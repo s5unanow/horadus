@@ -1,4 +1,4 @@
-# Agent Instructions (Codex / Claude / Gemini)
+# Agent Instructions (Canonical)
 
 This repo is a hobby “geopolitical intelligence” backend (not enterprise scale; expect **≤ 20 trends**). Despite being personal, it aims to be **mature and production-shaped**, adhering to **enterprise best practices where reasonable** (tests, migrations, type safety, observability, safe defaults, cost controls) without premature over-engineering.
 
@@ -34,13 +34,26 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 - Keep **production-like discipline**: clear module boundaries, migrations, idempotency, retries/backoff, structured logs, and tests for core logic.
 - Avoid adding infrastructure unless it enables a concrete next milestone.
 
+## Workflow (How To Work In This Repo)
+
+Before starting work:
+- Read `tasks/CURRENT_SPRINT.md` and any relevant `tasks/specs/*.md`.
+- Skim `docs/ARCHITECTURE.md` and `docs/DATA_MODEL.md` for context.
+- Run tests relevant to your change (at minimum unit tests).
+
+After completing work:
+- Update `tasks/CURRENT_SPRINT.md` (mark DONE) and move finished tasks to `tasks/COMPLETED.md`.
+- Update `PROJECT_STATUS.md` when a milestone meaningfully changes.
+- Add/adjust ADRs under `docs/adr/` for major decisions.
+- Ensure formatting/linting/tests pass.
+
 ## Guardrails
 
 - Don’t introduce network calls in tests.
 - Keep probability updates explainable (store factors used for deltas).
 - Any LLM usage must be protected by budget/limits where possible.
 
-## Common Commands
+## Development Commands
 
 - Tests: `pytest tests/ -v`
 - Dev API: `uvicorn src.api.main:app --reload`
@@ -49,4 +62,28 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 
 ## Git Conventions
 
-See `CLAUDE.md` for branch/commit conventions used in this repo.
+Branch naming:
+- `main`
+- `feature/TASK-XXX-short-description`
+- `fix/TASK-XXX-short-description`
+- `refactor/short-description`
+- `docs/short-description`
+
+Commit message format:
+- `<type>(<scope>): <subject>`
+- Types: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`, `perf`
+- Scope (optional): `api`, `core`, `storage`, `ingestion`, `processing`, `workers`, `repo`
+
+Commit hygiene:
+- Keep commits atomic (one logical change).
+- Include `TASK-XXX` in body/footer when applicable.
+- Prefer subject ≤ 50 chars; wrap body at ~72 chars.
+
+## Environment Variables
+
+Copy `.env.example` to `.env`. LLM provider selection is documented in `docs/adr/002-llm-provider.md`.
+
+Typical required values:
+- `DATABASE_URL`
+- `REDIS_URL`
+- `OPENAI_API_KEY` (don’t commit real keys)

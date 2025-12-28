@@ -25,7 +25,7 @@ Building a headless backend that:
 | API | FastAPI + Pydantic |
 | Database | PostgreSQL + TimescaleDB + pgvector |
 | Queue | Redis + Celery |
-| LLM | Claude API (Haiku for filtering, Sonnet for classification) |
+| LLM | OpenAI API (gpt-4.1-nano for filtering, gpt-4o-mini for classification) |
 | Scraping | feedparser, Trafilatura, Telethon |
 
 ## Project Navigation
@@ -279,7 +279,7 @@ Required in `.env`:
 ```
 DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/geoint
 REDIS_URL=redis://localhost:6379/0
-ANTHROPIC_API_KEY=sk-ant-...
+OPENAI_API_KEY=sk-...
 
 # Optional
 GDELT_API_KEY=...

@@ -148,7 +148,7 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
           REDIS_URL: redis://localhost:6379/0
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: pytest tests/integration/ -v -m integration || echo "No integration tests yet"
 
   # ---------------------------------------------------------------------------

@@ -270,9 +270,9 @@ Benefit: Every probability change has an auditable paper trail.
 
 | Component | Purpose | Model/Method |
 |-----------|---------|--------------|
-| Tier1Filter | Quick relevance check | Claude Haiku |
-| Tier2Classifier | Full classification | Claude Sonnet |
-| EmbeddingService | Generate embeddings | Claude/OpenAI |
+| Tier1Filter | Quick relevance check | gpt-4.1-nano |
+| Tier2Classifier | Full classification | gpt-4o-mini |
+| EmbeddingService | Generate embeddings | OpenAI |
 | EventClusterer | Group similar items | pgvector cosine |
 | Deduplicator | Prevent duplicates | URL + hash + embedding |
 

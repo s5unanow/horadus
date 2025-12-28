@@ -17,7 +17,7 @@ A headless backend for collecting, classifying, and analyzing news to track geop
 
 - Python 3.12+
 - Docker & Docker Compose
-- Anthropic API key
+- OpenAI API key
 
 ### Setup
 

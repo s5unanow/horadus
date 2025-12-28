@@ -182,7 +182,7 @@ Build Telegram channel collector using Telethon.
 Create service for generating text embeddings.
 
 **Acceptance Criteria**:
-- [ ] Use Claude or OpenAI embedding API
+- [ ] Use OpenAI embedding API
 - [ ] Batch processing for efficiency
 - [ ] Caching to avoid re-computing
 - [ ] Store embeddings in pgvector
@@ -232,7 +232,7 @@ Cluster related articles into events.
 Build Tier 1 (fast/cheap) LLM filter for relevance scoring.
 
 **Acceptance Criteria**:
-- [ ] Use Claude Haiku for speed/cost
+- [ ] Use gpt-4.1-nano for speed/cost
 - [ ] Relevance score 0-10 for each configured trend
 - [ ] Structured output with Pydantic
 - [ ] Batch processing (multiple items per call)
@@ -251,7 +251,7 @@ Build Tier 1 (fast/cheap) LLM filter for relevance scoring.
 Build Tier 2 (thorough) LLM classification.
 
 **Acceptance Criteria**:
-- [ ] Use Claude Sonnet for quality
+- [ ] Use gpt-4o-mini for quality
 - [ ] Extract: who, what, where, when, claims
 - [ ] Assign categories from taxonomy
 - [ ] For each relevant trend:

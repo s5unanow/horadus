@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     redis_url: RedisDsn = Field(default="redis://localhost:6379/0")
 
     # LLM
-    anthropic_api_key: str = ""
+    openai_api_key: str = ""
 
     # Optional: Telegram
     telegram_api_id: str = ""

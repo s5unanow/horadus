@@ -37,7 +37,7 @@ feedparser = "^6.0.10"
 trafilatura = "^1.6.0"
 
 # LLM
-anthropic = "^0.18.0"
+openai = "^1.0.0"
 
 # Utilities
 python-dotenv = "^1.0.0"
@@ -98,7 +98,7 @@ API_PORT=8000
 DEBUG=true
 
 # LLM
-ANTHROPIC_API_KEY=sk-ant-your-key-here
+OPENAI_API_KEY=sk-your-key-here
 
 # Optional: GDELT
 GDELT_API_KEY=

@@ -82,22 +82,22 @@ class Settings(BaseSettings):
         return v
 
     # =========================================================================
-    # LLM
+    # OpenAI Configuration
     # =========================================================================
-    ANTHROPIC_API_KEY: str = Field(
+    OPENAI_API_KEY: str = Field(
         default="",
-        description="Anthropic API key for Claude",
+        description="OpenAI API key",
     )
     LLM_TIER1_MODEL: str = Field(
-        default="claude-3-5-haiku-20241022",
+        default="gpt-4.1-nano",
         description="Model for Tier 1 (fast) classification",
     )
     LLM_TIER2_MODEL: str = Field(
-        default="claude-sonnet-4-20250514",
+        default="gpt-4o-mini",
         description="Model for Tier 2 (thorough) classification",
     )
-    LLM_TIER1_RPM: int = Field(default=100, description="Tier 1 rate limit (req/min)")
-    LLM_TIER2_RPM: int = Field(default=50, description="Tier 2 rate limit (req/min)")
+    LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
+    LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
 
     # =========================================================================
     # Telegram

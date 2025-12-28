@@ -16,18 +16,18 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     Application settings.
-    
+
     All settings can be overridden via environment variables.
     For example, DATABASE_URL env var sets the database_url field.
     """
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
-    
+
     # =========================================================================
     # Database
     # =========================================================================
@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     )
     DATABASE_POOL_SIZE: int = Field(default=10, ge=1, le=100)
     DATABASE_MAX_OVERFLOW: int = Field(default=20, ge=0, le=100)
-    
+
     # =========================================================================
     # Redis
     # =========================================================================
@@ -49,14 +49,14 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/0",
         description="Redis connection URL",
     )
-    
+
     # =========================================================================
     # API
     # =========================================================================
     API_HOST: str = Field(default="0.0.0.0")
     API_PORT: int = Field(default=8000, ge=1, le=65535)
     API_RELOAD: bool = Field(default=True)
-    
+
     # =========================================================================
     # Security
     # =========================================================================
@@ -72,7 +72,7 @@ class Settings(BaseSettings):
         default=["http://localhost:3000", "http://localhost:8080"],
         description="Allowed CORS origins",
     )
-    
+
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def parse_cors_origins(cls, v: Any) -> list[str]:
@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return v
-    
+
     # =========================================================================
     # LLM
     # =========================================================================
@@ -98,14 +98,14 @@ class Settings(BaseSettings):
     )
     LLM_TIER1_RPM: int = Field(default=100, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=50, description="Tier 2 rate limit (req/min)")
-    
+
     # =========================================================================
     # Telegram
     # =========================================================================
     TELEGRAM_API_ID: int | None = Field(default=None)
     TELEGRAM_API_HASH: str | None = Field(default=None)
     TELEGRAM_SESSION_NAME: str = Field(default="geoint_session")
-    
+
     # =========================================================================
     # Application
     # =========================================================================
@@ -115,7 +115,7 @@ class Settings(BaseSettings):
     )
     LOG_LEVEL: str = Field(default="INFO")
     LOG_FORMAT: str = Field(default="json", description="json or console")
-    
+
     # =========================================================================
     # Processing
     # =========================================================================
@@ -142,7 +142,7 @@ class Settings(BaseSettings):
         ge=1,
         description="Time window for event clustering",
     )
-    
+
     # =========================================================================
     # Trend Engine
     # =========================================================================
@@ -178,23 +178,23 @@ class Settings(BaseSettings):
         le=100,
         description="Alert when this % of daily budget is reached",
     )
-    
+
     # =========================================================================
     # Collection
     # =========================================================================
     RSS_COLLECTION_INTERVAL: int = Field(default=30, description="Minutes")
     GDELT_COLLECTION_INTERVAL: int = Field(default=60, description="Minutes")
     MAX_ITEMS_PER_COLLECTION: int = Field(default=100, ge=1)
-    
+
     # =========================================================================
     # Computed Properties
     # =========================================================================
-    
+
     @property
     def is_development(self) -> bool:
         """Check if running in development mode."""
         return self.ENVIRONMENT == "development"
-    
+
     @property
     def is_production(self) -> bool:
         """Check if running in production mode."""
@@ -205,7 +205,7 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """
     Get cached settings instance.
-    
+
     Uses lru_cache to ensure settings are only loaded once.
     """
     return Settings()

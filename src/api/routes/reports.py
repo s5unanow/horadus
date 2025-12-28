@@ -22,8 +22,10 @@ router = APIRouter()
 # Response Models
 # =============================================================================
 
+
 class ReportSummary(BaseModel):
     """Brief report summary for listings."""
+
     id: UUID
     report_type: str
     period_start: datetime
@@ -34,6 +36,7 @@ class ReportSummary(BaseModel):
 
 class ReportResponse(BaseModel):
     """Full report response."""
+
     id: UUID
     report_type: str
     period_start: datetime
@@ -50,6 +53,7 @@ class ReportResponse(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.get("", response_model=list[ReportSummary])
 async def list_reports(
     report_type: str | None = None,
@@ -59,7 +63,7 @@ async def list_reports(
 ) -> list[ReportSummary]:
     """
     List available reports.
-    
+
     Can filter by type (weekly, monthly, retrospective) or trend.
     """
     # TODO: Implement
@@ -91,7 +95,7 @@ async def get_latest_weekly(
 ) -> ReportResponse:
     """
     Get the most recent weekly report.
-    
+
     Optionally filter by trend.
     """
     # TODO: Implement

@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
@@ -27,20 +26,18 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-
-if TYPE_CHECKING:
-    pass
-
 
 # =============================================================================
 # Base Configuration
 # =============================================================================
 
+
 class Base(DeclarativeBase):
     """Base class for all models."""
-    
+
     type_annotation_map = {
         dict: JSONB,
         list[str]: ARRAY(String),
@@ -52,8 +49,10 @@ class Base(DeclarativeBase):
 # Enums
 # =============================================================================
 
+
 class SourceType(str, enum.Enum):
     """Types of data sources."""
+
     RSS = "rss"
     TELEGRAM = "telegram"
     GDELT = "gdelt"
@@ -63,22 +62,25 @@ class SourceType(str, enum.Enum):
 
 class SourceTier(str, enum.Enum):
     """Source credibility tiers (Expert Recommendation)."""
-    PRIMARY = "primary"      # Official sources, direct access
-    WIRE = "wire"            # AP, Reuters, AFP
-    MAJOR = "major"          # BBC, Guardian, major papers
-    REGIONAL = "regional"    # Specialty/regional outlets
+
+    PRIMARY = "primary"  # Official sources, direct access
+    WIRE = "wire"  # AP, Reuters, AFP
+    MAJOR = "major"  # BBC, Guardian, major papers
+    REGIONAL = "regional"  # Specialty/regional outlets
     AGGREGATOR = "aggregator"  # News aggregators, blogs
 
 
 class ReportingType(str, enum.Enum):
     """Type of reporting (Expert Recommendation)."""
-    FIRSTHAND = "firsthand"   # Original reporting
-    SECONDARY = "secondary"   # Citing other sources
+
+    FIRSTHAND = "firsthand"  # Original reporting
+    SECONDARY = "secondary"  # Citing other sources
     AGGREGATOR = "aggregator"  # Pure aggregation
 
 
 class ProcessingStatus(str, enum.Enum):
     """Status of item in processing pipeline."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     CLASSIFIED = "classified"
@@ -88,14 +90,16 @@ class ProcessingStatus(str, enum.Enum):
 
 class EventLifecycle(str, enum.Enum):
     """Lifecycle status of an event (Expert Recommendation)."""
-    EMERGING = "emerging"      # Single source, unconfirmed
-    CONFIRMED = "confirmed"    # Multiple independent sources
-    FADING = "fading"          # No new mentions in 48h
-    ARCHIVED = "archived"      # No mentions in 7d, historical only
+
+    EMERGING = "emerging"  # Single source, unconfirmed
+    CONFIRMED = "confirmed"  # Multiple independent sources
+    FADING = "fading"  # No new mentions in 48h
+    ARCHIVED = "archived"  # No mentions in 7d, historical only
 
 
 class TrendDirection(str, enum.Enum):
     """Direction of trend movement."""
+
     RISING_FAST = "rising_fast"
     RISING = "rising"
     STABLE = "stable"
@@ -105,15 +109,17 @@ class TrendDirection(str, enum.Enum):
 
 class RiskLevel(str, enum.Enum):
     """Risk level categories (Expert Recommendation)."""
-    LOW = "low"           # < 10%
-    GUARDED = "guarded"   # 10-25%
-    ELEVATED = "elevated" # 25-50%
-    HIGH = "high"         # 50-75%
-    SEVERE = "severe"     # > 75%
+
+    LOW = "low"  # < 10%
+    GUARDED = "guarded"  # 10-25%
+    ELEVATED = "elevated"  # 25-50%
+    HIGH = "high"  # 50-75%
+    SEVERE = "severe"  # > 75%
 
 
 class OutcomeType(str, enum.Enum):
     """Outcome types for calibration (Expert Recommendation)."""
+
     OCCURRED = "occurred"
     DID_NOT_OCCUR = "did_not_occur"
     PARTIAL = "partial"
@@ -125,10 +131,11 @@ class OutcomeType(str, enum.Enum):
 # Source Models
 # =============================================================================
 
+
 class Source(Base):
     """
     A data source (RSS feed, Telegram channel, etc.).
-    
+
     Attributes:
         id: Unique identifier
         type: Source type (rss, telegram, gdelt, api, scraper)
@@ -143,9 +150,9 @@ class Source(Base):
         error_count: Consecutive error count
         last_error: Most recent error message
     """
-    
+
     __tablename__ = "sources"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -190,10 +197,10 @@ class Source(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
     items: Mapped[list[RawItem]] = relationship(back_populates="source")
-    
+
     # Constraints
     __table_args__ = (
         CheckConstraint(
@@ -210,13 +217,14 @@ class Source(Base):
 # Raw Item Models
 # =============================================================================
 
+
 class RawItem(Base):
     """
     A single collected item (article, post, message).
-    
+
     This is the raw data before classification. Each item goes through
     the processing pipeline: pending -> processing -> classified/noise/error
-    
+
     Attributes:
         id: Unique identifier
         source_id: Reference to source
@@ -231,9 +239,9 @@ class RawItem(Base):
         processing_status: Current pipeline status
         error_message: Error details if status is ERROR
     """
-    
+
     __tablename__ = "raw_items"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -268,11 +276,11 @@ class RawItem(Base):
         server_default=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
     source: Mapped[Source] = relationship(back_populates="items")
     event_links: Mapped[list[EventItem]] = relationship(back_populates="item")
-    
+
     # Constraints
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_source_external"),
@@ -287,13 +295,14 @@ class RawItem(Base):
 # Event Models
 # =============================================================================
 
+
 class Event(Base):
     """
     A clustered event (multiple articles about the same story).
-    
+
     Events are the unit of analysis for trend impact. Multiple RawItems
     are clustered into Events based on embedding similarity.
-    
+
     Attributes:
         id: Unique identifier
         canonical_summary: LLM-generated summary of the event
@@ -312,9 +321,9 @@ class Event(Base):
         primary_item_id: Most authoritative source item
         has_contradictions: Whether sources contradict each other
     """
-    
+
     __tablename__ = "events"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -322,7 +331,7 @@ class Event(Base):
     )
     canonical_summary: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
-    
+
     # LLM-extracted structured data
     extracted_who: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     extracted_what: Mapped[str | None] = mapped_column(Text)
@@ -330,18 +339,18 @@ class Event(Base):
     extracted_when: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     extracted_claims: Mapped[dict | None] = mapped_column(JSONB)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String))
-    
+
     # Aggregated metadata
     source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unique_source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    
+
     # NEW: Lifecycle tracking (Expert Recommendation)
     lifecycle_status: Mapped[str] = mapped_column(
         String(20),
         default=EventLifecycle.EMERGING.value,
         nullable=False,
     )
-    
+
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -361,26 +370,26 @@ class Event(Base):
     )
     # NEW: When event was confirmed (Expert Recommendation)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    
+
     primary_item_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("raw_items.id", ondelete="SET NULL"),
     )
-    
+
     # NEW: Contradiction tracking (Expert Recommendation)
     has_contradictions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     contradiction_notes: Mapped[str | None] = mapped_column(Text)
-    
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
     item_links: Mapped[list[EventItem]] = relationship(back_populates="event")
     evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="event")
-    
+
     # Indexes
     __table_args__ = (
         Index("idx_events_first_seen", "first_seen_at"),
@@ -393,13 +402,13 @@ class Event(Base):
 class EventItem(Base):
     """
     Junction table linking Events to RawItems.
-    
+
     An Event can have multiple RawItems (articles about same story).
     A RawItem belongs to exactly one Event once classified.
     """
-    
+
     __tablename__ = "event_items"
-    
+
     event_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("events.id", ondelete="CASCADE"),
@@ -415,7 +424,7 @@ class EventItem(Base):
         server_default=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
     event: Mapped[Event] = relationship(back_populates="item_links")
     item: Mapped[RawItem] = relationship(back_populates="event_links")
@@ -425,16 +434,17 @@ class EventItem(Base):
 # Trend Models
 # =============================================================================
 
+
 class Trend(Base):
     """
     A geopolitical trend being tracked.
-    
+
     Trends represent hypotheses with associated probabilities.
     Examples: "EU-Russia Military Conflict", "US-China Trade War"
-    
+
     Probability is stored as log-odds internally for mathematical correctness.
     Use the trend_engine functions to convert to/from probability.
-    
+
     Attributes:
         id: Unique identifier
         name: Human-readable trend name
@@ -446,9 +456,9 @@ class Trend(Base):
         decay_half_life_days: How fast old evidence fades
         is_active: Whether trend is being tracked
     """
-    
+
     __tablename__ = "trends"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -457,7 +467,7 @@ class Trend(Base):
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
     definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
-    
+
     # Probability as log-odds
     baseline_log_odds: Mapped[float] = mapped_column(
         Numeric(10, 6),
@@ -467,7 +477,7 @@ class Trend(Base):
         Numeric(10, 6),
         nullable=False,
     )
-    
+
     # Configuration
     indicators: Mapped[dict] = mapped_column(JSONB, nullable=False)
     decay_half_life_days: Mapped[int] = mapped_column(
@@ -475,7 +485,7 @@ class Trend(Base):
         default=30,
         nullable=False,
     )
-    
+
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -488,34 +498,32 @@ class Trend(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
     evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="trend")
     snapshots: Mapped[list[TrendSnapshot]] = relationship(back_populates="trend")
-    outcomes: Mapped[list["TrendOutcome"]] = relationship(back_populates="trend")
-    
+    outcomes: Mapped[list[TrendOutcome]] = relationship(back_populates="trend")
+
     # Indexes
-    __table_args__ = (
-        Index("idx_trends_active", "is_active"),
-    )
+    __table_args__ = (Index("idx_trends_active", "is_active"),)
 
 
 class TrendEvidence(Base):
     """
     Record of evidence applied to a trend.
-    
+
     Every time an event affects a trend's probability, we record:
     - What event caused it
     - What signal type was detected
     - All the scoring factors
     - The resulting log-odds delta
     - Human-readable reasoning
-    
+
     This creates a full audit trail for probability changes.
     """
-    
+
     __tablename__ = "trend_evidence"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -531,36 +539,33 @@ class TrendEvidence(Base):
         ForeignKey("events.id", ondelete="CASCADE"),
         nullable=False,
     )
-    
+
     # Signal classification
     signal_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    
+
     # Scoring factors
     credibility_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
     corroboration_factor: Mapped[float | None] = mapped_column(Numeric(5, 2))
     novelty_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
     severity_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
-    
+
     # Result
     delta_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
     reasoning: Mapped[str | None] = mapped_column(Text)
-    
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
     trend: Mapped[Trend] = relationship(back_populates="evidence_records")
     event: Mapped[Event] = relationship(back_populates="evidence_records")
-    
+
     # Constraints
     __table_args__ = (
-        UniqueConstraint(
-            "trend_id", "event_id", "signal_type",
-            name="uq_trend_event_signal"
-        ),
+        UniqueConstraint("trend_id", "event_id", "signal_type", name="uq_trend_event_signal"),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
     )
@@ -569,14 +574,14 @@ class TrendEvidence(Base):
 class TrendSnapshot(Base):
     """
     Point-in-time snapshot of trend probability.
-    
+
     Used for time-series queries and historical analysis.
     This table should be a TimescaleDB hypertable for efficient
     time-range queries.
     """
-    
+
     __tablename__ = "trend_snapshots"
-    
+
     trend_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("trends.id", ondelete="CASCADE"),
@@ -588,10 +593,10 @@ class TrendSnapshot(Base):
     )
     log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
     event_count_24h: Mapped[int | None] = mapped_column(Integer)
-    
+
     # Relationships
     trend: Mapped[Trend] = relationship(back_populates="snapshots")
-    
+
     # Note: After table creation, run:
     # SELECT create_hypertable('trend_snapshots', 'timestamp');
 
@@ -600,18 +605,19 @@ class TrendSnapshot(Base):
 # Report Models
 # =============================================================================
 
+
 class Report(Base):
     """
     Generated intelligence report.
-    
+
     Reports are generated periodically (weekly/monthly) and contain:
     - Computed statistics about trends
     - LLM-generated narrative
     - Top contributing events
     """
-    
+
     __tablename__ = "reports"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -629,24 +635,24 @@ class Report(Base):
         DateTime(timezone=True),
         nullable=False,
     )
-    
+
     # For trend-specific reports
     trend_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("trends.id", ondelete="SET NULL"),
     )
-    
+
     # Report content
     statistics: Mapped[dict] = mapped_column(JSONB, nullable=False)
     narrative: Mapped[str | None] = mapped_column(Text)
     top_events: Mapped[dict | None] = mapped_column(JSONB)
-    
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    
+
     # Indexes
     __table_args__ = (
         Index("idx_reports_type_period", "report_type", "period_end"),
@@ -658,16 +664,17 @@ class Report(Base):
 # Calibration Models (Expert Recommendation)
 # =============================================================================
 
+
 class TrendOutcome(Base):
     """
     Record of how a trend prediction resolved.
-    
-    Used for calibration analysis: when we predicted X%, 
+
+    Used for calibration analysis: when we predicted X%,
     did it happen X% of the time?
     """
-    
+
     __tablename__ = "trend_outcomes"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -678,7 +685,7 @@ class TrendOutcome(Base):
         ForeignKey("trends.id", ondelete="CASCADE"),
         nullable=False,
     )
-    
+
     # What we predicted
     prediction_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -700,16 +707,16 @@ class TrendOutcome(Base):
         Numeric(5, 4),
         nullable=False,
     )
-    
+
     # What happened
     outcome_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     outcome: Mapped[str | None] = mapped_column(String(20))  # OutcomeType
     outcome_notes: Mapped[str | None] = mapped_column(Text)
     outcome_evidence: Mapped[dict | None] = mapped_column(JSONB)
-    
+
     # Scoring
     brier_score: Mapped[float | None] = mapped_column(Numeric(10, 6))
-    
+
     # Metadata
     recorded_by: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(
@@ -723,10 +730,10 @@ class TrendOutcome(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    
+
     # Relationships
-    trend: Mapped["Trend"] = relationship(back_populates="outcomes")
-    
+    trend: Mapped[Trend] = relationship(back_populates="outcomes")
+
     __table_args__ = (
         Index("idx_outcomes_trend_date", "trend_id", "prediction_date"),
         Index("idx_outcomes_outcome", "outcome"),
@@ -736,19 +743,19 @@ class TrendOutcome(Base):
 class HumanFeedback(Base):
     """
     Human corrections and annotations (Expert Recommendation).
-    
+
     Tracks manual overrides, pins, and noise markings
     for training/evaluation data.
     """
-    
+
     __tablename__ = "human_feedback"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
-    
+
     # What was annotated
     target_type: Mapped[str] = mapped_column(
         String(50),
@@ -758,7 +765,7 @@ class HumanFeedback(Base):
         PGUUID(as_uuid=True),
         nullable=False,
     )
-    
+
     # The feedback
     action: Mapped[str] = mapped_column(
         String(50),
@@ -767,7 +774,7 @@ class HumanFeedback(Base):
     original_value: Mapped[dict | None] = mapped_column(JSONB)
     corrected_value: Mapped[dict | None] = mapped_column(JSONB)
     notes: Mapped[str | None] = mapped_column(Text)
-    
+
     # Metadata
     created_by: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(
@@ -775,7 +782,7 @@ class HumanFeedback(Base):
         server_default=func.now(),
         nullable=False,
     )
-    
+
     __table_args__ = (
         Index("idx_feedback_target", "target_type", "target_id"),
         Index("idx_feedback_action", "action"),

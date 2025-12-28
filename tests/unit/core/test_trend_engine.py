@@ -6,7 +6,6 @@ Tests probability conversion, evidence calculation, and trend updates.
 
 from __future__ import annotations
 
-import math
 from datetime import datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -27,10 +26,10 @@ from src.core.trend_engine import (
     prob_to_logodds,
 )
 
-
 # =============================================================================
 # Probability Conversion Tests
 # =============================================================================
+
 
 class TestProbToLogodds:
     """Tests for prob_to_logodds function."""
@@ -110,6 +109,7 @@ class TestLogoddsToProb:
 # =============================================================================
 # Evidence Calculation Tests
 # =============================================================================
+
 
 class TestCalculateEvidenceDelta:
     """Tests for calculate_evidence_delta function."""
@@ -195,7 +195,7 @@ class TestCalculateEvidenceDelta:
             direction="escalatory",
         )
         # sqrt(4) / 3 = 2/3 ≈ 0.667
-        assert factors.corroboration == pytest.approx(2/3, rel=0.01)
+        assert factors.corroboration == pytest.approx(2 / 3, rel=0.01)
 
     def test_credibility_affects_delta(self):
         """Higher credibility should produce larger delta."""
@@ -361,6 +361,7 @@ class TestCalculateEvidenceDelta:
 # Trend Engine Tests
 # =============================================================================
 
+
 class TestTrendEngine:
     """Tests for TrendEngine class."""
 
@@ -403,23 +404,21 @@ class TestTrendEngine:
     def test_get_probability(self, mock_session, mock_trend):
         """Test getting current probability."""
         engine = TrendEngine(mock_session)
-        
+
         mock_trend.current_log_odds = 0.0
         assert engine.get_probability(mock_trend) == pytest.approx(0.5)
-        
+
         mock_trend.current_log_odds = prob_to_logodds(0.25)
         assert engine.get_probability(mock_trend) == pytest.approx(0.25, rel=0.01)
 
     @pytest.mark.asyncio
-    async def test_apply_evidence_updates_logodds(
-        self, mock_session, mock_trend, sample_factors
-    ):
+    async def test_apply_evidence_updates_logodds(self, mock_session, mock_trend, sample_factors):
         """Test that apply_evidence updates trend log-odds."""
         engine = TrendEngine(mock_session)
-        
+
         initial_lo = mock_trend.current_log_odds
         delta = 0.1
-        
+
         result = await engine.apply_evidence(
             trend=mock_trend,
             delta=delta,
@@ -428,20 +427,18 @@ class TestTrendEngine:
             factors=sample_factors,
             reasoning="Test reasoning",
         )
-        
+
         assert mock_trend.current_log_odds == initial_lo + delta
         assert result.delta_applied == delta
 
     @pytest.mark.asyncio
-    async def test_apply_evidence_returns_update(
-        self, mock_session, mock_trend, sample_factors
-    ):
+    async def test_apply_evidence_returns_update(self, mock_session, mock_trend, sample_factors):
         """Test that apply_evidence returns correct TrendUpdate."""
         engine = TrendEngine(mock_session)
-        
+
         mock_trend.current_log_odds = 0.0  # 50%
         delta = 0.2  # Should increase probability
-        
+
         result = await engine.apply_evidence(
             trend=mock_trend,
             delta=delta,
@@ -450,19 +447,17 @@ class TestTrendEngine:
             factors=sample_factors,
             reasoning="Test",
         )
-        
+
         assert isinstance(result, TrendUpdate)
         assert result.previous_probability == pytest.approx(0.5)
         assert result.new_probability > result.previous_probability
         assert result.direction == "up"
 
     @pytest.mark.asyncio
-    async def test_apply_evidence_creates_record(
-        self, mock_session, mock_trend, sample_factors
-    ):
+    async def test_apply_evidence_creates_record(self, mock_session, mock_trend, sample_factors):
         """Test that apply_evidence creates evidence record."""
         engine = TrendEngine(mock_session)
-        
+
         await engine.apply_evidence(
             trend=mock_trend,
             delta=0.1,
@@ -471,44 +466,40 @@ class TestTrendEngine:
             factors=sample_factors,
             reasoning="Test reasoning",
         )
-        
+
         # Should have called session.add with an evidence record
         mock_session.add.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_apply_decay_moves_toward_baseline(
-        self, mock_session, mock_trend
-    ):
+    async def test_apply_decay_moves_toward_baseline(self, mock_session, mock_trend):
         """Test that decay moves probability toward baseline."""
         engine = TrendEngine(mock_session)
-        
+
         # Start at 50% (log-odds = 0), baseline is 10%
         mock_trend.current_log_odds = 0.0
         mock_trend.updated_at = datetime.utcnow() - timedelta(days=30)  # One half-life
-        
+
         new_prob = await engine.apply_decay(mock_trend)
-        
+
         # After one half-life, should be halfway between 50% and 10%
-        # In log-odds space: 0 + (lo(0.1) - 0) * 0.5 
+        # In log-odds space: 0 + (lo(0.1) - 0) * 0.5
         baseline_lo = prob_to_logodds(0.1)
         expected_lo = baseline_lo + (0 - baseline_lo) * 0.5
         expected_prob = logodds_to_prob(expected_lo)
-        
+
         assert new_prob == pytest.approx(expected_prob, rel=0.01)
 
     @pytest.mark.asyncio
-    async def test_apply_decay_no_change_if_recent(
-        self, mock_session, mock_trend
-    ):
+    async def test_apply_decay_no_change_if_recent(self, mock_session, mock_trend):
         """Test that decay has no effect if just updated."""
         engine = TrendEngine(mock_session)
-        
+
         mock_trend.current_log_odds = 0.5
         mock_trend.updated_at = datetime.utcnow()  # Just now
-        
+
         original_lo = mock_trend.current_log_odds
         await engine.apply_decay(mock_trend)
-        
+
         # Should be unchanged
         assert mock_trend.current_log_odds == pytest.approx(original_lo, rel=0.001)
 
@@ -516,6 +507,7 @@ class TestTrendEngine:
 # =============================================================================
 # Utility Function Tests
 # =============================================================================
+
 
 class TestUtilityFunctions:
     """Tests for utility functions."""
@@ -542,6 +534,7 @@ class TestUtilityFunctions:
 # Integration Tests
 # =============================================================================
 
+
 class TestEvidenceIntegration:
     """Integration tests for evidence calculation and application."""
 
@@ -556,16 +549,16 @@ class TestEvidenceIntegration:
             novelty_score=1.0,  # New information
             direction="escalatory",
         )
-        
+
         # Delta should be meaningful but not extreme
         assert 0.01 < delta < 0.1
-        
+
         # Apply to a trend at 10% baseline
         initial_prob = 0.10
         initial_lo = prob_to_logodds(initial_prob)
         new_lo = initial_lo + delta
         new_prob = logodds_to_prob(new_lo)
-        
+
         # Should increase probability modestly
         assert new_prob > initial_prob
         assert new_prob < 0.20  # But not by too much
@@ -588,7 +581,7 @@ class TestEvidenceIntegration:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         # Low credibility should have roughly 1/3 the impact
         ratio = delta_low / delta_high
         assert ratio == pytest.approx(0.30 / 0.95, rel=0.01)
@@ -611,6 +604,6 @@ class TestEvidenceIntegration:
             novelty_score=0.3,
             direction="escalatory",
         )
-        
+
         assert delta_repeat < delta_new
         assert delta_repeat / delta_new == pytest.approx(0.3, rel=0.01)

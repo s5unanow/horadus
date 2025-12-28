@@ -29,15 +29,16 @@ if TYPE_CHECKING:
 # Engine Configuration
 # =============================================================================
 
+
 def create_engine() -> AsyncEngine:
     """
     Create async SQLAlchemy engine.
-    
+
     Uses connection pooling in production, NullPool in development
     for easier debugging.
     """
     pool_class = NullPool if settings.is_development else None
-    
+
     return create_async_engine(
         settings.DATABASE_URL,
         echo=settings.is_development,  # Log SQL in development
@@ -66,16 +67,17 @@ async_session_maker = async_sessionmaker(
 # Session Dependency
 # =============================================================================
 
+
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     """
     Dependency for getting database sessions.
-    
+
     Usage:
         @router.get("/items")
         async def list_items(session: AsyncSession = Depends(get_session)):
             result = await session.execute(select(Item))
             return result.scalars().all()
-    
+
     Sessions are automatically committed on success and rolled back on error.
     """
     async with async_session_maker() as session:
@@ -91,15 +93,16 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 # Utility Functions
 # =============================================================================
 
+
 async def init_db() -> None:
     """
     Initialize database tables.
-    
+
     Note: In production, use Alembic migrations instead.
     This is useful for testing or quick setup.
     """
     from src.storage.models import Base
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -107,10 +110,10 @@ async def init_db() -> None:
 async def drop_db() -> None:
     """
     Drop all database tables.
-    
+
     WARNING: This will delete all data. Use only in testing.
     """
     from src.storage.models import Base
-    
+
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

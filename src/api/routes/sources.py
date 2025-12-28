@@ -21,8 +21,10 @@ router = APIRouter()
 # Request/Response Models
 # =============================================================================
 
+
 class SourceCreate(BaseModel):
     """Request body for creating a source."""
+
     type: str = Field(..., description="Source type: rss, telegram, gdelt, api")
     name: str = Field(..., description="Human-readable name")
     url: str | None = Field(None, description="Source URL")
@@ -32,6 +34,7 @@ class SourceCreate(BaseModel):
 
 class SourceUpdate(BaseModel):
     """Request body for updating a source."""
+
     name: str | None = None
     url: str | None = None
     credibility_score: float | None = Field(None, ge=0, le=1)
@@ -41,6 +44,7 @@ class SourceUpdate(BaseModel):
 
 class SourceResponse(BaseModel):
     """Response body for a source."""
+
     id: UUID
     type: str
     name: str
@@ -50,7 +54,7 @@ class SourceResponse(BaseModel):
     is_active: bool
     last_fetched_at: str | None
     error_count: int
-    
+
     class Config:
         from_attributes = True
 
@@ -58,6 +62,7 @@ class SourceResponse(BaseModel):
 # =============================================================================
 # Endpoints
 # =============================================================================
+
 
 @router.get("", response_model=list[SourceResponse])
 async def list_sources(
@@ -67,11 +72,11 @@ async def list_sources(
 ) -> list[SourceResponse]:
     """
     List all data sources.
-    
+
     Args:
         type: Filter by source type (rss, telegram, gdelt, api)
         active_only: Only return active sources
-        
+
     Returns:
         List of sources
     """
@@ -89,10 +94,10 @@ async def create_source(
 ) -> SourceResponse:
     """
     Create a new data source.
-    
+
     Args:
         source: Source configuration
-        
+
     Returns:
         Created source
     """
@@ -110,10 +115,10 @@ async def get_source(
 ) -> SourceResponse:
     """
     Get a source by ID.
-    
+
     Args:
         source_id: Source UUID
-        
+
     Returns:
         Source details
     """
@@ -132,11 +137,11 @@ async def update_source(
 ) -> SourceResponse:
     """
     Update a source.
-    
+
     Args:
         source_id: Source UUID
         source: Fields to update
-        
+
     Returns:
         Updated source
     """
@@ -154,7 +159,7 @@ async def delete_source(
 ) -> None:
     """
     Delete (deactivate) a source.
-    
+
     Args:
         source_id: Source UUID
     """

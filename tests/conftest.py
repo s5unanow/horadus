@@ -10,19 +10,18 @@ This module provides:
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import Generator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
 from httpx import AsyncClient
-
 
 # =============================================================================
 # Event Loop Configuration
 # =============================================================================
+
 
 @pytest.fixture(scope="session")
 def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
@@ -35,6 +34,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 # =============================================================================
 # Mock Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def mock_db_session() -> AsyncMock:
@@ -61,6 +61,7 @@ def mock_http_client() -> AsyncMock:
 # =============================================================================
 # Sample Data Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def sample_source_data() -> dict[str, Any]:
@@ -100,7 +101,7 @@ def sample_trend_data() -> dict[str, Any]:
         "description": "A test trend for unit testing",
         "definition": {"baseline_probability": 0.1},
         "baseline_log_odds": -2.197,  # 10%
-        "current_log_odds": -1.386,   # 20%
+        "current_log_odds": -1.386,  # 20%
         "indicators": {
             "test_signal": {
                 "weight": 0.04,
@@ -130,6 +131,7 @@ def sample_event_data() -> dict[str, Any]:
 # =============================================================================
 # RSS Feed Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def sample_rss_xml() -> str:
@@ -178,6 +180,7 @@ def sample_atom_xml() -> str:
 # Trend Configuration Fixtures
 # =============================================================================
 
+
 @pytest.fixture
 def sample_trend_config() -> dict[str, Any]:
     """Sample trend configuration matching config/trends/*.yaml format."""
@@ -210,6 +213,7 @@ def sample_trend_config() -> dict[str, Any]:
 # =============================================================================
 # Integration Test Markers
 # =============================================================================
+
 
 def pytest_configure(config: pytest.Config) -> None:
     """Configure custom pytest markers."""

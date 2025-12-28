@@ -22,8 +22,10 @@ router = APIRouter()
 # Response Models
 # =============================================================================
 
+
 class EventResponse(BaseModel):
     """Response body for an event."""
+
     id: UUID
     summary: str
     categories: list[str]
@@ -36,6 +38,7 @@ class EventResponse(BaseModel):
 
 class EventDetailResponse(EventResponse):
     """Detailed event response with sources."""
+
     sources: list[dict]
     trend_impacts: list[dict]
 
@@ -43,6 +46,7 @@ class EventDetailResponse(EventResponse):
 # =============================================================================
 # Endpoints
 # =============================================================================
+
 
 @router.get("", response_model=list[EventResponse])
 async def list_events(
@@ -54,7 +58,7 @@ async def list_events(
 ) -> list[EventResponse]:
     """
     List recent events.
-    
+
     Can filter by category or by events affecting a specific trend.
     """
     # TODO: Implement
@@ -71,7 +75,7 @@ async def get_event(
 ) -> EventDetailResponse:
     """
     Get detailed event information.
-    
+
     Includes source articles and trend impacts.
     """
     # TODO: Implement

@@ -27,8 +27,10 @@ router = APIRouter()
 # Response Models
 # =============================================================================
 
+
 class HealthStatus(BaseModel):
     """Health check response."""
+
     status: str
     timestamp: str
     version: str
@@ -37,6 +39,7 @@ class HealthStatus(BaseModel):
 
 class ComponentHealth(BaseModel):
     """Individual component health."""
+
     status: str
     latency_ms: float | None = None
     message: str | None = None
@@ -46,36 +49,37 @@ class ComponentHealth(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.get("/health", response_model=HealthStatus)
 async def health_check(
     session: AsyncSession = Depends(get_session),
 ) -> HealthStatus:
     """
     Check application health.
-    
+
     Returns status of all critical components:
     - Database connection
     - Redis connection
     - Overall status
-    
+
     Returns:
         HealthStatus with component details
     """
     checks: dict[str, Any] = {}
     overall_status = "healthy"
-    
+
     # Check database
     db_check = await check_database(session)
     checks["database"] = db_check
     if db_check["status"] != "healthy":
         overall_status = "unhealthy"
-    
+
     # Check Redis (if available)
     redis_check = await check_redis()
     checks["redis"] = redis_check
     if redis_check["status"] != "healthy":
         overall_status = "degraded" if overall_status == "healthy" else overall_status
-    
+
     return HealthStatus(
         status=overall_status,
         timestamp=datetime.utcnow().isoformat(),
@@ -88,7 +92,7 @@ async def health_check(
 async def liveness_check() -> dict[str, str]:
     """
     Kubernetes liveness probe.
-    
+
     Simple check that the application is running.
     Does not check dependencies.
     """
@@ -101,7 +105,7 @@ async def readiness_check(
 ) -> dict[str, str]:
     """
     Kubernetes readiness probe.
-    
+
     Checks if the application is ready to receive traffic.
     Includes database connectivity check.
     """
@@ -117,15 +121,16 @@ async def readiness_check(
 # Health Check Functions
 # =============================================================================
 
+
 async def check_database(session: AsyncSession) -> dict[str, Any]:
     """Check database connectivity and latency."""
     import time
-    
+
     try:
         start = time.perf_counter()
         await session.execute(text("SELECT 1"))
         latency = (time.perf_counter() - start) * 1000
-        
+
         return {
             "status": "healthy",
             "latency_ms": round(latency, 2),
@@ -141,17 +146,18 @@ async def check_database(session: AsyncSession) -> dict[str, Any]:
 async def check_redis() -> dict[str, Any]:
     """Check Redis connectivity."""
     import time
-    
+
     try:
         import redis.asyncio as redis
+
         from src.core.config import settings
-        
+
         start = time.perf_counter()
         client = redis.from_url(settings.REDIS_URL)
         await client.ping()
         latency = (time.perf_counter() - start) * 1000
         await client.close()
-        
+
         return {
             "status": "healthy",
             "latency_ms": round(latency, 2),

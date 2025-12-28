@@ -11,7 +11,7 @@ from datetime import datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
@@ -23,8 +23,10 @@ router = APIRouter()
 # Response Models
 # =============================================================================
 
+
 class TrendResponse(BaseModel):
     """Response body for a trend."""
+
     id: UUID
     name: str
     description: str | None
@@ -34,13 +36,14 @@ class TrendResponse(BaseModel):
     change_7d: float | None
     is_active: bool
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
 class TrendHistoryPoint(BaseModel):
     """Single point in trend history."""
+
     timestamp: datetime
     probability: float
     event_count: int | None
@@ -48,6 +51,7 @@ class TrendHistoryPoint(BaseModel):
 
 class TrendEvidenceResponse(BaseModel):
     """Evidence record for a trend."""
+
     id: UUID
     event_id: UUID
     event_summary: str
@@ -61,6 +65,7 @@ class TrendEvidenceResponse(BaseModel):
 # Endpoints
 # =============================================================================
 
+
 @router.get("", response_model=list[TrendResponse])
 async def list_trends(
     active_only: bool = True,
@@ -68,7 +73,7 @@ async def list_trends(
 ) -> list[TrendResponse]:
     """
     List all trends with current probabilities.
-    
+
     Returns trends sorted by current probability (highest first).
     """
     # TODO: Implement
@@ -102,7 +107,7 @@ async def get_trend_history(
 ) -> list[TrendHistoryPoint]:
     """
     Get probability history for a trend.
-    
+
     Returns time series data for charting.
     """
     # TODO: Implement
@@ -121,7 +126,7 @@ async def get_trend_evidence(
 ) -> list[TrendEvidenceResponse]:
     """
     Get evidence records that affected this trend.
-    
+
     Returns events sorted by impact magnitude (highest first).
     """
     # TODO: Implement

@@ -96,14 +96,14 @@ Expert confirmed core design:
 - ✅ Events as core unit (not articles)
 - ✅ Log-odds for probability tracking
 - ✅ LLM extracts signals; code computes deltas
-- ✅ Two-tier LLM processing (Haiku → Sonnet)
+- ✅ Two-tier LLM processing (Tier 1 → Tier 2)
 - ✅ Evidence ledger with full provenance
 
 ## Recent Decisions
 
 - Project bootstrapped with agent-friendly structure
 - Using log-odds for probability tracking (ADR-003)
-- Two-tier LLM processing (Haiku → Sonnet) (ADR-005)
+- Two-tier LLM processing (Tier 1 → Tier 2) (ADR-005)
 - Risk levels instead of single probability numbers (expert feedback)
 - Event lifecycle to reduce noise (expert feedback)
 - Calibration infrastructure for long-term accuracy (expert feedback)

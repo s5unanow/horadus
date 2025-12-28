@@ -47,10 +47,10 @@ from decimal import Decimal
 
 from src.core.config import settings
 
-# Approximate costs per 1M tokens (as of 2025)
+# Approximate costs per 1M tokens (example values; verify vendor pricing "as of" date)
 COST_PER_1M_TOKENS = {
-    "tier1": {"input": Decimal("0.25"), "output": Decimal("1.25")},   # Haiku
-    "tier2": {"input": Decimal("3.00"), "output": Decimal("15.00")},  # Sonnet
+    "tier1": {"input": Decimal("0.10"), "output": Decimal("0.40")},   # gpt-4.1-nano (Tier 1)
+    "tier2": {"input": Decimal("0.15"), "output": Decimal("0.60")},   # gpt-4o-mini (Tier 2)
     "embedding": {"input": Decimal("0.10"), "output": Decimal("0")},
 }
 
@@ -194,8 +194,8 @@ horadus budget status
 # Output:
 # Daily Budget Status (2025-01-15)
 # ================================
-# Tier 1 (Haiku):   142/1000 calls  ($0.18)
-# Tier 2 (Sonnet):   28/200 calls   ($1.42)
+# Tier 1 (gpt-4.1-nano): 142/1000 calls  ($0.18)
+# Tier 2 (gpt-4o-mini):   28/200 calls   ($1.42)
 # Embeddings:        89/500 calls   ($0.02)
 # --------------------------------
 # Total:            $1.62 / $5.00 (32%)

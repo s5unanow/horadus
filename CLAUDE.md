@@ -263,8 +263,8 @@ Multiple articles about the same story become ONE event.
 - See `docs/adr/004-event-clustering.md`
 
 ### 3. Two-Tier LLM Processing (ADR-005)
-- **Tier 1 (Haiku)**: Quick relevance scoring (cheap, fast)
-- **Tier 2 (Sonnet)**: Full classification + extraction (expensive, thorough)
+- **Tier 1 (gpt-4.1-nano)**: Quick relevance scoring (cheap, fast)
+- **Tier 2 (gpt-4o-mini)**: Full classification + extraction (higher quality)
 - Only ~20% of items reach Tier 2
 
 ### 4. Deterministic Scoring (ADR-006)

@@ -155,12 +155,12 @@ class Settings(BaseSettings):
     TIER1_MAX_DAILY_CALLS: int = Field(
         default=1000,
         ge=0,
-        description="Max Haiku calls per day (0 = unlimited)",
+        description="Max Tier 1 LLM calls per day (0 = unlimited)",
     )
     TIER2_MAX_DAILY_CALLS: int = Field(
         default=200,
         ge=0,
-        description="Max Sonnet calls per day (0 = unlimited)",
+        description="Max Tier 2 LLM calls per day (0 = unlimited)",
     )
     EMBEDDING_MAX_DAILY_CALLS: int = Field(
         default=500,

@@ -20,13 +20,19 @@ We need reliable structured output (JSON) and extreme cost efficiency for a pers
 Use **OpenAI models** with a “simple default” and an “optional optimization path”.
 
 ### Operational Default (Start Here)
+- **Tier 1 (Filter)**: `gpt-4.1-nano`
+- **Tier 2 (Classify/Summarize)**: `gpt-4o-mini`
+
+**Why**: Tier 1 is high-volume and classification-oriented; Tier 2 is lower-volume and quality-sensitive.
+
+### Simplified Option (When You Want Fewer Moving Parts)
 - **Tier 1 (Filter)**: `gpt-4o-mini`
 - **Tier 2 (Classify/Summarize)**: `gpt-4o-mini`
 
 **Why**: One model minimizes complexity while keeping strong JSON/schema adherence and predictable quality.
 
 ### Optional Optimization Path (When Cost/Volume Requires It)
-- **Tier 1 (Filter)**: a cheaper “classification-oriented” model *if available in your account and priced lower* (expert review suggested `gpt-4.1-nano`)
+- **Tier 1 (Filter)**: the cheapest “classification-oriented” model you can tolerate (or a cheaper provider) while keeping acceptable schema adherence
 - **Tier 2 (Classify/Summarize)**: `gpt-4o-mini`
 
 **Why**: Tier 1 is high-volume and can tolerate simpler reasoning; Tier 2 is lower-volume and quality-sensitive.
@@ -80,12 +86,13 @@ Cost is dominated by three factors:
 
 ### Example Prices (Must Be Verified “As Of”)
 This ADR previously used:
+- `gpt-4.1-nano`: $0.10 / 1M input tokens, $0.40 / 1M output tokens
 - `gpt-4o-mini`: $0.15 / 1M input tokens, $0.60 / 1M output tokens
 
 Pricing changes; verify on vendor pricing pages and update this ADR with an “as-of” date.
 
 ### Why the “Optional Optimization Path” Helps
-If Tier 1 moves to a cheaper classifier model (expert review suggested `gpt-4.1-nano`) and Tier 2 stays on `gpt-4o-mini`, the monthly cost can drop materially **if**:
+If Tier 1 moves to a cheaper classifier model/provider and Tier 2 stays on `gpt-4o-mini`, the monthly cost can drop materially **if**:
 - Tier 1 volume is high
 - Tier 2 pass rate is low
 - The cheaper model doesn’t increase retries/repair costs

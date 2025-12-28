@@ -6,8 +6,8 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                           EXTERNAL SYSTEMS                              │
 ├──────────────┬──────────────┬──────────────┬──────────────┬────────────┤
-│  RSS/Web     │    GDELT     │   Telegram   │  Claude API  │   Client   │
-│  Sources     │    API       │   Channels   │   (LLM)      │   Apps     │
+│  RSS/Web     │    GDELT     │   Telegram   │   LLM API    │   Client   │
+│  Sources     │    API       │   Channels   │   (OpenAI)   │   Apps     │
 └──────┬───────┴──────┬───────┴──────┬───────┴──────┬───────┴─────┬──────┘
        │              │              │              │             │
        │              │              │              │             │
@@ -33,7 +33,7 @@
 │   │                      PROCESSING LAYER                           │   │
 │   │                                                                 │   │
 │   │   Tier1 Filter     Tier2 Classifier    Deduplicator             │   │
-│   │   (Haiku)          (Sonnet)            (hash + vector)          │   │
+│   │   (nano)           (mini)              (hash + vector)          │   │
 │   └─────────────────────────────────────────────────────────────────┘   │
 │                                     │                                   │
 │   ┌─────────────────────────────────▼───────────────────────────────┐   │
@@ -107,6 +107,10 @@
 
 ### 2. Processing Flow
 
+Current model mapping (see ADR-002):
+- Tier 1 (filter): `gpt-4.1-nano`
+- Tier 2 (classify/summarize): `gpt-4o-mini`
+
 ```
 ┌─────────────┐
 │  raw_item   │
@@ -116,7 +120,7 @@
        ▼
 ┌─────────────┐
 │ Tier 1 LLM  │
-│ (Haiku)     │
+│ (nano)      │
 │ relevance   │
 │ score 0-10  │
 └──────┬──────┘
@@ -126,7 +130,7 @@
        ▼                                 ▼
 ┌─────────────┐                   ┌─────────────┐
 │   Mark as   │                   │ Tier 2 LLM  │
-│   "noise"   │                   │ (Sonnet)    │
+│   "noise"   │                   │ (mini)      │
 │   Archive   │                   │             │
 └─────────────┘                   │ • classify  │
                                   │ • extract   │
@@ -247,8 +251,8 @@ Benefit: One event with corroboration count, not 50 duplicate items.
 ### 3. Two-Tier LLM Processing (ADR-005)
 
 Why: LLM calls are expensive; most news is irrelevant.
-How: Cheap model (Haiku) filters, expensive model (Sonnet) classifies.
-Benefit: ~80% cost reduction vs. processing everything with Sonnet.
+How: Tier 1 model filters, Tier 2 model classifies (see ADR-002 for current models).
+Benefit: Significant cost reduction vs. running Tier 2 on all items.
 
 ### 4. Deterministic Scoring (ADR-006)
 

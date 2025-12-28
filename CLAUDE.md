@@ -84,6 +84,132 @@ geopolitical-intel/
 - Use pytest fixtures for common setup
 - Integration tests require running database
 
+## Git Conventions
+
+### Branch Naming
+
+```
+main              ← Production-ready code
+develop           ← Integration branch (optional for solo dev)
+feature/TASK-XXX-short-description
+fix/TASK-XXX-short-description
+refactor/short-description
+docs/short-description
+```
+
+**Examples:**
+```
+feature/TASK-006-rss-collector
+feature/TASK-028-risk-levels
+fix/TASK-017-decay-calculation
+refactor/trend-engine-cleanup
+docs/api-documentation
+```
+
+### Commit Message Format
+
+```
+<type>(<scope>): <subject>
+
+[optional body]
+
+[optional footer]
+```
+
+**Types:**
+| Type | When to use |
+|------|-------------|
+| `feat` | New feature |
+| `fix` | Bug fix |
+| `refactor` | Code change that neither fixes nor adds |
+| `docs` | Documentation only |
+| `test` | Adding/updating tests |
+| `chore` | Maintenance (deps, config, etc.) |
+| `perf` | Performance improvement |
+
+**Scope** (optional): Module affected (`api`, `core`, `storage`, `ingestion`, `processing`, `workers`)
+
+**Examples:**
+```
+feat(core): implement risk level calculation
+
+Adds RiskLevel enum and get_risk_level() function.
+Maps probability to Low/Guarded/Elevated/High/Severe.
+
+Closes TASK-028
+```
+
+```
+fix(storage): correct decay half-life calculation
+
+The decay was using days instead of hours for the
+half-life calculation, causing probabilities to
+decay too slowly.
+
+Fixes TASK-017
+```
+
+```
+docs: add API endpoint documentation
+```
+
+```
+chore: update anthropic SDK to 0.18.0
+```
+
+```
+test(core): add trend engine edge case tests
+```
+
+### Commit Best Practices
+
+1. **Atomic commits**: One logical change per commit
+2. **Reference tasks**: Include `TASK-XXX` in body/footer
+3. **Present tense**: "Add feature" not "Added feature"
+4. **No period** at end of subject line
+5. **50/72 rule**: Subject ≤50 chars, body wrapped at 72
+
+### When to Commit
+
+- After completing a logical unit of work
+- Before switching to a different task
+- After all tests pass
+- After making the code work (commit working state)
+
+### Pull Request / Merge Strategy
+
+For solo development:
+```bash
+# Work on feature branch
+git checkout -b feature/TASK-006-rss-collector
+
+# Make commits...
+
+# When done, merge to main
+git checkout main
+git merge feature/TASK-006-rss-collector
+git push origin main
+
+# Delete feature branch
+git branch -d feature/TASK-006-rss-collector
+```
+
+### .gitignore Essentials
+
+Already configured, but verify these are ignored:
+```
+.env
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+```
+
 ## Common Commands
 
 ```bash
@@ -209,3 +335,4 @@ If starting fresh or resuming work:
 6. Verify                     → Run tests, check types
 7. Update tracking            → Mark done, update status
 ```
+

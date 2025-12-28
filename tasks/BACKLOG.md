@@ -308,6 +308,36 @@ Prevent runaway API costs from bugs or high-volume news events.
 
 ---
 
+### TASK-038: LLM Provider Fallback
+**Priority**: P1 (High)
+**Estimate**: 3-4 hours
+
+Configure a secondary LLM provider/model and automatically switch when the primary is rate limited or down.
+
+**Acceptance Criteria**:
+- [ ] Provider configuration supports primary + secondary
+- [ ] Automatic failover on rate limit (HTTP 429) and transient outages (HTTP 5xx/timeouts)
+- [ ] Switch events are logged with reason and provider/model chosen
+- [ ] Schema validation remains strict (no silent shape changes on fallback)
+- [ ] Unit tests simulate rate limit/outage and verify failover behavior
+
+---
+
+### TASK-039: Model Evaluation Gold Set
+**Priority**: P2 (Medium)
+**Estimate**: 6-8 hours
+
+Create a small labeled dataset and a benchmark script to compare model/provider quality and cost.
+
+**Acceptance Criteria**:
+- [ ] 200 labeled articles/items (gold set) in a repo-friendly format (e.g., JSONL)
+- [ ] Labels include: relevance, trend match, signal type, direction, severity, and confidence (as applicable)
+- [ ] Benchmark script produces accuracy metrics + estimated cost per item
+- [ ] Compare `gpt-4o-mini` against at least one alternative configuration
+- [ ] Document how to run the benchmark and interpret results
+
+---
+
 ## Phase 3: Trend Engine
 
 ### TASK-016: Trend Management

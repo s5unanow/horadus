@@ -1,0 +1,300 @@
+# RSS Feeds Configuration
+#
+# This file defines the RSS feeds to monitor for news collection.
+# Each feed has a credibility score based on journalistic standards.
+#
+# credibility: 0.0-1.0 scale
+#   0.9-1.0: Major wire services, primary sources
+#   0.8-0.9: Major newspapers, established outlets
+#   0.7-0.8: Reputable regional/specialty outlets
+#   0.6-0.7: Secondary sources, aggregators
+#   0.5-0.6: Opinion-heavy outlets
+#   <0.5: Unreliable, use with caution
+#
+# source_tier: (Expert Recommendation)
+#   primary: Official sources, wire services with direct access
+#   wire: Major international wire services (AP, Reuters, AFP)
+#   major: Major newspapers with original reporting
+#   regional: Reputable regional/specialty outlets
+#   aggregator: News aggregators, blogs, secondary reporting
+#
+# reporting_type: (Expert Recommendation)
+#   firsthand: Original reporting, on-the-ground sources
+#   secondary: Citing other sources, analysis of primary reports
+#   aggregator: Compiling/summarizing other sources
+
+feeds:
+  # ==========================================================================
+  # Tier 1: Wire Services (highest credibility)
+  # ==========================================================================
+  
+  - name: "Reuters World"
+    url: "https://feeds.reuters.com/Reuters/worldNews"
+    credibility: 0.95
+    source_tier: wire
+    reporting_type: firsthand
+    categories:
+      - "world"
+      - "politics"
+    check_interval_minutes: 15
+    max_items_per_fetch: 50
+    language: "en"
+    enabled: true
+    
+  - name: "AP News - World"
+    url: "https://rsshub.app/apnews/topics/world-news"
+    credibility: 0.95
+    source_tier: wire
+    reporting_type: firsthand
+    categories:
+      - "world"
+      - "politics"
+    check_interval_minutes: 15
+    max_items_per_fetch: 50
+    language: "en"
+    enabled: true
+    
+  - name: "AFP - English"
+    url: "https://www.afp.com/en/rss-feeds"
+    credibility: 0.95
+    source_tier: wire
+    reporting_type: firsthand
+    categories:
+      - "world"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: false  # Requires subscription
+    
+  # ==========================================================================
+  # Tier 2: Major International Outlets
+  # ==========================================================================
+  
+  - name: "BBC World"
+    url: "http://feeds.bbci.co.uk/news/world/rss.xml"
+    credibility: 0.90
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "world"
+      - "europe"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  - name: "BBC Europe"
+    url: "http://feeds.bbci.co.uk/news/world/europe/rss.xml"
+    credibility: 0.90
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "europe"
+    check_interval_minutes: 30
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    
+  - name: "The Guardian - World"
+    url: "https://www.theguardian.com/world/rss"
+    credibility: 0.85
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "world"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  - name: "Al Jazeera English"
+    url: "https://www.aljazeera.com/xml/rss/all.xml"
+    credibility: 0.80
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "world"
+      - "middle-east"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  - name: "DW News"
+    url: "https://rss.dw.com/rdf/rss-en-all"
+    credibility: 0.85
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "world"
+      - "europe"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  - name: "France24 - World"
+    url: "https://www.france24.com/en/rss"
+    credibility: 0.85
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "world"
+      - "europe"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  # ==========================================================================
+  # Tier 3: Regional / Specialty (Defense, Security)
+  # ==========================================================================
+  
+  - name: "Defense News"
+    url: "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml"
+    credibility: 0.80
+    source_tier: regional
+    reporting_type: firsthand
+    categories:
+      - "defense"
+      - "military"
+    check_interval_minutes: 60
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    
+  - name: "The War Zone"
+    url: "https://www.thedrive.com/the-war-zone/feed"
+    credibility: 0.75
+    source_tier: regional
+    reporting_type: secondary
+    categories:
+      - "defense"
+      - "military"
+    check_interval_minutes: 60
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    
+  - name: "Breaking Defense"
+    url: "https://breakingdefense.com/feed/"
+    credibility: 0.75
+    source_tier: regional
+    reporting_type: firsthand
+    categories:
+      - "defense"
+      - "military"
+    check_interval_minutes: 60
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    
+  # ==========================================================================
+  # Tier 4: Regional Sources (Eastern Europe, Russia)
+  # ==========================================================================
+  
+  - name: "Kyiv Independent"
+    url: "https://kyivindependent.com/feed/"
+    credibility: 0.75
+    source_tier: regional
+    reporting_type: firsthand
+    categories:
+      - "ukraine"
+      - "russia"
+      - "conflict"
+    check_interval_minutes: 30
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  - name: "Moscow Times"
+    url: "https://www.themoscowtimes.com/rss/news"
+    credibility: 0.70
+    source_tier: regional
+    reporting_type: firsthand
+    categories:
+      - "russia"
+    check_interval_minutes: 60
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    note: "Independent outlet, critical of Kremlin"
+    
+  - name: "TASS (Russia)"
+    url: "https://tass.com/rss/v2.xml"
+    credibility: 0.50
+    source_tier: primary  # State source - primary for official Russian position
+    reporting_type: firsthand
+    categories:
+      - "russia"
+    check_interval_minutes: 60
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    note: "State media - useful for official Russian position, not independent analysis"
+    
+  - name: "Baltic Times"
+    url: "https://www.baltictimes.com/rss.xml"
+    credibility: 0.70
+    source_tier: regional
+    reporting_type: secondary
+    categories:
+      - "europe"
+      - "baltics"
+    check_interval_minutes: 120
+    max_items_per_fetch: 20
+    language: "en"
+    enabled: true
+    
+  # ==========================================================================
+  # Tier 5: US/China Focus
+  # ==========================================================================
+  
+  - name: "SCMP - China"
+    url: "https://www.scmp.com/rss/91/feed"
+    credibility: 0.75
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "china"
+      - "asia"
+    check_interval_minutes: 60
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+    
+  - name: "Nikkei Asia"
+    url: "https://asia.nikkei.com/rss/feed/nar"
+    credibility: 0.85
+    source_tier: major
+    reporting_type: firsthand
+    categories:
+      - "asia"
+      - "china"
+      - "japan"
+    check_interval_minutes: 60
+    max_items_per_fetch: 30
+    language: "en"
+    enabled: true
+
+# Global settings
+settings:
+  default_check_interval_minutes: 30
+  default_max_items_per_fetch: 30
+  request_timeout_seconds: 30
+  user_agent: "GeopoliticalIntel/1.0 (News Aggregator)"
+  respect_robots_txt: true
+  
+  # Tier multipliers for credibility calculation (Expert Recommendation)
+  tier_multipliers:
+    primary: 1.0      # Official sources, direct access
+    wire: 0.95        # AP, Reuters, AFP
+    major: 0.85       # BBC, Guardian, major papers
+    regional: 0.70    # Specialty/regional outlets
+    aggregator: 0.50  # News aggregators, blogs
+  
+  # Reporting type multipliers
+  reporting_multipliers:
+    firsthand: 1.0    # Original reporting
+    secondary: 0.7    # Citing other sources
+    aggregator: 0.4   # Pure aggregation

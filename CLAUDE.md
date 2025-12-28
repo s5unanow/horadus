@@ -1,0 +1,211 @@
+# CLAUDE.md - Agent Instructions for Geopolitical Intelligence Platform
+
+## Project Overview
+
+Building a headless backend that:
+1. Collects news from multiple sources (RSS, GDELT, Telegram)
+2. Classifies them via LLM with smart filtering
+3. Clusters articles into events (many articles → one event)
+4. Tracks geopolitical trend probabilities using log-odds
+5. Generates periodic reports with retrospective analysis
+
+**Key Principle**: LLM extracts structured signals; deterministic code computes probability deltas.
+
+## Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Language | Python 3.12 |
+| API | FastAPI + Pydantic |
+| Database | PostgreSQL + TimescaleDB + pgvector |
+| Queue | Redis + Celery |
+| LLM | Claude API (Haiku for filtering, Sonnet for classification) |
+| Scraping | feedparser, Trafilatura, Telethon |
+
+## Project Navigation
+
+```
+geopolitical-intel/
+├── CLAUDE.md              ← You are here (agent instructions)
+├── PROJECT_STATUS.md      ← Current progress, what's done/next
+├── tasks/
+│   ├── BACKLOG.md         ← All planned tasks
+│   ├── CURRENT_SPRINT.md  ← Active tasks (check this first)
+│   └── specs/             ← Detailed task specifications
+├── docs/
+│   ├── ARCHITECTURE.md    ← System design (READ THIS)
+│   ├── DATA_MODEL.md      ← Database schema
+│   ├── GLOSSARY.md        ← Domain terminology
+│   └── adr/               ← Architecture Decision Records
+├── src/                   ← Source code
+├── tests/                 ← Test files
+└── config/                ← Configuration files
+```
+
+## Before Starting Any Task
+
+1. **Read the task spec** in `tasks/specs/` if it exists
+2. **Check architecture** in `docs/ARCHITECTURE.md` for system context
+3. **Check data model** in `docs/DATA_MODEL.md` for schema
+4. **Run existing tests**: `pytest tests/ -v`
+
+## After Completing Any Task
+
+1. **Update** `tasks/CURRENT_SPRINT.md` (mark task as DONE)
+2. **Move completed tasks** to `tasks/COMPLETED.md`
+3. **Update** `PROJECT_STATUS.md` if milestone reached
+4. **Add ADR** to `docs/adr/` if significant decision was made
+5. **Run tests** to verify nothing broke: `pytest tests/ -v`
+
+## Code Conventions
+
+### General
+- **Type hints required** on all functions
+- **Pydantic models** for all data structures
+- **Async everywhere** (FastAPI, asyncpg, httpx)
+- **Docstrings** on public classes and functions
+
+### File Organization
+- Database models: `src/storage/models.py`
+- Database operations: `src/storage/repositories.py`
+- API routes: `src/api/routes/*.py`
+- Core domain logic: `src/core/*.py`
+- Celery tasks: `src/workers/tasks.py`
+- LLM interactions: `src/processing/llm_classifier.py`
+
+### Naming
+- Files: `snake_case.py`
+- Classes: `PascalCase`
+- Functions/variables: `snake_case`
+- Constants: `UPPER_SNAKE_CASE`
+
+### Testing
+- Tests mirror `src/` structure in `tests/unit/`
+- Use pytest fixtures for common setup
+- Integration tests require running database
+
+## Common Commands
+
+```bash
+# Start services (database, redis)
+docker-compose up -d
+
+# Run database migrations
+alembic upgrade head
+
+# Start API server (development)
+uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+
+# Start Celery worker
+celery -A src.workers.celery_app worker --loglevel=info
+
+# Start Celery beat (scheduler)
+celery -A src.workers.celery_app beat --loglevel=info
+
+# Run all tests
+pytest tests/ -v
+
+# Run specific test file
+pytest tests/unit/core/test_trend_engine.py -v
+
+# Run with coverage
+pytest tests/ --cov=src --cov-report=term-missing
+
+# Type checking
+mypy src/
+
+# Format code
+ruff format src/ tests/
+ruff check src/ tests/ --fix
+```
+
+## Key Architectural Decisions
+
+### 1. Log-Odds for Probability (ADR-003)
+We track trend probabilities using log-odds, not raw percentages.
+- Mathematically sound (always valid 0-1 range)
+- Evidence is additive
+- See `docs/adr/003-probability-model.md`
+
+### 2. Events > Articles (ADR-004)
+Multiple articles about the same story become ONE event.
+- Reduces noise
+- Corroboration count matters
+- See `docs/adr/004-event-clustering.md`
+
+### 3. Two-Tier LLM Processing (ADR-005)
+- **Tier 1 (Haiku)**: Quick relevance scoring (cheap, fast)
+- **Tier 2 (Sonnet)**: Full classification + extraction (expensive, thorough)
+- Only ~20% of items reach Tier 2
+
+### 4. Deterministic Scoring (ADR-006)
+LLM outputs structured signals. Code computes deltas.
+- Explainable: every probability change has a paper trail
+- Debuggable: no "the AI said so" black boxes
+- Consistent: same inputs → same outputs
+
+## Environment Variables
+
+Required in `.env`:
+```
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost:5432/geoint
+REDIS_URL=redis://localhost:6379/0
+ANTHROPIC_API_KEY=sk-ant-...
+
+# Optional
+GDELT_API_KEY=...
+TELEGRAM_API_ID=...
+TELEGRAM_API_HASH=...
+```
+
+## Troubleshooting
+
+### Database connection issues
+```bash
+# Check if PostgreSQL is running
+docker-compose ps
+# Check logs
+docker-compose logs postgres
+```
+
+### Celery tasks not running
+```bash
+# Check if Redis is running
+docker-compose ps
+# Check Celery worker logs
+celery -A src.workers.celery_app worker --loglevel=debug
+```
+
+### Import errors
+```bash
+# Make sure you're in the project root
+# Make sure virtual environment is activated
+source .venv/bin/activate
+# Install in development mode
+pip install -e .
+```
+
+## Quick Reference: Domain Concepts
+
+| Term | Definition |
+|------|------------|
+| **RawItem** | Single article/post from a source |
+| **Event** | Cluster of RawItems about the same story |
+| **Trend** | Hypothesis being tracked (e.g., "EU-Russia conflict") |
+| **Signal** | Extracted fact that affects a trend |
+| **Evidence** | A signal's contribution to a trend's probability |
+| **Log-odds** | ln(p / (1-p)), our internal probability representation |
+
+## Getting Oriented
+
+If starting fresh or resuming work:
+
+```
+1. Read PROJECT_STATUS.md     → Understand current state
+2. Read CURRENT_SPRINT.md     → See active tasks
+3. Pick a task or ask         → "What should I work on?"
+4. Read task spec if exists   → tasks/specs/XXX-task-name.md
+5. Implement                  → Write code, tests
+6. Verify                     → Run tests, check types
+7. Update tracking            → Mark done, update status
+```

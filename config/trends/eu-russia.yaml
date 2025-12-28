@@ -1,0 +1,192 @@
+# EU-Russia Military Conflict Trend Configuration
+# This trend tracks the probability of direct military confrontation between EU/NATO and Russia
+
+id: "eu-russia-conflict"
+name: "EU-Russia Military Conflict"
+description: |
+  Tracks the probability of direct military confrontation between EU/NATO member 
+  states and the Russian Federation. This includes scenarios ranging from border 
+  incidents to full-scale conflict.
+
+# Prior probability (before any evidence)
+# 8% baseline reflects historical tensions without active escalation
+baseline_probability: 0.08
+
+# How many days for an event's impact to decay by 50%
+# 30 days means old news loses influence relatively quickly
+decay_half_life_days: 30
+
+# =============================================================================
+# DISQUALIFIERS (Expert Recommendation)
+# Events that would reset or dramatically change the assessment
+# =============================================================================
+disqualifiers:
+  - signal: "peace_treaty_signed"
+    effect: "reset_to_baseline"
+    description: "Formal, ratified peace agreement between parties"
+    
+  - signal: "regime_change_russia"
+    effect: "reassess"
+    description: "Major political transition in Russia requires full reassessment"
+    
+  - signal: "nato_dissolution"
+    effect: "invalidate"
+    description: "NATO no longer exists as a coherent alliance"
+
+# =============================================================================
+# FALSIFICATION CRITERIA (Expert Recommendation)
+# "What would change my mind?" - makes reasoning transparent
+# =============================================================================
+falsification_criteria:
+  decrease_confidence:
+    - "6+ months of sustained de-escalation with no military incidents"
+    - "Formal diplomatic normalization and sanctions relief"
+    - "Mutual troop withdrawals from border regions"
+    - "Joint military cooperation agreements"
+    
+  increase_confidence:
+    - "Direct military engagement between NATO and Russian forces"
+    - "Nuclear weapon use or credible deployment orders"
+    - "Full mobilization by Russia or NATO member state"
+    - "Formal declaration of war"
+    
+  would_invalidate_model:
+    - "Fundamental change in international order (e.g., UN replacement)"
+    - "Major alliance realignment (e.g., EU member joins Russia)"
+
+# =============================================================================
+# INDICATORS
+# Each indicator has:
+#   - weight: base impact on log-odds (0.01-0.10 typical)
+#   - direction: "escalatory" (+) or "de_escalatory" (-)
+#   - type: "leading" (precedes escalation) or "lagging" (follows escalation)
+#   - keywords: terms that suggest this signal type
+# =============================================================================
+indicators:
+  military_movement:
+    weight: 0.04
+    direction: escalatory
+    type: leading  # Troop movements often precede conflict
+    keywords:
+      - troops
+      - deployment
+      - mobilization
+      - exercises
+      - military buildup
+      - reinforcements
+      - nato forces
+      - border forces
+    
+  weapons_transfer:
+    weight: 0.03
+    direction: escalatory
+    type: leading  # Arms shipments indicate preparation
+    keywords:
+      - weapons shipment
+      - arms transfer
+      - military aid
+      - missiles
+      - tanks
+      - artillery
+      - ammunition
+      
+  sanctions:
+    weight: 0.02
+    direction: escalatory
+    type: lagging  # Usually follows other escalatory events
+    keywords:
+      - sanctions
+      - embargo
+      - trade restrictions
+      - asset freeze
+      - economic measures
+      
+  diplomatic_breakdown:
+    weight: 0.03
+    direction: escalatory
+    type: lagging  # Follows breakdown in relations
+    keywords:
+      - expelled diplomat
+      - ambassador recalled
+      - embassy closed
+      - diplomatic ties
+      - severed relations
+      
+  military_incident:
+    weight: 0.05
+    direction: escalatory
+    type: leading  # Incidents often precede larger conflicts
+    keywords:
+      - airspace violation
+      - intercept
+      - close call
+      - provocation
+      - incursion
+      - fired upon
+      
+  nuclear_rhetoric:
+    weight: 0.04
+    direction: escalatory
+    type: leading  # Nuclear threats indicate willingness to escalate
+    keywords:
+      - nuclear
+      - atomic
+      - strategic deterrent
+      - nuclear readiness
+      - nuclear threat
+      
+  diplomatic_talks:
+    weight: 0.03
+    direction: de_escalatory
+    type: leading  # Talks often precede de-escalation
+    keywords:
+      - peace talks
+      - negotiations
+      - diplomatic solution
+      - summit
+      - dialogue
+      - de-escalation
+      
+  ceasefire:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging  # Ceasefires follow conflict reduction
+    keywords:
+      - ceasefire
+      - truce
+      - armistice
+      - cessation of hostilities
+      - peace agreement
+      
+  troop_withdrawal:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging  # Withdrawals follow de-escalation decisions
+    keywords:
+      - withdrawal
+      - pull back
+      - troops leaving
+      - de-mobilization
+      - stand down
+
+# Relevant geographic regions
+regions:
+  - Baltic States (Estonia, Latvia, Lithuania)
+  - Poland
+  - Finland
+  - Ukraine
+  - Black Sea
+  - Kaliningrad
+  - Arctic
+
+# Key actors to monitor
+actors:
+  - NATO
+  - European Union
+  - Russia
+  - United States
+  - Germany
+  - France
+  - United Kingdom
+  - Poland
+  - Baltic States

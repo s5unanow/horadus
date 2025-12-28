@@ -146,11 +146,13 @@ def logodds_to_prob(lo: float) -> float:
 class EvidenceFactors:
     """
     Breakdown of factors used in delta calculation.
-    
+
     Stored with each evidence record for transparency and debugging.
-    
+
     Attributes:
         base_weight: Weight from trend indicator config
+        severity: Magnitude of the signal (0.0-1.0)
+        confidence: LLM classification confidence (0.0-1.0)
         credibility: Source reliability score
         corroboration: Factor from multiple sources
         novelty: Factor for new vs repeated info
@@ -159,17 +161,21 @@ class EvidenceFactors:
         clamped_delta: Final delta after clamping
     """
     base_weight: float
+    severity: float
+    confidence: float
     credibility: float
     corroboration: float
     novelty: float
     direction_multiplier: float
     raw_delta: float
     clamped_delta: float
-    
+
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON storage."""
         return {
             "base_weight": self.base_weight,
+            "severity": self.severity,
+            "confidence": self.confidence,
             "credibility": self.credibility,
             "corroboration": self.corroboration,
             "novelty": self.novelty,
@@ -186,23 +192,27 @@ def calculate_evidence_delta(
     corroboration_count: int,
     novelty_score: float,
     direction: str,
+    severity: float = 1.0,
+    confidence: float = 1.0,
 ) -> tuple[float, EvidenceFactors]:
     """
     Calculate log-odds delta from evidence factors.
-    
+
     The formula is:
-        delta = base_weight × credibility × corroboration × novelty × direction
-    
+        delta = base_weight × severity × confidence × credibility × corroboration × novelty × direction
+
     Where:
         - base_weight: From trend indicator config (e.g., 0.04 for military_movement)
+        - severity: Magnitude of the signal (0.0-1.0), e.g., routine=0.2, major=0.8
+        - confidence: LLM's certainty in classification (0.0-1.0)
         - credibility: Source reliability (0-1)
         - corroboration: sqrt(num_sources) / 3, capped at 1.0
         - novelty: 1.0 for new info, 0.3 for repeated
         - direction: +1 for escalatory, -1 for de-escalatory
-    
+
     The result is clamped to MAX_DELTA_PER_EVENT to prevent any single
     event from having outsized influence.
-    
+
     Args:
         signal_type: Type of signal detected (for logging)
         indicator_weight: Base weight from trend config
@@ -210,13 +220,19 @@ def calculate_evidence_delta(
         corroboration_count: Number of independent sources
         novelty_score: Novelty factor (0.0 to 1.0, typically 1.0 or 0.3)
         direction: 'escalatory' or 'de_escalatory'
-        
+        severity: Magnitude of the signal (0.0 to 1.0, default 1.0)
+                  - 0.1-0.3: Routine (exercises, standard diplomatic statements)
+                  - 0.4-0.6: Significant (unusual activity, strong rhetoric)
+                  - 0.7-0.9: Major (mobilization, direct threats)
+                  - 1.0: Critical (active conflict, use of force)
+        confidence: LLM's classification confidence (0.0 to 1.0, default 1.0)
+
     Returns:
         Tuple of (delta, factors_breakdown)
-        
+
     Raises:
         ValueError: If direction is not valid
-        
+
     Examples:
         >>> delta, factors = calculate_evidence_delta(
         ...     signal_type="military_movement",
@@ -225,6 +241,8 @@ def calculate_evidence_delta(
         ...     corroboration_count=3,
         ...     novelty_score=1.0,
         ...     direction="escalatory",
+        ...     severity=0.8,  # Major event
+        ...     confidence=0.95,  # High LLM confidence
         ... )
         >>> delta > 0
         True
@@ -234,28 +252,36 @@ def calculate_evidence_delta(
     # Validate direction
     if direction not in ("escalatory", "de_escalatory"):
         raise ValueError(f"Invalid direction: {direction}")
-    
+
+    # Clamp severity and confidence to valid range
+    severity = max(0.0, min(1.0, severity))
+    confidence = max(0.0, min(1.0, confidence))
+
     # Calculate corroboration factor
     # 1 source = 0.33, 4 sources = 0.67, 9+ sources = 1.0
     corroboration = min(1.0, math.sqrt(max(1, corroboration_count)) / 3.0)
-    
+
     # Direction multiplier
     direction_mult = 1.0 if direction == "escalatory" else -1.0
-    
-    # Calculate raw delta
+
+    # Calculate raw delta (now includes severity and confidence)
     raw_delta = (
         indicator_weight
+        * severity          # NEW: magnitude of the signal
+        * confidence        # NEW: LLM certainty
         * source_credibility
         * corroboration
         * novelty_score
         * direction_mult
     )
-    
+
     # Clamp to prevent any single event from dominating
     clamped_delta = max(-MAX_DELTA_PER_EVENT, min(MAX_DELTA_PER_EVENT, raw_delta))
-    
+
     factors = EvidenceFactors(
         base_weight=indicator_weight,
+        severity=severity,
+        confidence=confidence,
         credibility=source_credibility,
         corroboration=corroboration,
         novelty=novelty_score,

@@ -239,6 +239,82 @@ class TestCalculateEvidenceDelta:
         # Should be proportional
         assert abs(delta_new) / abs(delta_old) == pytest.approx(1.0 / 0.3, rel=0.01)
 
+    def test_severity_affects_delta(self):
+        """Higher severity (magnitude) should produce larger delta."""
+        delta_major, factors_major = calculate_evidence_delta(
+            signal_type="military_movement",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            severity=0.9,  # Major event
+        )
+        delta_routine, factors_routine = calculate_evidence_delta(
+            signal_type="military_movement",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            severity=0.2,  # Routine event
+        )
+        assert abs(delta_major) > abs(delta_routine)
+        assert factors_major.severity == 0.9
+        assert factors_routine.severity == 0.2
+        # Should be proportional
+        assert abs(delta_major) / abs(delta_routine) == pytest.approx(0.9 / 0.2, rel=0.01)
+
+    def test_confidence_affects_delta(self):
+        """Higher LLM confidence should produce larger delta."""
+        delta_confident, factors_high = calculate_evidence_delta(
+            signal_type="test",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            confidence=0.95,  # High confidence
+        )
+        delta_uncertain, factors_low = calculate_evidence_delta(
+            signal_type="test",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            confidence=0.5,  # Uncertain
+        )
+        assert abs(delta_confident) > abs(delta_uncertain)
+        assert factors_high.confidence == 0.95
+        assert factors_low.confidence == 0.5
+
+    def test_severity_and_confidence_combined(self):
+        """Test that severity and confidence multiply together."""
+        # Baseline: no severity/confidence multipliers (defaults to 1.0)
+        delta_full, _ = calculate_evidence_delta(
+            signal_type="test",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            severity=1.0,
+            confidence=1.0,
+        )
+        # With severity=0.5 and confidence=0.5, should be 0.25x
+        delta_reduced, _ = calculate_evidence_delta(
+            signal_type="test",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            severity=0.5,
+            confidence=0.5,
+        )
+        assert abs(delta_reduced) / abs(delta_full) == pytest.approx(0.25, rel=0.01)
+
     def test_delta_clamped_to_max(self):
         """Extreme inputs should be clamped to MAX_DELTA_PER_EVENT."""
         delta, factors = calculate_evidence_delta(
@@ -314,6 +390,8 @@ class TestTrendEngine:
         """Create sample evidence factors."""
         return EvidenceFactors(
             base_weight=0.04,
+            severity=0.8,
+            confidence=0.95,
             credibility=0.9,
             corroboration=0.67,
             novelty=1.0,

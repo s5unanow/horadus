@@ -148,6 +148,36 @@ class Settings(BaseSettings):
     # =========================================================================
     DEFAULT_DECAY_HALF_LIFE_DAYS: int = Field(default=30, ge=1)
     TREND_SNAPSHOT_INTERVAL_MINUTES: int = Field(default=60, ge=1)
+
+    # =========================================================================
+    # Cost Protection (Kill Switch)
+    # =========================================================================
+    TIER1_MAX_DAILY_CALLS: int = Field(
+        default=1000,
+        ge=0,
+        description="Max Haiku calls per day (0 = unlimited)",
+    )
+    TIER2_MAX_DAILY_CALLS: int = Field(
+        default=200,
+        ge=0,
+        description="Max Sonnet calls per day (0 = unlimited)",
+    )
+    EMBEDDING_MAX_DAILY_CALLS: int = Field(
+        default=500,
+        ge=0,
+        description="Max embedding calls per day (0 = unlimited)",
+    )
+    DAILY_COST_LIMIT_USD: float = Field(
+        default=5.0,
+        ge=0,
+        description="Hard daily cost limit in USD (0 = unlimited)",
+    )
+    COST_ALERT_THRESHOLD_PCT: int = Field(
+        default=80,
+        ge=0,
+        le=100,
+        description="Alert when this % of daily budget is reached",
+    )
     
     # =========================================================================
     # Collection

@@ -244,8 +244,8 @@ Build Tier 1 (fast/cheap) LLM filter for relevance scoring.
 ---
 
 ### TASK-014: LLM Classifier - Tier 2
-**Priority**: P1 (High)  
-**Estimate**: 6 hours  
+**Priority**: P1 (High)
+**Estimate**: 6 hours
 **Spec**: `tasks/specs/014-llm-classifier-tier2.md`
 
 Build Tier 2 (thorough) LLM classification.
@@ -257,12 +257,15 @@ Build Tier 2 (thorough) LLM classification.
 - [ ] For each relevant trend:
   - Signal type detected
   - Impact direction (escalatory/de-escalatory)
-  - Confidence score
+  - **Severity score (0.0-1.0)**: Magnitude of the signal (routine=0.2, significant=0.5, major=0.8, critical=1.0)
+  - **Confidence score (0.0-1.0)**: LLM certainty in classification
 - [ ] Generate 2-sentence summary
 - [ ] Structured output with Pydantic
 - [ ] Store results in event record
-- [ ] Cost tracking
+- [ ] Cost tracking (integrates with TASK-036)
 - [ ] Unit tests with mock responses
+
+**Note on Severity**: This distinguishes "routine military exercises" (severity=0.2) from "100k troops massing on border" (severity=0.9). The severity multiplies the indicator weight in delta calculation.
 
 ---
 
@@ -280,6 +283,28 @@ Wire together the full processing pipeline.
 - [ ] Error handling and retry logic
 - [ ] Pipeline metrics (items processed, filtered, etc.)
 - [ ] Integration test end-to-end
+
+---
+
+### TASK-036: Cost Protection & Budget Limits
+**Priority**: P1 (Critical)
+**Estimate**: 2-3 hours
+**Spec**: `tasks/specs/036-cost-protection.md`
+
+Prevent runaway API costs from bugs or high-volume news events.
+
+**Acceptance Criteria**:
+- [ ] `api_usage` table for tracking daily usage by tier
+- [ ] `CostTracker` service with `check_budget()` and `record_usage()`
+- [ ] All LLM calls check budget before execution
+- [ ] `BudgetExceededError` raised when limits hit
+- [ ] Pipeline enters "sleep mode" when budget exceeded (items stay pending)
+- [ ] Alert logged at configurable threshold (default 80%)
+- [ ] `GET /api/v1/budget` endpoint for status
+- [ ] CLI command: `horadus budget status`
+- [ ] Unit tests
+
+**Why Critical**: Without this, a bug or major news event could burn through entire API budget in hours.
 
 ---
 
@@ -594,34 +619,47 @@ Detect when sources contradict each other on claims.
 ---
 
 ### TASK-034: Human Feedback API
-**Priority**: P2 (Medium)  
-**Estimate**: 3 hours  
+**Priority**: P2 (Medium)
+**Estimate**: 3 hours
 **Spec**: `tasks/specs/034-human-feedback.md`
 
 Allow human corrections and annotations.
 
 **Acceptance Criteria**:
 - [ ] human_feedback table
-- [ ] POST /events/{id}/feedback (pin, mark_noise)
+- [ ] POST /events/{id}/feedback (pin, mark_noise, **invalidate**)
 - [ ] POST /trends/{id}/override (manual delta adjustment)
 - [ ] GET /feedback (list all feedback)
 - [ ] Feedback affects future processing (marked noise skipped)
+- [ ] **Invalidate event**: Recalculates trend by removing event's log-odds contribution
 - [ ] Audit trail preserved
+
+**Note**: The "invalidate" action is critical for handling LLM hallucinations or misclassifications. When an event is invalidated, the system must reverse its probability impact on all affected trends.
 
 ---
 
-### TASK-035: Calibration Dashboard
-**Priority**: P3 (Low)  
+### TASK-035: Calibration Dashboard & Early Visibility
+**Priority**: P2 (Medium) - **Bumped from P3**
 **Estimate**: 4 hours
 
-Build calibration analysis and reporting.
+Build calibration analysis and early visibility into trend movements.
 
 **Acceptance Criteria**:
+- [ ] CLI command: `horadus trends status` (quick view of all trends)
 - [ ] Calibration curve generation
 - [ ] Brier score over time
 - [ ] "When we said X%, it happened Y% of the time"
 - [ ] Report endpoint: GET /reports/calibration
-- [ ] Requires 2+ months of data to be meaningful
+- [ ] Simple trend movement visualization (text-based or basic chart)
+
+**Why Bumped**: Expert advice: "You need to see the graph moving to know if your math is broken." Without visibility, you're flying blind on weight tuning.
+
+**Early Phase**: Even before full calibration data, provide simple status output:
+```
+horadus trends status
+# EU-Russia: 12.3% (Guarded) ↑ +2.1% this week
+# Top movers: military_movement (3), diplomatic_breakdown (1)
+```
 
 ---
 

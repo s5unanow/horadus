@@ -30,24 +30,18 @@ cd geopolitical-intel
 cp .env.example .env
 # Edit .env with your API keys
 
-# Start infrastructure
-docker-compose up -d
-
 # Create virtual environment
 python -m venv .venv
 source .venv/bin/activate
 
-# Install dependencies
-pip install -e ".[dev]"
-
-# Run migrations
-alembic upgrade head
+# Full setup (installs deps, starts infra, runs migrations)
+make setup
 
 # Seed initial trends
 python scripts/seed_trends.py
 
 # Start API server
-uvicorn src.api.main:app --reload
+make run
 ```
 
 ### Start Workers
@@ -56,10 +50,10 @@ uvicorn src.api.main:app --reload
 # In separate terminals:
 
 # Celery worker (processes tasks)
-celery -A src.workers.celery_app worker --loglevel=info
+make run-worker
 
 # Celery beat (schedules periodic tasks)
-celery -A src.workers.celery_app beat --loglevel=info
+make run-beat
 ```
 
 ## Architecture Overview
@@ -149,40 +143,36 @@ feeds:
 
 ## Development
 
+The project uses a `Makefile` to simplify common tasks. Run `make help` to see all available commands.
+
 ### Running Tests
 
 ```bash
 # All tests
-pytest tests/ -v
+make test
 
 # With coverage
-pytest tests/ --cov=src --cov-report=html
+make test-cov
 ```
 
 ### Code Quality
 
 ```bash
-# Format code
-ruff format src/ tests/
-
-# Lint
-ruff check src/ tests/ --fix
-
-# Type check
-mypy src/
+# Run formatter, linter, and type checker
+make check
 ```
 
 ### Database Migrations
 
 ```bash
 # Create new migration
-alembic revision --autogenerate -m "description"
+make db-migrate msg="description"
 
 # Apply migrations
-alembic upgrade head
+make db-upgrade
 
 # Rollback one step
-alembic downgrade -1
+make db-downgrade
 ```
 
 ## Project Structure

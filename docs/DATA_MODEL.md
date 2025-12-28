@@ -252,6 +252,7 @@ Audit trail of all probability updates.
 | corroboration_factor | DECIMAL(5,2) | Yes | | sqrt(sources)/3 |
 | novelty_score | DECIMAL(3,2) | Yes | | 1.0 new, 0.3 repeat |
 | severity_score | DECIMAL(3,2) | Yes | | Event severity |
+| confidence_score | DECIMAL(3,2) | Yes | | LLM confidence |
 | delta_log_odds | DECIMAL(10,6) | No | | Probability change |
 | reasoning | TEXT | Yes | | LLM explanation |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
@@ -264,7 +265,7 @@ Audit trail of all probability updates.
 
 **Delta calculation:**
 ```
-delta = weight × credibility × corroboration × novelty × direction
+delta = weight × credibility × corroboration × novelty × direction × severity × confidence
 
 where direction = +1 (escalatory) or -1 (de_escalatory)
 ```
@@ -405,17 +406,17 @@ Migrations are managed with Alembic. Key files:
 
 ```bash
 # Apply all migrations
-alembic upgrade head
+make db-upgrade
 
 # Rollback one step
-alembic downgrade -1
+make db-downgrade
 
 # Generate new migration
-alembic revision --autogenerate -m "description"
+make db-migrate msg="description"
 
 # Show current version
-alembic current
+make db-current
 
 # Show migration history
-alembic history
+make db-history
 ```

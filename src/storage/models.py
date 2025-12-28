@@ -549,6 +549,7 @@ class TrendEvidence(Base):
     corroboration_factor: Mapped[float | None] = mapped_column(Numeric(5, 2))
     novelty_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
     severity_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
+    confidence_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
 
     # Result
     delta_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)

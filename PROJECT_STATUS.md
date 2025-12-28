@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2025-12-26  
+**Last Updated**: 2025-12-28
 **Current Phase**: Phase 0 - Project Setup (60% complete)
 
 ## Progress Overview
@@ -28,10 +28,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Core config module (Pydantic Settings)
 - [x] Trend engine core (log-odds math, evidence calculation)
 - [x] EU-Russia trend config with enhanced schema
+- [x] Makefile for common workflows
 
 ## In Progress
 
-- [ ] TASK-001: Python project setup (verify install works)
+- [ ] TASK-001: Python project setup (verify install works) 🟡
 - [ ] TASK-002: Docker environment (verify extensions work)
 - [ ] TASK-003: Database migrations (generate initial migration)
 - [ ] TASK-004: FastAPI skeleton (wire database sessions)
@@ -43,14 +44,14 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 ## Next Up (Priority Order)
 
 1. Complete Phase 0 setup tasks (see CURRENT_SPRINT.md)
-2. Get Docker environment running (`docker-compose up -d`)
-3. Apply database migrations (`alembic upgrade head`)
-4. Verify basic API works (`uvicorn src.api.main:app`)
+2. Get Docker environment running (`make docker-up`)
+3. Apply database migrations (`make db-upgrade`)
+4. Verify basic API works (`make run`)
 5. Start Phase 1: RSS Collector (TASK-006)
 
 ## Expert Feedback Integration ✅
 
-Based on expert review, added 8 new tasks:
+Based on expert review, added 9 new tasks:
 
 | Task | Description | Priority |
 |------|-------------|----------|
@@ -61,13 +62,15 @@ Based on expert review, added 8 new tasks:
 | TASK-032 | Trend outcomes for calibration | P1 |
 | TASK-033 | Contradiction detection | P2 |
 | TASK-034 | Human feedback API | P2 |
-| TASK-035 | Calibration dashboard | P3 |
+| TASK-035 | Calibration dashboard | P2 |
+| TASK-036 | Cost protection & budget limits | P1 |
 
 ### Key Additions
 - **Risk levels**: Low / Guarded / Elevated / High / Severe
 - **Event lifecycle**: emerging → confirmed → fading → archived
 - **Source tiers**: primary / wire / major / regional / aggregator
 - **Calibration**: Brier scores, outcome tracking
+- **Cost protection**: Kill switch for API spend
 - **Trend config**: disqualifiers, falsification criteria
 
 ## Milestones

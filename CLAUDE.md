@@ -1,4 +1,10 @@
-# CLAUDE.md - Agent Instructions for Geopolitical Intelligence Platform
+# Agent Instructions (Claude / Codex / Gemini)
+
+This file is intentionally tool-agnostic. If your agent supports `AGENTS.md`, read `AGENTS.md` first; otherwise this file contains the full project orientation.
+
+Important: this is a **hobby/personal** system, but it should be treated as **mature and production-shaped**. Assume **≤ 20 trends**: keep scope small while still adhering to **enterprise best practices** where reasonable (tests, migrations, type safety, structured logging, safe defaults, and cost controls). Avoid premature over-engineering.
+
+# Geopolitical Intelligence Platform
 
 ## Project Overview
 
@@ -26,6 +32,7 @@ Building a headless backend that:
 
 ```
 geopolitical-intel/
+├── AGENTS.md              # Tool-agnostic agent instructions (start here)
 ├── CLAUDE.md              ← You are here (agent instructions)
 ├── PROJECT_STATUS.md      ← Current progress, what's done/next
 ├── tasks/

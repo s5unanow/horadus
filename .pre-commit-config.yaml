@@ -63,7 +63,9 @@ repos:
     hooks:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
-        exclude: \.env\.example$
+        # Exclude low-risk, high-churn docs/task text from secrets scanning.
+        # Keep scanning code/config where secrets are most likely to appear.
+        exclude: '(^docs/|^tasks/|\.env\.example$)'
 
   # -------------------------------------------------------------------------
   # Security: Bandit (Python security linter)

@@ -38,7 +38,7 @@ source .venv/bin/activate
 make setup
 
 # Seed initial trends
-python scripts/seed_trends.py
+python3 scripts/seed_trends.py
 
 # Start API server
 make run

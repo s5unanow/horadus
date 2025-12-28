@@ -179,6 +179,7 @@ make db-downgrade
 
 ```
 geopolitical-intel/
+├── AGENTS.md              # Canonical agent instructions (all CLIs)
 ├── CLAUDE.md              # Agent instructions (for Claude CLI)
 ├── README.md              # This file
 ├── PROJECT_STATUS.md      # Development progress

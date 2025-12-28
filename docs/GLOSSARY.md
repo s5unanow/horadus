@@ -279,7 +279,7 @@ Answers questions like:
 ### Embedding
 A dense vector representation of text for similarity comparison.
 
-We use 1536-dimensional vectors (OpenAI/Claude embedding models).
+We use 1536-dimensional vectors (OpenAI embedding models).
 
 Stored in PostgreSQL using **pgvector** extension.
 

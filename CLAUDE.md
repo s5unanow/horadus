@@ -214,35 +214,31 @@ build/
 
 ```bash
 # Start services (database, redis)
-docker-compose up -d
+make docker-up
 
 # Run database migrations
-alembic upgrade head
+make db-upgrade
 
 # Start API server (development)
-uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+make run
 
 # Start Celery worker
-celery -A src.workers.celery_app worker --loglevel=info
+make run-worker
 
 # Start Celery beat (scheduler)
-celery -A src.workers.celery_app beat --loglevel=info
+make run-beat
 
 # Run all tests
-pytest tests/ -v
+make test
 
 # Run specific test file
 pytest tests/unit/core/test_trend_engine.py -v
 
 # Run with coverage
-pytest tests/ --cov=src --cov-report=term-missing
+make test-cov
 
-# Type checking
-mypy src/
-
-# Format code
-ruff format src/ tests/
-ruff check src/ tests/ --fix
+# Code quality check (lint + type + format)
+make check
 ```
 
 ## Key Architectural Decisions

@@ -179,6 +179,8 @@
 │                    × credibility        (0.0 - 1.0)             │
 │                    × corroboration      (sqrt(sources) / 3)     │
 │                    × novelty            (1.0 new, 0.3 repeat)   │
+│                    × severity           (0.0 - 1.0 magnitude)   │
+│                    × confidence         (0.0 - 1.0 LLM score)   │
 │                    × direction          (+1 escalatory, -1 de)  │
 │                                                                 │
 │   Example:                                                      │
@@ -186,11 +188,13 @@
 │   - From Reuters (credibility: 0.95)                            │
 │   - 3 sources (corroboration: √3/3 = 0.58)                      │
 │   - New information (novelty: 1.0)                              │
+│   - Major event (severity: 0.9)                                 │
+│   - High confidence (confidence: 0.95)                          │
 │   - Escalatory (direction: +1)                                  │
 │                                                                 │
-│   delta = 0.04 × 0.95 × 0.58 × 1.0 × 1 = 0.022                  │
+│   delta = 0.04 × 0.95 × 0.58 × 1.0 × 0.9 × 0.95 × 1 = 0.0188    │
 │                                                                 │
-│   trend.current_log_odds += 0.022                               │
+│   trend.current_log_odds += 0.0188                              │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -377,7 +381,7 @@ feeds:
 | Metric | Source | Alert Threshold |
 |--------|--------|-----------------|
 | Items processed/hour | Celery | < 10 |
-| LLM cost/day | Application | > $50 |
+| LLM cost/day | Application | > $5.00 |
 | API latency p95 | FastAPI | > 500ms |
 | Queue depth | Redis | > 1000 |
 | Error rate | Logs | > 1% |

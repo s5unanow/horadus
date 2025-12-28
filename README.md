@@ -115,12 +115,12 @@ indicators:
     weight: 0.04
     direction: escalatory
     keywords: ["troops", "deployment", "mobilization", "exercises", "nato"]
-  
+
   sanctions:
     weight: 0.02
     direction: escalatory
     keywords: ["sanctions", "embargo", "restrictions", "freeze assets"]
-  
+
   diplomatic_talks:
     weight: -0.03
     direction: de_escalatory
@@ -140,7 +140,7 @@ feeds:
     url: "https://feeds.reuters.com/Reuters/worldNews"
     credibility: 0.95
     check_interval_minutes: 30
-    
+
   - name: "BBC World"
     url: "http://feeds.bbci.co.uk/news/world/rss.xml"
     credibility: 0.90

@@ -5,17 +5,17 @@ This module configures Alembic for async SQLAlchemy migrations
 with the Geopolitical Intelligence Platform database.
 """
 
-import asyncio
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
+from src.core.config import settings
+
 # Import models so Alembic can detect them
 from src.storage.models import Base
-from src.core.config import settings
 
 # Alembic Config object
 config = context.config
@@ -73,7 +73,7 @@ def do_run_migrations(connection: Connection) -> None:
 async def run_async_migrations() -> None:
     """
     Run migrations in 'online' mode with async engine.
-    
+
     Creates an Engine and associates a connection with the context.
     """
     # Use async connection string
@@ -81,7 +81,7 @@ async def run_async_migrations() -> None:
     configuration["sqlalchemy.url"] = settings.DATABASE_URL.replace(
         "postgresql+asyncpg", "postgresql"
     )
-    
+
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
@@ -100,7 +100,7 @@ def run_migrations_online() -> None:
     """Run migrations in 'online' mode."""
     # Use sync connection for simplicity
     from sqlalchemy import create_engine
-    
+
     connectable = create_engine(
         settings.DATABASE_URL_SYNC,
         poolclass=pool.NullPool,

@@ -84,7 +84,7 @@ feeds:
     check_interval_minutes: 30
     max_items_per_fetch: 50
     enabled: true
-    
+
   - name: "BBC World"
     url: "http://feeds.bbci.co.uk/news/world/rss.xml"
     credibility: 0.90
@@ -92,7 +92,7 @@ feeds:
     check_interval_minutes: 30
     max_items_per_fetch: 50
     enabled: true
-    
+
   - name: "Al Jazeera"
     url: "https://www.aljazeera.com/xml/rss/all.xml"
     credibility: 0.85
@@ -189,7 +189,7 @@ class CollectionResult:
 
 class RSSCollector:
     """Collects articles from configured RSS feeds."""
-    
+
     def __init__(
         self,
         session: AsyncSession,
@@ -201,12 +201,12 @@ class RSSCollector:
         self.config_path = config_path
         self.rate_limiter = DomainRateLimiter(requests_per_second=1.0)
         self._feeds: list[FeedConfig] = []
-    
+
     async def load_config(self) -> None:
         """Load feed configurations from YAML file."""
         # Implementation here
         pass
-    
+
     async def collect_all(self) -> list[CollectionResult]:
         """Collect from all enabled feeds."""
         results = []
@@ -215,24 +215,24 @@ class RSSCollector:
                 result = await self.collect_feed(feed)
                 results.append(result)
         return results
-    
+
     async def collect_feed(self, feed: FeedConfig) -> CollectionResult:
         """Collect articles from a single feed."""
         # Implementation here
         pass
-    
+
     async def _fetch_feed(self, url: str) -> feedparser.FeedParserDict:
         """Fetch and parse RSS feed."""
         pass
-    
+
     async def _extract_content(self, url: str) -> str | None:
         """Extract full article content from URL."""
         pass
-    
+
     async def _is_duplicate(self, url: str, content_hash: str) -> bool:
         """Check if article is a duplicate."""
         pass
-    
+
     async def _store_item(
         self,
         source: Source,
@@ -242,13 +242,13 @@ class RSSCollector:
     ) -> RawItem:
         """Store article in database."""
         pass
-    
+
     @staticmethod
     def _normalize_url(url: str) -> str:
         """Normalize URL for deduplication."""
         # Remove query params, www, trailing slashes
         pass
-    
+
     @staticmethod
     def _compute_hash(content: str) -> str:
         """Compute SHA256 hash of content."""
@@ -268,25 +268,25 @@ from urllib.parse import urlparse
 
 class DomainRateLimiter:
     """Rate limiter that tracks requests per domain."""
-    
+
     def __init__(self, requests_per_second: float = 1.0):
         self.min_interval = 1.0 / requests_per_second
         self._last_request: dict[str, datetime] = defaultdict(
             lambda: datetime.min
         )
         self._locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
-    
+
     async def acquire(self, url: str) -> None:
         """Wait until we can make a request to this domain."""
         domain = urlparse(url).netloc
-        
+
         async with self._locks[domain]:
             now = datetime.now()
             elapsed = (now - self._last_request[domain]).total_seconds()
-            
+
             if elapsed < self.min_interval:
                 await asyncio.sleep(self.min_interval - elapsed)
-            
+
             self._last_request[domain] = datetime.now()
 ```
 
@@ -305,7 +305,7 @@ from src.ingestion.rss_collector import RSSCollector, FeedConfig
 
 class TestRSSCollector:
     """Tests for RSSCollector."""
-    
+
     @pytest.fixture
     def sample_feed_config(self):
         return FeedConfig(
@@ -317,7 +317,7 @@ class TestRSSCollector:
             max_items_per_fetch=10,
             enabled=True
         )
-    
+
     @pytest.fixture
     def sample_rss_content(self):
         return """<?xml version="1.0" encoding="UTF-8"?>
@@ -333,33 +333,33 @@ class TestRSSCollector:
             </channel>
         </rss>
         """
-    
+
     async def test_normalize_url_removes_query_params(self):
         """URL normalization should strip query parameters."""
         url = "https://www.example.com/article?utm_source=rss&ref=123"
         normalized = RSSCollector._normalize_url(url)
         assert "utm_source" not in normalized
         assert "ref" not in normalized
-    
+
     async def test_normalize_url_removes_www(self):
         """URL normalization should strip www prefix."""
         url = "https://www.example.com/article"
         normalized = RSSCollector._normalize_url(url)
         assert "www." not in normalized
-    
+
     async def test_compute_hash_is_deterministic(self):
         """Same content should produce same hash."""
         content = "Test article content"
         hash1 = RSSCollector._compute_hash(content)
         hash2 = RSSCollector._compute_hash(content)
         assert hash1 == hash2
-    
+
     async def test_compute_hash_is_unique(self):
         """Different content should produce different hashes."""
         hash1 = RSSCollector._compute_hash("Content A")
         hash2 = RSSCollector._compute_hash("Content B")
         assert hash1 != hash2
-    
+
     # More tests...
 ```
 
@@ -377,7 +377,7 @@ from src.ingestion.rss_collector import RSSCollector
 @pytest.mark.integration
 class TestRSSCollectorIntegration:
     """Integration tests for RSS collector (hits real feeds)."""
-    
+
     @pytest.fixture
     async def collector(self, db_session, http_client):
         return RSSCollector(
@@ -385,7 +385,7 @@ class TestRSSCollectorIntegration:
             http_client=http_client,
             config_path="tests/fixtures/rss_feeds.yaml"
         )
-    
+
     async def test_collect_real_feed(self, collector):
         """Test collecting from a real RSS feed (BBC)."""
         # Use a stable, reliable feed for testing
@@ -400,7 +400,7 @@ class TestRSSCollectorIntegration:
                 enabled=True
             )
         )
-        
+
         assert result.errors == []
         assert result.items_fetched > 0
         assert result.items_stored > 0

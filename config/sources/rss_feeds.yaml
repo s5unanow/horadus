@@ -27,7 +27,7 @@ feeds:
   # ==========================================================================
   # Tier 1: Wire Services (highest credibility)
   # ==========================================================================
-  
+
   - name: "Reuters World"
     url: "https://feeds.reuters.com/Reuters/worldNews"
     credibility: 0.95
@@ -40,7 +40,7 @@ feeds:
     max_items_per_fetch: 50
     language: "en"
     enabled: true
-    
+
   - name: "AP News - World"
     url: "https://rsshub.app/apnews/topics/world-news"
     credibility: 0.95
@@ -53,7 +53,7 @@ feeds:
     max_items_per_fetch: 50
     language: "en"
     enabled: true
-    
+
   - name: "AFP - English"
     url: "https://www.afp.com/en/rss-feeds"
     credibility: 0.95
@@ -65,11 +65,11 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: false  # Requires subscription
-    
+
   # ==========================================================================
   # Tier 2: Major International Outlets
   # ==========================================================================
-  
+
   - name: "BBC World"
     url: "http://feeds.bbci.co.uk/news/world/rss.xml"
     credibility: 0.90
@@ -82,7 +82,7 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   - name: "BBC Europe"
     url: "http://feeds.bbci.co.uk/news/world/europe/rss.xml"
     credibility: 0.90
@@ -94,7 +94,7 @@ feeds:
     max_items_per_fetch: 20
     language: "en"
     enabled: true
-    
+
   - name: "The Guardian - World"
     url: "https://www.theguardian.com/world/rss"
     credibility: 0.85
@@ -106,7 +106,7 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   - name: "Al Jazeera English"
     url: "https://www.aljazeera.com/xml/rss/all.xml"
     credibility: 0.80
@@ -119,7 +119,7 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   - name: "DW News"
     url: "https://rss.dw.com/rdf/rss-en-all"
     credibility: 0.85
@@ -132,7 +132,7 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   - name: "France24 - World"
     url: "https://www.france24.com/en/rss"
     credibility: 0.85
@@ -145,11 +145,11 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   # ==========================================================================
   # Tier 3: Regional / Specialty (Defense, Security)
   # ==========================================================================
-  
+
   - name: "Defense News"
     url: "https://www.defensenews.com/arc/outboundfeeds/rss/?outputType=xml"
     credibility: 0.80
@@ -162,7 +162,7 @@ feeds:
     max_items_per_fetch: 20
     language: "en"
     enabled: true
-    
+
   - name: "The War Zone"
     url: "https://www.thedrive.com/the-war-zone/feed"
     credibility: 0.75
@@ -175,7 +175,7 @@ feeds:
     max_items_per_fetch: 20
     language: "en"
     enabled: true
-    
+
   - name: "Breaking Defense"
     url: "https://breakingdefense.com/feed/"
     credibility: 0.75
@@ -188,11 +188,11 @@ feeds:
     max_items_per_fetch: 20
     language: "en"
     enabled: true
-    
+
   # ==========================================================================
   # Tier 4: Regional Sources (Eastern Europe, Russia)
   # ==========================================================================
-  
+
   - name: "Kyiv Independent"
     url: "https://kyivindependent.com/feed/"
     credibility: 0.75
@@ -206,7 +206,7 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   - name: "Moscow Times"
     url: "https://www.themoscowtimes.com/rss/news"
     credibility: 0.70
@@ -219,7 +219,7 @@ feeds:
     language: "en"
     enabled: true
     note: "Independent outlet, critical of Kremlin"
-    
+
   - name: "TASS (Russia)"
     url: "https://tass.com/rss/v2.xml"
     credibility: 0.50
@@ -232,7 +232,7 @@ feeds:
     language: "en"
     enabled: true
     note: "State media - useful for official Russian position, not independent analysis"
-    
+
   - name: "Baltic Times"
     url: "https://www.baltictimes.com/rss.xml"
     credibility: 0.70
@@ -245,11 +245,11 @@ feeds:
     max_items_per_fetch: 20
     language: "en"
     enabled: true
-    
+
   # ==========================================================================
   # Tier 5: US/China Focus
   # ==========================================================================
-  
+
   - name: "SCMP - China"
     url: "https://www.scmp.com/rss/91/feed"
     credibility: 0.75
@@ -262,7 +262,7 @@ feeds:
     max_items_per_fetch: 30
     language: "en"
     enabled: true
-    
+
   - name: "Nikkei Asia"
     url: "https://asia.nikkei.com/rss/feed/nar"
     credibility: 0.85
@@ -284,7 +284,7 @@ settings:
   request_timeout_seconds: 30
   user_agent: "GeopoliticalIntel/1.0 (News Aggregator)"
   respect_robots_txt: true
-  
+
   # Tier multipliers for credibility calculation (Expert Recommendation)
   tier_multipliers:
     primary: 1.0      # Official sources, direct access
@@ -292,7 +292,7 @@ settings:
     major: 0.85       # BBC, Guardian, major papers
     regional: 0.70    # Specialty/regional outlets
     aggregator: 0.50  # News aggregators, blogs
-  
+
   # Reporting type multipliers
   reporting_multipliers:
     firsthand: 1.0    # Original reporting

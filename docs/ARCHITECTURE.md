@@ -310,17 +310,17 @@ indicators:
     weight: 0.04
     direction: escalatory
     keywords: ["troops", "deployment", "mobilization", "exercises"]
-  
+
   sanctions:
     weight: 0.02
     direction: escalatory
     keywords: ["sanctions", "embargo", "restrictions"]
-  
+
   diplomatic_breakdown:
     weight: 0.03
     direction: escalatory
     keywords: ["expelled", "ambassador", "recalled"]
-  
+
   de_escalation:
     weight: 0.03
     direction: de_escalatory
@@ -340,7 +340,7 @@ feeds:
     url: "https://feeds.reuters.com/Reuters/worldNews"
     credibility: 0.95
     check_interval_minutes: 30
-    
+
   - name: "BBC World"
     url: "http://feeds.bbci.co.uk/news/world/rss.xml"
     credibility: 0.90

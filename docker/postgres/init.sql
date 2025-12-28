@@ -18,7 +18,7 @@ BEGIN
     RAISE NOTICE 'Installed extensions:';
 END $$;
 
-SELECT extname, extversion FROM pg_extension 
+SELECT extname, extversion FROM pg_extension
 WHERE extname IN ('vector', 'timescaledb', 'uuid-ossp', 'pg_trgm');
 
 -- Log completion

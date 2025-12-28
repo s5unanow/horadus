@@ -49,7 +49,7 @@ class EventLifecycle(str, Enum):
      │                                      ▲
      │              new mention             │
      └──────────────────────────────────────┘
-     
+
                          7d silence
 ┌─────────┐         ┌──────────┐
 │ FADING  │ ──────► │ ARCHIVED │
@@ -63,21 +63,21 @@ class EventLifecycle(str, Enum):
 
 class Event(Base):
     # Existing fields...
-    
+
     # NEW: Lifecycle tracking
     lifecycle_status: Mapped[str] = mapped_column(
         String(20),
         default=EventLifecycle.EMERGING.value,
         nullable=False,
     )
-    
+
     # When was this event last mentioned by a new source?
     last_mention_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    
+
     # How many unique sources have reported this?
     # (Different from source_count which may include updates)
     unique_source_count: Mapped[int] = mapped_column(
@@ -85,7 +85,7 @@ class Event(Base):
         default=1,
         nullable=False,
     )
-    
+
     # When did it get confirmed (if ever)?
     confirmed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -120,7 +120,7 @@ def upgrade():
         sa.DateTime(timezone=True),
         nullable=True
     ))
-    
+
     # Index for lifecycle queries
     op.create_index(
         'idx_events_lifecycle',
@@ -166,10 +166,10 @@ ARCHIVE_DAYS = 7            # Days without mention to archive
 
 class EventLifecycleManager:
     """Manages event lifecycle transitions."""
-    
+
     def __init__(self, session: AsyncSession):
         self.session = session
-    
+
     async def on_new_mention(
         self,
         event: Event,
@@ -178,50 +178,50 @@ class EventLifecycleManager:
     ) -> bool:
         """
         Process a new mention of an event.
-        
+
         Returns True if lifecycle changed.
         """
         mentioned_at = mentioned_at or datetime.utcnow()
         previous_status = event.lifecycle_status
-        
+
         # Update mention tracking
         event.last_mention_at = mentioned_at
         event.source_count += 1
-        
+
         # Check if this is a new unique source
         # (Would need to track source IDs - simplified here)
         event.unique_source_count += 1
-        
+
         # Transitions
         if event.lifecycle_status == EventLifecycle.EMERGING.value:
             if event.unique_source_count >= CONFIRMATION_THRESHOLD:
                 event.lifecycle_status = EventLifecycle.CONFIRMED.value
                 event.confirmed_at = mentioned_at
-        
+
         elif event.lifecycle_status == EventLifecycle.FADING.value:
             # Revive to confirmed on new mention
             event.lifecycle_status = EventLifecycle.CONFIRMED.value
-        
+
         elif event.lifecycle_status == EventLifecycle.ARCHIVED.value:
             # Rare: archived event gets new mention
             event.lifecycle_status = EventLifecycle.CONFIRMED.value
-        
+
         return event.lifecycle_status != previous_status
-    
+
     async def run_decay_check(self) -> dict:
         """
         Check all events for lifecycle decay.
-        
+
         Should be run periodically (e.g., hourly via Celery).
-        
+
         Returns stats on transitions.
         """
         now = datetime.utcnow()
         fading_threshold = now - timedelta(hours=FADING_HOURS)
         archive_threshold = now - timedelta(days=ARCHIVE_DAYS)
-        
+
         stats = {"confirmed_to_fading": 0, "fading_to_archived": 0}
-        
+
         # Confirmed → Fading
         result = await self.session.execute(
             update(Event)
@@ -231,7 +231,7 @@ class EventLifecycleManager:
             .returning(Event.id)
         )
         stats["confirmed_to_fading"] = len(result.all())
-        
+
         # Fading → Archived
         result = await self.session.execute(
             update(Event)
@@ -241,9 +241,9 @@ class EventLifecycleManager:
             .returning(Event.id)
         )
         stats["fading_to_archived"] = len(result.all())
-        
+
         return stats
-    
+
     async def get_active_events(
         self,
         include_fading: bool = False,
@@ -252,7 +252,7 @@ class EventLifecycleManager:
         statuses = [EventLifecycle.EMERGING.value, EventLifecycle.CONFIRMED.value]
         if include_fading:
             statuses.append(EventLifecycle.FADING.value)
-        
+
         result = await self.session.execute(
             select(Event)
             .where(Event.lifecycle_status.in_(statuses))
@@ -278,7 +278,7 @@ def calculate_evidence_delta(
     event_lifecycle: str = "confirmed",
 ) -> tuple[float, EvidenceFactors]:
     """Calculate log-odds delta with lifecycle weighting."""
-    
+
     # Existing calculation
     raw_delta = (
         indicator_weight
@@ -287,11 +287,11 @@ def calculate_evidence_delta(
         * novelty_score
         * direction_mult
     )
-    
+
     # NEW: Apply lifecycle weight
     lifecycle_weight = LIFECYCLE_WEIGHT.get(event_lifecycle, 1.0)
     raw_delta *= lifecycle_weight
-    
+
     # Rest of function...
 ```
 
@@ -306,7 +306,7 @@ from src.processing.event_lifecycle import EventLifecycleManager
 def check_event_lifecycles():
     """
     Periodic task to decay event lifecycles.
-    
+
     Schedule: Every hour
     """
     async def _run():
@@ -315,7 +315,7 @@ def check_event_lifecycles():
             stats = await manager.run_decay_check()
             await session.commit()
             return stats
-    
+
     stats = asyncio.run(_run())
     logger.info("Event lifecycle check completed", **stats)
     return stats
@@ -349,7 +349,7 @@ async def list_events(
 ):
     """List events with lifecycle filtering."""
     query = select(Event)
-    
+
     if lifecycle:
         query = query.where(Event.lifecycle_status == lifecycle)
     elif active_only:
@@ -357,7 +357,7 @@ async def list_events(
             EventLifecycle.EMERGING.value,
             EventLifecycle.CONFIRMED.value,
         ]))
-    
+
     # Rest of implementation...
 ```
 
@@ -370,7 +370,7 @@ class EventResponse(BaseModel):
     categories: list[str]
     source_count: int
     first_seen_at: datetime
-    
+
     # NEW
     lifecycle_status: str
     last_mention_at: datetime
@@ -401,44 +401,44 @@ class MockEvent:
         self.confirmed_at = None
 
 class TestEventLifecycle:
-    
+
     def test_emerging_to_confirmed_on_threshold(self):
         """Event confirms when reaching source threshold."""
         event = MockEvent()
         manager = EventLifecycleManager(None)
-        
+
         # Add mentions until threshold
         for i in range(CONFIRMATION_THRESHOLD - 1):
             manager.on_new_mention(event, f"source_{i}")
-        
+
         assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
         assert event.confirmed_at is not None
-    
+
     def test_confirmed_to_fading_on_silence(self):
         """Event fades after period without mentions."""
         event = MockEvent()
         event.lifecycle_status = EventLifecycle.CONFIRMED.value
         event.last_mention_at = datetime.utcnow() - timedelta(hours=FADING_HOURS + 1)
-        
+
         # Would need async test setup for run_decay_check
         # Simplified assertion
         assert event.last_mention_at < datetime.utcnow() - timedelta(hours=FADING_HOURS)
-    
+
     def test_fading_revives_on_new_mention(self):
         """Fading event returns to confirmed on new mention."""
         event = MockEvent()
         event.lifecycle_status = EventLifecycle.FADING.value
-        
+
         manager = EventLifecycleManager(None)
         changed = manager.on_new_mention(event, "new_source")
-        
+
         assert changed
         assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
-    
+
     def test_lifecycle_weight_reduces_impact(self):
         """Emerging and fading events have reduced trend impact."""
         from src.core.trend_engine import LIFECYCLE_WEIGHT
-        
+
         assert LIFECYCLE_WEIGHT["emerging"] < LIFECYCLE_WEIGHT["confirmed"]
         assert LIFECYCLE_WEIGHT["fading"] < LIFECYCLE_WEIGHT["confirmed"]
         assert LIFECYCLE_WEIGHT["archived"] == 0.0

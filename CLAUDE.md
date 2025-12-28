@@ -335,4 +335,3 @@ If starting fresh or resuming work:
 6. Verify                     → Run tests, check types
 7. Update tracking            → Mark done, update status
 ```
-

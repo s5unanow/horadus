@@ -208,13 +208,7 @@ ignore_missing_imports = true
 
 [tool.bandit]
 exclude_dirs = ["tests", "alembic"]
-skips = [
-    "B101",  # assert_used - OK in tests
-    "B104",  # hardcoded_bind_all_interfaces - OK for dev server
-]
-
-[tool.bandit.assert_used]
-skips = ["**/test_*.py", "**/conftest.py"]
+skips = ["B101"]  # assert_used - OK in development
 
 # =============================================================================
 # Commit Message: Commitizen

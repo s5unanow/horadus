@@ -4,8 +4,8 @@
 id: "eu-russia-conflict"
 name: "EU-Russia Military Conflict"
 description: |
-  Tracks the probability of direct military confrontation between EU/NATO member 
-  states and the Russian Federation. This includes scenarios ranging from border 
+  Tracks the probability of direct military confrontation between EU/NATO member
+  states and the Russian Federation. This includes scenarios ranging from border
   incidents to full-scale conflict.
 
 # Prior probability (before any evidence)
@@ -24,11 +24,11 @@ disqualifiers:
   - signal: "peace_treaty_signed"
     effect: "reset_to_baseline"
     description: "Formal, ratified peace agreement between parties"
-    
+
   - signal: "regime_change_russia"
     effect: "reassess"
     description: "Major political transition in Russia requires full reassessment"
-    
+
   - signal: "nato_dissolution"
     effect: "invalidate"
     description: "NATO no longer exists as a coherent alliance"
@@ -43,13 +43,13 @@ falsification_criteria:
     - "Formal diplomatic normalization and sanctions relief"
     - "Mutual troop withdrawals from border regions"
     - "Joint military cooperation agreements"
-    
+
   increase_confidence:
     - "Direct military engagement between NATO and Russian forces"
     - "Nuclear weapon use or credible deployment orders"
     - "Full mobilization by Russia or NATO member state"
     - "Formal declaration of war"
-    
+
   would_invalidate_model:
     - "Fundamental change in international order (e.g., UN replacement)"
     - "Major alliance realignment (e.g., EU member joins Russia)"
@@ -76,7 +76,7 @@ indicators:
       - reinforcements
       - nato forces
       - border forces
-    
+
   weapons_transfer:
     weight: 0.03
     direction: escalatory
@@ -89,7 +89,7 @@ indicators:
       - tanks
       - artillery
       - ammunition
-      
+
   sanctions:
     weight: 0.02
     direction: escalatory
@@ -100,7 +100,7 @@ indicators:
       - trade restrictions
       - asset freeze
       - economic measures
-      
+
   diplomatic_breakdown:
     weight: 0.03
     direction: escalatory
@@ -111,7 +111,7 @@ indicators:
       - embassy closed
       - diplomatic ties
       - severed relations
-      
+
   military_incident:
     weight: 0.05
     direction: escalatory
@@ -123,7 +123,7 @@ indicators:
       - provocation
       - incursion
       - fired upon
-      
+
   nuclear_rhetoric:
     weight: 0.04
     direction: escalatory
@@ -134,7 +134,7 @@ indicators:
       - strategic deterrent
       - nuclear readiness
       - nuclear threat
-      
+
   diplomatic_talks:
     weight: 0.03
     direction: de_escalatory
@@ -146,7 +146,7 @@ indicators:
       - summit
       - dialogue
       - de-escalation
-      
+
   ceasefire:
     weight: 0.04
     direction: de_escalatory
@@ -157,7 +157,7 @@ indicators:
       - armistice
       - cessation of hostilities
       - peace agreement
-      
+
   troop_withdrawal:
     weight: 0.03
     direction: de_escalatory

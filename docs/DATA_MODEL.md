@@ -289,7 +289,7 @@ Time-series of trend probabilities (TimescaleDB hypertable).
 **Time-series queries:**
 ```sql
 -- Get trend history for last 30 days
-SELECT 
+SELECT
     timestamp,
     1.0 / (1.0 + exp(-log_odds)) as probability
 FROM trend_snapshots
@@ -298,7 +298,7 @@ WHERE trend_id = $1
 ORDER BY timestamp;
 
 -- Get daily average (TimescaleDB)
-SELECT 
+SELECT
     time_bucket('1 day', timestamp) as day,
     AVG(1.0 / (1.0 + exp(-log_odds))) as avg_probability
 FROM trend_snapshots
@@ -315,7 +315,7 @@ ORDER BY day;
 ### Get all trends with current probability
 
 ```sql
-SELECT 
+SELECT
     id,
     name,
     1.0 / (1.0 + exp(-current_log_odds)) as probability,
@@ -328,7 +328,7 @@ ORDER BY probability DESC;
 ### Get recent events for a category
 
 ```sql
-SELECT 
+SELECT
     e.id,
     e.canonical_summary,
     e.source_count,
@@ -343,7 +343,7 @@ LIMIT 20;
 ### Get top evidence for a trend
 
 ```sql
-SELECT 
+SELECT
     te.signal_type,
     te.delta_log_odds,
     te.reasoning,
@@ -373,7 +373,7 @@ week_ago AS (
     ORDER BY timestamp DESC
     LIMIT 1
 )
-SELECT 
+SELECT
     1.0 / (1.0 + exp(-c.log_odds)) as current_prob,
     1.0 / (1.0 + exp(-w.log_odds)) as week_ago_prob,
     (1.0 / (1.0 + exp(-c.log_odds))) - (1.0 / (1.0 + exp(-w.log_odds))) as change
@@ -383,7 +383,7 @@ FROM current c, week_ago w;
 ### Find similar events (vector search)
 
 ```sql
-SELECT 
+SELECT
     id,
     canonical_summary,
     1 - (embedding <=> $1) as similarity

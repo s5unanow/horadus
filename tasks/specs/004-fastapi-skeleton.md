@@ -53,28 +53,28 @@ class Settings(BaseSettings):
     api_port: int = 8000
     debug: bool = False
     api_prefix: str = "/api/v1"
-    
+
     # CORS
     cors_origins: List[str] = Field(default=["*"])
-    
+
     # Database
     database_url: PostgresDsn = Field(
         default="postgresql+asyncpg://postgres:postgres@localhost:5432/geoint"
     )
     db_pool_size: int = 5
     db_max_overflow: int = 10
-    
+
     # Redis
     redis_url: RedisDsn = Field(default="redis://localhost:6379/0")
-    
+
     # LLM
     anthropic_api_key: str = ""
-    
+
     # Optional: Telegram
     telegram_api_id: str = ""
     telegram_api_hash: str = ""
     telegram_session_name: str = "geoint_session"
-    
+
     @property
     def async_database_url(self) -> str:
         """Ensure we're using asyncpg driver."""
@@ -209,19 +209,19 @@ async def health_check(
 ) -> HealthResponse:
     """
     Health check endpoint.
-    
+
     Returns the health status of the API and its dependencies.
     """
     db_status = await check_database(db)
     redis_status = await check_redis(settings)
-    
+
     checks = {
         "database": db_status,
         "redis": redis_status,
     }
-    
+
     overall_status = "healthy" if all(v == "healthy" for v in checks.values()) else "degraded"
-    
+
     return HealthResponse(
         status=overall_status,
         timestamp=datetime.utcnow(),
@@ -244,10 +244,10 @@ async def readiness(
     """Kubernetes readiness probe - checks if dependencies are available."""
     db_status = await check_database(db)
     redis_status = await check_redis(settings)
-    
+
     if db_status == "healthy" and redis_status == "healthy":
         return {"status": "ready"}
-    
+
     # Return 503 if not ready (FastAPI will handle this based on status code)
     from fastapi import HTTPException
     raise HTTPException(status_code=503, detail="Service not ready")
@@ -328,7 +328,7 @@ async def add_request_id(request: Request, call_next):
     request_id = str(uuid.uuid4())
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(request_id=request_id)
-    
+
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response

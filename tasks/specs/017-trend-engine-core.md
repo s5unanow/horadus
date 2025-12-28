@@ -132,15 +132,15 @@ MAX_DELTA_PER_EVENT = 0.5  # About ±12% probability change at p=0.5
 def prob_to_logodds(p: float) -> float:
     """
     Convert probability to log-odds.
-    
+
     Log-odds = ln(p / (1-p))
-    
+
     Args:
         p: Probability between 0 and 1
-        
+
     Returns:
         Log-odds value (can be any real number)
-        
+
     Examples:
         >>> prob_to_logodds(0.5)
         0.0
@@ -157,15 +157,15 @@ def prob_to_logodds(p: float) -> float:
 def logodds_to_prob(lo: float) -> float:
     """
     Convert log-odds to probability.
-    
+
     Probability = 1 / (1 + e^(-lo))
-    
+
     Args:
         lo: Log-odds value
-        
+
     Returns:
         Probability between MIN_PROBABILITY and MAX_PROBABILITY
-        
+
     Examples:
         >>> logodds_to_prob(0.0)
         0.5
@@ -179,7 +179,7 @@ def logodds_to_prob(lo: float) -> float:
     except OverflowError:
         # Very negative log-odds -> very small probability
         p = MIN_PROBABILITY if lo < 0 else MAX_PROBABILITY
-    
+
     return max(MIN_PROBABILITY, min(MAX_PROBABILITY, p))
 
 
@@ -209,17 +209,17 @@ def calculate_evidence_delta(
 ) -> tuple[float, EvidenceFactors]:
     """
     Calculate log-odds delta from evidence factors.
-    
+
     Formula:
         delta = base_weight * credibility * corroboration * novelty * direction
-    
+
     Where:
         - base_weight: From trend indicator config (e.g., 0.04 for military_movement)
         - credibility: Source reliability (0-1)
         - corroboration: sqrt(num_sources) / 3, capped at 1.0
         - novelty: 1.0 for new info, 0.3 for repeated
         - direction: +1 for escalatory, -1 for de-escalatory
-    
+
     Args:
         signal_type: Type of signal detected
         indicator_weight: Base weight from trend config
@@ -227,29 +227,29 @@ def calculate_evidence_delta(
         corroboration_count: Number of independent sources
         novelty_score: Novelty factor (0-1, typically 1.0 or 0.3)
         direction: 'escalatory' or 'de_escalatory'
-    
+
     Returns:
         Tuple of (delta, factors breakdown)
     """
     # Corroboration factor: sqrt(n)/3, capped at 1.0
     # 1 source = 0.33, 4 sources = 0.67, 9+ sources = 1.0
     corroboration = min(1.0, math.sqrt(corroboration_count) / 3)
-    
+
     # Direction multiplier
     direction_mult = 1.0 if direction == "escalatory" else -1.0
-    
+
     # Calculate raw delta
     raw_delta = (
-        indicator_weight 
-        * source_credibility 
-        * corroboration 
-        * novelty_score 
+        indicator_weight
+        * source_credibility
+        * corroboration
+        * novelty_score
         * direction_mult
     )
-    
+
     # Clamp to prevent any single event from dominating
     clamped_delta = max(-MAX_DELTA_PER_EVENT, min(MAX_DELTA_PER_EVENT, raw_delta))
-    
+
     factors = EvidenceFactors(
         base_weight=indicator_weight,
         credibility=source_credibility,
@@ -259,7 +259,7 @@ def calculate_evidence_delta(
         raw_delta=raw_delta,
         clamped_delta=clamped_delta,
     )
-    
+
     return clamped_delta, factors
 
 
@@ -270,28 +270,28 @@ def calculate_evidence_delta(
 class TrendEngine:
     """
     Engine for updating and querying trend probabilities.
-    
+
     This class handles:
     - Applying evidence to update probabilities
     - Time-based decay toward baseline
     - Probability queries and comparisons
-    
+
     Example:
         >>> engine = TrendEngine(db_session)
         >>> delta, factors = calculate_evidence_delta(...)
         >>> await engine.apply_evidence(trend, delta, event_id, "Military buildup reported")
         >>> prob = await engine.get_probability(trend)
     """
-    
+
     def __init__(self, session):
         """
         Initialize trend engine.
-        
+
         Args:
             session: Async database session
         """
         self.session = session
-    
+
     async def apply_evidence(
         self,
         trend: Trend,
@@ -303,7 +303,7 @@ class TrendEngine:
     ) -> float:
         """
         Apply evidence delta to trend and record it.
-        
+
         Args:
             trend: Trend to update
             delta: Log-odds delta to apply
@@ -311,17 +311,17 @@ class TrendEngine:
             signal_type: Type of signal
             factors: Breakdown of calculation factors
             reasoning: Human-readable explanation
-            
+
         Returns:
             New probability after update
         """
         # Update trend
         trend.current_log_odds += delta
         trend.updated_at = datetime.utcnow()
-        
+
         # Create evidence record
         from src.storage.models import TrendEvidence
-        
+
         evidence = TrendEvidence(
             trend_id=trend.id,
             event_id=event_id,
@@ -333,12 +333,12 @@ class TrendEngine:
             delta_log_odds=delta,
             reasoning=reasoning,
         )
-        
+
         self.session.add(evidence)
         await self.session.flush()
-        
+
         return logodds_to_prob(trend.current_log_odds)
-    
+
     async def apply_decay(
         self,
         trend: Trend,
@@ -346,51 +346,51 @@ class TrendEngine:
     ) -> float:
         """
         Apply time-based decay toward baseline probability.
-        
+
         Uses exponential decay with configurable half-life:
             new_lo = baseline_lo + (current_lo - baseline_lo) * decay_factor
-        
+
         Where decay_factor = 0.5^(days_elapsed / half_life)
-        
+
         Args:
             trend: Trend to decay
             as_of: Reference time (default: now)
-            
+
         Returns:
             New probability after decay
         """
         as_of = as_of or datetime.utcnow()
-        
+
         # Get baseline log-odds
         baseline_lo = prob_to_logodds(
             trend.definition.get("baseline_probability", 0.1)
         )
-        
+
         # Get half-life
         half_life = trend.decay_half_life_days or 30
-        
+
         # Calculate days since last update
         days_elapsed = (as_of - trend.updated_at).total_seconds() / 86400
-        
+
         if days_elapsed <= 0:
             return logodds_to_prob(trend.current_log_odds)
-        
+
         # Exponential decay factor
         decay_factor = math.pow(0.5, days_elapsed / half_life)
-        
+
         # Apply decay toward baseline
         deviation = trend.current_log_odds - baseline_lo
         new_lo = baseline_lo + (deviation * decay_factor)
-        
+
         trend.current_log_odds = new_lo
         trend.updated_at = as_of
-        
+
         return logodds_to_prob(new_lo)
-    
+
     def get_probability(self, trend: Trend) -> float:
         """Get current probability for trend."""
         return logodds_to_prob(trend.current_log_odds)
-    
+
     async def get_probability_at(
         self,
         trend_id: UUID,
@@ -398,12 +398,12 @@ class TrendEngine:
     ) -> float | None:
         """
         Get probability at a specific point in time.
-        
+
         Uses trend_snapshots table.
         """
         from sqlalchemy import select
         from src.storage.models import TrendSnapshot
-        
+
         result = await self.session.execute(
             select(TrendSnapshot.log_odds)
             .where(TrendSnapshot.trend_id == trend_id)
@@ -412,12 +412,12 @@ class TrendEngine:
             .limit(1)
         )
         row = result.scalar_one_or_none()
-        
+
         if row is None:
             return None
-            
+
         return logodds_to_prob(row)
-    
+
     async def get_direction(
         self,
         trend: Trend,
@@ -425,7 +425,7 @@ class TrendEngine:
     ) -> str:
         """
         Get trend direction over specified period.
-        
+
         Returns:
             'rising_fast': +5% or more
             'rising': +1% to +5%
@@ -438,12 +438,12 @@ class TrendEngine:
             trend.id,
             datetime.utcnow() - timedelta(days=days)
         )
-        
+
         if past is None:
             return "stable"  # Not enough history
-        
+
         delta = current - past
-        
+
         if delta >= 0.05:
             return "rising_fast"
         elif delta >= 0.01:
@@ -454,7 +454,7 @@ class TrendEngine:
             return "falling"
         else:
             return "stable"
-    
+
     async def get_change(
         self,
         trend: Trend,
@@ -462,7 +462,7 @@ class TrendEngine:
     ) -> float | None:
         """
         Get absolute probability change over period.
-        
+
         Returns:
             Probability delta (can be positive or negative),
             or None if not enough history.
@@ -472,10 +472,10 @@ class TrendEngine:
             trend.id,
             datetime.utcnow() - timedelta(days=days)
         )
-        
+
         if past is None:
             return None
-            
+
         return current - past
 ```
 
@@ -539,29 +539,29 @@ from src.core.trend_engine import (
 
 class TestProbabilityConversion:
     """Tests for probability <-> log-odds conversion."""
-    
+
     def test_prob_to_logodds_at_half(self):
         """p=0.5 should give log-odds of 0."""
         assert prob_to_logodds(0.5) == pytest.approx(0.0)
-    
+
     def test_prob_to_logodds_symmetry(self):
         """p and 1-p should have opposite log-odds."""
         lo_low = prob_to_logodds(0.2)
         lo_high = prob_to_logodds(0.8)
         assert lo_low == pytest.approx(-lo_high)
-    
+
     def test_logodds_to_prob_inverse(self):
         """Converting back and forth should preserve value."""
         for p in [0.1, 0.25, 0.5, 0.75, 0.9]:
             lo = prob_to_logodds(p)
             recovered = logodds_to_prob(lo)
             assert recovered == pytest.approx(p, rel=1e-6)
-    
+
     def test_extreme_probabilities_clamped(self):
         """Extreme probabilities should be clamped."""
         assert logodds_to_prob(-1000) == MIN_PROBABILITY
         assert logodds_to_prob(1000) == MAX_PROBABILITY
-    
+
     def test_zero_probability_clamped(self):
         """p=0 should be clamped to MIN_PROBABILITY."""
         lo = prob_to_logodds(0)
@@ -570,7 +570,7 @@ class TestProbabilityConversion:
 
 class TestEvidenceCalculation:
     """Tests for evidence delta calculation."""
-    
+
     def test_basic_escalatory_delta(self):
         """Basic escalatory evidence should produce positive delta."""
         delta, factors = calculate_evidence_delta(
@@ -583,7 +583,7 @@ class TestEvidenceCalculation:
         )
         assert delta > 0
         assert factors.direction_multiplier == 1.0
-    
+
     def test_basic_deescalatory_delta(self):
         """De-escalatory evidence should produce negative delta."""
         delta, factors = calculate_evidence_delta(
@@ -596,7 +596,7 @@ class TestEvidenceCalculation:
         )
         assert delta < 0
         assert factors.direction_multiplier == -1.0
-    
+
     def test_corroboration_scaling(self):
         """More sources should increase delta magnitude."""
         _, factors_1 = calculate_evidence_delta(
@@ -607,7 +607,7 @@ class TestEvidenceCalculation:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         _, factors_9 = calculate_evidence_delta(
             signal_type="test",
             indicator_weight=0.04,
@@ -616,9 +616,9 @@ class TestEvidenceCalculation:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         assert factors_9.corroboration > factors_1.corroboration
-    
+
     def test_low_credibility_reduces_delta(self):
         """Low credibility source should produce smaller delta."""
         delta_high, _ = calculate_evidence_delta(
@@ -629,7 +629,7 @@ class TestEvidenceCalculation:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         delta_low, _ = calculate_evidence_delta(
             signal_type="test",
             indicator_weight=0.04,
@@ -638,9 +638,9 @@ class TestEvidenceCalculation:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         assert abs(delta_high) > abs(delta_low)
-    
+
     def test_novelty_affects_delta(self):
         """Repeated information should have less impact."""
         delta_new, _ = calculate_evidence_delta(
@@ -651,7 +651,7 @@ class TestEvidenceCalculation:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         delta_old, _ = calculate_evidence_delta(
             signal_type="test",
             indicator_weight=0.04,
@@ -660,9 +660,9 @@ class TestEvidenceCalculation:
             novelty_score=0.3,
             direction="escalatory",
         )
-        
+
         assert abs(delta_new) > abs(delta_old)
-    
+
     def test_delta_is_clamped(self):
         """Extreme inputs should not exceed MAX_DELTA_PER_EVENT."""
         delta, _ = calculate_evidence_delta(
@@ -673,13 +673,13 @@ class TestEvidenceCalculation:
             novelty_score=1.0,
             direction="escalatory",
         )
-        
+
         assert abs(delta) <= MAX_DELTA_PER_EVENT
 
 
 class TestDecay:
     """Tests for time-based probability decay."""
-    
+
     # These would be async tests using the TrendEngine class
     # with mock database sessions
     pass

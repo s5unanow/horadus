@@ -40,13 +40,13 @@ class OutcomeType(str, Enum):
 class TrendOutcome(Base):
     """
     Record of how a trend prediction resolved.
-    
-    Used for calibration analysis: when we predicted X%, 
+
+    Used for calibration analysis: when we predicted X%,
     did it happen X% of the time?
     """
-    
+
     __tablename__ = "trend_outcomes"
-    
+
     id: Mapped[UUID] = mapped_column(
         primary_key=True,
         default=uuid4,
@@ -55,7 +55,7 @@ class TrendOutcome(Base):
         ForeignKey("trends.id", ondelete="CASCADE"),
         nullable=False,
     )
-    
+
     # What we predicted
     prediction_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -77,7 +77,7 @@ class TrendOutcome(Base):
         Numeric(5, 4),
         nullable=False,
     )
-    
+
     # What happened
     outcome_date: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True),
@@ -87,12 +87,12 @@ class TrendOutcome(Base):
     )  # OutcomeType enum value
     outcome_notes: Mapped[str | None] = mapped_column(Text)
     outcome_evidence: Mapped[dict | None] = mapped_column(JSONB)
-    
+
     # Scoring
     brier_score: Mapped[float | None] = mapped_column(
         Numeric(10, 6),
     )  # (prediction - outcome)²
-    
+
     # Metadata
     recorded_by: Mapped[str | None] = mapped_column(String(100))
     created_at: Mapped[datetime] = mapped_column(
@@ -104,10 +104,10 @@ class TrendOutcome(Base):
         server_default=func.now(),
         onupdate=func.now(),
     )
-    
+
     # Relationships
     trend: Mapped["Trend"] = relationship(back_populates="outcomes")
-    
+
     __table_args__ = (
         Index("idx_outcomes_trend_date", "trend_id", "prediction_date"),
         Index("idx_outcomes_outcome", "outcome"),
@@ -131,11 +131,11 @@ def calculate_brier_score(
 ) -> float:
     """
     Calculate Brier score for a prediction.
-    
+
     Brier = (prediction - actual)²
-    
+
     Where actual = 1 if occurred, 0 if not.
-    
+
     Perfect prediction: 0.0
     Worst prediction: 1.0
     Random (0.5): 0.25
@@ -148,7 +148,7 @@ def calculate_brier_score(
         actual = 0.5  # Debatable - could parameterize
     else:
         return None  # Can't score superseded/ongoing
-    
+
     return (predicted_probability - actual) ** 2
 ```
 
@@ -195,11 +195,11 @@ class CalibrationReport:
 
 class CalibrationService:
     """Service for recording outcomes and analyzing calibration."""
-    
+
     def __init__(self, session: AsyncSession):
         self.session = session
         self.engine = TrendEngine(session)
-    
+
     async def record_outcome(
         self,
         trend_id: UUID,
@@ -211,33 +211,33 @@ class CalibrationService:
     ) -> TrendOutcome:
         """
         Record the outcome of a trend prediction.
-        
+
         Captures what we predicted at outcome_date and scores it.
         """
         # Get the prediction closest to outcome date
         trend = await self.session.get(Trend, trend_id)
         if not trend:
             raise ValueError(f"Trend {trend_id} not found")
-        
+
         # Get probability at prediction time (from snapshots)
         snapshot = await self._get_snapshot_at(trend_id, outcome_date)
-        
+
         if snapshot:
             predicted_prob = 1 / (1 + math.exp(-float(snapshot.log_odds)))
         else:
             # Fall back to current if no snapshot
             predicted_prob = self.engine.get_probability(trend)
-        
+
         # Calculate band (simplified - could retrieve from stored data)
         band_low = max(0.001, predicted_prob - 0.10)
         band_high = min(0.999, predicted_prob + 0.10)
-        
+
         # Get risk level
         risk_level = get_risk_level(predicted_prob).value
-        
+
         # Calculate Brier score
         brier = calculate_brier_score(predicted_prob, outcome)
-        
+
         # Create outcome record
         record = TrendOutcome(
             trend_id=trend_id,
@@ -253,12 +253,12 @@ class CalibrationService:
             brier_score=brier,
             recorded_by=recorded_by,
         )
-        
+
         self.session.add(record)
         await self.session.flush()
-        
+
         return record
-    
+
     async def get_calibration_report(
         self,
         trend_id: UUID | None = None,
@@ -267,7 +267,7 @@ class CalibrationService:
     ) -> CalibrationReport:
         """
         Generate calibration analysis.
-        
+
         Groups predictions into probability buckets and compares
         predicted rates to actual occurrence rates.
         """
@@ -278,17 +278,17 @@ class CalibrationService:
                 OutcomeType.DID_NOT_OCCUR.value,
             ])
         )
-        
+
         if trend_id:
             query = query.where(TrendOutcome.trend_id == trend_id)
         if start_date:
             query = query.where(TrendOutcome.prediction_date >= start_date)
         if end_date:
             query = query.where(TrendOutcome.prediction_date <= end_date)
-        
+
         result = await self.session.execute(query)
         outcomes = list(result.scalars().all())
-        
+
         if not outcomes:
             return CalibrationReport(
                 total_predictions=0,
@@ -298,21 +298,21 @@ class CalibrationService:
                 overconfident=False,
                 underconfident=False,
             )
-        
+
         # Calculate buckets (0-10%, 10-20%, ..., 90-100%)
         buckets = []
         for i in range(10):
             bucket_start = i / 10
             bucket_end = (i + 1) / 10
-            
+
             in_bucket = [
                 o for o in outcomes
                 if bucket_start <= float(o.predicted_probability) < bucket_end
             ]
-            
+
             if in_bucket:
                 occurred = sum(
-                    1 for o in in_bucket 
+                    1 for o in in_bucket
                     if o.outcome == OutcomeType.OCCURRED.value
                 )
                 buckets.append(CalibrationBucket(
@@ -326,11 +326,11 @@ class CalibrationService:
                         occurred / len(in_bucket) - (bucket_start + bucket_end) / 2
                     ),
                 ))
-        
+
         # Overall stats
         brier_scores = [float(o.brier_score) for o in outcomes if o.brier_score]
         mean_brier = sum(brier_scores) / len(brier_scores) if brier_scores else 0
-        
+
         # Determine over/under confidence
         high_pred = [o for o in outcomes if float(o.predicted_probability) > 0.5]
         if high_pred:
@@ -338,14 +338,14 @@ class CalibrationService:
             overconfident = high_occurred / len(high_pred) < 0.5
         else:
             overconfident = False
-        
+
         low_pred = [o for o in outcomes if float(o.predicted_probability) < 0.5]
         if low_pred:
             low_occurred = sum(1 for o in low_pred if o.outcome == OutcomeType.OCCURRED.value)
             underconfident = low_occurred / len(low_pred) > 0.5
         else:
             underconfident = False
-        
+
         return CalibrationReport(
             total_predictions=len(outcomes),
             resolved_predictions=len(outcomes),
@@ -354,7 +354,7 @@ class CalibrationService:
             overconfident=overconfident,
             underconfident=underconfident,
         )
-    
+
     async def _get_snapshot_at(
         self,
         trend_id: UUID,
@@ -386,7 +386,7 @@ async def record_trend_outcome(
 ) -> OutcomeResponse:
     """
     Record the resolution of a trend prediction.
-    
+
     Use this when a trend's prediction can be evaluated
     (e.g., an event occurred or definitely didn't happen).
     """
@@ -409,7 +409,7 @@ async def get_trend_calibration(
 ) -> CalibrationReportResponse:
     """
     Get calibration analysis for a trend.
-    
+
     Shows how well our predictions matched reality.
     """
     service = CalibrationService(session)
@@ -469,7 +469,7 @@ class OutcomeResponse(BaseModel):
     outcome: str
     outcome_date: datetime
     brier_score: float | None
-    
+
     class Config:
         from_attributes = True
 
@@ -490,7 +490,7 @@ class CalibrationReportResponse(BaseModel):
     buckets: list[BucketResponse]
     overconfident: bool
     underconfident: bool
-    
+
     # Interpretation helper
     @property
     def assessment(self) -> str:
@@ -542,17 +542,17 @@ class TestBrierScore:
         """Predicting 1.0 for occurred event = 0 Brier."""
         score = calculate_brier_score(1.0, OutcomeType.OCCURRED)
         assert score == 0.0
-    
+
     def test_perfect_prediction_not_occurred(self):
         """Predicting 0.0 for non-occurred event = 0 Brier."""
         score = calculate_brier_score(0.0, OutcomeType.DID_NOT_OCCUR)
         assert score == 0.0
-    
+
     def test_worst_prediction_occurred(self):
         """Predicting 0.0 for occurred event = 1.0 Brier."""
         score = calculate_brier_score(0.0, OutcomeType.OCCURRED)
         assert score == 1.0
-    
+
     def test_fifty_fifty(self):
         """Predicting 0.5 for any outcome = 0.25 Brier."""
         score = calculate_brier_score(0.5, OutcomeType.OCCURRED)

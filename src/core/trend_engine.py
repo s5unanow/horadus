@@ -203,7 +203,7 @@ def calculate_evidence_delta(
     Calculate log-odds delta from evidence factors.
 
     The formula is:
-        delta = base_weight × severity × confidence × credibility × corroboration × novelty × direction
+        delta = base_weight * severity * confidence * credibility * corroboration * novelty * direction
 
     Where:
         - base_weight: From trend indicator config (e.g., 0.04 for military_movement)
@@ -446,7 +446,7 @@ class TrendEngine:
         Apply time-based decay toward baseline probability.
 
         Uses exponential decay with configurable half-life:
-            new_lo = baseline_lo + (current_lo - baseline_lo) × decay_factor
+            new_lo = baseline_lo + (current_lo - baseline_lo) * decay_factor
 
         Where decay_factor = 0.5^(days_elapsed / half_life)
 

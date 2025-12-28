@@ -149,8 +149,8 @@ class LLMClassifier:
             logger.warning("Budget exceeded, entering sleep mode", reason=reason)
             raise BudgetExceededError(reason)
 
-        # Make API call
-        response = await self.client.messages.create(...)
+        # Make API call (provider-specific; example shows OpenAI-style client)
+        response = await self.client.responses.create(...)
 
         # Record usage AFTER call
         await self.cost_tracker.record_usage(

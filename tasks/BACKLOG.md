@@ -330,9 +330,10 @@ Configure a secondary LLM provider/model and automatically switch when the prima
 Create a small labeled dataset and a benchmark script to compare model/provider quality and cost.
 
 **Acceptance Criteria**:
-- [ ] 200 labeled articles/items (gold set) in a repo-friendly format (e.g., JSONL)
+- [ ] 200 labeled articles/items (gold set) in a repo-friendly format (e.g., JSONL) stored under `ai/eval/`
+- [ ] Gold set file: `ai/eval/gold_set.jsonl`
 - [ ] Labels include: relevance, trend match, signal type, direction, severity, and confidence (as applicable)
-- [ ] Benchmark script produces accuracy metrics + estimated cost per item
+- [ ] Benchmark script produces accuracy metrics + estimated cost per item; outputs saved under `ai/eval/results/`
 - [ ] Compare `gpt-4o-mini` against at least one alternative configuration
 - [ ] Document how to run the benchmark and interpret results
 

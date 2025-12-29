@@ -54,6 +54,58 @@ After completing work:
 - Keep probability updates explainable (store factors used for deltas).
 - Any LLM usage must be protected by budget/limits where possible.
 
+## Project-Specific Patterns
+
+### pgvector similarity (clustering)
+```python
+from datetime import datetime, timedelta
+
+from sqlalchemy import select
+
+from src.core.config import settings
+from src.storage.models import Event
+
+# Our config uses cosine *similarity* thresholds.
+# pgvector queries often use cosine *distance* (≈ 1 - similarity when normalized).
+max_distance = 1.0 - settings.CLUSTER_SIMILARITY_THRESHOLD
+window_start = datetime.utcnow() - timedelta(hours=settings.CLUSTER_TIME_WINDOW_HOURS)
+
+query = (
+    select(Event)
+    .where(Event.last_mention_at >= window_start)
+    .where(Event.embedding.cosine_distance(target_embedding) <= max_distance)
+)
+```
+
+### Log-odds conversion (always use helpers)
+```python
+from src.core.trend_engine import logodds_to_prob, prob_to_logodds
+
+baseline_lo = prob_to_logodds(0.08)
+new_probability = logodds_to_prob(baseline_lo + delta_log_odds)
+```
+
+### Evidence delta calculation (severity + confidence)
+```python
+from src.core.trend_engine import calculate_evidence_delta
+
+delta_log_odds, factors = calculate_evidence_delta(
+    signal_type="military_movement",
+    indicator_weight=0.04,
+    source_credibility=0.9,
+    corroboration_count=3,
+    novelty_score=1.0,
+    direction="escalatory",
+    severity=0.8,
+    confidence=0.95,
+)
+```
+
+### LLM calls (budget + retry + failover)
+- Check budget **before** calling (`TASK-036`).
+- Retry only on transient failures (429/5xx/timeouts), then fail over (`TASK-038`).
+- Validate strict JSON; don’t silently coerce malformed outputs.
+
 ## Development Commands
 
 - Tests: `pytest tests/ -v`

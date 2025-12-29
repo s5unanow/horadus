@@ -23,6 +23,7 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 - `src/processing/` — LLM + clustering + pipeline (may be stubbed early)
 - `src/workers/` — async/background workers (may be stubbed early)
 - `config/` — YAML configuration (`trends/`, `sources/`)
+- `ai/` — LLM assets (prompts, evaluation data, benchmark results)
 - `docs/` — architecture, glossary, ADRs (`docs/adr/`)
 - `tasks/` — backlog, sprint, and detailed specs (`tasks/specs/`)
 - `tests/` — unit/integration tests

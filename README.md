@@ -190,8 +190,9 @@ geopolitical-intel/
 ├── docs/                  # Documentation
 │   ├── ARCHITECTURE.md    # System design
 │   ├── DATA_MODEL.md      # Database schema
-│   ├── API_SPEC.md        # API documentation
 │   └── adr/               # Architecture decisions
+│
+├── ai/                    # AI assets (prompts, evals)
 │
 ├── tasks/                 # Task tracking
 │   ├── BACKLOG.md
@@ -218,4 +219,4 @@ geopolitical-intel/
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+This is a personal learning project. If you want to propose changes, open an issue or a PR with a clear description and test notes.

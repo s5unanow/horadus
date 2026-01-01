@@ -37,15 +37,19 @@ def create_engine() -> AsyncEngine:
     Uses connection pooling in production, NullPool in development
     for easier debugging.
     """
-    pool_class = NullPool if settings.is_development else None
+    if settings.is_development:
+        return create_async_engine(
+            settings.DATABASE_URL,
+            echo=True,  # Log SQL in development
+            poolclass=NullPool,
+            pool_pre_ping=True,
+        )
 
     return create_async_engine(
         settings.DATABASE_URL,
-        echo=settings.is_development,  # Log SQL in development
-        pool_size=settings.DATABASE_POOL_SIZE if not settings.is_development else 5,
-        max_overflow=settings.DATABASE_MAX_OVERFLOW if not settings.is_development else 0,
-        poolclass=pool_class,
-        # Connection health check
+        echo=False,
+        pool_size=settings.DATABASE_POOL_SIZE,
+        max_overflow=settings.DATABASE_MAX_OVERFLOW,
         pool_pre_ping=True,
     )
 

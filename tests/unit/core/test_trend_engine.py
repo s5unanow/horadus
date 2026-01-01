@@ -365,7 +365,7 @@ class TestCalculateEvidenceDelta:
 class TestTrendEngine:
     """Tests for TrendEngine class."""
 
-    @pytest.fixture()
+    @pytest.fixture
     def mock_session(self):
         """Create a mock database session."""
         session = AsyncMock()
@@ -374,7 +374,7 @@ class TestTrendEngine:
         session.execute = AsyncMock()
         return session
 
-    @pytest.fixture()
+    @pytest.fixture
     def mock_trend(self):
         """Create a mock trend object."""
         trend = MagicMock()
@@ -386,7 +386,7 @@ class TestTrendEngine:
         trend.definition = {"baseline_probability": 0.1}
         return trend
 
-    @pytest.fixture()
+    @pytest.fixture
     def sample_factors(self):
         """Create sample evidence factors."""
         return EvidenceFactors(
@@ -411,7 +411,7 @@ class TestTrendEngine:
         mock_trend.current_log_odds = prob_to_logodds(0.25)
         assert engine.get_probability(mock_trend) == pytest.approx(0.25, rel=0.01)
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_apply_evidence_updates_logodds(self, mock_session, mock_trend, sample_factors):
         """Test that apply_evidence updates trend log-odds."""
         engine = TrendEngine(mock_session)
@@ -431,7 +431,7 @@ class TestTrendEngine:
         assert mock_trend.current_log_odds == initial_lo + delta
         assert result.delta_applied == delta
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_apply_evidence_returns_update(self, mock_session, mock_trend, sample_factors):
         """Test that apply_evidence returns correct TrendUpdate."""
         engine = TrendEngine(mock_session)
@@ -453,7 +453,7 @@ class TestTrendEngine:
         assert result.new_probability > result.previous_probability
         assert result.direction == "up"
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_apply_evidence_creates_record(self, mock_session, mock_trend, sample_factors):
         """Test that apply_evidence creates evidence record."""
         engine = TrendEngine(mock_session)
@@ -470,7 +470,7 @@ class TestTrendEngine:
         # Should have called session.add with an evidence record
         mock_session.add.assert_called_once()
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_apply_decay_moves_toward_baseline(self, mock_session, mock_trend):
         """Test that decay moves probability toward baseline."""
         engine = TrendEngine(mock_session)
@@ -489,7 +489,7 @@ class TestTrendEngine:
 
         assert new_prob == pytest.approx(expected_prob, rel=0.01)
 
-    @pytest.mark.asyncio()
+    @pytest.mark.asyncio
     async def test_apply_decay_no_change_if_recent(self, mock_session, mock_trend):
         """Test that decay has no effect if just updated."""
         engine = TrendEngine(mock_session)
@@ -541,7 +541,7 @@ class TestEvidenceIntegration:
     def test_realistic_scenario(self):
         """Test a realistic evidence scenario."""
         # Scenario: Multiple credible sources report military movement
-        delta, factors = calculate_evidence_delta(
+        delta, _factors = calculate_evidence_delta(
             signal_type="military_movement",
             indicator_weight=0.04,  # From trend config
             source_credibility=0.95,  # Reuters

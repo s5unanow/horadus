@@ -6,6 +6,7 @@ CRUD operations for managing data sources (RSS feeds, Telegram channels, etc.)
 
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -29,7 +30,7 @@ class SourceCreate(BaseModel):
     name: str = Field(..., description="Human-readable name")
     url: str | None = Field(None, description="Source URL")
     credibility_score: float = Field(0.5, ge=0, le=1, description="Reliability score")
-    config: dict = Field(default_factory=dict, description="Source-specific config")
+    config: dict[str, Any] = Field(default_factory=dict, description="Source-specific config")
 
 
 class SourceUpdate(BaseModel):
@@ -38,7 +39,7 @@ class SourceUpdate(BaseModel):
     name: str | None = None
     url: str | None = None
     credibility_score: float | None = Field(None, ge=0, le=1)
-    config: dict | None = None
+    config: dict[str, Any] | None = None
     is_active: bool | None = None
 
 
@@ -50,7 +51,7 @@ class SourceResponse(BaseModel):
     name: str
     url: str | None
     credibility_score: float
-    config: dict
+    config: dict[str, Any]
     is_active: bool
     last_fetched_at: str | None
     error_count: int

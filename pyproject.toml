@@ -167,6 +167,9 @@ ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # function call in default argument (FastAPI Depends)
     "B904",   # raise without from (sometimes intentional)
+    "TC002",  # move third-party import into TYPE_CHECKING (FastAPI needs runtime inspection)
+    "TC003",  # move stdlib import into TYPE_CHECKING (FastAPI needs runtime inspection)
+    "DTZ003", # datetime.utcnow() - TODO: migrate to timezone-aware datetimes
 ]
 
 [tool.ruff.lint.isort]
@@ -175,6 +178,7 @@ known-first-party = ["src"]
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG001", "ARG002"]  # Unused arguments OK in tests
 "alembic/*" = ["ERA001"]  # Comments OK in migrations
+"src/api/routes/*" = ["ARG001", "ARG002"]  # Unused arguments OK in stub endpoints
 
 [tool.mypy]
 python_version = "3.12"

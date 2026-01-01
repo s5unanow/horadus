@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import ClassVar
+from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
@@ -39,8 +39,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 class Base(DeclarativeBase):
     """Base class for all models."""
 
-    type_annotation_map: ClassVar[dict] = {
-        dict: JSONB,
+    type_annotation_map: ClassVar[dict[Any, Any]] = {
+        dict[str, Any]: JSONB,
         list[str]: ARRAY(String),
         UUID: PGUUID(as_uuid=True),
     }
@@ -182,7 +182,7 @@ class Source(Base):
         default=ReportingType.SECONDARY.value,
         nullable=False,
     )
-    config: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
@@ -338,7 +338,7 @@ class Event(Base):
     extracted_what: Mapped[str | None] = mapped_column(Text)
     extracted_where: Mapped[str | None] = mapped_column(String(255))
     extracted_when: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    extracted_claims: Mapped[dict | None] = mapped_column(JSONB)
+    extracted_claims: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String))
 
     # Aggregated metadata
@@ -467,7 +467,7 @@ class Trend(Base):
     )
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    definition: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     # Probability as log-odds
     baseline_log_odds: Mapped[float] = mapped_column(
@@ -480,7 +480,7 @@ class Trend(Base):
     )
 
     # Configuration
-    indicators: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    indicators: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     decay_half_life_days: Mapped[int] = mapped_column(
         Integer,
         default=30,
@@ -645,9 +645,9 @@ class Report(Base):
     )
 
     # Report content
-    statistics: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    statistics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     narrative: Mapped[str | None] = mapped_column(Text)
-    top_events: Mapped[dict | None] = mapped_column(JSONB)
+    top_events: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -714,7 +714,7 @@ class TrendOutcome(Base):
     outcome_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     outcome: Mapped[str | None] = mapped_column(String(20))  # OutcomeType
     outcome_notes: Mapped[str | None] = mapped_column(Text)
-    outcome_evidence: Mapped[dict | None] = mapped_column(JSONB)
+    outcome_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Scoring
     brier_score: Mapped[float | None] = mapped_column(Numeric(10, 6))
@@ -773,8 +773,8 @@ class HumanFeedback(Base):
         String(50),
         nullable=False,
     )  # "pin" | "mark_noise" | "override_delta" | "correct_category"
-    original_value: Mapped[dict | None] = mapped_column(JSONB)
-    corrected_value: Mapped[dict | None] = mapped_column(JSONB)
+    original_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    corrected_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     notes: Mapped[str | None] = mapped_column(Text)
 
     # Metadata

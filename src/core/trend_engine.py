@@ -174,7 +174,7 @@ class EvidenceFactors:
     raw_delta: float
     clamped_delta: float
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, float]:
         """Convert to dictionary for JSON storage."""
         return {
             "base_weight": self.base_weight,

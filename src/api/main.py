@@ -7,11 +7,15 @@ including middleware, error handlers, and route registration.
 
 from __future__ import annotations
 
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
 import structlog
 from fastapi import FastAPI, Request
+from sqlalchemy import text
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -28,7 +32,7 @@ logger = structlog.get_logger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     """
     Manage application lifespan events.
 
@@ -51,7 +55,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Verify database connection
     try:
         async with async_session_maker() as session:
-            await session.execute("SELECT 1")
+            await session.execute(text("SELECT 1"))
         logger.info("Database connection verified")
     except Exception as e:
         logger.error("Database connection failed", error=str(e))

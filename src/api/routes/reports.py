@@ -7,6 +7,7 @@ Endpoints for accessing generated intelligence reports.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -43,9 +44,9 @@ class ReportResponse(BaseModel):
     period_end: datetime
     trend_id: UUID | None
     trend_name: str | None
-    statistics: dict
+    statistics: dict[str, Any]
     narrative: str | None
-    top_events: list[dict] | None
+    top_events: list[dict[str, Any]] | None
     created_at: datetime
 
 

@@ -36,7 +36,7 @@ def event_loop() -> Generator[asyncio.AbstractEventLoop, None, None]:
 # =============================================================================
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_db_session() -> AsyncMock:
     """Create a mock database session for unit tests."""
     session = AsyncMock()
@@ -51,7 +51,7 @@ def mock_db_session() -> AsyncMock:
     return session
 
 
-@pytest.fixture()
+@pytest.fixture
 def mock_http_client() -> AsyncMock:
     """Create a mock HTTP client for unit tests."""
     return AsyncMock(spec=AsyncClient)
@@ -62,7 +62,7 @@ def mock_http_client() -> AsyncMock:
 # =============================================================================
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_source_data() -> dict[str, Any]:
     """Sample source data for testing."""
     return {
@@ -76,7 +76,7 @@ def sample_source_data() -> dict[str, Any]:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_raw_item_data() -> dict[str, Any]:
     """Sample raw item data for testing."""
     return {
@@ -91,7 +91,7 @@ def sample_raw_item_data() -> dict[str, Any]:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_trend_data() -> dict[str, Any]:
     """Sample trend data for testing."""
     return {
@@ -113,7 +113,7 @@ def sample_trend_data() -> dict[str, Any]:
     }
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_event_data() -> dict[str, Any]:
     """Sample event data for testing."""
     return {
@@ -132,7 +132,7 @@ def sample_event_data() -> dict[str, Any]:
 # =============================================================================
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_rss_xml() -> str:
     """Sample RSS feed XML for testing."""
     return """<?xml version="1.0" encoding="UTF-8"?>
@@ -158,7 +158,7 @@ def sample_rss_xml() -> str:
 """
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_atom_xml() -> str:
     """Sample Atom feed XML for testing."""
     return """<?xml version="1.0" encoding="utf-8"?>
@@ -180,7 +180,7 @@ def sample_atom_xml() -> str:
 # =============================================================================
 
 
-@pytest.fixture()
+@pytest.fixture
 def sample_trend_config() -> dict[str, Any]:
     """Sample trend configuration matching config/trends/*.yaml format."""
     return {

@@ -7,6 +7,7 @@ Endpoints for querying clustered news events.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -39,8 +40,8 @@ class EventResponse(BaseModel):
 class EventDetailResponse(EventResponse):
     """Detailed event response with sources."""
 
-    sources: list[dict]
-    trend_impacts: list[dict]
+    sources: list[dict[str, Any]]
+    trend_impacts: list[dict[str, Any]]
 
 
 # =============================================================================

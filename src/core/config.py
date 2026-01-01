@@ -79,7 +79,7 @@ class Settings(BaseSettings):
         """Parse CORS origins from comma-separated string or list."""
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
-        return v
+        return list(v) if v else []
 
     # =========================================================================
     # OpenAI Configuration

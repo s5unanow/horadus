@@ -8,21 +8,6 @@
 
 ## Active Tasks
 
-### TASK-001: Python Project Setup
-**Status**: DONE ✓  
-**Priority**: P0 (Critical)  
-**Spec**: `tasks/specs/001-python-project-setup.md`
-
-Set up Python project with pyproject.toml, dependencies, and dev tools.
-
-**Completed**:
-- [x] pyproject.toml with all dependencies
-- [x] Dev dependencies (pytest, ruff, mypy)
-- [x] .env.example with all required variables
-- [x] Basic src/ package structure importable
-
----
-
 ### TASK-002: Docker Environment
 **Status**: TODO  
 **Priority**: P0 (Critical)  
@@ -97,7 +82,18 @@ Create basic FastAPI application structure.
 
 ## Completed This Sprint
 
-(Move tasks here when done)
+### TASK-001: Python Project Setup
+**Status**: DONE ✓  
+**Priority**: P0 (Critical)  
+**Spec**: `tasks/specs/001-python-project-setup.md`
+
+Set up Python project with pyproject.toml, dependencies, and dev tools.
+
+**Completed**:
+- [x] pyproject.toml with all dependencies
+- [x] Dev dependencies (pytest, ruff, mypy)
+- [x] .env.example with all required variables
+- [x] Basic src/ package structure importable
 
 ---
 

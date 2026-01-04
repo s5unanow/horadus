@@ -6,11 +6,13 @@ Tests probability conversion, evidence calculation, and trend updates.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from src.core.trend_engine import (
     MAX_DELTA_PER_EVENT,
@@ -371,7 +373,17 @@ class TestTrendEngine:
         session = AsyncMock()
         session.add = MagicMock()
         session.flush = AsyncMock()
-        session.execute = AsyncMock()
+
+        # Default: no existing evidence found.
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = None
+        session.execute = AsyncMock(return_value=execute_result)
+
+        @asynccontextmanager
+        async def _begin_nested():
+            yield
+
+        session.begin_nested = MagicMock(return_value=_begin_nested())
         return session
 
     @pytest.fixture
@@ -381,7 +393,7 @@ class TestTrendEngine:
         trend.id = uuid4()
         trend.name = "Test Trend"
         trend.current_log_odds = 0.0  # 50% probability
-        trend.updated_at = datetime.utcnow()
+        trend.updated_at = datetime.now(UTC)
         trend.decay_half_life_days = 30
         trend.definition = {"baseline_probability": 0.1}
         return trend
@@ -471,13 +483,65 @@ class TestTrendEngine:
         mock_session.add.assert_called_once()
 
     @pytest.mark.asyncio
+    async def test_apply_evidence_duplicate_is_noop(self, mock_session, mock_trend, sample_factors):
+        """Duplicate (trend,event,signal) evidence should not re-apply delta."""
+        engine = TrendEngine(mock_session)
+
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = uuid4()
+        mock_session.execute = AsyncMock(return_value=execute_result)
+
+        initial_lo = mock_trend.current_log_odds
+        result = await engine.apply_evidence(
+            trend=mock_trend,
+            delta=0.5,
+            event_id=uuid4(),
+            signal_type="test",
+            factors=sample_factors,
+            reasoning="Test reasoning",
+        )
+
+        assert mock_trend.current_log_odds == initial_lo
+        assert result.delta_applied == 0.0
+        assert result.direction == "unchanged"
+        mock_session.add.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_apply_evidence_race_integrityerror_is_noop(
+        self, mock_session, mock_trend, sample_factors
+    ):
+        """If evidence insert races, treat it as idempotent and don't apply delta."""
+        engine = TrendEngine(mock_session)
+
+        # No existing evidence found in the pre-check.
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = None
+        mock_session.execute = AsyncMock(return_value=execute_result)
+
+        mock_session.flush.side_effect = IntegrityError("stmt", {}, Exception("boom"))
+
+        initial_lo = mock_trend.current_log_odds
+        result = await engine.apply_evidence(
+            trend=mock_trend,
+            delta=0.5,
+            event_id=uuid4(),
+            signal_type="test",
+            factors=sample_factors,
+            reasoning="Test reasoning",
+        )
+
+        assert mock_trend.current_log_odds == initial_lo
+        assert result.delta_applied == 0.0
+        assert result.direction == "unchanged"
+
+    @pytest.mark.asyncio
     async def test_apply_decay_moves_toward_baseline(self, mock_session, mock_trend):
         """Test that decay moves probability toward baseline."""
         engine = TrendEngine(mock_session)
 
         # Start at 50% (log-odds = 0), baseline is 10%
         mock_trend.current_log_odds = 0.0
-        mock_trend.updated_at = datetime.utcnow() - timedelta(days=30)  # One half-life
+        mock_trend.updated_at = datetime.now(UTC) - timedelta(days=30)  # One half-life
 
         new_prob = await engine.apply_decay(mock_trend)
 
@@ -495,7 +559,7 @@ class TestTrendEngine:
         engine = TrendEngine(mock_session)
 
         mock_trend.current_log_odds = 0.5
-        mock_trend.updated_at = datetime.utcnow()  # Just now
+        mock_trend.updated_at = datetime.now(UTC)  # Just now
 
         original_lo = mock_trend.current_log_odds
         await engine.apply_decay(mock_trend)

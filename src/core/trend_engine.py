@@ -26,11 +26,13 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 from uuid import UUID
 
 import structlog
+from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -55,6 +57,17 @@ MAX_DELTA_PER_EVENT: float = 0.5
 # Default values
 DEFAULT_DECAY_HALF_LIFE_DAYS: int = 30
 DEFAULT_BASELINE_PROBABILITY: float = 0.10
+
+
+# =============================================================================
+# Time Helpers
+# =============================================================================
+
+
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
 
 
 # =============================================================================
@@ -385,12 +398,70 @@ class TrendEngine:
         """
         from src.storage.models import TrendEvidence
 
-        # Get previous probability
         previous_prob = logodds_to_prob(float(trend.current_log_odds))
 
-        # Apply delta
+        existing = await self.session.execute(
+            # Ensure idempotency: never apply the same (trend, event, signal) twice.
+            # The DB enforces this with a unique constraint, but we want a clean no-op
+            # return instead of "apply delta then fail on commit".
+            select(TrendEvidence.id).where(
+                TrendEvidence.trend_id == trend.id,
+                TrendEvidence.event_id == event_id,
+                TrendEvidence.signal_type == signal_type,
+            )
+        )
+        if existing.scalar_one_or_none() is not None:
+            logger.info(
+                "Duplicate evidence ignored (idempotent)",
+                trend_id=str(trend.id),
+                trend_name=trend.name,
+                event_id=str(event_id),
+                signal_type=signal_type,
+            )
+            return TrendUpdate(
+                previous_probability=previous_prob,
+                new_probability=previous_prob,
+                delta_applied=0.0,
+                direction="unchanged",
+            )
+
+        # Get previous probability
+        evidence = TrendEvidence(
+            trend_id=trend.id,
+            event_id=event_id,
+            signal_type=signal_type,
+            credibility_score=factors.credibility,
+            corroboration_factor=factors.corroboration,
+            novelty_score=factors.novelty,
+            severity_score=factors.severity,
+            confidence_score=factors.confidence,
+            delta_log_odds=delta,
+            reasoning=reasoning,
+        )
+
+        try:
+            async with self.session.begin_nested():
+                self.session.add(evidence)
+                await self.session.flush()
+        except IntegrityError:
+            # Another worker inserted the same evidence concurrently.
+            logger.info(
+                "Evidence insert raced; treated as duplicate (idempotent)",
+                trend_id=str(trend.id),
+                trend_name=trend.name,
+                event_id=str(event_id),
+                signal_type=signal_type,
+            )
+            return TrendUpdate(
+                previous_probability=previous_prob,
+                new_probability=previous_prob,
+                delta_applied=0.0,
+                direction="unchanged",
+            )
+
+        # Apply delta only after evidence record is guaranteed unique/persistable.
         trend.current_log_odds = float(trend.current_log_odds) + delta
-        trend.updated_at = datetime.utcnow()
+        trend.updated_at = datetime.now(UTC)
 
         # Get new probability
         new_prob = logodds_to_prob(float(trend.current_log_odds))
@@ -402,21 +473,6 @@ class TrendEngine:
             direction = "down"
         else:
             direction = "unchanged"
-
-        # Create evidence record
-        evidence = TrendEvidence(
-            trend_id=trend.id,
-            event_id=event_id,
-            signal_type=signal_type,
-            credibility_score=factors.credibility,
-            corroboration_factor=factors.corroboration,
-            novelty_score=factors.novelty,
-            severity_score=factors.base_weight,
-            delta_log_odds=delta,
-            reasoning=reasoning,
-        )
-
-        self.session.add(evidence)
 
         logger.info(
             "Evidence applied to trend",
@@ -460,7 +516,7 @@ class TrendEngine:
         Returns:
             New probability after decay
         """
-        as_of = as_of or datetime.utcnow()
+        as_of = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
 
         # Get baseline
         baseline_prob = trend.definition.get(
@@ -542,6 +598,8 @@ class TrendEngine:
 
         from src.storage.models import TrendSnapshot
 
+        at = _as_utc(at)
+
         result = await self.session.execute(
             select(TrendSnapshot.log_odds)
             .where(TrendSnapshot.trend_id == trend_id)
@@ -576,7 +634,7 @@ class TrendEngine:
         current = self.get_probability(trend)
         past = await self.get_probability_at(
             trend.id,
-            datetime.utcnow() - timedelta(days=days),
+            datetime.now(UTC) - timedelta(days=days),
         )
 
         if past is None:
@@ -613,7 +671,7 @@ class TrendEngine:
         current = self.get_probability(trend)
         past = await self.get_probability_at(
             trend.id,
-            datetime.utcnow() - timedelta(days=days),
+            datetime.now(UTC) - timedelta(days=days),
         )
 
         if past is None:
@@ -644,7 +702,7 @@ class TrendEngine:
 
         from src.storage.models import TrendEvidence
 
-        cutoff = datetime.utcnow() - timedelta(days=days)
+        cutoff = datetime.now(UTC) - timedelta(days=days)
 
         result = await self.session.execute(
             select(TrendEvidence)

@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import Any
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -32,15 +32,21 @@ class Settings(BaseSettings):
     # Database
     # =========================================================================
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://geoint:geoint@localhost:5432/geoint",
+        default="postgresql+asyncpg://postgres@localhost:5432/geoint",
         description="Async PostgreSQL connection string",
     )
     DATABASE_URL_SYNC: str = Field(
-        default="postgresql://geoint:geoint@localhost:5432/geoint",
-        description="Sync PostgreSQL connection string (for Alembic)",
+        default="",
+        description="Sync PostgreSQL connection string (for Alembic); derived if empty",
     )
     DATABASE_POOL_SIZE: int = Field(default=10, ge=1, le=100)
     DATABASE_MAX_OVERFLOW: int = Field(default=20, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _derive_database_url_sync(self) -> Settings:
+        if not self.DATABASE_URL_SYNC.strip():
+            self.DATABASE_URL_SYNC = self.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+        return self
 
     # =========================================================================
     # Redis
@@ -105,6 +111,19 @@ class Settings(BaseSettings):
     TELEGRAM_API_ID: int | None = Field(default=None)
     TELEGRAM_API_HASH: str | None = Field(default=None)
     TELEGRAM_SESSION_NAME: str = Field(default="geoint_session")
+
+    # =========================================================================
+    # Celery
+    # =========================================================================
+    CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
+    CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/2")
+
+    # =========================================================================
+    # Feature Flags
+    # =========================================================================
+    ENABLE_RSS_INGESTION: bool = Field(default=True)
+    ENABLE_GDELT_INGESTION: bool = Field(default=True)
+    ENABLE_TELEGRAM_INGESTION: bool = Field(default=False)
 
     # =========================================================================
     # Application

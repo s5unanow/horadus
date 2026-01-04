@@ -6,7 +6,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 1
 
-(No completed tasks yet)
+- TASK-001: Python Project Setup ✅
 
 ---
 

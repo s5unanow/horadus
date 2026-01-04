@@ -7,7 +7,7 @@ including database and Redis connectivity checks.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -82,7 +82,7 @@ async def health_check(
 
     return HealthStatus(
         status=overall_status,
-        timestamp=datetime.utcnow().isoformat(),
+        timestamp=datetime.now(UTC).isoformat(),
         version="1.0.0",
         checks=checks,
     )

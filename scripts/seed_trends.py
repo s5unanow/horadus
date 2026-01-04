@@ -43,6 +43,34 @@ def _trend_name(definition: dict[str, Any], path: Path) -> str:
     raise ValueError(f"Missing required 'name' in trend file: {path}")
 
 
+def _validate_indicators(indicators: dict[str, Any], path: Path) -> None:
+    for signal_type, cfg in indicators.items():
+        if not isinstance(signal_type, str) or not signal_type.strip():
+            raise ValueError(f"Indicator key must be a non-empty string in {path}")
+        if not isinstance(cfg, dict):
+            raise ValueError(f"Indicator '{signal_type}' must be a mapping in {path}")
+
+        weight = cfg.get("weight")
+        if weight is None:
+            raise ValueError(f"Indicator '{signal_type}' missing required 'weight' in {path}")
+        try:
+            weight_f = float(weight)
+        except (TypeError, ValueError) as e:
+            raise ValueError(
+                f"Indicator '{signal_type}' has non-numeric weight={weight!r} in {path}"
+            ) from e
+        if weight_f < 0:
+            raise ValueError(
+                f"Indicator '{signal_type}' weight must be >= 0 (got {weight_f}) in {path}"
+            )
+
+        direction = cfg.get("direction")
+        if direction not in ("escalatory", "de_escalatory"):
+            raise ValueError(
+                f"Indicator '{signal_type}' has invalid direction={direction!r} in {path}"
+            )
+
+
 async def seed_trends(trends_path: Path, dry_run: bool) -> int:
     if not trends_path.exists():
         raise FileNotFoundError(f"Trends path not found: {trends_path}")
@@ -68,6 +96,7 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
             indicators = definition.get("indicators") or {}
             if not isinstance(indicators, dict):
                 raise ValueError(f"'indicators' must be a mapping in {path}")
+            _validate_indicators(indicators, path)
 
             baseline_log_odds = prob_to_logodds(baseline_probability)
 

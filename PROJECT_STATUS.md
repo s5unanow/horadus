@@ -32,7 +32,6 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## In Progress
 
-- [ ] TASK-001: Python project setup (verify install works) 🟡
 - [ ] TASK-002: Docker environment (verify extensions work)
 - [ ] TASK-003: Database migrations (generate initial migration)
 - [ ] TASK-004: FastAPI skeleton (wire database sessions)

@@ -116,7 +116,7 @@ indicators:
     keywords: ["sanctions", "embargo", "restrictions", "freeze assets"]
 
   diplomatic_talks:
-    weight: -0.03
+    weight: 0.03
     direction: de_escalatory
     keywords: ["talks", "negotiation", "summit", "agreement", "ceasefire"]
 

@@ -5,6 +5,7 @@ This module configures Alembic for async SQLAlchemy migrations
 with the Geopolitical Intelligence Platform database.
 """
 
+import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import pool
@@ -19,9 +20,6 @@ from src.storage.models import Base
 
 # Alembic Config object
 config = context.config
-
-# Set sqlalchemy.url from environment
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL_SYNC)
 
 # Interpret the config file for Python logging
 if config.config_file_name is not None:
@@ -42,7 +40,9 @@ def run_migrations_offline() -> None:
     Calls to context.execute() here emit the given string to the
     script output.
     """
-    url = config.get_main_option("sqlalchemy.url")
+    # Offline mode does not connect to the database, so we can safely use a
+    # "sync" URL purely for dialect rendering without requiring a sync driver.
+    url = settings.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -70,46 +70,27 @@ def do_run_migrations(connection: Connection) -> None:
         context.run_migrations()
 
 
-async def run_async_migrations() -> None:
-    """
-    Run migrations in 'online' mode with async engine.
-
-    Creates an Engine and associates a connection with the context.
-    """
-    # Use async connection string
+def run_migrations_online() -> None:
+    """Run migrations in 'online' mode."""
     configuration = config.get_section(config.config_ini_section, {})
-    configuration["sqlalchemy.url"] = settings.DATABASE_URL.replace(
-        "postgresql+asyncpg", "postgresql"
-    )
+    async_url = settings.DATABASE_URL
+    if async_url.startswith("postgresql://"):
+        async_url = async_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    configuration["sqlalchemy.url"] = async_url
 
     connectable = async_engine_from_config(
         configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
-        # Need to use sync driver for migrations
         future=True,
     )
 
-    async with connectable.connect() as connection:
-        await connection.run_sync(do_run_migrations)
+    async def run() -> None:
+        async with connectable.connect() as connection:
+            await connection.run_sync(do_run_migrations)
+        await connectable.dispose()
 
-    await connectable.dispose()
-
-
-def run_migrations_online() -> None:
-    """Run migrations in 'online' mode."""
-    # Use sync connection for simplicity
-    from sqlalchemy import create_engine
-
-    connectable = create_engine(
-        settings.DATABASE_URL_SYNC,
-        poolclass=pool.NullPool,
-    )
-
-    with connectable.connect() as connection:
-        do_run_migrations(connection)
-
-    connectable.dispose()
+    asyncio.run(run())
 
 
 if context.is_offline_mode():

@@ -44,6 +44,13 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _derive_database_url_sync(self) -> Settings:
+        if self.DATABASE_URL.startswith("postgresql://"):
+            # Runtime engines use asyncpg; normalize common sync-style URLs.
+            self.DATABASE_URL = self.DATABASE_URL.replace(
+                "postgresql://",
+                "postgresql+asyncpg://",
+                1,
+            )
         if not self.DATABASE_URL_SYNC.strip():
             self.DATABASE_URL_SYNC = self.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
         return self

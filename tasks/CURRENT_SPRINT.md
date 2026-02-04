@@ -2,25 +2,25 @@
 
 **Sprint Goal**: Complete Phase 0 - Get basic infrastructure running  
 **Sprint Number**: 1  
-**Sprint Dates**: [START_DATE] to [END_DATE]
+**Sprint Dates**: 2026-02-02 to 2026-02-16
 
 ---
 
 ## Active Tasks
 
 ### TASK-002: Docker Environment
-**Status**: TODO  
+**Status**: IN_PROGRESS  
 **Priority**: P0 (Critical)  
 **Spec**: `tasks/specs/002-docker-environment.md`
 
 Set up Docker Compose for local development.
 
 **Acceptance Criteria**:
-- [ ] docker-compose.yml with postgres + redis
-- [ ] PostgreSQL has pgvector and timescaledb extensions
-- [ ] Volumes for data persistence
-- [ ] Health checks configured
-- [ ] Services start with `docker-compose up -d`
+- [x] docker-compose.yml with postgres + redis
+- [ ] PostgreSQL has pgvector and timescaledb extensions (verify in running container)
+- [x] Volumes for data persistence
+- [x] Health checks configured
+- [ ] Services start with `make docker-up` (or `docker compose up -d`)
 
 **Files to Create/Modify**:
 - `docker-compose.yml` (create)
@@ -37,37 +37,37 @@ Create initial database schema using Alembic migrations.
 
 **Completed**:
 - [x] src/storage/models.py with all entities
+- [x] Alembic configured and initialized
+- [x] alembic.ini created
+- [x] Initial migration generated from models (manual initial schema)
+- [x] pgvector extension enabled in migration
+- [x] TimescaleDB hypertable for trend_snapshots
 
 **Remaining**:
-- [ ] Alembic configured and initialized
-- [ ] alembic.ini created
-- [ ] Initial migration generated from models
-- [ ] pgvector extension enabled in migration
-- [ ] TimescaleDB hypertable for trend_snapshots
 - [ ] `alembic upgrade head` works
 
 **Files to Create/Modify**:
 - `alembic.ini` (create)
 - `alembic/env.py` (create)
-- `alembic/versions/001_initial_schema.py` (create)
+- `alembic/versions/0001_initial_schema.py` (create)
 
 ---
 
 ### TASK-004: FastAPI Skeleton
-**Status**: TODO  
+**Status**: IN_PROGRESS  
 **Priority**: P0 (Critical)  
 **Spec**: `tasks/specs/004-fastapi-skeleton.md`
 
 Create basic FastAPI application structure.
 
 **Acceptance Criteria**:
-- [ ] FastAPI app in src/api/main.py
-- [ ] Health endpoint at GET /health
-- [ ] Database connection pool (asyncpg)
-- [ ] Database session dependency
-- [ ] CORS middleware
-- [ ] Error handling middleware
-- [ ] Settings from environment variables
+- [x] FastAPI app in src/api/main.py
+- [x] Health endpoint at GET /health
+- [x] Database connection pool (asyncpg)
+- [x] Database session dependency
+- [x] CORS middleware
+- [x] Error handling middleware
+- [x] Settings from environment variables
 - [ ] App starts with `uvicorn src.api.main:app`
 
 **Files to Create/Modify**:
@@ -106,8 +106,8 @@ Set up Python project with pyproject.toml, dependencies, and dev tools.
 
 ### Definition of Done for Sprint 1
 
-- [ ] `docker-compose up -d` starts postgres and redis
+- [ ] `make docker-up` starts postgres and redis
 - [ ] `alembic upgrade head` creates all tables
 - [ ] `uvicorn src.api.main:app` starts server
 - [ ] GET /health returns `{"status": "healthy"}`
-- [ ] All tests pass: `pytest tests/`
+- [ ] All tests pass: `make test`

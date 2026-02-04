@@ -3,7 +3,10 @@ version: '3.8'
 services:
   # PostgreSQL with pgvector and TimescaleDB
   postgres:
-    image: timescale/timescaledb:latest-pg16
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    image: geoint-postgres:pg16
     container_name: geoint-postgres
     environment:
       POSTGRES_USER: postgres

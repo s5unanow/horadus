@@ -1,12 +1,12 @@
 # Project Status
 
-**Last Updated**: 2025-12-28
-**Current Phase**: Phase 0 - Project Setup (60% complete)
+**Last Updated**: 2026-02-02
+**Current Phase**: Phase 0 - Project Setup (75% complete)
 
 ## Progress Overview
 
 ```
-Phase 0: Setup & Foundation  [████████████░░░░░░░░]  60%  ← WE ARE HERE
+Phase 0: Setup & Foundation  [███████████████░░░░░]  75%  ← WE ARE HERE
 Phase 1: Data Ingestion      [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 2: Processing Layer    [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -24,6 +24,7 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] docker-compose.yml (PostgreSQL + TimescaleDB + Redis)
 - [x] Database models (all entities including expert recommendations)
 - [x] Alembic configuration
+- [x] Initial Alembic migration created (schema + extensions + hypertable)
 - [x] FastAPI skeleton with route stubs
 - [x] Core config module (Pydantic Settings)
 - [x] Trend engine core (log-odds math, evidence calculation)
@@ -33,8 +34,8 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 ## In Progress
 
 - [ ] TASK-002: Docker environment (verify extensions work)
-- [ ] TASK-003: Database migrations (generate initial migration)
-- [ ] TASK-004: FastAPI skeleton (wire database sessions)
+- [ ] TASK-003: Database migrations (run `alembic upgrade head`)
+- [ ] TASK-004: FastAPI skeleton (verify server boots + /health)
 
 ## Blocked
 

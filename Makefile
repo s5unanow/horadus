@@ -13,6 +13,10 @@
 # Default target
 .DEFAULT_GOAL := help
 
+# Tooling
+PYTHON ?= python3
+DOCKER_COMPOSE := $(shell if command -v docker-compose >/dev/null 2>&1; then echo docker-compose; else echo "docker compose"; fi)
+
 # Colors for terminal output
 BLUE := \033[34m
 GREEN := \033[32m
@@ -72,16 +76,16 @@ pre-commit: ## Run pre-commit on all files
 # =============================================================================
 
 test: ## Run all tests
-	pytest tests/ -v
+	$(PYTHON) -m pytest tests/ -v
 
 test-unit: ## Run unit tests only
-	pytest tests/unit/ -v -m unit
+	$(PYTHON) -m pytest tests/unit/ -v -m unit
 
 test-integration: ## Run integration tests only
-	pytest tests/integration/ -v -m integration
+	$(PYTHON) -m pytest tests/integration/ -v -m integration
 
 test-cov: ## Run tests with coverage report
-	pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
+	$(PYTHON) -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
 	@echo "$(GREEN)Coverage report: htmlcov/index.html$(RESET)"
 
 # =============================================================================
@@ -89,19 +93,19 @@ test-cov: ## Run tests with coverage report
 # =============================================================================
 
 docker-up: ## Start Docker containers (postgres, redis)
-	docker-compose up -d
+	$(DOCKER_COMPOSE) up -d
 	@echo "$(GREEN)Waiting for services to be ready...$(RESET)"
 	@sleep 3
-	@docker-compose ps
+	@$(DOCKER_COMPOSE) ps
 
 docker-down: ## Stop Docker containers
-	docker-compose down
+	$(DOCKER_COMPOSE) down
 
 docker-logs: ## Show Docker container logs
-	docker-compose logs -f
+	$(DOCKER_COMPOSE) logs -f
 
 docker-clean: ## Stop containers and remove volumes
-	docker-compose down -v
+	$(DOCKER_COMPOSE) down -v
 	@echo "$(YELLOW)Warning: All data has been removed$(RESET)"
 
 # =============================================================================
@@ -174,4 +178,4 @@ ci: ## CI pipeline (format check, lint, typecheck, test)
 	ruff format src/ tests/ --check
 	ruff check src/ tests/
 	mypy src/
-	pytest tests/ -v --cov=src
+	$(PYTHON) -m pytest tests/ -v --cov=src

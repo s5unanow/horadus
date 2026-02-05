@@ -5,7 +5,7 @@
 # Run `make help` to see all available targets
 # =============================================================================
 
-.PHONY: help install install-dev setup clean \
+.PHONY: help venv deps deps-dev hooks install install-dev setup clean \
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs db-migrate db-upgrade db-downgrade \
         run run-worker run-beat pre-commit check all
@@ -14,7 +14,13 @@
 .DEFAULT_GOAL := help
 
 # Tooling
-PYTHON ?= python3
+VENV ?= .venv
+VENV_PY := $(VENV)/bin/python
+UV ?= uv
+UV_CACHE_DIR ?= $(CURDIR)/.uv-cache
+export UV_CACHE_DIR
+UV_RUN := $(UV) run --no-sync
+PYTHON := $(shell command -v python3.12 >/dev/null 2>&1 && echo python3.12 || echo python3)
 DOCKER_COMPOSE := $(shell if command -v docker-compose >/dev/null 2>&1; then echo docker-compose; else echo "docker compose"; fi)
 
 # Colors for terminal output
@@ -39,15 +45,25 @@ help: ## Show this help message
 # Installation
 # =============================================================================
 
-install: ## Install production dependencies
-	pip install -e .
+venv: ## Create local virtualenv at .venv (prefers uv)
+	@command -v $(UV) >/dev/null 2>&1 || (echo "$(RED)uv is required.$(RESET) Install uv via Nix and retry." && exit 1)
+	@test -x "$(VENV_PY)" || $(PYTHON) -m venv --without-pip $(VENV)
 
-install-dev: ## Install development dependencies
-	pip install -e ".[dev]"
-	pre-commit install
-	pre-commit install --hook-type commit-msg
+deps: venv ## Install production dependencies (prefers uv)
+	$(UV) sync --python $(VENV_PY)
 
-setup: install-dev docker-up db-upgrade ## Full development setup
+deps-dev: venv ## Install development dependencies (prefers uv)
+	$(UV) sync --extra dev --python $(VENV_PY)
+
+hooks: deps-dev ## Install git hooks (pre-commit + commit-msg)
+	$(UV_RUN) pre-commit install
+	$(UV_RUN) pre-commit install --hook-type commit-msg
+
+install: deps ## Back-compat alias for deps
+
+install-dev: deps-dev hooks ## Back-compat alias for deps-dev + hooks
+
+setup: deps-dev hooks docker-up db-upgrade ## Full development setup
 	@echo "$(GREEN)Setup complete!$(RESET)"
 	@echo "Run 'make run' to start the API server"
 
@@ -55,37 +71,37 @@ setup: install-dev docker-up db-upgrade ## Full development setup
 # Code Quality
 # =============================================================================
 
-format: ## Format code with ruff
-	ruff format src/ tests/
-	ruff check src/ tests/ --fix
+format: deps-dev ## Format code with ruff
+	$(UV_RUN) ruff format src/ tests/
+	$(UV_RUN) ruff check src/ tests/ --fix
 
-lint: ## Run linter (ruff)
-	ruff check src/ tests/
+lint: deps-dev ## Run linter (ruff)
+	$(UV_RUN) ruff check src/ tests/
 
-typecheck: ## Run type checker (mypy)
-	mypy src/
+typecheck: deps-dev ## Run type checker (mypy)
+	$(UV_RUN) mypy src/
 
 check: format lint typecheck ## Run all code quality checks
 	@echo "$(GREEN)All checks passed!$(RESET)"
 
 pre-commit: ## Run pre-commit on all files
-	pre-commit run --all-files
+	$(UV_RUN) pre-commit run --all-files
 
 # =============================================================================
 # Testing
 # =============================================================================
 
-test: ## Run all tests
-	$(PYTHON) -m pytest tests/ -v
+test: deps-dev ## Run all tests
+	$(UV_RUN) pytest tests/ -v
 
-test-unit: ## Run unit tests only
-	$(PYTHON) -m pytest tests/unit/ -v -m unit
+test-unit: deps-dev ## Run unit tests only
+	$(UV_RUN) pytest tests/unit/ -v -m unit
 
-test-integration: ## Run integration tests only
-	$(PYTHON) -m pytest tests/integration/ -v -m integration
+test-integration: deps-dev ## Run integration tests only
+	$(UV_RUN) pytest tests/integration/ -v -m integration
 
-test-cov: ## Run tests with coverage report
-	$(PYTHON) -m pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
+test-cov: deps-dev ## Run tests with coverage report
+	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
 	@echo "$(GREEN)Coverage report: htmlcov/index.html$(RESET)"
 
 # =============================================================================
@@ -112,43 +128,40 @@ docker-clean: ## Stop containers and remove volumes
 # Database
 # =============================================================================
 
-db-migrate: ## Create new migration (usage: make db-migrate msg="description")
-	alembic revision --autogenerate -m "$(msg)"
+db-migrate: deps ## Create new migration (usage: make db-migrate msg="description")
+	$(UV_RUN) alembic revision --autogenerate -m "$(msg)"
 
-db-upgrade: ## Apply all pending migrations
-	alembic upgrade head
+db-upgrade: deps ## Apply all pending migrations
+	$(UV_RUN) alembic upgrade head
 
-db-downgrade: ## Rollback last migration
-	alembic downgrade -1
+db-downgrade: deps ## Rollback last migration
+	$(UV_RUN) alembic downgrade -1
 
-db-history: ## Show migration history
-	alembic history --verbose
+db-history: deps ## Show migration history
+	$(UV_RUN) alembic history --verbose
 
-db-current: ## Show current migration
-	alembic current
+db-current: deps ## Show current migration
+	$(UV_RUN) alembic current
 
 # =============================================================================
 # Run Application
 # =============================================================================
 
-run: ## Run API server (development mode)
-	uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
+run: deps ## Run API server (development mode)
+	$(UV_RUN) uvicorn src.api.main:app --reload --host 0.0.0.0 --port 8000
 
 run-worker: ## Run Celery worker
-	celery -A src.workers.celery_app worker --loglevel=info
+	$(UV_RUN) celery -A src.workers.celery_app worker --loglevel=info
 
 run-beat: ## Run Celery beat scheduler
-	celery -A src.workers.celery_app beat --loglevel=info
+	$(UV_RUN) celery -A src.workers.celery_app beat --loglevel=info
 
 # =============================================================================
 # Security
 # =============================================================================
 
-security: ## Run security checks (bandit)
-	bandit -c pyproject.toml -r src/
-
-deps-check: ## Check for vulnerable dependencies
-	pip-audit
+security: deps-dev ## Run security checks (bandit)
+	$(UV_RUN) bandit -c pyproject.toml -r src/
 
 # =============================================================================
 # Cleanup
@@ -175,7 +188,7 @@ all: check test ## Run all checks and tests
 	@echo "$(GREEN)All checks and tests passed!$(RESET)"
 
 ci: ## CI pipeline (format check, lint, typecheck, test)
-	ruff format src/ tests/ --check
-	ruff check src/ tests/
-	mypy src/
-	$(PYTHON) -m pytest tests/ -v --cov=src
+	$(UV_RUN) ruff format src/ tests/ --check
+	$(UV_RUN) ruff check src/ tests/
+	$(UV_RUN) mypy src/
+	$(UV_RUN) pytest tests/ -v --cov=src

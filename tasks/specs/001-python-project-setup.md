@@ -114,7 +114,7 @@ TELEGRAM_SESSION_NAME=geoint_session
 1. Create `pyproject.toml` with all dependencies and tool configs
 2. Create `.env.example` with all environment variables
 3. Create all `__init__.py` files in src/ packages
-4. Verify installation: `pip install -e ".[dev]"`
+4. Verify installation: `uv sync --extra dev`
 5. Verify imports work: `python -c "from src.api import main"`
 
 ## pyproject.toml Template
@@ -163,7 +163,7 @@ ignore_missing_imports = true
 
 ```bash
 # Install project
-pip install -e ".[dev]"
+uv sync --extra dev
 
 # Verify imports
 python -c "from src.api import main; print('API module OK')"
@@ -171,9 +171,9 @@ python -c "from src.core import config; print('Core module OK')"
 python -c "from src.storage import models; print('Storage module OK')"
 
 # Verify tools
-ruff check src/
-mypy src/
-pytest --version
+uv run --extra dev ruff check src/
+uv run --extra dev mypy src/
+uv run --extra dev pytest --version
 ```
 
 ## Acceptance Checklist
@@ -181,7 +181,7 @@ pytest --version
 - [ ] `pyproject.toml` created with all dependencies
 - [ ] `.env.example` created with all variables
 - [ ] All `src/**/__init__.py` files created
-- [ ] `pip install -e ".[dev]"` succeeds
+- [ ] `uv sync --extra dev` succeeds
 - [ ] `python -c "import src"` works
-- [ ] `ruff check src/` runs (may have no files to check yet)
-- [ ] `mypy src/` runs (may have no files to check yet)
+- [ ] `uv run --extra dev ruff check src/` runs (may have no files to check yet)
+- [ ] `uv run --extra dev mypy src/` runs (may have no files to check yet)

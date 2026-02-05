@@ -30,9 +30,8 @@ cd geopolitical-intel
 cp .env.example .env
 # Edit .env with your API keys
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
+# Create virtual environment (preferred: uv)
+uv venv --python 3.12 .venv
 
 # Full setup (installs deps, starts infra, runs migrations)
 make setup

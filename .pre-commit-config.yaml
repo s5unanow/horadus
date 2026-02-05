@@ -1,7 +1,7 @@
 # =============================================================================
 # Pre-commit Configuration
 # =============================================================================
-# Install: pip install pre-commit && pre-commit install
+# Install: make hooks
 # Run manually: pre-commit run --all-files
 # Update hooks: pre-commit autoupdate
 # =============================================================================

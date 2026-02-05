@@ -28,6 +28,8 @@ from src.core.trend_engine import (
     prob_to_logodds,
 )
 
+pytestmark = pytest.mark.unit
+
 # =============================================================================
 # Probability Conversion Tests
 # =============================================================================

@@ -51,7 +51,7 @@ class Base(DeclarativeBase):
 # =============================================================================
 
 
-class SourceType(str, enum.Enum):
+class SourceType(enum.StrEnum):
     """Types of data sources."""
 
     RSS = "rss"
@@ -61,7 +61,7 @@ class SourceType(str, enum.Enum):
     SCRAPER = "scraper"
 
 
-class SourceTier(str, enum.Enum):
+class SourceTier(enum.StrEnum):
     """Source credibility tiers (Expert Recommendation)."""
 
     PRIMARY = "primary"  # Official sources, direct access
@@ -71,7 +71,7 @@ class SourceTier(str, enum.Enum):
     AGGREGATOR = "aggregator"  # News aggregators, blogs
 
 
-class ReportingType(str, enum.Enum):
+class ReportingType(enum.StrEnum):
     """Type of reporting (Expert Recommendation)."""
 
     FIRSTHAND = "firsthand"  # Original reporting
@@ -79,7 +79,7 @@ class ReportingType(str, enum.Enum):
     AGGREGATOR = "aggregator"  # Pure aggregation
 
 
-class ProcessingStatus(str, enum.Enum):
+class ProcessingStatus(enum.StrEnum):
     """Status of item in processing pipeline."""
 
     PENDING = "pending"
@@ -89,7 +89,7 @@ class ProcessingStatus(str, enum.Enum):
     ERROR = "error"
 
 
-class EventLifecycle(str, enum.Enum):
+class EventLifecycle(enum.StrEnum):
     """Lifecycle status of an event (Expert Recommendation)."""
 
     EMERGING = "emerging"  # Single source, unconfirmed
@@ -98,7 +98,7 @@ class EventLifecycle(str, enum.Enum):
     ARCHIVED = "archived"  # No mentions in 7d, historical only
 
 
-class TrendDirection(str, enum.Enum):
+class TrendDirection(enum.StrEnum):
     """Direction of trend movement."""
 
     RISING_FAST = "rising_fast"
@@ -108,7 +108,7 @@ class TrendDirection(str, enum.Enum):
     FALLING_FAST = "falling_fast"
 
 
-class RiskLevel(str, enum.Enum):
+class RiskLevel(enum.StrEnum):
     """Risk level categories (Expert Recommendation)."""
 
     LOW = "low"  # < 10%
@@ -118,7 +118,7 @@ class RiskLevel(str, enum.Enum):
     SEVERE = "severe"  # > 75%
 
 
-class OutcomeType(str, enum.Enum):
+class OutcomeType(enum.StrEnum):
     """Outcome types for calibration (Expert Recommendation)."""
 
     OCCURRED = "occurred"

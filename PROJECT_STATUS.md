@@ -1,13 +1,13 @@
 # Project Status
 
 **Last Updated**: 2026-02-06
-**Current Phase**: Phase 1 - Data Ingestion (starting)
+**Current Phase**: Phase 1 - Data Ingestion (in progress)
 
 ## Progress Overview
 
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
-Phase 1: Data Ingestion      [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
+Phase 1: Data Ingestion      [████████████░░░░░░░░]  60%  ← WE ARE HERE
 Phase 2: Processing Layer    [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -32,11 +32,13 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Makefile for common workflows
 - [x] RSS collector foundation (config load, fetch/parse, extraction, dedup, persistence)
 - [x] RSS integration test path (no external network calls)
+- [x] GDELT client foundation (querying, filters, mapping, pagination, dedup, persistence)
+- [x] GDELT integration test path (no external network calls)
 - [x] Source management API CRUD endpoints with unit tests
 
 ## In Progress
 
-- [ ] TASK-007: GDELT client (Phase 1 continuation)
+- [ ] TASK-008: Celery setup (worker + beat scheduling)
 
 ## Blocked
 
@@ -44,11 +46,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Implement Phase 1 GDELT client (TASK-007)
-2. Add source fetch scheduling and retries
-3. Add ingestion observability (structured logs + metrics)
-4. Connect ingestion tasks to Celery beat (TASK-008)
-5. Start Telegram harvester baseline (TASK-009)
+1. Connect ingestion to Celery workers + beat (TASK-008)
+2. Add ingestion observability (structured logs + metrics)
+3. Start Telegram harvester baseline (TASK-009)
+4. Begin processing layer embeddings (TASK-010)
+5. Add embedding-aware deduplication service (TASK-011)
 
 ## Expert Feedback Integration ✅
 
@@ -79,8 +81,8 @@ Based on expert review, added 9 new tasks:
 | Milestone | Target Date | Status |
 |-----------|-------------|--------|
 | M1: Basic API + DB running | Week 1 | ✅ Complete |
-| M2: RSS ingestion working | Week 2 | 🟡 In Progress |
-| M3: GDELT integration | Week 3 | 🔲 Not Started |
+| M2: RSS ingestion working | Week 2 | ✅ Complete |
+| M3: GDELT integration | Week 3 | ✅ Complete |
 | M4: LLM classification pipeline | Week 4 | 🔲 Not Started |
 | M5: Trend engine operational | Week 5 | 🔲 Not Started |
 | M6: Weekly reports generating | Week 6 | 🔲 Not Started |

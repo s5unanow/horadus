@@ -66,7 +66,7 @@ class Settings(BaseSettings):
     # =========================================================================
     # API
     # =========================================================================
-    API_HOST: str = Field(default="0.0.0.0")
+    API_HOST: str = Field(default="0.0.0.0")  # nosec B104
     API_PORT: int = Field(default=8000, ge=1, le=65535)
     API_RELOAD: bool = Field(default=True)
 
@@ -111,6 +111,21 @@ class Settings(BaseSettings):
     )
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="Model for text embedding generation",
+    )
+    EMBEDDING_DIMENSIONS: int = Field(
+        default=1536,
+        ge=1,
+        description="Expected embedding vector dimensions",
+    )
+    EMBEDDING_BATCH_SIZE: int = Field(
+        default=32,
+        ge=1,
+        le=2048,
+        description="Maximum texts per embedding API request",
+    )
 
     # =========================================================================
     # Telegram

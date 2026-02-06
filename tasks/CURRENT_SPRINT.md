@@ -8,19 +8,19 @@
 
 ## Active Tasks
 
-### TASK-010: Embedding Service
+### TASK-011: Deduplication Service
 **Status**: IN_PROGRESS  
 **Priority**: P1 (High)  
-**Spec**: `tasks/specs/010-embedding-service.md`
+**Spec**: `tasks/specs/011-deduplication-service.md`
 
-Create embedding generation service for processed items/events.
+Build deduplication service using URL, hash, and embedding similarity.
 
 **Planned**:
-- [ ] Add OpenAI embedding wrapper with strict input/output validation
-- [ ] Support batch embedding requests
-- [ ] Add caching to avoid duplicate embedding calls
-- [ ] Persist embeddings in pgvector-backed columns
-- [ ] Add unit tests with mocked OpenAI responses
+- [ ] Normalize URLs before duplicate checks
+- [ ] Match by content hash in recent window
+- [ ] Add optional embedding similarity dedup path
+- [ ] Return duplicate status with matched item id
+- [ ] Add unit tests for edge cases
 
 ---
 
@@ -184,6 +184,22 @@ Build Telegram channel collector using Telethon.
 - [x] Deduplication by external id/url/content hash
 - [x] Unit tests with mocked Telegram client/messages
 - [x] Integration test verification without external network
+
+---
+
+### TASK-010: Embedding Service
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/010-embedding-service.md`
+
+Create embedding generation service for processed items/events.
+
+**Completed**:
+- [x] OpenAI embedding wrapper with strict response validation
+- [x] Batch embedding requests with configurable batch size
+- [x] In-memory caching for repeated text embeddings
+- [x] pgvector persistence for `raw_items.embedding`
+- [x] Unit tests for batching, caching, validation, and persistence
 
 ---
 

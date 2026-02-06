@@ -1,6 +1,6 @@
 # Current Sprint
 
-**Sprint Goal**: Complete Phase 1 - Data ingestion foundation  
+**Sprint Goal**: Complete Phase 1 and begin Phase 2 processing baseline  
 **Sprint Number**: 1  
 **Sprint Dates**: 2026-02-02 to 2026-02-16
 
@@ -8,19 +8,19 @@
 
 ## Active Tasks
 
-### TASK-009: Telegram Harvester
+### TASK-010: Embedding Service
 **Status**: IN_PROGRESS  
-**Priority**: P2 (Medium)  
-**Spec**: `tasks/specs/009-telegram-harvester.md`
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/010-embedding-service.md`
 
-Build Telegram channel collector using Telethon.
+Create embedding generation service for processed items/events.
 
 **Planned**:
-- [ ] Telethon client setup with session management
-- [ ] Ingest configured channels and map messages to `raw_items`
-- [ ] Add historical backfill capability
-- [ ] Handle media text extraction where possible
-- [ ] Add unit/integration coverage for harvester flow
+- [ ] Add OpenAI embedding wrapper with strict input/output validation
+- [ ] Support batch embedding requests
+- [ ] Add caching to avoid duplicate embedding calls
+- [ ] Persist embeddings in pgvector-backed columns
+- [ ] Add unit tests with mocked OpenAI responses
 
 ---
 
@@ -164,6 +164,26 @@ Configure Celery for async task processing.
 - [x] Dead-letter handling added via Celery failure signal + Redis list
 - [x] Worker health task (`workers.ping`) added
 - [x] Unit tests covering schedule/task/dead-letter behavior
+
+---
+
+### TASK-009: Telegram Harvester
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/009-telegram-harvester.md`
+
+Build Telegram channel collector using Telethon.
+
+**Completed**:
+- [x] Telethon client setup with persistent session naming
+- [x] Channel config loading from `config/sources/telegram_channels.yaml`
+- [x] Message ingestion and mapping into `raw_items` schema
+- [x] Historical backfill capability for bounded day windows
+- [x] Near real-time polling mode (`stream_channel`)
+- [x] Media fallback extraction (captions/file metadata)
+- [x] Deduplication by external id/url/content hash
+- [x] Unit tests with mocked Telegram client/messages
+- [x] Integration test verification without external network
 
 ---
 

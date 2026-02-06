@@ -8,19 +8,19 @@
 
 ## Active Tasks
 
-### TASK-011: Deduplication Service
+### TASK-012: Event Clusterer
 **Status**: IN_PROGRESS  
 **Priority**: P1 (High)  
-**Spec**: `tasks/specs/011-deduplication-service.md`
+**Spec**: `tasks/specs/012-event-clusterer.md`
 
-Build deduplication service using URL, hash, and embedding similarity.
+Cluster related items into canonical events.
 
 **Planned**:
-- [ ] Normalize URLs before duplicate checks
-- [ ] Match by content hash in recent window
-- [ ] Add optional embedding similarity dedup path
-- [ ] Return duplicate status with matched item id
-- [ ] Add unit tests for edge cases
+- [ ] Find matching events in 48h time window
+- [ ] Merge items into existing events by similarity threshold
+- [ ] Create new events when no suitable cluster exists
+- [ ] Update source counts and lifecycle metadata
+- [ ] Add unit tests for cluster decisions
 
 ---
 
@@ -200,6 +200,22 @@ Create embedding generation service for processed items/events.
 - [x] In-memory caching for repeated text embeddings
 - [x] pgvector persistence for `raw_items.embedding`
 - [x] Unit tests for batching, caching, validation, and persistence
+
+---
+
+### TASK-011: Deduplication Service
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/011-deduplication-service.md`
+
+Build deduplication using URL, hash, and embedding similarity.
+
+**Completed**:
+- [x] Reusable deduplication service with URL normalization
+- [x] Exact duplicate checks for external id, URL, and content hash
+- [x] Optional embedding similarity check (cosine threshold, default 0.92)
+- [x] Configurable similarity threshold and dedup result metadata
+- [x] Unit tests for matching order and edge cases
 
 ---
 

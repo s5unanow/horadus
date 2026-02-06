@@ -16,11 +16,12 @@ from urllib.parse import urlsplit, urlunsplit
 import httpx
 import structlog
 import yaml
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.ingestion.rate_limiter import DomainRateLimiter
+from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
 logger = structlog.get_logger(__name__)
@@ -96,6 +97,7 @@ class GDELTClient:
         self.total_timeout_seconds = 300
         self.max_retries = 3
         self.dedup_window_days = 7
+        self.deduplication_service = DeduplicationService(session=session)
 
     @property
     def queries(self) -> list[GDELTQueryConfig]:
@@ -372,21 +374,13 @@ class GDELTClient:
         external_id: str,
         content_hash: str,
     ) -> bool:
-        window_start = datetime.now(tz=UTC) - timedelta(days=self.dedup_window_days)
-        conditions: list[Any] = [
-            RawItem.external_id == external_id,
-            RawItem.content_hash == content_hash,
-        ]
-        if normalized_url is not None:
-            conditions.append(RawItem.url == normalized_url)
-
-        duplicate_query = (
-            select(RawItem.id)
-            .where(RawItem.fetched_at >= window_start)
-            .where(or_(*conditions))
-            .limit(1)
+        result = await self.deduplication_service.find_duplicate(
+            external_id=external_id,
+            url=normalized_url,
+            content_hash=content_hash,
+            dedup_window_days=self.dedup_window_days,
         )
-        return await self.session.scalar(duplicate_query) is not None
+        return result.is_duplicate
 
     async def _record_source_success(self, source: Source) -> None:
         source.last_fetched_at = datetime.now(tz=UTC)

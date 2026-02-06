@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+from types import SimpleNamespace
+from uuid import uuid4
+
+import pytest
+
+from src.processing.deduplication_service import DeduplicationService
+
+pytestmark = pytest.mark.unit
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_matches_external_id_first(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    matched_id = uuid4()
+    mock_db_session.scalar.side_effect = [matched_id]
+
+    result = await service.find_duplicate(
+        external_id="item-1",
+        url="https://example.com/item-1",
+        content_hash="deadbeef",
+    )
+
+    assert result.is_duplicate is True
+    assert result.matched_item_id == matched_id
+    assert result.match_reason == "external_id"
+    assert mock_db_session.scalar.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_matches_url_when_external_id_missing(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    matched_id = uuid4()
+    mock_db_session.scalar.side_effect = [None, matched_id]
+
+    result = await service.find_duplicate(
+        external_id="item-1",
+        url="https://www.Example.com/item-1/?utm=1#frag",
+    )
+
+    assert result.is_duplicate is True
+    assert result.matched_item_id == matched_id
+    assert result.match_reason == "url"
+    assert mock_db_session.scalar.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_matches_content_hash(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    matched_id = uuid4()
+    mock_db_session.scalar.side_effect = [None, None, matched_id]
+
+    result = await service.find_duplicate(
+        external_id="item-1",
+        url="https://example.com/item-1",
+        content_hash="abc123",
+    )
+
+    assert result.is_duplicate is True
+    assert result.matched_item_id == matched_id
+    assert result.match_reason == "content_hash"
+    assert mock_db_session.scalar.await_count == 3
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_matches_embedding_similarity(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session, similarity_threshold=0.92)
+    matched_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: (matched_id, 0.07))
+
+    result = await service.find_duplicate(embedding=[0.1, 0.2, 0.3])
+
+    assert result.is_duplicate is True
+    assert result.matched_item_id == matched_id
+    assert result.match_reason == "embedding"
+    assert result.similarity == pytest.approx(0.93)
+    assert mock_db_session.execute.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_returns_false_when_no_matches(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    mock_db_session.scalar.side_effect = [None, None, None]
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: None)
+
+    result = await service.find_duplicate(
+        external_id="item-1",
+        url="https://example.com/item-1",
+        content_hash="abc123",
+        embedding=[0.1, 0.2, 0.3],
+    )
+
+    assert result.is_duplicate is False
+    assert result.matched_item_id is None
+    assert result.match_reason is None
+    assert result.similarity is None
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_rejects_invalid_similarity_threshold(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session, similarity_threshold=1.5)
+
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        await service.find_duplicate(content_hash="abc123")
+
+
+def test_normalize_url_removes_tracking_components() -> None:
+    normalized = DeduplicationService.normalize_url("https://www.Example.com/path/?utm=1#frag")
+    assert normalized == "https://example.com/path"
+
+
+def test_compute_content_hash_returns_sha256_hex() -> None:
+    digest = DeduplicationService.compute_content_hash("hello")
+    assert len(digest) == 64

@@ -100,6 +100,23 @@ Create basic FastAPI application structure.
 
 ---
 
+### TASK-005: Source Management
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/005-source-management.md`
+
+Add CRUD management for ingestion sources.
+
+**Completed**:
+- [x] GET `/api/v1/sources` lists sources (with type + active filters)
+- [x] POST `/api/v1/sources` creates source with validation
+- [x] GET `/api/v1/sources/{id}` returns source by UUID
+- [x] PATCH `/api/v1/sources/{id}` updates partial fields
+- [x] DELETE `/api/v1/sources/{id}` deactivates source
+- [x] Unit tests for endpoint handlers
+
+---
+
 ## Sprint Notes
 
 - Start with TASK-001 (project setup) - everything else depends on it

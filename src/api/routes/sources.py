@@ -6,14 +6,17 @@ CRUD operations for managing data sources (RSS feeds, Telegram channels, etc.)
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
+from src.storage.models import ReportingType, Source, SourceTier, SourceType
 
 router = APIRouter()
 
@@ -26,11 +29,20 @@ router = APIRouter()
 class SourceCreate(BaseModel):
     """Request body for creating a source."""
 
-    type: str = Field(..., description="Source type: rss, telegram, gdelt, api")
+    type: SourceType = Field(..., description="Source type: rss, telegram, gdelt, api")
     name: str = Field(..., description="Human-readable name")
     url: str | None = Field(None, description="Source URL")
     credibility_score: float = Field(0.5, ge=0, le=1, description="Reliability score")
+    source_tier: SourceTier = Field(
+        default=SourceTier.REGIONAL,
+        description="Source tier (primary/wire/major/regional/aggregator)",
+    )
+    reporting_type: ReportingType = Field(
+        default=ReportingType.SECONDARY,
+        description="Reporting type (firsthand/secondary/aggregator)",
+    )
     config: dict[str, Any] = Field(default_factory=dict, description="Source-specific config")
+    is_active: bool = True
 
 
 class SourceUpdate(BaseModel):
@@ -39,6 +51,8 @@ class SourceUpdate(BaseModel):
     name: str | None = None
     url: str | None = None
     credibility_score: float | None = Field(None, ge=0, le=1)
+    source_tier: SourceTier | None = None
+    reporting_type: ReportingType | None = None
     config: dict[str, Any] | None = None
     is_active: bool | None = None
 
@@ -46,18 +60,38 @@ class SourceUpdate(BaseModel):
 class SourceResponse(BaseModel):
     """Response body for a source."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     id: UUID
-    type: str
+    type: SourceType
     name: str
     url: str | None
     credibility_score: float
+    source_tier: str
+    reporting_type: str
     config: dict[str, Any]
     is_active: bool
-    last_fetched_at: str | None
+    last_fetched_at: datetime | None
     error_count: int
 
-    class Config:
-        from_attributes = True
+
+# =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _to_response(source: Source) -> SourceResponse:
+    return SourceResponse.model_validate(source)
+
+
+async def _get_source_or_404(session: AsyncSession, source_id: UUID) -> Source:
+    source = await session.get(Source, source_id)
+    if source is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Source '{source_id}' not found",
+        )
+    return source
 
 
 # =============================================================================
@@ -67,7 +101,7 @@ class SourceResponse(BaseModel):
 
 @router.get("", response_model=list[SourceResponse])
 async def list_sources(
-    type: str | None = None,
+    source_type: SourceType | None = Query(default=None, alias="type"),
     active_only: bool = True,
     session: AsyncSession = Depends(get_session),
 ) -> list[SourceResponse]:
@@ -75,17 +109,20 @@ async def list_sources(
     List all data sources.
 
     Args:
-        type: Filter by source type (rss, telegram, gdelt, api)
+        source_type: Filter by source type (rss, telegram, gdelt, api)
         active_only: Only return active sources
 
     Returns:
         List of sources
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
-    )
+    query = select(Source).order_by(Source.created_at.desc())
+    if source_type is not None:
+        query = query.where(Source.type == source_type)
+    if active_only:
+        query = query.where(Source.is_active.is_(True))
+
+    sources = (await session.scalars(query)).all()
+    return [_to_response(source) for source in sources]
 
 
 @router.post("", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)
@@ -102,11 +139,22 @@ async def create_source(
     Returns:
         Created source
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
+    source_record = Source(
+        type=source.type,
+        name=source.name,
+        url=source.url,
+        credibility_score=source.credibility_score,
+        source_tier=source.source_tier.value,
+        reporting_type=source.reporting_type.value,
+        config=source.config,
+        is_active=source.is_active,
+        error_count=0,
     )
+
+    session.add(source_record)
+    await session.flush()
+
+    return _to_response(source_record)
 
 
 @router.get("/{source_id}", response_model=SourceResponse)
@@ -123,11 +171,8 @@ async def get_source(
     Returns:
         Source details
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
-    )
+    source = await _get_source_or_404(session, source_id)
+    return _to_response(source)
 
 
 @router.patch("/{source_id}", response_model=SourceResponse)
@@ -146,11 +191,19 @@ async def update_source(
     Returns:
         Updated source
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
-    )
+    source_record = await _get_source_or_404(session, source_id)
+
+    updates = source.model_dump(exclude_unset=True)
+    if "source_tier" in updates and updates["source_tier"] is not None:
+        updates["source_tier"] = updates["source_tier"].value
+    if "reporting_type" in updates and updates["reporting_type"] is not None:
+        updates["reporting_type"] = updates["reporting_type"].value
+
+    for field_name, field_value in updates.items():
+        setattr(source_record, field_name, field_value)
+
+    await session.flush()
+    return _to_response(source_record)
 
 
 @router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -164,8 +217,6 @@ async def delete_source(
     Args:
         source_id: Source UUID
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
-    )
+    source = await _get_source_or_404(session, source_id)
+    source.is_active = False
+    await session.flush()

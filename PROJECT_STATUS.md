@@ -31,6 +31,7 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] EU-Russia trend config with enhanced schema
 - [x] Makefile for common workflows
 - [x] RSS collector foundation (config load, fetch/parse, extraction, dedup, persistence)
+- [x] Source management API CRUD endpoints with unit tests
 
 ## In Progress
 

@@ -8,19 +8,19 @@
 
 ## Active Tasks
 
-### TASK-012: Event Clusterer
+### TASK-013: LLM Classifier - Tier 1
 **Status**: IN_PROGRESS  
 **Priority**: P1 (High)  
-**Spec**: `tasks/specs/012-event-clusterer.md`
+**Spec**: `tasks/specs/013-llm-classifier-tier1.md`
 
-Cluster related items into canonical events.
+Build the fast relevance filter stage for processing.
 
 **Planned**:
-- [ ] Find matching events in 48h time window
-- [ ] Merge items into existing events by similarity threshold
-- [ ] Create new events when no suitable cluster exists
-- [ ] Update source counts and lifecycle metadata
-- [ ] Add unit tests for cluster decisions
+- [ ] Score relevance (0-10) per configured trend
+- [ ] Parse strict structured output for Tier 1 decisions
+- [ ] Mark low-score items as `noise`
+- [ ] Forward high-score items to Tier 2 queue
+- [ ] Add unit tests with mocked model responses
 
 ---
 
@@ -216,6 +216,22 @@ Build deduplication using URL, hash, and embedding similarity.
 - [x] Optional embedding similarity check (cosine threshold, default 0.92)
 - [x] Configurable similarity threshold and dedup result metadata
 - [x] Unit tests for matching order and edge cases
+
+---
+
+### TASK-012: Event Clusterer
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/012-event-clusterer.md`
+
+Cluster related `RawItem` records into `Event` records.
+
+**Completed**:
+- [x] Event clusterer service with 48h similarity search window
+- [x] Create-or-merge flow for clustering raw items into events
+- [x] Event metadata updates on merge (`source_count`, `unique_source_count`)
+- [x] Canonical summary refresh and primary source tracking by credibility
+- [x] Unit tests covering create, merge, and primary-source selection
 
 ---
 

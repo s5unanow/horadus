@@ -104,6 +104,7 @@ Individual articles/posts collected from sources.
 | published_at | TIMESTAMPTZ | Yes | | Original publication time |
 | fetched_at | TIMESTAMPTZ | No | NOW() | When we fetched it |
 | raw_content | TEXT | No | | Extracted text content |
+| embedding | vector(1536) | Yes | | Text embedding for similarity and clustering |
 | content_hash | VARCHAR(64) | No | | SHA256 hash for dedup |
 | language | VARCHAR(10) | Yes | | Detected language (ISO 639-1) |
 | processing_status | VARCHAR(20) | No | 'pending' | Status: pending, processing, classified, noise, error |
@@ -116,6 +117,7 @@ Individual articles/posts collected from sources.
 - Index: `processing_status`
 - Index: `content_hash`
 - Index: `fetched_at DESC`
+- IVFFlat: `embedding` (vector_cosine_ops, lists=100)
 
 **Processing status flow:**
 ```

@@ -240,6 +240,7 @@ class RawItem(Base):
         published_at: Original publication time
         fetched_at: When we collected it
         raw_content: Extracted text content
+        embedding: Vector embedding for similarity and clustering
         content_hash: SHA256 hash for deduplication
         language: Detected language code (e.g., 'en', 'ru')
         processing_status: Current pipeline status
@@ -269,6 +270,7 @@ class RawItem(Base):
         nullable=False,
     )
     raw_content: Mapped[str] = mapped_column(Text, nullable=False)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256
     language: Mapped[str | None] = mapped_column(String(10))
     processing_status: Mapped[ProcessingStatus] = mapped_column(

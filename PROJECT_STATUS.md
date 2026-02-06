@@ -1,14 +1,14 @@
 # Project Status
 
 **Last Updated**: 2026-02-06
-**Current Phase**: Phase 2 - Processing Layer (starting)
+**Current Phase**: Phase 2 - Processing Layer (in progress)
 
 ## Progress Overview
 
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
-Phase 2: Processing Layer    [██░░░░░░░░░░░░░░░░░░]  10%  ← WE ARE HERE
+Phase 2: Processing Layer    [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -39,10 +39,13 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] RSS/GDELT periodic Celery tasks with retry/backoff + dead-letter capture
 - [x] Telegram harvester baseline (collect, backfill, stream polling, media fallback)
 - [x] Telegram integration test path (no external network calls)
+- [x] Embedding service baseline (OpenAI wrapper, strict validation, batching, cache)
+- [x] `raw_items.embedding` pgvector column + ivfflat index migration (`0002`)
+- [x] Embedding unit test coverage (batching/cache/validation/persistence)
 
 ## In Progress
 
-- [ ] TASK-010: Embedding service baseline
+- [ ] TASK-011: Deduplication service baseline
 
 ## Blocked
 
@@ -50,11 +53,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Complete embedding service baseline (TASK-010)
-2. Add embedding-aware deduplication service (TASK-011)
-3. Build event clustering baseline (TASK-012)
-4. Implement Tier 1 classifier (TASK-013)
-5. Implement Tier 2 classifier (TASK-014)
+1. Complete embedding-aware deduplication service (TASK-011)
+2. Build event clustering baseline (TASK-012)
+3. Implement Tier 1 classifier (TASK-013)
+4. Implement Tier 2 classifier (TASK-014)
+5. Add processing pipeline orchestration (TASK-015)
 
 ## Expert Feedback Integration ✅
 

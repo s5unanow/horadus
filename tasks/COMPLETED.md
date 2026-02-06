@@ -15,6 +15,7 @@ Tasks that have been completed and verified.
 - TASK-007: GDELT Client ✅
 - TASK-008: Celery Setup ✅
 - TASK-009: Telegram Harvester ✅
+- TASK-010: Embedding Service ✅
 
 ---
 

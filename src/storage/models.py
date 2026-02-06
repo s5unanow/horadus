@@ -128,6 +128,11 @@ class OutcomeType(enum.StrEnum):
     ONGOING = "ongoing"
 
 
+def enum_values(enum_class: type[enum.Enum]) -> list[str]:
+    """Persist enum values (not member names) in PostgreSQL enums."""
+    return [str(member.value) for member in enum_class]
+
+
 # =============================================================================
 # Source Models
 # =============================================================================
@@ -160,7 +165,7 @@ class Source(Base):
         default=uuid4,
     )
     type: Mapped[SourceType] = mapped_column(
-        Enum(SourceType, name="source_type"),
+        Enum(SourceType, name="source_type", values_callable=enum_values),
         nullable=False,
     )
     name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -267,7 +272,7 @@ class RawItem(Base):
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256
     language: Mapped[str | None] = mapped_column(String(10))
     processing_status: Mapped[ProcessingStatus] = mapped_column(
-        Enum(ProcessingStatus, name="processing_status"),
+        Enum(ProcessingStatus, name="processing_status", values_callable=enum_values),
         default=ProcessingStatus.PENDING,
         nullable=False,
     )

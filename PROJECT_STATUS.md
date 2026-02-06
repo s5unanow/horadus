@@ -7,7 +7,7 @@
 
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
-Phase 1: Data Ingestion      [░░░░░░░░░░░░░░░░░░░░]   0%  ← WE ARE HERE
+Phase 1: Data Ingestion      [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
 Phase 2: Processing Layer    [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -31,11 +31,12 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] EU-Russia trend config with enhanced schema
 - [x] Makefile for common workflows
 - [x] RSS collector foundation (config load, fetch/parse, extraction, dedup, persistence)
+- [x] RSS integration test path (no external network calls)
 - [x] Source management API CRUD endpoints with unit tests
 
 ## In Progress
 
-- [ ] TASK-006: RSS collector (Phase 1 start)
+- [ ] TASK-007: GDELT client (Phase 1 continuation)
 
 ## Blocked
 
@@ -43,11 +44,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Implement Phase 1 RSS ingestion pipeline (TASK-006)
+1. Implement Phase 1 GDELT client (TASK-007)
 2. Add source fetch scheduling and retries
 3. Add ingestion observability (structured logs + metrics)
-4. Add ingestion integration tests (no external network)
-5. Prepare GDELT collector baseline (TASK-007)
+4. Connect ingestion tasks to Celery beat (TASK-008)
+5. Start Telegram harvester baseline (TASK-009)
 
 ## Expert Feedback Integration ✅
 
@@ -78,7 +79,7 @@ Based on expert review, added 9 new tasks:
 | Milestone | Target Date | Status |
 |-----------|-------------|--------|
 | M1: Basic API + DB running | Week 1 | ✅ Complete |
-| M2: RSS ingestion working | Week 2 | 🔲 Not Started |
+| M2: RSS ingestion working | Week 2 | 🟡 In Progress |
 | M3: GDELT integration | Week 3 | 🔲 Not Started |
 | M4: LLM classification pipeline | Week 4 | 🔲 Not Started |
 | M5: Trend engine operational | Week 5 | 🔲 Not Started |

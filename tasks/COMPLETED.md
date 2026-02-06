@@ -12,6 +12,7 @@ Tasks that have been completed and verified.
 - TASK-004: FastAPI Skeleton ✅
 - TASK-005: Source Management ✅
 - TASK-006: RSS Collector ✅
+- TASK-007: GDELT Client ✅
 
 ---
 

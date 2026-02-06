@@ -1,0 +1,31 @@
+settings:
+  request_timeout_seconds: 30
+  user_agent: "GeopoliticalIntel/1.0 (GDELT Client)"
+  default_lookback_hours: 24
+  default_max_records_per_page: 100
+  default_max_pages: 3
+
+queries:
+  - name: "Military Escalation Signals"
+    query: "(Ukraine OR Russia OR NATO) AND (military OR troops OR missile OR strike)"
+    credibility: 0.55
+    themes:
+      - "MILITARY"
+      - "TAX_FNCACT_MILITARY"
+    actors:
+      - "Russia"
+      - "Ukraine"
+      - "NATO"
+    countries:
+      - "RU"
+      - "UA"
+      - "US"
+      - "GB"
+    languages:
+      - "en"
+    lookback_hours: 24
+    max_records_per_page: 100
+    max_pages: 3
+    source_tier: "aggregator"
+    reporting_type: "aggregator"
+    enabled: true

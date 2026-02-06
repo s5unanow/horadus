@@ -8,19 +8,18 @@
 
 ## Active Tasks
 
-### TASK-007: GDELT Client
+### TASK-008: Celery Setup
 **Status**: IN_PROGRESS  
 **Priority**: P1 (High)  
-**Spec**: `tasks/specs/007-gdelt-client.md`
+**Spec**: `tasks/specs/008-celery-setup.md`
 
-Build GDELT API client for broad news coverage.
+Configure Celery workers + beat scheduling for ingestion and processing.
 
 **Planned**:
-- [ ] Query GDELT DOC 2.0 API
-- [ ] Filter by relevant themes/actors
-- [ ] Map GDELT events to `raw_items` schema
-- [ ] Handle pagination and deduplication
-- [ ] Store results in database with tests
+- [ ] Configure Celery app with Redis broker/backend
+- [ ] Add RSS + GDELT periodic collection tasks
+- [ ] Configure beat schedules and retry behavior
+- [ ] Verify worker/beat startup commands
 
 ---
 
@@ -127,6 +126,24 @@ Build RSS feed collector with full-text extraction.
 - [x] Handle feed/article failures gracefully with source error tracking
 - [x] Per-domain rate limiting (1 req/sec)
 - [x] Unit tests with mocked feeds/network/database
+- [x] Integration test verification without external network (`httpx.MockTransport`)
+
+---
+
+### TASK-007: GDELT Client
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/007-gdelt-client.md`
+
+Build GDELT API client for broad news coverage.
+
+**Completed**:
+- [x] Query GDELT DOC 2.0 API (`mode=ArtList`) with bounded retry/backoff
+- [x] Filter by relevant themes/actors/countries/languages
+- [x] Map GDELT records to `raw_items` schema
+- [x] Handle time-window pagination + deduplication
+- [x] Persist collected items with pending status
+- [x] Unit tests for query/filter/storage flow
 - [x] Integration test verification without external network (`httpx.MockTransport`)
 
 ---

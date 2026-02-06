@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-05
+**Last Updated**: 2026-02-06
 **Current Phase**: Phase 1 - Data Ingestion (starting)
 
 ## Progress Overview
@@ -30,6 +30,7 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Trend engine core (log-odds math, evidence calculation)
 - [x] EU-Russia trend config with enhanced schema
 - [x] Makefile for common workflows
+- [x] RSS collector foundation (config load, fetch/parse, extraction, dedup, persistence)
 
 ## In Progress
 

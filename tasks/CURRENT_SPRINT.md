@@ -8,7 +8,25 @@
 
 ## Active Tasks
 
-- None. Phase 0 scope for Sprint 1 is complete.
+### TASK-006: RSS Collector
+**Status**: IN_PROGRESS  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/006-rss-collector.md`
+
+Build RSS feed collector with full-text extraction.
+
+**Completed**:
+- [x] Load feed configs from `config/sources/rss_feeds.yaml`
+- [x] Fetch and parse RSS feeds using `feedparser`
+- [x] Extract full article text using Trafilatura (fallback to summary/title)
+- [x] Deduplicate by normalized URL and content hash (7-day window)
+- [x] Store new entries in `raw_items` with `processing_status='pending'`
+- [x] Handle feed/article failures gracefully with source error tracking
+- [x] Per-domain rate limiting (1 req/sec)
+- [x] Unit tests with mocked feeds/network/database
+
+**Remaining**:
+- [ ] Integration verification with live feed source
 
 ---
 

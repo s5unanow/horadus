@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Generator
+from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -48,6 +49,12 @@ def mock_db_session() -> AsyncMock:
     session.execute = AsyncMock()
     session.scalar = AsyncMock()
     session.scalars = AsyncMock()
+
+    @asynccontextmanager
+    async def _nested_transaction() -> Generator[None, None, None]:
+        yield
+
+    session.begin_nested = MagicMock(return_value=_nested_transaction())
     return session
 
 

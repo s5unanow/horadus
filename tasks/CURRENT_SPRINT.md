@@ -1,6 +1,6 @@
 # Current Sprint
 
-**Sprint Goal**: Complete Phase 0 - Get basic infrastructure running  
+**Sprint Goal**: Complete Phase 1 - Data ingestion foundation  
 **Sprint Number**: 1  
 **Sprint Dates**: 2026-02-02 to 2026-02-16
 
@@ -8,25 +8,19 @@
 
 ## Active Tasks
 
-### TASK-006: RSS Collector
+### TASK-007: GDELT Client
 **Status**: IN_PROGRESS  
 **Priority**: P1 (High)  
-**Spec**: `tasks/specs/006-rss-collector.md`
+**Spec**: `tasks/specs/007-gdelt-client.md`
 
-Build RSS feed collector with full-text extraction.
+Build GDELT API client for broad news coverage.
 
-**Completed**:
-- [x] Load feed configs from `config/sources/rss_feeds.yaml`
-- [x] Fetch and parse RSS feeds using `feedparser`
-- [x] Extract full article text using Trafilatura (fallback to summary/title)
-- [x] Deduplicate by normalized URL and content hash (7-day window)
-- [x] Store new entries in `raw_items` with `processing_status='pending'`
-- [x] Handle feed/article failures gracefully with source error tracking
-- [x] Per-domain rate limiting (1 req/sec)
-- [x] Unit tests with mocked feeds/network/database
-
-**Remaining**:
-- [ ] Integration verification with live feed source
+**Planned**:
+- [ ] Query GDELT DOC 2.0 API
+- [ ] Filter by relevant themes/actors
+- [ ] Map GDELT events to `raw_items` schema
+- [ ] Handle pagination and deduplication
+- [ ] Store results in database with tests
 
 ---
 
@@ -114,6 +108,26 @@ Add CRUD management for ingestion sources.
 - [x] PATCH `/api/v1/sources/{id}` updates partial fields
 - [x] DELETE `/api/v1/sources/{id}` deactivates source
 - [x] Unit tests for endpoint handlers
+
+---
+
+### TASK-006: RSS Collector
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/006-rss-collector.md`
+
+Build RSS feed collector with full-text extraction.
+
+**Completed**:
+- [x] Load feed configs from `config/sources/rss_feeds.yaml`
+- [x] Fetch and parse RSS feeds using `feedparser`
+- [x] Extract full article text using Trafilatura (fallback to summary/title)
+- [x] Deduplicate by normalized URL and content hash (7-day window)
+- [x] Store new entries in `raw_items` with `processing_status='pending'`
+- [x] Handle feed/article failures gracefully with source error tracking
+- [x] Per-domain rate limiting (1 req/sec)
+- [x] Unit tests with mocked feeds/network/database
+- [x] Integration test verification without external network (`httpx.MockTransport`)
 
 ---
 

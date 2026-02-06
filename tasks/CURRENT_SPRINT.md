@@ -8,18 +8,19 @@
 
 ## Active Tasks
 
-### TASK-008: Celery Setup
+### TASK-009: Telegram Harvester
 **Status**: IN_PROGRESS  
-**Priority**: P1 (High)  
-**Spec**: `tasks/specs/008-celery-setup.md`
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/009-telegram-harvester.md`
 
-Configure Celery workers + beat scheduling for ingestion and processing.
+Build Telegram channel collector using Telethon.
 
 **Planned**:
-- [ ] Configure Celery app with Redis broker/backend
-- [ ] Add RSS + GDELT periodic collection tasks
-- [ ] Configure beat schedules and retry behavior
-- [ ] Verify worker/beat startup commands
+- [ ] Telethon client setup with session management
+- [ ] Ingest configured channels and map messages to `raw_items`
+- [ ] Add historical backfill capability
+- [ ] Handle media text extraction where possible
+- [ ] Add unit/integration coverage for harvester flow
 
 ---
 
@@ -145,6 +146,24 @@ Build GDELT API client for broad news coverage.
 - [x] Persist collected items with pending status
 - [x] Unit tests for query/filter/storage flow
 - [x] Integration test verification without external network (`httpx.MockTransport`)
+
+---
+
+### TASK-008: Celery Setup
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/008-celery-setup.md`
+
+Configure Celery for async task processing.
+
+**Completed**:
+- [x] Celery app configured with Redis broker/backend (`src/workers/celery_app.py`)
+- [x] Beat schedule configured for periodic RSS + GDELT ingestion
+- [x] RSS and GDELT ingestion tasks implemented (`src/workers/tasks.py`)
+- [x] Retry/backoff policy configured on ingestion tasks
+- [x] Dead-letter handling added via Celery failure signal + Redis list
+- [x] Worker health task (`workers.ping`) added
+- [x] Unit tests covering schedule/task/dead-letter behavior
 
 ---
 

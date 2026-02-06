@@ -7,7 +7,7 @@
 
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
-Phase 1: Data Ingestion      [████████████░░░░░░░░]  60%  ← WE ARE HERE
+Phase 1: Data Ingestion      [████████████████░░░░]  80%  ← WE ARE HERE
 Phase 2: Processing Layer    [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -35,10 +35,12 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] GDELT client foundation (querying, filters, mapping, pagination, dedup, persistence)
 - [x] GDELT integration test path (no external network calls)
 - [x] Source management API CRUD endpoints with unit tests
+- [x] Celery worker app with beat scheduling + ingestion task routing
+- [x] RSS/GDELT periodic Celery tasks with retry/backoff + dead-letter capture
 
 ## In Progress
 
-- [ ] TASK-008: Celery setup (worker + beat scheduling)
+- [ ] TASK-009: Telegram harvester baseline
 
 ## Blocked
 
@@ -46,11 +48,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Connect ingestion to Celery workers + beat (TASK-008)
+1. Complete Telegram harvester baseline (TASK-009)
 2. Add ingestion observability (structured logs + metrics)
-3. Start Telegram harvester baseline (TASK-009)
-4. Begin processing layer embeddings (TASK-010)
-5. Add embedding-aware deduplication service (TASK-011)
+3. Begin processing layer embeddings (TASK-010)
+4. Add embedding-aware deduplication service (TASK-011)
+5. Build event clustering baseline (TASK-012)
 
 ## Expert Feedback Integration ✅
 

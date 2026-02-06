@@ -1,14 +1,14 @@
 # Project Status
 
 **Last Updated**: 2026-02-06
-**Current Phase**: Phase 1 - Data Ingestion (in progress)
+**Current Phase**: Phase 2 - Processing Layer (starting)
 
 ## Progress Overview
 
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
-Phase 1: Data Ingestion      [████████████████░░░░]  80%  ← WE ARE HERE
-Phase 2: Processing Layer    [░░░░░░░░░░░░░░░░░░░░]   0%
+Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
+Phase 2: Processing Layer    [██░░░░░░░░░░░░░░░░░░]  10%  ← WE ARE HERE
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -37,10 +37,12 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Source management API CRUD endpoints with unit tests
 - [x] Celery worker app with beat scheduling + ingestion task routing
 - [x] RSS/GDELT periodic Celery tasks with retry/backoff + dead-letter capture
+- [x] Telegram harvester baseline (collect, backfill, stream polling, media fallback)
+- [x] Telegram integration test path (no external network calls)
 
 ## In Progress
 
-- [ ] TASK-009: Telegram harvester baseline
+- [ ] TASK-010: Embedding service baseline
 
 ## Blocked
 
@@ -48,11 +50,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Complete Telegram harvester baseline (TASK-009)
-2. Add ingestion observability (structured logs + metrics)
-3. Begin processing layer embeddings (TASK-010)
-4. Add embedding-aware deduplication service (TASK-011)
-5. Build event clustering baseline (TASK-012)
+1. Complete embedding service baseline (TASK-010)
+2. Add embedding-aware deduplication service (TASK-011)
+3. Build event clustering baseline (TASK-012)
+4. Implement Tier 1 classifier (TASK-013)
+5. Implement Tier 2 classifier (TASK-014)
 
 ## Expert Feedback Integration ✅
 
@@ -85,6 +87,7 @@ Based on expert review, added 9 new tasks:
 | M1: Basic API + DB running | Week 1 | ✅ Complete |
 | M2: RSS ingestion working | Week 2 | ✅ Complete |
 | M3: GDELT integration | Week 3 | ✅ Complete |
+| M3.5: Telegram integration | Week 3 | ✅ Complete |
 | M4: LLM classification pipeline | Week 4 | 🔲 Not Started |
 | M5: Trend engine operational | Week 5 | 🔲 Not Started |
 | M6: Weekly reports generating | Week 6 | 🔲 Not Started |

@@ -1,0 +1,18 @@
+settings:
+  default_check_interval_minutes: 15
+  default_max_messages_per_fetch: 100
+
+channels:
+  - name: "Open Source Intel"
+    channel: "@example_channel"
+    credibility: 0.6
+    categories:
+      - "military"
+      - "geopolitics"
+    check_interval_minutes: 10
+    max_messages_per_fetch: 100
+    include_media: true
+    language: "en"
+    source_tier: "regional"
+    reporting_type: "secondary"
+    enabled: false

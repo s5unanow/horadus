@@ -14,6 +14,7 @@ Tasks that have been completed and verified.
 - TASK-006: RSS Collector ✅
 - TASK-007: GDELT Client ✅
 - TASK-008: Celery Setup ✅
+- TASK-009: Telegram Harvester ✅
 
 ---
 

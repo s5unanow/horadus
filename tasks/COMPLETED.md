@@ -17,6 +17,7 @@ Tasks that have been completed and verified.
 - TASK-009: Telegram Harvester ✅
 - TASK-010: Embedding Service ✅
 - TASK-011: Deduplication Service ✅
+- TASK-012: Event Clusterer ✅
 
 ---
 

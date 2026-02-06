@@ -1,13 +1,13 @@
 # Project Status
 
-**Last Updated**: 2026-02-02
-**Current Phase**: Phase 0 - Project Setup (75% complete)
+**Last Updated**: 2026-02-05
+**Current Phase**: Phase 1 - Data Ingestion (starting)
 
 ## Progress Overview
 
 ```
-Phase 0: Setup & Foundation  [███████████████░░░░░]  75%  ← WE ARE HERE
-Phase 1: Data Ingestion      [░░░░░░░░░░░░░░░░░░░░]   0%
+Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
+Phase 1: Data Ingestion      [░░░░░░░░░░░░░░░░░░░░]   0%  ← WE ARE HERE
 Phase 2: Processing Layer    [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -33,9 +33,7 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## In Progress
 
-- [ ] TASK-002: Docker environment (verify extensions work)
-- [ ] TASK-003: Database migrations (run `alembic upgrade head`)
-- [ ] TASK-004: FastAPI skeleton (verify server boots + /health)
+- [ ] TASK-006: RSS collector (Phase 1 start)
 
 ## Blocked
 
@@ -43,11 +41,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Complete Phase 0 setup tasks (see CURRENT_SPRINT.md)
-2. Get Docker environment running (`make docker-up`)
-3. Apply database migrations (`make db-upgrade`)
-4. Verify basic API works (`make run`)
-5. Start Phase 1: RSS Collector (TASK-006)
+1. Implement Phase 1 RSS ingestion pipeline (TASK-006)
+2. Add source fetch scheduling and retries
+3. Add ingestion observability (structured logs + metrics)
+4. Add ingestion integration tests (no external network)
+5. Prepare GDELT collector baseline (TASK-007)
 
 ## Expert Feedback Integration ✅
 
@@ -77,7 +75,7 @@ Based on expert review, added 9 new tasks:
 
 | Milestone | Target Date | Status |
 |-----------|-------------|--------|
-| M1: Basic API + DB running | Week 1 | 🟡 In Progress |
+| M1: Basic API + DB running | Week 1 | ✅ Complete |
 | M2: RSS ingestion working | Week 2 | 🔲 Not Started |
 | M3: GDELT integration | Week 3 | 🔲 Not Started |
 | M4: LLM classification pipeline | Week 4 | 🔲 Not Started |

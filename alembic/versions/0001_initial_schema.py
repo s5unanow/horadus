@@ -32,6 +32,7 @@ def upgrade() -> None:
         "api",
         "scraper",
         name="source_type",
+        create_type=False,
     )
     processing_status_enum = postgresql.ENUM(
         "pending",
@@ -40,6 +41,7 @@ def upgrade() -> None:
         "noise",
         "error",
         name="processing_status",
+        create_type=False,
     )
     source_type_enum.create(op.get_bind(), checkfirst=True)
     processing_status_enum.create(op.get_bind(), checkfirst=True)

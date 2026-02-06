@@ -8,7 +8,7 @@
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
-Phase 2: Processing Layer    [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
+Phase 2: Processing Layer    [██████░░░░░░░░░░░░░░]  30%  ← WE ARE HERE
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -42,10 +42,12 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Embedding service baseline (OpenAI wrapper, strict validation, batching, cache)
 - [x] `raw_items.embedding` pgvector column + ivfflat index migration (`0002`)
 - [x] Embedding unit test coverage (batching/cache/validation/persistence)
+- [x] Deduplication service baseline (URL/hash/external-id + optional embedding similarity)
+- [x] Ingestion collectors wired to shared deduplication service
 
 ## In Progress
 
-- [ ] TASK-011: Deduplication service baseline
+- [ ] TASK-012: Event clustering baseline
 
 ## Blocked
 
@@ -53,11 +55,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Complete embedding-aware deduplication service (TASK-011)
-2. Build event clustering baseline (TASK-012)
-3. Implement Tier 1 classifier (TASK-013)
-4. Implement Tier 2 classifier (TASK-014)
-5. Add processing pipeline orchestration (TASK-015)
+1. Build event clustering baseline (TASK-012)
+2. Implement Tier 1 classifier (TASK-013)
+3. Implement Tier 2 classifier (TASK-014)
+4. Add processing pipeline orchestration (TASK-015)
+5. Add trend management service baseline (TASK-016)
 
 ## Expert Feedback Integration ✅
 

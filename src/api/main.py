@@ -20,13 +20,18 @@ if TYPE_CHECKING:
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from src.api.routes import events, health, reports, sources, trends
+from src.api.middleware.auth import APIKeyAuthMiddleware
+from src.api.routes import auth, events, health, reports, sources, trends
 from src.core.config import settings
 from src.storage.database import async_session_maker, engine
 
 logger = structlog.get_logger(__name__)
 
 OPENAPI_TAGS = [
+    {
+        "name": "Auth",
+        "description": "API key lifecycle management (list/create/revoke).",
+    },
     {
         "name": "Health",
         "description": "Liveness/readiness and dependency health checks.",
@@ -121,7 +126,7 @@ def create_app() -> FastAPI:
             "Collects news from multiple sources, classifies via LLM, and "
             "tracks trend probabilities over time.\n\n"
             "Authentication header:\n"
-            "- `X-API-Key`: optional for now (documented for forward compatibility)."
+            "- `X-API-Key`: required when `API_AUTH_ENABLED=true` or when keys are configured."
         ),
         version="1.0.0",
         docs_url="/docs",
@@ -131,6 +136,8 @@ def create_app() -> FastAPI:
         dependencies=[Security(api_key_auth)],
         lifespan=lifespan,
     )
+
+    app.add_middleware(APIKeyAuthMiddleware)
 
     # Add CORS middleware
     app.add_middleware(
@@ -188,6 +195,12 @@ def register_routes(app: FastAPI) -> None:
         sources.router,
         prefix=f"{api_v1_prefix}/sources",
         tags=["Sources"],
+    )
+
+    app.include_router(
+        auth.router,
+        prefix=f"{api_v1_prefix}/auth",
+        tags=["Auth"],
     )
 
     app.include_router(

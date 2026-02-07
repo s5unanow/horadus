@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-025: Authentication
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md` (Phase 5)
+
+Add API key auth, per-key rate limiting, and key management endpoints.
+
+**Completed**:
+- [x] Added API key auth middleware with path exemptions for health/docs
+- [x] Added per-key in-memory rate limiting with `429` and `Retry-After`
+- [x] Added key management endpoints under `/api/v1/auth/keys` (list/create/revoke)
+- [x] Added environment settings for auth enablement, key lists, admin key, and rate limits
+- [x] Added unit tests for manager logic and middleware/route behavior
+
+---
+
 ### TASK-024: API Documentation
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

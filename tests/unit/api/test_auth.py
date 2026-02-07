@@ -1,0 +1,116 @@
+from __future__ import annotations
+
+import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+import src.api.routes.auth as auth_module
+from src.api.middleware.auth import APIKeyAuthMiddleware
+from src.core.api_key_manager import APIKeyManager
+
+pytestmark = pytest.mark.unit
+
+
+def _build_manager(
+    *,
+    auth_enabled: bool = True,
+    rate_limit_per_minute: int = 5,
+) -> tuple[APIKeyManager, str]:
+    manager = APIKeyManager(
+        auth_enabled=auth_enabled,
+        legacy_api_key=None,
+        static_api_keys=[],
+        default_rate_limit_per_minute=rate_limit_per_minute,
+    )
+    _record, raw_credential = manager.create_key(name="test-client")
+    return (manager, raw_credential)
+
+
+def _build_app(manager: APIKeyManager) -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(APIKeyAuthMiddleware, manager=manager)
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/api/v1/protected")
+    async def protected() -> dict[str, str]:
+        return {"status": "ok"}
+
+    app.include_router(auth_module.router, prefix="/api/v1/auth", tags=["Auth"])
+    return app
+
+
+def test_missing_api_key_returns_401() -> None:
+    manager, _credential = _build_manager()
+    client = TestClient(_build_app(manager))
+
+    response = client.get("/api/v1/protected")
+
+    assert response.status_code == 401
+    assert response.json()["message"] == "Missing API key"
+
+
+def test_valid_api_key_allows_request() -> None:
+    manager, credential = _build_manager()
+    client = TestClient(_build_app(manager))
+
+    response = client.get(
+        "/api/v1/protected",
+        headers={"X-API-Key": credential},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_health_route_bypasses_auth() -> None:
+    manager, _credential = _build_manager()
+    client = TestClient(_build_app(manager))
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_rate_limit_returns_429() -> None:
+    manager, credential = _build_manager(rate_limit_per_minute=1)
+    client = TestClient(_build_app(manager))
+    headers = {"X-API-Key": credential}
+
+    first = client.get("/api/v1/protected", headers=headers)
+    second = client.get("/api/v1/protected", headers=headers)
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert "Retry-After" in second.headers
+
+
+def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    client = TestClient(_build_app(manager))
+    headers = {
+        "X-API-Key": credential,
+        "X-Admin-API-Key": "admin-secret",
+    }
+
+    listed = client.get("/api/v1/auth/keys", headers=headers)
+    created = client.post(
+        "/api/v1/auth/keys",
+        headers=headers,
+        json={"name": "dashboard", "rate_limit_per_minute": 50},
+    )
+
+    assert listed.status_code == 200
+    assert created.status_code == 201
+    created_payload = created.json()
+    created_id = created_payload["key"]["id"]
+    assert created_payload["api_key"]
+    assert created_payload["key"]["name"] == "dashboard"
+
+    revoked = client.delete(f"/api/v1/auth/keys/{created_id}", headers=headers)
+    assert revoked.status_code == 204

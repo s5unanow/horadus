@@ -18,6 +18,7 @@ from src.core.source_credibility import (
     source_multiplier_expression,
 )
 from src.core.trend_engine import TrendEngine, calculate_evidence_delta
+from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
@@ -145,6 +146,8 @@ class ProcessingPipeline:
             if status == ProcessingStatus.ERROR:
                 run_result.errors += 1
                 continue
+            if status == ProcessingStatus.PENDING:
+                continue
 
             run_result.processed += 1
             if status == ProcessingStatus.CLASSIFIED:
@@ -171,6 +174,8 @@ class ProcessingPipeline:
         await self.session.flush()
 
         usage = PipelineUsage()
+        embedded = False
+        cluster_result: ClusterResult | None = None
         try:
             duplicate_result = await self.deduplication_service.find_duplicate(
                 external_id=item.external_id,
@@ -195,7 +200,6 @@ class ProcessingPipeline:
                 msg = "RawItem.raw_content must not be empty for pipeline processing"
                 raise ValueError(msg)
 
-            embedded = False
             if item.embedding is None:
                 (
                     vectors,
@@ -254,6 +258,25 @@ class ProcessingPipeline:
                     tier2_applied=True,
                     trend_impacts_seen=trend_impacts_seen,
                     trend_updates=trend_updates,
+                ),
+                usage=usage,
+            )
+        except BudgetExceededError as exc:
+            item.processing_status = ProcessingStatus.PENDING
+            item.error_message = None
+            await self.session.flush()
+            logger.warning(
+                "Budget exceeded; leaving item pending for retry",
+                item_id=str(item_id),
+                reason=str(exc),
+            )
+            return _ItemExecution(
+                result=self._build_item_result(
+                    item_id=item_id,
+                    status=item.processing_status,
+                    cluster_result=cluster_result,
+                    embedded=embedded,
+                    error_message=str(exc),
                 ),
                 usage=usage,
             )
@@ -525,22 +548,31 @@ class ProcessingPipeline:
         *,
         item_id: UUID,
         status: ProcessingStatus,
-        cluster_result: ClusterResult,
+        cluster_result: ClusterResult | None,
         embedded: bool,
         tier2_applied: bool = False,
         trend_impacts_seen: int = 0,
         trend_updates: int = 0,
+        error_message: str | None = None,
     ) -> PipelineItemResult:
+        event_id = cluster_result.event_id if cluster_result is not None else None
+        event_created = cluster_result.created if cluster_result is not None else False
+        event_merged = (
+            cluster_result.merged and not cluster_result.created
+            if cluster_result is not None
+            else False
+        )
         return PipelineItemResult(
             item_id=item_id,
             final_status=status,
-            event_id=cluster_result.event_id,
+            event_id=event_id,
             embedded=embedded,
-            event_created=cluster_result.created,
-            event_merged=cluster_result.merged and not cluster_result.created,
+            event_created=event_created,
+            event_merged=event_merged,
             tier2_applied=tier2_applied,
             trend_impacts_seen=trend_impacts_seen,
             trend_updates=trend_updates,
+            error_message=error_message,
         )
 
     @staticmethod

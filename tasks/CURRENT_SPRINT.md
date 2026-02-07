@@ -14,6 +14,24 @@
 
 ## Completed This Sprint
 
+### TASK-036: Cost Protection & Budget Limits
+**Status**: DONE ✓  
+**Priority**: P1 (Critical)  
+**Spec**: `tasks/specs/036-cost-protection.md`
+
+Enforce LLM budget limits with daily usage tracking and pipeline-safe behavior.
+
+**Completed**:
+- [x] Added `api_usage` model and Alembic migration (`0004_add_api_usage_table`)
+- [x] Added `CostTracker` service with `check_budget()` and `record_usage()`
+- [x] Applied pre-call budget checks in Tier 1, Tier 2, and embedding requests
+- [x] Recorded token/call usage after successful LLM/embedding calls
+- [x] Added `BudgetExceededError` flow so pipeline keeps items `pending`
+- [x] Added budget status API endpoint `GET /api/v1/budget`
+- [x] Added unit tests for tracker, classifiers, pipeline budget flow, and budget API
+
+---
+
 ### TASK-031: Source Tier and Reporting Type
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

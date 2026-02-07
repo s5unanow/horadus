@@ -130,6 +130,19 @@ List monthly reports:
 curl "http://localhost:8000/api/v1/reports?report_type=monthly&limit=10"
 ```
 
+## Budget
+
+- `GET /api/v1/budget`
+
+Returns current UTC-day LLM usage by tier (`tier1`, `tier2`, `embedding`) with
+call counters, token totals, estimated cost, and remaining daily budget.
+
+Example:
+
+```bash
+curl "http://localhost:8000/api/v1/budget"
+```
+
 ## Auth
 
 - `GET /api/v1/auth/keys`

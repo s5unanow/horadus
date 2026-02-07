@@ -4,10 +4,12 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
+from src.processing.cost_tracker import BudgetExceededError
 from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.models import Event
 
@@ -55,12 +57,17 @@ class FakeChatCompletions:
 def _build_classifier(mock_db_session):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
     classifier = Tier2Classifier(
         session=mock_db_session,
         client=client,
         model="gpt-4o-mini",
+        cost_tracker=cost_tracker,
     )
-    return classifier, chat
+    return classifier, chat, cost_tracker
 
 
 def _build_trend(trend_id: str, name: str):
@@ -79,7 +86,7 @@ def _build_trend(trend_id: str, name: str):
 
 @pytest.mark.asyncio
 async def test_classify_event_updates_event_fields_and_usage(mock_db_session) -> None:
-    classifier, chat = _build_classifier(mock_db_session)
+    classifier, chat, cost_tracker = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trends = [_build_trend("eu-russia", "EU-Russia")]
 
@@ -104,11 +111,13 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
     assert len(chat.calls) == 1
     assert mock_db_session.flush.await_count == 1
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_classify_events_classifies_unstructured_events(mock_db_session) -> None:
-    classifier, _chat = _build_classifier(mock_db_session)
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
     event_one = Event(id=uuid4(), canonical_summary="Summary 1")
     event_two = Event(id=uuid4(), canonical_summary="Summary 2")
     mock_db_session.scalars.side_effect = [
@@ -131,7 +140,7 @@ async def test_classify_events_classifies_unstructured_events(mock_db_session) -
 
 @pytest.mark.asyncio
 async def test_classify_event_rejects_unknown_trend_ids(mock_db_session) -> None:
-    classifier, _chat = _build_classifier(mock_db_session)
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trends = [_build_trend("eu-russia", "EU-Russia")]
 
@@ -165,4 +174,17 @@ async def test_classify_event_rejects_unknown_trend_ids(mock_db_session) -> None
     classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=BadCompletions()))
 
     with pytest.raises(ValueError, match="unknown trend id"):
+        await classifier.classify_event(event=event, trends=trends, context_chunks=["Context"])
+
+
+@pytest.mark.asyncio
+async def test_classify_event_raises_when_budget_exceeded(mock_db_session) -> None:
+    classifier, _chat, cost_tracker = _build_classifier(mock_db_session)
+    cost_tracker.ensure_within_budget = AsyncMock(
+        side_effect=BudgetExceededError("tier2 daily call limit (1) exceeded")
+    )
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    with pytest.raises(BudgetExceededError, match="daily call limit"):
         await classifier.classify_event(event=event, trends=trends, context_chunks=["Context"])

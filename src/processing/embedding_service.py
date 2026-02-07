@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.processing.cost_tracker import EMBEDDING, CostTracker
 from src.storage.models import Event, RawItem
 
 logger = structlog.get_logger(__name__)
@@ -43,6 +44,7 @@ class EmbeddingService:
         model: str | None = None,
         dimensions: int | None = None,
         batch_size: int | None = None,
+        cost_tracker: CostTracker | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.EMBEDDING_MODEL
@@ -50,6 +52,7 @@ class EmbeddingService:
         self.batch_size = batch_size or settings.EMBEDDING_BATCH_SIZE
 
         self.client = client or self._create_client()
+        self.cost_tracker = cost_tracker or CostTracker(session=session)
         self._cache: dict[str, list[float]] = {}
 
     def _create_client(self) -> AsyncOpenAI:
@@ -183,9 +186,19 @@ class EmbeddingService:
         if not inputs:
             return []
 
+        await self.cost_tracker.ensure_within_budget(EMBEDDING)
         response = await self.client.embeddings.create(
             model=self.model,
             input=inputs,
+        )
+        usage_obj = getattr(response, "usage", None)
+        prompt_tokens = int(getattr(usage_obj, "prompt_tokens", 0) or 0)
+        if prompt_tokens == 0:
+            prompt_tokens = int(getattr(usage_obj, "total_tokens", 0) or 0)
+        await self.cost_tracker.record_usage(
+            tier=EMBEDDING,
+            input_tokens=prompt_tokens,
+            output_tokens=0,
         )
 
         raw_data = getattr(response, "data", None)

@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.processing.cost_tracker import TIER2, CostTracker
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -111,11 +112,13 @@ class Tier2Classifier:
         client: AsyncOpenAI | Any | None = None,
         model: str | None = None,
         prompt_path: str = "ai/prompts/tier2_classify.md",
+        cost_tracker: CostTracker | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_TIER2_MODEL
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         self.client = client or self._create_client()
+        self.cost_tracker = cost_tracker or CostTracker(session=session)
 
     def _create_client(self) -> AsyncOpenAI:
         if not settings.OPENAI_API_KEY.strip():
@@ -183,6 +186,7 @@ class Tier2Classifier:
         )
         payload = self._build_payload(event=event, trends=trends, context_chunks=chunks)
 
+        await self.cost_tracker.ensure_within_budget(TIER2)
         response = await self.client.chat.completions.create(
             model=self.model,
             temperature=0,
@@ -199,6 +203,11 @@ class Tier2Classifier:
 
         usage = self._extract_usage(response)
         usage.api_calls = 1
+        await self.cost_tracker.record_usage(
+            tier=TIER2,
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
+        )
         usage.estimated_cost_usd = self._estimate_cost_usd(
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,

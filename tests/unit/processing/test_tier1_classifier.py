@@ -3,10 +3,12 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 
+from src.processing.cost_tracker import BudgetExceededError
 from src.processing.tier1_classifier import Tier1Classifier
 from src.storage.models import ProcessingStatus, RawItem
 
@@ -53,13 +55,18 @@ class FakeChatCompletions:
 def _build_classifier(mock_db_session, *, batch_size: int = 2):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
     classifier = Tier1Classifier(
         session=mock_db_session,
         client=client,
         model="gpt-4.1-nano",
         batch_size=batch_size,
+        cost_tracker=cost_tracker,
     )
-    return classifier, chat
+    return classifier, chat, cost_tracker
 
 
 def _build_item(title: str) -> RawItem:
@@ -89,7 +96,7 @@ def _build_trend(trend_id: str, name: str):
 
 @pytest.mark.asyncio
 async def test_classify_items_batches_and_tracks_usage(mock_db_session) -> None:
-    classifier, chat = _build_classifier(mock_db_session, batch_size=2)
+    classifier, chat, cost_tracker = _build_classifier(mock_db_session, batch_size=2)
     items = [
         _build_item("eu-russia update"),
         _build_item("other news"),
@@ -105,11 +112,13 @@ async def test_classify_items_batches_and_tracks_usage(mock_db_session) -> None:
     assert usage.completion_tokens == 40
     assert usage.estimated_cost_usd == pytest.approx(0.000036, rel=0.001)
     assert len(chat.calls) == 2
+    assert cost_tracker.ensure_within_budget.await_count == 2
+    assert cost_tracker.record_usage.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_classify_pending_items_updates_status(mock_db_session) -> None:
-    classifier, _chat = _build_classifier(mock_db_session, batch_size=10)
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=10)
     high_item = _build_item("eu-russia escalation")
     low_item = _build_item("sports roundup")
     mock_db_session.scalars.side_effect = [
@@ -129,7 +138,7 @@ async def test_classify_pending_items_updates_status(mock_db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_classify_batch_rejects_mismatched_trend_ids(mock_db_session) -> None:
-    classifier, _chat = _build_classifier(mock_db_session, batch_size=10)
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=10)
     item = _build_item("eu-russia escalation")
     trends = [_build_trend("eu-russia", "EU-Russia"), _build_trend("us-china", "US-China")]
 
@@ -163,7 +172,7 @@ async def test_classify_batch_rejects_mismatched_trend_ids(mock_db_session) -> N
 
 @pytest.mark.asyncio
 async def test_classify_pending_items_raises_without_trends(mock_db_session) -> None:
-    classifier, _chat = _build_classifier(mock_db_session, batch_size=10)
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=10)
     item = _build_item("eu-russia escalation")
     mock_db_session.scalars.side_effect = [
         SimpleNamespace(all=lambda: [item]),
@@ -172,3 +181,16 @@ async def test_classify_pending_items_raises_without_trends(mock_db_session) -> 
 
     with pytest.raises(ValueError, match="No active trends"):
         await classifier.classify_pending_items(limit=10, trends=None)
+
+
+@pytest.mark.asyncio
+async def test_classify_items_raises_when_budget_exceeded(mock_db_session) -> None:
+    classifier, _chat, cost_tracker = _build_classifier(mock_db_session, batch_size=10)
+    cost_tracker.ensure_within_budget = AsyncMock(
+        side_effect=BudgetExceededError("tier1 daily call limit (1) exceeded")
+    )
+    item = _build_item("eu-russia escalation")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    with pytest.raises(BudgetExceededError, match="daily call limit"):
+        await classifier.classify_items([item], trends)

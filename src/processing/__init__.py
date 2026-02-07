@@ -1,5 +1,6 @@
 """Data processing services."""
 
+from src.processing.cost_tracker import BudgetExceededError, CostTracker
 from src.processing.deduplication_service import DeduplicationResult, DeduplicationService
 from src.processing.embedding_service import EmbeddingRunResult, EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
@@ -25,7 +26,9 @@ from src.processing.tier2_classifier import (
 )
 
 __all__ = [
+    "BudgetExceededError",
     "ClusterResult",
+    "CostTracker",
     "DeduplicationResult",
     "DeduplicationService",
     "EmbeddingRunResult",

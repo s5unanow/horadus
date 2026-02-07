@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.processing.cost_tracker import TIER1, CostTracker
 from src.storage.models import ProcessingStatus, RawItem, Trend
 
 
@@ -98,6 +99,7 @@ class Tier1Classifier:
         model: str | None = None,
         batch_size: int | None = None,
         prompt_path: str = "ai/prompts/tier1_filter.md",
+        cost_tracker: CostTracker | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_TIER1_MODEL
@@ -105,6 +107,7 @@ class Tier1Classifier:
         self.batch_size = max(1, configured_batch_size)
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         self.client = client or self._create_client()
+        self.cost_tracker = cost_tracker or CostTracker(session=session)
 
     def _create_client(self) -> AsyncOpenAI:
         if not settings.OPENAI_API_KEY.strip():
@@ -188,6 +191,7 @@ class Tier1Classifier:
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
+        await self.cost_tracker.ensure_within_budget(TIER1)
         response = await self.client.chat.completions.create(
             model=self.model,
             temperature=0,
@@ -203,6 +207,11 @@ class Tier1Classifier:
 
         usage = self._extract_usage(response)
         usage.api_calls = 1
+        await self.cost_tracker.record_usage(
+            tier=TIER1,
+            input_tokens=usage.prompt_tokens,
+            output_tokens=usage.completion_tokens,
+        )
         usage.estimated_cost_usd = self._estimate_cost_usd(
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,

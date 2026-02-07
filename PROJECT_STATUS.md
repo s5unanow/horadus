@@ -9,7 +9,7 @@
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
-Phase 3: Trend Engine        [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
+Phase 3: Trend Engine        [████████░░░░░░░░░░░░]  40%  ← WE ARE HERE
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -56,10 +56,14 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Trend management API CRUD endpoints (`/api/v1/trends`)
 - [x] Trend YAML sync/load path for `config/trends/*.yaml`
 - [x] Trend API unit coverage for CRUD + config sync
+- [x] Pipeline-to-trend orchestration for applying Tier 2 trend impacts
+- [x] Trend evidence persistence wired through idempotent trend engine updates
+- [x] Pipeline metrics now include trend impacts seen and trend updates applied
+- [x] End-to-end tests covering trend impact application in processing pipeline
 
 ## In Progress
 
-- [ ] TASK-017: Trend engine orchestration
+- None currently
 
 ## Blocked
 
@@ -67,11 +71,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Implement trend engine orchestration (TASK-017)
-2. Add evidence recording orchestration (TASK-018)
-3. Implement trend snapshots (TASK-019)
-4. Add reporting service baseline (TASK-020)
-5. Build event query/reporting APIs (TASK-021)
+1. Add evidence recording orchestration (TASK-018)
+2. Implement trend snapshots (TASK-019)
+3. Add reporting service baseline (TASK-020)
+4. Build event query/reporting APIs (TASK-021)
+5. Expand trend engine observability and ops guardrails
 
 ## Expert Feedback Integration ✅
 

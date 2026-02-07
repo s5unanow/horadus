@@ -8,24 +8,28 @@
 
 ## Active Tasks
 
+- No active tasks right now.
+
+---
+
+## Completed This Sprint
+
 ### TASK-017: Trend Engine Core
-**Status**: IN_PROGRESS  
+**Status**: DONE ✓  
 **Priority**: P0 (Critical)  
 **Spec**: `tasks/specs/017-trend-engine-core.md`
 
 Implement log-odds trend engine orchestration and service integration.
 
-**Planned**:
-- [ ] Add engine orchestration service for applying event impacts
-- [ ] Resolve signal weights from trend indicator configs
-- [ ] Apply log-odds deltas per trend with deterministic factors
-- [ ] Wire novelty/corroboration/credibility inputs to delta calculation
-- [ ] Persist trend updates transactionally with traceable metadata
-- [ ] Add unit tests for orchestration paths and edge cases
+**Completed**:
+- [x] Added trend-impact orchestration in processing pipeline after Tier 2
+- [x] Resolved indicator weights from trend config and skipped invalid signal weights safely
+- [x] Applied deterministic log-odds deltas using severity/confidence/credibility/corroboration/novelty
+- [x] Persisted trend evidence via `TrendEngine.apply_evidence` idempotent path
+- [x] Added trend impact/update counters to pipeline run metrics
+- [x] Added unit and integration tests for applied and skipped impact paths
 
 ---
-
-## Completed This Sprint
 
 ### TASK-016: Trend Management
 **Status**: DONE ✓  

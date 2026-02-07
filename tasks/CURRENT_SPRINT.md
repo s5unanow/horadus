@@ -8,24 +8,40 @@
 
 ## Active Tasks
 
-### TASK-016: Trend Management
+### TASK-017: Trend Engine Core
 **Status**: IN_PROGRESS  
+**Priority**: P0 (Critical)  
+**Spec**: `tasks/specs/017-trend-engine-core.md`
+
+Implement log-odds trend engine orchestration and service integration.
+
+**Planned**:
+- [ ] Add engine orchestration service for applying event impacts
+- [ ] Resolve signal weights from trend indicator configs
+- [ ] Apply log-odds deltas per trend with deterministic factors
+- [ ] Wire novelty/corroboration/credibility inputs to delta calculation
+- [ ] Persist trend updates transactionally with traceable metadata
+- [ ] Add unit tests for orchestration paths and edge cases
+
+---
+
+## Completed This Sprint
+
+### TASK-016: Trend Management
+**Status**: DONE ✓  
 **Priority**: P1 (High)  
 **Spec**: `tasks/specs/016-trend-management.md`
 
 Add API endpoints and internal services to manage trends.
 
-**Planned**:
-- [ ] Add `GET /api/v1/trends` endpoint for listing trends
-- [ ] Add `POST /api/v1/trends` endpoint for creating trends
-- [ ] Add `GET /api/v1/trends/{id}` endpoint with probability response
-- [ ] Add `PATCH /api/v1/trends/{id}` endpoint for updates
-- [ ] Add `DELETE /api/v1/trends/{id}` endpoint for deactivation
-- [ ] Add YAML trend-load path and unit tests
+**Completed**:
+- [x] Added trend CRUD endpoints (`GET/POST/GET by id/PATCH/DELETE`)
+- [x] Added probability conversion in API responses (log-odds → probability)
+- [x] Added YAML config sync endpoint and loader for `config/trends/*.yaml`
+- [x] Added conflict/404 handling and soft-delete deactivation flow
+- [x] Added unit tests for trend routes and config loading behavior
 
 ---
-
-## Completed This Sprint
 
 ### TASK-015: Processing Pipeline
 **Status**: DONE ✓  

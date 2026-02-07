@@ -8,6 +8,7 @@ A headless backend for collecting, classifying, and analyzing news to track geop
 - **Smart filtering**: Two-tier LLM classification (cheap filter → expensive analysis)
 - **Event clustering**: Groups duplicate news into single events
 - **Trend tracking**: Bayesian-inspired probability updates using log-odds
+- **Risk presentation**: Risk levels + probability bands + confidence ratings
 - **Automated reports**: Weekly/monthly trend analysis with retrospectives
 - **Headless API**: REST endpoints for any frontend (web/mobile)
 

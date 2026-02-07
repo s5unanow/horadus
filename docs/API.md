@@ -75,6 +75,12 @@ curl -X POST http://localhost:8000/api/v1/sources \
 - `POST /api/v1/trends/{trend_id}/outcomes`
 - `GET /api/v1/trends/{trend_id}/calibration`
 
+Trend responses now include:
+- `risk_level` (`low`/`guarded`/`elevated`/`high`/`severe`)
+- `probability_band` (lower/upper bound)
+- `confidence` (`low`/`medium`/`high`)
+- `top_movers_7d` (highest-impact recent evidence summaries)
+
 Retrospective example:
 
 ```bash

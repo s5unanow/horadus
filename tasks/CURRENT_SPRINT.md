@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-028: Risk Levels and Probability Bands
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/028-risk-levels.md`
+
+Improve trend presentation with explicit uncertainty and confidence.
+
+**Completed**:
+- [x] Added risk presentation helpers (`src/core/risk.py`)
+- [x] Added `risk_level`, `probability_band`, and `confidence` to trend responses
+- [x] Added evidence-driven uncertainty band calculation
+- [x] Added `top_movers_7d` in trend responses from recent high-impact evidence
+- [x] Added unit tests for risk mapping/band/confidence logic
+- [x] Updated API docs to describe risk presentation fields
+
+---
+
 ### TASK-032: Trend Outcomes for Calibration
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

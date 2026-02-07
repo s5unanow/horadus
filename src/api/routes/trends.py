@@ -14,11 +14,17 @@ from uuid import UUID
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.calibration import CalibrationService
 from src.core.retrospective_analyzer import RetrospectiveAnalyzer
+from src.core.risk import (
+    ConfidenceRating,
+    calculate_probability_band,
+    get_confidence_rating,
+    get_risk_level,
+)
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
 from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
@@ -98,6 +104,13 @@ class TrendResponse(BaseModel):
                 "definition": {"id": "eu-russia-military-conflict"},
                 "baseline_probability": 0.08,
                 "current_probability": 0.18,
+                "risk_level": "guarded",
+                "probability_band": [0.11, 0.25],
+                "confidence": "medium",
+                "top_movers_7d": [
+                    "Multiple sources corroborate force-movement reports.",
+                    "Diplomatic talks were suspended after border incident.",
+                ],
                 "indicators": {"military_movement": {"direction": "escalatory", "weight": 0.04}},
                 "decay_half_life_days": 30,
                 "is_active": True,
@@ -112,6 +125,10 @@ class TrendResponse(BaseModel):
     definition: dict[str, Any]
     baseline_probability: float
     current_probability: float
+    risk_level: str
+    probability_band: tuple[float, float]
+    confidence: ConfidenceRating
+    top_movers_7d: list[str]
     indicators: dict[str, Any]
     decay_half_life_days: int
     is_active: bool
@@ -386,14 +403,92 @@ def _ensure_definition_id(definition: dict[str, Any], *, trend_name: str) -> dic
     return updated_definition
 
 
-def _to_response(trend: Trend) -> TrendResponse:
+async def _get_evidence_stats(
+    session: AsyncSession,
+    *,
+    trend_id: UUID,
+) -> tuple[int, float, int]:
+    now = datetime.now(tz=UTC)
+    since_30d = now - timedelta(days=30)
+
+    count_stmt = select(
+        func.count(TrendEvidence.id),
+        func.avg(TrendEvidence.corroboration_factor),
+        func.max(TrendEvidence.created_at),
+    ).where(
+        TrendEvidence.trend_id == trend_id,
+        TrendEvidence.created_at >= since_30d,
+    )
+    count_row = (await session.execute(count_stmt)).one()
+    evidence_count = int(count_row[0] or 0)
+    avg_corroboration = float(count_row[1]) if count_row[1] is not None else 0.5
+    most_recent = count_row[2]
+
+    if most_recent is None:
+        days_since_last = 30
+    else:
+        most_recent_utc = most_recent if most_recent.tzinfo else most_recent.replace(tzinfo=UTC)
+        elapsed_days = (now - most_recent_utc).days
+        days_since_last = max(0, elapsed_days)
+
+    return evidence_count, avg_corroboration, days_since_last
+
+
+async def _get_top_movers_7d(
+    session: AsyncSession,
+    *,
+    trend_id: UUID,
+    limit: int = 3,
+) -> list[str]:
+    since_7d = datetime.now(tz=UTC) - timedelta(days=7)
+    query = (
+        select(TrendEvidence)
+        .where(TrendEvidence.trend_id == trend_id)
+        .where(TrendEvidence.created_at >= since_7d)
+        .order_by(func.abs(TrendEvidence.delta_log_odds).desc())
+        .limit(limit)
+    )
+    records = list((await session.scalars(query)).all())
+    movers = [record.reasoning.strip() for record in records if record.reasoning]
+    if movers:
+        return movers
+    return [record.signal_type for record in records[:limit]]
+
+
+async def _to_response(
+    trend: Trend,
+    *,
+    session: AsyncSession,
+) -> TrendResponse:
+    probability = logodds_to_prob(float(trend.current_log_odds))
+    evidence_count, avg_corroboration, days_since_last = await _get_evidence_stats(
+        session,
+        trend_id=trend.id,
+    )
+    band_low, band_high = calculate_probability_band(
+        probability=probability,
+        evidence_count_30d=evidence_count,
+        avg_corroboration=avg_corroboration,
+        days_since_last_evidence=days_since_last,
+    )
+    confidence = get_confidence_rating(
+        band_width=band_high - band_low,
+        evidence_count=evidence_count,
+        avg_corroboration=avg_corroboration,
+    )
+    top_movers = await _get_top_movers_7d(session, trend_id=trend.id)
+
     return TrendResponse(
         id=trend.id,
         name=trend.name,
         description=trend.description,
         definition=trend.definition,
         baseline_probability=logodds_to_prob(float(trend.baseline_log_odds)),
-        current_probability=logodds_to_prob(float(trend.current_log_odds)),
+        current_probability=probability,
+        risk_level=get_risk_level(probability).value,
+        probability_band=(band_low, band_high),
+        confidence=confidence,
+        top_movers_7d=top_movers,
         indicators=trend.indicators,
         decay_half_life_days=trend.decay_half_life_days,
         is_active=trend.is_active,
@@ -584,8 +679,8 @@ async def list_trends(
     if active_only:
         query = query.where(Trend.is_active.is_(True))
 
-    trends = (await session.scalars(query)).all()
-    return [_to_response(trend) for trend in trends]
+    trends = list((await session.scalars(query)).all())
+    return [await _to_response(trend, session=session) for trend in trends]
 
 
 @router.post("", response_model=TrendResponse, status_code=status.HTTP_201_CREATED)
@@ -623,7 +718,7 @@ async def create_trend(
     session.add(trend_record)
     await session.flush()
 
-    return _to_response(trend_record)
+    return await _to_response(trend_record, session=session)
 
 
 @router.post("/sync-config", response_model=TrendConfigLoadResponse)
@@ -642,7 +737,7 @@ async def get_trend(
 ) -> TrendResponse:
     """Get one trend by id."""
     trend = await _get_trend_or_404(session, trend_id)
-    return _to_response(trend)
+    return await _to_response(trend, session=session)
 
 
 @router.get("/{trend_id}/evidence", response_model=list[TrendEvidenceResponse])
@@ -862,7 +957,7 @@ async def update_trend(
         setattr(trend_record, field_name, field_value)
 
     await session.flush()
-    return _to_response(trend_record)
+    return await _to_response(trend_record, session=session)
 
 
 @router.delete("/{trend_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -30,6 +30,18 @@ from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, 
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _patch_risk_presentation(monkeypatch) -> None:
+    async def _fake_evidence_stats(*_args: object, **_kwargs: object) -> tuple[int, float, int]:
+        return 8, 0.75, 1
+
+    async def _fake_top_movers(*_args: object, **_kwargs: object) -> list[str]:
+        return ["Signal corroborated across multiple outlets"]
+
+    monkeypatch.setattr(trends_module, "_get_evidence_stats", _fake_evidence_stats)
+    monkeypatch.setattr(trends_module, "_get_top_movers_7d", _fake_top_movers)
+
+
 def _build_trend(
     *,
     trend_id: UUID | None = None,
@@ -64,6 +76,11 @@ async def test_list_trends_returns_response_models(mock_db_session) -> None:
     assert result[0].name == trend.name
     assert result[0].baseline_probability == pytest.approx(0.1, rel=0.01)
     assert result[0].current_probability == pytest.approx(0.2, rel=0.01)
+    assert result[0].risk_level == "guarded"
+    assert result[0].probability_band[0] == pytest.approx(0.10235, rel=0.01)
+    assert result[0].probability_band[1] == pytest.approx(0.29765, rel=0.01)
+    assert result[0].confidence == "medium"
+    assert len(result[0].top_movers_7d) == 1
     assert mock_db_session.scalars.await_count == 1
 
 

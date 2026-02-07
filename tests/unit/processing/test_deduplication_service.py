@@ -113,3 +113,19 @@ def test_normalize_url_removes_tracking_components() -> None:
 def test_compute_content_hash_returns_sha256_hex() -> None:
     digest = DeduplicationService.compute_content_hash("hello")
     assert len(digest) == 64
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_excludes_current_item_id(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    mock_db_session.scalar.side_effect = [None]
+    excluded_id = uuid4()
+
+    result = await service.find_duplicate(
+        external_id="item-1",
+        exclude_item_id=excluded_id,
+    )
+
+    assert result.is_duplicate is False
+    query = mock_db_session.scalar.await_args.args[0]
+    assert "raw_items.id !=" in str(query)

@@ -41,10 +41,20 @@ def test_build_beat_schedule_omits_disabled_collectors(
     assert schedule == {}
 
 
+def test_celery_routes_include_processing_queue() -> None:
+    routes = celery_app_module.celery_app.conf.task_routes
+    assert routes["workers.process_pending_items"]["queue"] == "processing"
+
+
 def test_collect_rss_task_uses_async_collector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    def fake_queue(*, collector: str, stored_items: int) -> bool:
+        queue_calls.append((collector, stored_items))
+        return True
 
     async def fake_collect() -> dict[str, object]:
         return {
@@ -58,18 +68,25 @@ def test_collect_rss_task_uses_async_collector(
         }
 
     monkeypatch.setattr(tasks_module, "_collect_rss_async", fake_collect)
+    monkeypatch.setattr(tasks_module, "_queue_processing_for_new_items", fake_queue)
 
     result = tasks_module.collect_rss.run()
 
     assert result["status"] == "ok"
     assert result["collector"] == "rss"
     assert result["stored"] == 2
+    assert queue_calls == [("rss", 2)]
 
 
 def test_collect_gdelt_task_uses_async_collector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(tasks_module.settings, "ENABLE_GDELT_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    def fake_queue(*, collector: str, stored_items: int) -> bool:
+        queue_calls.append((collector, stored_items))
+        return True
 
     async def fake_collect() -> dict[str, object]:
         return {
@@ -83,12 +100,51 @@ def test_collect_gdelt_task_uses_async_collector(
         }
 
     monkeypatch.setattr(tasks_module, "_collect_gdelt_async", fake_collect)
+    monkeypatch.setattr(tasks_module, "_queue_processing_for_new_items", fake_queue)
 
     result = tasks_module.collect_gdelt.run()
 
     assert result["status"] == "ok"
     assert result["collector"] == "gdelt"
     assert result["stored"] == 3
+    assert queue_calls == [("gdelt", 3)]
+
+
+def test_process_pending_items_task_uses_async_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 25)
+
+    async def fake_process(limit: int) -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "processing_pipeline",
+            "scanned": limit,
+            "processed": limit,
+            "classified": limit - 1,
+            "noise": 1,
+            "duplicates": 0,
+            "errors": 0,
+            "embedded": limit,
+            "events_created": 1,
+            "events_merged": limit - 1,
+            "embedding_api_calls": 2,
+            "tier1_prompt_tokens": 100,
+            "tier1_completion_tokens": 20,
+            "tier1_api_calls": 1,
+            "tier2_prompt_tokens": 80,
+            "tier2_completion_tokens": 40,
+            "tier2_api_calls": 1,
+        }
+
+    monkeypatch.setattr(tasks_module, "_process_pending_async", fake_process)
+
+    result = tasks_module.process_pending_items.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "processing_pipeline"
+    assert result["processed"] == 25
+    assert result["classified"] == 24
 
 
 def test_task_retry_configuration() -> None:
@@ -96,6 +152,8 @@ def test_task_retry_configuration() -> None:
     assert tasks_module.collect_rss.retry_kwargs == {"max_retries": 3}
     assert tasks_module.collect_gdelt.autoretry_for
     assert tasks_module.collect_gdelt.retry_kwargs == {"max_retries": 3}
+    assert tasks_module.process_pending_items.autoretry_for
+    assert tasks_module.process_pending_items.retry_kwargs == {"max_retries": 3}
 
 
 def test_push_dead_letter_to_redis(monkeypatch: pytest.MonkeyPatch) -> None:

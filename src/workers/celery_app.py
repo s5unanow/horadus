@@ -8,6 +8,7 @@ from datetime import timedelta
 from typing import Any
 
 from celery import Celery
+from celery.schedules import crontab
 
 from src.core.config import settings
 
@@ -35,6 +36,14 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
         "task": "workers.apply_trend_decay",
         "schedule": timedelta(days=1),
     }
+    schedule["generate-weekly-reports"] = {
+        "task": "workers.generate_weekly_reports",
+        "schedule": crontab(
+            day_of_week=str(settings.WEEKLY_REPORT_DAY_OF_WEEK),
+            hour=settings.WEEKLY_REPORT_HOUR_UTC,
+            minute=settings.WEEKLY_REPORT_MINUTE_UTC,
+        ),
+    }
 
     return schedule
 
@@ -58,6 +67,7 @@ celery_app.conf.update(
         "workers.process_pending_items": {"queue": "processing"},
         "workers.snapshot_trends": {"queue": "processing"},
         "workers.apply_trend_decay": {"queue": "processing"},
+        "workers.generate_weekly_reports": {"queue": "processing"},
         "workers.ping": {"queue": "default"},
     },
     broker_connection_retry_on_startup=True,

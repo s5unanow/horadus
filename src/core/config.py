@@ -109,6 +109,10 @@ class Settings(BaseSettings):
         default="gpt-4o-mini",
         description="Model for Tier 2 (thorough) classification",
     )
+    LLM_REPORT_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Model for weekly report narrative generation",
+    )
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
     LLM_TIER1_BATCH_SIZE: int = Field(
@@ -238,6 +242,24 @@ class Settings(BaseSettings):
     RSS_COLLECTION_INTERVAL: int = Field(default=30, description="Minutes")
     GDELT_COLLECTION_INTERVAL: int = Field(default=60, description="Minutes")
     MAX_ITEMS_PER_COLLECTION: int = Field(default=100, ge=1)
+    WEEKLY_REPORT_DAY_OF_WEEK: int = Field(
+        default=1,
+        ge=0,
+        le=6,
+        description="UTC day of week for weekly report task (0=Sun..6=Sat)",
+    )
+    WEEKLY_REPORT_HOUR_UTC: int = Field(
+        default=7,
+        ge=0,
+        le=23,
+        description="UTC hour for weekly report task",
+    )
+    WEEKLY_REPORT_MINUTE_UTC: int = Field(
+        default=0,
+        ge=0,
+        le=59,
+        description="UTC minute for weekly report task",
+    )
 
     # =========================================================================
     # Computed Properties

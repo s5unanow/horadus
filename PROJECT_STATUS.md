@@ -1,7 +1,7 @@
 # Project Status
 
 **Last Updated**: 2026-02-07
-**Current Phase**: Phase 3 - Trend Engine (in progress)
+**Current Phase**: Phase 4 - Reporting (in progress)
 
 ## Progress Overview
 
@@ -9,8 +9,8 @@
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
-Phase 3: Trend Engine        [█████████████████░░░]  85%  ← WE ARE HERE
-Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
+Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
+Phase 4: Reporting           [███████░░░░░░░░░░░░░]  35%  ← WE ARE HERE
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
@@ -70,6 +70,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Trend decay worker task (`workers.apply_trend_decay`) wired into Celery
 - [x] Daily decay schedule to fade stale evidence toward baseline
 - [x] Decay worker metrics/logging and unit test coverage
+- [x] Weekly report generation service for active trends with top-event attribution
+- [x] Weekly report worker task + schedule wiring (`workers.generate_weekly_reports`)
+- [x] Report API endpoints (`GET /api/v1/reports`, `/api/v1/reports/{id}`, `/api/v1/reports/latest/weekly`)
+- [x] Weekly reporting prompt template and report API unit test coverage
 
 ## In Progress
 
@@ -81,11 +85,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Build event query/reporting APIs (TASK-021)
-2. Add reporting service baseline (TASK-022)
+1. Add monthly report generator (TASK-022)
+2. Add retrospective analysis endpoints (TASK-023)
 3. Expand trend engine observability and ops guardrails
-4. Begin Phase 4 reporting generation pipeline
-5. Add retrospective analysis endpoints (TASK-023)
+4. Start Phase 5 polish and deployment tasks
+5. Start calibration outcome tracking tasks (TASK-032+)
 
 ## Expert Feedback Integration ✅
 
@@ -120,9 +124,9 @@ Based on expert review, added 9 new tasks:
 | M3: GDELT integration | Week 3 | ✅ Complete |
 | M3.5: Telegram integration | Week 3 | ✅ Complete |
 | M4: LLM classification pipeline | Week 4 | ✅ Complete |
-| M5: Trend engine operational | Week 5 | 🔄 In Progress |
-| M6: Weekly reports generating | Week 6 | 🔲 Not Started |
-| M7: Reporting APIs operational | Week 7 | 🔲 Not Started |
+| M5: Trend engine operational | Week 5 | ✅ Complete |
+| M6: Weekly reports generating | Week 6 | ✅ Complete |
+| M7: Reporting APIs operational | Week 7 | 🔄 In Progress |
 | M8: Full system operational | Week 8 | 🔲 Not Started |
 
 ## Known Issues

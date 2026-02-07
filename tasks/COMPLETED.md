@@ -26,6 +26,7 @@ Tasks that have been completed and verified.
 - TASK-018: Evidence Recording ✅
 - TASK-019: Trend Snapshots ✅
 - TASK-020: Decay Worker ✅
+- TASK-021: Report Generator - Weekly ✅
 
 ---
 

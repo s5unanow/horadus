@@ -10,7 +10,7 @@ Phase 0: Setup & Foundation  [████████████████�
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
-Phase 4: Reporting           [███████░░░░░░░░░░░░░]  35%  ← WE ARE HERE
+Phase 4: Reporting           [██████████████░░░░░░]  70%  ← WE ARE HERE
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
@@ -74,6 +74,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Weekly report worker task + schedule wiring (`workers.generate_weekly_reports`)
 - [x] Report API endpoints (`GET /api/v1/reports`, `/api/v1/reports/{id}`, `/api/v1/reports/latest/weekly`)
 - [x] Weekly reporting prompt template and report API unit test coverage
+- [x] Monthly report generation service with monthly deltas + prior-week rollups
+- [x] Category/source breakdown aggregation for monthly intelligence summaries
+- [x] Monthly report worker task + schedule wiring (`workers.generate_monthly_reports`)
+- [x] Monthly report API endpoint (`GET /api/v1/reports/latest/monthly`)
 
 ## In Progress
 
@@ -85,11 +89,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add monthly report generator (TASK-022)
-2. Add retrospective analysis endpoints (TASK-023)
-3. Expand trend engine observability and ops guardrails
-4. Start Phase 5 polish and deployment tasks
-5. Start calibration outcome tracking tasks (TASK-032+)
+1. Add retrospective analysis endpoints (TASK-023)
+2. Expand trend engine observability and ops guardrails
+3. Start Phase 5 polish and deployment tasks
+4. Start calibration outcome tracking tasks (TASK-032+)
+5. Add operational dashboards and alerting for report generation
 
 ## Expert Feedback Integration ✅
 
@@ -126,7 +130,7 @@ Based on expert review, added 9 new tasks:
 | M4: LLM classification pipeline | Week 4 | ✅ Complete |
 | M5: Trend engine operational | Week 5 | ✅ Complete |
 | M6: Weekly reports generating | Week 6 | ✅ Complete |
-| M7: Reporting APIs operational | Week 7 | 🔄 In Progress |
+| M7: Reporting APIs operational | Week 7 | ✅ Complete |
 | M8: Full system operational | Week 8 | 🔲 Not Started |
 
 ## Known Issues

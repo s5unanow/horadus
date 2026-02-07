@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from src.api.routes.reports import get_latest_weekly, get_report, list_reports
+from src.api.routes.reports import get_latest_monthly, get_latest_weekly, get_report, list_reports
 from src.storage.models import Report
 
 pytestmark = pytest.mark.unit
@@ -97,4 +97,26 @@ async def test_get_latest_weekly_returns_report(mock_db_session) -> None:
 
     assert result.id == report.id
     assert result.report_type == "weekly"
+    assert result.trend_name == "EU-Russia"
+
+
+@pytest.mark.asyncio
+async def test_get_latest_monthly_returns_404_when_missing(mock_db_session) -> None:
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: None)
+
+    with pytest.raises(HTTPException, match="No monthly reports found") as exc:
+        await get_latest_monthly(session=mock_db_session)
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_latest_monthly_returns_report(mock_db_session) -> None:
+    report = _build_report(trend_id=uuid4(), report_type="monthly")
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: (report, "EU-Russia"))
+
+    result = await get_latest_monthly(session=mock_db_session)
+
+    assert result.id == report.id
+    assert result.report_type == "monthly"
     assert result.trend_name == "EU-Russia"

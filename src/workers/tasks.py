@@ -275,6 +275,23 @@ async def _generate_weekly_reports_async() -> dict[str, Any]:
     }
 
 
+async def _generate_monthly_reports_async() -> dict[str, Any]:
+    async with async_session_maker() as session:
+        generator = ReportGenerator(session=session)
+        run_result = await generator.generate_monthly_reports()
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "generate_monthly_reports",
+        "period_start": run_result.period_start.isoformat(),
+        "period_end": run_result.period_end.isoformat(),
+        "scanned": run_result.scanned,
+        "created": run_result.created,
+        "updated": run_result.updated,
+    }
+
+
 @typed_shared_task(
     name="workers.process_pending_items",
     autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
@@ -336,6 +353,21 @@ def generate_weekly_reports() -> dict[str, Any]:
     result = _run_async(_generate_weekly_reports_async())
     logger.info(
         "Finished weekly report generation task",
+        scanned=result["scanned"],
+        created=result["created"],
+        updated=result["updated"],
+        period_end=result["period_end"],
+    )
+    return result
+
+
+@typed_shared_task(name="workers.generate_monthly_reports")
+def generate_monthly_reports() -> dict[str, Any]:
+    """Generate and store monthly reports for all active trends."""
+    logger.info("Starting monthly report generation task")
+    result = _run_async(_generate_monthly_reports_async())
+    logger.info(
+        "Finished monthly report generation task",
         scanned=result["scanned"],
         created=result["created"],
         updated=result["updated"],

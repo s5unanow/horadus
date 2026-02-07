@@ -26,6 +26,9 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 6)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 30)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_DAY_OF_MONTH", 1)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_HOUR_UTC", 8)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_MINUTE_UTC", 15)
 
     schedule = celery_app_module._build_beat_schedule()
 
@@ -43,6 +46,12 @@ def test_build_beat_schedule_includes_enabled_collectors(
         hour=6,
         minute=30,
     )
+    assert schedule["generate-monthly-reports"]["task"] == "workers.generate_monthly_reports"
+    assert schedule["generate-monthly-reports"]["schedule"] == crontab(
+        day_of_month="1",
+        hour=8,
+        minute=15,
+    )
 
 
 def test_build_beat_schedule_omits_disabled_collectors(
@@ -54,6 +63,9 @@ def test_build_beat_schedule_omits_disabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 1)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 7)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 0)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_DAY_OF_MONTH", 1)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_HOUR_UTC", 8)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_MINUTE_UTC", 0)
 
     schedule = celery_app_module._build_beat_schedule()
 
@@ -61,6 +73,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
         "snapshot-trends",
         "apply-trend-decay",
         "generate-weekly-reports",
+        "generate-monthly-reports",
     ]
     assert schedule["snapshot-trends"]["task"] == "workers.snapshot_trends"
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=90)
@@ -72,6 +85,12 @@ def test_build_beat_schedule_omits_disabled_collectors(
         hour=7,
         minute=0,
     )
+    assert schedule["generate-monthly-reports"]["task"] == "workers.generate_monthly_reports"
+    assert schedule["generate-monthly-reports"]["schedule"] == crontab(
+        day_of_month="1",
+        hour=8,
+        minute=0,
+    )
 
 
 def test_celery_routes_include_processing_queue() -> None:
@@ -80,6 +99,7 @@ def test_celery_routes_include_processing_queue() -> None:
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
     assert routes["workers.generate_weekly_reports"]["queue"] == "processing"
+    assert routes["workers.generate_monthly_reports"]["queue"] == "processing"
 
 
 def test_collect_rss_task_uses_async_collector(
@@ -250,6 +270,30 @@ def test_generate_weekly_reports_task_uses_async_worker(
 
     assert result["status"] == "ok"
     assert result["task"] == "generate_weekly_reports"
+    assert result["scanned"] == 3
+    assert result["created"] == 3
+
+
+def test_generate_monthly_reports_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_generate() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "generate_monthly_reports",
+            "period_start": "2026-01-01T00:00:00+00:00",
+            "period_end": "2026-02-01T00:00:00+00:00",
+            "scanned": 3,
+            "created": 3,
+            "updated": 0,
+        }
+
+    monkeypatch.setattr(tasks_module, "_generate_monthly_reports_async", fake_generate)
+
+    result = tasks_module.generate_monthly_reports.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "generate_monthly_reports"
     assert result["scanned"] == 3
     assert result["created"] == 3
 

@@ -260,6 +260,24 @@ class Settings(BaseSettings):
         le=59,
         description="UTC minute for weekly report task",
     )
+    MONTHLY_REPORT_DAY_OF_MONTH: int = Field(
+        default=1,
+        ge=1,
+        le=28,
+        description="UTC day of month for monthly report task",
+    )
+    MONTHLY_REPORT_HOUR_UTC: int = Field(
+        default=8,
+        ge=0,
+        le=23,
+        description="UTC hour for monthly report task",
+    )
+    MONTHLY_REPORT_MINUTE_UTC: int = Field(
+        default=0,
+        ge=0,
+        le=59,
+        description="UTC minute for monthly report task",
+    )
 
     # =========================================================================
     # Computed Properties

@@ -3,6 +3,12 @@
 from src.processing.deduplication_service import DeduplicationResult, DeduplicationService
 from src.processing.embedding_service import EmbeddingRunResult, EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
+from src.processing.pipeline_orchestrator import (
+    PipelineItemResult,
+    PipelineRunResult,
+    PipelineUsage,
+    ProcessingPipeline,
+)
 from src.processing.tier1_classifier import (
     Tier1Classifier,
     Tier1ItemResult,
@@ -25,6 +31,10 @@ __all__ = [
     "EmbeddingRunResult",
     "EmbeddingService",
     "EventClusterer",
+    "PipelineItemResult",
+    "PipelineRunResult",
+    "PipelineUsage",
+    "ProcessingPipeline",
     "Tier1Classifier",
     "Tier1ItemResult",
     "Tier1RunResult",

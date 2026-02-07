@@ -1,5 +1,5 @@
 """
-Celery tasks for ingestion collection.
+Celery tasks for ingestion collection and processing orchestration.
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ from celery.signals import task_failure
 from src.core.config import settings
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
+from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
 
 logger = structlog.get_logger(__name__)
@@ -131,6 +132,63 @@ async def _collect_gdelt_async() -> dict[str, Any]:
     }
 
 
+def _queue_processing_for_new_items(*, collector: str, stored_items: int) -> bool:
+    if stored_items <= 0:
+        return False
+    if not settings.ENABLE_PROCESSING_PIPELINE:
+        return False
+
+    queue_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
+    task_limit = min(stored_items, queue_limit)
+    cast("Any", process_pending_items).delay(limit=task_limit)
+    logger.info(
+        "Queued processing pipeline task",
+        collector=collector,
+        stored_items=stored_items,
+        task_limit=task_limit,
+    )
+    return True
+
+
+async def _process_pending_async(limit: int) -> dict[str, Any]:
+    async with async_session_maker() as session:
+        pipeline = ProcessingPipeline(session=session)
+        run_result = await pipeline.process_pending_items(limit=limit)
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "processing_pipeline",
+        **ProcessingPipeline.run_result_to_dict(run_result),
+    }
+
+
+@typed_shared_task(
+    name="workers.process_pending_items",
+    autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
+    retry_backoff=True,
+    retry_backoff_max=300,
+    retry_jitter=True,
+    retry_kwargs={"max_retries": 3},
+)
+def process_pending_items(limit: int | None = None) -> dict[str, Any]:
+    """Run processing pipeline for pending raw items."""
+    configured_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
+    run_limit = max(1, limit or configured_limit)
+
+    logger.info("Starting processing pipeline task", limit=run_limit)
+    result = _run_async(_process_pending_async(limit=run_limit))
+    logger.info(
+        "Finished processing pipeline task",
+        scanned=result["scanned"],
+        processed=result["processed"],
+        classified=result["classified"],
+        noise=result["noise"],
+        errors=result["errors"],
+    )
+    return result
+
+
 @typed_shared_task(
     name="workers.collect_rss",
     autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
@@ -146,6 +204,7 @@ def collect_rss() -> dict[str, Any]:
 
     logger.info("Starting RSS collection task")
     result = _run_async(_collect_rss_async())
+    _queue_processing_for_new_items(collector="rss", stored_items=int(result["stored"]))
     logger.info(
         "Finished RSS collection task",
         stored=result["stored"],
@@ -170,6 +229,7 @@ def collect_gdelt() -> dict[str, Any]:
 
     logger.info("Starting GDELT collection task")
     result = _run_async(_collect_gdelt_async())
+    _queue_processing_for_new_items(collector="gdelt", stored_items=int(result["stored"]))
     logger.info(
         "Finished GDELT collection task",
         stored=result["stored"],

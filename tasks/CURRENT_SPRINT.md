@@ -8,24 +8,41 @@
 
 ## Active Tasks
 
-### TASK-015: Processing Pipeline
+### TASK-016: Trend Management
 **Status**: IN_PROGRESS  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/016-trend-management.md`
+
+Add API endpoints and internal services to manage trends.
+
+**Planned**:
+- [ ] Add `GET /api/v1/trends` endpoint for listing trends
+- [ ] Add `POST /api/v1/trends` endpoint for creating trends
+- [ ] Add `GET /api/v1/trends/{id}` endpoint with probability response
+- [ ] Add `PATCH /api/v1/trends/{id}` endpoint for updates
+- [ ] Add `DELETE /api/v1/trends/{id}` endpoint for deactivation
+- [ ] Add YAML trend-load path and unit tests
+
+---
+
+## Completed This Sprint
+
+### TASK-015: Processing Pipeline
+**Status**: DONE ✓  
 **Priority**: P1 (High)  
 **Spec**: `tasks/specs/015-processing-pipeline.md`
 
 Wire together the end-to-end processing pipeline.
 
-**Planned**:
-- [ ] Trigger Celery task when new `raw_items` arrive
-- [ ] Orchestrate flow: dedup → embed → cluster → tier1 → tier2
-- [ ] Persist pipeline status transitions on items/events
-- [ ] Add retry/error handling for recoverable failures
-- [ ] Add pipeline metrics (processed, filtered, escalated)
-- [ ] Add integration test for end-to-end flow
+**Completed**:
+- [x] Added processing orchestrator (dedup → embed → cluster → tier1 → tier2)
+- [x] Added per-item status transitions (`pending` → `processing` → terminal state)
+- [x] Added robust per-item error handling with `error_message` persistence
+- [x] Added Celery processing task + auto-trigger when ingestion stores new items
+- [x] Added pipeline metrics summary for processing runs
+- [x] Added unit and integration tests for end-to-end pipeline flow
 
 ---
-
-## Completed This Sprint
 
 ### TASK-014: LLM Classifier - Tier 2
 **Status**: DONE ✓  

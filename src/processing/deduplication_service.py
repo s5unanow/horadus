@@ -51,6 +51,7 @@ class DeduplicationService:
         content_hash: str | None = None,
         embedding: list[float] | None = None,
         dedup_window_days: int = 7,
+        exclude_item_id: UUID | None = None,
     ) -> DeduplicationResult:
         """
         Return duplicate match details for a candidate item.
@@ -66,6 +67,7 @@ class DeduplicationService:
             RawItem.external_id,
             external_id,
             window_start,
+            exclude_item_id=exclude_item_id,
         )
         if match_id is not None:
             return DeduplicationResult(
@@ -78,6 +80,7 @@ class DeduplicationService:
             RawItem.url,
             normalized_url,
             window_start,
+            exclude_item_id=exclude_item_id,
         )
         if match_id is not None:
             return DeduplicationResult(
@@ -90,6 +93,7 @@ class DeduplicationService:
             RawItem.content_hash,
             content_hash,
             window_start,
+            exclude_item_id=exclude_item_id,
         )
         if match_id is not None:
             return DeduplicationResult(
@@ -103,6 +107,7 @@ class DeduplicationService:
                 embedding=embedding,
                 window_start=window_start,
                 similarity_threshold=self.similarity_threshold,
+                exclude_item_id=exclude_item_id,
             )
             if embedding_match is not None:
                 matched_id, similarity = embedding_match
@@ -123,6 +128,7 @@ class DeduplicationService:
         content_hash: str | None = None,
         embedding: list[float] | None = None,
         dedup_window_days: int = 7,
+        exclude_item_id: UUID | None = None,
     ) -> bool:
         """Convenience wrapper returning only duplicate status."""
         return (
@@ -132,6 +138,7 @@ class DeduplicationService:
                 content_hash=content_hash,
                 embedding=embedding,
                 dedup_window_days=dedup_window_days,
+                exclude_item_id=exclude_item_id,
             )
         ).is_duplicate
 
@@ -140,15 +147,16 @@ class DeduplicationService:
         column: Any,
         value: str | None,
         window_start: datetime,
+        *,
+        exclude_item_id: UUID | None = None,
     ) -> UUID | None:
         if value is None:
             return None
-        query = (
-            select(RawItem.id)
-            .where(RawItem.fetched_at >= window_start)
-            .where(column == value)
-            .limit(1)
-        )
+        query = select(RawItem.id).where(RawItem.fetched_at >= window_start).where(column == value)
+        if exclude_item_id is not None:
+            query = query.where(RawItem.id != exclude_item_id)
+
+        query = query.limit(1)
         matched_id: UUID | None = await self.session.scalar(query)
         return matched_id
 
@@ -158,6 +166,7 @@ class DeduplicationService:
         embedding: list[float],
         window_start: datetime,
         similarity_threshold: float,
+        exclude_item_id: UUID | None = None,
     ) -> tuple[UUID, float] | None:
         if not embedding:
             msg = "embedding must not be empty"
@@ -171,9 +180,11 @@ class DeduplicationService:
             .where(RawItem.fetched_at >= window_start)
             .where(RawItem.embedding.is_not(None))
             .where(distance_expr <= max_distance)
-            .order_by(distance_expr.asc())
-            .limit(1)
         )
+        if exclude_item_id is not None:
+            query = query.where(RawItem.id != exclude_item_id)
+
+        query = query.order_by(distance_expr.asc()).limit(1)
         row = (await self.session.execute(query)).first()
         if row is None:
             return None

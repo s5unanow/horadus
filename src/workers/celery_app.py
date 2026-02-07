@@ -46,6 +46,7 @@ celery_app.conf.update(
     task_routes={
         "workers.collect_rss": {"queue": "ingestion"},
         "workers.collect_gdelt": {"queue": "ingestion"},
+        "workers.process_pending_items": {"queue": "processing"},
         "workers.ping": {"queue": "default"},
     },
     broker_connection_retry_on_startup=True,

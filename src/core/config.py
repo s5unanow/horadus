@@ -152,6 +152,7 @@ class Settings(BaseSettings):
     ENABLE_RSS_INGESTION: bool = Field(default=True)
     ENABLE_GDELT_INGESTION: bool = Field(default=True)
     ENABLE_TELEGRAM_INGESTION: bool = Field(default=False)
+    ENABLE_PROCESSING_PIPELINE: bool = Field(default=True)
 
     # =========================================================================
     # Application
@@ -188,6 +189,11 @@ class Settings(BaseSettings):
         default=48,
         ge=1,
         description="Time window for event clustering",
+    )
+    PROCESSING_PIPELINE_BATCH_SIZE: int = Field(
+        default=50,
+        ge=1,
+        description="Max pending items processed per pipeline task run",
     )
 
     # =========================================================================

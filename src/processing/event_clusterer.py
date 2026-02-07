@@ -14,6 +14,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.source_credibility import (
+    DEFAULT_SOURCE_CREDIBILITY,
+    source_multiplier_expression,
+)
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.models import Event, EventItem, RawItem, Source
 
@@ -183,13 +187,24 @@ class EventClusterer:
 
     async def _source_credibility_for_item(self, item_id: UUID) -> float:
         query = (
-            select(Source.credibility_score)
+            select(
+                (
+                    func.coalesce(Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY)
+                    * source_multiplier_expression(
+                        source_tier_col=Source.source_tier,
+                        reporting_type_col=Source.reporting_type,
+                    )
+                ).label("effective_credibility")
+            )
             .join(RawItem, RawItem.source_id == Source.id)
             .where(RawItem.id == item_id)
             .limit(1)
         )
         credibility = await self.session.scalar(query)
-        return float(credibility or 0.0)
+        try:
+            return float(credibility) if credibility is not None else 0.0
+        except (TypeError, ValueError):
+            return 0.0
 
     @staticmethod
     def _build_canonical_summary(item: RawItem) -> str:

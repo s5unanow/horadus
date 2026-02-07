@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [████████████░░░░░░░░]  60%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [██████████████░░░░░░]  70%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -109,6 +109,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Event lifecycle transition manager (emerging/confirmed/fading/archived)
 - [x] Hourly lifecycle decay worker task (`workers.check_event_lifecycles`)
 - [x] Events API now supports lifecycle filtering and event detail retrieval
+- [x] Source tier/reporting multipliers applied to effective source credibility
 
 ## In Progress
 
@@ -120,11 +121,11 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add source tier and reporting type enhancements (TASK-031)
-2. Add operational dashboards for reporting and worker health
-3. Add authentication key persistence/rotation hardening
-4. Add alert routing policies and SLO thresholds
-5. Add deployment hardening follow-ups (secrets manager, TLS, backups)
+1. Add operational dashboards for reporting and worker health
+2. Add authentication key persistence/rotation hardening
+3. Add alert routing policies and SLO thresholds
+4. Add deployment hardening follow-ups (secrets manager, TLS, backups)
+5. Add contradiction detection and conflict handling (TASK-033)
 
 ## Expert Feedback Integration ✅
 

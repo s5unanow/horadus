@@ -7,7 +7,8 @@
 
 .PHONY: help venv deps deps-dev hooks install install-dev setup clean \
         format lint typecheck test test-unit test-integration test-cov \
-        docker-up docker-down docker-logs db-migrate db-upgrade db-downgrade \
+        docker-up docker-down docker-logs docker-prod-build docker-prod-up \
+        docker-prod-down docker-prod-migrate db-migrate db-upgrade db-downgrade \
         run run-worker run-beat pre-commit check all
 
 # Default target
@@ -123,6 +124,18 @@ docker-logs: ## Show Docker container logs
 docker-clean: ## Stop containers and remove volumes
 	$(DOCKER_COMPOSE) down -v
 	@echo "$(YELLOW)Warning: All data has been removed$(RESET)"
+
+docker-prod-build: ## Build production images
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml build
+
+docker-prod-migrate: ## Run production database migrations (one-off)
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml --profile ops run --rm migrate
+
+docker-prod-up: ## Start production stack
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up -d api worker beat postgres redis
+
+docker-prod-down: ## Stop production stack
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml down
 
 # =============================================================================
 # Database

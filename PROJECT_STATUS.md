@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [██████████░░░░░░░░░░]  50%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [████████████░░░░░░░░]  60%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
 
@@ -93,6 +93,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Prometheus metrics endpoint (`GET /metrics`)
 - [x] Observability counters for ingestion throughput, worker errors, and LLM usage
 - [x] Worker instrumentation for collector and pipeline metrics
+- [x] Production API container image definition (`docker/api/Dockerfile`)
+- [x] Production worker/beat container image definition (`docker/worker/Dockerfile`)
+- [x] Production deployment stack (`docker-compose.prod.yml`)
+- [x] Deployment runbook and environment variable reference docs
 
 ## In Progress
 
@@ -104,11 +108,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Begin deployment hardening tasks (TASK-027)
-2. Start calibration outcome tracking tasks (TASK-032+)
-3. Add operational dashboards for reporting and worker health
-4. Add authentication key persistence/rotation hardening
-5. Add alert routing policies and SLO thresholds
+1. Start calibration outcome tracking tasks (TASK-032+)
+2. Add operational dashboards for reporting and worker health
+3. Add authentication key persistence/rotation hardening
+4. Add alert routing policies and SLO thresholds
+5. Add deployment hardening follow-ups (secrets manager, TLS, backups)
 
 ## Expert Feedback Integration ✅
 

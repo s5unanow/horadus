@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -32,22 +33,31 @@ def _build_service(
 ) -> tuple[
     EmbeddingService,
     FakeEmbeddingsAPI,
+    SimpleNamespace,
 ]:
     embeddings_api = FakeEmbeddingsAPI(dimensions=dimensions, calls=[])
     client = SimpleNamespace(embeddings=embeddings_api)
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
     service = EmbeddingService(
         session=mock_db_session,
         client=client,
         model="test-embedding-model",
         dimensions=dimensions,
         batch_size=batch_size,
+        cost_tracker=cost_tracker,
     )
-    return service, embeddings_api
+    return service, embeddings_api, cost_tracker
 
 
 @pytest.mark.asyncio
 async def test_embed_texts_batches_requests_and_counts_cache_hits(mock_db_session) -> None:
-    service, embeddings_api = _build_service(mock_db_session=mock_db_session, batch_size=2)
+    service, embeddings_api, cost_tracker = _build_service(
+        mock_db_session=mock_db_session,
+        batch_size=2,
+    )
 
     vectors, cache_hits, api_calls = await service.embed_texts(
         ["alpha", "beta", "alpha", "  gamma  "]
@@ -61,11 +71,16 @@ async def test_embed_texts_batches_requests_and_counts_cache_hits(mock_db_sessio
         ("test-embedding-model", ["alpha", "beta"]),
         ("test-embedding-model", ["gamma"]),
     ]
+    assert cost_tracker.ensure_within_budget.await_count == 2
+    assert cost_tracker.record_usage.await_count == 2
 
 
 @pytest.mark.asyncio
 async def test_embed_texts_reuses_cache_across_calls(mock_db_session) -> None:
-    service, embeddings_api = _build_service(mock_db_session=mock_db_session, batch_size=8)
+    service, embeddings_api, _cost_tracker = _build_service(
+        mock_db_session=mock_db_session,
+        batch_size=8,
+    )
 
     first = await service.embed_text("cached")
     vectors, cache_hits, api_calls = await service.embed_texts(["cached", "new"])
@@ -78,7 +93,7 @@ async def test_embed_texts_reuses_cache_across_calls(mock_db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_embed_text_rejects_blank_input(mock_db_session) -> None:
-    service, _ = _build_service(mock_db_session=mock_db_session)
+    service, _embeddings_api, _cost_tracker = _build_service(mock_db_session=mock_db_session)
 
     with pytest.raises(ValueError, match="must not be empty"):
         await service.embed_text("   ")
@@ -86,7 +101,10 @@ async def test_embed_text_rejects_blank_input(mock_db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_request_embeddings_rejects_dimension_mismatch(mock_db_session) -> None:
-    service, _ = _build_service(mock_db_session=mock_db_session, dimensions=3)
+    service, _embeddings_api, _cost_tracker = _build_service(
+        mock_db_session=mock_db_session,
+        dimensions=3,
+    )
 
     class WrongEmbeddingsAPI:
         async def create(self, *, model: str, input: list[str]) -> SimpleNamespace:
@@ -101,7 +119,7 @@ async def test_request_embeddings_rejects_dimension_mismatch(mock_db_session) ->
 
 @pytest.mark.asyncio
 async def test_embed_raw_items_without_embedding_persists_vectors(mock_db_session) -> None:
-    service, _ = _build_service(mock_db_session=mock_db_session)
+    service, _embeddings_api, _cost_tracker = _build_service(mock_db_session=mock_db_session)
     first_item = RawItem(
         source_id=uuid4(),
         external_id="raw-1",
@@ -135,7 +153,7 @@ async def test_embed_raw_items_without_embedding_persists_vectors(mock_db_sessio
 
 @pytest.mark.asyncio
 async def test_embed_events_without_embedding_persists_vectors(mock_db_session) -> None:
-    service, _ = _build_service(mock_db_session=mock_db_session)
+    service, _embeddings_api, _cost_tracker = _build_service(mock_db_session=mock_db_session)
     first_event = Event(canonical_summary="first summary")
     second_event = Event(canonical_summary="second summary")
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])

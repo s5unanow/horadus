@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from src.core.trend_engine import TrendUpdate
+from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationResult
 from src.processing.event_clusterer import ClusterResult
 from src.processing.pipeline_orchestrator import ProcessingPipeline
@@ -381,3 +382,99 @@ async def test_process_items_skips_unknown_signal_weight(mock_db_session) -> Non
     assert result.trend_impacts_seen == 1
     assert result.trend_updates == 0
     mock_trend_engine.apply_evidence.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_items_keeps_item_pending_when_tier1_budget_exceeded(mock_db_session) -> None:
+    item = _build_item()
+    event = Event(id=uuid4(), canonical_summary="Seed summary")
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=True,
+                merged=False,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            side_effect=BudgetExceededError("tier1 daily call limit (1) exceeded")
+        )
+    )
+    tier2 = SimpleNamespace(classify_event=AsyncMock())
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert result.scanned == 1
+    assert result.processed == 0
+    assert result.errors == 0
+    assert result.classified == 0
+    assert result.noise == 0
+    assert result.results[0].final_status == ProcessingStatus.PENDING
+    assert item.processing_status == ProcessingStatus.PENDING
+    tier2.classify_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_items_keeps_item_pending_when_tier2_budget_exceeded(mock_db_session) -> None:
+    item = _build_item()
+    event = Event(id=uuid4(), canonical_summary="Seed summary")
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=True,
+                merged=False,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True)],
+                Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
+    tier2 = SimpleNamespace(
+        classify_event=AsyncMock(
+            side_effect=BudgetExceededError("tier2 daily call limit (1) exceeded")
+        )
+    )
+    mock_db_session.scalar = AsyncMock(return_value=event)
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert result.scanned == 1
+    assert result.processed == 0
+    assert result.errors == 0
+    assert result.classified == 0
+    assert result.results[0].final_status == ProcessingStatus.PENDING
+    assert item.processing_status == ProcessingStatus.PENDING

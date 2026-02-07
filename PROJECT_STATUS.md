@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [██████████████░░░░░░]  70%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [████████████████░░░░]  80%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -110,6 +110,9 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Hourly lifecycle decay worker task (`workers.check_event_lifecycles`)
 - [x] Events API now supports lifecycle filtering and event detail retrieval
 - [x] Source tier/reporting multipliers applied to effective source credibility
+- [x] Daily LLM budget enforcement (tier1/tier2/embedding) with usage persistence
+- [x] Budget-safe pipeline behavior keeps items pending when limits are exceeded
+- [x] Budget visibility endpoint (`GET /api/v1/budget`)
 
 ## In Progress
 
@@ -122,10 +125,10 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 ## Next Up (Priority Order)
 
 1. Add operational dashboards for reporting and worker health
-2. Add authentication key persistence/rotation hardening
-3. Add alert routing policies and SLO thresholds
-4. Add deployment hardening follow-ups (secrets manager, TLS, backups)
-5. Add contradiction detection and conflict handling (TASK-033)
+2. Add contradiction detection and conflict handling (TASK-033)
+3. Add human feedback API for analyst corrections (TASK-034)
+4. Add calibration dashboard and drift visualization (TASK-035)
+5. Add deployment hardening follow-ups (secrets manager, TLS, backups)
 
 ## Expert Feedback Integration ✅
 

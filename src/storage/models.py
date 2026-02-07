@@ -8,7 +8,7 @@ Uses async SQLAlchemy 2.0 patterns.
 from __future__ import annotations
 
 import enum
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, ClassVar
 from uuid import UUID, uuid4
 
@@ -16,6 +16,7 @@ from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
+    Date,
     DateTime,
     Enum,
     ForeignKey,
@@ -666,6 +667,72 @@ class Report(Base):
     __table_args__ = (
         Index("idx_reports_type_period", "report_type", "period_end"),
         Index("idx_reports_trend", "trend_id"),
+    )
+
+
+# =============================================================================
+# Cost Protection Models
+# =============================================================================
+
+
+class ApiUsage(Base):
+    """
+    Daily API usage counters for budget enforcement.
+
+    Tracks per-tier call counts, tokens, and estimated spend.
+    """
+
+    __tablename__ = "api_usage"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    usage_date: Mapped[date] = mapped_column(
+        "date",
+        Date,
+        nullable=False,
+    )
+    tier: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+    )
+    call_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    input_tokens: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    output_tokens: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        nullable=False,
+    )
+    estimated_cost_usd: Mapped[float] = mapped_column(
+        Numeric(10, 4),
+        default=0,
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("date", "tier", name="uq_api_usage_date_tier"),
+        Index("idx_api_usage_date", "date"),
     )
 
 

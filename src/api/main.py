@@ -21,8 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.middleware.auth import APIKeyAuthMiddleware
-from src.api.routes import auth, events, health, reports, sources, trends
+from src.api.routes import auth, events, health, metrics, reports, sources, trends
 from src.core.config import settings
+from src.core.logging_setup import configure_logging
 from src.storage.database import async_session_maker, engine
 
 logger = structlog.get_logger(__name__)
@@ -109,6 +110,8 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application instance.
     """
+    configure_logging()
+
     api_key_auth = APIKeyHeader(
         name="X-API-Key",
         scheme_name="ApiKeyAuth",
@@ -187,6 +190,7 @@ def register_routes(app: FastAPI) -> None:
 
     # Health check (no prefix)
     app.include_router(health.router, tags=["Health"])
+    app.include_router(metrics.router, tags=["Health"])
 
     # API v1 routes
     api_v1_prefix = "/api/v1"

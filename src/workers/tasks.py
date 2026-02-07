@@ -19,6 +19,11 @@ from celery.signals import task_failure
 from sqlalchemy import select
 
 from src.core.config import settings
+from src.core.observability import (
+    record_collector_metrics,
+    record_pipeline_metrics,
+    record_worker_error,
+)
 from src.core.report_generator import ReportGenerator
 from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
@@ -90,6 +95,7 @@ def _handle_task_failure(
         "retries": current_retries,
         "failed_at": datetime.now(tz=UTC).isoformat(),
     }
+    record_worker_error(task_name=str(payload["task_name"]))
     _push_dead_letter(payload)
 
 
@@ -307,6 +313,7 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
 
     logger.info("Starting processing pipeline task", limit=run_limit)
     result = _run_async(_process_pending_async(limit=run_limit))
+    record_pipeline_metrics(result)
     logger.info(
         "Finished processing pipeline task",
         scanned=result["scanned"],
@@ -391,6 +398,13 @@ def collect_rss() -> dict[str, Any]:
 
     logger.info("Starting RSS collection task")
     result = _run_async(_collect_rss_async())
+    record_collector_metrics(
+        collector="rss",
+        fetched=int(result["fetched"]),
+        stored=int(result["stored"]),
+        skipped=int(result["skipped"]),
+        errors=int(result["errors"]),
+    )
     _queue_processing_for_new_items(collector="rss", stored_items=int(result["stored"]))
     logger.info(
         "Finished RSS collection task",
@@ -416,6 +430,13 @@ def collect_gdelt() -> dict[str, Any]:
 
     logger.info("Starting GDELT collection task")
     result = _run_async(_collect_gdelt_async())
+    record_collector_metrics(
+        collector="gdelt",
+        fetched=int(result["fetched"]),
+        stored=int(result["stored"]),
+        skipped=int(result["skipped"]),
+        errors=int(result["errors"]),
+    )
     _queue_processing_for_new_items(collector="gdelt", stored_items=int(result["stored"]))
     logger.info(
         "Finished GDELT collection task",

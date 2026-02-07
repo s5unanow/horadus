@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import yaml
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
-from src.storage.models import Trend, TrendEvidence
+from src.storage.models import Trend, TrendEvidence, TrendSnapshot
 
 router = APIRouter()
 
@@ -100,6 +100,14 @@ class TrendEvidenceResponse(BaseModel):
     created_at: datetime
 
 
+class TrendHistoryPoint(BaseModel):
+    """Response body for one historical trend snapshot."""
+
+    timestamp: datetime
+    log_odds: float
+    probability: float
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -159,6 +167,47 @@ def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
         reasoning=evidence.reasoning,
         created_at=evidence.created_at,
     )
+
+
+def _to_history_point(snapshot: TrendSnapshot) -> TrendHistoryPoint:
+    log_odds = float(snapshot.log_odds)
+    return TrendHistoryPoint(
+        timestamp=snapshot.timestamp,
+        log_odds=log_odds,
+        probability=logodds_to_prob(log_odds),
+    )
+
+
+def _history_bucket_key(
+    timestamp: datetime,
+    interval: Literal["hourly", "daily", "weekly"],
+) -> tuple[int, ...]:
+    if interval == "hourly":
+        return (
+            timestamp.year,
+            timestamp.month,
+            timestamp.day,
+            timestamp.hour,
+        )
+    if interval == "daily":
+        return (timestamp.year, timestamp.month, timestamp.day)
+
+    iso = timestamp.isocalendar()
+    return (iso.year, iso.week)
+
+
+def _downsample_snapshots(
+    snapshots: list[TrendSnapshot],
+    interval: Literal["hourly", "daily", "weekly"],
+) -> list[TrendSnapshot]:
+    if interval == "hourly":
+        return snapshots
+
+    bucketed: dict[tuple[int, ...], TrendSnapshot] = {}
+    for snapshot in snapshots:
+        bucketed[_history_bucket_key(snapshot.timestamp, interval)] = snapshot
+
+    return list(bucketed.values())
 
 
 async def _get_trend_or_404(session: AsyncSession, trend_id: UUID) -> Trend:
@@ -348,6 +397,40 @@ async def list_trend_evidence(
 
     evidence_records = (await session.scalars(query)).all()
     return [_to_evidence_response(record) for record in evidence_records]
+
+
+@router.get("/{trend_id}/history", response_model=list[TrendHistoryPoint])
+async def get_trend_history(
+    trend_id: UUID,
+    start_at: Annotated[datetime | None, Query()] = None,
+    end_at: Annotated[datetime | None, Query()] = None,
+    interval: Annotated[Literal["hourly", "daily", "weekly"], Query()] = "hourly",
+    limit: Annotated[int, Query(ge=1, le=10000)] = 1000,
+    session: AsyncSession = Depends(get_session),
+) -> list[TrendHistoryPoint]:
+    """Get historical snapshots for one trend with optional downsampling."""
+    await _get_trend_or_404(session, trend_id)
+
+    if start_at and end_at and start_at > end_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_at must be less than or equal to end_at",
+        )
+
+    query = (
+        select(TrendSnapshot)
+        .where(TrendSnapshot.trend_id == trend_id)
+        .order_by(TrendSnapshot.timestamp.asc())
+        .limit(limit)
+    )
+    if start_at is not None:
+        query = query.where(TrendSnapshot.timestamp >= start_at)
+    if end_at is not None:
+        query = query.where(TrendSnapshot.timestamp <= end_at)
+
+    snapshots = list((await session.scalars(query)).all())
+    downsampled = _downsample_snapshots(snapshots=snapshots, interval=interval)
+    return [_to_history_point(snapshot) for snapshot in downsampled]
 
 
 @router.patch("/{trend_id}", response_model=TrendResponse)

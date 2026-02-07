@@ -16,12 +16,14 @@ import redis
 import structlog
 from celery import shared_task
 from celery.signals import task_failure
+from sqlalchemy import select
 
 from src.core.config import settings
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
+from src.storage.models import Trend, TrendSnapshot
 
 logger = structlog.get_logger(__name__)
 
@@ -163,6 +165,56 @@ async def _process_pending_async(limit: int) -> dict[str, Any]:
     }
 
 
+async def _snapshot_trends_async() -> dict[str, Any]:
+    snapshot_time = datetime.now(tz=UTC).replace(second=0, microsecond=0)
+    async with async_session_maker() as session:
+        trends = list(
+            (
+                await session.scalars(
+                    select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
+                )
+            ).all()
+        )
+
+        created = 0
+        skipped = 0
+        for trend in trends:
+            trend_id = trend.id
+            if trend_id is None:
+                skipped += 1
+                continue
+
+            existing = await session.scalar(
+                select(TrendSnapshot.trend_id)
+                .where(TrendSnapshot.trend_id == trend_id)
+                .where(TrendSnapshot.timestamp == snapshot_time)
+                .limit(1)
+            )
+            if existing is not None:
+                skipped += 1
+                continue
+
+            session.add(
+                TrendSnapshot(
+                    trend_id=trend_id,
+                    timestamp=snapshot_time,
+                    log_odds=float(trend.current_log_odds),
+                )
+            )
+            created += 1
+
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "snapshot_trends",
+        "timestamp": snapshot_time.isoformat(),
+        "scanned": len(trends),
+        "created": created,
+        "skipped": skipped,
+    }
+
+
 @typed_shared_task(
     name="workers.process_pending_items",
     autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
@@ -185,6 +237,20 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
         classified=result["classified"],
         noise=result["noise"],
         errors=result["errors"],
+    )
+    return result
+
+
+@typed_shared_task(name="workers.snapshot_trends")
+def snapshot_trends() -> dict[str, Any]:
+    """Persist point-in-time snapshots for active trends."""
+    logger.info("Starting trend snapshot task")
+    result = _run_async(_snapshot_trends_async())
+    logger.info(
+        "Finished trend snapshot task",
+        scanned=result["scanned"],
+        created=result["created"],
+        skipped=result["skipped"],
     )
     return result
 

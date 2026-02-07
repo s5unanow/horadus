@@ -13,13 +13,14 @@ from src.api.routes.trends import (
     create_trend,
     delete_trend,
     get_trend,
+    get_trend_history,
     list_trend_evidence,
     list_trends,
     load_trends_from_config,
     update_trend,
 )
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
-from src.storage.models import Trend, TrendEvidence
+from src.storage.models import Trend, TrendEvidence, TrendSnapshot
 
 pytestmark = pytest.mark.unit
 
@@ -259,6 +260,89 @@ async def test_list_trend_evidence_rejects_invalid_date_range(mock_db_session) -
 
     with pytest.raises(HTTPException, match="start_at must be less than or equal to end_at") as exc:
         await list_trend_evidence(
+            trend_id=trend.id,
+            start_at=now,
+            end_at=now - timedelta(minutes=1),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
+    mock_db_session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_trend_history_returns_snapshots(mock_db_session) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    snapshots = [
+        TrendSnapshot(
+            trend_id=trend.id,
+            timestamp=now - timedelta(hours=2),
+            log_odds=prob_to_logodds(0.20),
+        ),
+        TrendSnapshot(
+            trend_id=trend.id,
+            timestamp=now - timedelta(hours=1),
+            log_odds=prob_to_logodds(0.24),
+        ),
+    ]
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: snapshots)
+
+    result = await get_trend_history(trend_id=trend.id, session=mock_db_session)
+
+    assert len(result) == 2
+    assert result[0].timestamp == snapshots[0].timestamp
+    assert result[0].probability == pytest.approx(0.20, rel=0.01)
+    assert result[1].timestamp == snapshots[1].timestamp
+    assert result[1].probability == pytest.approx(0.24, rel=0.01)
+
+
+@pytest.mark.asyncio
+async def test_get_trend_history_downsamples_daily(mock_db_session) -> None:
+    trend = _build_trend()
+    start = datetime(2026, 2, 1, 8, 0, tzinfo=UTC)
+    snapshots = [
+        TrendSnapshot(
+            trend_id=trend.id,
+            timestamp=start,
+            log_odds=prob_to_logodds(0.20),
+        ),
+        TrendSnapshot(
+            trend_id=trend.id,
+            timestamp=start + timedelta(hours=8),
+            log_odds=prob_to_logodds(0.25),
+        ),
+        TrendSnapshot(
+            trend_id=trend.id,
+            timestamp=start + timedelta(days=1, hours=1),
+            log_odds=prob_to_logodds(0.30),
+        ),
+    ]
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: snapshots)
+
+    result = await get_trend_history(
+        trend_id=trend.id,
+        interval="daily",
+        session=mock_db_session,
+    )
+
+    assert len(result) == 2
+    assert result[0].timestamp == snapshots[1].timestamp
+    assert result[0].probability == pytest.approx(0.25, rel=0.01)
+    assert result[1].timestamp == snapshots[2].timestamp
+    assert result[1].probability == pytest.approx(0.30, rel=0.01)
+
+
+@pytest.mark.asyncio
+async def test_get_trend_history_rejects_invalid_date_range(mock_db_session) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    mock_db_session.get.return_value = trend
+
+    with pytest.raises(HTTPException, match="start_at must be less than or equal to end_at") as exc:
+        await get_trend_history(
             trend_id=trend.id,
             start_at=now,
             end_at=now - timedelta(minutes=1),

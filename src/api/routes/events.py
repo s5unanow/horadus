@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
@@ -27,6 +27,21 @@ router = APIRouter()
 class EventResponse(BaseModel):
     """Response body for an event."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                "summary": "Border force movement observed across multiple sources.",
+                "categories": ["military"],
+                "source_count": 5,
+                "first_seen_at": "2026-02-07T12:10:00Z",
+                "extracted_who": ["Country A", "Country B"],
+                "extracted_what": "Military units repositioned near border.",
+                "extracted_where": "Eastern sector",
+            }
+        }
+    )
+
     id: UUID
     summary: str
     categories: list[str]
@@ -39,6 +54,29 @@ class EventResponse(BaseModel):
 
 class EventDetailResponse(EventResponse):
     """Detailed event response with sources."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                "summary": "Border force movement observed across multiple sources.",
+                "categories": ["military"],
+                "source_count": 5,
+                "first_seen_at": "2026-02-07T12:10:00Z",
+                "extracted_who": ["Country A", "Country B"],
+                "extracted_what": "Military units repositioned near border.",
+                "extracted_where": "Eastern sector",
+                "sources": [{"source_name": "Reuters", "url": "https://example.com/article-1"}],
+                "trend_impacts": [
+                    {
+                        "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                        "signal_type": "military_movement",
+                        "direction": "escalatory",
+                    }
+                ],
+            }
+        }
+    )
 
     sources: list[dict[str, Any]]
     trend_impacts: list[dict[str, Any]]

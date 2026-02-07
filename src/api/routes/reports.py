@@ -11,7 +11,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,19 @@ router = APIRouter()
 class ReportSummary(BaseModel):
     """Brief report summary for listings."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "9a4f5a7c-9d0d-4b4a-a777-3aa64be6a02c",
+                "report_type": "weekly",
+                "period_start": "2026-02-01T00:00:00Z",
+                "period_end": "2026-02-08T00:00:00Z",
+                "trend_name": "EU-Russia Military Conflict",
+                "created_at": "2026-02-08T00:01:00Z",
+            }
+        }
+    )
+
     id: UUID
     report_type: str
     period_start: datetime
@@ -39,6 +52,32 @@ class ReportSummary(BaseModel):
 
 class ReportResponse(BaseModel):
     """Full report response."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "id": "9a4f5a7c-9d0d-4b4a-a777-3aa64be6a02c",
+                "report_type": "monthly",
+                "period_start": "2026-01-08T00:00:00Z",
+                "period_end": "2026-02-07T00:00:00Z",
+                "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "trend_name": "EU-Russia Military Conflict",
+                "statistics": {
+                    "current_probability": 0.18,
+                    "monthly_change": 0.04,
+                    "direction": "rising",
+                },
+                "narrative": "Probability rose this month due to repeated corroborated signals.",
+                "top_events": [
+                    {
+                        "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                        "impact_score": 0.12,
+                    }
+                ],
+                "created_at": "2026-02-08T00:01:00Z",
+            }
+        }
+    )
 
     id: UUID
     report_type: str

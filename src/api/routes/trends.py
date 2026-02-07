@@ -33,6 +33,24 @@ router = APIRouter()
 class TrendCreate(BaseModel):
     """Request body for creating a trend."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "name": "EU-Russia Military Conflict",
+                "description": "Probability of direct military confrontation.",
+                "definition": {"region": "Europe"},
+                "baseline_probability": 0.08,
+                "current_probability": 0.10,
+                "indicators": {
+                    "military_movement": {"direction": "escalatory", "weight": 0.04},
+                    "diplomatic_talks": {"direction": "de_escalatory", "weight": 0.03},
+                },
+                "decay_half_life_days": 30,
+                "is_active": True,
+            }
+        }
+    )
+
     name: str = Field(..., min_length=1)
     description: str | None = None
     definition: dict[str, Any] = Field(default_factory=dict)
@@ -45,6 +63,16 @@ class TrendCreate(BaseModel):
 
 class TrendUpdate(BaseModel):
     """Request body for updating a trend."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "current_probability": 0.18,
+                "decay_half_life_days": 45,
+                "is_active": True,
+            }
+        }
+    )
 
     name: str | None = Field(default=None, min_length=1)
     description: str | None = None
@@ -59,7 +87,23 @@ class TrendUpdate(BaseModel):
 class TrendResponse(BaseModel):
     """Response body for a trend."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "name": "EU-Russia Military Conflict",
+                "description": "Probability of direct military confrontation.",
+                "definition": {"id": "eu-russia-military-conflict"},
+                "baseline_probability": 0.08,
+                "current_probability": 0.18,
+                "indicators": {"military_movement": {"direction": "escalatory", "weight": 0.04}},
+                "decay_half_life_days": 30,
+                "is_active": True,
+                "updated_at": "2026-02-07T19:56:00Z",
+            }
+        },
+    )
 
     id: UUID
     name: str
@@ -85,7 +129,25 @@ class TrendConfigLoadResponse(BaseModel):
 class TrendEvidenceResponse(BaseModel):
     """Response body for one evidence record."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+                "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                "signal_type": "military_movement",
+                "credibility_score": 0.9,
+                "corroboration_factor": 0.67,
+                "novelty_score": 1.0,
+                "severity_score": 0.8,
+                "confidence_score": 0.95,
+                "delta_log_odds": 0.021,
+                "reasoning": "Multiple corroborated force-movement reports.",
+                "created_at": "2026-02-07T18:00:00Z",
+            }
+        },
+    )
 
     id: UUID
     trend_id: UUID
@@ -103,6 +165,16 @@ class TrendEvidenceResponse(BaseModel):
 
 class TrendHistoryPoint(BaseModel):
     """Response body for one historical trend snapshot."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "timestamp": "2026-02-07T18:00:00Z",
+                "log_odds": -1.65,
+                "probability": 0.161,
+            }
+        }
+    )
 
     timestamp: datetime
     log_odds: float
@@ -132,6 +204,45 @@ class RetrospectiveSignal(BaseModel):
 
 class TrendRetrospectiveResponse(BaseModel):
     """Trend retrospective analysis response payload."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "trend_name": "EU-Russia Military Conflict",
+                "period_start": "2026-01-08T00:00:00Z",
+                "period_end": "2026-02-07T00:00:00Z",
+                "pivotal_events": [
+                    {
+                        "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                        "summary": "Large troop repositioning near border sectors.",
+                        "categories": ["military"],
+                        "evidence_count": 4,
+                        "net_delta_log_odds": 0.132,
+                        "abs_delta_log_odds": 0.132,
+                        "direction": "up",
+                    }
+                ],
+                "category_breakdown": {"military": 3, "diplomacy": 1},
+                "predictive_signals": [
+                    {
+                        "signal_type": "military_movement",
+                        "evidence_count": 5,
+                        "net_delta_log_odds": 0.201,
+                        "abs_delta_log_odds": 0.201,
+                    }
+                ],
+                "accuracy_assessment": {
+                    "outcome_count": 2,
+                    "resolved_outcomes": 1,
+                    "scored_outcomes": 1,
+                    "mean_brier_score": 0.18,
+                    "resolved_rate": 0.5,
+                },
+                "narrative": "Military movement signals were most predictive in this window.",
+            }
+        }
+    )
 
     trend_id: UUID
     trend_name: str

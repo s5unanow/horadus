@@ -12,7 +12,7 @@ from typing import Any
 
 import structlog
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -31,6 +31,20 @@ router = APIRouter()
 class HealthStatus(BaseModel):
     """Health check response."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "status": "healthy",
+                "timestamp": "2026-02-07T20:00:00Z",
+                "version": "1.0.0",
+                "checks": {
+                    "database": {"status": "healthy", "latency_ms": 3.2},
+                    "redis": {"status": "healthy", "latency_ms": 1.8},
+                },
+            }
+        }
+    )
+
     status: str
     timestamp: str
     version: str
@@ -39,6 +53,16 @@ class HealthStatus(BaseModel):
 
 class ComponentHealth(BaseModel):
     """Individual component health."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "status": "healthy",
+                "latency_ms": 2.4,
+                "message": None,
+            }
+        }
+    )
 
     status: str
     latency_ms: float | None = None

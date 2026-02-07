@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-022: Report Generator - Monthly
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/022-monthly-reports.md`
+
+Generate monthly trend reports with retrospective comparisons.
+
+**Completed**:
+- [x] Added monthly report generation with category/source breakdowns
+- [x] Included prior weekly report rollups in monthly statistics payload
+- [x] Added month-over-month change comparison metrics
+- [x] Added Celery task `workers.generate_monthly_reports` and monthly beat schedule
+- [x] Added monthly report API endpoint `GET /api/v1/reports/latest/monthly`
+- [x] Added unit tests for monthly scheduling/routes and reports API behavior
+
+---
+
 ### TASK-021: Report Generator - Weekly
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

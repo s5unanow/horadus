@@ -44,6 +44,14 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
             minute=settings.WEEKLY_REPORT_MINUTE_UTC,
         ),
     }
+    schedule["generate-monthly-reports"] = {
+        "task": "workers.generate_monthly_reports",
+        "schedule": crontab(
+            day_of_month=str(settings.MONTHLY_REPORT_DAY_OF_MONTH),
+            hour=settings.MONTHLY_REPORT_HOUR_UTC,
+            minute=settings.MONTHLY_REPORT_MINUTE_UTC,
+        ),
+    }
 
     return schedule
 
@@ -68,6 +76,7 @@ celery_app.conf.update(
         "workers.snapshot_trends": {"queue": "processing"},
         "workers.apply_trend_decay": {"queue": "processing"},
         "workers.generate_weekly_reports": {"queue": "processing"},
+        "workers.generate_monthly_reports": {"queue": "processing"},
         "workers.ping": {"queue": "default"},
     },
     broker_connection_retry_on_startup=True,

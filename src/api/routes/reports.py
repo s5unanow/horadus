@@ -174,3 +174,34 @@ async def get_latest_weekly(
 
     report, trend_name = row
     return _to_report_response(report, trend_name)
+
+
+@router.get("/latest/monthly", response_model=ReportResponse)
+async def get_latest_monthly(
+    trend_id: UUID | None = None,
+    session: AsyncSession = Depends(get_session),
+) -> ReportResponse:
+    """
+    Get the most recent monthly report.
+
+    Optionally filter by trend.
+    """
+    query = (
+        select(Report, Trend.name)
+        .outerjoin(Trend, Trend.id == Report.trend_id)
+        .where(Report.report_type == "monthly")
+        .order_by(Report.period_end.desc(), Report.created_at.desc())
+        .limit(1)
+    )
+    if trend_id is not None:
+        query = query.where(Report.trend_id == trend_id)
+
+    row = (await session.execute(query)).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No monthly reports found",
+        )
+
+    report, trend_name = row
+    return _to_report_response(report, trend_name)

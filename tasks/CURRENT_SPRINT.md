@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-020: Decay Worker
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/020-decay-worker.md`
+
+Apply time-based probability decay for active trends.
+
+**Completed**:
+- [x] Added Celery task `workers.apply_trend_decay` for daily trend decay
+- [x] Applied `TrendEngine.apply_decay` across all active trends in one run
+- [x] Added decay task summary metrics (`scanned`, `decayed`, `unchanged`)
+- [x] Added beat schedule wiring for daily decay execution
+- [x] Added unit tests for schedule/routes and decay task invocation
+
+---
+
 ### TASK-019: Trend Snapshots
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

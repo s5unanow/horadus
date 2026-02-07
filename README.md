@@ -75,6 +75,20 @@ make run-beat
                     └─────────────┘
 ```
 
+## API Documentation
+
+Interactive OpenAPI docs are hosted by FastAPI:
+
+- Swagger UI: `/docs`
+- ReDoc: `/redoc`
+- OpenAPI JSON: `/openapi.json`
+
+Detailed endpoint reference and curl examples:
+- `docs/API.md`
+
+Authentication header (documented now, enforcement planned in TASK-025):
+- `X-API-Key: <key>`
+
 ## API Endpoints
 
 | Method | Endpoint | Description |

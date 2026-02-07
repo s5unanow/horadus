@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [██░░░░░░░░░░░░░░░░░░]  10%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
 
@@ -81,6 +81,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Retrospective analysis service with pivotal-event and predictive-signal ranking
 - [x] Retrospective API endpoint (`GET /api/v1/trends/{id}/retrospective`)
 - [x] Retrospective narrative generation via LLM with deterministic fallback
+- [x] OpenAPI docs metadata refreshed with richer tags and descriptions
+- [x] API key auth scheme documented in OpenAPI (`X-API-Key`, forward-compatible)
+- [x] Request/response examples added for core API models
+- [x] API reference guide with endpoint examples (`docs/API.md`)
 
 ## In Progress
 
@@ -92,11 +96,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Finalize API documentation and examples (TASK-024)
-2. Add API key authentication and rate limiting (TASK-025)
-3. Add monitoring and alerting baseline (TASK-026)
-4. Start calibration outcome tracking tasks (TASK-032+)
-5. Add operational dashboards for reporting and worker health
+1. Add API key authentication and rate limiting (TASK-025)
+2. Add monitoring and alerting baseline (TASK-026)
+3. Start calibration outcome tracking tasks (TASK-032+)
+4. Add operational dashboards for reporting and worker health
+5. Begin deployment hardening tasks (TASK-027)
 
 ## Expert Feedback Integration ✅
 

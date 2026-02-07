@@ -1,6 +1,6 @@
 # Current Sprint
 
-**Sprint Goal**: Complete Phase 3 trend engine baseline and prepare Phase 4 reporting  
+**Sprint Goal**: Complete Phase 4 reporting and begin Phase 5 polish  
 **Sprint Number**: 1  
 **Sprint Dates**: 2026-02-02 to 2026-02-16
 
@@ -13,6 +13,22 @@
 ---
 
 ## Completed This Sprint
+
+### TASK-024: API Documentation
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md` (Phase 5)
+
+Finalize OpenAPI docs and endpoint examples.
+
+**Completed**:
+- [x] Added global API docs auth scheme for `X-API-Key` in OpenAPI
+- [x] Added endpoint/tag documentation metadata for Swagger/ReDoc clarity
+- [x] Added request/response schema examples across API models
+- [x] Added dedicated reference guide with curl examples (`docs/API.md`)
+- [x] Added unit tests to validate docs routes, auth scheme, and example presence
+
+---
 
 ### TASK-023: Retrospective Analysis
 **Status**: DONE ✓  

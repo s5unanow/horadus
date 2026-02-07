@@ -11,7 +11,8 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING
 
 import structlog
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Security
+from fastapi.security import APIKeyHeader
 from sqlalchemy import text
 
 if TYPE_CHECKING:
@@ -24,6 +25,29 @@ from src.core.config import settings
 from src.storage.database import async_session_maker, engine
 
 logger = structlog.get_logger(__name__)
+
+OPENAPI_TAGS = [
+    {
+        "name": "Health",
+        "description": "Liveness/readiness and dependency health checks.",
+    },
+    {
+        "name": "Sources",
+        "description": "Manage ingestion sources (RSS, Telegram, GDELT, APIs).",
+    },
+    {
+        "name": "Trends",
+        "description": "Trend CRUD, evidence/history queries, and retrospective analysis.",
+    },
+    {
+        "name": "Events",
+        "description": "Query clustered events and related classification context.",
+    },
+    {
+        "name": "Reports",
+        "description": "Access weekly and monthly generated intelligence reports.",
+    },
+]
 
 
 # =============================================================================
@@ -80,17 +104,31 @@ def create_app() -> FastAPI:
     Returns:
         Configured FastAPI application instance.
     """
+    api_key_auth = APIKeyHeader(
+        name="X-API-Key",
+        scheme_name="ApiKeyAuth",
+        auto_error=False,
+        description=(
+            "Optional API key header. This is documented now and will be enforced "
+            "once TASK-025 authentication middleware lands."
+        ),
+    )
+
     app = FastAPI(
         title="Geopolitical Intelligence Platform",
         description=(
             "API for tracking geopolitical trends and analyzing news events. "
             "Collects news from multiple sources, classifies via LLM, and "
-            "tracks trend probabilities over time."
+            "tracks trend probabilities over time.\n\n"
+            "Authentication header:\n"
+            "- `X-API-Key`: optional for now (documented for forward compatibility)."
         ),
         version="1.0.0",
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        openapi_tags=OPENAPI_TAGS,
+        dependencies=[Security(api_key_auth)],
         lifespan=lifespan,
     )
 

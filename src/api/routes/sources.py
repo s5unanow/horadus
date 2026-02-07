@@ -29,6 +29,21 @@ router = APIRouter()
 class SourceCreate(BaseModel):
     """Request body for creating a source."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "type": "rss",
+                "name": "Reuters World",
+                "url": "https://feeds.reuters.com/Reuters/worldNews",
+                "credibility_score": 0.95,
+                "source_tier": "wire",
+                "reporting_type": "secondary",
+                "config": {"check_interval_minutes": 30},
+                "is_active": True,
+            }
+        }
+    )
+
     type: SourceType = Field(..., description="Source type: rss, telegram, gdelt, api")
     name: str = Field(..., description="Human-readable name")
     url: str | None = Field(None, description="Source URL")
@@ -48,6 +63,16 @@ class SourceCreate(BaseModel):
 class SourceUpdate(BaseModel):
     """Request body for updating a source."""
 
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "credibility_score": 0.92,
+                "source_tier": "major",
+                "is_active": True,
+            }
+        }
+    )
+
     name: str | None = None
     url: str | None = None
     credibility_score: float | None = Field(None, ge=0, le=1)
@@ -60,7 +85,24 @@ class SourceUpdate(BaseModel):
 class SourceResponse(BaseModel):
     """Response body for a source."""
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
+                "type": "rss",
+                "name": "Reuters World",
+                "url": "https://feeds.reuters.com/Reuters/worldNews",
+                "credibility_score": 0.95,
+                "source_tier": "wire",
+                "reporting_type": "secondary",
+                "config": {"check_interval_minutes": 30},
+                "is_active": True,
+                "last_fetched_at": "2026-02-07T18:30:00Z",
+                "error_count": 0,
+            }
+        },
+    )
 
     id: UUID
     type: SourceType

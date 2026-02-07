@@ -9,7 +9,7 @@
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
-Phase 3: Trend Engine        [███████████░░░░░░░░░]  55%  ← WE ARE HERE
+Phase 3: Trend Engine        [██████████████░░░░░░]  70%  ← WE ARE HERE
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -63,6 +63,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Trend evidence API endpoint (`GET /api/v1/trends/{id}/evidence`)
 - [x] Evidence date-range querying (`start_at`, `end_at`) with validation
 - [x] Trend evidence API unit tests for retrieval and filtering behavior
+- [x] Trend snapshot worker task + beat schedule wiring (`workers.snapshot_trends`)
+- [x] Trend history API endpoint (`GET /api/v1/trends/{id}/history`)
+- [x] History date-range filters with interval downsampling (hourly/daily/weekly)
+- [x] Unit tests for snapshot scheduling and history API responses
 
 ## In Progress
 
@@ -74,11 +78,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Implement trend snapshots (TASK-019)
-2. Add reporting service baseline (TASK-020)
-3. Build event query/reporting APIs (TASK-021)
-4. Expand trend engine observability and ops guardrails
-5. Add trend decay worker scheduling (TASK-020 follow-up)
+1. Add reporting service baseline (TASK-020)
+2. Build event query/reporting APIs (TASK-021)
+3. Expand trend engine observability and ops guardrails
+4. Add trend decay worker scheduling (TASK-020 follow-up)
+5. Begin Phase 4 reporting generation pipeline
 
 ## Expert Feedback Integration ✅
 

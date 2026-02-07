@@ -21,6 +21,7 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", True)
     monkeypatch.setattr(celery_app_module.settings, "RSS_COLLECTION_INTERVAL", 15)
     monkeypatch.setattr(celery_app_module.settings, "GDELT_COLLECTION_INTERVAL", 45)
+    monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 120)
 
     schedule = celery_app_module._build_beat_schedule()
 
@@ -28,6 +29,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["collect-rss"]["schedule"] == timedelta(minutes=15)
     assert schedule["collect-gdelt"]["task"] == "workers.collect_gdelt"
     assert schedule["collect-gdelt"]["schedule"] == timedelta(minutes=45)
+    assert schedule["snapshot-trends"]["task"] == "workers.snapshot_trends"
+    assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=120)
 
 
 def test_build_beat_schedule_omits_disabled_collectors(
@@ -35,15 +38,19 @@ def test_build_beat_schedule_omits_disabled_collectors(
 ) -> None:
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
 
     schedule = celery_app_module._build_beat_schedule()
 
-    assert schedule == {}
+    assert list(schedule.keys()) == ["snapshot-trends"]
+    assert schedule["snapshot-trends"]["task"] == "workers.snapshot_trends"
+    assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=90)
 
 
 def test_celery_routes_include_processing_queue() -> None:
     routes = celery_app_module.celery_app.conf.task_routes
     assert routes["workers.process_pending_items"]["queue"] == "processing"
+    assert routes["workers.snapshot_trends"]["queue"] == "processing"
 
 
 def test_collect_rss_task_uses_async_collector(
@@ -145,6 +152,29 @@ def test_process_pending_items_task_uses_async_pipeline(
     assert result["task"] == "processing_pipeline"
     assert result["processed"] == 25
     assert result["classified"] == 24
+
+
+def test_snapshot_trends_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_snapshot() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "snapshot_trends",
+            "timestamp": "2026-02-07T13:00:00+00:00",
+            "scanned": 4,
+            "created": 4,
+            "skipped": 0,
+        }
+
+    monkeypatch.setattr(tasks_module, "_snapshot_trends_async", fake_snapshot)
+
+    result = tasks_module.snapshot_trends.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "snapshot_trends"
+    assert result["scanned"] == 4
+    assert result["created"] == 4
 
 
 def test_task_retry_configuration() -> None:

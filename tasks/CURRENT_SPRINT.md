@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-019: Trend Snapshots
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/019-trend-snapshots.md`
+
+Store periodic snapshots for trend history tracking and reporting.
+
+**Completed**:
+- [x] Added Celery task `workers.snapshot_trends` to persist active trend snapshots
+- [x] Added beat schedule wiring using `TREND_SNAPSHOT_INTERVAL_MINUTES`
+- [x] Added history endpoint `GET /api/v1/trends/{id}/history`
+- [x] Added date-range filtering and interval downsampling (`hourly`, `daily`, `weekly`)
+- [x] Added unit tests for snapshot task scheduling and trend history API behavior
+
+---
+
 ### TASK-018: Evidence Recording
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

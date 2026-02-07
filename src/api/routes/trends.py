@@ -17,10 +17,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.calibration import CalibrationService
 from src.core.retrospective_analyzer import RetrospectiveAnalyzer
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
-from src.storage.models import Trend, TrendEvidence, TrendSnapshot
+from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
 
 router = APIRouter()
 
@@ -181,6 +182,117 @@ class TrendHistoryPoint(BaseModel):
     probability: float
 
 
+class TrendOutcomeCreate(BaseModel):
+    """Request body for recording a trend outcome."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "outcome": "occurred",
+                "outcome_date": "2026-02-07T00:00:00Z",
+                "outcome_notes": "Frontline engagements confirmed by multiple sources.",
+                "outcome_evidence": {"report_ids": ["abc-123", "def-456"]},
+                "recorded_by": "analyst@horadus",
+            }
+        }
+    )
+
+    outcome: OutcomeType
+    outcome_date: datetime
+    outcome_notes: str | None = None
+    outcome_evidence: dict[str, Any] | None = None
+    recorded_by: str | None = None
+
+
+class TrendOutcomeResponse(BaseModel):
+    """Response body for one recorded trend outcome."""
+
+    model_config = ConfigDict(
+        from_attributes=True,
+        json_schema_extra={
+            "example": {
+                "id": "f4f9f95b-82f7-42f0-a628-f44ca8d50f55",
+                "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "prediction_date": "2026-02-07T00:00:00Z",
+                "predicted_probability": 0.31,
+                "predicted_risk_level": "elevated",
+                "probability_band_low": 0.21,
+                "probability_band_high": 0.41,
+                "outcome_date": "2026-02-07T00:00:00Z",
+                "outcome": "occurred",
+                "outcome_notes": "Confirmed military engagement.",
+                "outcome_evidence": {"report_ids": ["abc-123"]},
+                "brier_score": 0.4761,
+                "recorded_by": "analyst@horadus",
+                "created_at": "2026-02-07T00:05:00Z",
+            }
+        },
+    )
+
+    id: UUID
+    trend_id: UUID
+    prediction_date: datetime
+    predicted_probability: float
+    predicted_risk_level: str
+    probability_band_low: float
+    probability_band_high: float
+    outcome_date: datetime | None
+    outcome: str | None
+    outcome_notes: str | None
+    outcome_evidence: dict[str, Any] | None
+    brier_score: float | None
+    recorded_by: str | None
+    created_at: datetime
+
+
+class CalibrationBucketResponse(BaseModel):
+    """One bucket in a calibration report."""
+
+    bucket_start: float
+    bucket_end: float
+    prediction_count: int
+    occurred_count: int
+    actual_rate: float
+    expected_rate: float
+    calibration_error: float
+
+
+class TrendCalibrationResponse(BaseModel):
+    """Calibration report response payload."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "total_predictions": 14,
+                "resolved_predictions": 10,
+                "mean_brier_score": 0.18,
+                "overconfident": False,
+                "underconfident": False,
+                "buckets": [
+                    {
+                        "bucket_start": 0.2,
+                        "bucket_end": 0.3,
+                        "prediction_count": 4,
+                        "occurred_count": 1,
+                        "actual_rate": 0.25,
+                        "expected_rate": 0.25,
+                        "calibration_error": 0.0,
+                    }
+                ],
+            }
+        }
+    )
+
+    trend_id: UUID
+    total_predictions: int
+    resolved_predictions: int
+    mean_brier_score: float | None
+    overconfident: bool
+    underconfident: bool
+    buckets: list[CalibrationBucketResponse]
+
+
 class RetrospectiveEvent(BaseModel):
     """One pivotal event in retrospective analysis."""
 
@@ -322,6 +434,25 @@ def _to_history_point(snapshot: TrendSnapshot) -> TrendHistoryPoint:
         timestamp=snapshot.timestamp,
         log_odds=log_odds,
         probability=logodds_to_prob(log_odds),
+    )
+
+
+def _to_outcome_response(outcome: TrendOutcome) -> TrendOutcomeResponse:
+    return TrendOutcomeResponse(
+        id=outcome.id,
+        trend_id=outcome.trend_id,
+        prediction_date=outcome.prediction_date,
+        predicted_probability=float(outcome.predicted_probability),
+        predicted_risk_level=outcome.predicted_risk_level,
+        probability_band_low=float(outcome.probability_band_low),
+        probability_band_high=float(outcome.probability_band_high),
+        outcome_date=outcome.outcome_date,
+        outcome=outcome.outcome,
+        outcome_notes=outcome.outcome_notes,
+        outcome_evidence=outcome.outcome_evidence,
+        brier_score=float(outcome.brier_score) if outcome.brier_score is not None else None,
+        recorded_by=outcome.recorded_by,
+        created_at=outcome.created_at,
     )
 
 
@@ -618,6 +749,83 @@ async def get_trend_retrospective(
         end_date=period_end,
     )
     return TrendRetrospectiveResponse(**analysis)
+
+
+@router.post(
+    "/{trend_id}/outcomes",
+    response_model=TrendOutcomeResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def record_trend_outcome(
+    trend_id: UUID,
+    payload: TrendOutcomeCreate,
+    session: AsyncSession = Depends(get_session),
+) -> TrendOutcomeResponse:
+    """
+    Record a resolved trend outcome and compute Brier score for calibration.
+    """
+    service = CalibrationService(session)
+    try:
+        outcome = await service.record_outcome(
+            trend_id=trend_id,
+            outcome=payload.outcome,
+            outcome_date=payload.outcome_date,
+            notes=payload.outcome_notes,
+            evidence=payload.outcome_evidence,
+            recorded_by=payload.recorded_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+    return _to_outcome_response(outcome)
+
+
+@router.get("/{trend_id}/calibration", response_model=TrendCalibrationResponse)
+async def get_trend_calibration(
+    trend_id: UUID,
+    start_date: Annotated[datetime | None, Query()] = None,
+    end_date: Annotated[datetime | None, Query()] = None,
+    session: AsyncSession = Depends(get_session),
+) -> TrendCalibrationResponse:
+    """
+    Get calibration analysis for one trend.
+    """
+    await _get_trend_or_404(session, trend_id)
+    if start_date and end_date and start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be less than or equal to end_date",
+        )
+
+    service = CalibrationService(session)
+    report = await service.get_calibration_report(
+        trend_id=trend_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return TrendCalibrationResponse(
+        trend_id=trend_id,
+        total_predictions=report.total_predictions,
+        resolved_predictions=report.resolved_predictions,
+        mean_brier_score=report.mean_brier_score,
+        overconfident=report.overconfident,
+        underconfident=report.underconfident,
+        buckets=[
+            CalibrationBucketResponse(
+                bucket_start=bucket.bucket_start,
+                bucket_end=bucket.bucket_end,
+                prediction_count=bucket.prediction_count,
+                occurred_count=bucket.occurred_count,
+                actual_rate=bucket.actual_rate,
+                expected_rate=bucket.expected_rate,
+                calibration_error=bucket.calibration_error,
+            )
+            for bucket in report.buckets
+        ],
+    )
 
 
 @router.patch("/{trend_id}", response_model=TrendResponse)

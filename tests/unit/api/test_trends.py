@@ -14,15 +14,18 @@ from src.api.routes.trends import (
     create_trend,
     delete_trend,
     get_trend,
+    get_trend_calibration,
     get_trend_history,
     get_trend_retrospective,
     list_trend_evidence,
     list_trends,
     load_trends_from_config,
+    record_trend_outcome,
     update_trend,
 )
+from src.core.calibration import CalibrationBucket, CalibrationReport
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
-from src.storage.models import Trend, TrendEvidence, TrendSnapshot
+from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
 
 pytestmark = pytest.mark.unit
 
@@ -437,6 +440,176 @@ async def test_get_trend_retrospective_rejects_invalid_date_range(mock_db_sessio
         HTTPException, match="start_date must be less than or equal to end_date"
     ) as exc:
         await get_trend_retrospective(
+            trend_id=trend.id,
+            start_date=now,
+            end_date=now - timedelta(days=1),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_record_trend_outcome_returns_created_payload(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    outcome_id = uuid4()
+    mock_db_session.get.return_value = trend
+
+    class FakeService:
+        def __init__(self, session: object) -> None:
+            assert session is mock_db_session
+
+        async def record_outcome(
+            self,
+            *,
+            trend_id: UUID,
+            outcome: OutcomeType,
+            outcome_date: datetime,
+            notes: str | None,
+            evidence: dict[str, object] | None,
+            recorded_by: str | None,
+        ) -> TrendOutcome:
+            assert trend_id == trend.id
+            assert outcome == OutcomeType.OCCURRED
+            assert notes == "Confirmed by OSINT"
+            assert evidence == {"items": ["x-1"]}
+            assert recorded_by == "analyst@horadus"
+            return TrendOutcome(
+                id=outcome_id,
+                trend_id=trend.id,
+                prediction_date=outcome_date,
+                predicted_probability=0.40,
+                predicted_risk_level="elevated",
+                probability_band_low=0.30,
+                probability_band_high=0.50,
+                outcome_date=outcome_date,
+                outcome=outcome.value,
+                outcome_notes=notes,
+                outcome_evidence=evidence,
+                brier_score=0.36,
+                recorded_by=recorded_by,
+                created_at=now,
+            )
+
+    monkeypatch.setattr(trends_module, "CalibrationService", FakeService)
+
+    result = await record_trend_outcome(
+        trend_id=trend.id,
+        payload=trends_module.TrendOutcomeCreate(
+            outcome=OutcomeType.OCCURRED,
+            outcome_date=now,
+            outcome_notes="Confirmed by OSINT",
+            outcome_evidence={"items": ["x-1"]},
+            recorded_by="analyst@horadus",
+        ),
+        session=mock_db_session,
+    )
+
+    assert result.id == outcome_id
+    assert result.trend_id == trend.id
+    assert result.predicted_probability == pytest.approx(0.40)
+    assert result.probability_band_low == pytest.approx(0.30)
+    assert result.probability_band_high == pytest.approx(0.50)
+    assert result.outcome == "occurred"
+    assert result.brier_score == pytest.approx(0.36)
+
+
+@pytest.mark.asyncio
+async def test_record_trend_outcome_returns_404_when_trend_missing(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    class FakeService:
+        def __init__(self, _session: object) -> None:
+            pass
+
+        async def record_outcome(self, **_: object) -> TrendOutcome:
+            raise ValueError("Trend not found")
+
+    monkeypatch.setattr(trends_module, "CalibrationService", FakeService)
+
+    with pytest.raises(HTTPException, match="Trend not found") as exc:
+        await record_trend_outcome(
+            trend_id=uuid4(),
+            payload=trends_module.TrendOutcomeCreate(
+                outcome=OutcomeType.DID_NOT_OCCUR,
+                outcome_date=datetime.now(tz=UTC),
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_trend_calibration_returns_report(mock_db_session, monkeypatch) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+
+    class FakeService:
+        def __init__(self, session: object) -> None:
+            assert session is mock_db_session
+
+        async def get_calibration_report(
+            self,
+            *,
+            trend_id: UUID,
+            start_date: datetime | None = None,
+            end_date: datetime | None = None,
+        ) -> CalibrationReport:
+            assert trend_id == trend.id
+            assert start_date is None
+            assert end_date is None
+            return CalibrationReport(
+                total_predictions=12,
+                resolved_predictions=9,
+                mean_brier_score=0.18,
+                overconfident=False,
+                underconfident=True,
+                buckets=[
+                    CalibrationBucket(
+                        bucket_start=0.2,
+                        bucket_end=0.3,
+                        prediction_count=4,
+                        occurred_count=1,
+                        actual_rate=0.25,
+                        expected_rate=0.25,
+                        calibration_error=0.0,
+                    )
+                ],
+            )
+
+    monkeypatch.setattr(trends_module, "CalibrationService", FakeService)
+
+    result = await get_trend_calibration(
+        trend_id=trend.id,
+        session=mock_db_session,
+    )
+
+    assert result.trend_id == trend.id
+    assert result.total_predictions == 12
+    assert result.resolved_predictions == 9
+    assert result.mean_brier_score == pytest.approx(0.18)
+    assert result.overconfident is False
+    assert result.underconfident is True
+    assert len(result.buckets) == 1
+    assert result.buckets[0].prediction_count == 4
+
+
+@pytest.mark.asyncio
+async def test_get_trend_calibration_rejects_invalid_date_range(mock_db_session) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    mock_db_session.get.return_value = trend
+
+    with pytest.raises(
+        HTTPException, match="start_date must be less than or equal to end_date"
+    ) as exc:
+        await get_trend_calibration(
             trend_id=trend.id,
             start_date=now,
             end_date=now - timedelta(days=1),

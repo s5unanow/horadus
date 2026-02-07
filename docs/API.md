@@ -72,11 +72,32 @@ curl -X POST http://localhost:8000/api/v1/sources \
 - `GET /api/v1/trends/{trend_id}/evidence`
 - `GET /api/v1/trends/{trend_id}/history`
 - `GET /api/v1/trends/{trend_id}/retrospective`
+- `POST /api/v1/trends/{trend_id}/outcomes`
+- `GET /api/v1/trends/{trend_id}/calibration`
 
 Retrospective example:
 
 ```bash
 curl "http://localhost:8000/api/v1/trends/<trend-id>/retrospective?start_date=2026-01-01T00:00:00Z&end_date=2026-02-01T00:00:00Z"
+```
+
+Record an outcome for calibration:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/trends/<trend-id>/outcomes" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "outcome": "occurred",
+    "outcome_date": "2026-02-07T00:00:00Z",
+    "outcome_notes": "Confirmed by multiple independent sources",
+    "recorded_by": "analyst@horadus"
+  }'
+```
+
+Fetch trend calibration report:
+
+```bash
+curl "http://localhost:8000/api/v1/trends/<trend-id>/calibration"
 ```
 
 ## Events

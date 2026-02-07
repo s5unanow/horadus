@@ -106,6 +106,8 @@ Authentication header:
 | GET | `/api/v1/trends/{id}/history` | Get probability time series |
 | GET | `/api/v1/trends/{id}/evidence` | Get events affecting trend |
 | GET | `/api/v1/trends/{id}/retrospective` | Retrospective analysis |
+| POST | `/api/v1/trends/{id}/outcomes` | Record resolved outcome for calibration |
+| GET | `/api/v1/trends/{id}/calibration` | Get trend calibration report |
 | GET | `/api/v1/events` | List recent events |
 | GET | `/api/v1/events/{id}` | Get event details |
 | GET | `/api/v1/reports` | List generated reports |

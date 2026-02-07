@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-032: Trend Outcomes for Calibration
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/032-trend-outcomes.md`
+
+Track resolved outcomes and calibration quality for trend predictions.
+
+**Completed**:
+- [x] Added calibration service with Brier score computation (`src/core/calibration.py`)
+- [x] Added endpoint `POST /api/v1/trends/{id}/outcomes`
+- [x] Added endpoint `GET /api/v1/trends/{id}/calibration`
+- [x] Added probability bucket calibration analysis (expected vs actual rates)
+- [x] Added unit tests for calibration math and trend calibration routes
+- [x] Documented outcome recording and calibration endpoints (`docs/API.md`)
+
+---
+
 ### TASK-027: Deployment Configuration
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

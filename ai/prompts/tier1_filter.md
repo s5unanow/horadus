@@ -1,18 +1,38 @@
-# Tier 1 — Relevance Filter (Prompt Template)
+# Tier 1 — Relevance Filter
 
 Purpose: fast, cheap relevance scoring to decide whether an item should proceed to Tier 2.
 
 Model (current): `gpt-4.1-nano` (see `docs/adr/002-llm-provider.md`)
 
-## Inputs (planned)
-- `item.title`
-- `item.raw_content` (or trimmed excerpt)
-- `trends[]` (ids/names + indicator keywords)
+## Runtime Contract
 
-## Output (planned; strict JSON)
-- Per trend: relevance score `0..10`
-- Optional brief rationale (short, non-narrative)
+The caller will send JSON with:
+- `threshold`: minimum score for Tier 2 routing (currently 5)
+- `trends[]`: `{ trend_id, name, keywords[] }`
+- `items[]`: `{ item_id, title, content }`
 
-## Prompt
+Return JSON only, with this exact shape:
 
-TBD (define when implementing `TASK-013`).
+```json
+{
+  "items": [
+    {
+      "item_id": "uuid-string",
+      "trend_scores": [
+        {
+          "trend_id": "trend-id",
+          "relevance_score": 0,
+          "rationale": "short reason"
+        }
+      ]
+    }
+  ]
+}
+```
+
+Rules:
+- Score each `item_id` against every provided `trend_id`.
+- `relevance_score` must be an integer `0..10`.
+- Use `0` for clearly unrelated trends.
+- Keep `rationale` short and factual.
+- Do not include extra keys or prose outside JSON.

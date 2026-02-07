@@ -111,6 +111,12 @@ class Settings(BaseSettings):
     )
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
+    LLM_TIER1_BATCH_SIZE: int = Field(
+        default=10,
+        ge=1,
+        le=256,
+        description="Maximum raw items per Tier 1 classification API request",
+    )
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-small",
         description="Model for text embedding generation",

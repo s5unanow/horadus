@@ -8,19 +8,19 @@
 
 ## Active Tasks
 
-### TASK-013: LLM Classifier - Tier 1
+### TASK-014: LLM Classifier - Tier 2
 **Status**: IN_PROGRESS  
 **Priority**: P1 (High)  
-**Spec**: `tasks/specs/013-llm-classifier-tier1.md`
+**Spec**: `tasks/specs/014-llm-classifier-tier2.md`
 
-Build the fast relevance filter stage for processing.
+Build detailed structured event extraction and per-trend impact classification.
 
 **Planned**:
-- [ ] Score relevance (0-10) per configured trend
-- [ ] Parse strict structured output for Tier 1 decisions
-- [ ] Mark low-score items as `noise`
-- [ ] Forward high-score items to Tier 2 queue
-- [ ] Add unit tests with mocked model responses
+- [ ] Extract who/what/where/when and structured claims
+- [ ] Classify per-trend impacts with direction, severity, confidence
+- [ ] Assign taxonomy categories
+- [ ] Generate canonical event summary
+- [ ] Add strict-schema unit tests with mocked model responses
 
 ---
 
@@ -232,6 +232,22 @@ Cluster related `RawItem` records into `Event` records.
 - [x] Event metadata updates on merge (`source_count`, `unique_source_count`)
 - [x] Canonical summary refresh and primary source tracking by credibility
 - [x] Unit tests covering create, merge, and primary-source selection
+
+---
+
+### TASK-013: LLM Classifier - Tier 1
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/013-llm-classifier-tier1.md`
+
+Build the fast relevance filter stage for processing.
+
+**Completed**:
+- [x] Tier 1 classifier service using `gpt-4.1-nano`
+- [x] Relevance scoring `0..10` per configured trend with strict Pydantic validation
+- [x] Batch request handling with configurable batch size
+- [x] Cost/usage metrics per run (tokens + estimated USD)
+- [x] Status routing (`noise` vs Tier 2 queue-ready `processing`) and unit tests
 
 ---
 

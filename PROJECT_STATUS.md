@@ -119,7 +119,7 @@ Based on expert review, added 9 new tasks:
 | M4: LLM classification pipeline | Week 4 | ✅ Complete |
 | M5: Trend engine operational | Week 5 | 🔄 In Progress |
 | M6: Weekly reports generating | Week 6 | 🔲 Not Started |
-| M7: Telegram integration | Week 7 | 🔲 Not Started |
+| M7: Reporting APIs operational | Week 7 | 🔲 Not Started |
 | M8: Full system operational | Week 8 | 🔲 Not Started |
 
 ## Known Issues

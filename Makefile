@@ -47,7 +47,7 @@ help: ## Show this help message
 
 venv: ## Create local virtualenv at .venv (prefers uv)
 	@command -v $(UV) >/dev/null 2>&1 || (echo "$(RED)uv is required.$(RESET) Install uv via Nix and retry." && exit 1)
-	@test -x "$(VENV_PY)" || $(PYTHON) -m venv --without-pip $(VENV)
+	@test -x "$(VENV_PY)" || $(UV) venv --python $(PYTHON) $(VENV)
 
 deps: venv ## Install production dependencies (prefers uv)
 	$(UV) sync --python $(VENV_PY)

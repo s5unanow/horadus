@@ -8,23 +8,41 @@
 
 ## Active Tasks
 
-### TASK-014: LLM Classifier - Tier 2
+### TASK-015: Processing Pipeline
 **Status**: IN_PROGRESS  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/015-processing-pipeline.md`
+
+Wire together the end-to-end processing pipeline.
+
+**Planned**:
+- [ ] Trigger Celery task when new `raw_items` arrive
+- [ ] Orchestrate flow: dedup → embed → cluster → tier1 → tier2
+- [ ] Persist pipeline status transitions on items/events
+- [ ] Add retry/error handling for recoverable failures
+- [ ] Add pipeline metrics (processed, filtered, escalated)
+- [ ] Add integration test for end-to-end flow
+
+---
+
+## Completed This Sprint
+
+### TASK-014: LLM Classifier - Tier 2
+**Status**: DONE ✓  
 **Priority**: P1 (High)  
 **Spec**: `tasks/specs/014-llm-classifier-tier2.md`
 
 Build detailed structured event extraction and per-trend impact classification.
 
-**Planned**:
-- [ ] Extract who/what/where/when and structured claims
-- [ ] Classify per-trend impacts with direction, severity, confidence
-- [ ] Assign taxonomy categories
-- [ ] Generate canonical event summary
-- [ ] Add strict-schema unit tests with mocked model responses
+**Completed**:
+- [x] Tier 2 classifier service using `gpt-4o-mini`
+- [x] Structured extraction of who/what/where/when and claims
+- [x] Per-trend impact classification (direction, severity, confidence)
+- [x] Taxonomy category assignment and canonical summary generation
+- [x] Strict schema validation and unknown-trend safeguards
+- [x] Cost/usage metrics per run and unit tests
 
 ---
-
-## Completed This Sprint
 
 ### TASK-001: Python Project Setup
 **Status**: DONE ✓  

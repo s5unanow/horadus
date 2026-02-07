@@ -19,6 +19,7 @@ Tasks that have been completed and verified.
 - TASK-011: Deduplication Service ✅
 - TASK-012: Event Clusterer ✅
 - TASK-013: LLM Classifier - Tier 1 ✅
+- TASK-014: LLM Classifier - Tier 2 ✅
 
 ---
 

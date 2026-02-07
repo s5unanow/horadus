@@ -134,6 +134,58 @@ def test_collect_rss_task_uses_async_collector(
     assert queue_calls == [("rss", 2)]
 
 
+def test_collect_rss_records_observability_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    captured: list[dict[str, int | str]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "rss",
+            "fetched": 5,
+            "stored": 3,
+            "skipped": 2,
+            "errors": 1,
+            "results": [],
+        }
+
+    def fake_record(
+        *,
+        collector: str,
+        fetched: int,
+        stored: int,
+        skipped: int,
+        errors: int,
+    ) -> None:
+        captured.append(
+            {
+                "collector": collector,
+                "fetched": fetched,
+                "stored": stored,
+                "skipped": skipped,
+                "errors": errors,
+            }
+        )
+
+    monkeypatch.setattr(tasks_module, "_collect_rss_async", fake_collect)
+    monkeypatch.setattr(tasks_module, "_queue_processing_for_new_items", lambda **_: True)
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", fake_record)
+
+    tasks_module.collect_rss.run()
+
+    assert captured == [
+        {
+            "collector": "rss",
+            "fetched": 5,
+            "stored": 3,
+            "skipped": 2,
+            "errors": 1,
+        }
+    ]
+
+
 def test_collect_gdelt_task_uses_async_collector(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -201,6 +253,47 @@ def test_process_pending_items_task_uses_async_pipeline(
     assert result["task"] == "processing_pipeline"
     assert result["processed"] == 25
     assert result["classified"] == 24
+
+
+def test_process_pending_items_records_observability_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 10)
+    captured: list[dict[str, object]] = []
+
+    async def fake_process(limit: int) -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "processing_pipeline",
+            "scanned": limit,
+            "processed": limit,
+            "classified": limit - 1,
+            "noise": 1,
+            "duplicates": 0,
+            "errors": 0,
+            "embedded": limit,
+            "events_created": 1,
+            "events_merged": limit - 1,
+            "embedding_api_calls": 2,
+            "tier1_prompt_tokens": 100,
+            "tier1_completion_tokens": 20,
+            "tier1_api_calls": 1,
+            "tier2_prompt_tokens": 80,
+            "tier2_completion_tokens": 40,
+            "tier2_api_calls": 1,
+        }
+
+    def fake_record(run_result: dict[str, object]) -> None:
+        captured.append(run_result)
+
+    monkeypatch.setattr(tasks_module, "_process_pending_async", fake_process)
+    monkeypatch.setattr(tasks_module, "record_pipeline_metrics", fake_record)
+
+    tasks_module.process_pending_items.run(limit=10)
+
+    assert len(captured) == 1
+    assert captured[0]["task"] == "processing_pipeline"
+    assert captured[0]["processed"] == 10
 
 
 def test_snapshot_trends_task_uses_async_worker(

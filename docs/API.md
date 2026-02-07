@@ -28,6 +28,7 @@ curl -H "X-API-Key: dev-key" http://localhost:8000/api/v1/trends
 - `GET /health`
 - `GET /health/live`
 - `GET /health/ready`
+- `GET /metrics` (Prometheus exposition format)
 
 Example:
 

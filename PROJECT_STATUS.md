@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [███████░░░░░░░░░░░░░]  35%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [██████████░░░░░░░░░░]  50%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
 
@@ -89,6 +89,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Per-key request throttling (`429` + `Retry-After`) for API traffic
 - [x] API key management endpoints (`/api/v1/auth/keys`) for list/create/revoke
 - [x] Auth/rate-limit unit test coverage for middleware and key manager
+- [x] Structured logging bootstrap with JSON/console output modes
+- [x] Prometheus metrics endpoint (`GET /metrics`)
+- [x] Observability counters for ingestion throughput, worker errors, and LLM usage
+- [x] Worker instrumentation for collector and pipeline metrics
 
 ## In Progress
 
@@ -100,11 +104,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add monitoring and alerting baseline (TASK-026)
-2. Begin deployment hardening tasks (TASK-027)
-3. Start calibration outcome tracking tasks (TASK-032+)
-4. Add operational dashboards for reporting and worker health
-5. Add authentication key persistence/rotation hardening
+1. Begin deployment hardening tasks (TASK-027)
+2. Start calibration outcome tracking tasks (TASK-032+)
+3. Add operational dashboards for reporting and worker health
+4. Add authentication key persistence/rotation hardening
+5. Add alert routing policies and SLO thresholds
 
 ## Expert Feedback Integration ✅
 

@@ -25,6 +25,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         manager: APIKeyManager | None = None,
         exempt_prefixes: tuple[str, ...] = (
             "/health",
+            "/metrics",
             "/docs",
             "/redoc",
             "/openapi.json",

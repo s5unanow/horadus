@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-026: Monitoring & Alerting
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md` (Phase 5)
+
+Set up observability baseline for API and workers.
+
+**Completed**:
+- [x] Added structured logging bootstrap (`src/core/logging_setup.py`)
+- [x] Added Prometheus endpoint `GET /metrics`
+- [x] Added core counters for ingestion volume, LLM calls/cost, and worker failures
+- [x] Added worker instrumentation for collector/pipeline metrics and failure counts
+- [x] Kept dependency health checks for DB and Redis (`/health`)
+- [x] Added unit tests for metrics endpoint and worker metrics recording
+
+---
+
 ### TASK-025: Authentication
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

@@ -96,14 +96,19 @@ Authentication header:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
+| GET | `/metrics` | Prometheus metrics |
 | GET | `/api/v1/trends` | List all trends with current probabilities |
 | GET | `/api/v1/trends/{id}` | Get trend details |
 | GET | `/api/v1/trends/{id}/history` | Get probability time series |
 | GET | `/api/v1/trends/{id}/evidence` | Get events affecting trend |
+| GET | `/api/v1/trends/{id}/retrospective` | Retrospective analysis |
 | GET | `/api/v1/events` | List recent events |
 | GET | `/api/v1/events/{id}` | Get event details |
 | GET | `/api/v1/reports` | List generated reports |
 | GET | `/api/v1/reports/{id}` | Get report details |
+| GET | `/api/v1/auth/keys` | List API keys (admin) |
+| POST | `/api/v1/auth/keys` | Create API key (admin) |
+| DELETE | `/api/v1/auth/keys/{id}` | Revoke API key (admin) |
 
 ## Configuration
 

@@ -21,6 +21,7 @@ from src.storage.models import (
     Source,
     SourceType,
     Trend,
+    TrendEvidence,
 )
 
 pytestmark = pytest.mark.integration
@@ -124,6 +125,7 @@ async def test_processing_pipeline_runs_end_to_end() -> None:
             current_log_odds=-2.197225,
             indicators={
                 "military_movement": {
+                    "weight": 0.04,
                     "direction": "escalatory",
                     "keywords": ["troops", "deployment"],
                 }
@@ -182,11 +184,23 @@ async def test_processing_pipeline_runs_end_to_end() -> None:
 
         event = await session.scalar(select(Event).where(Event.id == event_link.event_id))
         assert event is not None
+        saved_trend = await session.scalar(select(Trend).where(Trend.id == trend.id))
+        assert saved_trend is not None
+        evidence_records = (
+            await session.scalars(
+                select(TrendEvidence).where(
+                    TrendEvidence.trend_id == trend.id,
+                    TrendEvidence.event_id == event.id,
+                )
+            )
+        ).all()
 
         assert result.scanned >= 1
         assert result.processed >= 1
         assert result.classified >= 1
         assert result.errors == 0
+        assert result.trend_impacts_seen >= 1
+        assert result.trend_updates >= 1
         assert any(
             row.item_id == item.id and row.final_status == ProcessingStatus.CLASSIFIED
             for row in result.results
@@ -197,3 +211,6 @@ async def test_processing_pipeline_runs_end_to_end() -> None:
         assert event.categories == ["military", "security"]
         assert isinstance(event.extracted_claims, dict)
         assert len(event.extracted_claims["trend_impacts"]) == 1
+        assert float(saved_trend.current_log_odds) > float(saved_trend.baseline_log_odds)
+        assert len(evidence_records) == 1
+        assert evidence_records[0].signal_type == "military_movement"

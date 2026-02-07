@@ -5,6 +5,7 @@ Processing pipeline orchestration for pending raw items.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
@@ -12,12 +13,13 @@ import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.trend_engine import TrendEngine, calculate_evidence_delta
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Classifier
-from src.storage.models import Event, ProcessingStatus, RawItem, Trend
+from src.storage.models import Event, ProcessingStatus, RawItem, Source, Trend, TrendEvidence
 
 logger = structlog.get_logger(__name__)
 
@@ -47,6 +49,8 @@ class PipelineItemResult:
     event_created: bool = False
     event_merged: bool = False
     tier2_applied: bool = False
+    trend_impacts_seen: int = 0
+    trend_updates: int = 0
     error_message: str | None = None
 
 
@@ -63,6 +67,8 @@ class PipelineRunResult:
     embedded: int = 0
     events_created: int = 0
     events_merged: int = 0
+    trend_impacts_seen: int = 0
+    trend_updates: int = 0
     results: list[PipelineItemResult] = field(default_factory=list)
     usage: PipelineUsage = field(default_factory=PipelineUsage)
 
@@ -86,6 +92,7 @@ class ProcessingPipeline:
         event_clusterer: EventClusterer | None = None,
         tier1_classifier: Tier1Classifier | None = None,
         tier2_classifier: Tier2Classifier | None = None,
+        trend_engine: TrendEngine | None = None,
     ) -> None:
         self.session = session
         self.deduplication_service = deduplication_service or DeduplicationService(session=session)
@@ -93,6 +100,7 @@ class ProcessingPipeline:
         self.event_clusterer = event_clusterer or EventClusterer(session=session)
         self.tier1_classifier = tier1_classifier or Tier1Classifier(session=session)
         self.tier2_classifier = tier2_classifier or Tier2Classifier(session=session)
+        self.trend_engine = trend_engine or TrendEngine(session=session)
 
     async def process_pending_items(
         self,
@@ -147,6 +155,8 @@ class ProcessingPipeline:
                 run_result.events_created += 1
             if execution.result.event_merged:
                 run_result.events_merged += 1
+            run_result.trend_impacts_seen += execution.result.trend_impacts_seen
+            run_result.trend_updates += execution.result.trend_updates
 
         return run_result
 
@@ -224,6 +234,10 @@ class ProcessingPipeline:
             usage.tier2_prompt_tokens += tier2_usage.prompt_tokens
             usage.tier2_completion_tokens += tier2_usage.completion_tokens
             usage.tier2_api_calls += tier2_usage.api_calls
+            trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
+                event=event,
+                trends=trends,
+            )
 
             item.processing_status = ProcessingStatus.CLASSIFIED
             await self.session.flush()
@@ -234,6 +248,8 @@ class ProcessingPipeline:
                     cluster_result=cluster_result,
                     embedded=embedded,
                     tier2_applied=True,
+                    trend_impacts_seen=trend_impacts_seen,
+                    trend_updates=trend_updates,
                 ),
                 usage=usage,
             )
@@ -285,6 +301,206 @@ class ProcessingPipeline:
         event: Event | None = await self.session.scalar(query)
         return event
 
+    async def _apply_trend_impacts(
+        self,
+        *,
+        event: Event,
+        trends: list[Trend],
+    ) -> tuple[int, int]:
+        if event.id is None:
+            msg = "Event must have an id before applying trend impacts"
+            raise ValueError(msg)
+
+        claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+        impacts_payload = claims.get("trend_impacts", [])
+        if not isinstance(impacts_payload, list) or not impacts_payload:
+            return (0, 0)
+
+        trend_by_id = {self._trend_identifier(trend): trend for trend in trends}
+        source_credibility = await self._load_event_source_credibility(event)
+        corroboration_count = self._corroboration_count(event)
+
+        impacts_seen = 0
+        updates_applied = 0
+        for payload in impacts_payload:
+            impact = self._parse_trend_impact(payload)
+            if impact is None:
+                logger.warning("Skipping malformed trend impact payload", event_id=str(event.id))
+                continue
+
+            impacts_seen += 1
+            trend = trend_by_id.get(impact["trend_id"])
+            if trend is None:
+                logger.warning(
+                    "Skipping unknown trend impact",
+                    event_id=str(event.id),
+                    trend_id=impact["trend_id"],
+                )
+                continue
+
+            signal_type = impact["signal_type"]
+            indicator_weight = self._resolve_indicator_weight(trend=trend, signal_type=signal_type)
+            if indicator_weight is None:
+                logger.warning(
+                    "Skipping trend impact with unknown indicator weight",
+                    event_id=str(event.id),
+                    trend_id=str(trend.id),
+                    signal_type=signal_type,
+                )
+                continue
+
+            trend_id = trend.id
+            if trend_id is None:
+                logger.warning(
+                    "Skipping trend impact because trend id is missing",
+                    event_id=str(event.id),
+                    trend_name=trend.name,
+                    signal_type=signal_type,
+                )
+                continue
+
+            novelty_score = await self._novelty_score(
+                trend_id=trend_id,
+                signal_type=signal_type,
+                event_id=event.id,
+            )
+            delta, factors = calculate_evidence_delta(
+                signal_type=signal_type,
+                indicator_weight=indicator_weight,
+                source_credibility=source_credibility,
+                corroboration_count=corroboration_count,
+                novelty_score=novelty_score,
+                direction=impact["direction"],
+                severity=impact["severity"],
+                confidence=impact["confidence"],
+            )
+            update = await self.trend_engine.apply_evidence(
+                trend=trend,
+                delta=delta,
+                event_id=event.id,
+                signal_type=signal_type,
+                factors=factors,
+                reasoning=self._impact_reasoning(impact),
+            )
+            if abs(update.delta_applied) > 0.0:
+                updates_applied += 1
+
+        return (impacts_seen, updates_applied)
+
+    async def _load_event_source_credibility(self, event: Event) -> float:
+        if event.primary_item_id is None:
+            return 0.5
+
+        query = (
+            select(Source.credibility_score)
+            .join(RawItem, RawItem.source_id == Source.id)
+            .where(RawItem.id == event.primary_item_id)
+            .limit(1)
+        )
+        credibility = await self.session.scalar(query)
+        try:
+            return float(credibility) if credibility is not None else 0.5
+        except (TypeError, ValueError):
+            return 0.5
+
+    async def _novelty_score(
+        self,
+        *,
+        trend_id: UUID,
+        signal_type: str,
+        event_id: UUID,
+    ) -> float:
+        recent_window_start = datetime.now(tz=UTC) - timedelta(days=7)
+        query = (
+            select(TrendEvidence.id)
+            .where(TrendEvidence.trend_id == trend_id)
+            .where(TrendEvidence.signal_type == signal_type)
+            .where(TrendEvidence.event_id != event_id)
+            .where(TrendEvidence.created_at >= recent_window_start)
+            .limit(1)
+        )
+        prior_evidence_id: UUID | None = await self.session.scalar(query)
+        return 0.3 if prior_evidence_id is not None else 1.0
+
+    @staticmethod
+    def _corroboration_count(event: Event) -> int:
+        if event.unique_source_count and event.unique_source_count > 0:
+            return int(event.unique_source_count)
+        if event.source_count and event.source_count > 0:
+            return int(event.source_count)
+        return 1
+
+    @staticmethod
+    def _trend_identifier(trend: Trend) -> str:
+        definition = trend.definition if isinstance(trend.definition, dict) else {}
+        definition_id = definition.get("id")
+        if isinstance(definition_id, str) and definition_id.strip():
+            return definition_id.strip()
+        return str(trend.id)
+
+    @staticmethod
+    def _resolve_indicator_weight(*, trend: Trend, signal_type: str) -> float | None:
+        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
+        indicator_config = indicators.get(signal_type)
+        if not isinstance(indicator_config, dict):
+            return None
+
+        raw_weight = indicator_config.get("weight")
+        if raw_weight is None:
+            return None
+        if not isinstance(raw_weight, str | int | float):
+            return None
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            return None
+
+        if weight <= 0:
+            return None
+        return weight
+
+    @staticmethod
+    def _parse_trend_impact(payload: Any) -> dict[str, Any] | None:
+        if not isinstance(payload, dict):
+            return None
+
+        trend_id = payload.get("trend_id")
+        signal_type = payload.get("signal_type")
+        direction = payload.get("direction")
+        if not isinstance(trend_id, str) or not trend_id.strip():
+            return None
+        if not isinstance(signal_type, str) or not signal_type.strip():
+            return None
+        if direction not in ("escalatory", "de_escalatory"):
+            return None
+
+        try:
+            severity = float(payload.get("severity", 1.0))
+            confidence = float(payload.get("confidence", 1.0))
+        except (TypeError, ValueError):
+            return None
+
+        rationale = payload.get("rationale")
+        rationale_text = (
+            rationale.strip() if isinstance(rationale, str) and rationale.strip() else None
+        )
+
+        return {
+            "trend_id": trend_id.strip(),
+            "signal_type": signal_type.strip(),
+            "direction": direction,
+            "severity": max(0.0, min(1.0, severity)),
+            "confidence": max(0.0, min(1.0, confidence)),
+            "rationale": rationale_text,
+        }
+
+    @staticmethod
+    def _impact_reasoning(impact: dict[str, Any]) -> str:
+        rationale = impact.get("rationale")
+        if isinstance(rationale, str) and rationale:
+            return rationale
+        return f"Tier 2 classified {impact['signal_type']} as {impact['direction']}"
+
     @staticmethod
     def _item_id(item: RawItem) -> UUID:
         if item.id is None:
@@ -300,6 +516,8 @@ class ProcessingPipeline:
         cluster_result: ClusterResult,
         embedded: bool,
         tier2_applied: bool = False,
+        trend_impacts_seen: int = 0,
+        trend_updates: int = 0,
     ) -> PipelineItemResult:
         return PipelineItemResult(
             item_id=item_id,
@@ -309,6 +527,8 @@ class ProcessingPipeline:
             event_created=cluster_result.created,
             event_merged=cluster_result.merged and not cluster_result.created,
             tier2_applied=tier2_applied,
+            trend_impacts_seen=trend_impacts_seen,
+            trend_updates=trend_updates,
         )
 
     @staticmethod
@@ -324,6 +544,8 @@ class ProcessingPipeline:
             "embedded": result.embedded,
             "events_created": result.events_created,
             "events_merged": result.events_merged,
+            "trend_impacts_seen": result.trend_impacts_seen,
+            "trend_updates": result.trend_updates,
             "embedding_api_calls": result.usage.embedding_api_calls,
             "tier1_prompt_tokens": result.usage.tier1_prompt_tokens,
             "tier1_completion_tokens": result.usage.tier1_completion_tokens,

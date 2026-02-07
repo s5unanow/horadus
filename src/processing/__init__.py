@@ -10,6 +10,13 @@ from src.processing.tier1_classifier import (
     Tier1Usage,
     TrendRelevanceScore,
 )
+from src.processing.tier2_classifier import (
+    Tier2Classifier,
+    Tier2EventResult,
+    Tier2RunResult,
+    Tier2Usage,
+    TrendImpact,
+)
 
 __all__ = [
     "ClusterResult",
@@ -22,5 +29,10 @@ __all__ = [
     "Tier1ItemResult",
     "Tier1RunResult",
     "Tier1Usage",
+    "Tier2Classifier",
+    "Tier2EventResult",
+    "Tier2RunResult",
+    "Tier2Usage",
+    "TrendImpact",
     "TrendRelevanceScore",
 ]

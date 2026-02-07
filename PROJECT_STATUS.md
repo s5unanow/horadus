@@ -12,7 +12,7 @@ Phase 2: Processing Layer    [████████████████�
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████░░░░░░░░]  60%  ← WE ARE HERE
-Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
+Phase 6: Calibration (NEW)   [██░░░░░░░░░░░░░░░░░░]  10%
 ```
 
 ## What's Working
@@ -97,6 +97,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Production worker/beat container image definition (`docker/worker/Dockerfile`)
 - [x] Production deployment stack (`docker-compose.prod.yml`)
 - [x] Deployment runbook and environment variable reference docs
+- [x] Calibration service for trend outcomes and Brier scoring (`src/core/calibration.py`)
+- [x] Trend outcome recording endpoint (`POST /api/v1/trends/{id}/outcomes`)
+- [x] Trend calibration report endpoint (`GET /api/v1/trends/{id}/calibration`)
+- [x] Calibration bucket analysis over historical predictions
 
 ## In Progress
 
@@ -108,7 +112,7 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Start calibration outcome tracking tasks (TASK-032+)
+1. Add risk levels + probability bands (TASK-028)
 2. Add operational dashboards for reporting and worker health
 3. Add authentication key persistence/rotation hardening
 4. Add alert routing policies and SLO thresholds

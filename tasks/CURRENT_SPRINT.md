@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-030: Event Lifecycle Tracking
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/030-event-lifecycle.md`
+
+Track event progression (emerging → confirmed → fading → archived) and expose lifecycle filters.
+
+**Completed**:
+- [x] Added lifecycle manager with mention/decay transitions (`src/processing/event_lifecycle.py`)
+- [x] Integrated lifecycle transitions into event clustering on new mentions
+- [x] Added periodic worker task `workers.check_event_lifecycles`
+- [x] Added hourly beat schedule and task routing for lifecycle checks
+- [x] Implemented events API list/detail handlers and lifecycle filter support
+- [x] Added unit tests for lifecycle manager, clusterer transitions, events API, and worker wiring
+
+---
+
 ### TASK-029: Enhanced Trend Definitions
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

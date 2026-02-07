@@ -7,6 +7,7 @@ A headless backend for collecting, classifying, and analyzing news to track geop
 - **Multi-source ingestion**: RSS feeds, GDELT, Telegram channels
 - **Smart filtering**: Two-tier LLM classification (cheap filter → expensive analysis)
 - **Event clustering**: Groups duplicate news into single events
+- **Event lifecycle tracking**: Emerging → confirmed → fading → archived
 - **Trend tracking**: Bayesian-inspired probability updates using log-odds
 - **Risk presentation**: Risk levels + probability bands + confidence ratings
 - **Automated reports**: Weekly/monthly trend analysis with retrospectives

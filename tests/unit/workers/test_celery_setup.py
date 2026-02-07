@@ -40,6 +40,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=120)
     assert schedule["apply-trend-decay"]["task"] == "workers.apply_trend_decay"
     assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
+    assert schedule["check-event-lifecycles"]["task"] == "workers.check_event_lifecycles"
+    assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="2",
@@ -72,6 +74,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
     assert list(schedule.keys()) == [
         "snapshot-trends",
         "apply-trend-decay",
+        "check-event-lifecycles",
         "generate-weekly-reports",
         "generate-monthly-reports",
     ]
@@ -79,6 +82,8 @@ def test_build_beat_schedule_omits_disabled_collectors(
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=90)
     assert schedule["apply-trend-decay"]["task"] == "workers.apply_trend_decay"
     assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
+    assert schedule["check-event-lifecycles"]["task"] == "workers.check_event_lifecycles"
+    assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="1",
@@ -98,6 +103,7 @@ def test_celery_routes_include_processing_queue() -> None:
     assert routes["workers.process_pending_items"]["queue"] == "processing"
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
+    assert routes["workers.check_event_lifecycles"]["queue"] == "processing"
     assert routes["workers.generate_weekly_reports"]["queue"] == "processing"
     assert routes["workers.generate_monthly_reports"]["queue"] == "processing"
 
@@ -341,6 +347,28 @@ def test_apply_trend_decay_task_uses_async_worker(
     assert result["scanned"] == 4
     assert result["decayed"] == 3
     assert result["unchanged"] == 1
+
+
+def test_check_event_lifecycles_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_check() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "check_event_lifecycles",
+            "as_of": "2026-02-07T13:00:00+00:00",
+            "confirmed_to_fading": 2,
+            "fading_to_archived": 1,
+        }
+
+    monkeypatch.setattr(tasks_module, "_check_event_lifecycles_async", fake_check)
+
+    result = tasks_module.check_event_lifecycles.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "check_event_lifecycles"
+    assert result["confirmed_to_fading"] == 2
+    assert result["fading_to_archived"] == 1
 
 
 def test_generate_weekly_reports_task_uses_async_worker(

@@ -12,7 +12,7 @@ Phase 2: Processing Layer    [████████████████�
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████░░░░░░░░]  60%  ← WE ARE HERE
-Phase 6: Calibration (NEW)   [██████░░░░░░░░░░░░░░]  30%
+Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
 ## What's Working
@@ -106,6 +106,9 @@ Phase 6: Calibration (NEW)   [██████░░░░░░░░░░�
 - [x] Trend responses now include top movers for the last 7 days
 - [x] Trend config schema validation for disqualifiers and falsification criteria
 - [x] Indicator type validation (`leading`/`lagging`) in YAML config sync
+- [x] Event lifecycle transition manager (emerging/confirmed/fading/archived)
+- [x] Hourly lifecycle decay worker task (`workers.check_event_lifecycles`)
+- [x] Events API now supports lifecycle filtering and event detail retrieval
 
 ## In Progress
 
@@ -117,7 +120,7 @@ Phase 6: Calibration (NEW)   [██████░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add event lifecycle tracking (TASK-030)
+1. Add source tier and reporting type enhancements (TASK-031)
 2. Add operational dashboards for reporting and worker health
 3. Add authentication key persistence/rotation hardening
 4. Add alert routing policies and SLO thresholds

@@ -6,15 +6,17 @@ Endpoints for querying clustered news events.
 
 from __future__ import annotations
 
-from datetime import datetime
-from typing import Any
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
+from src.storage.models import Event, EventItem, RawItem, Source, TrendEvidence
 
 router = APIRouter()
 
@@ -34,7 +36,10 @@ class EventResponse(BaseModel):
                 "summary": "Border force movement observed across multiple sources.",
                 "categories": ["military"],
                 "source_count": 5,
+                "unique_source_count": 4,
+                "lifecycle_status": "confirmed",
                 "first_seen_at": "2026-02-07T12:10:00Z",
+                "last_mention_at": "2026-02-07T15:25:00Z",
                 "extracted_who": ["Country A", "Country B"],
                 "extracted_what": "Military units repositioned near border.",
                 "extracted_where": "Eastern sector",
@@ -46,7 +51,10 @@ class EventResponse(BaseModel):
     summary: str
     categories: list[str]
     source_count: int
+    unique_source_count: int
+    lifecycle_status: str
     first_seen_at: datetime
+    last_mention_at: datetime
     extracted_who: list[str] | None
     extracted_what: str | None
     extracted_where: str | None
@@ -91,6 +99,7 @@ class EventDetailResponse(EventResponse):
 async def list_events(
     category: str | None = None,
     trend_id: UUID | None = None,
+    lifecycle: Literal["emerging", "confirmed", "fading", "archived"] | None = None,
     days: int = Query(7, ge=1, le=30),
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
@@ -100,11 +109,39 @@ async def list_events(
 
     Can filter by category or by events affecting a specific trend.
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
+    since = datetime.now(tz=UTC) - timedelta(days=days)
+    query = (
+        select(Event)
+        .where(Event.last_mention_at >= since)
+        .order_by(Event.last_mention_at.desc())
+        .limit(limit)
     )
+    if lifecycle is not None:
+        query = query.where(Event.lifecycle_status == lifecycle)
+    if category is not None:
+        query = query.where(func.array_position(Event.categories, category).is_not(None))
+    if trend_id is not None:
+        query = query.join(TrendEvidence, TrendEvidence.event_id == Event.id).where(
+            TrendEvidence.trend_id == trend_id
+        )
+
+    events = list((await session.scalars(query)).all())
+    return [
+        EventResponse(
+            id=event.id,
+            summary=event.canonical_summary,
+            categories=list(event.categories or []),
+            source_count=event.source_count,
+            unique_source_count=event.unique_source_count,
+            lifecycle_status=event.lifecycle_status,
+            first_seen_at=event.first_seen_at,
+            last_mention_at=event.last_mention_at,
+            extracted_who=list(event.extracted_who) if event.extracted_who else None,
+            extracted_what=event.extracted_what,
+            extracted_where=event.extracted_where,
+        )
+        for event in events
+    ]
 
 
 @router.get("/{event_id}", response_model=EventDetailResponse)
@@ -117,8 +154,60 @@ async def get_event(
 
     Includes source articles and trend impacts.
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
+    event = await session.get(Event, event_id)
+    if event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event '{event_id}' not found",
+        )
+
+    source_rows = (
+        await session.execute(
+            select(Source.name, RawItem.url)
+            .join(RawItem, RawItem.source_id == Source.id)
+            .join(EventItem, EventItem.item_id == RawItem.id)
+            .where(EventItem.event_id == event_id)
+            .order_by(Source.name.asc())
+        )
+    ).all()
+    sources = [
+        {"source_name": source_name, "url": url}
+        for source_name, url in source_rows
+        if source_name is not None
+    ]
+
+    impact_rows = (
+        await session.execute(
+            select(
+                TrendEvidence.trend_id,
+                TrendEvidence.signal_type,
+                TrendEvidence.delta_log_odds,
+            )
+            .where(TrendEvidence.event_id == event_id)
+            .order_by(TrendEvidence.created_at.desc())
+        )
+    ).all()
+    trend_impacts = [
+        {
+            "trend_id": trend_id,
+            "signal_type": signal_type,
+            "direction": "escalatory" if float(delta_log_odds) >= 0 else "de_escalatory",
+        }
+        for trend_id, signal_type, delta_log_odds in impact_rows
+    ]
+
+    return EventDetailResponse(
+        id=event.id,
+        summary=event.canonical_summary,
+        categories=list(event.categories or []),
+        source_count=event.source_count,
+        unique_source_count=event.unique_source_count,
+        lifecycle_status=event.lifecycle_status,
+        first_seen_at=event.first_seen_at,
+        last_mention_at=event.last_mention_at,
+        extracted_who=list(event.extracted_who) if event.extracted_who else None,
+        extracted_what=event.extracted_what,
+        extracted_where=event.extracted_where,
+        sources=sources,
+        trend_impacts=trend_impacts,
     )

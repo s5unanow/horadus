@@ -111,7 +111,11 @@ curl "http://localhost:8000/api/v1/trends/<trend-id>/calibration"
 - `GET /api/v1/events`
 - `GET /api/v1/events/{event_id}`
 
-Note: event query endpoints are currently scaffolded and return `501` until implemented.
+Supported event filters:
+- `category` (string)
+- `trend_id` (UUID)
+- `lifecycle` (`emerging`, `confirmed`, `fading`, `archived`)
+- `days` (1..30), `limit` (1..200)
 
 ## Reports
 

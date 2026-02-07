@@ -28,6 +28,7 @@ from src.core.report_generator import ReportGenerator
 from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
+from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
 from src.storage.models import Trend, TrendSnapshot
@@ -264,6 +265,18 @@ async def _decay_trends_async() -> dict[str, Any]:
     }
 
 
+async def _check_event_lifecycles_async() -> dict[str, Any]:
+    async with async_session_maker() as session:
+        manager = EventLifecycleManager(session)
+        run_result = await manager.run_decay_check()
+        await session.commit()
+
+    return {
+        "status": "ok",
+        **run_result,
+    }
+
+
 async def _generate_weekly_reports_async() -> dict[str, Any]:
     async with async_session_maker() as session:
         generator = ReportGenerator(session=session)
@@ -364,6 +377,19 @@ def generate_weekly_reports() -> dict[str, Any]:
         created=result["created"],
         updated=result["updated"],
         period_end=result["period_end"],
+    )
+    return result
+
+
+@typed_shared_task(name="workers.check_event_lifecycles")
+def check_event_lifecycles() -> dict[str, Any]:
+    """Periodically transition events across lifecycle states."""
+    logger.info("Starting event lifecycle check task")
+    result = _run_async(_check_event_lifecycles_async())
+    logger.info(
+        "Finished event lifecycle check task",
+        confirmed_to_fading=result["confirmed_to_fading"],
+        fading_to_archived=result["fading_to_archived"],
     )
     return result
 

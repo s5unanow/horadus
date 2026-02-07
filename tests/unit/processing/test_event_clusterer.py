@@ -6,7 +6,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from src.processing.event_clusterer import EventClusterer
-from src.storage.models import Event, RawItem
+from src.storage.models import Event, EventLifecycle, RawItem
 
 pytestmark = pytest.mark.unit
 
@@ -67,6 +67,7 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
         canonical_summary="Old summary",
         source_count=2,
         unique_source_count=1,
+        lifecycle_status=EventLifecycle.EMERGING.value,
         primary_item_id=uuid4(),
     )
 
@@ -92,6 +93,8 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
 
     assert event.source_count == 3
     assert event.unique_source_count == 3
+    assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
+    assert event.confirmed_at is not None
     assert event.canonical_summary == "Updated summary"
     assert result.created is False
     assert result.merged is True

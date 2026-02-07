@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.models import Event, EventItem, RawItem, Source
 
 
@@ -33,6 +34,7 @@ class EventClusterer:
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
+        self.lifecycle_manager = EventLifecycleManager(session)
 
     async def cluster_item(self, item: RawItem) -> ClusterResult:
         """Cluster a single raw item into an existing or new event."""
@@ -106,12 +108,14 @@ class EventClusterer:
     async def _merge_into_event(self, event: Event, item: RawItem) -> None:
         event.source_count += 1
         event.canonical_summary = self._build_canonical_summary(item)
-        event.last_mention_at = self._item_timestamp(item)
+        mention_time = self._item_timestamp(item)
+        event.last_mention_at = mention_time
         if event.embedding is None and item.embedding is not None:
             event.embedding = item.embedding
 
         await self._update_primary_item(event, item.id)
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
+        self.lifecycle_manager.on_event_mention(event, mentioned_at=mention_time)
         await self.session.flush()
 
     async def _find_matching_event(

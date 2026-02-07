@@ -19,6 +19,7 @@ from celery.signals import task_failure
 from sqlalchemy import select
 
 from src.core.config import settings
+from src.core.report_generator import ReportGenerator
 from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
@@ -257,6 +258,23 @@ async def _decay_trends_async() -> dict[str, Any]:
     }
 
 
+async def _generate_weekly_reports_async() -> dict[str, Any]:
+    async with async_session_maker() as session:
+        generator = ReportGenerator(session=session)
+        run_result = await generator.generate_weekly_reports()
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "generate_weekly_reports",
+        "period_start": run_result.period_start.isoformat(),
+        "period_end": run_result.period_end.isoformat(),
+        "scanned": run_result.scanned,
+        "created": run_result.created,
+        "updated": run_result.updated,
+    }
+
+
 @typed_shared_task(
     name="workers.process_pending_items",
     autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
@@ -307,6 +325,21 @@ def apply_trend_decay() -> dict[str, Any]:
         scanned=result["scanned"],
         decayed=result["decayed"],
         unchanged=result["unchanged"],
+    )
+    return result
+
+
+@typed_shared_task(name="workers.generate_weekly_reports")
+def generate_weekly_reports() -> dict[str, Any]:
+    """Generate and store weekly reports for all active trends."""
+    logger.info("Starting weekly report generation task")
+    result = _run_async(_generate_weekly_reports_async())
+    logger.info(
+        "Finished weekly report generation task",
+        scanned=result["scanned"],
+        created=result["created"],
+        updated=result["updated"],
+        period_end=result["period_end"],
     )
     return result
 

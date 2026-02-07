@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import MagicMock
 
 import pytest
+from celery.schedules import crontab
 
 import src.workers.tasks as tasks_module
 
@@ -22,6 +23,9 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "RSS_COLLECTION_INTERVAL", 15)
     monkeypatch.setattr(celery_app_module.settings, "GDELT_COLLECTION_INTERVAL", 45)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 120)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 6)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 30)
 
     schedule = celery_app_module._build_beat_schedule()
 
@@ -33,6 +37,12 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=120)
     assert schedule["apply-trend-decay"]["task"] == "workers.apply_trend_decay"
     assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
+    assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
+    assert schedule["generate-weekly-reports"]["schedule"] == crontab(
+        day_of_week="2",
+        hour=6,
+        minute=30,
+    )
 
 
 def test_build_beat_schedule_omits_disabled_collectors(
@@ -41,14 +51,27 @@ def test_build_beat_schedule_omits_disabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 1)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 7)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 0)
 
     schedule = celery_app_module._build_beat_schedule()
 
-    assert list(schedule.keys()) == ["snapshot-trends", "apply-trend-decay"]
+    assert list(schedule.keys()) == [
+        "snapshot-trends",
+        "apply-trend-decay",
+        "generate-weekly-reports",
+    ]
     assert schedule["snapshot-trends"]["task"] == "workers.snapshot_trends"
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=90)
     assert schedule["apply-trend-decay"]["task"] == "workers.apply_trend_decay"
     assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
+    assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
+    assert schedule["generate-weekly-reports"]["schedule"] == crontab(
+        day_of_week="1",
+        hour=7,
+        minute=0,
+    )
 
 
 def test_celery_routes_include_processing_queue() -> None:
@@ -56,6 +79,7 @@ def test_celery_routes_include_processing_queue() -> None:
     assert routes["workers.process_pending_items"]["queue"] == "processing"
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
+    assert routes["workers.generate_weekly_reports"]["queue"] == "processing"
 
 
 def test_collect_rss_task_uses_async_collector(
@@ -204,6 +228,30 @@ def test_apply_trend_decay_task_uses_async_worker(
     assert result["scanned"] == 4
     assert result["decayed"] == 3
     assert result["unchanged"] == 1
+
+
+def test_generate_weekly_reports_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_generate() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "generate_weekly_reports",
+            "period_start": "2026-02-01T00:00:00+00:00",
+            "period_end": "2026-02-08T00:00:00+00:00",
+            "scanned": 3,
+            "created": 3,
+            "updated": 0,
+        }
+
+    monkeypatch.setattr(tasks_module, "_generate_weekly_reports_async", fake_generate)
+
+    result = tasks_module.generate_weekly_reports.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "generate_weekly_reports"
+    assert result["scanned"] == 3
+    assert result["created"] == 3
 
 
 def test_task_retry_configuration() -> None:

@@ -12,9 +12,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
+from src.storage.models import Report, Trend
 
 router = APIRouter()
 
@@ -50,6 +52,31 @@ class ReportResponse(BaseModel):
     created_at: datetime
 
 
+def _normalize_top_events(value: Any) -> list[dict[str, Any]] | None:
+    if isinstance(value, list):
+        return [row for row in value if isinstance(row, dict)]
+    if isinstance(value, dict):
+        nested = value.get("events")
+        if isinstance(nested, list):
+            return [row for row in nested if isinstance(row, dict)]
+    return None
+
+
+def _to_report_response(report: Report, trend_name: str | None) -> ReportResponse:
+    return ReportResponse(
+        id=report.id,
+        report_type=report.report_type,
+        period_start=report.period_start,
+        period_end=report.period_end,
+        trend_id=report.trend_id,
+        trend_name=trend_name,
+        statistics=report.statistics,
+        narrative=report.narrative,
+        top_events=_normalize_top_events(report.top_events),
+        created_at=report.created_at,
+    )
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -67,11 +94,29 @@ async def list_reports(
 
     Can filter by type (weekly, monthly, retrospective) or trend.
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
+    query = (
+        select(Report, Trend.name)
+        .outerjoin(Trend, Trend.id == Report.trend_id)
+        .order_by(Report.created_at.desc())
+        .limit(limit)
     )
+    if report_type is not None:
+        query = query.where(Report.report_type == report_type)
+    if trend_id is not None:
+        query = query.where(Report.trend_id == trend_id)
+
+    rows = (await session.execute(query)).all()
+    return [
+        ReportSummary(
+            id=report.id,
+            report_type=report.report_type,
+            period_start=report.period_start,
+            period_end=report.period_end,
+            trend_name=trend_name,
+            created_at=report.created_at,
+        )
+        for report, trend_name in rows
+    ]
 
 
 @router.get("/{report_id}", response_model=ReportResponse)
@@ -82,11 +127,22 @@ async def get_report(
     """
     Get a specific report.
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
-    )
+    row = (
+        await session.execute(
+            select(Report, Trend.name)
+            .outerjoin(Trend, Trend.id == Report.trend_id)
+            .where(Report.id == report_id)
+            .limit(1)
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Report '{report_id}' not found",
+        )
+
+    report, trend_name = row
+    return _to_report_response(report, trend_name)
 
 
 @router.get("/latest/weekly", response_model=ReportResponse)
@@ -99,8 +155,22 @@ async def get_latest_weekly(
 
     Optionally filter by trend.
     """
-    # TODO: Implement
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Not yet implemented",
+    query = (
+        select(Report, Trend.name)
+        .outerjoin(Trend, Trend.id == Report.trend_id)
+        .where(Report.report_type == "weekly")
+        .order_by(Report.period_end.desc(), Report.created_at.desc())
+        .limit(1)
     )
+    if trend_id is not None:
+        query = query.where(Report.trend_id == trend_id)
+
+    row = (await session.execute(query)).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No weekly reports found",
+        )
+
+    report, trend_name = row
+    return _to_report_response(report, trend_name)

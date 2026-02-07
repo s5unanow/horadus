@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-021: Report Generator - Weekly
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/021-weekly-reports.md`
+
+Generate weekly trend reports with computed statistics and narrative.
+
+**Completed**:
+- [x] Added weekly report generation service with per-trend stats and top events
+- [x] Added Celery task `workers.generate_weekly_reports`
+- [x] Added weekly beat schedule (configurable day/hour/minute in UTC)
+- [x] Added report API implementations for list/get/latest weekly
+- [x] Added unit tests for reports API and weekly report worker wiring
+
+---
+
 ### TASK-020: Decay Worker
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

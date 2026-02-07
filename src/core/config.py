@@ -113,6 +113,10 @@ class Settings(BaseSettings):
         default="gpt-4o-mini",
         description="Model for weekly report narrative generation",
     )
+    LLM_RETROSPECTIVE_MODEL: str = Field(
+        default="gpt-4o-mini",
+        description="Model for retrospective analysis narrative generation",
+    )
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
     LLM_TIER1_BATCH_SIZE: int = Field(

@@ -1,7 +1,7 @@
 # Project Status
 
 **Last Updated**: 2026-02-07
-**Current Phase**: Phase 4 - Reporting (in progress)
+**Current Phase**: Phase 5 - Polish & Deploy (in progress)
 
 ## Progress Overview
 
@@ -10,8 +10,8 @@ Phase 0: Setup & Foundation  [████████████████�
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
-Phase 4: Reporting           [██████████████░░░░░░]  70%  ← WE ARE HERE
-Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
+Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
+Phase 5: Polish & Deploy     [██░░░░░░░░░░░░░░░░░░]  10%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
 
@@ -78,6 +78,9 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Category/source breakdown aggregation for monthly intelligence summaries
 - [x] Monthly report worker task + schedule wiring (`workers.generate_monthly_reports`)
 - [x] Monthly report API endpoint (`GET /api/v1/reports/latest/monthly`)
+- [x] Retrospective analysis service with pivotal-event and predictive-signal ranking
+- [x] Retrospective API endpoint (`GET /api/v1/trends/{id}/retrospective`)
+- [x] Retrospective narrative generation via LLM with deterministic fallback
 
 ## In Progress
 
@@ -89,11 +92,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add retrospective analysis endpoints (TASK-023)
-2. Expand trend engine observability and ops guardrails
-3. Start Phase 5 polish and deployment tasks
+1. Finalize API documentation and examples (TASK-024)
+2. Add API key authentication and rate limiting (TASK-025)
+3. Add monitoring and alerting baseline (TASK-026)
 4. Start calibration outcome tracking tasks (TASK-032+)
-5. Add operational dashboards and alerting for report generation
+5. Add operational dashboards for reporting and worker health
 
 ## Expert Feedback Integration ✅
 

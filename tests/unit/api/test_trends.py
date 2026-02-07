@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import HTTPException
 
+import src.api.routes.trends as trends_module
 from src.api.routes.trends import (
     TrendCreate,
     TrendUpdate,
@@ -14,6 +15,7 @@ from src.api.routes.trends import (
     delete_trend,
     get_trend,
     get_trend_history,
+    get_trend_retrospective,
     list_trend_evidence,
     list_trends,
     load_trends_from_config,
@@ -351,3 +353,94 @@ async def test_get_trend_history_rejects_invalid_date_range(mock_db_session) -> 
 
     assert exc.value.status_code == 400
     mock_db_session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_get_trend_retrospective_returns_analysis(mock_db_session, monkeypatch) -> None:
+    trend = _build_trend(name="EU-Russia Risk")
+    now = datetime.now(tz=UTC)
+    start_date = now - timedelta(days=14)
+    mock_db_session.get.return_value = trend
+
+    class FakeAnalyzer:
+        def __init__(self, session: object) -> None:
+            assert session is mock_db_session
+
+        async def analyze(
+            self,
+            *,
+            trend: Trend,
+            start_date: datetime,
+            end_date: datetime,
+        ) -> dict[str, object]:
+            assert trend.id is not None
+            assert start_date <= end_date
+            return {
+                "trend_id": trend.id,
+                "trend_name": trend.name,
+                "period_start": start_date,
+                "period_end": end_date,
+                "pivotal_events": [
+                    {
+                        "event_id": uuid4(),
+                        "summary": "Border forces repositioned",
+                        "categories": ["military"],
+                        "evidence_count": 3,
+                        "net_delta_log_odds": 0.14,
+                        "abs_delta_log_odds": 0.14,
+                        "direction": "up",
+                    }
+                ],
+                "category_breakdown": {"military": 1},
+                "predictive_signals": [
+                    {
+                        "signal_type": "military_movement",
+                        "evidence_count": 4,
+                        "net_delta_log_odds": 0.21,
+                        "abs_delta_log_odds": 0.21,
+                    }
+                ],
+                "accuracy_assessment": {
+                    "outcome_count": 2,
+                    "resolved_outcomes": 2,
+                    "scored_outcomes": 2,
+                    "mean_brier_score": 0.18,
+                    "resolved_rate": 1.0,
+                },
+                "narrative": "Signals were dominated by military movement in the period.",
+            }
+
+    monkeypatch.setattr(trends_module, "RetrospectiveAnalyzer", FakeAnalyzer)
+
+    result = await get_trend_retrospective(
+        trend_id=trend.id,
+        start_date=start_date,
+        end_date=now,
+        session=mock_db_session,
+    )
+
+    assert result.trend_id == trend.id
+    assert result.trend_name == trend.name
+    assert len(result.pivotal_events) == 1
+    assert result.pivotal_events[0].direction == "up"
+    assert result.predictive_signals[0].signal_type == "military_movement"
+    assert result.accuracy_assessment["mean_brier_score"] == pytest.approx(0.18)
+
+
+@pytest.mark.asyncio
+async def test_get_trend_retrospective_rejects_invalid_date_range(mock_db_session) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    mock_db_session.get.return_value = trend
+
+    with pytest.raises(
+        HTTPException, match="start_date must be less than or equal to end_date"
+    ) as exc:
+        await get_trend_retrospective(
+            trend_id=trend.id,
+            start_date=now,
+            end_date=now - timedelta(days=1),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400

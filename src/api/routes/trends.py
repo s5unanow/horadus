@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 from uuid import UUID
 
 import yaml
@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
-from src.storage.models import Trend
+from src.storage.models import Trend, TrendEvidence
 
 router = APIRouter()
 
@@ -81,6 +81,25 @@ class TrendConfigLoadResponse(BaseModel):
     errors: list[str] = Field(default_factory=list)
 
 
+class TrendEvidenceResponse(BaseModel):
+    """Response body for one evidence record."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    trend_id: UUID
+    event_id: UUID
+    signal_type: str
+    credibility_score: float | None
+    corroboration_factor: float | None
+    novelty_score: float | None
+    severity_score: float | None
+    confidence_score: float | None
+    delta_log_odds: float
+    reasoning: str | None
+    created_at: datetime
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -112,6 +131,33 @@ def _to_response(trend: Trend) -> TrendResponse:
         decay_half_life_days=trend.decay_half_life_days,
         is_active=trend.is_active,
         updated_at=trend.updated_at,
+    )
+
+
+def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
+    return TrendEvidenceResponse(
+        id=evidence.id,
+        trend_id=evidence.trend_id,
+        event_id=evidence.event_id,
+        signal_type=evidence.signal_type,
+        credibility_score=(
+            float(evidence.credibility_score) if evidence.credibility_score is not None else None
+        ),
+        corroboration_factor=(
+            float(evidence.corroboration_factor)
+            if evidence.corroboration_factor is not None
+            else None
+        ),
+        novelty_score=float(evidence.novelty_score) if evidence.novelty_score is not None else None,
+        severity_score=(
+            float(evidence.severity_score) if evidence.severity_score is not None else None
+        ),
+        confidence_score=(
+            float(evidence.confidence_score) if evidence.confidence_score is not None else None
+        ),
+        delta_log_odds=float(evidence.delta_log_odds),
+        reasoning=evidence.reasoning,
+        created_at=evidence.created_at,
     )
 
 
@@ -270,6 +316,38 @@ async def get_trend(
     """Get one trend by id."""
     trend = await _get_trend_or_404(session, trend_id)
     return _to_response(trend)
+
+
+@router.get("/{trend_id}/evidence", response_model=list[TrendEvidenceResponse])
+async def list_trend_evidence(
+    trend_id: UUID,
+    start_at: Annotated[datetime | None, Query()] = None,
+    end_at: Annotated[datetime | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
+    session: AsyncSession = Depends(get_session),
+) -> list[TrendEvidenceResponse]:
+    """List evidence records for one trend, optionally filtered by date range."""
+    await _get_trend_or_404(session, trend_id)
+
+    if start_at and end_at and start_at > end_at:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_at must be less than or equal to end_at",
+        )
+
+    query = (
+        select(TrendEvidence)
+        .where(TrendEvidence.trend_id == trend_id)
+        .order_by(TrendEvidence.created_at.desc())
+        .limit(limit)
+    )
+    if start_at is not None:
+        query = query.where(TrendEvidence.created_at >= start_at)
+    if end_at is not None:
+        query = query.where(TrendEvidence.created_at <= end_at)
+
+    evidence_records = (await session.scalars(query)).all()
+    return [_to_evidence_response(record) for record in evidence_records]
 
 
 @router.patch("/{trend_id}", response_model=TrendResponse)

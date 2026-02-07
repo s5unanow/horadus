@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-018: Evidence Recording
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/018-evidence-recording.md`
+
+Store evidence trail for all probability updates.
+
+**Completed**:
+- [x] Added evidence list endpoint `GET /api/v1/trends/{id}/evidence`
+- [x] Added optional `start_at` and `end_at` date-range filters
+- [x] Added response mapping for all persisted evidence scoring factors
+- [x] Added request validation for invalid date windows
+- [x] Added unit tests for evidence retrieval and date filter behavior
+
+---
+
 ### TASK-017: Trend Engine Core
 **Status**: DONE ✓  
 **Priority**: P0 (Critical)  

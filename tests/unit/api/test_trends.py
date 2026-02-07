@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
@@ -13,12 +13,13 @@ from src.api.routes.trends import (
     create_trend,
     delete_trend,
     get_trend,
+    list_trend_evidence,
     list_trends,
     load_trends_from_config,
     update_trend,
 )
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
-from src.storage.models import Trend
+from src.storage.models import Trend, TrendEvidence
 
 pytestmark = pytest.mark.unit
 
@@ -186,3 +187,83 @@ indicators:
     assert added.name == "Sample Trend"
     assert logodds_to_prob(float(added.baseline_log_odds)) == pytest.approx(0.15, rel=0.01)
     assert mock_db_session.flush.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_trend_evidence_returns_records(mock_db_session) -> None:
+    trend = _build_trend()
+    evidence_id = uuid4()
+    event_id = uuid4()
+    created_at = datetime.now(tz=UTC)
+    evidence = TrendEvidence(
+        id=evidence_id,
+        trend_id=trend.id,
+        event_id=event_id,
+        signal_type="military_movement",
+        credibility_score=0.9,
+        corroboration_factor=0.67,
+        novelty_score=1.0,
+        severity_score=0.8,
+        confidence_score=0.95,
+        delta_log_odds=0.02,
+        reasoning="Multiple sources corroborate force buildup",
+        created_at=created_at,
+    )
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [evidence])
+
+    result = await list_trend_evidence(trend_id=trend.id, session=mock_db_session)
+
+    assert len(result) == 1
+    assert result[0].id == evidence_id
+    assert result[0].trend_id == trend.id
+    assert result[0].event_id == event_id
+    assert result[0].signal_type == "military_movement"
+    assert result[0].credibility_score == pytest.approx(0.9)
+    assert result[0].corroboration_factor == pytest.approx(0.67)
+    assert result[0].novelty_score == pytest.approx(1.0)
+    assert result[0].severity_score == pytest.approx(0.8)
+    assert result[0].confidence_score == pytest.approx(0.95)
+    assert result[0].delta_log_odds == pytest.approx(0.02)
+    assert result[0].reasoning == "Multiple sources corroborate force buildup"
+    assert result[0].created_at == created_at
+    assert mock_db_session.scalars.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_trend_evidence_filters_by_date_range(mock_db_session) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+
+    await list_trend_evidence(
+        trend_id=trend.id,
+        start_at=now - timedelta(days=7),
+        end_at=now,
+        limit=25,
+        session=mock_db_session,
+    )
+
+    query = mock_db_session.scalars.await_args.args[0]
+    query_text = str(query)
+    assert "trend_evidence.created_at >=" in query_text
+    assert "trend_evidence.created_at <=" in query_text
+
+
+@pytest.mark.asyncio
+async def test_list_trend_evidence_rejects_invalid_date_range(mock_db_session) -> None:
+    trend = _build_trend()
+    now = datetime.now(tz=UTC)
+    mock_db_session.get.return_value = trend
+
+    with pytest.raises(HTTPException, match="start_at must be less than or equal to end_at") as exc:
+        await list_trend_evidence(
+            trend_id=trend.id,
+            start_at=now,
+            end_at=now - timedelta(minutes=1),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
+    mock_db_session.scalars.assert_not_called()

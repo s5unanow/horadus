@@ -9,7 +9,7 @@
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
-Phase 3: Trend Engine        [██░░░░░░░░░░░░░░░░░░]  10%  ← WE ARE HERE
+Phase 3: Trend Engine        [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -53,10 +53,13 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Processing pipeline orchestrator (dedup → embed → cluster → tier1 → tier2)
 - [x] Celery processing task auto-triggered by new ingested items
 - [x] Pipeline run metrics and end-to-end integration coverage
+- [x] Trend management API CRUD endpoints (`/api/v1/trends`)
+- [x] Trend YAML sync/load path for `config/trends/*.yaml`
+- [x] Trend API unit coverage for CRUD + config sync
 
 ## In Progress
 
-- [ ] TASK-016: Trend management service baseline
+- [ ] TASK-017: Trend engine orchestration
 
 ## Blocked
 
@@ -64,11 +67,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add trend management service baseline (TASK-016)
-2. Implement trend engine orchestration (TASK-017)
-3. Add evidence recording orchestration (TASK-018)
-4. Implement trend snapshots (TASK-019)
-5. Add reporting service baseline (TASK-020)
+1. Implement trend engine orchestration (TASK-017)
+2. Add evidence recording orchestration (TASK-018)
+3. Implement trend snapshots (TASK-019)
+4. Add reporting service baseline (TASK-020)
+5. Build event query/reporting APIs (TASK-021)
 
 ## Expert Feedback Integration ✅
 
@@ -103,7 +106,7 @@ Based on expert review, added 9 new tasks:
 | M3: GDELT integration | Week 3 | ✅ Complete |
 | M3.5: Telegram integration | Week 3 | ✅ Complete |
 | M4: LLM classification pipeline | Week 4 | ✅ Complete |
-| M5: Trend engine operational | Week 5 | 🔲 Not Started |
+| M5: Trend engine operational | Week 5 | 🔄 In Progress |
 | M6: Weekly reports generating | Week 6 | 🔲 Not Started |
 | M7: Telegram integration | Week 7 | 🔲 Not Started |
 | M8: Full system operational | Week 8 | 🔲 Not Started |

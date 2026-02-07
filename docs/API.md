@@ -115,6 +115,7 @@ Supported event filters:
 - `category` (string)
 - `trend_id` (UUID)
 - `lifecycle` (`emerging`, `confirmed`, `fading`, `archived`)
+- `contradicted` (`true`/`false`)
 - `days` (1..30), `limit` (1..200)
 
 ## Reports

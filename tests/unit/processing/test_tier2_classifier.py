@@ -35,6 +35,8 @@ class FakeChatCompletions:
             "extracted_when": "2026-02-07T12:00:00Z",
             "claims": ["Multiple units were redeployed", "Talks are ongoing"],
             "categories": ["military", "security"],
+            "has_contradictions": True,
+            "contradiction_notes": "One source reports withdrawal while another reports mobilization.",
             "trend_impacts": [
                 {
                     "trend_id": trend_id,
@@ -103,6 +105,8 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert event.extracted_where == "Baltic region"
     assert event.extracted_when == datetime(2026, 2, 7, 12, 0, tzinfo=UTC)
     assert event.categories == ["military", "security"]
+    assert event.has_contradictions is True
+    assert event.contradiction_notes is not None
     assert isinstance(event.extracted_claims, dict)
     assert len(event.extracted_claims["trend_impacts"]) == 1
     assert usage.api_calls == 1
@@ -155,6 +159,8 @@ async def test_classify_event_rejects_unknown_trend_ids(mock_db_session) -> None
                 "extracted_when": None,
                 "claims": [],
                 "categories": [],
+                "has_contradictions": False,
+                "contradiction_notes": None,
                 "trend_impacts": [
                     {
                         "trend_id": "unknown",
@@ -188,3 +194,46 @@ async def test_classify_event_raises_when_budget_exceeded(mock_db_session) -> No
 
     with pytest.raises(BudgetExceededError, match="daily call limit"):
         await classifier.classify_event(event=event, trends=trends, context_chunks=["Context"])
+
+
+@pytest.mark.asyncio
+async def test_classify_event_clears_contradiction_note_when_not_contradicted(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Initial summary",
+        has_contradictions=True,
+        contradiction_notes="Old contradiction note",
+    )
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class NoContradictionCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "S1. S2.",
+                "extracted_who": ["A"],
+                "extracted_what": "W",
+                "extracted_where": None,
+                "extracted_when": None,
+                "claims": [],
+                "categories": [],
+                "has_contradictions": False,
+                "contradiction_notes": "Should be ignored",
+                "trend_impacts": [],
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=NoContradictionCompletions())
+    )
+
+    await classifier.classify_event(event=event, trends=trends, context_chunks=["Context"])
+
+    assert event.has_contradictions is False
+    assert event.contradiction_notes is None

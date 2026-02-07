@@ -93,6 +93,8 @@ class _Tier2Output(BaseModel):
     extracted_when: str | None = None
     claims: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
+    has_contradictions: bool = False
+    contradiction_notes: str | None = None
     trend_impacts: list[_TrendImpactOutput] = Field(default_factory=list)
 
 
@@ -354,6 +356,16 @@ class Tier2Classifier:
             ).as_dict()
             for impact in output.trend_impacts
         ]
+        contradiction_notes = (
+            output.contradiction_notes.strip()
+            if isinstance(output.contradiction_notes, str) and output.contradiction_notes.strip()
+            else None
+        )
+        has_contradictions = bool(output.has_contradictions)
+        if has_contradictions and contradiction_notes is None:
+            contradiction_notes = "Potential contradiction detected across source claims."
+        event.has_contradictions = has_contradictions
+        event.contradiction_notes = contradiction_notes if has_contradictions else None
         event.extracted_claims = {
             "claims": self._dedupe_strings(output.claims),
             "trend_impacts": trend_impacts,

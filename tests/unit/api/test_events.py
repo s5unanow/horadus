@@ -17,6 +17,8 @@ def _build_event(
     *,
     event_id: UUID | None = None,
     lifecycle_status: str = "confirmed",
+    has_contradictions: bool = False,
+    contradiction_notes: str | None = None,
 ) -> Event:
     now = datetime.now(tz=UTC)
     return Event(
@@ -26,6 +28,8 @@ def _build_event(
         source_count=4,
         unique_source_count=3,
         lifecycle_status=lifecycle_status,
+        has_contradictions=has_contradictions,
+        contradiction_notes=contradiction_notes,
         first_seen_at=now - timedelta(hours=6),
         last_mention_at=now,
         extracted_who=["Country A", "Country B"],
@@ -41,6 +45,7 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
 
     result = await list_events(
         lifecycle="confirmed",
+        contradicted=False,
         category="military",
         trend_id=uuid4(),
         days=7,
@@ -56,6 +61,7 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
     query = mock_db_session.scalars.await_args.args[0]
     query_text = str(query)
     assert "events.lifecycle_status" in query_text
+    assert "events.has_contradictions" in query_text
     assert "trend_evidence.trend_id" in query_text
 
 
@@ -71,7 +77,10 @@ async def test_get_event_returns_404_when_missing(mock_db_session) -> None:
 
 @pytest.mark.asyncio
 async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session) -> None:
-    event = _build_event()
+    event = _build_event(
+        has_contradictions=True,
+        contradiction_notes="Source narratives conflict on withdrawal timeline.",
+    )
     mock_db_session.get.return_value = event
     mock_db_session.execute.side_effect = [
         SimpleNamespace(
@@ -91,6 +100,8 @@ async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session
     result = await get_event(event_id=event.id, session=mock_db_session)
 
     assert result.id == event.id
+    assert result.has_contradictions is True
+    assert "conflict" in (result.contradiction_notes or "").lower()
     assert len(result.sources) == 2
     assert result.sources[0]["source_name"] == "Reuters"
     assert len(result.trend_impacts) == 2

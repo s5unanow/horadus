@@ -23,6 +23,8 @@ Return JSON only, with this exact shape:
   "extracted_when": "ISO-8601 datetime or null",
   "claims": ["factual claim"],
   "categories": ["taxonomy-tag"],
+  "has_contradictions": false,
+  "contradiction_notes": null,
   "trend_impacts": [
     {
       "trend_id": "trend-id",
@@ -40,5 +42,7 @@ Rules:
 - Use only provided `trend_id` values.
 - `direction` must be `escalatory` or `de_escalatory`.
 - `severity` and `confidence` must be floats in `0.0..1.0`.
+- Set `has_contradictions=true` when sources materially disagree on key factual claims.
+- Set `contradiction_notes` to a short sentence describing the disagreement, else `null`.
 - Keep `summary` concise (2 sentences).
 - Output strict JSON only, no markdown or extra keys.

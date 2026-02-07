@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-033: Contradiction Detection
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/033-contradiction-detection.md`
+
+Detect and surface contradictory source claims at event level.
+
+**Completed**:
+- [x] Persisted contradiction annotations from Tier 2 (`has_contradictions`, `contradiction_notes`)
+- [x] Updated Tier 2 prompt contract to include contradiction detection fields
+- [x] Added `contradicted` filter on `GET /api/v1/events`
+- [x] Exposed contradiction fields in event list/detail API responses
+- [x] Added unit tests for Tier 2 contradiction handling and events API filtering
+
+---
+
 ### TASK-036: Cost Protection & Budget Limits
 **Status**: DONE ✓  
 **Priority**: P1 (Critical)  

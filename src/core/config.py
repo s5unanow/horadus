@@ -81,6 +81,23 @@ class Settings(BaseSettings):
         default=None,
         description="Optional API key for authentication",
     )
+    API_AUTH_ENABLED: bool = Field(
+        default=False,
+        description="Enforce API key auth when true",
+    )
+    API_KEYS: list[str] = Field(
+        default_factory=list,
+        description="Additional API keys (comma-separated env value supported)",
+    )
+    API_ADMIN_KEY: str | None = Field(
+        default=None,
+        description="Admin key for API key management endpoints",
+    )
+    API_RATE_LIMIT_PER_MINUTE: int = Field(
+        default=120,
+        ge=1,
+        description="Default per-key API request limit per minute",
+    )
     CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8080"],
         description="Allowed CORS origins",
@@ -93,6 +110,16 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return [origin.strip() for origin in v.split(",")]
         return list(v) if v else []
+
+    @field_validator("API_KEYS", mode="before")
+    @classmethod
+    def parse_api_keys(cls, v: Any) -> list[str]:
+        """Parse API keys from comma-separated string or list."""
+        if isinstance(v, str):
+            return [key.strip() for key in v.split(",") if key.strip()]
+        if isinstance(v, list):
+            return [str(key).strip() for key in v if str(key).strip()]
+        return []
 
     # =========================================================================
     # OpenAI Configuration

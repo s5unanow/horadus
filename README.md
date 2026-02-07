@@ -86,8 +86,10 @@ Interactive OpenAPI docs are hosted by FastAPI:
 Detailed endpoint reference and curl examples:
 - `docs/API.md`
 
-Authentication header (documented now, enforcement planned in TASK-025):
+Authentication header:
 - `X-API-Key: <key>`
+- Key-management admin header:
+  - `X-Admin-API-Key: <key>`
 
 ## API Endpoints
 

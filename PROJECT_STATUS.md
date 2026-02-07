@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [████░░░░░░░░░░░░░░░░]  20%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [███████░░░░░░░░░░░░░]  35%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░░░░░]   0%
 ```
 
@@ -85,6 +85,10 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] API key auth scheme documented in OpenAPI (`X-API-Key`, forward-compatible)
 - [x] Request/response examples added for core API models
 - [x] API reference guide with endpoint examples (`docs/API.md`)
+- [x] API key auth middleware with opt-in enforcement and key validation
+- [x] Per-key request throttling (`429` + `Retry-After`) for API traffic
+- [x] API key management endpoints (`/api/v1/auth/keys`) for list/create/revoke
+- [x] Auth/rate-limit unit test coverage for middleware and key manager
 
 ## In Progress
 
@@ -96,11 +100,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add API key authentication and rate limiting (TASK-025)
-2. Add monitoring and alerting baseline (TASK-026)
+1. Add monitoring and alerting baseline (TASK-026)
+2. Begin deployment hardening tasks (TASK-027)
 3. Start calibration outcome tracking tasks (TASK-032+)
 4. Add operational dashboards for reporting and worker health
-5. Begin deployment hardening tasks (TASK-027)
+5. Add authentication key persistence/rotation hardening
 
 ## Expert Feedback Integration ✅
 

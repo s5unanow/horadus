@@ -9,11 +9,13 @@ Interactive documentation:
 
 ## Authentication
 
-All endpoints document `X-API-Key` in OpenAPI for forward compatibility.
+API key auth and rate limiting are controlled by environment config.
 
 - Header: `X-API-Key: <key>`
-- Current behavior: optional (not enforced yet)
-- Planned enforcement: TASK-025
+- Admin header for key management: `X-Admin-API-Key: <admin-key>`
+- Set `API_AUTH_ENABLED=true` to enforce auth globally
+- Configure keys via `API_KEY` and/or `API_KEYS`
+- Per-key default rate limit is controlled by `API_RATE_LIMIT_PER_MINUTE`
 
 Example:
 
@@ -94,4 +96,19 @@ List monthly reports:
 
 ```bash
 curl "http://localhost:8000/api/v1/reports?report_type=monthly&limit=10"
+```
+
+## Auth
+
+- `GET /api/v1/auth/keys`
+- `POST /api/v1/auth/keys`
+- `DELETE /api/v1/auth/keys/{key_id}`
+
+Create key example:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/auth/keys \
+  -H "Content-Type: application/json" \
+  -H "X-Admin-API-Key: $API_ADMIN_KEY" \
+  -d '{"name":"analytics-dashboard","rate_limit_per_minute":90}'
 ```

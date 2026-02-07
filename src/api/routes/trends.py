@@ -25,6 +25,7 @@ from src.core.risk import (
     get_confidence_rating,
     get_risk_level,
 )
+from src.core.trend_config import TrendConfig
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
 from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
@@ -612,46 +613,39 @@ async def load_trends_from_config(
             if not isinstance(raw_config, dict):
                 raise ValueError("YAML root must be a mapping")
 
-            trend_name = str(raw_config.get("name", "")).strip()
-            if not trend_name:
-                raise ValueError("name is required")
-
-            baseline_probability = float(raw_config.get("baseline_probability", 0.0))
-            if not 0 <= baseline_probability <= 1:
-                raise ValueError("baseline_probability must be in range [0, 1]")
-
-            indicators = raw_config.get("indicators", {})
-            if not isinstance(indicators, dict):
-                raise ValueError("indicators must be a mapping")
-
-            decay_half_life_days = int(raw_config.get("decay_half_life_days", 30))
-            if decay_half_life_days < 1:
-                raise ValueError("decay_half_life_days must be >= 1")
-
-            definition = _ensure_definition_id(raw_config, trend_name=trend_name)
-            baseline_log_odds = prob_to_logodds(baseline_probability)
+            parsed_config = TrendConfig.model_validate(raw_config)
+            trend_name = parsed_config.name
+            baseline_log_odds = prob_to_logodds(parsed_config.baseline_probability)
+            indicators = {
+                signal_name: indicator.model_dump(mode="json")
+                for signal_name, indicator in parsed_config.indicators.items()
+            }
+            definition = _ensure_definition_id(
+                parsed_config.model_dump(mode="json", exclude_none=True),
+                trend_name=trend_name,
+            )
 
             existing = await session.scalar(select(Trend).where(Trend.name == trend_name).limit(1))
             if existing is None:
                 trend = Trend(
                     name=trend_name,
-                    description=raw_config.get("description"),
+                    description=parsed_config.description,
                     definition=definition,
                     baseline_log_odds=baseline_log_odds,
                     current_log_odds=baseline_log_odds,
                     indicators=indicators,
-                    decay_half_life_days=decay_half_life_days,
+                    decay_half_life_days=parsed_config.decay_half_life_days,
                     is_active=True,
                 )
                 session.add(trend)
                 result.created += 1
                 continue
 
-            existing.description = raw_config.get("description")
+            existing.description = parsed_config.description
             existing.definition = definition
             existing.baseline_log_odds = baseline_log_odds
             existing.indicators = indicators
-            existing.decay_half_life_days = decay_half_life_days
+            existing.decay_half_life_days = parsed_config.decay_half_life_days
             result.updated += 1
         except Exception as exc:
             result.errors.append(f"{file_path.name}: {exc}")

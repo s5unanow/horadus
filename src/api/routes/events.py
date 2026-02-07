@@ -38,6 +38,8 @@ class EventResponse(BaseModel):
                 "source_count": 5,
                 "unique_source_count": 4,
                 "lifecycle_status": "confirmed",
+                "has_contradictions": True,
+                "contradiction_notes": "Source A reports a withdrawal while Source B reports escalation.",
                 "first_seen_at": "2026-02-07T12:10:00Z",
                 "last_mention_at": "2026-02-07T15:25:00Z",
                 "extracted_who": ["Country A", "Country B"],
@@ -53,6 +55,8 @@ class EventResponse(BaseModel):
     source_count: int
     unique_source_count: int
     lifecycle_status: str
+    has_contradictions: bool
+    contradiction_notes: str | None
     first_seen_at: datetime
     last_mention_at: datetime
     extracted_who: list[str] | None
@@ -100,6 +104,10 @@ async def list_events(
     category: str | None = None,
     trend_id: UUID | None = None,
     lifecycle: Literal["emerging", "confirmed", "fading", "archived"] | None = None,
+    contradicted: bool | None = Query(
+        default=None,
+        description="Filter contradicted events (true/false)",
+    ),
     days: int = Query(7, ge=1, le=30),
     limit: int = Query(50, ge=1, le=200),
     session: AsyncSession = Depends(get_session),
@@ -118,6 +126,8 @@ async def list_events(
     )
     if lifecycle is not None:
         query = query.where(Event.lifecycle_status == lifecycle)
+    if contradicted is not None:
+        query = query.where(Event.has_contradictions.is_(contradicted))
     if category is not None:
         query = query.where(func.array_position(Event.categories, category).is_not(None))
     if trend_id is not None:
@@ -134,6 +144,8 @@ async def list_events(
             source_count=event.source_count,
             unique_source_count=event.unique_source_count,
             lifecycle_status=event.lifecycle_status,
+            has_contradictions=event.has_contradictions,
+            contradiction_notes=event.contradiction_notes,
             first_seen_at=event.first_seen_at,
             last_mention_at=event.last_mention_at,
             extracted_who=list(event.extracted_who) if event.extracted_who else None,
@@ -203,6 +215,8 @@ async def get_event(
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,
         lifecycle_status=event.lifecycle_status,
+        has_contradictions=event.has_contradictions,
+        contradiction_notes=event.contradiction_notes,
         first_seen_at=event.first_seen_at,
         last_mention_at=event.last_mention_at,
         extracted_who=list(event.extracted_who) if event.extracted_who else None,

@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-029: Enhanced Trend Definitions
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/029-enhanced-trend-config.md`
+
+Enhance trend YAML semantics and enforce schema validation in config sync.
+
+**Completed**:
+- [x] Added trend config schema models (`src/core/trend_config.py`)
+- [x] Added validation for indicator `type` (`leading`/`lagging`)
+- [x] Added validation for `disqualifiers` and `falsification_criteria`
+- [x] Wired schema validation into trend config sync (`load_trends_from_config`)
+- [x] Added tests for enhanced config support and invalid indicator type handling
+- [x] Updated trend config documentation example in `README.md`
+
+---
+
 ### TASK-028: Risk Levels and Probability Bands
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

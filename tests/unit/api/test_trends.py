@@ -193,6 +193,7 @@ baseline_probability: 0.15
 decay_half_life_days: 20
 indicators:
   test_signal:
+    weight: 0.04
     direction: escalatory
     keywords: ["alpha"]
 """.strip(),
@@ -210,6 +211,78 @@ indicators:
     assert added.name == "Sample Trend"
     assert logodds_to_prob(float(added.baseline_log_odds)) == pytest.approx(0.15, rel=0.01)
     assert mock_db_session.flush.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_supports_enhanced_fields(
+    mock_db_session,
+    tmp_path,
+) -> None:
+    config_file = tmp_path / "enhanced-trend.yaml"
+    config_file.write_text(
+        """
+id: enhanced-trend
+name: Enhanced Trend
+baseline_probability: 0.20
+decay_half_life_days: 15
+disqualifiers:
+  - signal: peace_treaty
+    effect: reset_to_baseline
+    description: Signed peace treaty
+falsification_criteria:
+  decrease_confidence:
+    - Sustained de-escalation
+indicators:
+  military_movement:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["troops"]
+""".strip(),
+        encoding="utf-8",
+    )
+    mock_db_session.scalar.side_effect = [None]
+
+    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+
+    assert result.created == 1
+    assert result.errors == []
+    added = mock_db_session.add.call_args.args[0]
+    assert added.indicators["military_movement"]["type"] == "leading"
+    assert added.definition["disqualifiers"][0]["effect"] == "reset_to_baseline"
+    assert added.definition["falsification_criteria"]["decrease_confidence"] == [
+        "Sustained de-escalation"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_rejects_invalid_indicator_type(
+    mock_db_session,
+    tmp_path,
+) -> None:
+    config_file = tmp_path / "invalid-trend.yaml"
+    config_file.write_text(
+        """
+id: invalid-trend
+name: Invalid Trend
+baseline_probability: 0.20
+indicators:
+  military_movement:
+    weight: 0.04
+    direction: escalatory
+    type: invalid_kind
+    keywords: ["troops"]
+""".strip(),
+        encoding="utf-8",
+    )
+
+    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+
+    assert result.created == 0
+    assert result.updated == 0
+    assert len(result.errors) == 1
+    assert "invalid-trend.yaml" in result.errors[0]
+    mock_db_session.add.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ Phase 2: Processing Layer    [████████████████�
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████░░░░░░░░]  60%  ← WE ARE HERE
-Phase 6: Calibration (NEW)   [████░░░░░░░░░░░░░░░░]  20%
+Phase 6: Calibration (NEW)   [██████░░░░░░░░░░░░░░]  30%
 ```
 
 ## What's Working
@@ -104,6 +104,8 @@ Phase 6: Calibration (NEW)   [████░░░░░░░░░░░░�
 - [x] Risk level mapping and confidence rating for trend presentation
 - [x] Probability bands derived from evidence volume/recency/corroboration
 - [x] Trend responses now include top movers for the last 7 days
+- [x] Trend config schema validation for disqualifiers and falsification criteria
+- [x] Indicator type validation (`leading`/`lagging`) in YAML config sync
 
 ## In Progress
 
@@ -115,11 +117,11 @@ Phase 6: Calibration (NEW)   [████░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add enhanced trend definitions (TASK-029)
-2. Add event lifecycle tracking (TASK-030)
-3. Add operational dashboards for reporting and worker health
-4. Add authentication key persistence/rotation hardening
-5. Add alert routing policies and SLO thresholds
+1. Add event lifecycle tracking (TASK-030)
+2. Add operational dashboards for reporting and worker health
+3. Add authentication key persistence/rotation hardening
+4. Add alert routing policies and SLO thresholds
+5. Add deployment hardening follow-ups (secrets manager, TLS, backups)
 
 ## Expert Feedback Integration ✅
 

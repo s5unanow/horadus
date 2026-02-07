@@ -135,6 +135,7 @@ indicators:
   military_movement:
     weight: 0.04
     direction: escalatory
+    type: leading
     keywords: ["troops", "deployment", "mobilization", "exercises", "nato"]
 
   sanctions:
@@ -145,7 +146,19 @@ indicators:
   diplomatic_talks:
     weight: 0.03
     direction: de_escalatory
+    type: leading
     keywords: ["talks", "negotiation", "summit", "agreement", "ceasefire"]
+
+disqualifiers:
+  - signal: peace_treaty_signed
+    effect: reset_to_baseline
+    description: "Formal ratified peace agreement"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Sustained de-escalation without incidents"
+  increase_confidence:
+    - "Direct military engagement between parties"
 
 decay_half_life_days: 30
 ```

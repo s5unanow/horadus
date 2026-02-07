@@ -8,7 +8,7 @@
 ```
 Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
 Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
-Phase 2: Processing Layer    [████████░░░░░░░░░░░░]  40%  ← WE ARE HERE
+Phase 2: Processing Layer    [██████████░░░░░░░░░░]  50%  ← WE ARE HERE
 Phase 3: Trend Engine        [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 4: Reporting           [░░░░░░░░░░░░░░░░░░░░]   0%
 Phase 5: Polish & Deploy     [░░░░░░░░░░░░░░░░░░░░]   0%
@@ -46,10 +46,12 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 - [x] Ingestion collectors wired to shared deduplication service
 - [x] Event clusterer baseline (time-window similarity create/merge)
 - [x] Event metadata updates on merge (source counts, summary, primary source)
+- [x] Tier 1 classifier baseline (batch scoring + strict JSON validation)
+- [x] Tier 1 routing updates (`noise` vs Tier 2-ready `processing`) and usage metrics
 
 ## In Progress
 
-- [ ] TASK-013: Tier 1 classifier baseline
+- [ ] TASK-014: Tier 2 classifier baseline
 
 ## Blocked
 
@@ -57,11 +59,11 @@ Phase 6: Calibration (NEW)   [░░░░░░░░░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Implement Tier 1 classifier (TASK-013)
-2. Implement Tier 2 classifier (TASK-014)
-3. Add processing pipeline orchestration (TASK-015)
-4. Add trend management service baseline (TASK-016)
-5. Implement trend engine orchestration (TASK-017)
+1. Implement Tier 2 classifier (TASK-014)
+2. Add processing pipeline orchestration (TASK-015)
+3. Add trend management service baseline (TASK-016)
+4. Implement trend engine orchestration (TASK-017)
+5. Add evidence recording orchestration (TASK-018)
 
 ## Expert Feedback Integration ✅
 

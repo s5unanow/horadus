@@ -19,6 +19,7 @@ from celery.signals import task_failure
 from sqlalchemy import select
 
 from src.core.config import settings
+from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
 from src.processing.pipeline_orchestrator import ProcessingPipeline
@@ -215,6 +216,47 @@ async def _snapshot_trends_async() -> dict[str, Any]:
     }
 
 
+async def _decay_trends_async() -> dict[str, Any]:
+    as_of = datetime.now(tz=UTC)
+    async with async_session_maker() as session:
+        engine = TrendEngine(session=session)
+        trends = list(
+            (
+                await session.scalars(
+                    select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
+                )
+            ).all()
+        )
+
+        decayed = 0
+        unchanged = 0
+        for trend in trends:
+            previous_probability = engine.get_probability(trend)
+            new_probability = await engine.apply_decay(trend=trend, as_of=as_of)
+            if abs(new_probability - previous_probability) > 1e-12:
+                decayed += 1
+            else:
+                unchanged += 1
+            logger.debug(
+                "Applied trend decay",
+                trend_id=str(trend.id),
+                trend_name=trend.name,
+                previous_probability=previous_probability,
+                new_probability=new_probability,
+            )
+
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "apply_trend_decay",
+        "as_of": as_of.isoformat(),
+        "scanned": len(trends),
+        "decayed": decayed,
+        "unchanged": unchanged,
+    }
+
+
 @typed_shared_task(
     name="workers.process_pending_items",
     autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
@@ -251,6 +293,20 @@ def snapshot_trends() -> dict[str, Any]:
         scanned=result["scanned"],
         created=result["created"],
         skipped=result["skipped"],
+    )
+    return result
+
+
+@typed_shared_task(name="workers.apply_trend_decay")
+def apply_trend_decay() -> dict[str, Any]:
+    """Apply time-based decay to all active trends."""
+    logger.info("Starting trend decay task")
+    result = _run_async(_decay_trends_async())
+    logger.info(
+        "Finished trend decay task",
+        scanned=result["scanned"],
+        decayed=result["decayed"],
+        unchanged=result["unchanged"],
     )
     return result
 

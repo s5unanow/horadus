@@ -31,6 +31,10 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
         "task": "workers.snapshot_trends",
         "schedule": timedelta(minutes=max(1, settings.TREND_SNAPSHOT_INTERVAL_MINUTES)),
     }
+    schedule["apply-trend-decay"] = {
+        "task": "workers.apply_trend_decay",
+        "schedule": timedelta(days=1),
+    }
 
     return schedule
 
@@ -53,6 +57,7 @@ celery_app.conf.update(
         "workers.collect_gdelt": {"queue": "ingestion"},
         "workers.process_pending_items": {"queue": "processing"},
         "workers.snapshot_trends": {"queue": "processing"},
+        "workers.apply_trend_decay": {"queue": "processing"},
         "workers.ping": {"queue": "default"},
     },
     broker_connection_retry_on_startup=True,

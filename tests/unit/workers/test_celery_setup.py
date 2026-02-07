@@ -31,6 +31,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["collect-gdelt"]["schedule"] == timedelta(minutes=45)
     assert schedule["snapshot-trends"]["task"] == "workers.snapshot_trends"
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=120)
+    assert schedule["apply-trend-decay"]["task"] == "workers.apply_trend_decay"
+    assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
 
 
 def test_build_beat_schedule_omits_disabled_collectors(
@@ -42,15 +44,18 @@ def test_build_beat_schedule_omits_disabled_collectors(
 
     schedule = celery_app_module._build_beat_schedule()
 
-    assert list(schedule.keys()) == ["snapshot-trends"]
+    assert list(schedule.keys()) == ["snapshot-trends", "apply-trend-decay"]
     assert schedule["snapshot-trends"]["task"] == "workers.snapshot_trends"
     assert schedule["snapshot-trends"]["schedule"] == timedelta(minutes=90)
+    assert schedule["apply-trend-decay"]["task"] == "workers.apply_trend_decay"
+    assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
 
 
 def test_celery_routes_include_processing_queue() -> None:
     routes = celery_app_module.celery_app.conf.task_routes
     assert routes["workers.process_pending_items"]["queue"] == "processing"
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
+    assert routes["workers.apply_trend_decay"]["queue"] == "processing"
 
 
 def test_collect_rss_task_uses_async_collector(
@@ -175,6 +180,30 @@ def test_snapshot_trends_task_uses_async_worker(
     assert result["task"] == "snapshot_trends"
     assert result["scanned"] == 4
     assert result["created"] == 4
+
+
+def test_apply_trend_decay_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_decay() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "apply_trend_decay",
+            "as_of": "2026-02-07T13:00:00+00:00",
+            "scanned": 4,
+            "decayed": 3,
+            "unchanged": 1,
+        }
+
+    monkeypatch.setattr(tasks_module, "_decay_trends_async", fake_decay)
+
+    result = tasks_module.apply_trend_decay.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "apply_trend_decay"
+    assert result["scanned"] == 4
+    assert result["decayed"] == 3
+    assert result["unchanged"] == 1
 
 
 def test_task_retry_configuration() -> None:

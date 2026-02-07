@@ -25,6 +25,7 @@ Tasks that have been completed and verified.
 - TASK-017: Trend Engine Core ✅
 - TASK-018: Evidence Recording ✅
 - TASK-019: Trend Snapshots ✅
+- TASK-020: Decay Worker ✅
 
 ---
 

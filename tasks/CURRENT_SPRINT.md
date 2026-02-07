@@ -14,6 +14,21 @@
 
 ## Completed This Sprint
 
+### TASK-031: Source Tier and Reporting Type
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/031-source-tiers.md`
+
+Apply source tier/reporting semantics to effective credibility in processing.
+
+**Completed**:
+- [x] Applied source tier + reporting type multipliers in credibility calculation paths
+- [x] Used effective source credibility for event primary-source selection
+- [x] Used effective source credibility for trend impact evidence scoring
+- [x] Added unit tests for tier/reporting multiplier behavior
+
+---
+
 ### TASK-030: Event Lifecycle Tracking
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

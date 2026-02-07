@@ -36,6 +36,7 @@ Tasks that have been completed and verified.
 - TASK-028: Risk Levels and Probability Bands ✅
 - TASK-029: Enhanced Trend Definitions ✅
 - TASK-030: Event Lifecycle Tracking ✅
+- TASK-031: Source Tier and Reporting Type ✅
 - TASK-032: Trend Outcomes for Calibration ✅
 
 ---

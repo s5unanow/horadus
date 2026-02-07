@@ -10,9 +10,13 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.source_credibility import (
+    DEFAULT_SOURCE_CREDIBILITY,
+    source_multiplier_expression,
+)
 from src.core.trend_engine import TrendEngine, calculate_evidence_delta
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
@@ -389,19 +393,27 @@ class ProcessingPipeline:
 
     async def _load_event_source_credibility(self, event: Event) -> float:
         if event.primary_item_id is None:
-            return 0.5
+            return DEFAULT_SOURCE_CREDIBILITY
 
         query = (
-            select(Source.credibility_score)
+            select(
+                (
+                    func.coalesce(Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY)
+                    * source_multiplier_expression(
+                        source_tier_col=Source.source_tier,
+                        reporting_type_col=Source.reporting_type,
+                    )
+                ).label("effective_credibility")
+            )
             .join(RawItem, RawItem.source_id == Source.id)
             .where(RawItem.id == event.primary_item_id)
             .limit(1)
         )
         credibility = await self.session.scalar(query)
         try:
-            return float(credibility) if credibility is not None else 0.5
+            return float(credibility) if credibility is not None else DEFAULT_SOURCE_CREDIBILITY
         except (TypeError, ValueError):
-            return 0.5
+            return DEFAULT_SOURCE_CREDIBILITY
 
     async def _novelty_score(
         self,

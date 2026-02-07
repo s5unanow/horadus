@@ -85,6 +85,10 @@ Interactive OpenAPI docs are hosted by FastAPI:
 
 Detailed endpoint reference and curl examples:
 - `docs/API.md`
+- Deployment runbook:
+  - `docs/DEPLOYMENT.md`
+- Environment variable reference:
+  - `docs/ENVIRONMENT.md`
 
 Authentication header:
 - `X-API-Key: <key>`
@@ -165,6 +169,18 @@ feeds:
 
 The project uses a `Makefile` to simplify common tasks. Run `make help` to see all available commands.
 
+## Production Deployment
+
+Use the production Compose stack and container definitions:
+
+```bash
+docker compose -f docker-compose.prod.yml build
+docker compose -f docker-compose.prod.yml --profile ops run --rm migrate
+docker compose -f docker-compose.prod.yml up -d api worker beat postgres redis
+```
+
+See `docs/DEPLOYMENT.md` for the full deployment workflow and operational notes.
+
 ### Running Tests
 
 ```bash
@@ -205,11 +221,19 @@ geopolitical-intel/
 ├── PROJECT_STATUS.md      # Development progress
 ├── pyproject.toml         # Python project config
 ├── docker-compose.yml     # Local infrastructure
+├── docker-compose.prod.yml # Production deployment stack
 ├── alembic.ini            # Migration config
+│
+├── docker/                # Container definitions
+│   ├── api/Dockerfile     # API container image
+│   ├── worker/Dockerfile  # Worker/beat container image
+│   └── postgres/Dockerfile# Postgres image with pgvector
 │
 ├── docs/                  # Documentation
 │   ├── ARCHITECTURE.md    # System design
 │   ├── DATA_MODEL.md      # Database schema
+│   ├── DEPLOYMENT.md      # Deployment runbook
+│   ├── ENVIRONMENT.md     # Environment variable reference
 │   └── adr/               # Architecture decisions
 │
 ├── ai/                    # AI assets (prompts, evals)

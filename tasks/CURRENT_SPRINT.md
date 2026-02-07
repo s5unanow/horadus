@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-027: Deployment Configuration
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md` (Phase 5)
+
+Production deployment setup.
+
+**Completed**:
+- [x] Added production API Dockerfile (`docker/api/Dockerfile`)
+- [x] Added production worker Dockerfile (`docker/worker/Dockerfile`)
+- [x] Added production stack definition (`docker-compose.prod.yml`)
+- [x] Added environment variable reference (`docs/ENVIRONMENT.md`)
+- [x] Added deployment guide/runbook (`docs/DEPLOYMENT.md`)
+
+---
+
 ### TASK-026: Monitoring & Alerting
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

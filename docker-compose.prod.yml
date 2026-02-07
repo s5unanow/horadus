@@ -1,0 +1,159 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/api/Dockerfile
+    image: horadus-api:latest
+    env_file:
+      - .env
+    environment:
+      API_RELOAD: "false"
+      ENVIRONMENT: production
+      LOG_FORMAT: json
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - horadus-network
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/worker/Dockerfile
+    image: horadus-worker:latest
+    env_file:
+      - .env
+    environment:
+      API_RELOAD: "false"
+      ENVIRONMENT: production
+      LOG_FORMAT: json
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - horadus-network
+
+  beat:
+    image: horadus-worker:latest
+    env_file:
+      - .env
+    environment:
+      API_RELOAD: "false"
+      ENVIRONMENT: production
+      LOG_FORMAT: json
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    command:
+      - celery
+      - -A
+      - src.workers.celery_app
+      - beat
+      - --loglevel=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - horadus-network
+
+  migrate:
+    image: horadus-api:latest
+    env_file:
+      - .env
+    environment:
+      API_RELOAD: "false"
+      ENVIRONMENT: production
+      LOG_FORMAT: json
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      DATABASE_URL_SYNC: postgresql://${POSTGRES_USER:-geoint}:${POSTGRES_PASSWORD:-change-me}@postgres:5432/${POSTGRES_DB:-geoint}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+    command:
+      - alembic
+      - upgrade
+      - head
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - ops
+    restart: "no"
+    networks:
+      - horadus-network
+
+  postgres:
+    build:
+      context: ./docker/postgres
+      dockerfile: Dockerfile
+    image: horadus-postgres:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-geoint}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      POSTGRES_DB: ${POSTGRES_DB:-geoint}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-geoint} -d ${POSTGRES_DB:-geoint}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - horadus-network
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --maxmemory
+      - 512mb
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - horadus-network
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  horadus-network:
+    driver: bridge

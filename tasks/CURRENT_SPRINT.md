@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-023: Retrospective Analysis
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/023-retrospective-analysis.md`
+
+Analyze how past classifications affected trend movement.
+
+**Completed**:
+- [x] Added endpoint `GET /api/v1/trends/{id}/retrospective`
+- [x] Added `start_date`/`end_date` query parameters with validation
+- [x] Added pivotal-event and predictive-signal aggregation for the selected window
+- [x] Added accuracy assessment metrics from trend outcomes
+- [x] Added LLM-backed retrospective narrative generation with deterministic fallback
+- [x] Added unit tests for retrospective endpoint behavior
+
+---
+
 ### TASK-022: Report Generator - Monthly
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

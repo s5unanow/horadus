@@ -6,7 +6,7 @@ CRUD operations for trend management plus config-file sync.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -17,6 +17,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.retrospective_analyzer import RetrospectiveAnalyzer
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
 from src.storage.models import Trend, TrendEvidence, TrendSnapshot
@@ -106,6 +107,41 @@ class TrendHistoryPoint(BaseModel):
     timestamp: datetime
     log_odds: float
     probability: float
+
+
+class RetrospectiveEvent(BaseModel):
+    """One pivotal event in retrospective analysis."""
+
+    event_id: UUID
+    summary: str
+    categories: list[str]
+    evidence_count: int
+    net_delta_log_odds: float
+    abs_delta_log_odds: float
+    direction: Literal["up", "down", "mixed"]
+
+
+class RetrospectiveSignal(BaseModel):
+    """One predictive signal summary in retrospective analysis."""
+
+    signal_type: str
+    evidence_count: int
+    net_delta_log_odds: float
+    abs_delta_log_odds: float
+
+
+class TrendRetrospectiveResponse(BaseModel):
+    """Trend retrospective analysis response payload."""
+
+    trend_id: UUID
+    trend_name: str
+    period_start: datetime
+    period_end: datetime
+    pivotal_events: list[RetrospectiveEvent]
+    category_breakdown: dict[str, int]
+    predictive_signals: list[RetrospectiveSignal]
+    accuracy_assessment: dict[str, int | float | None]
+    narrative: str
 
 
 # =============================================================================
@@ -431,6 +467,46 @@ async def get_trend_history(
     snapshots = list((await session.scalars(query)).all())
     downsampled = _downsample_snapshots(snapshots=snapshots, interval=interval)
     return [_to_history_point(snapshot) for snapshot in downsampled]
+
+
+@router.get("/{trend_id}/retrospective", response_model=TrendRetrospectiveResponse)
+async def get_trend_retrospective(
+    trend_id: UUID,
+    start_date: Annotated[datetime | None, Query()] = None,
+    end_date: Annotated[datetime | None, Query()] = None,
+    session: AsyncSession = Depends(get_session),
+) -> TrendRetrospectiveResponse:
+    """
+    Analyze pivotal events/signals for one trend over a selected time window.
+    """
+    trend = await _get_trend_or_404(session, trend_id)
+
+    if end_date is None:
+        period_end = datetime.now(tz=UTC)
+    elif end_date.tzinfo is None:
+        period_end = end_date.replace(tzinfo=UTC)
+    else:
+        period_end = end_date.astimezone(UTC)
+
+    if start_date is None:
+        period_start = period_end - timedelta(days=30)
+    elif start_date.tzinfo is None:
+        period_start = start_date.replace(tzinfo=UTC)
+    else:
+        period_start = start_date.astimezone(UTC)
+    if period_start > period_end:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be less than or equal to end_date",
+        )
+
+    analyzer = RetrospectiveAnalyzer(session=session)
+    analysis = await analyzer.analyze(
+        trend=trend,
+        start_date=period_start,
+        end_date=period_end,
+    )
+    return TrendRetrospectiveResponse(**analysis)
 
 
 @router.patch("/{trend_id}", response_model=TrendResponse)

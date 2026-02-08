@@ -10,6 +10,7 @@ A headless backend for collecting, classifying, and analyzing news to track geop
 - **Event lifecycle tracking**: Emerging → confirmed → fading → archived
 - **Trend tracking**: Bayesian-inspired probability updates using log-odds
 - **Risk presentation**: Risk levels + probability bands + confidence ratings
+- **Calibration visibility**: Reliability curve + Brier score dashboard
 - **Automated reports**: Weekly/monthly trend analysis with retrospectives
 - **Headless API**: REST endpoints for any frontend (web/mobile)
 
@@ -114,9 +115,18 @@ Authentication header:
 | GET | `/api/v1/events/{id}` | Get event details |
 | GET | `/api/v1/reports` | List generated reports |
 | GET | `/api/v1/reports/{id}` | Get report details |
+| GET | `/api/v1/reports/calibration` | Calibration dashboard + trend movement visibility |
 | GET | `/api/v1/auth/keys` | List API keys (admin) |
 | POST | `/api/v1/auth/keys` | Create API key (admin) |
 | DELETE | `/api/v1/auth/keys/{id}` | Revoke API key (admin) |
+
+## CLI
+
+Quick trend visibility from the terminal:
+
+```bash
+uv run horadus trends status
+```
 
 ## Configuration
 

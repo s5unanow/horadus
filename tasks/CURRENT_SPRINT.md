@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-035: Calibration Dashboard & Early Visibility
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md` (Phase 5)
+
+Build calibration analysis and quick visibility into trend movement.
+
+**Completed**:
+- [x] Added dashboard service for reliability buckets and Brier score timeline (`src/core/calibration_dashboard.py`)
+- [x] Added endpoint `GET /api/v1/reports/calibration` for cross-trend calibration reporting
+- [x] Added reliability statements ("When we said X%, it happened Y%")
+- [x] Added trend movement text charts with weekly change + top movers
+- [x] Added CLI command `horadus trends status` for terminal visibility
+- [x] Added unit tests for dashboard helpers, reports API, and CLI formatting
+
+---
+
 ### TASK-034: Human Feedback API
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

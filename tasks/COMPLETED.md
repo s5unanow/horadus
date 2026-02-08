@@ -40,6 +40,7 @@ Tasks that have been completed and verified.
 - TASK-032: Trend Outcomes for Calibration ✅
 - TASK-033: Contradiction Detection ✅
 - TASK-034: Human Feedback API ✅
+- TASK-035: Calibration Dashboard & Early Visibility ✅
 - TASK-036: Cost Protection & Budget Limits ✅
 
 ---

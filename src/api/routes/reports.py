@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.calibration_dashboard import CalibrationDashboardService
 from src.storage.database import get_session
 from src.storage.models import Report, Trend
 
@@ -91,6 +92,98 @@ class ReportResponse(BaseModel):
     created_at: datetime
 
 
+class CalibrationCurveBucketResponse(BaseModel):
+    """Calibration curve bucket from dashboard report."""
+
+    bucket_start: float
+    bucket_end: float
+    prediction_count: int
+    actual_rate: float
+    expected_rate: float
+    calibration_error: float
+
+
+class BrierScoreTimeseriesResponse(BaseModel):
+    """Brier score timeline point."""
+
+    period_start: datetime
+    period_end: datetime
+    mean_brier_score: float
+    sample_size: int
+
+
+class TrendMovementResponse(BaseModel):
+    """Trend movement visibility row."""
+
+    trend_id: UUID
+    trend_name: str
+    current_probability: float
+    weekly_change: float
+    risk_level: str
+    top_movers_7d: list[str]
+    movement_chart: str
+
+
+class CalibrationDashboardResponse(BaseModel):
+    """Cross-trend calibration dashboard payload."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "generated_at": "2026-02-08T12:00:00Z",
+                "period_start": "2025-11-10T00:00:00Z",
+                "period_end": "2026-02-08T12:00:00Z",
+                "total_predictions": 42,
+                "resolved_predictions": 38,
+                "mean_brier_score": 0.191,
+                "calibration_curve": [
+                    {
+                        "bucket_start": 0.2,
+                        "bucket_end": 0.3,
+                        "prediction_count": 10,
+                        "actual_rate": 0.3,
+                        "expected_rate": 0.25,
+                        "calibration_error": 0.05,
+                    }
+                ],
+                "brier_score_over_time": [
+                    {
+                        "period_start": "2026-01-05T00:00:00Z",
+                        "period_end": "2026-01-12T00:00:00Z",
+                        "mean_brier_score": 0.176,
+                        "sample_size": 5,
+                    }
+                ],
+                "reliability_notes": [
+                    "When we predicted 20%-30%, it happened 30% of the time (n=10)."
+                ],
+                "trend_movements": [
+                    {
+                        "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                        "trend_name": "EU-Russia Military Conflict",
+                        "current_probability": 0.183,
+                        "weekly_change": 0.021,
+                        "risk_level": "guarded",
+                        "top_movers_7d": ["military_movement", "diplomatic_breakdown"],
+                        "movement_chart": "._-~=+*#%@",
+                    }
+                ],
+            }
+        }
+    )
+
+    generated_at: datetime
+    period_start: datetime
+    period_end: datetime
+    total_predictions: int
+    resolved_predictions: int
+    mean_brier_score: float | None
+    calibration_curve: list[CalibrationCurveBucketResponse]
+    brier_score_over_time: list[BrierScoreTimeseriesResponse]
+    reliability_notes: list[str]
+    trend_movements: list[TrendMovementResponse]
+
+
 def _normalize_top_events(value: Any) -> list[dict[str, Any]] | None:
     if isinstance(value, list):
         return [row for row in value if isinstance(row, dict)]
@@ -156,6 +249,71 @@ async def list_reports(
         )
         for report, trend_name in rows
     ]
+
+
+@router.get("/calibration", response_model=CalibrationDashboardResponse)
+async def get_calibration_dashboard(
+    trend_id: UUID | None = None,
+    start_date: datetime | None = Query(default=None),
+    end_date: datetime | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> CalibrationDashboardResponse:
+    """
+    Get cross-trend calibration dashboard and movement visibility.
+    """
+    if start_date is not None and end_date is not None and start_date > end_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="start_date must be less than or equal to end_date",
+        )
+
+    service = CalibrationDashboardService(session)
+    dashboard = await service.build_dashboard(
+        trend_id=trend_id,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    return CalibrationDashboardResponse(
+        generated_at=dashboard.generated_at,
+        period_start=dashboard.period_start,
+        period_end=dashboard.period_end,
+        total_predictions=dashboard.total_predictions,
+        resolved_predictions=dashboard.resolved_predictions,
+        mean_brier_score=dashboard.mean_brier_score,
+        calibration_curve=[
+            CalibrationCurveBucketResponse(
+                bucket_start=bucket.bucket_start,
+                bucket_end=bucket.bucket_end,
+                prediction_count=bucket.prediction_count,
+                actual_rate=bucket.actual_rate,
+                expected_rate=bucket.expected_rate,
+                calibration_error=bucket.calibration_error,
+            )
+            for bucket in dashboard.calibration_curve
+        ],
+        brier_score_over_time=[
+            BrierScoreTimeseriesResponse(
+                period_start=point.period_start,
+                period_end=point.period_end,
+                mean_brier_score=point.mean_brier_score,
+                sample_size=point.sample_size,
+            )
+            for point in dashboard.brier_score_over_time
+        ],
+        reliability_notes=dashboard.reliability_notes,
+        trend_movements=[
+            TrendMovementResponse(
+                trend_id=row.trend_id,
+                trend_name=row.trend_name,
+                current_probability=row.current_probability,
+                weekly_change=row.weekly_change,
+                risk_level=row.risk_level,
+                top_movers_7d=row.top_movers_7d,
+                movement_chart=row.movement_chart,
+            )
+            for row in dashboard.trend_movements
+        ],
+    )
 
 
 @router.get("/{report_id}", response_model=ReportResponse)

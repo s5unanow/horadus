@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-07
+**Last Updated**: 2026-02-08
 **Current Phase**: Phase 5 - Polish & Deploy (in progress)
 
 ## Progress Overview
@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [██████████████████░░]  90%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [███████████████████░]  95%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -119,6 +119,10 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Feedback audit endpoint (`GET /api/v1/feedback`)
 - [x] Event invalidation support that reverts trend contributions
 - [x] Processing suppression for events marked as noise/invalidated
+- [x] Calibration dashboard endpoint (`GET /api/v1/reports/calibration`)
+- [x] Cross-trend reliability statements ("When we said X%, it happened Y%")
+- [x] Brier score timeline series for drift visibility
+- [x] `horadus trends status` CLI for quick movement checks
 
 ## In Progress
 
@@ -130,11 +134,11 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add operational dashboards for reporting and worker health
-2. Add calibration dashboard and drift visualization (TASK-035)
-3. Add deployment hardening follow-ups (secrets manager, TLS, backups)
-4. Add authentication key persistence/rotation hardening
-5. Add contradiction-resolution analytics in reports
+1. Add deployment hardening follow-ups (secrets manager, TLS, backups)
+2. Add authentication key persistence/rotation hardening
+3. Add contradiction-resolution analytics in reports
+4. Add calibration drift alert thresholds + notifications
+5. Add operational dashboard export/hosting path
 
 ## Expert Feedback Integration ✅
 

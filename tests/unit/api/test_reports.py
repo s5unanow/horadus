@@ -7,7 +7,19 @@ from uuid import uuid4
 import pytest
 from fastapi import HTTPException
 
-from src.api.routes.reports import get_latest_monthly, get_latest_weekly, get_report, list_reports
+from src.api.routes.reports import (
+    get_calibration_dashboard,
+    get_latest_monthly,
+    get_latest_weekly,
+    get_report,
+    list_reports,
+)
+from src.core.calibration_dashboard import (
+    BrierTimeseriesPoint,
+    CalibrationBucketSummary,
+    CalibrationDashboardReport,
+    TrendMovement,
+)
 from src.storage.models import Report
 
 pytestmark = pytest.mark.unit
@@ -120,3 +132,96 @@ async def test_get_latest_monthly_returns_report(mock_db_session) -> None:
     assert result.id == report.id
     assert result.report_type == "monthly"
     assert result.trend_name == "EU-Russia"
+
+
+@pytest.mark.asyncio
+async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkeypatch) -> None:
+    now = datetime.now(tz=UTC)
+    trend_id = uuid4()
+    dashboard = CalibrationDashboardReport(
+        generated_at=now,
+        period_start=now - timedelta(days=30),
+        period_end=now,
+        total_predictions=12,
+        resolved_predictions=10,
+        mean_brier_score=0.19,
+        calibration_curve=[
+            CalibrationBucketSummary(
+                bucket_start=0.2,
+                bucket_end=0.3,
+                prediction_count=5,
+                actual_rate=0.4,
+                expected_rate=0.25,
+                calibration_error=0.15,
+            )
+        ],
+        brier_score_over_time=[
+            BrierTimeseriesPoint(
+                period_start=now - timedelta(days=7),
+                period_end=now,
+                mean_brier_score=0.18,
+                sample_size=5,
+            )
+        ],
+        reliability_notes=["When we predicted 20%-30%, it happened 40% of the time (n=5)."],
+        trend_movements=[
+            TrendMovement(
+                trend_id=trend_id,
+                trend_name="EU-Russia",
+                current_probability=0.31,
+                weekly_change=0.04,
+                risk_level="elevated",
+                top_movers_7d=["military_movement"],
+                movement_chart="._-=+*",
+            )
+        ],
+    )
+
+    class _Service:
+        def __init__(self, session) -> None:
+            assert session is mock_db_session
+
+        async def build_dashboard(
+            self,
+            *,
+            trend_id,
+            start_date,
+            end_date,
+        ) -> CalibrationDashboardReport:
+            assert trend_id is None
+            assert start_date is None
+            assert end_date is None
+            return dashboard
+
+    monkeypatch.setattr("src.api.routes.reports.CalibrationDashboardService", _Service)
+
+    result = await get_calibration_dashboard(
+        trend_id=None,
+        start_date=None,
+        end_date=None,
+        session=mock_db_session,
+    )
+
+    assert result.total_predictions == 12
+    assert result.resolved_predictions == 10
+    assert result.mean_brier_score == pytest.approx(0.19)
+    assert result.calibration_curve[0].actual_rate == pytest.approx(0.4)
+    assert result.trend_movements[0].trend_name == "EU-Russia"
+    assert result.trend_movements[0].movement_chart == "._-=+*"
+
+
+@pytest.mark.asyncio
+async def test_get_calibration_dashboard_rejects_invalid_date_range(mock_db_session) -> None:
+    now = datetime.now(tz=UTC)
+
+    with pytest.raises(
+        HTTPException, match="start_date must be less than or equal to end_date"
+    ) as exc:
+        await get_calibration_dashboard(
+            trend_id=None,
+            start_date=now,
+            end_date=now - timedelta(days=1),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400

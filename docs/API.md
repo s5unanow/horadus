@@ -124,11 +124,18 @@ Supported event filters:
 - `GET /api/v1/reports/{report_id}`
 - `GET /api/v1/reports/latest/weekly`
 - `GET /api/v1/reports/latest/monthly`
+- `GET /api/v1/reports/calibration`
 
 List monthly reports:
 
 ```bash
 curl "http://localhost:8000/api/v1/reports?report_type=monthly&limit=10"
+```
+
+Calibration dashboard example:
+
+```bash
+curl "http://localhost:8000/api/v1/reports/calibration"
 ```
 
 ## Budget

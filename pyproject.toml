@@ -85,6 +85,9 @@ Documentation = "https://github.com/yourname/geopolitical-intel#readme"
 Issues = "https://github.com/yourname/geopolitical-intel/issues"
 Source = "https://github.com/yourname/geopolitical-intel"
 
+[project.scripts]
+horadus = "src.cli:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
 

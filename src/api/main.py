@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from src.api.middleware.auth import APIKeyAuthMiddleware
-from src.api.routes import auth, budget, events, health, metrics, reports, sources, trends
+from src.api.routes import auth, budget, events, feedback, health, metrics, reports, sources, trends
 from src.core.config import settings
 from src.core.logging_setup import configure_logging
 from src.storage.database import async_session_maker, engine
@@ -56,6 +56,10 @@ OPENAPI_TAGS = [
     {
         "name": "Budget",
         "description": "Track LLM usage limits, costs, and remaining daily budget.",
+    },
+    {
+        "name": "Feedback",
+        "description": "Record analyst feedback for events/trends and manual overrides.",
     },
 ]
 
@@ -233,6 +237,12 @@ def register_routes(app: FastAPI) -> None:
         budget.router,
         prefix=f"{api_v1_prefix}/budget",
         tags=["Budget"],
+    )
+
+    app.include_router(
+        feedback.router,
+        prefix=api_v1_prefix,
+        tags=["Feedback"],
     )
 
 

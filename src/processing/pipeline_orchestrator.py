@@ -24,7 +24,15 @@ from src.processing.embedding_service import EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Classifier
-from src.storage.models import Event, ProcessingStatus, RawItem, Source, Trend, TrendEvidence
+from src.storage.models import (
+    Event,
+    HumanFeedback,
+    ProcessingStatus,
+    RawItem,
+    Source,
+    Trend,
+    TrendEvidence,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -211,6 +219,32 @@ class ProcessingPipeline:
                 embedded = True
 
             cluster_result = await self.event_clusterer.cluster_item(item)
+            event = await self._load_event(cluster_result.event_id)
+            if event is None:
+                msg = f"Event {cluster_result.event_id} not found after clustering"
+                raise ValueError(msg)
+
+            suppression_action = await self._event_suppression_action(
+                event_id=cluster_result.event_id
+            )
+            if suppression_action is not None:
+                item.processing_status = ProcessingStatus.NOISE
+                await self.session.flush()
+                logger.info(
+                    "Skipping event due to human feedback suppression",
+                    item_id=str(item_id),
+                    event_id=str(cluster_result.event_id),
+                    action=suppression_action,
+                )
+                return _ItemExecution(
+                    result=self._build_item_result(
+                        item_id=item_id,
+                        status=item.processing_status,
+                        cluster_result=cluster_result,
+                        embedded=embedded,
+                    ),
+                    usage=usage,
+                )
 
             tier1_result, tier1_usage = await self._classify_tier1(item=item, trends=trends)
             usage.tier1_prompt_tokens += tier1_usage.prompt_tokens
@@ -229,11 +263,6 @@ class ProcessingPipeline:
                     ),
                     usage=usage,
                 )
-
-            event = await self._load_event(cluster_result.event_id)
-            if event is None:
-                msg = f"Event {cluster_result.event_id} not found after clustering"
-                raise ValueError(msg)
 
             _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
                 event=event,
@@ -327,6 +356,18 @@ class ProcessingPipeline:
         query = select(Event).where(Event.id == event_id).limit(1)
         event: Event | None = await self.session.scalar(query)
         return event
+
+    async def _event_suppression_action(self, *, event_id: UUID) -> str | None:
+        query = (
+            select(HumanFeedback.action)
+            .where(HumanFeedback.target_type == "event")
+            .where(HumanFeedback.target_id == event_id)
+            .where(HumanFeedback.action.in_(("mark_noise", "invalidate")))
+            .order_by(HumanFeedback.created_at.desc())
+            .limit(1)
+        )
+        action: str | None = await self.session.scalar(query)
+        return action
 
     async def _apply_trend_impacts(
         self,

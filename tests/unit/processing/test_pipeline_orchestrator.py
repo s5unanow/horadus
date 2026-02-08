@@ -85,7 +85,7 @@ async def test_process_items_classifies_relevant_item(mock_db_session) -> None:
             )
         )
     )
-    mock_db_session.scalar = AsyncMock(return_value=event)
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
 
     pipeline = ProcessingPipeline(
         session=mock_db_session,
@@ -271,7 +271,7 @@ async def test_process_items_applies_trend_impacts(mock_db_session) -> None:
             )
         )
     )
-    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None, None])
 
     pipeline = ProcessingPipeline(
         session=mock_db_session,
@@ -361,7 +361,7 @@ async def test_process_items_skips_unknown_signal_weight(mock_db_session) -> Non
         )
     )
     mock_trend_engine = SimpleNamespace(apply_evidence=AsyncMock())
-    mock_db_session.scalar = AsyncMock(return_value=event)
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
 
     pipeline = ProcessingPipeline(
         session=mock_db_session,
@@ -407,6 +407,7 @@ async def test_process_items_keeps_item_pending_when_tier1_budget_exceeded(mock_
         )
     )
     tier2 = SimpleNamespace(classify_event=AsyncMock())
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
 
     pipeline = ProcessingPipeline(
         session=mock_db_session,
@@ -459,7 +460,7 @@ async def test_process_items_keeps_item_pending_when_tier2_budget_exceeded(mock_
             side_effect=BudgetExceededError("tier2 daily call limit (1) exceeded")
         )
     )
-    mock_db_session.scalar = AsyncMock(return_value=event)
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
 
     pipeline = ProcessingPipeline(
         session=mock_db_session,
@@ -478,3 +479,45 @@ async def test_process_items_keeps_item_pending_when_tier2_budget_exceeded(mock_
     assert result.classified == 0
     assert result.results[0].final_status == ProcessingStatus.PENDING
     assert item.processing_status == ProcessingStatus.PENDING
+
+
+@pytest.mark.asyncio
+async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_session) -> None:
+    item = _build_item()
+    event = Event(id=uuid4(), canonical_summary="Suppressed event")
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=False,
+                merged=True,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(classify_items=AsyncMock())
+    tier2 = SimpleNamespace(classify_event=AsyncMock())
+    mock_db_session.scalar = AsyncMock(side_effect=[event, "mark_noise"])
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert result.scanned == 1
+    assert result.processed == 1
+    assert result.noise == 1
+    assert result.classified == 0
+    assert result.errors == 0
+    assert item.processing_status == ProcessingStatus.NOISE
+    tier1.classify_items.assert_not_called()
+    tier2.classify_event.assert_not_called()

@@ -158,3 +158,17 @@ curl -X POST http://localhost:8000/api/v1/auth/keys \
   -H "X-Admin-API-Key: $API_ADMIN_KEY" \
   -d '{"name":"analytics-dashboard","rate_limit_per_minute":90}'
 ```
+
+## Feedback
+
+- `GET /api/v1/feedback`
+- `POST /api/v1/events/{event_id}/feedback` (`pin`, `mark_noise`, `invalidate`)
+- `POST /api/v1/trends/{trend_id}/override`
+
+Invalidate example:
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/events/<event-id>/feedback" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"invalidate","notes":"Analyst invalidation after contradiction review"}'
+```

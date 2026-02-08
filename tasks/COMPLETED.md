@@ -42,6 +42,7 @@ Tasks that have been completed and verified.
 - TASK-034: Human Feedback API ✅
 - TASK-035: Calibration Dashboard & Early Visibility ✅
 - TASK-036: Cost Protection & Budget Limits ✅
+- TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 
 ---
 

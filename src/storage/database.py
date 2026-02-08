@@ -40,14 +40,14 @@ def create_engine() -> AsyncEngine:
     if settings.is_development:
         return create_async_engine(
             settings.DATABASE_URL,
-            echo=True,  # Log SQL in development
+            echo=settings.SQL_ECHO,
             poolclass=NullPool,
             pool_pre_ping=True,
         )
 
     return create_async_engine(
         settings.DATABASE_URL,
-        echo=False,
+        echo=settings.SQL_ECHO,
         pool_size=settings.DATABASE_POOL_SIZE,
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
         pool_pre_ping=True,

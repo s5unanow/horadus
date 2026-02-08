@@ -118,6 +118,7 @@ Authentication header:
 | GET | `/api/v1/reports/calibration` | Calibration dashboard + trend movement visibility |
 | GET | `/api/v1/auth/keys` | List API keys (admin) |
 | POST | `/api/v1/auth/keys` | Create API key (admin) |
+| POST | `/api/v1/auth/keys/{id}/rotate` | Rotate API key (admin) |
 | DELETE | `/api/v1/auth/keys/{id}` | Revoke API key (admin) |
 
 ## CLI

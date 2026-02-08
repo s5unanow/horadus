@@ -156,6 +156,7 @@ curl "http://localhost:8000/api/v1/budget"
 - `GET /api/v1/auth/keys`
 - `POST /api/v1/auth/keys`
 - `DELETE /api/v1/auth/keys/{key_id}`
+- `POST /api/v1/auth/keys/{key_id}/rotate`
 
 Create key example:
 

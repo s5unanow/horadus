@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-025 Follow-up: Auth Key Persistence & Rotation
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Harden API key lifecycle with persistence and safe rotation.
+
+**Completed**:
+- [x] Added optional runtime key metadata persistence (`API_KEYS_PERSIST_PATH`)
+- [x] Persisted runtime key hashes/metadata across restarts (no raw keys stored)
+- [x] Added endpoint `POST /api/v1/auth/keys/{key_id}/rotate`
+- [x] Added manager/route tests for persistence reload and rotation behavior
+- [x] Updated auth/docs references and env variable documentation
+
+---
+
 ### TASK-027 Follow-up: Deployment Hardening
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

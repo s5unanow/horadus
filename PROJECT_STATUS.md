@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [███████████████████░]  97%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [███████████████████░]  98%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -124,9 +124,12 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Brier score timeline series for drift visibility
 - [x] `horadus trends status` CLI for quick movement checks
 - [x] File-based secret loading via `*_FILE` settings for production runtimes
+- [x] Compose secrets overlay for production (`docker-compose.prod.secrets.yml`)
 - [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
 - [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations
 - [x] Deployment runbook coverage for TLS proxying and backup drills
+- [x] API key metadata persistence support (`API_KEYS_PERSIST_PATH`)
+- [x] API key rotation endpoint (`POST /api/v1/auth/keys/{id}/rotate`)
 
 ## In Progress
 
@@ -138,11 +141,11 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add external secret manager wiring (cloud secret backend references)
-2. Add authentication key persistence/rotation hardening
-3. Add contradiction-resolution analytics in reports
-4. Add calibration drift alert thresholds + notifications
-5. Add operational dashboard export/hosting path
+1. Add contradiction-resolution analytics in reports
+2. Add calibration drift alert thresholds + notifications
+3. Add operational dashboard export/hosting path
+4. Add cloud secret backend references for managed secret stores
+5. Add backup verification automation and retention enforcement
 
 ## Expert Feedback Integration ✅
 

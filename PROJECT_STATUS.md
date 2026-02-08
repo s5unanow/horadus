@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [█████████████████░░░]  85%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [██████████████████░░]  90%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -115,6 +115,10 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Budget visibility endpoint (`GET /api/v1/budget`)
 - [x] Contradiction detection metadata persisted on events (`has_contradictions`, `contradiction_notes`)
 - [x] Events API contradiction filter (`GET /api/v1/events?contradicted=true`)
+- [x] Human feedback API endpoints for events/trends (`/api/v1/events/{id}/feedback`, `/api/v1/trends/{id}/override`)
+- [x] Feedback audit endpoint (`GET /api/v1/feedback`)
+- [x] Event invalidation support that reverts trend contributions
+- [x] Processing suppression for events marked as noise/invalidated
 
 ## In Progress
 
@@ -127,10 +131,10 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 ## Next Up (Priority Order)
 
 1. Add operational dashboards for reporting and worker health
-2. Add human feedback API for analyst corrections (TASK-034)
-3. Add calibration dashboard and drift visualization (TASK-035)
-4. Add deployment hardening follow-ups (secrets manager, TLS, backups)
-5. Add authentication key persistence/rotation hardening
+2. Add calibration dashboard and drift visualization (TASK-035)
+3. Add deployment hardening follow-ups (secrets manager, TLS, backups)
+4. Add authentication key persistence/rotation hardening
+5. Add contradiction-resolution analytics in reports
 
 ## Expert Feedback Integration ✅
 

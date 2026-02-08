@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-034: Human Feedback API
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/specs/034-human-feedback.md`
+
+Allow analyst corrections and make feedback affect future processing.
+
+**Completed**:
+- [x] Added endpoint `POST /api/v1/events/{id}/feedback` (`pin`, `mark_noise`, `invalidate`)
+- [x] Added endpoint `POST /api/v1/trends/{id}/override` for manual deltas
+- [x] Added endpoint `GET /api/v1/feedback` for feedback audit history
+- [x] Implemented event invalidation that removes event evidence and reverts trend log-odds
+- [x] Implemented processing suppression for events marked `mark_noise` or `invalidate`
+- [x] Added unit tests for feedback routes and suppression behavior
+
+---
+
 ### TASK-033: Contradiction Detection
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

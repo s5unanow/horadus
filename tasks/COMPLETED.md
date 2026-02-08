@@ -39,6 +39,7 @@ Tasks that have been completed and verified.
 - TASK-031: Source Tier and Reporting Type ✅
 - TASK-032: Trend Outcomes for Calibration ✅
 - TASK-033: Contradiction Detection ✅
+- TASK-034: Human Feedback API ✅
 - TASK-036: Cost Protection & Budget Limits ✅
 
 ---

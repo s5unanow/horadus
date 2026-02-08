@@ -24,6 +24,12 @@ Required minimum values:
 
 For a full variable reference, see `docs/ENVIRONMENT.md`.
 
+Recommended production hardening:
+
+- Prefer `*_FILE` variables backed by secret mounts (instead of plaintext `.env` secrets).
+- Set `SQL_ECHO=false`.
+- Restrict `CORS_ORIGINS` to trusted frontend domains only.
+
 ## 2) Build production images
 
 ```bash
@@ -65,6 +71,35 @@ Rollback:
 1. Checkout the previous Git commit/tag.
 2. Rebuild images with that revision.
 3. Restart `api`, `worker`, and `beat`.
+
+## 7) TLS termination
+
+Run TLS at an edge reverse proxy (Caddy, Nginx, Traefik) and keep Horadus internal.
+
+- Terminate HTTPS at the proxy.
+- Forward traffic to `api:8000` on the private Docker network.
+- Disable public direct exposure of the API container where possible.
+- Enforce modern TLS settings and HTTP security headers at the proxy layer.
+
+## 8) Backups and restore
+
+Create PostgreSQL backups:
+
+```bash
+make backup-db
+```
+
+Restore from a backup:
+
+```bash
+make restore-db DUMP=backups/<dump-file>.sql.gz
+```
+
+Recommended practice:
+
+- Schedule `make backup-db` via cron/systemd.
+- Replicate backups to off-host object storage.
+- Test restore drills regularly.
 
 ## Operational Notes
 

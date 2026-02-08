@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [███████████████████░]  95%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [███████████████████░]  97%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -123,6 +123,10 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Cross-trend reliability statements ("When we said X%, it happened Y%")
 - [x] Brier score timeline series for drift visibility
 - [x] `horadus trends status` CLI for quick movement checks
+- [x] File-based secret loading via `*_FILE` settings for production runtimes
+- [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
+- [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations
+- [x] Deployment runbook coverage for TLS proxying and backup drills
 
 ## In Progress
 
@@ -134,7 +138,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add deployment hardening follow-ups (secrets manager, TLS, backups)
+1. Add external secret manager wiring (cloud secret backend references)
 2. Add authentication key persistence/rotation hardening
 3. Add contradiction-resolution analytics in reports
 4. Add calibration drift alert thresholds + notifications

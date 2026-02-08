@@ -8,7 +8,7 @@
 .PHONY: help venv deps deps-dev hooks install install-dev setup clean \
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
-        docker-prod-down docker-prod-migrate db-migrate db-upgrade db-downgrade \
+        docker-prod-down docker-prod-migrate backup-db restore-db db-migrate db-upgrade db-downgrade \
         run run-worker run-beat pre-commit check all
 
 # Default target
@@ -136,6 +136,13 @@ docker-prod-up: ## Start production stack
 
 docker-prod-down: ## Stop production stack
 	$(DOCKER_COMPOSE) -f docker-compose.prod.yml down
+
+backup-db: ## Create compressed PostgreSQL backup from production stack
+	./scripts/backup_postgres.sh
+
+restore-db: ## Restore PostgreSQL backup (usage: make restore-db DUMP=backups/file.sql.gz)
+	@test -n "$(DUMP)" || (echo "$(RED)Usage: make restore-db DUMP=backups/<file>.sql.gz$(RESET)" && exit 1)
+	./scripts/restore_postgres.sh "$(DUMP)"
 
 # =============================================================================
 # Database

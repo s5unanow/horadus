@@ -7,10 +7,23 @@ Loads configuration from environment variables and .env files.
 from __future__ import annotations
 
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _read_secret_file(path: str) -> str:
+    try:
+        content = Path(path).expanduser().read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        msg = f"Could not read secret file '{path}'"
+        raise ValueError(msg) from exc
+    if not content:
+        msg = f"Secret file '{path}' is empty"
+        raise ValueError(msg)
+    return content
 
 
 class Settings(BaseSettings):
@@ -35,12 +48,50 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://postgres@localhost:5432/geoint",
         description="Async PostgreSQL connection string",
     )
+    DATABASE_URL_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing DATABASE_URL",
+    )
     DATABASE_URL_SYNC: str = Field(
         default="",
         description="Sync PostgreSQL connection string (for Alembic); derived if empty",
     )
+    DATABASE_URL_SYNC_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing DATABASE_URL_SYNC",
+    )
     DATABASE_POOL_SIZE: int = Field(default=10, ge=1, le=100)
     DATABASE_MAX_OVERFLOW: int = Field(default=20, ge=0, le=100)
+
+    @model_validator(mode="after")
+    def _load_secret_file_values(self) -> Settings:
+        secret_mappings = {
+            "DATABASE_URL": self.DATABASE_URL_FILE,
+            "DATABASE_URL_SYNC": self.DATABASE_URL_SYNC_FILE,
+            "REDIS_URL": self.REDIS_URL_FILE,
+            "SECRET_KEY": self.SECRET_KEY_FILE,
+            "API_KEY": self.API_KEY_FILE,
+            "API_ADMIN_KEY": self.API_ADMIN_KEY_FILE,
+            "OPENAI_API_KEY": self.OPENAI_API_KEY_FILE,
+            "CELERY_BROKER_URL": self.CELERY_BROKER_URL_FILE,
+            "CELERY_RESULT_BACKEND": self.CELERY_RESULT_BACKEND_FILE,
+        }
+        for target_field, file_path in secret_mappings.items():
+            if not file_path:
+                continue
+            setattr(self, target_field, _read_secret_file(file_path))
+
+        if self.API_KEYS_FILE:
+            raw_keys = _read_secret_file(self.API_KEYS_FILE)
+            parsed_keys: list[str] = []
+            for line in raw_keys.splitlines():
+                for item in line.split(","):
+                    key = item.strip()
+                    if key:
+                        parsed_keys.append(key)
+            self.API_KEYS = parsed_keys
+
+        return self
 
     @model_validator(mode="after")
     def _derive_database_url_sync(self) -> Settings:
@@ -62,6 +113,10 @@ class Settings(BaseSettings):
         default="redis://localhost:6379/0",
         description="Redis connection URL",
     )
+    REDIS_URL_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing REDIS_URL",
+    )
 
     # =========================================================================
     # API
@@ -77,9 +132,17 @@ class Settings(BaseSettings):
         default="dev-secret-key-change-in-production",
         description="Secret key for signing tokens",
     )
+    SECRET_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing SECRET_KEY",
+    )
     API_KEY: str | None = Field(
         default=None,
         description="Optional API key for authentication",
+    )
+    API_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing API_KEY",
     )
     API_AUTH_ENABLED: bool = Field(
         default=False,
@@ -92,6 +155,14 @@ class Settings(BaseSettings):
     API_ADMIN_KEY: str | None = Field(
         default=None,
         description="Admin key for API key management endpoints",
+    )
+    API_ADMIN_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing API_ADMIN_KEY",
+    )
+    API_KEYS_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing API_KEYS values (newline or comma separated)",
     )
     API_RATE_LIMIT_PER_MINUTE: int = Field(
         default=120,
@@ -127,6 +198,10 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = Field(
         default="",
         description="OpenAI API key",
+    )
+    OPENAI_API_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing OPENAI_API_KEY",
     )
     LLM_TIER1_MODEL: str = Field(
         default="gpt-4.1-nano",
@@ -179,7 +254,15 @@ class Settings(BaseSettings):
     # Celery
     # =========================================================================
     CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
+    CELERY_BROKER_URL_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing CELERY_BROKER_URL",
+    )
     CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/2")
+    CELERY_RESULT_BACKEND_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing CELERY_RESULT_BACKEND",
+    )
 
     # =========================================================================
     # Feature Flags
@@ -195,6 +278,10 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = Field(
         default="development",
         description="Environment: development, staging, production",
+    )
+    SQL_ECHO: bool = Field(
+        default=False,
+        description="Log SQL statements from SQLAlchemy engine",
     )
     LOG_LEVEL: str = Field(default="INFO")
     LOG_FORMAT: str = Field(default="json", description="json or console")

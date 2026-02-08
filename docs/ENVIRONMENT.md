@@ -24,6 +24,7 @@ This document lists environment variables used by the Horadus backend.
 | `API_ADMIN_KEY` | empty | Required for key-management endpoints. |
 | `API_RATE_LIMIT_PER_MINUTE` | `120` | Per-key request budget. |
 | `CORS_ORIGINS` | local origins | Comma-separated origin list. |
+| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret; set a high-entropy value in production. |
 
 ## Model and Processing Controls
 
@@ -70,6 +71,7 @@ This document lists environment variables used by the Horadus backend.
 |----------|---------|-------|
 | `LOG_LEVEL` | `INFO` | Typical values: `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
 | `LOG_FORMAT` | `json` | Use `json` in production and `console` for local debugging. |
+| `SQL_ECHO` | `false` | SQLAlchemy SQL logging toggle; keep `false` in production. |
 
 ## Database and Redis (Supplemental)
 
@@ -79,6 +81,28 @@ This document lists environment variables used by the Horadus backend.
 | `DATABASE_POOL_SIZE` | `10` | SQLAlchemy async pool size. |
 | `DATABASE_MAX_OVERFLOW` | `20` | SQLAlchemy max overflow connections. |
 | `REDIS_URL` | `redis://localhost:6379/0` | General Redis connection URL. |
+
+## File-Based Secrets (`*_FILE`)
+
+For containerized production, each sensitive variable also supports a file path variant.
+When `<VAR>_FILE` is set, Horadus reads the file content and uses it as `<VAR>`.
+
+Supported file-backed variables:
+
+| Variable | File Variant |
+|----------|--------------|
+| `DATABASE_URL` | `DATABASE_URL_FILE` |
+| `DATABASE_URL_SYNC` | `DATABASE_URL_SYNC_FILE` |
+| `REDIS_URL` | `REDIS_URL_FILE` |
+| `SECRET_KEY` | `SECRET_KEY_FILE` |
+| `API_KEY` | `API_KEY_FILE` |
+| `API_KEYS` | `API_KEYS_FILE` |
+| `API_ADMIN_KEY` | `API_ADMIN_KEY_FILE` |
+| `OPENAI_API_KEY` | `OPENAI_API_KEY_FILE` |
+| `CELERY_BROKER_URL` | `CELERY_BROKER_URL_FILE` |
+| `CELERY_RESULT_BACKEND` | `CELERY_RESULT_BACKEND_FILE` |
+
+`API_KEYS_FILE` supports newline-separated and/or comma-separated values.
 
 ## Local Reference
 

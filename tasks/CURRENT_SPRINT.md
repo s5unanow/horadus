@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-027 Follow-up: Deployment Hardening
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Harden production operations for secrets, TLS posture, and backups.
+
+**Completed**:
+- [x] Added `*_FILE` secret loading support for runtime settings (DB/Redis/API/OpenAI/Celery keys)
+- [x] Added explicit `SQL_ECHO` setting defaulting to `false` for safer production logging
+- [x] Added backup/restore scripts (`scripts/backup_postgres.sh`, `scripts/restore_postgres.sh`)
+- [x] Added `make backup-db` and `make restore-db` operational targets
+- [x] Updated deployment/environment docs with file-based secrets, TLS proxy guidance, and backup drills
+
+---
+
 ### TASK-035: Calibration Dashboard & Early Visibility
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

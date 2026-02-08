@@ -30,6 +30,24 @@ Recommended production hardening:
 - Set `SQL_ECHO=false`.
 - Restrict `CORS_ORIGINS` to trusted frontend domains only.
 
+Create the local secret files directory if using the compose secrets overlay:
+
+```bash
+mkdir -p secrets
+```
+
+Expected files:
+
+- `secrets/database_url.txt`
+- `secrets/database_url_sync.txt`
+- `secrets/redis_url.txt`
+- `secrets/celery_broker_url.txt`
+- `secrets/celery_result_backend.txt`
+- `secrets/openai_api_key.txt`
+- `secrets/api_admin_key.txt`
+- `secrets/api_keys.txt`
+- `secrets/secret_key.txt`
+
 ## 2) Build production images
 
 ```bash
@@ -42,10 +60,22 @@ docker compose -f docker-compose.prod.yml build
 docker compose -f docker-compose.prod.yml --profile ops run --rm migrate
 ```
 
+With secrets overlay:
+
+```bash
+make docker-prod-migrate-secrets
+```
+
 ## 4) Start services
 
 ```bash
 docker compose -f docker-compose.prod.yml up -d api worker beat postgres redis
+```
+
+With secrets overlay:
+
+```bash
+make docker-prod-up-secrets
 ```
 
 ## 5) Verify health and metrics

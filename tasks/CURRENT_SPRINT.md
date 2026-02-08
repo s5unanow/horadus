@@ -23,9 +23,10 @@ Harden production operations for secrets, TLS posture, and backups.
 
 **Completed**:
 - [x] Added `*_FILE` secret loading support for runtime settings (DB/Redis/API/OpenAI/Celery keys)
+- [x] Added Docker Compose secrets overlay (`docker-compose.prod.secrets.yml`) for secret mounts
 - [x] Added explicit `SQL_ECHO` setting defaulting to `false` for safer production logging
 - [x] Added backup/restore scripts (`scripts/backup_postgres.sh`, `scripts/restore_postgres.sh`)
-- [x] Added `make backup-db` and `make restore-db` operational targets
+- [x] Added `make backup-db`, `make restore-db`, and secrets-overlay prod targets
 - [x] Updated deployment/environment docs with file-based secrets, TLS proxy guidance, and backup drills
 
 ---

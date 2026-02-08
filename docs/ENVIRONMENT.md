@@ -104,6 +104,9 @@ Supported file-backed variables:
 
 `API_KEYS_FILE` supports newline-separated and/or comma-separated values.
 
+For Docker Compose production, use `docker-compose.prod.secrets.yml` to mount
+these files into `/run/secrets/*` and wire the corresponding `*_FILE` variables.
+
 ## Local Reference
 
 Use `.env.example` as the source template:

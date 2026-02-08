@@ -124,6 +124,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Brier score timeline series for drift visibility
 - [x] `horadus trends status` CLI for quick movement checks
 - [x] File-based secret loading via `*_FILE` settings for production runtimes
+- [x] Docker Compose secrets overlay for production secret mounts (`docker-compose.prod.secrets.yml`)
 - [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
 - [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations
 - [x] Deployment runbook coverage for TLS proxying and backup drills

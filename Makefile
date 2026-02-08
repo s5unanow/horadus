@@ -8,7 +8,8 @@
 .PHONY: help venv deps deps-dev hooks install install-dev setup clean \
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
-        docker-prod-down docker-prod-migrate backup-db restore-db db-migrate db-upgrade db-downgrade \
+        docker-prod-down docker-prod-migrate docker-prod-up-secrets docker-prod-migrate-secrets \
+        backup-db restore-db db-migrate db-upgrade db-downgrade \
         run run-worker run-beat pre-commit check all
 
 # Default target
@@ -133,6 +134,12 @@ docker-prod-migrate: ## Run production database migrations (one-off)
 
 docker-prod-up: ## Start production stack
 	$(DOCKER_COMPOSE) -f docker-compose.prod.yml up -d api worker beat postgres redis
+
+docker-prod-migrate-secrets: ## Run production migrations with secrets overlay
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml -f docker-compose.prod.secrets.yml --profile ops run --rm migrate
+
+docker-prod-up-secrets: ## Start production stack with secrets overlay
+	$(DOCKER_COMPOSE) -f docker-compose.prod.yml -f docker-compose.prod.secrets.yml up -d api worker beat postgres redis
 
 docker-prod-down: ## Stop production stack
 	$(DOCKER_COMPOSE) -f docker-compose.prod.yml down

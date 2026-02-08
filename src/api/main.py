@@ -31,7 +31,7 @@ logger = structlog.get_logger(__name__)
 OPENAPI_TAGS = [
     {
         "name": "Auth",
-        "description": "API key lifecycle management (list/create/revoke).",
+        "description": "API key lifecycle management (list/create/rotate/revoke).",
     },
     {
         "name": "Health",

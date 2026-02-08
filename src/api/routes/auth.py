@@ -139,3 +139,24 @@ async def revoke_api_key(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"API key '{key_id}' not found",
         )
+
+
+@router.post("/keys/{key_id}/rotate", response_model=APIKeyCreateResponse)
+async def rotate_api_key(
+    key_id: str,
+    request: Request,
+) -> APIKeyCreateResponse:
+    """Rotate an API key by id and return a replacement credential."""
+    _ensure_admin_access(request)
+    manager = get_api_key_manager()
+    rotated = manager.rotate_key(key_id)
+    if rotated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"API key '{key_id}' not found",
+        )
+    record, raw_key = rotated
+    return APIKeyCreateResponse(
+        key=_to_summary(record),
+        api_key=raw_key,
+    )

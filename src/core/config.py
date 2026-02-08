@@ -169,6 +169,10 @@ class Settings(BaseSettings):
         ge=1,
         description="Default per-key API request limit per minute",
     )
+    API_KEYS_PERSIST_PATH: str | None = Field(
+        default=None,
+        description="Optional JSON file path for persisting runtime API key metadata",
+    )
     CORS_ORIGINS: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8080"],
         description="Allowed CORS origins",

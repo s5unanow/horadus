@@ -75,6 +75,34 @@ class CalibrationDriftAlert:
 
 
 @dataclass
+class TrendCoverageSummary:
+    """Coverage stats for one trend in the dashboard window."""
+
+    trend_id: UUID
+    trend_name: str
+    total_predictions: int
+    resolved_predictions: int
+    resolved_ratio: float
+
+
+@dataclass
+class CalibrationCoverageSummary:
+    """Coverage guardrail summary for calibration windows."""
+
+    min_resolved_per_trend: int
+    min_resolved_ratio: float
+    total_predictions: int
+    resolved_predictions: int
+    unresolved_predictions: int
+    overall_resolved_ratio: float
+    trends_with_predictions: int
+    trends_meeting_min: int
+    trends_below_min: int
+    low_sample_trends: list[TrendCoverageSummary]
+    coverage_sufficient: bool
+
+
+@dataclass
 class CalibrationDashboardReport:
     """Dashboard payload for calibration and movement visibility."""
 
@@ -88,6 +116,7 @@ class CalibrationDashboardReport:
     brier_score_over_time: list[BrierTimeseriesPoint]
     reliability_notes: list[str]
     trend_movements: list[TrendMovement]
+    coverage: CalibrationCoverageSummary
     drift_alerts: list[CalibrationDriftAlert] = field(default_factory=list)
 
 
@@ -115,6 +144,14 @@ class CalibrationDashboardService:
             period_end=period_end,
         )
         scored_outcomes = self._scored_outcomes(outcomes)
+        total_by_trend = self._count_predictions_by_trend(outcomes)
+        resolved_by_trend = self._count_predictions_by_trend(scored_outcomes)
+        trend_name_by_id = await self._load_trend_names(tuple(total_by_trend.keys()))
+        coverage = self._build_coverage_summary(
+            total_by_trend=total_by_trend,
+            resolved_by_trend=resolved_by_trend,
+            trend_name_by_id=trend_name_by_id,
+        )
         calibration_curve = [
             CalibrationBucketSummary(
                 bucket_start=bucket.bucket_start,
@@ -133,6 +170,7 @@ class CalibrationDashboardService:
             calibration_curve=calibration_curve,
             mean_brier_score=mean_brier,
             resolved_predictions=len(scored_outcomes),
+            coverage=coverage,
         )
         self._emit_drift_notifications(
             trend_id=trend_id,
@@ -155,6 +193,7 @@ class CalibrationDashboardService:
             brier_score_over_time=brier_series,
             reliability_notes=self._build_reliability_notes(calibration_curve),
             trend_movements=movements,
+            coverage=coverage,
             drift_alerts=drift_alerts,
         )
 
@@ -164,11 +203,12 @@ class CalibrationDashboardService:
         calibration_curve: list[CalibrationBucketSummary],
         mean_brier_score: float | None,
         resolved_predictions: int,
+        coverage: CalibrationCoverageSummary,
     ) -> list[CalibrationDriftAlert]:
+        alerts = self._build_coverage_alerts(coverage)
         if resolved_predictions < settings.CALIBRATION_DRIFT_MIN_RESOLVED_OUTCOMES:
-            return []
+            return alerts
 
-        alerts: list[CalibrationDriftAlert] = []
         if mean_brier_score is not None:
             severity, threshold = self._severity_and_threshold(
                 value=mean_brier_score,
@@ -215,6 +255,59 @@ class CalibrationDashboardService:
                     )
                 )
 
+        return alerts
+
+    def _build_coverage_alerts(
+        self,
+        coverage: CalibrationCoverageSummary,
+    ) -> list[CalibrationDriftAlert]:
+        alerts: list[CalibrationDriftAlert] = []
+        if coverage.total_predictions == 0:
+            alerts.append(
+                CalibrationDriftAlert(
+                    alert_type="low_sample_coverage",
+                    severity="warning",
+                    metric_name="resolved_predictions_total",
+                    metric_value=0.0,
+                    threshold=float(settings.CALIBRATION_DRIFT_MIN_RESOLVED_OUTCOMES),
+                    sample_size=0,
+                    message="No calibration predictions found in the dashboard window.",
+                )
+            )
+            return alerts
+
+        if coverage.overall_resolved_ratio < settings.CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO:
+            alerts.append(
+                CalibrationDriftAlert(
+                    alert_type="low_sample_coverage",
+                    severity="warning",
+                    metric_name="overall_resolved_ratio",
+                    metric_value=coverage.overall_resolved_ratio,
+                    threshold=settings.CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO,
+                    sample_size=coverage.total_predictions,
+                    message=(
+                        "Calibration resolved ratio is below guardrail "
+                        f"({coverage.overall_resolved_ratio:.2f} < "
+                        f"{settings.CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO:.2f})."
+                    ),
+                )
+            )
+
+        if coverage.trends_below_min > 0:
+            trend_names = ", ".join(row.trend_name for row in coverage.low_sample_trends[:5])
+            alerts.append(
+                CalibrationDriftAlert(
+                    alert_type="low_sample_coverage",
+                    severity="warning",
+                    metric_name="trends_below_min_resolved",
+                    metric_value=float(coverage.trends_below_min),
+                    threshold=float(settings.CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND),
+                    sample_size=coverage.trends_with_predictions,
+                    message=(
+                        f"Some trends are below minimum resolved-outcome coverage: {trend_names}."
+                    ),
+                )
+            )
         return alerts
 
     @staticmethod
@@ -273,6 +366,83 @@ class CalibrationDashboardService:
         if trend_id is not None:
             query = query.where(TrendOutcome.trend_id == trend_id)
         return list((await self.session.scalars(query)).all())
+
+    async def _load_trend_names(
+        self,
+        trend_ids: tuple[UUID, ...],
+    ) -> dict[UUID, str]:
+        if not trend_ids:
+            return {}
+        rows = (
+            await self.session.execute(select(Trend.id, Trend.name).where(Trend.id.in_(trend_ids)))
+        ).all()
+        return {row[0]: row[1] for row in rows}
+
+    @staticmethod
+    def _count_predictions_by_trend(outcomes: list[TrendOutcome]) -> dict[UUID, int]:
+        counts: dict[UUID, int] = {}
+        for outcome in outcomes:
+            counts[outcome.trend_id] = counts.get(outcome.trend_id, 0) + 1
+        return counts
+
+    def _build_coverage_summary(
+        self,
+        *,
+        total_by_trend: dict[UUID, int],
+        resolved_by_trend: dict[UUID, int],
+        trend_name_by_id: dict[UUID, str],
+    ) -> CalibrationCoverageSummary:
+        per_trend: list[TrendCoverageSummary] = []
+        for trend_id, total_predictions in total_by_trend.items():
+            resolved_predictions = resolved_by_trend.get(trend_id, 0)
+            ratio = resolved_predictions / total_predictions if total_predictions > 0 else 0.0
+            per_trend.append(
+                TrendCoverageSummary(
+                    trend_id=trend_id,
+                    trend_name=trend_name_by_id.get(trend_id, str(trend_id)),
+                    total_predictions=total_predictions,
+                    resolved_predictions=resolved_predictions,
+                    resolved_ratio=round(ratio, 6),
+                )
+            )
+
+        low_sample_trends = sorted(
+            [
+                row
+                for row in per_trend
+                if row.resolved_predictions < settings.CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND
+            ],
+            key=lambda row: (row.resolved_predictions, row.trend_name),
+        )
+
+        total_predictions = sum(total_by_trend.values())
+        resolved_predictions = sum(resolved_by_trend.values())
+        unresolved_predictions = max(0, total_predictions - resolved_predictions)
+        overall_resolved_ratio = (
+            round(resolved_predictions / total_predictions, 6) if total_predictions > 0 else 0.0
+        )
+        trends_with_predictions = len(total_by_trend)
+        trends_below_min = len(low_sample_trends)
+        trends_meeting_min = max(0, trends_with_predictions - trends_below_min)
+        coverage_sufficient = (
+            trends_with_predictions > 0
+            and trends_below_min == 0
+            and overall_resolved_ratio >= settings.CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO
+        )
+
+        return CalibrationCoverageSummary(
+            min_resolved_per_trend=settings.CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND,
+            min_resolved_ratio=settings.CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO,
+            total_predictions=total_predictions,
+            resolved_predictions=resolved_predictions,
+            unresolved_predictions=unresolved_predictions,
+            overall_resolved_ratio=overall_resolved_ratio,
+            trends_with_predictions=trends_with_predictions,
+            trends_meeting_min=trends_meeting_min,
+            trends_below_min=trends_below_min,
+            low_sample_trends=low_sample_trends,
+            coverage_sufficient=coverage_sufficient,
+        )
 
     def _scored_outcomes(self, outcomes: list[TrendOutcome]) -> list[TrendOutcome]:
         scored: list[TrendOutcome] = []

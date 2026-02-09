@@ -54,6 +54,8 @@ This document lists environment variables used by the Horadus backend.
 | `CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD` | `0.30` | Critical threshold for mean Brier score drift. |
 | `CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD` | `0.15` | Warning threshold for max bucket calibration error. |
 | `CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD` | `0.25` | Critical threshold for max bucket calibration error. |
+| `CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND` | `5` | Minimum resolved outcomes per trend in dashboard window. |
+| `CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO` | `0.50` | Minimum resolved/total ratio before coverage alerts are raised. |
 
 ## Scheduling and Workers
 

@@ -17,8 +17,10 @@ from src.api.routes.reports import (
 from src.core.calibration_dashboard import (
     BrierTimeseriesPoint,
     CalibrationBucketSummary,
+    CalibrationCoverageSummary,
     CalibrationDashboardReport,
     CalibrationDriftAlert,
+    TrendCoverageSummary,
     TrendMovement,
 )
 from src.storage.models import Report
@@ -187,6 +189,27 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
                 message="Mean Brier score approaching drift threshold.",
             )
         ],
+        coverage=CalibrationCoverageSummary(
+            min_resolved_per_trend=5,
+            min_resolved_ratio=0.5,
+            total_predictions=12,
+            resolved_predictions=10,
+            unresolved_predictions=2,
+            overall_resolved_ratio=0.833333,
+            trends_with_predictions=1,
+            trends_meeting_min=1,
+            trends_below_min=0,
+            low_sample_trends=[
+                TrendCoverageSummary(
+                    trend_id=trend_id,
+                    trend_name="EU-Russia",
+                    total_predictions=12,
+                    resolved_predictions=10,
+                    resolved_ratio=0.833333,
+                )
+            ],
+            coverage_sufficient=True,
+        ),
     )
 
     class _Service:
@@ -222,6 +245,7 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
     assert result.trend_movements[0].movement_chart == "._-=+*"
     assert len(result.drift_alerts) == 1
     assert result.drift_alerts[0].alert_type == "mean_brier_drift"
+    assert result.coverage.coverage_sufficient is True
 
 
 @pytest.mark.asyncio

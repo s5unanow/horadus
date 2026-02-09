@@ -136,6 +136,32 @@ class CalibrationDriftAlertResponse(BaseModel):
     message: str
 
 
+class TrendCoverageResponse(BaseModel):
+    """Per-trend calibration coverage summary row."""
+
+    trend_id: UUID
+    trend_name: str
+    total_predictions: int
+    resolved_predictions: int
+    resolved_ratio: float
+
+
+class CalibrationCoverageResponse(BaseModel):
+    """Calibration coverage guardrail summary."""
+
+    min_resolved_per_trend: int
+    min_resolved_ratio: float
+    total_predictions: int
+    resolved_predictions: int
+    unresolved_predictions: int
+    overall_resolved_ratio: float
+    trends_with_predictions: int
+    trends_meeting_min: int
+    trends_below_min: int
+    low_sample_trends: list[TrendCoverageResponse]
+    coverage_sufficient: bool
+
+
 class CalibrationDashboardResponse(BaseModel):
     """Cross-trend calibration dashboard payload."""
 
@@ -191,6 +217,27 @@ class CalibrationDashboardResponse(BaseModel):
                         "message": "Mean Brier score exceeded calibration drift threshold (0.214 >= 0.200).",
                     }
                 ],
+                "coverage": {
+                    "min_resolved_per_trend": 5,
+                    "min_resolved_ratio": 0.5,
+                    "total_predictions": 42,
+                    "resolved_predictions": 38,
+                    "unresolved_predictions": 4,
+                    "overall_resolved_ratio": 0.904762,
+                    "trends_with_predictions": 3,
+                    "trends_meeting_min": 2,
+                    "trends_below_min": 1,
+                    "low_sample_trends": [
+                        {
+                            "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                            "trend_name": "EU-Russia Military Conflict",
+                            "total_predictions": 4,
+                            "resolved_predictions": 2,
+                            "resolved_ratio": 0.5,
+                        }
+                    ],
+                    "coverage_sufficient": False,
+                },
             }
         }
     )
@@ -206,6 +253,7 @@ class CalibrationDashboardResponse(BaseModel):
     reliability_notes: list[str]
     trend_movements: list[TrendMovementResponse]
     drift_alerts: list[CalibrationDriftAlertResponse]
+    coverage: CalibrationCoverageResponse
 
 
 def _normalize_top_events(value: Any) -> list[dict[str, Any]] | None:
@@ -349,6 +397,28 @@ async def get_calibration_dashboard(
             )
             for alert in dashboard.drift_alerts
         ],
+        coverage=CalibrationCoverageResponse(
+            min_resolved_per_trend=dashboard.coverage.min_resolved_per_trend,
+            min_resolved_ratio=dashboard.coverage.min_resolved_ratio,
+            total_predictions=dashboard.coverage.total_predictions,
+            resolved_predictions=dashboard.coverage.resolved_predictions,
+            unresolved_predictions=dashboard.coverage.unresolved_predictions,
+            overall_resolved_ratio=dashboard.coverage.overall_resolved_ratio,
+            trends_with_predictions=dashboard.coverage.trends_with_predictions,
+            trends_meeting_min=dashboard.coverage.trends_meeting_min,
+            trends_below_min=dashboard.coverage.trends_below_min,
+            low_sample_trends=[
+                TrendCoverageResponse(
+                    trend_id=row.trend_id,
+                    trend_name=row.trend_name,
+                    total_predictions=row.total_predictions,
+                    resolved_predictions=row.resolved_predictions,
+                    resolved_ratio=row.resolved_ratio,
+                )
+                for row in dashboard.coverage.low_sample_trends
+            ],
+            coverage_sufficient=dashboard.coverage.coverage_sufficient,
+        ),
     )
 
 

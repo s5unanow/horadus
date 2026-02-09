@@ -402,6 +402,17 @@ class Settings(BaseSettings):
         ge=0,
         description="Critical threshold for max bucket calibration error alerts",
     )
+    CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND: int = Field(
+        default=5,
+        ge=0,
+        description="Minimum resolved outcomes per trend in window before coverage is considered sufficient",
+    )
+    CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="Minimum resolved/total ratio required for calibration coverage sufficiency",
+    )
 
     # =========================================================================
     # Collection

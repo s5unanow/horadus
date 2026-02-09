@@ -10,6 +10,7 @@ import pytest
 from src.core.calibration_dashboard import (
     BrierTimeseriesPoint,
     CalibrationBucketSummary,
+    CalibrationCoverageSummary,
     CalibrationDashboardReport,
     CalibrationDriftAlert,
     TrendMovement,
@@ -81,6 +82,19 @@ def _build_dashboard_report() -> CalibrationDashboardReport:
                 message="Mean Brier score exceeded calibration drift threshold (0.210 >= 0.200).",
             )
         ],
+        coverage=CalibrationCoverageSummary(
+            min_resolved_per_trend=5,
+            min_resolved_ratio=0.5,
+            total_predictions=15,
+            resolved_predictions=12,
+            unresolved_predictions=3,
+            overall_resolved_ratio=0.8,
+            trends_with_predictions=2,
+            trends_meeting_min=2,
+            trends_below_min=0,
+            low_sample_trends=[],
+            coverage_sufficient=True,
+        ),
     )
 
 

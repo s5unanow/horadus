@@ -9,7 +9,9 @@ import asyncio
 from collections.abc import Sequence
 
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
+from src.core.config import settings
 from src.core.dashboard_export import export_calibration_dashboard
+from src.eval.benchmark import available_configs, run_gold_set_benchmark
 from src.storage.database import async_session_maker
 
 
@@ -68,6 +70,24 @@ async def _run_dashboard_export(*, output_dir: str, limit: int) -> int:
     return 0
 
 
+async def _run_eval_benchmark(
+    *,
+    gold_set: str,
+    output_dir: str,
+    max_items: int,
+    config_names: list[str] | None,
+) -> int:
+    output_path = await run_gold_set_benchmark(
+        gold_set_path=gold_set,
+        output_dir=output_dir,
+        api_key=settings.OPENAI_API_KEY,
+        max_items=max(1, max_items),
+        config_names=config_names,
+    )
+    print(f"Benchmark output: {output_path}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="horadus")
     subparsers = parser.add_subparsers(dest="command")
@@ -104,6 +124,36 @@ def _build_parser() -> argparse.ArgumentParser:
         default=20,
         help="Maximum number of trend movement rows included in export.",
     )
+
+    eval_parser = subparsers.add_parser("eval")
+    eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
+
+    eval_benchmark_parser = eval_subparsers.add_parser(
+        "benchmark",
+        help="Run Tier-1/Tier-2 benchmark against ai/eval gold set.",
+    )
+    eval_benchmark_parser.add_argument(
+        "--gold-set",
+        default="ai/eval/gold_set.jsonl",
+        help="Path to gold-set JSONL file.",
+    )
+    eval_benchmark_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for benchmark result artifacts.",
+    )
+    eval_benchmark_parser.add_argument(
+        "--max-items",
+        type=int,
+        default=50,
+        help="Maximum gold-set items to evaluate (use 200 for full run).",
+    )
+    eval_benchmark_parser.add_argument(
+        "--config",
+        action="append",
+        choices=sorted(available_configs().keys()),
+        help="Benchmark config name (repeat to run multiple). Defaults to all.",
+    )
     return parser
 
 
@@ -118,6 +168,15 @@ def main(argv: Sequence[str] | None = None) -> int:
             _run_dashboard_export(
                 output_dir=args.output_dir,
                 limit=max(args.limit, 1),
+            )
+        )
+    if args.command == "eval" and args.eval_command == "benchmark":
+        return asyncio.run(
+            _run_eval_benchmark(
+                gold_set=args.gold_set,
+                output_dir=args.output_dir,
+                max_items=args.max_items,
+                config_names=args.config,
             )
         )
 

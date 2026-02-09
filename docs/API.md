@@ -138,6 +138,9 @@ Calibration dashboard example:
 curl "http://localhost:8000/api/v1/reports/calibration"
 ```
 
+Calibration dashboard responses include `drift_alerts` when Brier/bucket error
+thresholds are breached after minimum sample requirements are met.
+
 Report `statistics` for weekly/monthly entries now include `contradiction_analytics`
 with resolved/unresolved counts, resolution rate, and action mix for contradicted events.
 

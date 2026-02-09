@@ -49,6 +49,11 @@ This document lists environment variables used by the Horadus backend.
 | `EMBEDDING_MAX_DAILY_CALLS` | `500` | `0` means unlimited. |
 | `DAILY_COST_LIMIT_USD` | `5.0` | Hard stop threshold for total LLM cost. |
 | `COST_ALERT_THRESHOLD_PCT` | `80` | Alert threshold as percent of daily budget. |
+| `CALIBRATION_DRIFT_MIN_RESOLVED_OUTCOMES` | `20` | Minimum scored outcomes before drift alerts trigger. |
+| `CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD` | `0.20` | Warning threshold for mean Brier score drift. |
+| `CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD` | `0.30` | Critical threshold for mean Brier score drift. |
+| `CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD` | `0.15` | Warning threshold for max bucket calibration error. |
+| `CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD` | `0.25` | Critical threshold for max bucket calibration error. |
 
 ## Scheduling and Workers
 

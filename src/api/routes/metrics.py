@@ -9,6 +9,7 @@ from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from src.core.observability import (
+    CALIBRATION_DRIFT_ALERTS_TOTAL,
     INGESTION_ITEMS_TOTAL,
     LLM_API_CALLS_TOTAL,
     LLM_ESTIMATED_COST_USD_TOTAL,
@@ -22,6 +23,7 @@ _REGISTERED_METRICS = (
     LLM_API_CALLS_TOTAL,
     LLM_ESTIMATED_COST_USD_TOTAL,
     WORKER_ERRORS_TOTAL,
+    CALIBRATION_DRIFT_ALERTS_TOTAL,
 )
 
 

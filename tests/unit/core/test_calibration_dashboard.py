@@ -36,3 +36,46 @@ def test_build_reliability_notes_formats_bucket_statement() -> None:
         ]
     )
     assert notes == ["When we predicted 20%-30%, it happened 43% of the time (n=7)."]
+
+
+def test_build_drift_alerts_returns_warning_and_critical_entries() -> None:
+    service = CalibrationDashboardService(session=AsyncMock())
+    alerts = service._build_drift_alerts(
+        calibration_curve=[
+            CalibrationBucketSummary(
+                bucket_start=0.2,
+                bucket_end=0.3,
+                prediction_count=9,
+                actual_rate=0.56,
+                expected_rate=0.25,
+                calibration_error=0.31,
+            )
+        ],
+        mean_brier_score=0.32,
+        resolved_predictions=25,
+    )
+
+    assert len(alerts) == 2
+    assert alerts[0].alert_type == "mean_brier_drift"
+    assert alerts[0].severity == "critical"
+    assert alerts[1].alert_type == "bucket_error_drift"
+    assert alerts[1].severity == "critical"
+
+
+def test_build_drift_alerts_skips_when_sample_size_is_too_low() -> None:
+    service = CalibrationDashboardService(session=AsyncMock())
+    alerts = service._build_drift_alerts(
+        calibration_curve=[
+            CalibrationBucketSummary(
+                bucket_start=0.7,
+                bucket_end=0.8,
+                prediction_count=2,
+                actual_rate=1.0,
+                expected_rate=0.75,
+                calibration_error=0.25,
+            )
+        ],
+        mean_brier_score=0.35,
+        resolved_predictions=5,
+    )
+    assert alerts == []

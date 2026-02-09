@@ -26,6 +26,11 @@ WORKER_ERRORS_TOTAL = Counter(
     "Worker task failures by task name.",
     ["task_name"],
 )
+CALIBRATION_DRIFT_ALERTS_TOTAL = Counter(
+    "calibration_drift_alerts_total",
+    "Calibration drift alerts by alert type and severity.",
+    ["alert_type", "severity"],
+)
 
 
 def record_collector_metrics(
@@ -61,3 +66,10 @@ def record_pipeline_metrics(run_result: dict[str, int | float | str]) -> None:
 
 def record_worker_error(task_name: str) -> None:
     WORKER_ERRORS_TOTAL.labels(task_name=task_name).inc()
+
+
+def record_calibration_drift_alert(*, alert_type: str, severity: str) -> None:
+    CALIBRATION_DRIFT_ALERTS_TOTAL.labels(
+        alert_type=alert_type,
+        severity=severity,
+    ).inc()

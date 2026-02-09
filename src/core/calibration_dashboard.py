@@ -4,10 +4,11 @@ Calibration dashboard and trend visibility helpers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,9 +17,13 @@ from src.core.calibration import (
     calculate_brier_score,
     normalize_utc,
 )
+from src.core.config import settings
+from src.core.observability import record_calibration_drift_alert
 from src.core.risk import get_risk_level
 from src.core.trend_engine import logodds_to_prob
 from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -57,6 +62,19 @@ class TrendMovement:
 
 
 @dataclass
+class CalibrationDriftAlert:
+    """Calibration drift alert emitted when thresholds are breached."""
+
+    alert_type: str
+    severity: str
+    metric_name: str
+    metric_value: float
+    threshold: float
+    sample_size: int
+    message: str
+
+
+@dataclass
 class CalibrationDashboardReport:
     """Dashboard payload for calibration and movement visibility."""
 
@@ -70,6 +88,7 @@ class CalibrationDashboardReport:
     brier_score_over_time: list[BrierTimeseriesPoint]
     reliability_notes: list[str]
     trend_movements: list[TrendMovement]
+    drift_alerts: list[CalibrationDriftAlert] = field(default_factory=list)
 
 
 class CalibrationDashboardService:
@@ -110,6 +129,15 @@ class CalibrationDashboardService:
         brier_series = self._build_brier_timeseries(scored_outcomes, period_end=period_end)
         brier_values = [point.mean_brier_score for point in brier_series]
         mean_brier = sum(brier_values) / len(brier_values) if brier_values else None
+        drift_alerts = self._build_drift_alerts(
+            calibration_curve=calibration_curve,
+            mean_brier_score=mean_brier,
+            resolved_predictions=len(scored_outcomes),
+        )
+        self._emit_drift_notifications(
+            trend_id=trend_id,
+            drift_alerts=drift_alerts,
+        )
 
         movements = await self._load_trend_movements(
             trend_id=trend_id,
@@ -127,7 +155,107 @@ class CalibrationDashboardService:
             brier_score_over_time=brier_series,
             reliability_notes=self._build_reliability_notes(calibration_curve),
             trend_movements=movements,
+            drift_alerts=drift_alerts,
         )
+
+    def _build_drift_alerts(
+        self,
+        *,
+        calibration_curve: list[CalibrationBucketSummary],
+        mean_brier_score: float | None,
+        resolved_predictions: int,
+    ) -> list[CalibrationDriftAlert]:
+        if resolved_predictions < settings.CALIBRATION_DRIFT_MIN_RESOLVED_OUTCOMES:
+            return []
+
+        alerts: list[CalibrationDriftAlert] = []
+        if mean_brier_score is not None:
+            severity, threshold = self._severity_and_threshold(
+                value=mean_brier_score,
+                warn_threshold=settings.CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD,
+                critical_threshold=settings.CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD,
+            )
+            if severity is not None and threshold is not None:
+                alerts.append(
+                    CalibrationDriftAlert(
+                        alert_type="mean_brier_drift",
+                        severity=severity,
+                        metric_name="mean_brier_score",
+                        metric_value=round(mean_brier_score, 6),
+                        threshold=threshold,
+                        sample_size=resolved_predictions,
+                        message=(
+                            "Mean Brier score exceeded calibration drift threshold "
+                            f"({mean_brier_score:.3f} >= {threshold:.3f})."
+                        ),
+                    )
+                )
+
+        if calibration_curve:
+            worst_bucket = max(calibration_curve, key=lambda bucket: bucket.calibration_error)
+            severity, threshold = self._severity_and_threshold(
+                value=worst_bucket.calibration_error,
+                warn_threshold=settings.CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD,
+                critical_threshold=settings.CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD,
+            )
+            if severity is not None and threshold is not None:
+                alerts.append(
+                    CalibrationDriftAlert(
+                        alert_type="bucket_error_drift",
+                        severity=severity,
+                        metric_name="max_bucket_calibration_error",
+                        metric_value=round(worst_bucket.calibration_error, 6),
+                        threshold=threshold,
+                        sample_size=worst_bucket.prediction_count,
+                        message=(
+                            "Calibration bucket error exceeded threshold for "
+                            f"{worst_bucket.bucket_start:.0%}-{worst_bucket.bucket_end:.0%} "
+                            f"({worst_bucket.calibration_error:.3f} >= {threshold:.3f})."
+                        ),
+                    )
+                )
+
+        return alerts
+
+    @staticmethod
+    def _severity_and_threshold(
+        *,
+        value: float,
+        warn_threshold: float,
+        critical_threshold: float,
+    ) -> tuple[str | None, float | None]:
+        if value >= critical_threshold:
+            return "critical", critical_threshold
+        if value >= warn_threshold:
+            return "warning", warn_threshold
+        return None, None
+
+    def _emit_drift_notifications(
+        self,
+        *,
+        trend_id: UUID | None,
+        drift_alerts: list[CalibrationDriftAlert],
+    ) -> None:
+        if not drift_alerts:
+            return
+
+        trend_scope = str(trend_id) if trend_id is not None else "all_trends"
+        for alert in drift_alerts:
+            record_calibration_drift_alert(
+                alert_type=alert.alert_type,
+                severity=alert.severity,
+            )
+            logger.warning(
+                "Calibration drift alert",
+                trend_scope=trend_scope,
+                alert_type=alert.alert_type,
+                severity=alert.severity,
+                metric_name=alert.metric_name,
+                metric_value=alert.metric_value,
+                threshold=alert.threshold,
+                sample_size=alert.sample_size,
+                message=alert.message,
+            )
 
     async def _load_outcomes(
         self,

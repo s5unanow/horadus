@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-035 Follow-up: Calibration Drift Alerts & Notifications
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Add actionable drift alerting to calibration dashboard outputs.
+
+**Completed**:
+- [x] Added configurable drift thresholds for mean Brier and max bucket calibration error
+- [x] Added minimum sample guardrail before drift alerting is activated
+- [x] Added drift alert payloads to `GET /api/v1/reports/calibration`
+- [x] Added structured alert notifications and Prometheus counter (`calibration_drift_alerts_total`)
+- [x] Added unit tests for drift alert generation and API response wiring
+- [x] Updated environment/API documentation for new calibration alert controls
+
+---
+
 ### TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

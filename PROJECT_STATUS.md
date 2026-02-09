@@ -131,6 +131,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] API key metadata persistence support (`API_KEYS_PERSIST_PATH`)
 - [x] API key rotation endpoint (`POST /api/v1/auth/keys/{id}/rotate`)
 - [x] Weekly/monthly report contradiction-resolution analytics (`contradiction_analytics`)
+- [x] Calibration drift alerts with thresholded notifications (`drift_alerts`)
 
 ## In Progress
 
@@ -142,10 +143,9 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add calibration drift alert thresholds + notifications
-2. Add operational dashboard export/hosting path
-3. Add cloud secret backend references for managed secret stores
-4. Add backup verification automation and retention enforcement
+1. Add operational dashboard export/hosting path
+2. Add cloud secret backend references for managed secret stores
+3. Add backup verification automation and retention enforcement
 
 ## Expert Feedback Integration ✅
 

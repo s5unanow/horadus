@@ -106,6 +106,22 @@ class Settings(BaseSettings):
             self.DATABASE_URL_SYNC = self.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
         return self
 
+    @model_validator(mode="after")
+    def _validate_calibration_thresholds(self) -> Settings:
+        if (
+            self.CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD
+            > self.CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD
+        ):
+            msg = "CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD must be <= CRITICAL threshold"
+            raise ValueError(msg)
+        if (
+            self.CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD
+            > self.CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD
+        ):
+            msg = "CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD must be <= CRITICAL threshold"
+            raise ValueError(msg)
+        return self
+
     # =========================================================================
     # Redis
     # =========================================================================
@@ -356,6 +372,35 @@ class Settings(BaseSettings):
         ge=0,
         le=100,
         description="Alert when this % of daily budget is reached",
+    )
+
+    # =========================================================================
+    # Calibration Drift Alerting
+    # =========================================================================
+    CALIBRATION_DRIFT_MIN_RESOLVED_OUTCOMES: int = Field(
+        default=20,
+        ge=0,
+        description="Minimum resolved outcomes before calibration drift alerts are emitted",
+    )
+    CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD: float = Field(
+        default=0.20,
+        ge=0,
+        description="Warning threshold for mean Brier score drift alerts",
+    )
+    CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD: float = Field(
+        default=0.30,
+        ge=0,
+        description="Critical threshold for mean Brier score drift alerts",
+    )
+    CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD: float = Field(
+        default=0.15,
+        ge=0,
+        description="Warning threshold for max bucket calibration error alerts",
+    )
+    CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD: float = Field(
+        default=0.25,
+        ge=0,
+        description="Critical threshold for max bucket calibration error alerts",
     )
 
     # =========================================================================

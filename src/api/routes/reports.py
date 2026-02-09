@@ -124,6 +124,18 @@ class TrendMovementResponse(BaseModel):
     movement_chart: str
 
 
+class CalibrationDriftAlertResponse(BaseModel):
+    """Calibration drift alert summary."""
+
+    alert_type: str
+    severity: str
+    metric_name: str
+    metric_value: float
+    threshold: float
+    sample_size: int
+    message: str
+
+
 class CalibrationDashboardResponse(BaseModel):
     """Cross-trend calibration dashboard payload."""
 
@@ -168,6 +180,17 @@ class CalibrationDashboardResponse(BaseModel):
                         "movement_chart": "._-~=+*#%@",
                     }
                 ],
+                "drift_alerts": [
+                    {
+                        "alert_type": "mean_brier_drift",
+                        "severity": "warning",
+                        "metric_name": "mean_brier_score",
+                        "metric_value": 0.214,
+                        "threshold": 0.2,
+                        "sample_size": 38,
+                        "message": "Mean Brier score exceeded calibration drift threshold (0.214 >= 0.200).",
+                    }
+                ],
             }
         }
     )
@@ -182,6 +205,7 @@ class CalibrationDashboardResponse(BaseModel):
     brier_score_over_time: list[BrierScoreTimeseriesResponse]
     reliability_notes: list[str]
     trend_movements: list[TrendMovementResponse]
+    drift_alerts: list[CalibrationDriftAlertResponse]
 
 
 def _normalize_top_events(value: Any) -> list[dict[str, Any]] | None:
@@ -312,6 +336,18 @@ async def get_calibration_dashboard(
                 movement_chart=row.movement_chart,
             )
             for row in dashboard.trend_movements
+        ],
+        drift_alerts=[
+            CalibrationDriftAlertResponse(
+                alert_type=alert.alert_type,
+                severity=alert.severity,
+                metric_name=alert.metric_name,
+                metric_value=alert.metric_value,
+                threshold=alert.threshold,
+                sample_size=alert.sample_size,
+                message=alert.message,
+            )
+            for alert in dashboard.drift_alerts
         ],
     )
 

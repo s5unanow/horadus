@@ -18,6 +18,7 @@ from src.core.calibration_dashboard import (
     BrierTimeseriesPoint,
     CalibrationBucketSummary,
     CalibrationDashboardReport,
+    CalibrationDriftAlert,
     TrendMovement,
 )
 from src.storage.models import Report
@@ -175,6 +176,17 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
                 movement_chart="._-=+*",
             )
         ],
+        drift_alerts=[
+            CalibrationDriftAlert(
+                alert_type="mean_brier_drift",
+                severity="warning",
+                metric_name="mean_brier_score",
+                metric_value=0.19,
+                threshold=0.2,
+                sample_size=10,
+                message="Mean Brier score approaching drift threshold.",
+            )
+        ],
     )
 
     class _Service:
@@ -208,6 +220,8 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
     assert result.calibration_curve[0].actual_rate == pytest.approx(0.4)
     assert result.trend_movements[0].trend_name == "EU-Russia"
     assert result.trend_movements[0].movement_chart == "._-=+*"
+    assert len(result.drift_alerts) == 1
+    assert result.drift_alerts[0].alert_type == "mean_brier_drift"
 
 
 @pytest.mark.asyncio

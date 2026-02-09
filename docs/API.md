@@ -138,6 +138,9 @@ Calibration dashboard example:
 curl "http://localhost:8000/api/v1/reports/calibration"
 ```
 
+Report `statistics` for weekly/monthly entries now include `contradiction_analytics`
+with resolved/unresolved counts, resolution rate, and action mix for contradicted events.
+
 ## Budget
 
 - `GET /api/v1/budget`

@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Add contradiction-resolution visibility to weekly and monthly report outputs.
+
+**Completed**:
+- [x] Added contradiction analytics block to weekly and monthly report statistics
+- [x] Included resolved/unresolved counts, resolution rate, action breakdown, and avg resolution time
+- [x] Updated fallback report narrative to mention contradiction pressure when present
+- [x] Updated weekly/monthly report prompt guidance for contradiction context
+- [x] Added unit tests for contradiction analytics aggregation and report statistics wiring
+
+---
+
 ### TASK-025 Follow-up: Auth Key Persistence & Rotation
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

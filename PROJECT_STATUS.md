@@ -136,6 +136,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Calibration drift webhook delivery channel with retry/backoff controls
 - [x] Calibration operations runbook (triage playbook, checklist, decision tree)
 - [x] Tier-1/Tier-2 LLM provider failover (429/5xx/timeout) with secondary model routing
+- [x] Tier-1/Tier-2 gold-set benchmark workflow with 200-item evaluation dataset (`ai/eval/gold_set.jsonl`)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -150,7 +151,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 ## Next Up (Priority Order)
 
-1. TASK-041: Model evaluation gold set and benchmark harness
+1. Select next sprint priorities from `tasks/BACKLOG.md`
 
 ## Expert Feedback Integration ✅
 

@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-041: Model Evaluation Gold Set
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add a reusable gold-set benchmark workflow for Tier-1/Tier-2 model comparison.
+
+**Completed**:
+- [x] Added `ai/eval/gold_set.jsonl` with 200 labeled benchmark items
+- [x] Added benchmark runner (`horadus eval benchmark`) with timestamped JSON outputs under `ai/eval/results/`
+- [x] Added default model-pair comparison configs (`baseline` vs `alternative`)
+- [x] Added benchmark metrics for relevance/route accuracy, extraction accuracy, and estimated cost-per-item
+- [x] Added unit tests for gold-set parsing and benchmark output generation
+- [x] Updated evaluation docs and Make target (`make benchmark-eval`) for operator workflow
+
+---
+
 ### TASK-040: LLM Provider Fallback
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

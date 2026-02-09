@@ -46,6 +46,7 @@ Tasks that have been completed and verified.
 - TASK-038: Drift Alert Delivery Channels ✅
 - TASK-039: Calibration Ops Runbook Tightening ✅
 - TASK-040: LLM Provider Fallback ✅
+- TASK-041: Model Evaluation Gold Set ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

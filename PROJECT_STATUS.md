@@ -149,7 +149,8 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Select next sprint priorities from `tasks/BACKLOG.md`
+1. TASK-040: LLM provider fallback (primary/secondary failover)
+2. TASK-041: Model evaluation gold set and benchmark harness
 
 ## Expert Feedback Integration ✅
 

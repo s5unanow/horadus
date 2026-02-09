@@ -8,10 +8,6 @@
 
 ## Active Tasks
 
-- **TASK-037: Calibration Coverage Guardrails** (P1)
-  - Add coverage SLO metrics (resolved outcomes per trend/window)
-  - Add low-sample alert conditions in calibration dashboard payload
-  - Add tests for guardrail thresholds and response fields
 - **TASK-038: Drift Alert Delivery Channels** (P1)
   - Add optional webhook sink for calibration drift alerts
   - Add retry/backoff with bounded failure logging
@@ -24,6 +20,23 @@
 ---
 
 ## Completed This Sprint
+
+### TASK-037: Calibration Coverage Guardrails
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Add calibration coverage SLO metrics and low-sample guardrails to dashboard reporting.
+
+**Completed**:
+- [x] Added coverage metrics for resolved outcomes by trend in calibration dashboard output
+- [x] Added low-sample coverage alerts when trends fall below configured thresholds
+- [x] Added configurable coverage guardrail settings for minimum resolved count and ratio
+- [x] Extended calibration reports API response schema with coverage summary fields
+- [x] Added unit tests for coverage summary, low-sample alerts, API response, and dashboard export
+- [x] Updated environment/API docs and `.env.example` for new calibration coverage controls
+
+---
 
 ### TASK-027 Follow-up: Backup Verification & Retention Enforcement
 **Status**: DONE ✓  

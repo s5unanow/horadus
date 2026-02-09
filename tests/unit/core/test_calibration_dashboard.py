@@ -1,10 +1,16 @@
 from __future__ import annotations
 
 from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
-from src.core.calibration_dashboard import CalibrationBucketSummary, CalibrationDashboardService
+from src.core.calibration_dashboard import (
+    CalibrationBucketSummary,
+    CalibrationCoverageSummary,
+    CalibrationDashboardService,
+    TrendCoverageSummary,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -40,6 +46,19 @@ def test_build_reliability_notes_formats_bucket_statement() -> None:
 
 def test_build_drift_alerts_returns_warning_and_critical_entries() -> None:
     service = CalibrationDashboardService(session=AsyncMock())
+    coverage = CalibrationCoverageSummary(
+        min_resolved_per_trend=5,
+        min_resolved_ratio=0.5,
+        total_predictions=25,
+        resolved_predictions=25,
+        unresolved_predictions=0,
+        overall_resolved_ratio=1.0,
+        trends_with_predictions=2,
+        trends_meeting_min=2,
+        trends_below_min=0,
+        low_sample_trends=[],
+        coverage_sufficient=True,
+    )
     alerts = service._build_drift_alerts(
         calibration_curve=[
             CalibrationBucketSummary(
@@ -53,6 +72,7 @@ def test_build_drift_alerts_returns_warning_and_critical_entries() -> None:
         ],
         mean_brier_score=0.32,
         resolved_predictions=25,
+        coverage=coverage,
     )
 
     assert len(alerts) == 2
@@ -64,6 +84,19 @@ def test_build_drift_alerts_returns_warning_and_critical_entries() -> None:
 
 def test_build_drift_alerts_skips_when_sample_size_is_too_low() -> None:
     service = CalibrationDashboardService(session=AsyncMock())
+    coverage = CalibrationCoverageSummary(
+        min_resolved_per_trend=5,
+        min_resolved_ratio=0.5,
+        total_predictions=5,
+        resolved_predictions=5,
+        unresolved_predictions=0,
+        overall_resolved_ratio=1.0,
+        trends_with_predictions=1,
+        trends_meeting_min=1,
+        trends_below_min=0,
+        low_sample_trends=[],
+        coverage_sufficient=True,
+    )
     alerts = service._build_drift_alerts(
         calibration_curve=[
             CalibrationBucketSummary(
@@ -77,5 +110,45 @@ def test_build_drift_alerts_skips_when_sample_size_is_too_low() -> None:
         ],
         mean_brier_score=0.35,
         resolved_predictions=5,
+        coverage=coverage,
     )
     assert alerts == []
+
+
+def test_build_coverage_summary_marks_low_sample_trends() -> None:
+    service = CalibrationDashboardService(session=AsyncMock())
+    summary = service._build_coverage_summary(
+        total_by_trend={},
+        resolved_by_trend={},
+        trend_name_by_id={},
+    )
+    assert summary.coverage_sufficient is False
+    assert summary.total_predictions == 0
+
+
+def test_build_coverage_alerts_emits_low_sample_warning() -> None:
+    service = CalibrationDashboardService(session=AsyncMock())
+    coverage = CalibrationCoverageSummary(
+        min_resolved_per_trend=5,
+        min_resolved_ratio=0.5,
+        total_predictions=8,
+        resolved_predictions=3,
+        unresolved_predictions=5,
+        overall_resolved_ratio=0.375,
+        trends_with_predictions=1,
+        trends_meeting_min=0,
+        trends_below_min=1,
+        low_sample_trends=[
+            TrendCoverageSummary(
+                trend_id=uuid4(),
+                trend_name="EU-Russia",
+                total_predictions=8,
+                resolved_predictions=3,
+                resolved_ratio=0.375,
+            )
+        ],
+        coverage_sufficient=False,
+    )
+    alerts = service._build_coverage_alerts(coverage)
+    assert alerts
+    assert alerts[0].alert_type == "low_sample_coverage"

@@ -146,7 +146,9 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-- Phase 5 polish backlog complete; define next Phase 6 execution tasks.
+1. TASK-037: Calibration coverage guardrails and low-sample alerts
+2. TASK-038: Drift alert delivery channels (webhook + retry)
+3. TASK-039: Calibration operations runbook tightening
 
 ## Expert Feedback Integration ✅
 

@@ -1,6 +1,6 @@
 # Current Sprint
 
-**Sprint Goal**: Complete Phase 4 reporting and begin Phase 5 polish  
+**Sprint Goal**: Execute Phase 6 calibration hardening  
 **Sprint Number**: 1  
 **Sprint Dates**: 2026-02-02 to 2026-02-16
 
@@ -8,7 +8,18 @@
 
 ## Active Tasks
 
-- No active tasks right now.
+- **TASK-037: Calibration Coverage Guardrails** (P1)
+  - Add coverage SLO metrics (resolved outcomes per trend/window)
+  - Add low-sample alert conditions in calibration dashboard payload
+  - Add tests for guardrail thresholds and response fields
+- **TASK-038: Drift Alert Delivery Channels** (P1)
+  - Add optional webhook sink for calibration drift alerts
+  - Add retry/backoff with bounded failure logging
+  - Add unit tests for delivery success/failure behavior
+- **TASK-039: Calibration Ops Runbook Tightening** (P2)
+  - Add operator triage playbook for drift/coverage alerts
+  - Add weekly calibration review checklist
+  - Add remediation decision tree references in docs
 
 ---
 

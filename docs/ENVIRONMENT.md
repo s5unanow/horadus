@@ -110,6 +110,9 @@ Supported file-backed variables:
 
 `API_KEYS_FILE` supports newline-separated and/or comma-separated values.
 
+For managed cloud secret-store integrations (AWS/GCP/Azure/Vault), see
+`docs/SECRETS_BACKENDS.md`.
+
 ## Local Reference
 
 Use `.env.example` as the source template:

@@ -14,6 +14,21 @@
 
 ## Completed This Sprint
 
+### TASK-027 Follow-up: Cloud Secret Backend References
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Document managed secret-store integration patterns for production environments.
+
+**Completed**:
+- [x] Added managed secret backend reference guide (`docs/SECRETS_BACKENDS.md`)
+- [x] Added backend mapping guidance for AWS/GCP/Azure/Vault using Horadus `*_FILE` settings
+- [x] Linked guide from deployment and environment docs
+- [x] Added README references for secret backend integration docs
+
+---
+
 ### TASK-035 Follow-up: Operational Dashboard Export & Hosting Path
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

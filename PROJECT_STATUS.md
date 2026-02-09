@@ -133,6 +133,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Weekly/monthly report contradiction-resolution analytics (`contradiction_analytics`)
 - [x] Calibration drift alerts with thresholded notifications (`drift_alerts`)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
+- [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 
 ## In Progress
 
@@ -144,8 +145,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add cloud secret backend references for managed secret stores
-2. Add backup verification automation and retention enforcement
+1. Add backup verification automation and retention enforcement
 
 ## Expert Feedback Integration ✅
 

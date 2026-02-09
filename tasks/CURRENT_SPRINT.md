@@ -8,14 +8,26 @@
 
 ## Active Tasks
 
-- **TASK-039: Calibration Ops Runbook Tightening** (P2)
-  - Add operator triage playbook for drift/coverage alerts
-  - Add weekly calibration review checklist
-  - Add remediation decision tree references in docs
+- None currently (Phase 6 sprint deliverables complete)
 
 ---
 
 ## Completed This Sprint
+
+### TASK-039: Calibration Ops Runbook Tightening
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Add a practical operator runbook for handling calibration alerts.
+
+**Completed**:
+- [x] Added calibration operations runbook with alert triage playbook (`docs/CALIBRATION_RUNBOOK.md`)
+- [x] Added weekly calibration review checklist for ongoing alert hygiene
+- [x] Added remediation decision tree for coverage and drift escalation paths
+- [x] Linked calibration runbook from deployment and API docs
+
+---
 
 ### TASK-038: Drift Alert Delivery Channels
 **Status**: DONE ✓  

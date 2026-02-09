@@ -144,6 +144,8 @@ Responses also include `coverage` guardrail metrics (resolved ratio and per-tren
 low-sample breakdown) for calibration SLO monitoring.
 When `CALIBRATION_DRIFT_WEBHOOK_URL` is configured, alert payloads are also sent
 to the webhook with bounded retry/backoff on transient delivery failures.
+Operational response guidance for these alerts is documented in
+`docs/CALIBRATION_RUNBOOK.md`.
 
 Report `statistics` for weekly/monthly entries now include `contradiction_analytics`
 with resolved/unresolved counts, resolution rate, and action mix for contradicted events.

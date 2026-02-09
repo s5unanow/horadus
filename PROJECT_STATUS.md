@@ -1,7 +1,7 @@
 # Project Status
 
 **Last Updated**: 2026-02-09
-**Current Phase**: Phase 6 - Calibration (in progress)
+**Current Phase**: Phase 6 - Calibration (complete)
 
 ## Progress Overview
 
@@ -12,7 +12,7 @@ Phase 2: Processing Layer    [████████████████�
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
-Phase 6: Calibration (NEW)   [███████████████░░░░░]  75%  ← WE ARE HERE
+Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
 ```
 
 ## What's Working
@@ -134,6 +134,7 @@ Phase 6: Calibration (NEW)   [███████████████░�
 - [x] Calibration drift alerts with thresholded notifications (`drift_alerts`)
 - [x] Calibration coverage guardrails and low-sample alerts (`coverage`)
 - [x] Calibration drift webhook delivery channel with retry/backoff controls
+- [x] Calibration operations runbook (triage playbook, checklist, decision tree)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -148,7 +149,7 @@ Phase 6: Calibration (NEW)   [███████████████░�
 
 ## Next Up (Priority Order)
 
-1. TASK-039: Calibration operations runbook tightening
+1. Select next sprint priorities from `tasks/BACKLOG.md`
 
 ## Expert Feedback Integration ✅
 

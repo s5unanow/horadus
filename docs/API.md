@@ -156,6 +156,9 @@ with resolved/unresolved counts, resolution rate, and action mix for contradicte
 
 Returns current UTC-day LLM usage by tier (`tier1`, `tier2`, `embedding`) with
 call counters, token totals, estimated cost, and remaining daily budget.
+Tier-1 and Tier-2 processing calls support automatic primary/secondary model
+failover on transient provider errors (429/5xx/timeouts) when secondary models
+are configured.
 
 Example:
 

@@ -237,3 +237,36 @@ async def test_classify_event_clears_contradiction_note_when_not_contradicted(
 
     assert event.has_contradictions is False
     assert event.contradiction_notes is None
+
+
+@pytest.mark.asyncio
+async def test_classify_event_fails_over_to_secondary_on_timeout(mock_db_session) -> None:
+    primary_calls: list[dict[str, object]] = []
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            primary_calls.append(kwargs)
+            raise TimeoutError("primary timeout")
+
+    secondary_chat = FakeChatCompletions(calls=[])
+    classifier, _chat, cost_tracker = _build_classifier(mock_db_session)
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions()))
+    classifier.secondary_client = SimpleNamespace(chat=SimpleNamespace(completions=secondary_chat))
+    classifier.secondary_model = "gpt-4.1-nano"
+    classifier.secondary_provider = "openai-secondary"
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    result, usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert usage.api_calls == 1
+    assert usage.estimated_cost_usd == pytest.approx(0.000044, rel=0.001)
+    assert len(primary_calls) == 1
+    assert len(secondary_chat.calls) == 1
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once()

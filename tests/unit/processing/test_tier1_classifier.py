@@ -52,6 +52,12 @@ class FakeChatCompletions:
         )
 
 
+class _HttpStatusError(Exception):
+    def __init__(self, status_code: int):
+        super().__init__(f"status {status_code}")
+        self.status_code = status_code
+
+
 def _build_classifier(mock_db_session, *, batch_size: int = 2):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
@@ -194,3 +200,54 @@ async def test_classify_items_raises_when_budget_exceeded(mock_db_session) -> No
 
     with pytest.raises(BudgetExceededError, match="daily call limit"):
         await classifier.classify_items([item], trends)
+
+
+@pytest.mark.asyncio
+async def test_classify_items_fails_over_to_secondary_on_retryable_error(mock_db_session) -> None:
+    primary_calls: list[dict[str, object]] = []
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            primary_calls.append(kwargs)
+            raise _HttpStatusError(429)
+
+    secondary_chat = FakeChatCompletions(calls=[])
+    classifier, _chat, cost_tracker = _build_classifier(mock_db_session, batch_size=10)
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions()))
+    classifier.secondary_client = SimpleNamespace(chat=SimpleNamespace(completions=secondary_chat))
+    classifier.secondary_model = "gpt-4o-mini"
+    classifier.secondary_provider = "openai-secondary"
+
+    item = _build_item("eu-russia escalation")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+    results, usage = await classifier.classify_items([item], trends)
+
+    assert len(results) == 1
+    assert usage.api_calls == 1
+    assert usage.estimated_cost_usd == pytest.approx(0.000027, rel=0.001)
+    assert len(primary_calls) == 1
+    assert len(secondary_chat.calls) == 1
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_items_does_not_fail_over_on_non_retryable_error(mock_db_session) -> None:
+    secondary_chat = FakeChatCompletions(calls=[])
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            raise _HttpStatusError(400)
+
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=10)
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions()))
+    classifier.secondary_client = SimpleNamespace(chat=SimpleNamespace(completions=secondary_chat))
+    classifier.secondary_model = "gpt-4o-mini"
+
+    item = _build_item("eu-russia escalation")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    with pytest.raises(_HttpStatusError):
+        await classifier.classify_items([item], trends)
+    assert len(secondary_chat.calls) == 0

@@ -73,6 +73,7 @@ class Settings(BaseSettings):
             "API_KEY": self.API_KEY_FILE,
             "API_ADMIN_KEY": self.API_ADMIN_KEY_FILE,
             "OPENAI_API_KEY": self.OPENAI_API_KEY_FILE,
+            "LLM_SECONDARY_API_KEY": self.LLM_SECONDARY_API_KEY_FILE,
             "CELERY_BROKER_URL": self.CELERY_BROKER_URL_FILE,
             "CELERY_RESULT_BACKEND": self.CELERY_RESULT_BACKEND_FILE,
         }
@@ -223,6 +224,17 @@ class Settings(BaseSettings):
             return normalized or None
         return str(value).strip() or None
 
+    @field_validator("LLM_PRIMARY_BASE_URL", "LLM_SECONDARY_BASE_URL", mode="before")
+    @classmethod
+    def parse_optional_llm_base_urls(cls, value: Any) -> str | None:
+        """Normalize optional LLM base URL values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value).strip() or None
+
     # =========================================================================
     # OpenAI Configuration
     # =========================================================================
@@ -234,6 +246,30 @@ class Settings(BaseSettings):
         default=None,
         description="Path to file containing OPENAI_API_KEY",
     )
+    LLM_PRIMARY_PROVIDER: str = Field(
+        default="openai",
+        description="Primary LLM provider identifier for logging/routing",
+    )
+    LLM_PRIMARY_BASE_URL: str | None = Field(
+        default=None,
+        description="Optional base URL for OpenAI-compatible primary provider endpoints",
+    )
+    LLM_SECONDARY_PROVIDER: str | None = Field(
+        default=None,
+        description="Secondary LLM provider identifier for failover routing/logging",
+    )
+    LLM_SECONDARY_BASE_URL: str | None = Field(
+        default=None,
+        description="Optional base URL for OpenAI-compatible secondary provider endpoints",
+    )
+    LLM_SECONDARY_API_KEY: str | None = Field(
+        default=None,
+        description="Optional API key override for secondary provider",
+    )
+    LLM_SECONDARY_API_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing LLM_SECONDARY_API_KEY",
+    )
     LLM_TIER1_MODEL: str = Field(
         default="gpt-4.1-nano",
         description="Model for Tier 1 (fast) classification",
@@ -241,6 +277,14 @@ class Settings(BaseSettings):
     LLM_TIER2_MODEL: str = Field(
         default="gpt-4o-mini",
         description="Model for Tier 2 (thorough) classification",
+    )
+    LLM_TIER1_SECONDARY_MODEL: str | None = Field(
+        default=None,
+        description="Optional secondary model for Tier 1 failover",
+    )
+    LLM_TIER2_SECONDARY_MODEL: str | None = Field(
+        default=None,
+        description="Optional secondary model for Tier 2 failover",
     )
     LLM_REPORT_MODEL: str = Field(
         default="gpt-4o-mini",

@@ -71,6 +71,16 @@ This document lists environment variables used by the Horadus backend.
 | `MONTHLY_REPORT_DAY_OF_MONTH` | `1` | UTC day of month (`1..28`). |
 | `MONTHLY_REPORT_HOUR_UTC` | `8` | UTC hour. |
 
+## Backup Operations
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `BACKUP_RETENTION_DAYS` | `14` | Delete backup files older than this many days (`0` disables age pruning). |
+| `BACKUP_RETENTION_COUNT` | `30` | Keep only the newest N backups (`0` disables count pruning). |
+| `VERIFY_BACKUP` | `true` | Run gzip/size validation immediately after backup creation. |
+| `MIN_BACKUP_BYTES` | `1024` | Minimum compressed backup size accepted by backup/verify scripts. |
+| `MAX_BACKUP_AGE_HOURS` | `30` | Maximum allowed age for latest backup during verification checks. |
+
 ## Logging
 
 | Variable | Default | Notes |

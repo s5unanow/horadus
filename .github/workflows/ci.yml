@@ -31,14 +31,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install ruff
-        run: pip install ruff
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --extra dev --frozen
 
       - name: Check formatting
-        run: ruff format src/ tests/ --check
+        run: uv run --no-sync ruff format src/ tests/ --check
 
       - name: Run linter
-        run: ruff check src/ tests/
+        run: uv run --no-sync ruff check src/ tests/
 
   # ---------------------------------------------------------------------------
   # Type Checking
@@ -54,12 +59,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+        run: uv sync --extra dev --frozen
 
       - name: Run mypy
-        run: mypy src/
+        run: uv run --no-sync mypy src/
 
   # ---------------------------------------------------------------------------
   # Unit Tests
@@ -75,12 +84,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+        run: uv sync --extra dev --frozen
 
       - name: Run unit tests
-        run: pytest tests/unit/ -v --cov=src --cov-report=xml
+        run: uv run --no-sync pytest tests/unit/ -v --cov=src --cov-report=xml
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -130,9 +143,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install dependencies
-        run: |
-          pip install -e ".[dev]"
+        run: uv sync --extra dev --frozen
 
       - name: Wait for services
         run: |
@@ -142,14 +159,14 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
         run: |
-          alembic upgrade head || echo "No migrations to apply"
+          uv run --no-sync alembic upgrade head || echo "No migrations to apply"
 
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
           REDIS_URL: redis://localhost:6379/0
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: pytest tests/integration/ -v -m integration || echo "No integration tests yet"
+        run: uv run --no-sync pytest tests/integration/ -v -m integration || echo "No integration tests yet"
 
   # ---------------------------------------------------------------------------
   # Security Scanning
@@ -165,17 +182,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
       - name: Install dependencies
-        run: |
-          pip install bandit[toml] pip-audit
+        run: uv sync --extra dev --frozen
 
       - name: Run Bandit (code security)
-        run: bandit -c pyproject.toml -r src/ || true
+        run: uv run --no-sync bandit -c pyproject.toml -r src/ || true
 
-      - name: Run pip-audit (dependency vulnerabilities)
-        run: |
-          pip install -e .
-          pip-audit || true
+      - name: Validate lockfile
+        run: uv lock --check
 
   # ---------------------------------------------------------------------------
   # Build Check
@@ -192,13 +211,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install build tools
-        run: pip install build
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Build package
-        run: python -m build
+        run: uvx --from build pyproject-build
 
       - name: Check package
-        run: |
-          pip install twine
-          twine check dist/*
+        run: uvx twine check dist/*

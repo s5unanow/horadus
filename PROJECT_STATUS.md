@@ -138,6 +138,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Tier-1/Tier-2 LLM provider failover (429/5xx/timeout) with secondary model routing
 - [x] Tier-1/Tier-2 gold-set benchmark workflow with 200-item evaluation dataset (`ai/eval/gold_set.jsonl`)
 - [x] Benchmark queue-accuracy now uses runtime Tier-1 threshold + label provenance metadata
+- [x] Gold-set audit workflow (`horadus eval audit`) with provenance/diversity warning gates
 - [x] CI workflow aligned to uv-only dependency/tool execution (no pip install paths)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)

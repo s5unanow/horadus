@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-045: Gold-Set Quality Audit Tooling
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add automated audit checks for evaluation dataset quality before benchmark runs.
+
+**Completed**:
+- [x] Added `horadus eval audit` command for provenance/diversity/coverage quality analysis
+- [x] Added timestamped audit artifacts under `ai/eval/results/audit-*.json`
+- [x] Added warning rules for missing `human_verified` labels and duplicated content patterns
+- [x] Added `--fail-on-warnings` mode for gate-style non-zero exits
+- [x] Added unit tests for both warning-heavy and pass-quality audit datasets
+- [x] Added `make audit-eval` operational command and updated eval docs
+
+---
+
 ### TASK-043: Eval Threshold Alignment + Label Provenance
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

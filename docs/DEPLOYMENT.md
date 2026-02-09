@@ -29,6 +29,7 @@ Recommended production hardening:
 - Prefer `*_FILE` variables backed by secret mounts (instead of plaintext `.env` secrets).
 - Set `SQL_ECHO=false`.
 - Restrict `CORS_ORIGINS` to trusted frontend domains only.
+- Use managed secret backend integration patterns in `docs/SECRETS_BACKENDS.md`.
 
 ## 2) Build production images
 

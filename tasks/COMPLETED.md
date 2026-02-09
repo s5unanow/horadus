@@ -47,6 +47,7 @@ Tasks that have been completed and verified.
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅
 - TASK-035 Follow-up: Calibration Drift Alerts & Notifications ✅
 - TASK-035 Follow-up: Operational Dashboard Export & Hosting Path ✅
+- TASK-027 Follow-up: Cloud Secret Backend References ✅
 
 ---
 

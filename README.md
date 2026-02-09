@@ -92,6 +92,8 @@ Detailed endpoint reference and curl examples:
   - `docs/DEPLOYMENT.md`
 - Environment variable reference:
   - `docs/ENVIRONMENT.md`
+- Managed secret backend references:
+  - `docs/SECRETS_BACKENDS.md`
 
 Authentication header:
 - `X-API-Key: <key>`
@@ -268,6 +270,7 @@ geopolitical-intel/
 │   ├── DATA_MODEL.md      # Database schema
 │   ├── DEPLOYMENT.md      # Deployment runbook
 │   ├── ENVIRONMENT.md     # Environment variable reference
+│   ├── SECRETS_BACKENDS.md # Managed secret backend references
 │   └── adr/               # Architecture decisions
 │
 ├── ai/                    # AI assets (prompts, evals)

@@ -54,6 +54,10 @@ This document lists environment variables used by the Horadus backend.
 | `CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD` | `0.30` | Critical threshold for mean Brier score drift. |
 | `CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD` | `0.15` | Warning threshold for max bucket calibration error. |
 | `CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD` | `0.25` | Critical threshold for max bucket calibration error. |
+| `CALIBRATION_DRIFT_WEBHOOK_URL` | *(empty)* | Optional webhook URL for outbound calibration drift alerts. |
+| `CALIBRATION_DRIFT_WEBHOOK_TIMEOUT_SECONDS` | `5.0` | HTTP timeout (seconds) for webhook delivery calls. |
+| `CALIBRATION_DRIFT_WEBHOOK_MAX_RETRIES` | `3` | Retry attempts for transient webhook failures. |
+| `CALIBRATION_DRIFT_WEBHOOK_BACKOFF_SECONDS` | `1.0` | Initial retry backoff delay in seconds (exponential). |
 | `CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND` | `5` | Minimum resolved outcomes per trend in dashboard window. |
 | `CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO` | `0.50` | Minimum resolved/total ratio before coverage alerts are raised. |
 

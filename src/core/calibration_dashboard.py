@@ -4,7 +4,7 @@ Calibration dashboard and trend visibility helpers.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -18,6 +18,7 @@ from src.core.calibration import (
     normalize_utc,
 )
 from src.core.config import settings
+from src.core.drift_alert_notifier import DriftAlertWebhookNotifier
 from src.core.observability import record_calibration_drift_alert
 from src.core.risk import get_risk_level
 from src.core.trend_engine import logodds_to_prob
@@ -123,8 +124,17 @@ class CalibrationDashboardReport:
 class CalibrationDashboardService:
     """Build dashboard views for calibration and trend movement."""
 
-    def __init__(self, session: AsyncSession):
+    def __init__(
+        self,
+        session: AsyncSession,
+        drift_alert_notifier: DriftAlertWebhookNotifier | None = None,
+    ):
         self.session = session
+        self.drift_alert_notifier = (
+            drift_alert_notifier
+            if drift_alert_notifier is not None
+            else DriftAlertWebhookNotifier.from_settings()
+        )
 
     async def build_dashboard(
         self,
@@ -172,9 +182,11 @@ class CalibrationDashboardService:
             resolved_predictions=len(scored_outcomes),
             coverage=coverage,
         )
-        self._emit_drift_notifications(
+        generated_at = datetime.now(tz=UTC)
+        await self._emit_drift_notifications(
             trend_id=trend_id,
             drift_alerts=drift_alerts,
+            generated_at=generated_at,
         )
 
         movements = await self._load_trend_movements(
@@ -183,7 +195,7 @@ class CalibrationDashboardService:
         )
 
         return CalibrationDashboardReport(
-            generated_at=datetime.now(tz=UTC),
+            generated_at=generated_at,
             period_start=period_start,
             period_end=period_end,
             total_predictions=len(outcomes),
@@ -323,11 +335,12 @@ class CalibrationDashboardService:
             return "warning", warn_threshold
         return None, None
 
-    def _emit_drift_notifications(
+    async def _emit_drift_notifications(
         self,
         *,
         trend_id: UUID | None,
         drift_alerts: list[CalibrationDriftAlert],
+        generated_at: datetime,
     ) -> None:
         if not drift_alerts:
             return
@@ -348,6 +361,18 @@ class CalibrationDashboardService:
                 threshold=alert.threshold,
                 sample_size=alert.sample_size,
                 message=alert.message,
+            )
+        try:
+            await self.drift_alert_notifier.notify(
+                trend_scope=trend_scope,
+                generated_at=generated_at,
+                alerts=[asdict(alert) for alert in drift_alerts],
+            )
+        except Exception as exc:  # pragma: no cover - defensive safety net
+            logger.warning(
+                "Calibration drift webhook notifier failed unexpectedly",
+                trend_scope=trend_scope,
+                error=str(exc),
             )
 
     async def _load_outcomes(

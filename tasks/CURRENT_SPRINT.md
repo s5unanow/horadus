@@ -8,10 +8,6 @@
 
 ## Active Tasks
 
-- **TASK-038: Drift Alert Delivery Channels** (P1)
-  - Add optional webhook sink for calibration drift alerts
-  - Add retry/backoff with bounded failure logging
-  - Add unit tests for delivery success/failure behavior
 - **TASK-039: Calibration Ops Runbook Tightening** (P2)
   - Add operator triage playbook for drift/coverage alerts
   - Add weekly calibration review checklist
@@ -20,6 +16,23 @@
 ---
 
 ## Completed This Sprint
+
+### TASK-038: Drift Alert Delivery Channels
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Add webhook delivery channel support for calibration drift alerts.
+
+**Completed**:
+- [x] Added optional webhook sink for calibration drift/coverage alert payload delivery
+- [x] Added retry/backoff behavior for transient webhook errors (429/5xx/network)
+- [x] Added bounded webhook failure logging to avoid alert fanout noise
+- [x] Added environment controls for webhook URL, timeout, retries, and backoff
+- [x] Wired dashboard drift alert emission to notifier delivery path
+- [x] Added unit tests for webhook success, transient retry, and permanent failure scenarios
+
+---
 
 ### TASK-037: Calibration Coverage Guardrails
 **Status**: DONE ✓  

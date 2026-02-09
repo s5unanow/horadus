@@ -212,6 +212,17 @@ class Settings(BaseSettings):
             return [str(key).strip() for key in v if str(key).strip()]
         return []
 
+    @field_validator("CALIBRATION_DRIFT_WEBHOOK_URL", mode="before")
+    @classmethod
+    def parse_optional_webhook_url(cls, value: Any) -> str | None:
+        """Normalize optional webhook URL values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value).strip() or None
+
     # =========================================================================
     # OpenAI Configuration
     # =========================================================================
@@ -401,6 +412,25 @@ class Settings(BaseSettings):
         default=0.25,
         ge=0,
         description="Critical threshold for max bucket calibration error alerts",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_URL: str | None = Field(
+        default=None,
+        description="Optional webhook endpoint for calibration drift alert delivery",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_TIMEOUT_SECONDS: float = Field(
+        default=5.0,
+        gt=0,
+        description="HTTP timeout for calibration drift webhook calls",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_MAX_RETRIES: int = Field(
+        default=3,
+        ge=0,
+        description="Maximum retries for transient calibration drift webhook failures",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_BACKOFF_SECONDS: float = Field(
+        default=1.0,
+        ge=0,
+        description="Initial backoff delay (seconds) for webhook retry attempts",
     )
     CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND: int = Field(
         default=5,

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
@@ -9,6 +10,7 @@ from src.core.calibration_dashboard import (
     CalibrationBucketSummary,
     CalibrationCoverageSummary,
     CalibrationDashboardService,
+    CalibrationDriftAlert,
     TrendCoverageSummary,
 )
 
@@ -152,3 +154,32 @@ def test_build_coverage_alerts_emits_low_sample_warning() -> None:
     alerts = service._build_coverage_alerts(coverage)
     assert alerts
     assert alerts[0].alert_type == "low_sample_coverage"
+
+
+@pytest.mark.asyncio
+async def test_emit_drift_notifications_forwards_to_webhook_notifier() -> None:
+    notifier = AsyncMock()
+    service = CalibrationDashboardService(
+        session=AsyncMock(),
+        drift_alert_notifier=notifier,
+    )
+    generated_at = datetime(2026, 2, 9, tzinfo=UTC)
+    alerts = [
+        CalibrationDriftAlert(
+            alert_type="mean_brier_drift",
+            severity="warning",
+            metric_name="mean_brier_score",
+            metric_value=0.22,
+            threshold=0.2,
+            sample_size=12,
+            message="Threshold exceeded.",
+        )
+    ]
+
+    await service._emit_drift_notifications(
+        trend_id=None,
+        drift_alerts=alerts,
+        generated_at=generated_at,
+    )
+
+    notifier.notify.assert_awaited_once()

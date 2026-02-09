@@ -20,6 +20,7 @@ def _write_gold_set(path: Path) -> None:
             "item_id": "eval-0001",
             "title": "EU-Russia troop movement update",
             "content": "Troop deployment near border expanded with artillery support.",
+            "label_verification": "human_verified",
             "expected": {
                 "tier1": {
                     "trend_scores": {"eu-russia": 9, "us-china": 2, "middle-east": 1},
@@ -38,6 +39,7 @@ def _write_gold_set(path: Path) -> None:
             "item_id": "eval-0002",
             "title": "Market recap and weather",
             "content": "General market and weather bulletin with no geopolitical signal.",
+            "label_verification": "llm_seeded",
             "expected": {
                 "tier1": {
                     "trend_scores": {"eu-russia": 1, "us-china": 1, "middle-east": 1},
@@ -162,8 +164,11 @@ async def test_run_gold_set_benchmark_writes_results(
     assert result_path.exists()
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert payload["items_evaluated"] == 2
+    assert payload["require_human_verified"] is False
+    assert payload["label_verification_counts"] == {"human_verified": 1, "llm_seeded": 1}
     assert len(payload["configs"]) == 1
     assert payload["configs"][0]["name"] == "baseline"
+    assert payload["configs"][0]["tier1_metrics"]["queue_threshold"] == 5
     assert payload["configs"][0]["tier1_metrics"]["queue_accuracy"] == 1.0
 
 
@@ -173,3 +178,61 @@ def test_load_gold_set_rejects_invalid_rows(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="Invalid gold-set row"):
         benchmark_module.load_gold_set(invalid_path)
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_filters_human_verified(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_gold_set(gold_set_path)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        max_items=10,
+        config_names=["baseline"],
+        require_human_verified=True,
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["items_evaluated"] == 1
+    assert payload["require_human_verified"] is True
+    assert payload["label_verification_counts"] == {"human_verified": 1}
+
+
+def test_load_gold_set_requires_human_verified_rows(tmp_path: Path) -> None:
+    path = tmp_path / "gold_set.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "item_id": "eval-0002",
+                "title": "Market recap and weather",
+                "content": "General market and weather bulletin with no geopolitical signal.",
+                "label_verification": "llm_seeded",
+                "expected": {
+                    "tier1": {
+                        "trend_scores": {"eu-russia": 1, "us-china": 1, "middle-east": 1},
+                        "max_relevance": 1,
+                    },
+                    "tier2": None,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="no human-verified items"):
+        benchmark_module.load_gold_set(path, require_human_verified=True)

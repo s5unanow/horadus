@@ -63,6 +63,7 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
             "100",
             "--config",
             "baseline",
+            "--require-human-verified",
         ]
     )
 
@@ -72,3 +73,4 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
     assert args.output_dir == "ai/eval/results"
     assert args.max_items == 100
     assert args.config == ["baseline"]
+    assert args.require_human_verified is True

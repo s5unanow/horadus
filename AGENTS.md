@@ -54,6 +54,13 @@ After completing work:
 - Keep probability updates explainable (store factors used for deltas).
 - Any LLM usage must be protected by budget/limits where possible.
 
+## Human-Gated Tasks
+
+- Task entries may include the label `[REQUIRES_HUMAN]`.
+- Any task marked `[REQUIRES_HUMAN]` is blocked for autonomous execution.
+- Agents must not implement, close, or mark those tasks DONE until a human explicitly confirms manual completion.
+- Agents may prepare scaffolding/checklists for `[REQUIRES_HUMAN]` tasks, but must stop before the manual step and report that human action is required.
+
 ## Project-Specific Patterns
 
 ### pgvector similarity (clustering)

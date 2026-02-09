@@ -10,7 +10,7 @@ Goals:
 ## Structure
 
 - `ai/prompts/` — prompt templates for Tier 1 / Tier 2
-- `ai/eval/` — evaluation datasets and benchmark outputs (see `TASK-041`)
+- `ai/eval/` — evaluation datasets, benchmark outputs, and quality-audit artifacts
 
 ## Conventions
 

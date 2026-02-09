@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-045`.
+- Next available task IDs start at `TASK-046`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -383,6 +383,22 @@ Create a curated benchmark set from real items with manual human verification of
 - [ ] Tier-1 and Tier-2 labels validated for consistency and edge cases
 - [ ] Labeling rubric documented in `ai/eval/README.md`
 - [ ] Human reviewer sign-off recorded in sprint notes before marking DONE
+
+---
+
+### TASK-045: Gold-Set Quality Audit Tooling
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+**Spec**: `tasks/specs/045-gold-set-audit-tooling.md`
+
+Add automated audit checks for evaluation dataset quality before benchmark runs.
+
+**Acceptance Criteria**:
+- [ ] CLI command audits gold-set provenance, diversity, and Tier-2 coverage
+- [ ] Audit output saved as JSON artifact under `ai/eval/results/`
+- [ ] Audit reports warnings for no human-verified rows and heavy duplication
+- [ ] Optional non-zero exit mode for warning-gated workflows
+- [ ] Unit tests cover warning and pass scenarios
 
 ---
 

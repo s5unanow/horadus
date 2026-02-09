@@ -11,6 +11,7 @@ from collections.abc import Sequence
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
 from src.core.config import settings
 from src.core.dashboard_export import export_calibration_dashboard
+from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
 from src.storage.database import async_session_maker
 
@@ -90,6 +91,28 @@ async def _run_eval_benchmark(
     return 0
 
 
+def _run_eval_audit(
+    *,
+    gold_set: str,
+    output_dir: str,
+    max_items: int,
+    fail_on_warnings: bool,
+) -> int:
+    result = run_gold_set_audit(
+        gold_set_path=gold_set,
+        output_dir=output_dir,
+        max_items=max(1, max_items),
+    )
+    print(f"Audit output: {result.output_path}")
+    if result.warnings:
+        print("Audit warnings:")
+        for warning in result.warnings:
+            print(f"- {warning}")
+        if fail_on_warnings:
+            return 2
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="horadus")
     subparsers = parser.add_subparsers(dest="command")
@@ -161,6 +184,32 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Evaluate only rows where label_verification=human_verified.",
     )
+
+    eval_audit_parser = eval_subparsers.add_parser(
+        "audit",
+        help="Audit gold-set quality (provenance, diversity, and label coverage).",
+    )
+    eval_audit_parser.add_argument(
+        "--gold-set",
+        default="ai/eval/gold_set.jsonl",
+        help="Path to gold-set JSONL file.",
+    )
+    eval_audit_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for audit result artifacts.",
+    )
+    eval_audit_parser.add_argument(
+        "--max-items",
+        type=int,
+        default=200,
+        help="Maximum dataset rows to audit.",
+    )
+    eval_audit_parser.add_argument(
+        "--fail-on-warnings",
+        action="store_true",
+        help="Return non-zero exit code if audit warnings are present.",
+    )
     return parser
 
 
@@ -186,6 +235,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 config_names=args.config,
                 require_human_verified=args.require_human_verified,
             )
+        )
+    if args.command == "eval" and args.eval_command == "audit":
+        return _run_eval_audit(
+            gold_set=args.gold_set,
+            output_dir=args.output_dir,
+            max_items=args.max_items,
+            fail_on_warnings=args.fail_on_warnings,
         )
 
     parser.print_help()

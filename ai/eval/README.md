@@ -18,6 +18,18 @@ Run benchmark:
 uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 50
 ```
 
+Run quality audit:
+
+```bash
+uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
+```
+
+Run audit with failing exit code when warnings are present:
+
+```bash
+uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --fail-on-warnings
+```
+
 Run benchmark on only human-reviewed rows:
 
 ```bash
@@ -45,6 +57,7 @@ Interpretation guide:
 - `tier2_metrics.*_accuracy`: higher is better for structured extraction fields.
 - `tier2_metrics.*_mae`: lower is better for severity/confidence calibration.
 - `usage.estimated_cost_per_item_usd`: compare cost-efficiency across configs.
+- `audit.passes_quality_gate`: true only when no coverage/diversity/provenance warnings are present.
 
 Notes:
 - Treat only `label_verification=human_verified` rows as the true gold set.

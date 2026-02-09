@@ -74,3 +74,27 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
     assert args.max_items == 100
     assert args.config == ["baseline"]
     assert args.require_human_verified is True
+
+
+def test_build_parser_accepts_eval_audit_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "audit",
+            "--gold-set",
+            "ai/eval/gold_set.jsonl",
+            "--output-dir",
+            "ai/eval/results",
+            "--max-items",
+            "200",
+            "--fail-on-warnings",
+        ]
+    )
+
+    assert args.command == "eval"
+    assert args.eval_command == "audit"
+    assert args.gold_set == "ai/eval/gold_set.jsonl"
+    assert args.output_dir == "ai/eval/results"
+    assert args.max_items == 200
+    assert args.fail_on_warnings is True

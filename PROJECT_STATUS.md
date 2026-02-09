@@ -132,6 +132,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] API key rotation endpoint (`POST /api/v1/auth/keys/{id}/rotate`)
 - [x] Weekly/monthly report contradiction-resolution analytics (`contradiction_analytics`)
 - [x] Calibration drift alerts with thresholded notifications (`drift_alerts`)
+- [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 
 ## In Progress
 
@@ -143,9 +144,8 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add operational dashboard export/hosting path
-2. Add cloud secret backend references for managed secret stores
-3. Add backup verification automation and retention enforcement
+1. Add cloud secret backend references for managed secret stores
+2. Add backup verification automation and retention enforcement
 
 ## Expert Feedback Integration ✅
 

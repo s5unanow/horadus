@@ -46,6 +46,7 @@ Tasks that have been completed and verified.
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅
 - TASK-035 Follow-up: Calibration Drift Alerts & Notifications ✅
+- TASK-035 Follow-up: Operational Dashboard Export & Hosting Path ✅
 
 ---
 

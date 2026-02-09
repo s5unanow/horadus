@@ -129,6 +129,12 @@ Quick trend visibility from the terminal:
 uv run horadus trends status
 ```
 
+Export static calibration dashboard artifacts (JSON + HTML) for ops hosting:
+
+```bash
+uv run horadus dashboard export --output-dir artifacts/dashboard
+```
+
 ## Configuration
 
 ### Defining Trends

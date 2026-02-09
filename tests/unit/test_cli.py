@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from src.cli import _change_arrow, _format_trend_status_lines
+from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
@@ -35,3 +35,15 @@ def test_format_trend_status_lines_includes_probability_change_and_movers() -> N
     assert "^ +2.1% this week" in lines[0]
     assert "[._-~=+]" in lines[0]
     assert "military_movement, diplomatic_breakdown" in lines[1]
+
+
+def test_build_parser_accepts_dashboard_export_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        ["dashboard", "export", "--output-dir", "artifacts/dashboard", "--limit", "5"]
+    )
+
+    assert args.command == "dashboard"
+    assert args.dashboard_command == "export"
+    assert args.output_dir == "artifacts/dashboard"
+    assert args.limit == 5

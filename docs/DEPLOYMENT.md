@@ -55,7 +55,27 @@ curl -sSf http://localhost:8000/health
 curl -sSf http://localhost:8000/metrics | head
 ```
 
-## 6) Operate and update
+## 6) Export and host dashboard artifacts
+
+Generate static calibration dashboard files:
+
+```bash
+make export-dashboard
+```
+
+This writes timestamped artifacts plus stable hosting aliases:
+
+- `artifacts/dashboard/calibration-dashboard-latest.json`
+- `artifacts/dashboard/calibration-dashboard-latest.html`
+- `artifacts/dashboard/index.html`
+
+Recommended hosting path:
+
+- Serve `artifacts/dashboard/` from your reverse proxy/static host.
+- Keep `index.html` as the canonical dashboard URL.
+- Restrict dashboard exposure to trusted networks if it contains sensitive analysis.
+
+## 7) Operate and update
 
 Deploy a new revision:
 
@@ -72,7 +92,7 @@ Rollback:
 2. Rebuild images with that revision.
 3. Restart `api`, `worker`, and `beat`.
 
-## 7) TLS termination
+## 8) TLS termination
 
 Run TLS at an edge reverse proxy (Caddy, Nginx, Traefik) and keep Horadus internal.
 
@@ -81,7 +101,7 @@ Run TLS at an edge reverse proxy (Caddy, Nginx, Traefik) and keep Horadus intern
 - Disable public direct exposure of the API container where possible.
 - Enforce modern TLS settings and HTTP security headers at the proxy layer.
 
-## 8) Backups and restore
+## 9) Backups and restore
 
 Create PostgreSQL backups:
 

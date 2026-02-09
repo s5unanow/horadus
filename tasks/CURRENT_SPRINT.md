@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-042: CI uv Toolchain Alignment
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Align CI workflows with the repo-wide uv-only package/tooling policy.
+
+**Completed**:
+- [x] Migrated GitHub Actions jobs from legacy installer flows to `uv sync --frozen`
+- [x] Switched lint/typecheck/test/integration commands to `uv run --no-sync`
+- [x] Switched build/package checks to `uvx` (`build`, `twine`)
+- [x] Removed residual legacy-installer references from CI workflow definitions
+- [x] Kept CI security checks and lockfile validation in place under uv workflow
+
+---
+
 ### TASK-041: Model Evaluation Gold Set
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

@@ -47,6 +47,7 @@ Tasks that have been completed and verified.
 - TASK-039: Calibration Ops Runbook Tightening ✅
 - TASK-040: LLM Provider Fallback ✅
 - TASK-041: Model Evaluation Gold Set ✅
+- TASK-042: CI uv Toolchain Alignment ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

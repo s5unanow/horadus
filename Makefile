@@ -9,7 +9,7 @@
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
-        run run-worker run-beat export-dashboard benchmark-eval pre-commit check all
+        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human pre-commit check all
 
 # Default target
 .DEFAULT_GOAL := help
@@ -184,6 +184,9 @@ export-dashboard: deps ## Export static calibration dashboard artifacts
 
 benchmark-eval: deps ## Run Tier-1/Tier-2 benchmark against gold set
 	$(UV_RUN) horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 50
+
+benchmark-eval-human: deps ## Run benchmark using only human-verified labels
+	$(UV_RUN) horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --require-human-verified
 
 # =============================================================================
 # Security

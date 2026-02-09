@@ -9,9 +9,14 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-043`.
+- Next available task IDs start at `TASK-045`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
+
+## Task Labels
+
+- `[REQUIRES_HUMAN]`: task includes a mandatory manual step and must not be auto-completed by an agent.
+- For `[REQUIRES_HUMAN]` tasks, agents may prepare instructions/checklists only and must stop for human completion.
 
 ---
 
@@ -348,6 +353,36 @@ Create a small labeled dataset and a benchmark script to compare model/provider 
 - [ ] Benchmark script produces accuracy metrics + estimated cost per item; outputs saved under `ai/eval/results/`
 - [ ] Compare `gpt-4o-mini` against at least one alternative configuration
 - [ ] Document how to run the benchmark and interpret results
+
+---
+
+### TASK-043: Eval Threshold Alignment + Label Provenance
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Align benchmark routing metrics with runtime thresholding and make dataset label provenance explicit.
+
+**Acceptance Criteria**:
+- [ ] Queue-accuracy metric uses runtime `TIER1_RELEVANCE_THRESHOLD` (not a hardcoded cutoff)
+- [ ] Gold-set rows support `label_verification` provenance metadata
+- [ ] Benchmark output includes queue threshold + label provenance counts
+- [ ] CLI supports a human-only evaluation mode for `label_verification=human_verified`
+- [ ] Unit tests cover threshold alignment and human-only filtering behavior
+
+---
+
+### TASK-044: Curated Human-Verified Gold Dataset [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 8-12 hours (human review)
+
+Create a curated benchmark set from real items with manual human verification of labels.
+
+**Acceptance Criteria**:
+- [ ] Dataset sourced from representative real items across tracked trends/noise cases
+- [ ] Each row reviewed and approved by a human (`label_verification=human_verified`)
+- [ ] Tier-1 and Tier-2 labels validated for consistency and edge cases
+- [ ] Labeling rubric documented in `ai/eval/README.md`
+- [ ] Human reviewer sign-off recorded in sprint notes before marking DONE
 
 ---
 

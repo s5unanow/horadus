@@ -137,6 +137,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Calibration operations runbook (triage playbook, checklist, decision tree)
 - [x] Tier-1/Tier-2 LLM provider failover (429/5xx/timeout) with secondary model routing
 - [x] Tier-1/Tier-2 gold-set benchmark workflow with 200-item evaluation dataset (`ai/eval/gold_set.jsonl`)
+- [x] Benchmark queue-accuracy now uses runtime Tier-1 threshold + label provenance metadata
 - [x] CI workflow aligned to uv-only dependency/tool execution (no pip install paths)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
@@ -144,15 +145,16 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 ## In Progress
 
-- None currently
+- `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
 
 ## Blocked
 
-- Nothing currently blocked
+- `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
 
 ## Next Up (Priority Order)
 
-1. Select next sprint priorities from `tasks/BACKLOG.md`
+1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
+2. Select next sprint priorities from `tasks/BACKLOG.md`
 
 ## Expert Feedback Integration ✅
 

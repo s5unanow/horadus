@@ -4,7 +4,7 @@ This folder stores **LLM-related artifacts** that benefit from versioning and re
 
 Goals:
 - Keep prompts editable without changing Python code
-- Make evaluation repeatable (gold set + benchmark results)
+- Make evaluation repeatable (human-verified gold set + benchmark results)
 - Keep the project “production-shaped” without over-engineering
 
 ## Structure

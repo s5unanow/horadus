@@ -15,12 +15,15 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from openai import AsyncOpenAI
 
+from src.core.config import settings
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import (
     Tier2Classifier,
     Tier2Usage,
 )
 from src.storage.models import Event, ProcessingStatus, RawItem
+
+HUMAN_VERIFIED_LABEL = "human_verified"
 
 
 @dataclass(slots=True)
@@ -60,12 +63,14 @@ class GoldSetItem:
     item_id: str
     title: str
     content: str
+    label_verification: str
     tier1: Tier1GoldLabel
     tier2: Tier2GoldLabel | None
 
 
 @dataclass(slots=True)
 class _Tier1Metrics:
+    queue_threshold: int = settings.TIER1_RELEVANCE_THRESHOLD
     items_total: int = 0
     score_pairs_total: int = 0
     queue_accuracy_total: int = 0
@@ -87,7 +92,7 @@ class _Tier1Metrics:
             self.score_abs_error_sum += abs(predicted_score - expected_score)
 
         self.max_relevance_abs_error_sum += abs(predicted.max_relevance - gold.tier1.max_relevance)
-        expected_queue = gold.tier1.max_relevance >= 6
+        expected_queue = gold.tier1.max_relevance >= self.queue_threshold
         if predicted.should_queue_tier2 == expected_queue:
             self.queue_accuracy_total += 1
 
@@ -104,6 +109,7 @@ class _Tier1Metrics:
             "score_pairs_total": self.score_pairs_total,
             "score_mae": round(score_mae, 6),
             "max_relevance_mae": round(max_mae, 6),
+            "queue_threshold": self.queue_threshold,
             "queue_accuracy": round(queue_acc, 6),
         }
 
@@ -194,7 +200,12 @@ def available_configs() -> dict[str, EvalConfig]:
     return {config.name: config for config in DEFAULT_CONFIGS}
 
 
-def load_gold_set(path: Path, *, max_items: int | None = None) -> list[GoldSetItem]:
+def load_gold_set(
+    path: Path,
+    *,
+    max_items: int | None = None,
+    require_human_verified: bool = False,
+) -> list[GoldSetItem]:
     """Load and validate a gold-set JSONL file."""
     if not path.exists():
         msg = f"Gold set file not found: {path}"
@@ -207,20 +218,39 @@ def load_gold_set(path: Path, *, max_items: int | None = None) -> list[GoldSetIt
             if not stripped:
                 continue
             payload = json.loads(stripped)
-            rows.append(_parse_gold_item(payload, line_number=line_number))
+            item = _parse_gold_item(payload, line_number=line_number)
+            if require_human_verified and item.label_verification != HUMAN_VERIFIED_LABEL:
+                continue
+            rows.append(item)
             if max_items is not None and len(rows) >= max_items:
                 break
 
     if not rows:
+        if require_human_verified:
+            msg = (
+                "Gold set has no human-verified items. "
+                "Add rows with label_verification='human_verified' or run without --require-human-verified."
+            )
+            raise ValueError(msg)
         msg = "Gold set is empty"
         raise ValueError(msg)
     return rows
+
+
+def _count_label_verification(items: list[GoldSetItem]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        key = item.label_verification
+        counts[key] = counts.get(key, 0) + 1
+    return dict(sorted(counts.items()))
 
 
 def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetItem:
     item_id = str(payload.get("item_id", "")).strip()
     title = str(payload.get("title", "")).strip()
     content = str(payload.get("content", "")).strip()
+    label_verification_raw = str(payload.get("label_verification", "")).strip().lower()
+    label_verification = label_verification_raw if label_verification_raw else "unknown"
     expected = payload.get("expected")
     if not item_id or not title or not content or not isinstance(expected, dict):
         msg = f"Invalid gold-set row at line {line_number}"
@@ -266,6 +296,7 @@ def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetIte
         item_id=item_id,
         title=title,
         content=content,
+        label_verification=label_verification,
         tier1=Tier1GoldLabel(
             trend_scores=trend_scores,
             max_relevance=max_relevance_raw,
@@ -425,19 +456,27 @@ async def run_gold_set_benchmark(
     api_key: str,
     max_items: int = 200,
     config_names: list[str] | None = None,
+    require_human_verified: bool = False,
 ) -> Path:
     """
     Run Tier-1/Tier-2 benchmark over a gold set and persist JSON results.
     """
-    gold_items = load_gold_set(Path(gold_set_path), max_items=max(1, max_items))
+    gold_items = load_gold_set(
+        Path(gold_set_path),
+        max_items=max(1, max_items),
+        require_human_verified=require_human_verified,
+    )
     configs = _resolve_configs(config_names)
     trends = _build_trends()
     raw_items = [_build_raw_item(item) for item in gold_items]
+    label_verification_counts = _count_label_verification(gold_items)
 
     run_payload: dict[str, Any] = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "gold_set_path": str(Path(gold_set_path)),
         "items_evaluated": len(gold_items),
+        "require_human_verified": require_human_verified,
+        "label_verification_counts": label_verification_counts,
         "configs": [],
     }
 
@@ -461,7 +500,7 @@ async def run_gold_set_benchmark(
 
         tier1_results, tier1_usage = await tier1.classify_items(raw_items, trends)
         tier1_by_item_id = {result.item_id: result for result in tier1_results}
-        tier1_metrics = _Tier1Metrics()
+        tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)
         for item in gold_items:
             prediction = tier1_by_item_id.get(_item_uuid(item.item_id))
             if prediction is None:

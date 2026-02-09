@@ -76,6 +76,7 @@ async def _run_eval_benchmark(
     output_dir: str,
     max_items: int,
     config_names: list[str] | None,
+    require_human_verified: bool,
 ) -> int:
     output_path = await run_gold_set_benchmark(
         gold_set_path=gold_set,
@@ -83,6 +84,7 @@ async def _run_eval_benchmark(
         api_key=settings.OPENAI_API_KEY,
         max_items=max(1, max_items),
         config_names=config_names,
+        require_human_verified=require_human_verified,
     )
     print(f"Benchmark output: {output_path}")
     return 0
@@ -154,6 +156,11 @@ def _build_parser() -> argparse.ArgumentParser:
         choices=sorted(available_configs().keys()),
         help="Benchmark config name (repeat to run multiple). Defaults to all.",
     )
+    eval_benchmark_parser.add_argument(
+        "--require-human-verified",
+        action="store_true",
+        help="Evaluate only rows where label_verification=human_verified.",
+    )
     return parser
 
 
@@ -177,6 +184,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 output_dir=args.output_dir,
                 max_items=args.max_items,
                 config_names=args.config,
+                require_human_verified=args.require_human_verified,
             )
         )
 

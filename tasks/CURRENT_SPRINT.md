@@ -8,11 +8,27 @@
 
 ## Active Tasks
 
-- None currently (Phase 6 sprint deliverables complete)
+- `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
 
 ---
 
 ## Completed This Sprint
+
+### TASK-043: Eval Threshold Alignment + Label Provenance
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Align benchmark routing metrics with runtime threshold settings and add label provenance support.
+
+**Completed**:
+- [x] Replaced hardcoded queue cutoff with `TIER1_RELEVANCE_THRESHOLD` in benchmark queue-accuracy scoring
+- [x] Added `label_verification` support to gold-set row parsing and benchmark output metadata
+- [x] Added `--require-human-verified` CLI flag to evaluate only human-reviewed labels
+- [x] Added benchmark output fields for `queue_threshold`, `require_human_verified`, and label provenance counts
+- [x] Added unit tests for human-only filtering and threshold-aware benchmark metadata
+
+---
 
 ### TASK-042: CI uv Toolchain Alignment
 **Status**: DONE ✓  

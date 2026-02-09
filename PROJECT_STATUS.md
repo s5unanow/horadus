@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-08
+**Last Updated**: 2026-02-09
 **Current Phase**: Phase 5 - Polish & Deploy (in progress)
 
 ## Progress Overview
@@ -11,7 +11,7 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [███████████████████░]  98%  ← WE ARE HERE
+Phase 5: Polish & Deploy     [███████████████████░]  99%  ← WE ARE HERE
 Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
 ```
 
@@ -130,6 +130,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Deployment runbook coverage for TLS proxying and backup drills
 - [x] API key metadata persistence support (`API_KEYS_PERSIST_PATH`)
 - [x] API key rotation endpoint (`POST /api/v1/auth/keys/{id}/rotate`)
+- [x] Weekly/monthly report contradiction-resolution analytics (`contradiction_analytics`)
 
 ## In Progress
 
@@ -141,11 +142,10 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add contradiction-resolution analytics in reports
-2. Add calibration drift alert thresholds + notifications
-3. Add operational dashboard export/hosting path
-4. Add cloud secret backend references for managed secret stores
-5. Add backup verification automation and retention enforcement
+1. Add calibration drift alert thresholds + notifications
+2. Add operational dashboard export/hosting path
+3. Add cloud secret backend references for managed secret stores
+4. Add backup verification automation and retention enforcement
 
 ## Expert Feedback Integration ✅
 

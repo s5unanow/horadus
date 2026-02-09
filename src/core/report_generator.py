@@ -18,7 +18,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.trend_engine import TrendEngine
-from src.storage.models import Event, EventItem, RawItem, Report, Source, Trend, TrendEvidence
+from src.storage.models import (
+    Event,
+    EventItem,
+    HumanFeedback,
+    RawItem,
+    Report,
+    Source,
+    Trend,
+    TrendEvidence,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -49,6 +58,8 @@ class MonthlyReportRun:
 
 class ReportGenerator:
     """Generate and persist weekly/monthly trend reports."""
+
+    _CONTRADICTION_RESOLUTION_ACTIONS = ("pin", "mark_noise", "invalidate")
 
     def __init__(
         self,
@@ -275,12 +286,18 @@ class ReportGenerator:
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
         )
+        contradiction_analytics = await self._load_contradiction_analytics(
+            trend_id=trend_id,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
         return {
             "current_probability": round(current_probability, 6),
             "weekly_change": round(weekly_change, 6),
             "direction": direction,
             "evidence_count_weekly": int(evidence_count or 0),
+            "contradiction_analytics": contradiction_analytics,
         }
 
     async def _build_monthly_statistics(
@@ -332,6 +349,11 @@ class ReportGenerator:
             period_start=period_start,
             period_end=period_end,
         )
+        contradiction_analytics = await self._load_contradiction_analytics(
+            trend_id=trend_id,
+            period_start=period_start,
+            period_end=period_end,
+        )
 
         comparison_delta: float | None = None
         if previous_month_change is not None:
@@ -348,6 +370,7 @@ class ReportGenerator:
             "source_breakdown": source_breakdown,
             "weekly_reports_used": weekly_reports,
             "weekly_reports_count": len(weekly_reports),
+            "contradiction_analytics": contradiction_analytics,
         }
 
     async def _calculate_previous_period_change(
@@ -436,6 +459,112 @@ class ReportGenerator:
 
         ordered = sorted(counts.items(), key=lambda item: (-item[1], item[0]))
         return dict(ordered)
+
+    async def _load_contradiction_analytics(
+        self,
+        *,
+        trend_id: UUID,
+        period_start: datetime,
+        period_end: datetime,
+    ) -> dict[str, Any]:
+        contradicted_query = (
+            select(
+                TrendEvidence.event_id,
+                func.min(TrendEvidence.created_at).label("first_contradiction_at"),
+            )
+            .join(Event, Event.id == TrendEvidence.event_id)
+            .where(TrendEvidence.trend_id == trend_id)
+            .where(TrendEvidence.created_at >= period_start)
+            .where(TrendEvidence.created_at <= period_end)
+            .where(Event.has_contradictions.is_(True))
+            .group_by(TrendEvidence.event_id)
+        )
+        contradicted_rows = (await self.session.execute(contradicted_query)).all()
+        if not contradicted_rows:
+            return {
+                "contradicted_events_count": 0,
+                "resolved_events_count": 0,
+                "unresolved_events_count": 0,
+                "resolution_rate": 0.0,
+                "avg_resolution_time_hours": None,
+                "resolution_actions": {},
+            }
+
+        first_contradiction_by_event: dict[UUID, datetime] = {}
+        for row in contradicted_rows:
+            event_id = row.event_id
+            first_contradiction_at = row.first_contradiction_at
+            if event_id is None or first_contradiction_at is None:
+                continue
+            first_contradiction_by_event[event_id] = first_contradiction_at
+
+        event_ids = tuple(first_contradiction_by_event.keys())
+        if not event_ids:
+            return {
+                "contradicted_events_count": 0,
+                "resolved_events_count": 0,
+                "unresolved_events_count": 0,
+                "resolution_rate": 0.0,
+                "avg_resolution_time_hours": None,
+                "resolution_actions": {},
+            }
+
+        feedback_query = (
+            select(
+                HumanFeedback.target_id,
+                HumanFeedback.action,
+                HumanFeedback.created_at,
+            )
+            .where(HumanFeedback.target_type == "event")
+            .where(HumanFeedback.target_id.in_(event_ids))
+            .where(HumanFeedback.action.in_(self._CONTRADICTION_RESOLUTION_ACTIONS))
+            .order_by(HumanFeedback.target_id.asc(), HumanFeedback.created_at.asc())
+        )
+        feedback_rows = (await self.session.execute(feedback_query)).all()
+
+        first_resolution_by_event: dict[UUID, tuple[datetime, str]] = {}
+        for feedback_row in feedback_rows:
+            target_id = feedback_row.target_id
+            action = feedback_row.action
+            created_at = feedback_row.created_at
+            if (
+                target_id is None
+                or created_at is None
+                or not isinstance(action, str)
+                or target_id in first_resolution_by_event
+            ):
+                continue
+            first_resolution_by_event[target_id] = (created_at, action)
+
+        contradicted_count = len(event_ids)
+        resolved_count = len(first_resolution_by_event)
+        unresolved_count = contradicted_count - resolved_count
+        resolution_rate = round(resolved_count / contradicted_count, 6)
+
+        resolution_actions: dict[str, int] = {}
+        resolution_hours: list[float] = []
+        for event_id, (resolved_at, action) in first_resolution_by_event.items():
+            resolution_actions[action] = resolution_actions.get(action, 0) + 1
+            first_contradiction_at = first_contradiction_by_event.get(event_id)
+            if first_contradiction_at is None:
+                continue
+            hours = (resolved_at - first_contradiction_at).total_seconds() / 3600
+            resolution_hours.append(max(0.0, hours))
+
+        avg_resolution_time_hours: float | None = None
+        if resolution_hours:
+            avg_resolution_time_hours = round(sum(resolution_hours) / len(resolution_hours), 2)
+
+        return {
+            "contradicted_events_count": contradicted_count,
+            "resolved_events_count": resolved_count,
+            "unresolved_events_count": unresolved_count,
+            "resolution_rate": resolution_rate,
+            "avg_resolution_time_hours": avg_resolution_time_hours,
+            "resolution_actions": dict(
+                sorted(resolution_actions.items(), key=lambda item: (-item[1], item[0]))
+            ),
+        }
 
     async def _load_source_breakdown(
         self,
@@ -575,6 +704,18 @@ class ReportGenerator:
         report_type: str,
         statistics: dict[str, Any],
     ) -> str:
+        contradiction_summary = ""
+        contradiction_stats = statistics.get("contradiction_analytics")
+        if isinstance(contradiction_stats, dict):
+            contradicted_events_count = int(contradiction_stats.get("contradicted_events_count", 0))
+            resolved_events_count = int(contradiction_stats.get("resolved_events_count", 0))
+            unresolved_events_count = int(contradiction_stats.get("unresolved_events_count", 0))
+            if contradicted_events_count > 0:
+                contradiction_summary = (
+                    f" Contradiction review tracked {contradicted_events_count} events "
+                    f"({resolved_events_count} resolved, {unresolved_events_count} unresolved)."
+                )
+
         if report_type == "monthly":
             monthly_change = float(statistics.get("monthly_change", 0.0))
             evidence_count = int(statistics.get("evidence_count_monthly", 0))
@@ -584,6 +725,7 @@ class ReportGenerator:
                 f"{trend.name} is currently at {current_probability:.1%} with a monthly change of "
                 f"{monthly_change:+.1%}. Direction over 30 days is {direction}, with "
                 f"{evidence_count} evidence updates and category/source breakdowns included."
+                f"{contradiction_summary}"
             )
 
         direction = str(statistics.get("direction", "stable"))
@@ -593,5 +735,5 @@ class ReportGenerator:
         return (
             f"{trend.name} is currently at {current_probability:.1%} with a weekly change of "
             f"{weekly_change:+.1%}. Direction is {direction}, based on {evidence_count} "
-            "evidence updates in the reporting window."
+            f"evidence updates in the reporting window.{contradiction_summary}"
         )

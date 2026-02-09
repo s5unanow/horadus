@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.processing.cost_tracker import TIER1, CostTracker
+from src.processing.llm_failover import LLMChatFailoverInvoker, LLMChatRoute
 from src.storage.models import ProcessingStatus, RawItem, Trend
 
 
@@ -96,24 +97,62 @@ class Tier1Classifier:
         self,
         session: AsyncSession,
         client: AsyncOpenAI | Any | None = None,
+        secondary_client: AsyncOpenAI | Any | None = None,
         model: str | None = None,
+        secondary_model: str | None = None,
         batch_size: int | None = None,
         prompt_path: str = "ai/prompts/tier1_filter.md",
         cost_tracker: CostTracker | None = None,
+        primary_provider: str | None = None,
+        secondary_provider: str | None = None,
+        primary_base_url: str | None = None,
+        secondary_base_url: str | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_TIER1_MODEL
+        self.secondary_model = secondary_model or settings.LLM_TIER1_SECONDARY_MODEL
+        self.primary_provider = primary_provider or settings.LLM_PRIMARY_PROVIDER
+        self.secondary_provider = secondary_provider or settings.LLM_SECONDARY_PROVIDER
+        self.primary_base_url = primary_base_url or settings.LLM_PRIMARY_BASE_URL
+        self.secondary_base_url = secondary_base_url or settings.LLM_SECONDARY_BASE_URL
         configured_batch_size = settings.LLM_TIER1_BATCH_SIZE if batch_size is None else batch_size
         self.batch_size = max(1, configured_batch_size)
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
-        self.client = client or self._create_client()
+        self.client = client or self._create_client(
+            api_key=settings.OPENAI_API_KEY,
+            base_url=self.primary_base_url,
+        )
+        self.secondary_client = self._build_secondary_client(secondary_client=secondary_client)
         self.cost_tracker = cost_tracker or CostTracker(session=session)
 
-    def _create_client(self) -> AsyncOpenAI:
-        if not settings.OPENAI_API_KEY.strip():
+    @staticmethod
+    def _create_client(*, api_key: str, base_url: str | None = None) -> AsyncOpenAI:
+        if not api_key.strip():
             msg = "OPENAI_API_KEY is required for Tier1Classifier"
             raise ValueError(msg)
-        return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        if isinstance(base_url, str) and base_url.strip():
+            return AsyncOpenAI(api_key=api_key, base_url=base_url.strip())
+        return AsyncOpenAI(api_key=api_key)
+
+    def _build_secondary_client(
+        self,
+        *,
+        secondary_client: AsyncOpenAI | Any | None,
+    ) -> AsyncOpenAI | Any | None:
+        if self.secondary_model is None:
+            return None
+        if secondary_client is not None:
+            return secondary_client
+
+        secondary_api_key = settings.LLM_SECONDARY_API_KEY or settings.OPENAI_API_KEY
+        if not secondary_api_key.strip():
+            msg = "LLM secondary failover configured without API key"
+            raise ValueError(msg)
+
+        return self._create_client(
+            api_key=secondary_api_key,
+            base_url=self.secondary_base_url,
+        )
 
     async def classify_pending_items(
         self,
@@ -192,14 +231,30 @@ class Tier1Classifier:
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
         await self.cost_tracker.ensure_within_budget(TIER1)
-        response = await self.client.chat.completions.create(
-            model=self.model,
+        messages = [
+            {"role": "system", "content": self.prompt_template},
+            {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
+        ]
+        secondary_route = None
+        if self.secondary_client is not None and self.secondary_model is not None:
+            secondary_route = LLMChatRoute(
+                provider=self.secondary_provider or self.primary_provider,
+                model=self.secondary_model,
+                client=self.secondary_client,
+            )
+        failover_invoker = LLMChatFailoverInvoker(
+            stage=TIER1,
+            primary=LLMChatRoute(
+                provider=self.primary_provider,
+                model=self.model,
+                client=self.client,
+            ),
+            secondary=secondary_route,
+        )
+        response, active_model = await failover_invoker.create_chat_completion(
+            messages=messages,
             temperature=0,
             response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": self.prompt_template},
-                {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
-            ],
         )
         output = self._parse_output(response)
         self._validate_output_alignment(output, items=items, trends=trends)
@@ -215,6 +270,7 @@ class Tier1Classifier:
         usage.estimated_cost_usd = self._estimate_cost_usd(
             prompt_tokens=usage.prompt_tokens,
             completion_tokens=usage.completion_tokens,
+            model=active_model,
         )
         return (results, usage)
 
@@ -363,8 +419,15 @@ class Tier1Classifier:
         completion_tokens = int(getattr(usage_obj, "completion_tokens", 0) or 0)
         return Tier1Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
-    def _estimate_cost_usd(self, *, prompt_tokens: int, completion_tokens: int) -> float:
-        input_price, output_price = self._price_for_model(self.model)
+    def _estimate_cost_usd(
+        self,
+        *,
+        prompt_tokens: int,
+        completion_tokens: int,
+        model: str | None = None,
+    ) -> float:
+        model_name = model or self.model
+        input_price, output_price = self._price_for_model(model_name)
         return (prompt_tokens * input_price) / 1_000_000 + (
             completion_tokens * output_price
         ) / 1_000_000

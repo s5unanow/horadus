@@ -31,8 +31,15 @@ This document lists environment variables used by the Horadus backend.
 
 | Variable | Default | Notes |
 |----------|---------|-------|
+| `LLM_PRIMARY_PROVIDER` | `openai` | Provider label used for primary LLM routing/logging. |
+| `LLM_PRIMARY_BASE_URL` | empty | Optional OpenAI-compatible base URL for primary calls. |
+| `LLM_SECONDARY_PROVIDER` | empty | Optional secondary provider label for failover logging. |
+| `LLM_SECONDARY_BASE_URL` | empty | Optional OpenAI-compatible base URL for secondary failover calls. |
+| `LLM_SECONDARY_API_KEY` | empty | Optional API key override for secondary failover provider. |
 | `LLM_TIER1_MODEL` | `gpt-4.1-nano` | Tier-1 relevance filtering model. |
+| `LLM_TIER1_SECONDARY_MODEL` | empty | Optional Tier-1 failover model used on 429/5xx/timeout. |
 | `LLM_TIER2_MODEL` | `gpt-4o-mini` | Tier-2 extraction/classification model. |
+| `LLM_TIER2_SECONDARY_MODEL` | empty | Optional Tier-2 failover model used on 429/5xx/timeout. |
 | `LLM_REPORT_MODEL` | `gpt-4o-mini` | Weekly/monthly report narrative model. |
 | `LLM_RETROSPECTIVE_MODEL` | `gpt-4o-mini` | Retrospective narrative model. |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding generation model. |
@@ -121,6 +128,7 @@ Supported file-backed variables:
 | `API_KEYS` | `API_KEYS_FILE` |
 | `API_ADMIN_KEY` | `API_ADMIN_KEY_FILE` |
 | `OPENAI_API_KEY` | `OPENAI_API_KEY_FILE` |
+| `LLM_SECONDARY_API_KEY` | `LLM_SECONDARY_API_KEY_FILE` |
 | `CELERY_BROKER_URL` | `CELERY_BROKER_URL_FILE` |
 | `CELERY_RESULT_BACKEND` | `CELERY_RESULT_BACKEND_FILE` |
 

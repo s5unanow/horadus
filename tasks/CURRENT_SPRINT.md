@@ -14,6 +14,23 @@
 
 ## Completed This Sprint
 
+### TASK-040: LLM Provider Fallback
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add primary/secondary failover routing for Tier 1 and Tier 2 LLM calls.
+
+**Completed**:
+- [x] Added optional secondary provider/model settings for Tier 1 and Tier 2 failover
+- [x] Added failover routing helper for retryable errors (429/5xx/timeouts)
+- [x] Added structured failover switch logging (reason + provider/model route)
+- [x] Preserved strict JSON schema validation across failover route execution
+- [x] Added unit tests covering retryable failover and non-retryable behavior
+- [x] Updated `.env.example` and environment docs with failover configuration controls
+
+---
+
 ### TASK-039: Calibration Ops Runbook Tightening
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

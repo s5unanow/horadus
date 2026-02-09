@@ -23,6 +23,7 @@ Required minimum values:
 - `POSTGRES_PASSWORD` (in your shell or `.env`)
 
 For a full variable reference, see `docs/ENVIRONMENT.md`.
+For calibration alert triage and review operations, see `docs/CALIBRATION_RUNBOOK.md`.
 
 Recommended production hardening:
 

@@ -110,6 +110,12 @@ Create PostgreSQL backups:
 make backup-db
 ```
 
+Verify latest backup freshness and integrity:
+
+```bash
+make verify-backups
+```
+
 Restore from a backup:
 
 ```bash
@@ -119,6 +125,8 @@ make restore-db DUMP=backups/<dump-file>.sql.gz
 Recommended practice:
 
 - Schedule `make backup-db` via cron/systemd.
+- Schedule `make verify-backups` shortly after backup jobs.
+- Tune retention with `BACKUP_RETENTION_DAYS` and `BACKUP_RETENTION_COUNT`.
 - Replicate backups to off-host object storage.
 - Test restore drills regularly.
 

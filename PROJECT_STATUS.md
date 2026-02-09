@@ -1,7 +1,7 @@
 # Project Status
 
 **Last Updated**: 2026-02-09
-**Current Phase**: Phase 5 - Polish & Deploy (in progress)
+**Current Phase**: Phase 6 - Calibration (in progress)
 
 ## Progress Overview
 
@@ -11,8 +11,8 @@ Phase 1: Data Ingestion      [████████████████�
 Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
 Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
-Phase 5: Polish & Deploy     [███████████████████░]  99%  ← WE ARE HERE
-Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%
+Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
+Phase 6: Calibration (NEW)   [████████░░░░░░░░░░░░]  40%  ← WE ARE HERE
 ```
 
 ## What's Working
@@ -134,6 +134,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 - [x] Calibration drift alerts with thresholded notifications (`drift_alerts`)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
+- [x] Backup verification automation + retention enforcement (`make verify-backups`)
 
 ## In Progress
 
@@ -145,7 +146,7 @@ Phase 6: Calibration (NEW)   [████████░░░░░░░░�
 
 ## Next Up (Priority Order)
 
-1. Add backup verification automation and retention enforcement
+- Phase 5 polish backlog complete; define next Phase 6 execution tasks.
 
 ## Expert Feedback Integration ✅
 

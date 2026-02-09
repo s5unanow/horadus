@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-027 Follow-up: Backup Verification & Retention Enforcement
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Harden backup operations with automated verification and retention policies.
+
+**Completed**:
+- [x] Added backup verification script (`scripts/verify_backups.sh`) for freshness/integrity checks
+- [x] Added retention enforcement in backup script (`BACKUP_RETENTION_DAYS`, `BACKUP_RETENTION_COUNT`)
+- [x] Added checksum generation and size/integrity verification for created backups
+- [x] Added `make verify-backups` operational target
+- [x] Updated deployment/environment docs and `.env.example` backup controls
+
+---
+
 ### TASK-027 Follow-up: Cloud Secret Backend References
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

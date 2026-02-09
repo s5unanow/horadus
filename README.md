@@ -217,6 +217,13 @@ docker compose -f docker-compose.prod.yml up -d api worker beat postgres redis
 
 See `docs/DEPLOYMENT.md` for the full deployment workflow and operational notes.
 
+Backup operations:
+
+```bash
+make backup-db
+make verify-backups
+```
+
 ### Running Tests
 
 ```bash

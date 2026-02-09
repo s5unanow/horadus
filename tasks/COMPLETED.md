@@ -48,6 +48,7 @@ Tasks that have been completed and verified.
 - TASK-035 Follow-up: Calibration Drift Alerts & Notifications ✅
 - TASK-035 Follow-up: Operational Dashboard Export & Hosting Path ✅
 - TASK-027 Follow-up: Cloud Secret Backend References ✅
+- TASK-027 Follow-up: Backup Verification & Retention Enforcement ✅
 
 ---
 

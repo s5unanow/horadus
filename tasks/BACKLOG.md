@@ -5,6 +5,16 @@ Tasks are organized by phase and priority.
 
 ---
 
+## Task ID Policy
+
+- Task IDs are global and never reused.
+- Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
+- Next available task IDs start at `TASK-040`.
+- Checklist boxes in this file are planning snapshots; canonical completion status lives in
+  `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
+
+---
+
 ## Phase 0: Setup & Foundation
 
 ### TASK-001: Python Project Setup
@@ -308,9 +318,10 @@ Prevent runaway API costs from bugs or high-volume news events.
 
 ---
 
-### TASK-038: LLM Provider Fallback
+### TASK-040: LLM Provider Fallback
 **Priority**: P1 (High)
 **Estimate**: 3-4 hours
+**ID Note**: Renumbered from legacy draft `TASK-038` to avoid collision with completed IDs.
 
 Configure a secondary LLM provider/model and automatically switch when the primary is rate limited or down.
 
@@ -323,9 +334,10 @@ Configure a secondary LLM provider/model and automatically switch when the prima
 
 ---
 
-### TASK-039: Model Evaluation Gold Set
+### TASK-041: Model Evaluation Gold Set
 **Priority**: P2 (Medium)
 **Estimate**: 6-8 hours
+**ID Note**: Renumbered from legacy draft `TASK-039` to avoid collision with completed IDs.
 
 Create a small labeled dataset and a benchmark script to compare model/provider quality and cost.
 

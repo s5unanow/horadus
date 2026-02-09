@@ -14,6 +14,22 @@
 
 ## Completed This Sprint
 
+### TASK-035 Follow-up: Operational Dashboard Export & Hosting Path
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `PROJECT_STATUS.md` (Next Up)
+
+Add static export and hosting flow for calibration dashboard visibility.
+
+**Completed**:
+- [x] Added dashboard export service for JSON/HTML static artifacts (`src/core/dashboard_export.py`)
+- [x] Added CLI command `horadus dashboard export` with output path and trend-row limit options
+- [x] Added `make export-dashboard` operational command
+- [x] Added deployment guidance for serving `artifacts/dashboard/index.html`
+- [x] Added unit tests for dashboard export payload/file output and CLI parser wiring
+
+---
+
 ### TASK-035 Follow-up: Calibration Drift Alerts & Notifications
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

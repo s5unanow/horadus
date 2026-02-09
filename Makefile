@@ -9,7 +9,7 @@
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db db-migrate db-upgrade db-downgrade \
-        run run-worker run-beat pre-commit check all
+        run run-worker run-beat export-dashboard pre-commit check all
 
 # Default target
 .DEFAULT_GOAL := help
@@ -175,6 +175,9 @@ run-worker: ## Run Celery worker
 
 run-beat: ## Run Celery beat scheduler
 	$(UV_RUN) celery -A src.workers.celery_app beat --loglevel=info
+
+export-dashboard: deps ## Export static calibration dashboard artifacts
+	$(UV_RUN) horadus dashboard export
 
 # =============================================================================
 # Security

@@ -44,8 +44,10 @@ This document lists environment variables used by the Horadus backend.
 | `LLM_RETROSPECTIVE_MODEL` | `gpt-4.1-mini` | Retrospective narrative model. |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding generation model. |
 | `EMBEDDING_BATCH_SIZE` | `32` | Max texts per embedding request. |
+| `EMBEDDING_CACHE_MAX_SIZE` | `2048` | Max in-memory embedding cache entries (LRU-evicted). |
 | `LLM_TIER1_BATCH_SIZE` | `10` | Max items per tier-1 call. |
 | `PROCESSING_PIPELINE_BATCH_SIZE` | `50` | Pending items handled per pipeline run. |
+| `PROCESSING_STALE_TIMEOUT_MINUTES` | `30` | Age threshold before stale `processing` items are reset to `pending`. |
 
 ## Cost and Safety Controls
 
@@ -79,6 +81,7 @@ This document lists environment variables used by the Horadus backend.
 | `RSS_COLLECTION_INTERVAL` | `30` | In minutes. |
 | `GDELT_COLLECTION_INTERVAL` | `60` | In minutes. |
 | `TREND_SNAPSHOT_INTERVAL_MINUTES` | `60` | Snapshot cadence. |
+| `PROCESSING_REAPER_INTERVAL_MINUTES` | `15` | Cadence for stale-processing recovery task. |
 | `WEEKLY_REPORT_DAY_OF_WEEK` | `1` | UTC day (`0=Sun..6=Sat`). |
 | `WEEKLY_REPORT_HOUR_UTC` | `7` | UTC hour. |
 | `MONTHLY_REPORT_DAY_OF_MONTH` | `1` | UTC day of month (`1..28`). |

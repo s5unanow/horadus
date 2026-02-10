@@ -143,6 +143,10 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] CI integration/security gates now fail-closed (no permissive masking fallbacks)
 - [x] Docs consistency cleanup for repo naming, cross-links, and freshness process
 - [x] Tier-2/reporting defaults upgraded to `gpt-4.1-mini` with updated cost constants
+- [x] API key storage hardened to salted memory-hard `scrypt-v1` hashes with legacy migration path
+- [x] Stale processing reaper worker with timed recovery and observability metrics
+- [x] Bounded embedding cache with configurable LRU eviction (`EMBEDDING_CACHE_MAX_SIZE`)
+- [x] Hardened weekly/monthly/retrospective narrative prompts with anti-injection and uncertainty guardrails
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -151,17 +155,21 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
 - `TASK-047` Pinned Evaluation Baseline Artifact (blocked on benchmark generation without runtime API key)
+- `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` (manual trend definition/review pending)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
 - `TASK-047` requires benchmark execution with a configured API key to produce and pin `ai/eval/baselines/current.json`.
+- `TASK-066` requires human-authored trend definitions and reviewer sign-off before completion.
 
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
 2. Complete `TASK-047` pinned benchmark baseline artifact after API key is configured
-3. Continue highest-priority non-human hardening tasks from `tasks/BACKLOG.md` (Phase 8)
+3. Complete `TASK-052` distributed rate limiting + admin audit trail
+4. Complete `TASK-053` atomic budget enforcement under concurrency
+5. Complete `TASK-054` LLM input safety guardrails (injection + token precheck)
 
 ## Expert Feedback Integration ✅
 

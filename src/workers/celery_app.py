@@ -40,6 +40,10 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
         "task": "workers.check_event_lifecycles",
         "schedule": timedelta(hours=1),
     }
+    schedule["reap-stale-processing-items"] = {
+        "task": "workers.reap_stale_processing_items",
+        "schedule": timedelta(minutes=max(1, settings.PROCESSING_REAPER_INTERVAL_MINUTES)),
+    }
     schedule["generate-weekly-reports"] = {
         "task": "workers.generate_weekly_reports",
         "schedule": crontab(
@@ -80,6 +84,7 @@ celery_app.conf.update(
         "workers.snapshot_trends": {"queue": "processing"},
         "workers.apply_trend_decay": {"queue": "processing"},
         "workers.check_event_lifecycles": {"queue": "processing"},
+        "workers.reap_stale_processing_items": {"queue": "processing"},
         "workers.generate_weekly_reports": {"queue": "processing"},
         "workers.generate_monthly_reports": {"queue": "processing"},
         "workers.ping": {"queue": "default"},

@@ -29,7 +29,11 @@ class FakeEmbeddingsAPI:
 
 
 def _build_service(
-    *, mock_db_session, dimensions: int = 3, batch_size: int = 2
+    *,
+    mock_db_session,
+    dimensions: int = 3,
+    batch_size: int = 2,
+    cache_max_size: int = 128,
 ) -> tuple[
     EmbeddingService,
     FakeEmbeddingsAPI,
@@ -47,6 +51,7 @@ def _build_service(
         model="test-embedding-model",
         dimensions=dimensions,
         batch_size=batch_size,
+        cache_max_size=cache_max_size,
         cost_tracker=cost_tracker,
     )
     return service, embeddings_api, cost_tracker
@@ -89,6 +94,24 @@ async def test_embed_texts_reuses_cache_across_calls(mock_db_session) -> None:
     assert cache_hits == 1
     assert api_calls == 1
     assert len(embeddings_api.calls) == 2
+
+
+@pytest.mark.asyncio
+async def test_embed_texts_evicts_least_recent_cache_entry(mock_db_session) -> None:
+    service, embeddings_api, _cost_tracker = _build_service(
+        mock_db_session=mock_db_session,
+        batch_size=4,
+        cache_max_size=2,
+    )
+
+    await service.embed_texts(["alpha", "beta"])
+    await service.embed_text("alpha")
+    await service.embed_text("gamma")
+    _vector, cache_hits, api_calls = await service.embed_texts(["beta"])
+
+    assert cache_hits == 0
+    assert api_calls == 1
+    assert embeddings_api.calls[-1] == ("test-embedding-model", ["beta"])
 
 
 @pytest.mark.asyncio

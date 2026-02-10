@@ -4,6 +4,8 @@ API key authentication and in-memory per-key rate limiting.
 
 from __future__ import annotations
 
+import base64
+import binascii
 import hashlib
 import json
 import secrets
@@ -26,6 +28,7 @@ class APIKeyRecord:
     name: str
     prefix: str
     key_hash: str
+    hash_version: str
     is_active: bool
     rate_limit_per_minute: int
     created_at: datetime
@@ -36,6 +39,13 @@ class APIKeyRecord:
 
 class APIKeyManager:
     """Manage API keys and request rate limits."""
+
+    _HASH_VERSION_SCRYPT_V1 = "scrypt-v1"
+    _HASH_VERSION_SHA256_V1 = "sha256-v1"
+    _SCRYPT_N = 2**14
+    _SCRYPT_R = 8
+    _SCRYPT_P = 1
+    _SCRYPT_DKLEN = 32
 
     def __init__(
         self,
@@ -49,7 +59,6 @@ class APIKeyManager:
         self._auth_enabled = auth_enabled
         self._default_rate_limit_per_minute = max(1, default_rate_limit_per_minute)
         self._records_by_id: dict[str, APIKeyRecord] = {}
-        self._id_by_hash: dict[str, str] = {}
         self._request_windows: dict[str, deque[float]] = {}
         self._lock = RLock()
         self._persist_path = Path(persist_path).expanduser() if persist_path else None
@@ -73,16 +82,21 @@ class APIKeyManager:
         if not normalized:
             return None
 
-        key_hash = self._hash_key(normalized)
         with self._lock:
-            key_id = self._id_by_hash.get(key_hash)
-            if key_id is None:
-                return None
-            record = self._records_by_id.get(key_id)
-            if record is None or not record.is_active:
-                return None
-            record.last_used_at = datetime.now(tz=UTC)
-            return record
+            for record in self._records_by_id.values():
+                if not record.is_active:
+                    continue
+                if not self._verify_key_hash(normalized, record.key_hash):
+                    continue
+
+                if record.hash_version != self._HASH_VERSION_SCRYPT_V1:
+                    record.key_hash = self._hash_key(normalized)
+                    record.hash_version = self._HASH_VERSION_SCRYPT_V1
+                    self._save_persisted_keys()
+
+                record.last_used_at = datetime.now(tz=UTC)
+                return record
+            return None
 
     def list_keys(self) -> list[APIKeyRecord]:
         with self._lock:
@@ -174,18 +188,21 @@ class APIKeyManager:
             msg = "API key cannot be blank"
             raise ValueError(msg)
 
-        key_hash = self._hash_key(normalized)
-        existing_id = self._id_by_hash.get(key_hash)
-        if existing_id is not None:
-            return self._records_by_id[existing_id]
+        for existing in self._records_by_id.values():
+            if not existing.is_active:
+                continue
+            if self._verify_key_hash(normalized, existing.key_hash):
+                return existing
 
         now = datetime.now(tz=UTC)
         key_id = str(uuid4())
+        key_hash = self._hash_key(normalized)
         record = APIKeyRecord(
             id=key_id,
             name=name.strip() or "unnamed",
             prefix=normalized[:8],
             key_hash=key_hash,
+            hash_version=self._HASH_VERSION_SCRYPT_V1,
             is_active=True,
             rate_limit_per_minute=max(1, rate_limit_per_minute),
             created_at=now,
@@ -194,15 +211,13 @@ class APIKeyManager:
             source=source,
         )
         self._records_by_id[key_id] = record
-        self._id_by_hash[key_hash] = key_id
         return record
 
     def _add_record(self, record: APIKeyRecord) -> APIKeyRecord:
-        existing_id = self._id_by_hash.get(record.key_hash)
-        if existing_id is not None:
-            return self._records_by_id[existing_id]
+        existing = self._records_by_id.get(record.id)
+        if existing is not None:
+            return existing
         self._records_by_id[record.id] = record
-        self._id_by_hash[record.key_hash] = record.id
         return record
 
     def _load_persisted_keys(self) -> None:
@@ -235,6 +250,10 @@ class APIKeyManager:
                 name=str(row.get("name") or "unnamed"),
                 prefix=str(row.get("prefix") or "")[:8],
                 key_hash=key_hash,
+                hash_version=self._coerce_hash_version(
+                    row.get("hash_version"),
+                    key_hash=key_hash,
+                ),
                 is_active=bool(row.get("is_active", True)),
                 rate_limit_per_minute=rate_limit,
                 created_at=created_at,
@@ -282,9 +301,67 @@ class APIKeyManager:
             return parsed.astimezone(UTC)
         return None
 
-    @staticmethod
-    def _hash_key(raw_key: str) -> str:
-        return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    @classmethod
+    def _coerce_hash_version(cls, value: object, *, key_hash: str) -> str:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {cls._HASH_VERSION_SCRYPT_V1, cls._HASH_VERSION_SHA256_V1}:
+                return normalized
+        if cls._is_scrypt_hash(key_hash):
+            return cls._HASH_VERSION_SCRYPT_V1
+        return cls._HASH_VERSION_SHA256_V1
+
+    @classmethod
+    def _is_scrypt_hash(cls, key_hash: str) -> bool:
+        return key_hash.startswith(f"{cls._HASH_VERSION_SCRYPT_V1}$")
+
+    @classmethod
+    def _hash_key(cls, raw_key: str) -> str:
+        salt = secrets.token_bytes(16)
+        derived = hashlib.scrypt(
+            raw_key.encode("utf-8"),
+            salt=salt,
+            n=cls._SCRYPT_N,
+            r=cls._SCRYPT_R,
+            p=cls._SCRYPT_P,
+            dklen=cls._SCRYPT_DKLEN,
+        )
+        salt_b64 = base64.urlsafe_b64encode(salt).decode("ascii")
+        digest_b64 = base64.urlsafe_b64encode(derived).decode("ascii")
+        return (
+            f"{cls._HASH_VERSION_SCRYPT_V1}$"
+            f"{cls._SCRYPT_N}${cls._SCRYPT_R}${cls._SCRYPT_P}$"
+            f"{salt_b64}${digest_b64}"
+        )
+
+    @classmethod
+    def _verify_key_hash(cls, raw_key: str, key_hash: str) -> bool:
+        if cls._is_scrypt_hash(key_hash):
+            parts = key_hash.split("$")
+            if len(parts) != 6:
+                return False
+            _scheme, n_raw, r_raw, p_raw, salt_b64, digest_b64 = parts
+            try:
+                n = int(n_raw)
+                r = int(r_raw)
+                p = int(p_raw)
+                salt = base64.urlsafe_b64decode(salt_b64.encode("ascii"))
+                expected = base64.urlsafe_b64decode(digest_b64.encode("ascii"))
+            except (ValueError, binascii.Error):
+                return False
+
+            derived = hashlib.scrypt(
+                raw_key.encode("utf-8"),
+                salt=salt,
+                n=n,
+                r=r,
+                p=p,
+                dklen=len(expected),
+            )
+            return secrets.compare_digest(derived, expected)
+
+        expected_sha256 = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+        return secrets.compare_digest(expected_sha256, key_hash)
 
 
 @lru_cache

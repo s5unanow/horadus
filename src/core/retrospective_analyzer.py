@@ -303,8 +303,21 @@ class RetrospectiveAnalyzer:
         event_count = len(pivotal_events)
         brier_score = accuracy_assessment.get("mean_brier_score")
         brier_text = "n/a" if brier_score is None else f"{float(brier_score):.3f}"
+        resolved_rate = accuracy_assessment.get("resolved_rate")
+        resolved_text = "unknown"
+        uncertainty_note = " Conclusions should be treated as provisional."
+        if isinstance(resolved_rate, int | float):
+            resolved_text = f"{float(resolved_rate):.0%}"
+            if float(resolved_rate) >= 0.7:
+                uncertainty_note = " Confidence is moderate given current outcome coverage."
+            elif float(resolved_rate) >= 0.4:
+                uncertainty_note = " Confidence is limited due to partial outcome coverage."
+            else:
+                uncertainty_note = " Confidence is low because outcome coverage is sparse."
+
         return (
             f"Retrospective analysis for {trend_name} found {event_count} pivotal events in the "
             f"selected window. The most influential signal family was '{top_signal}'. "
-            f"Calibration snapshot mean Brier score is {brier_text}."
+            f"Calibration snapshot mean Brier score is {brier_text}, with resolved coverage "
+            f"at {resolved_text}.{uncertainty_note}"
         )

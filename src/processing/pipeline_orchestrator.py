@@ -178,6 +178,7 @@ class ProcessingPipeline:
     async def _process_item(self, *, item: RawItem, trends: list[Trend]) -> _ItemExecution:
         item_id = self._item_id(item)
         item.processing_status = ProcessingStatus.PROCESSING
+        item.processing_started_at = datetime.now(tz=UTC)
         item.error_message = None
         await self.session.flush()
 
@@ -193,6 +194,7 @@ class ProcessingPipeline:
             )
             if duplicate_result.is_duplicate:
                 item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
                 await self.session.flush()
                 return _ItemExecution(
                     result=PipelineItemResult(
@@ -229,6 +231,7 @@ class ProcessingPipeline:
             )
             if suppression_action is not None:
                 item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
                 await self.session.flush()
                 logger.info(
                     "Skipping event due to human feedback suppression",
@@ -253,6 +256,7 @@ class ProcessingPipeline:
 
             if not tier1_result.should_queue_tier2:
                 item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
                 await self.session.flush()
                 return _ItemExecution(
                     result=self._build_item_result(
@@ -277,6 +281,7 @@ class ProcessingPipeline:
             )
 
             item.processing_status = ProcessingStatus.CLASSIFIED
+            item.processing_started_at = None
             await self.session.flush()
             return _ItemExecution(
                 result=self._build_item_result(
@@ -292,6 +297,7 @@ class ProcessingPipeline:
             )
         except BudgetExceededError as exc:
             item.processing_status = ProcessingStatus.PENDING
+            item.processing_started_at = None
             item.error_message = None
             await self.session.flush()
             logger.warning(
@@ -311,6 +317,7 @@ class ProcessingPipeline:
             )
         except Exception as exc:
             item.processing_status = ProcessingStatus.ERROR
+            item.processing_started_at = None
             item.error_message = str(exc)[:1000]
             await self.session.flush()
             logger.exception(

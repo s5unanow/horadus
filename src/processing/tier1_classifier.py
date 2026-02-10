@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 from uuid import UUID
@@ -183,10 +184,12 @@ class Tier1Classifier:
                 raise ValueError(msg)
             if item_result.should_queue_tier2:
                 item.processing_status = ProcessingStatus.PROCESSING
+                item.processing_started_at = datetime.now(tz=UTC)
                 queued_item_ids.append(item.id)
                 queued_count += 1
             else:
                 item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
                 noise_count += 1
 
         await self.session.flush()

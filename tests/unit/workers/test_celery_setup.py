@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import importlib
 import json
-from datetime import timedelta
-from unittest.mock import MagicMock
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
 from celery.schedules import crontab
 
 import src.workers.tasks as tasks_module
+from src.storage.models import ProcessingStatus, RawItem
 
 celery_app_module = importlib.import_module("src.workers.celery_app")
 
@@ -23,6 +26,7 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "RSS_COLLECTION_INTERVAL", 15)
     monkeypatch.setattr(celery_app_module.settings, "GDELT_COLLECTION_INTERVAL", 45)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 120)
+    monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 20)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 6)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 30)
@@ -42,6 +46,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
     assert schedule["check-event-lifecycles"]["task"] == "workers.check_event_lifecycles"
     assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
+    assert schedule["reap-stale-processing-items"]["task"] == "workers.reap_stale_processing_items"
+    assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=20)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="2",
@@ -62,6 +68,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
+    monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 10)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 1)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 7)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 0)
@@ -75,6 +82,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
         "snapshot-trends",
         "apply-trend-decay",
         "check-event-lifecycles",
+        "reap-stale-processing-items",
         "generate-weekly-reports",
         "generate-monthly-reports",
     ]
@@ -84,6 +92,8 @@ def test_build_beat_schedule_omits_disabled_collectors(
     assert schedule["apply-trend-decay"]["schedule"] == timedelta(days=1)
     assert schedule["check-event-lifecycles"]["task"] == "workers.check_event_lifecycles"
     assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
+    assert schedule["reap-stale-processing-items"]["task"] == "workers.reap_stale_processing_items"
+    assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=10)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="1",
@@ -104,6 +114,7 @@ def test_celery_routes_include_processing_queue() -> None:
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
     assert routes["workers.check_event_lifecycles"]["queue"] == "processing"
+    assert routes["workers.reap_stale_processing_items"]["queue"] == "processing"
     assert routes["workers.generate_weekly_reports"]["queue"] == "processing"
     assert routes["workers.generate_monthly_reports"]["queue"] == "processing"
 
@@ -347,6 +358,95 @@ def test_apply_trend_decay_task_uses_async_worker(
     assert result["scanned"] == 4
     assert result["decayed"] == 3
     assert result["unchanged"] == 1
+
+
+def test_reap_stale_processing_items_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_reap() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "reap_stale_processing_items",
+            "checked_at": "2026-02-10T13:00:00+00:00",
+            "stale_before": "2026-02-10T12:30:00+00:00",
+            "scanned": 2,
+            "reset": 2,
+            "reset_item_ids": ["a", "b"],
+        }
+
+    captured: list[int] = []
+
+    def fake_record(*, reset_count: int) -> None:
+        captured.append(reset_count)
+
+    monkeypatch.setattr(tasks_module, "_reap_stale_processing_async", fake_reap)
+    monkeypatch.setattr(tasks_module, "record_processing_reaper_resets", fake_record)
+
+    result = tasks_module.reap_stale_processing_items.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "reap_stale_processing_items"
+    assert result["reset"] == 2
+    assert captured == [2]
+
+
+@pytest.mark.asyncio
+async def test_reap_stale_processing_async_resets_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stale_item = RawItem(
+        id=uuid4(),
+        source_id=uuid4(),
+        external_id="stale-item",
+        raw_content="x",
+        content_hash="a" * 64,
+        processing_status=ProcessingStatus.PROCESSING,
+        processing_started_at=datetime(2026, 2, 10, 12, 0, tzinfo=UTC),
+    )
+    mock_session = AsyncMock()
+    mock_session.scalars.return_value = MagicMock(all=lambda: [stale_item])
+
+    @asynccontextmanager
+    async def fake_session_maker():
+        yield mock_session
+
+    monkeypatch.setattr(tasks_module, "async_session_maker", fake_session_maker)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_STALE_TIMEOUT_MINUTES", 30)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 50)
+
+    result = await tasks_module._reap_stale_processing_async()
+
+    assert result["task"] == "reap_stale_processing_items"
+    assert result["scanned"] == 1
+    assert result["reset"] == 1
+    assert result["reset_item_ids"] == [str(stale_item.id)]
+    assert stale_item.processing_status == ProcessingStatus.PENDING
+    assert stale_item.processing_started_at is None
+    assert stale_item.error_message is None
+    assert mock_session.commit.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_reap_stale_processing_async_handles_no_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_session = AsyncMock()
+    mock_session.scalars.return_value = MagicMock(all=list)
+
+    @asynccontextmanager
+    async def fake_session_maker():
+        yield mock_session
+
+    monkeypatch.setattr(tasks_module, "async_session_maker", fake_session_maker)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_STALE_TIMEOUT_MINUTES", 30)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 50)
+
+    result = await tasks_module._reap_stale_processing_async()
+
+    assert result["scanned"] == 0
+    assert result["reset"] == 0
+    assert result["reset_item_ids"] == []
+    assert mock_session.commit.await_count == 1
 
 
 def test_check_event_lifecycles_task_uses_async_worker(

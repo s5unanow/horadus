@@ -166,3 +166,43 @@ async def test_build_monthly_statistics_includes_contradiction_analytics(mock_db
     assert result["direction"] == "stable"
     assert result["evidence_count_monthly"] == 11
     assert result["contradiction_analytics"] == analytics
+
+
+def test_fallback_narrative_weekly_includes_confidence_and_contradictions() -> None:
+    trend = SimpleNamespace(name="Signal Watch")
+    narrative = ReportGenerator._fallback_narrative(
+        trend=trend,
+        report_type="weekly",
+        statistics={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+            "contradiction_analytics": {
+                "contradicted_events_count": 3,
+                "resolved_events_count": 1,
+                "unresolved_events_count": 2,
+            },
+        },
+    )
+
+    assert "Signal Watch is currently at 42.0%" in narrative
+    assert "Confidence is limited" in narrative
+    assert "3 events (1 resolved, 2 unresolved)" in narrative
+
+
+def test_fallback_narrative_monthly_scales_confidence_with_coverage() -> None:
+    trend = SimpleNamespace(name="Signal Watch")
+    narrative = ReportGenerator._fallback_narrative(
+        trend=trend,
+        report_type="monthly",
+        statistics={
+            "current_probability": 0.58,
+            "monthly_change": -0.02,
+            "direction": "stable",
+            "evidence_count_monthly": 24,
+        },
+    )
+
+    assert "monthly change of -2.0%" in narrative
+    assert "Confidence is high" in narrative

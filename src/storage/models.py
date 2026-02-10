@@ -279,6 +279,7 @@ class RawItem(Base):
         default=ProcessingStatus.PENDING,
         nullable=False,
     )
+    processing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_message: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -294,6 +295,7 @@ class RawItem(Base):
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_source_external"),
         Index("idx_raw_items_status", "processing_status"),
+        Index("idx_raw_items_processing_started_at", "processing_started_at"),
         Index("idx_raw_items_hash", "content_hash"),
         Index("idx_raw_items_fetched", "fetched_at"),
         Index("idx_raw_items_source_fetched", "source_id", "fetched_at"),

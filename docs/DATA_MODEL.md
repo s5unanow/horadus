@@ -108,6 +108,7 @@ Individual articles/posts collected from sources.
 | content_hash | VARCHAR(64) | No | | SHA256 hash for dedup |
 | language | VARCHAR(10) | Yes | | Detected language (ISO 639-1) |
 | processing_status | VARCHAR(20) | No | 'pending' | Status: pending, processing, classified, noise, error |
+| processing_started_at | TIMESTAMPTZ | Yes | | Timestamp when item entered `processing` (used by stale-item reaper) |
 | error_message | TEXT | Yes | | Error details if status=error |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 
@@ -115,6 +116,7 @@ Individual articles/posts collected from sources.
 - Primary key: `id`
 - Unique: `(source_id, external_id)`
 - Index: `processing_status`
+- Index: `processing_started_at`
 - Index: `content_hash`
 - Index: `fetched_at DESC`
 - IVFFlat: `embedding` (vector_cosine_ops, lists=100)
@@ -124,6 +126,7 @@ Individual articles/posts collected from sources.
 pending → processing → classified
                     → noise
                     → error
+processing (stale timeout) → pending
 ```
 
 ---

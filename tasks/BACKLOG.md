@@ -1081,6 +1081,21 @@ Improve narrative usefulness while minimizing unsupported claims in weekly/month
 
 ---
 
+### TASK-068: Gold-Set Change Governance and Baseline Supersession
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Define how evaluation baselines are handled when the gold-set content/labels change.
+
+**Acceptance Criteria**:
+- [ ] Document that gold-set content/label updates supersede prior pass/fail baseline comparisons
+- [ ] Document baseline lifecycle (`current.json` promotion + `history/` archival for replaced baselines)
+- [ ] Ensure benchmark artifacts include dataset fingerprint metadata for comparison integrity
+- [ ] Update eval policy and baseline docs with a concrete operator checklist for dataset-version transitions
+- [ ] Keep process aligned with `[REQUIRES_HUMAN]` gold-set curation flow (`TASK-044`)
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] WebSocket for real-time trend updates

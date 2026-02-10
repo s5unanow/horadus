@@ -147,6 +147,8 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Stale processing reaper worker with timed recovery and observability metrics
 - [x] Bounded embedding cache with configurable LRU eviction (`EMBEDDING_CACHE_MAX_SIZE`)
 - [x] Hardened weekly/monthly/retrospective narrative prompts with anti-injection and uncertainty guardrails
+- [x] Gold-set update governance policy with baseline supersession + history archival workflow
+- [x] Benchmark artifacts now include dataset fingerprint metadata for comparison integrity
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -154,13 +156,13 @@ Phase 6: Calibration (NEW)   [████████████████�
 ## In Progress
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
-- `TASK-047` Pinned Evaluation Baseline Artifact (blocked on benchmark generation without runtime API key)
+- `TASK-047` Pinned Evaluation Baseline Artifact (blocked by provider quota during benchmark generation)
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` (manual trend definition/review pending)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
-- `TASK-047` requires benchmark execution with a configured API key to produce and pin `ai/eval/baselines/current.json`.
+- `TASK-047` requires available provider quota to run benchmark and pin `ai/eval/baselines/current.json`.
 - `TASK-066` requires human-authored trend definitions and reviewer sign-off before completion.
 
 ## Next Up (Priority Order)

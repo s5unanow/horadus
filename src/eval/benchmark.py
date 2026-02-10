@@ -245,6 +245,40 @@ def _count_label_verification(items: list[GoldSetItem]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
+def _gold_set_fingerprint(items: list[GoldSetItem]) -> str:
+    canonical_rows: list[dict[str, Any]] = []
+    for item in items:
+        row: dict[str, Any] = {
+            "item_id": item.item_id,
+            "title": item.title,
+            "content": item.content,
+            "label_verification": item.label_verification,
+            "tier1": {
+                "trend_scores": item.tier1.trend_scores,
+                "max_relevance": item.tier1.max_relevance,
+            },
+        }
+        if item.tier2 is not None:
+            row["tier2"] = {
+                "trend_id": item.tier2.trend_id,
+                "signal_type": item.tier2.signal_type,
+                "direction": item.tier2.direction,
+                "severity": item.tier2.severity,
+                "confidence": item.tier2.confidence,
+            }
+        else:
+            row["tier2"] = None
+        canonical_rows.append(row)
+
+    payload = json.dumps(canonical_rows, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _gold_set_item_ids_fingerprint(items: list[GoldSetItem]) -> str:
+    normalized_ids = "\n".join(sorted(item.item_id for item in items))
+    return hashlib.sha256(normalized_ids.encode("utf-8")).hexdigest()
+
+
 def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetItem:
     item_id = str(payload.get("item_id", "")).strip()
     title = str(payload.get("title", "")).strip()
@@ -471,12 +505,19 @@ async def run_gold_set_benchmark(
     raw_items = [_build_raw_item(item) for item in gold_items]
     label_verification_counts = _count_label_verification(gold_items)
 
+    bounded_max_items = max(1, max_items)
     run_payload: dict[str, Any] = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "gold_set_path": str(Path(gold_set_path)),
         "items_evaluated": len(gold_items),
         "require_human_verified": require_human_verified,
         "label_verification_counts": label_verification_counts,
+        "dataset_scope": {
+            "max_items": bounded_max_items,
+            "require_human_verified": require_human_verified,
+        },
+        "gold_set_fingerprint_sha256": _gold_set_fingerprint(gold_items),
+        "gold_set_item_ids_sha256": _gold_set_item_ids_fingerprint(gold_items),
         "configs": [],
     }
 

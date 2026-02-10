@@ -264,16 +264,29 @@ async def test_processing_pipeline_keeps_item_pending_when_budget_exceeded(monke
         session.add(trend)
         await session.flush()
 
-        session.add(
-            ApiUsage(
-                usage_date=datetime.now(tz=UTC).date(),
-                tier="tier1",
-                call_count=1,
-                input_tokens=100,
-                output_tokens=10,
-                estimated_cost_usd=0.1,
+        usage_date = datetime.now(tz=UTC).date()
+        existing_usage = await session.scalar(
+            select(ApiUsage).where(
+                ApiUsage.usage_date == usage_date,
+                ApiUsage.tier == "tier1",
             )
         )
+        if existing_usage is None:
+            session.add(
+                ApiUsage(
+                    usage_date=usage_date,
+                    tier="tier1",
+                    call_count=1,
+                    input_tokens=100,
+                    output_tokens=10,
+                    estimated_cost_usd=0.1,
+                )
+            )
+        else:
+            existing_usage.call_count = 1
+            existing_usage.input_tokens = 100
+            existing_usage.output_tokens = 10
+            existing_usage.estimated_cost_usd = 0.1
 
         item = RawItem(
             source_id=source.id,

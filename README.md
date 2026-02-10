@@ -1,4 +1,4 @@
-# Geopolitical Intelligence Platform
+# Horadus Geopolitical Intelligence Platform
 
 A headless backend for collecting, classifying, and analyzing news to track geopolitical trend probabilities.
 
@@ -27,7 +27,7 @@ A headless backend for collecting, classifying, and analyzing news to track geop
 ```bash
 # Clone and enter project
 git clone <repo-url>
-cd geopolitical-intel
+cd horadus
 
 # Copy environment template
 cp .env.example .env
@@ -90,10 +90,16 @@ Detailed endpoint reference and curl examples:
 - `docs/API.md`
 - Deployment runbook:
   - `docs/DEPLOYMENT.md`
+- Release runbook:
+  - `docs/RELEASING.md`
 - Environment variable reference:
   - `docs/ENVIRONMENT.md`
 - Managed secret backend references:
   - `docs/SECRETS_BACKENDS.md`
+- Prompt/model evaluation policy:
+  - `docs/PROMPT_EVAL_POLICY.md`
+- Evaluation workflow details:
+  - `ai/eval/README.md`
 
 Authentication header:
 - `X-API-Key: <key>`
@@ -254,10 +260,25 @@ make db-upgrade
 make db-downgrade
 ```
 
+## Documentation Freshness
+
+Owner: release driver for each merged change.
+
+Update timing:
+- In the same PR whenever behavior, commands, or env vars change.
+- During each tagged release using `docs/RELEASING.md` checklist.
+
+Minimum docs to review per release:
+- `README.md`
+- `docs/DEPLOYMENT.md`
+- `docs/ENVIRONMENT.md`
+- `docs/PROMPT_EVAL_POLICY.md`
+- `ai/eval/README.md`
+
 ## Project Structure
 
 ```
-geopolitical-intel/
+horadus/
 ├── AGENTS.md              # Canonical agent instructions (all CLIs)
 ├── CLAUDE.md              # Agent instructions (for Claude CLI)
 ├── README.md              # This file

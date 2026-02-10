@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-046`.
+- Next available task IDs start at `TASK-068`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -402,6 +402,24 @@ Add automated audit checks for evaluation dataset quality before benchmark runs.
 
 ---
 
+### TASK-050: Upgrade Tier 2 LLM from gpt-4o-mini to gpt-4.1-mini
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+`gpt-4o-mini` is now 1-2 generations behind; `gpt-4.1-mini` is a drop-in upgrade (same provider, OpenAI-compatible) with significantly better classification, structured JSON, and reasoning quality at comparable cost.
+
+**Acceptance Criteria**:
+- [ ] Update `LLM_TIER2_MODEL` default from `gpt-4o-mini` to `gpt-4.1-mini` in `src/core/config.py`
+- [ ] Update `LLM_REPORT_MODEL` and `LLM_RETROSPECTIVE_MODEL` defaults to match
+- [ ] Update Tier 2 pricing constants in `cost_tracker.py` ($0.15/$0.60 → $0.40/$1.60 per M tokens)
+- [ ] Update `.env.example` with DeepSeek V3.2 as recommended secondary/failover for Tier 2
+- [ ] Add "2026-02 Review" section to `docs/adr/002-llm-provider.md` documenting the evaluation and decision
+- [ ] Tests pass with updated defaults
+
+**Context**: 2026-02 model evaluation confirmed Tier 1 (`gpt-4.1-nano`) and embeddings (`text-embedding-3-small`) are still optimal. DeepSeek V3.2 ($0.28/$0.42) is the recommended failover — 85-95% of GPT-5 quality, OpenAI-compatible API.
+
+---
+
 ## Phase 3: Trend Engine
 
 ### TASK-016: Trend Management
@@ -754,6 +772,312 @@ horadus trends status
 # EU-Russia: 12.3% (Guarded) ↑ +2.1% this week
 # Top movers: military_movement (3), diplomatic_breakdown (1)
 ```
+
+---
+
+## Phase 7: Release and Operations Governance
+
+### TASK-046: Release Process Runbook
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Create a formal release workflow document for versioning, tagging, rollout, and rollback.
+
+**Acceptance Criteria**:
+- [ ] Add `docs/RELEASING.md` with a step-by-step release checklist
+- [ ] Document version bump workflow and Git tagging conventions (e.g. `vX.Y.Z`)
+- [ ] Define changelog/update policy (manual or automated) and required release notes
+- [ ] Include pre-release quality gates (tests, lint, mypy, migrations, eval policy checks)
+- [ ] Include production rollout + post-deploy verification steps
+- [ ] Include rollback criteria and rollback procedure linked to deployment runbook
+- [ ] Link release runbook from `README.md` and deployment docs
+
+---
+
+### TASK-047: Pinned Evaluation Baseline Artifact
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Create and maintain a committed pinned evaluation baseline artifact for prompt/model comparisons.
+
+**Acceptance Criteria**:
+- [ ] Generate a benchmark artifact from current accepted configuration
+- [ ] Commit pinned baseline JSON at `ai/eval/baselines/current.json`
+- [ ] Ensure baseline metadata captures run context (date, config, dataset scope, threshold mode)
+- [ ] Update eval documentation to reference the concrete baseline file path
+- [ ] Add a simple update procedure for replacing baseline on approved prompt/model changes
+- [ ] Confirm policy docs and baseline README are aligned with the committed artifact
+
+---
+
+### TASK-048: CI Gate Hardening for Integration and Security
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Make integration and security checks enforceable CI gates (no silent pass-through on failures).
+
+**Acceptance Criteria**:
+- [ ] Remove permissive `||` fallbacks that mask failures in integration test job
+- [ ] Remove permissive `||` fallback that masks Bandit failures (or explicitly scope intentional ignores in config)
+- [ ] Keep lockfile validation and existing lint/type/unit jobs intact
+- [ ] Document expected CI failure behavior and remediation path in repo docs
+- [ ] Verify CI workflow syntax and job dependency graph after changes
+- [ ] Add/update tests or fixtures if needed to keep gates deterministic
+
+---
+
+### TASK-049: Documentation Drift and Consistency Cleanup
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Resolve inconsistencies between status docs and repository reality.
+
+**Acceptance Criteria**:
+- [ ] Reconcile `PROJECT_STATUS.md` claims with actual files/features in repo
+- [ ] Fix naming/path inconsistencies in `README.md` (project directory/repo naming)
+- [ ] Remove or correct references to missing artifacts (for example absent compose overlay files)
+- [ ] Ensure cross-links between README, deployment, environment, and eval docs are valid
+- [ ] Add a lightweight doc freshness check process (owner + when to update)
+
+---
+
+## Phase 8: Assessment-Driven Hardening (2026-02)
+
+### TASK-051: API Key Hash Hardening and Migration
+**Priority**: P1 (High)
+**Estimate**: 3-4 hours
+
+Harden API key storage and verification to reduce credential exposure risk if persisted metadata is leaked.
+
+**Acceptance Criteria**:
+- [ ] Replace plain SHA-256 key hashes with salted, memory-hard hashes (scrypt/argon2/pbkdf2) and hash-version metadata
+- [ ] Use constant-time verification for key comparison paths
+- [ ] Support backward-compatible validation for existing persisted keys and migrate on successful auth
+- [ ] Add unit tests for legacy hash compatibility and new hash verification behavior
+
+---
+
+### TASK-052: Distributed Rate Limiting + Admin Audit Trail
+**Priority**: P1 (High)
+**Estimate**: 4-5 hours
+
+Move per-key limits out of process memory and add traceability for privileged auth actions.
+
+**Acceptance Criteria**:
+- [ ] Add Redis-backed per-key rate limiting with TTL windows that works across multiple API instances
+- [ ] Preserve `Retry-After` behavior with deterministic calculation
+- [ ] Add structured audit logs for admin key management operations (create/revoke/rotate/list attempts)
+- [ ] Add tests for multi-worker consistency and rate-limit edge behavior
+
+---
+
+### TASK-053: Atomic Budget Enforcement Under Concurrency
+**Priority**: P1 (Critical)
+**Estimate**: 3-4 hours
+
+Eliminate race windows between budget checks and usage recording across concurrent workers.
+
+**Acceptance Criteria**:
+- [ ] Implement atomic budget reservation/check-record flow in one transactional path
+- [ ] Prevent daily call and cost limit overshoot under concurrent worker execution
+- [ ] Add concurrency-focused tests that simulate parallel Tier1/Tier2/embedding calls
+- [ ] Add structured logging/metrics for budget reservation denials
+
+---
+
+### TASK-054: LLM Input Safety Guardrails (Injection + Token Precheck)
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Harden Tier1/Tier2 input handling against malicious prompt content and context-window overruns.
+
+**Acceptance Criteria**:
+- [ ] Delimit untrusted article/context content explicitly in Tier1/Tier2 payload contracts
+- [ ] Add explicit prompt rules to ignore instructions embedded in article content
+- [ ] Add token estimation pre-checks with safe truncation markers before LLM calls
+- [ ] Add tests for adversarial prompt-injection content and overlong context inputs
+
+---
+
+### TASK-055: Stuck Processing Reaper Worker
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Recover items stranded in `processing` after worker crashes or abnormal terminations.
+
+**Acceptance Criteria**:
+- [ ] Add scheduled worker task to reset stale `processing` items to `pending`
+- [ ] Add configurable timeout threshold for stale processing detection
+- [ ] Emit metrics/logs for reset counts and affected item IDs
+- [ ] Add tests for reset and non-reset scenarios
+
+---
+
+### TASK-056: Bounded Embedding Cache
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Prevent unbounded memory growth from embedding cache accumulation.
+
+**Acceptance Criteria**:
+- [ ] Replace unbounded in-memory embedding cache with bounded LRU cache
+- [ ] Add configurable max cache size and sensible defaults
+- [ ] Preserve cache hit behavior and current embedding output correctness
+- [ ] Add tests for eviction behavior and cache hit/miss accounting
+
+---
+
+### TASK-057: Runtime Resilience Guardrails
+**Priority**: P1 (High)
+**Estimate**: 4-5 hours
+
+Strengthen runtime safety for production operations and health visibility.
+
+**Acceptance Criteria**:
+- [ ] Add CPU/memory limits in `docker-compose.prod.yml` for API/worker/beat/postgres/redis services
+- [ ] Add worker activity health signal (heartbeat or recent-task timestamp) to health reporting
+- [ ] Add Timescale retention/compression policy migration for `trend_snapshots`
+- [ ] Add configurable DB pool timeout setting and document production defaults
+
+---
+
+### TASK-058: Vector Retrieval Quality Tuning (HNSW vs IVFFlat)
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+
+Tune event/raw-item vector retrieval quality for current small-table operating regime.
+
+**Acceptance Criteria**:
+- [ ] Add reproducible benchmark comparing IVFFlat vs HNSW (and/or exact search fallback) for recall/latency
+- [ ] Select and document default ANN strategy for current dataset sizes
+- [ ] Add migration/update path for selected index strategy
+- [ ] Add tests covering nearest-neighbor behavior against configured similarity thresholds
+
+---
+
+### TASK-059: Active-Learning Human Review Queue
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Prioritize analyst review using expected information gain to speed high-value labeling.
+
+**Acceptance Criteria**:
+- [ ] Implement ranking score using uncertainty x projected delta x contradiction risk
+- [ ] Add `GET /api/v1/review-queue` endpoint with ranked review candidates
+- [ ] Include payload fields needed for reviewer triage and label provenance updates
+- [ ] Add tests for deterministic ranking and filter behavior
+
+---
+
+### TASK-060: Counterfactual Simulation API
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+
+Provide non-persistent "what-if" probability projections using deterministic trend math.
+
+**Acceptance Criteria**:
+- [ ] Support "remove historical event impact" simulation mode
+- [ ] Support "inject hypothetical signal" simulation mode
+- [ ] Expose projected probability + delta + factor breakdown without DB mutation
+- [ ] Add tests ensuring simulation calls are side-effect free
+
+---
+
+### TASK-061: Recency-Aware Novelty + Per-Indicator Decay
+**Priority**: P1 (High)
+**Estimate**: 3-4 hours
+
+Improve evidence math realism by removing coarse novelty cliffs and global decay assumptions.
+
+**Acceptance Criteria**:
+- [ ] Replace binary novelty with continuous recency-aware novelty scoring
+- [ ] Add optional per-indicator decay half-life support in trend definitions
+- [ ] Keep factor provenance explicit in `TrendEvidence` for explainability
+- [ ] Add unit tests validating expected deltas across recency and indicator decay scenarios
+
+---
+
+### TASK-062: Hermetic Integration Test Environment Parity
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Align local and CI integration environments to eliminate config drift and silent failures.
+
+**Acceptance Criteria**:
+- [ ] Ensure CI uses pgvector-capable Postgres image consistent with local integration expectations
+- [ ] Remove migration failure masking patterns in CI integration jobs
+- [ ] Normalize integration DB credentials/URLs between local and CI fixtures
+- [ ] Add/update integration fixtures for deterministic setup/teardown behavior
+
+---
+
+### TASK-063: Source Reliability Diagnostics (Read-Only)
+**Priority**: P2 (Medium)
+**Estimate**: 3-4 hours
+
+Add visibility into source/tier outcome calibration before enabling any adaptive weighting.
+
+**Acceptance Criteria**:
+- [ ] Add source and source-tier reliability diagnostics in calibration reporting
+- [ ] Include sample-size/confidence gating to avoid over-interpreting sparse outcomes
+- [ ] Keep output advisory-only (no automatic source-weight mutations)
+- [ ] Add tests for diagnostic aggregation and sparse-data guardrails
+
+---
+
+### TASK-064: Historical Replay and Champion/Challenger Harness
+**Priority**: P2 (Medium)
+**Estimate**: 5-7 hours
+
+Enable safe evaluation of model/prompt/threshold changes before production rollout.
+
+**Acceptance Criteria**:
+- [ ] Add replay runner over historical items/events/evidence snapshots
+- [ ] Support side-by-side config comparisons with shared dataset/time-window inputs
+- [ ] Output quality/cost/latency comparison artifact suitable for release decisions
+- [ ] Document promotion criteria for champion/challenger decisions
+
+---
+
+### TASK-065: Independence-Aware Corroboration and Claim Graph
+**Priority**: P2 (Medium)
+**Estimate**: 5-7 hours
+
+Reduce false confidence from syndicated/derivative coverage by modeling claim-level independence.
+
+**Acceptance Criteria**:
+- [ ] Add normalized claim representation on events with support/contradiction links
+- [ ] Compute corroboration factor from independent source clusters instead of raw source count
+- [ ] Penalize derivative coverage in corroboration math
+- [ ] Add tests for overcount prevention and contradiction-aware corroboration behavior
+
+---
+
+### TASK-066: Expand Trend Catalog to Multi-Trend Baseline [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 6-10 hours (human analysis + review)
+
+Reduce single-trend bottleneck by adding a minimal operational set of additional trend definitions.
+
+**Acceptance Criteria**:
+- [ ] Define at least 5 additional trend YAMLs with baseline/indicators/disqualifiers/falsification criteria
+- [ ] Human analyst review and sign-off for each new trend definition
+- [ ] Validate all new trend configs with existing sync/validation tooling
+- [ ] Record trend-definition rationale and reviewer sign-off in sprint notes
+
+---
+
+### TASK-067: Report Narrative Prompt Hardening
+**Priority**: P2 (Medium)
+**Estimate**: 2-3 hours
+
+Improve narrative usefulness while minimizing unsupported claims in weekly/monthly/retrospective reports.
+
+**Acceptance Criteria**:
+- [ ] Expand report prompts with explicit audience, uncertainty, and contradiction guidance
+- [ ] Add guardrails that disallow unsupported entities/events not present in structured inputs
+- [ ] Improve deterministic fallback narrative quality for no-LLM paths
+- [ ] Add tests for prompt contract/output-shape validation where applicable
 
 ---
 

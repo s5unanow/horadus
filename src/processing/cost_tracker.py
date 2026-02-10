@@ -25,7 +25,7 @@ KNOWN_TIERS = (TIER1, TIER2, EMBEDDING)
 
 COST_PER_1M_TOKENS: dict[str, tuple[Decimal, Decimal]] = {
     TIER1: (Decimal("0.10"), Decimal("0.40")),
-    TIER2: (Decimal("0.15"), Decimal("0.60")),
+    TIER2: (Decimal("0.40"), Decimal("1.60")),
     EMBEDDING: (Decimal("0.10"), Decimal("0.00")),
 }
 

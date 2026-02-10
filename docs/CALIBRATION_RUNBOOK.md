@@ -2,6 +2,12 @@
 
 This runbook defines operator response for calibration drift and coverage alerts.
 
+## Relationship to Prompt Evaluation
+
+- This runbook handles **runtime monitoring and incident response**.
+- Prompt/model release gating is handled separately by `docs/PROMPT_EVAL_POLICY.md`.
+- Use both: release gate before deployment, calibration triage after deployment.
+
 ## Inputs and Signals
 
 Primary source:
@@ -79,7 +85,7 @@ Alert raised?
 - **Coverage gap**: increase outcome capture throughput for low-sample trends.
 - **Brier drift**: re-evaluate indicator weights and source-credibility multipliers.
 - **Bucket drift**: audit over/under-confidence by probability band.
-- **Persistent drift**: schedule prompt and extraction quality review with rollback criteria.
+- **Persistent drift**: schedule prompt and extraction quality review with rollback criteria, then apply `docs/PROMPT_EVAL_POLICY.md` before shipping prompt updates.
 
 ## Exit Criteria
 

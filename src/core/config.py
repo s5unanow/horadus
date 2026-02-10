@@ -275,7 +275,7 @@ class Settings(BaseSettings):
         description="Model for Tier 1 (fast) classification",
     )
     LLM_TIER2_MODEL: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-4.1-mini",
         description="Model for Tier 2 (thorough) classification",
     )
     LLM_TIER1_SECONDARY_MODEL: str | None = Field(
@@ -287,11 +287,11 @@ class Settings(BaseSettings):
         description="Optional secondary model for Tier 2 failover",
     )
     LLM_REPORT_MODEL: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-4.1-mini",
         description="Model for weekly report narrative generation",
     )
     LLM_RETROSPECTIVE_MODEL: str = Field(
-        default="gpt-4o-mini",
+        default="gpt-4.1-mini",
         description="Model for retrospective analysis narrative generation",
     )
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")

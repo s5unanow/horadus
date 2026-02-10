@@ -9,10 +9,73 @@
 ## Active Tasks
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
+- `TASK-047` Pinned Evaluation Baseline Artifact — Blocked pending runtime API key for benchmark generation (`OPENAI_API_KEY`)
 
 ---
 
 ## Completed This Sprint
+
+### TASK-050: Upgrade Tier 2 LLM Defaults to gpt-4.1-mini
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Upgrade Tier-2/reporting defaults and cost constants to the 2026-02 reviewed model configuration.
+
+**Completed**:
+- [x] Updated `LLM_TIER2_MODEL`, `LLM_REPORT_MODEL`, and `LLM_RETROSPECTIVE_MODEL` defaults to `gpt-4.1-mini`
+- [x] Updated Tier-2 cost constants in cost tracker to `$0.40/$1.60` per 1M tokens
+- [x] Added `gpt-4.1-mini` pricing in classifier model-price maps
+- [x] Updated `.env.example` with Tier-2 DeepSeek failover recommendation comments
+- [x] Added `2026-02 Review` decision update to `docs/adr/002-llm-provider.md`
+
+---
+
+### TASK-049: Documentation Drift and Consistency Cleanup
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Reconcile docs with repository reality and add explicit freshness process.
+
+**Completed**:
+- [x] Corrected project path naming in `README.md` (`horadus` vs legacy path)
+- [x] Added missing cross-links for release and evaluation policy docs
+- [x] Removed stale reference to absent `docker-compose.prod.secrets.yml` from status tracking
+- [x] Added lightweight documentation freshness process (owner + update timing)
+
+---
+
+### TASK-048: CI Gate Hardening for Integration and Security
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Enforce integration and security checks as fail-closed CI gates.
+
+**Completed**:
+- [x] Removed migration fallback that masked integration environment failures
+- [x] Removed integration test fallback that masked test job failures
+- [x] Removed Bandit fallback that masked security findings
+- [x] Kept lockfile, lint, typecheck, and unit jobs intact
+- [x] Documented CI gate failure remediation path in release runbook
+
+---
+
+### TASK-046: Release Process Runbook
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add formal release/versioning/tagging/rollback governance.
+
+**Completed**:
+- [x] Added `docs/RELEASING.md` with pre-release, tagging, rollout, verification, and rollback checklists
+- [x] Documented semantic version tagging and release-note policy
+- [x] Included quality gates (tests/lint/mypy/migrations/eval policy checks)
+- [x] Linked release runbook from README and deployment documentation
+
+---
 
 ### TASK-045: Gold-Set Quality Audit Tooling
 **Status**: DONE ✓  

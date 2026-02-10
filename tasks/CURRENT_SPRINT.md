@@ -10,10 +10,71 @@
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
 - `TASK-047` Pinned Evaluation Baseline Artifact — Blocked pending runtime API key for benchmark generation (`OPENAI_API_KEY`)
+- `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` — Awaiting manual trend authoring/reviewer sign-off
 
 ---
 
 ## Completed This Sprint
+
+### TASK-051: API Key Hash Hardening and Migration
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Harden API key hash storage/verification and support legacy migration on successful auth.
+
+**Completed**:
+- [x] Replaced plain SHA-256 hashes with salted memory-hard `scrypt` hashes (`scrypt-v1`)
+- [x] Added explicit `hash_version` metadata to persisted key records
+- [x] Switched key verification to constant-time compare via `secrets.compare_digest`
+- [x] Added backward-compatible legacy SHA-256 verification and on-auth migration to `scrypt-v1`
+- [x] Added unit tests for legacy compatibility + migration behavior
+
+---
+
+### TASK-067: Report Narrative Prompt Hardening
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Harden weekly/monthly/retrospective narrative prompts and deterministic fallback behavior.
+
+**Completed**:
+- [x] Expanded report/retrospective prompt contracts with audience, uncertainty, contradiction, and anti-injection guidance
+- [x] Added explicit guardrails to avoid unsupported entities/events outside provided structured payloads
+- [x] Improved deterministic fallback narratives to include confidence cues tied to evidence/coverage
+- [x] Added unit tests for fallback narrative confidence/output-shape behavior
+
+---
+
+### TASK-056: Bounded Embedding Cache
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Replace unbounded embedding cache behavior with bounded LRU semantics.
+
+**Completed**:
+- [x] Replaced in-memory embedding cache with LRU behavior (`OrderedDict` + recency touch on reads)
+- [x] Added configurable `EMBEDDING_CACHE_MAX_SIZE` setting with default `2048`
+- [x] Preserved cache-hit behavior and embedding output correctness paths
+- [x] Added unit test coverage for LRU eviction and cache hit/miss accounting
+
+---
+
+### TASK-055: Stuck Processing Reaper Worker
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Recover items stranded in `processing` after worker crashes/abnormal exits.
+
+**Completed**:
+- [x] Added `processing_started_at` tracking on `raw_items` with Alembic migration `0005_add_processing_started_at`
+- [x] Added `workers.reap_stale_processing_items` task to reset stale processing rows back to `pending`
+- [x] Added stale timeout/interval settings (`PROCESSING_STALE_TIMEOUT_MINUTES`, `PROCESSING_REAPER_INTERVAL_MINUTES`)
+- [x] Added structured logs + Prometheus counter for reset counts and affected item IDs
+- [x] Added unit tests covering reset and no-op reaper scenarios plus schedule/route wiring
 
 ### TASK-050: Upgrade Tier 2 LLM Defaults to gpt-4.1-mini
 **Status**: DONE ✓  

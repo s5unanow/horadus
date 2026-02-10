@@ -317,6 +317,11 @@ class Settings(BaseSettings):
         le=2048,
         description="Maximum texts per embedding API request",
     )
+    EMBEDDING_CACHE_MAX_SIZE: int = Field(
+        default=2048,
+        ge=1,
+        description="Maximum in-memory embedding cache entries before LRU eviction",
+    )
 
     # =========================================================================
     # Telegram
@@ -391,6 +396,16 @@ class Settings(BaseSettings):
         default=50,
         ge=1,
         description="Max pending items processed per pipeline task run",
+    )
+    PROCESSING_STALE_TIMEOUT_MINUTES: int = Field(
+        default=30,
+        ge=1,
+        description="Age threshold in minutes for resetting stale processing items",
+    )
+    PROCESSING_REAPER_INTERVAL_MINUTES: int = Field(
+        default=15,
+        ge=1,
+        description="Interval in minutes for stale-processing reaper task schedule",
     )
 
     # =========================================================================

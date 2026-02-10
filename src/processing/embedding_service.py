@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections import OrderedDict
 from dataclasses import dataclass
 from typing import Any
 
@@ -44,16 +45,18 @@ class EmbeddingService:
         model: str | None = None,
         dimensions: int | None = None,
         batch_size: int | None = None,
+        cache_max_size: int | None = None,
         cost_tracker: CostTracker | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.EMBEDDING_MODEL
         self.dimensions = dimensions or settings.EMBEDDING_DIMENSIONS
         self.batch_size = batch_size or settings.EMBEDDING_BATCH_SIZE
+        self.cache_max_size = cache_max_size or settings.EMBEDDING_CACHE_MAX_SIZE
 
         self.client = client or self._create_client()
         self.cost_tracker = cost_tracker or CostTracker(session=session)
-        self._cache: dict[str, list[float]] = {}
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
 
     def _create_client(self) -> AsyncOpenAI:
         if not settings.OPENAI_API_KEY.strip():
@@ -86,7 +89,7 @@ class EmbeddingService:
 
         for index, normalized_text in enumerate(normalized_texts):
             cache_key = self._cache_key(normalized_text)
-            cached_vector = self._cache.get(cache_key)
+            cached_vector = self._cache_get(cache_key)
             if cached_vector is not None:
                 results[index] = cached_vector
                 cache_hits += 1
@@ -103,7 +106,7 @@ class EmbeddingService:
             api_calls += 1
 
             for key, vector in zip(chunk_keys, vectors, strict=True):
-                self._cache[key] = vector
+                self._cache_set(key, vector)
                 for result_index in misses_by_key[key]:
                     results[result_index] = vector
 
@@ -249,6 +252,19 @@ class EmbeddingService:
     @staticmethod
     def _cache_key(text: str) -> str:
         return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+    def _cache_get(self, cache_key: str) -> list[float] | None:
+        cached = self._cache.get(cache_key)
+        if cached is None:
+            return None
+        self._cache.move_to_end(cache_key)
+        return cached
+
+    def _cache_set(self, cache_key: str, vector: list[float]) -> None:
+        self._cache[cache_key] = vector
+        self._cache.move_to_end(cache_key)
+        while len(self._cache) > self.cache_max_size:
+            self._cache.popitem(last=False)
 
     @staticmethod
     def _normalize_text(text: str) -> str:

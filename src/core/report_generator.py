@@ -705,7 +705,9 @@ class ReportGenerator:
         statistics: dict[str, Any],
     ) -> str:
         contradiction_summary = ""
+        confidence_modifier = ""
         contradiction_stats = statistics.get("contradiction_analytics")
+        unresolved_events_count = 0
         if isinstance(contradiction_stats, dict):
             contradicted_events_count = int(contradiction_stats.get("contradicted_events_count", 0))
             resolved_events_count = int(contradiction_stats.get("resolved_events_count", 0))
@@ -715,16 +717,27 @@ class ReportGenerator:
                     f" Contradiction review tracked {contradicted_events_count} events "
                     f"({resolved_events_count} resolved, {unresolved_events_count} unresolved)."
                 )
+                if unresolved_events_count > 0:
+                    confidence_modifier = " unresolved contradictions"
+
+        def confidence_label(evidence_count: int) -> str:
+            if evidence_count >= 20:
+                return "high"
+            if evidence_count >= 8:
+                return "moderate"
+            return "limited"
 
         if report_type == "monthly":
             monthly_change = float(statistics.get("monthly_change", 0.0))
             evidence_count = int(statistics.get("evidence_count_monthly", 0))
             direction = str(statistics.get("direction", "stable"))
             current_probability = float(statistics.get("current_probability", 0.0))
+            confidence = confidence_label(evidence_count)
             return (
                 f"{trend.name} is currently at {current_probability:.1%} with a monthly change of "
                 f"{monthly_change:+.1%}. Direction over 30 days is {direction}, with "
-                f"{evidence_count} evidence updates and category/source breakdowns included."
+                f"{evidence_count} evidence updates. Confidence is {confidence} based on available "
+                f"coverage{confidence_modifier}."
                 f"{contradiction_summary}"
             )
 
@@ -732,8 +745,10 @@ class ReportGenerator:
         current_probability = float(statistics.get("current_probability", 0.0))
         weekly_change = float(statistics.get("weekly_change", 0.0))
         evidence_count = int(statistics.get("evidence_count_weekly", 0))
+        confidence = confidence_label(evidence_count)
         return (
             f"{trend.name} is currently at {current_probability:.1%} with a weekly change of "
             f"{weekly_change:+.1%}. Direction is {direction}, based on {evidence_count} "
-            f"evidence updates in the reporting window.{contradiction_summary}"
+            f"evidence updates in the reporting window. Confidence is {confidence} based on "
+            f"current evidence volume{confidence_modifier}.{contradiction_summary}"
         )

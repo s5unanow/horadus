@@ -31,6 +31,10 @@ CALIBRATION_DRIFT_ALERTS_TOTAL = Counter(
     "Calibration drift alerts by alert type and severity.",
     ["alert_type", "severity"],
 )
+PROCESSING_REAPER_RESETS_TOTAL = Counter(
+    "processing_reaper_resets_total",
+    "Count of raw items reset from processing to pending by stale-item reaper.",
+)
 
 
 def record_collector_metrics(
@@ -73,3 +77,7 @@ def record_calibration_drift_alert(*, alert_type: str, severity: str) -> None:
         alert_type=alert_type,
         severity=severity,
     ).inc()
+
+
+def record_processing_reaper_resets(*, reset_count: int) -> None:
+    PROCESSING_REAPER_RESETS_TOTAL.inc(max(0, reset_count))

@@ -8,7 +8,7 @@ import asyncio
 import json
 from collections.abc import Callable, Coroutine
 from dataclasses import asdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar, cast
 
 import httpx
@@ -22,6 +22,7 @@ from src.core.config import settings
 from src.core.observability import (
     record_collector_metrics,
     record_pipeline_metrics,
+    record_processing_reaper_resets,
     record_worker_error,
 )
 from src.core.report_generator import ReportGenerator
@@ -31,7 +32,7 @@ from src.ingestion.rss_collector import RSSCollector
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
-from src.storage.models import Trend, TrendSnapshot
+from src.storage.models import ProcessingStatus, RawItem, Trend, TrendSnapshot
 
 logger = structlog.get_logger(__name__)
 
@@ -171,6 +172,51 @@ async def _process_pending_async(limit: int) -> dict[str, Any]:
         "status": "ok",
         "task": "processing_pipeline",
         **ProcessingPipeline.run_result_to_dict(run_result),
+    }
+
+
+async def _reap_stale_processing_async() -> dict[str, Any]:
+    now = datetime.now(tz=UTC)
+    stale_before = now - timedelta(minutes=settings.PROCESSING_STALE_TIMEOUT_MINUTES)
+    async with async_session_maker() as session:
+        stale_items = list(
+            (
+                await session.scalars(
+                    select(RawItem)
+                    .where(RawItem.processing_status == ProcessingStatus.PROCESSING)
+                    .where(RawItem.processing_started_at.is_not(None))
+                    .where(RawItem.processing_started_at <= stale_before)
+                    .order_by(RawItem.processing_started_at.asc())
+                    .limit(max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE))
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+        )
+
+        reset_item_ids: list[str] = []
+        for item in stale_items:
+            item.processing_status = ProcessingStatus.PENDING
+            item.processing_started_at = None
+            item.error_message = None
+            reset_item_ids.append(str(item.id))
+
+        await session.commit()
+
+    logger.info(
+        "Reaped stale processing items",
+        scanned=len(stale_items),
+        reset_count=len(reset_item_ids),
+        reset_item_ids=reset_item_ids,
+        stale_before=stale_before.isoformat(),
+    )
+    return {
+        "status": "ok",
+        "task": "reap_stale_processing_items",
+        "checked_at": now.isoformat(),
+        "stale_before": stale_before.isoformat(),
+        "scanned": len(stale_items),
+        "reset": len(reset_item_ids),
+        "reset_item_ids": reset_item_ids,
     }
 
 
@@ -334,6 +380,24 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
         classified=result["classified"],
         noise=result["noise"],
         errors=result["errors"],
+    )
+    return result
+
+
+@typed_shared_task(name="workers.reap_stale_processing_items")
+def reap_stale_processing_items() -> dict[str, Any]:
+    """Reset stale processing items after worker crashes/timeouts."""
+    logger.info(
+        "Starting stale processing reaper task",
+        timeout_minutes=settings.PROCESSING_STALE_TIMEOUT_MINUTES,
+    )
+    result = _run_async(_reap_stale_processing_async())
+    record_processing_reaper_resets(reset_count=int(result["reset"]))
+    logger.info(
+        "Finished stale processing reaper task",
+        reset=result["reset"],
+        scanned=result["scanned"],
+        reset_item_ids=result["reset_item_ids"],
     )
     return result
 

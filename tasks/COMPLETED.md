@@ -54,6 +54,10 @@ Tasks that have been completed and verified.
 - TASK-048: CI Gate Hardening for Integration and Security ✅
 - TASK-049: Documentation Drift and Consistency Cleanup ✅
 - TASK-050: Upgrade Tier 2 LLM from gpt-4o-mini to gpt-4.1-mini ✅
+- TASK-051: API Key Hash Hardening and Migration ✅
+- TASK-055: Stuck Processing Reaper Worker ✅
+- TASK-056: Bounded Embedding Cache ✅
+- TASK-067: Report Narrative Prompt Hardening ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

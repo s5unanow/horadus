@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -37,6 +40,8 @@ def test_authenticate_accepts_configured_keys() -> None:
     assert secondary is not None
     assert missing is None
     assert manager.auth_required is True
+    assert legacy.hash_version == "scrypt-v1"
+    assert legacy.key_hash.startswith("scrypt-v1$")
 
 
 def test_create_and_revoke_key() -> None:
@@ -79,6 +84,39 @@ def test_runtime_keys_persist_and_reload(tmp_path: Path) -> None:
     reloaded_manager = _build_manager(persist_path=persist_path)
 
     assert reloaded_manager.authenticate(raw_key) is not None
+
+
+def test_authenticate_migrates_legacy_sha256_hash(tmp_path: Path) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    raw_key = "geo_legacy_key"
+    legacy_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+    payload = [
+        {
+            "id": "legacy-id",
+            "name": "legacy",
+            "prefix": raw_key[:8],
+            "key_hash": legacy_hash,
+            "is_active": True,
+            "rate_limit_per_minute": 5,
+            "created_at": datetime.now(tz=UTC).isoformat(),
+            "last_used_at": None,
+            "revoked_at": None,
+            "source": "persisted",
+        }
+    ]
+    persist_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    manager = _build_manager(persist_path=str(persist_path))
+    record = manager.authenticate(raw_key)
+
+    assert record is not None
+    assert record.hash_version == "scrypt-v1"
+    assert record.key_hash != legacy_hash
+    assert record.key_hash.startswith("scrypt-v1$")
+
+    refreshed = json.loads(persist_path.read_text(encoding="utf-8"))
+    assert refreshed[0]["hash_version"] == "scrypt-v1"
+    assert refreshed[0]["key_hash"].startswith("scrypt-v1$")
 
 
 def test_rotate_key_revokes_old_and_returns_new() -> None:

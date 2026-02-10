@@ -50,6 +50,10 @@ Tasks that have been completed and verified.
 - TASK-042: CI uv Toolchain Alignment ✅
 - TASK-043: Eval Threshold Alignment + Label Provenance ✅
 - TASK-045: Gold-Set Quality Audit Tooling ✅
+- TASK-046: Release Process Runbook ✅
+- TASK-048: CI Gate Hardening for Integration and Security ✅
+- TASK-049: Documentation Drift and Consistency Cleanup ✅
+- TASK-050: Upgrade Tier 2 LLM from gpt-4o-mini to gpt-4.1-mini ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

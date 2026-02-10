@@ -174,7 +174,7 @@ Why: ~80% of articles are irrelevant. Don't waste expensive LLM calls on them.
 ---
 
 ### Tier 2 Classifier
-The thorough LLM analysis using a capable model (gpt-4o-mini).
+The thorough LLM analysis using a capable model (gpt-4.1-mini).
 
 Purpose: Extract detailed information:
 - Who, what, where, when

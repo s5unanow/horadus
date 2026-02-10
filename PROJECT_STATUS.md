@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-09
+**Last Updated**: 2026-02-10
 **Current Phase**: Phase 6 - Calibration (complete)
 
 ## Progress Overview
@@ -124,7 +124,6 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Brier score timeline series for drift visibility
 - [x] `horadus trends status` CLI for quick movement checks
 - [x] File-based secret loading via `*_FILE` settings for production runtimes
-- [x] Compose secrets overlay for production (`docker-compose.prod.secrets.yml`)
 - [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
 - [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations
 - [x] Deployment runbook coverage for TLS proxying and backup drills
@@ -140,6 +139,10 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Benchmark queue-accuracy now uses runtime Tier-1 threshold + label provenance metadata
 - [x] Gold-set audit workflow (`horadus eval audit`) with provenance/diversity warning gates
 - [x] CI workflow aligned to uv-only dependency/tool execution (no pip install paths)
+- [x] Release governance runbook (`docs/RELEASING.md`) with versioning/tagging/rollback workflow
+- [x] CI integration/security gates now fail-closed (no permissive masking fallbacks)
+- [x] Docs consistency cleanup for repo naming, cross-links, and freshness process
+- [x] Tier-2/reporting defaults upgraded to `gpt-4.1-mini` with updated cost constants
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -147,15 +150,18 @@ Phase 6: Calibration (NEW)   [████████████████�
 ## In Progress
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
+- `TASK-047` Pinned Evaluation Baseline Artifact (blocked on benchmark generation without runtime API key)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
+- `TASK-047` requires benchmark execution with a configured API key to produce and pin `ai/eval/baselines/current.json`.
 
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Select next sprint priorities from `tasks/BACKLOG.md`
+2. Complete `TASK-047` pinned benchmark baseline artifact after API key is configured
+3. Continue highest-priority non-human hardening tasks from `tasks/BACKLOG.md` (Phase 8)
 
 ## Expert Feedback Integration ✅
 

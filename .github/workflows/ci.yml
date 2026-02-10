@@ -158,15 +158,14 @@ jobs:
       - name: Run database migrations
         env:
           DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
-        run: |
-          uv run --no-sync alembic upgrade head || echo "No migrations to apply"
+        run: uv run --no-sync alembic upgrade head
 
       - name: Run integration tests
         env:
           DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
           REDIS_URL: redis://localhost:6379/0
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: uv run --no-sync pytest tests/integration/ -v -m integration || echo "No integration tests yet"
+        run: uv run --no-sync pytest tests/integration/ -v -m integration
 
   # ---------------------------------------------------------------------------
   # Security Scanning
@@ -191,7 +190,7 @@ jobs:
         run: uv sync --extra dev --frozen
 
       - name: Run Bandit (code security)
-        run: uv run --no-sync bandit -c pyproject.toml -r src/ || true
+        run: uv run --no-sync bandit -c pyproject.toml -r src/
 
       - name: Validate lockfile
         run: uv lock --check

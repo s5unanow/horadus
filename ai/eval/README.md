@@ -2,10 +2,14 @@
 
 This folder is the home for model/provider evaluation artifacts (`TASK-041`).
 
+Policy reference:
+- `docs/PROMPT_EVAL_POLICY.md` — prompt benchmark gates, promotion, and rollback workflow.
+
 Recommended layout:
 
 - `ai/eval/gold_set.jsonl` — labeled items (inputs + expected structured outputs)
 - `ai/eval/results/` — benchmark outputs (timestamped)
+- `ai/eval/baselines/current.json` — pinned accepted benchmark baseline artifact
 
 Each JSONL row supports:
 
@@ -64,3 +68,9 @@ Notes:
 - Use LLM-seeded labels as silver/pre-label drafts, then human-correct.
 - Keep gold data small, curated, and representative.
 - Avoid storing sensitive content.
+
+Baseline update procedure:
+1. Run `horadus eval audit` (and fail on warnings for release gates).
+2. Run `horadus eval benchmark` with the candidate prompt/model config.
+3. Compare candidate results against `ai/eval/baselines/current.json` per `docs/PROMPT_EVAL_POLICY.md`.
+4. On approval, replace `ai/eval/baselines/current.json` with the accepted benchmark artifact and commit.

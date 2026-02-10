@@ -38,10 +38,10 @@ This document lists environment variables used by the Horadus backend.
 | `LLM_SECONDARY_API_KEY` | empty | Optional API key override for secondary failover provider. |
 | `LLM_TIER1_MODEL` | `gpt-4.1-nano` | Tier-1 relevance filtering model. |
 | `LLM_TIER1_SECONDARY_MODEL` | empty | Optional Tier-1 failover model used on 429/5xx/timeout. |
-| `LLM_TIER2_MODEL` | `gpt-4o-mini` | Tier-2 extraction/classification model. |
+| `LLM_TIER2_MODEL` | `gpt-4.1-mini` | Tier-2 extraction/classification model. |
 | `LLM_TIER2_SECONDARY_MODEL` | empty | Optional Tier-2 failover model used on 429/5xx/timeout. |
-| `LLM_REPORT_MODEL` | `gpt-4o-mini` | Weekly/monthly report narrative model. |
-| `LLM_RETROSPECTIVE_MODEL` | `gpt-4o-mini` | Retrospective narrative model. |
+| `LLM_REPORT_MODEL` | `gpt-4.1-mini` | Weekly/monthly report narrative model. |
+| `LLM_RETROSPECTIVE_MODEL` | `gpt-4.1-mini` | Retrospective narrative model. |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding generation model. |
 | `EMBEDDING_BATCH_SIZE` | `32` | Max texts per embedding request. |
 | `LLM_TIER1_BATCH_SIZE` | `10` | Max items per tier-1 call. |

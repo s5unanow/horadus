@@ -109,7 +109,7 @@
 
 Current model mapping (see ADR-002):
 - Tier 1 (filter): `gpt-4.1-nano`
-- Tier 2 (classify/summarize): `gpt-4o-mini`
+- Tier 2 (classify/summarize): `gpt-4.1-mini`
 
 ```
 ┌─────────────┐
@@ -275,7 +275,7 @@ Benefit: Every probability change has an auditable paper trail.
 | Component | Purpose | Model/Method |
 |-----------|---------|--------------|
 | Tier1Filter | Quick relevance check | gpt-4.1-nano |
-| Tier2Classifier | Full classification | gpt-4o-mini |
+| Tier2Classifier | Full classification | gpt-4.1-mini |
 | EmbeddingService | Generate embeddings | OpenAI |
 | EventClusterer | Group similar items | pgvector cosine |
 | Deduplicator | Prevent duplicates | URL + hash + embedding |

@@ -21,19 +21,19 @@ Use **OpenAI models** with a “simple default” and an “optional optimizatio
 
 ### Operational Default (Start Here)
 - **Tier 1 (Filter)**: `gpt-4.1-nano`
-- **Tier 2 (Classify/Summarize)**: `gpt-4o-mini`
+- **Tier 2 (Classify/Summarize)**: `gpt-4.1-mini`
 
 **Why**: Tier 1 is high-volume and classification-oriented; Tier 2 is lower-volume and quality-sensitive.
 
 ### Simplified Option (When You Want Fewer Moving Parts)
-- **Tier 1 (Filter)**: `gpt-4o-mini`
-- **Tier 2 (Classify/Summarize)**: `gpt-4o-mini`
+- **Tier 1 (Filter)**: `gpt-4.1-mini`
+- **Tier 2 (Classify/Summarize)**: `gpt-4.1-mini`
 
 **Why**: One model minimizes complexity while keeping strong JSON/schema adherence and predictable quality.
 
 ### Optional Optimization Path (When Cost/Volume Requires It)
 - **Tier 1 (Filter)**: the cheapest “classification-oriented” model you can tolerate (or a cheaper provider) while keeping acceptable schema adherence
-- **Tier 2 (Classify/Summarize)**: `gpt-4o-mini`
+- **Tier 2 (Classify/Summarize)**: `gpt-4.1-mini`
 
 **Why**: Tier 1 is high-volume and can tolerate simpler reasoning; Tier 2 is lower-volume and quality-sensitive.
 
@@ -85,14 +85,15 @@ Cost is dominated by three factors:
 - Tier 2 uses ~1,500 input + ~500 output tokens/item
 
 ### Example Prices (Must Be Verified “As Of”)
-This ADR previously used:
+This ADR currently uses:
 - `gpt-4.1-nano`: $0.10 / 1M input tokens, $0.40 / 1M output tokens
-- `gpt-4o-mini`: $0.15 / 1M input tokens, $0.60 / 1M output tokens
+- `gpt-4.1-mini`: $0.40 / 1M input tokens, $1.60 / 1M output tokens
+- DeepSeek V3.2 (recommended failover): $0.28 / 1M input tokens, $0.42 / 1M output tokens
 
 Pricing changes; verify on vendor pricing pages and update this ADR with an “as-of” date.
 
 ### Why the “Optional Optimization Path” Helps
-If Tier 1 moves to a cheaper classifier model/provider and Tier 2 stays on `gpt-4o-mini`, the monthly cost can drop materially **if**:
+If Tier 1 moves to a cheaper classifier model/provider and Tier 2 stays on `gpt-4.1-mini`, the monthly cost can drop materially **if**:
 - Tier 1 volume is high
 - Tier 2 pass rate is low
 - The cheaper model doesn’t increase retries/repair costs
@@ -113,3 +114,17 @@ If Tier 1 moves to a cheaper classifier model/provider and Tier 2 stays on `gpt-
 ## Notes
 - A previous draft referenced “~$540/month”; treat that as a discarded estimate. Costs are extremely sensitive to token assumptions and output length.
 - For a personal system with ~20 trends, correctness/traceability and bounded spend matter more than squeezing every cent out of the model choice.
+
+## 2026-02 Review
+
+Evaluation update (2026-02):
+
+- Tier 1 remains on `gpt-4.1-nano`.
+- Tier 2/reporting/retrospective defaults move to `gpt-4.1-mini`.
+- Secondary failover recommendation for Tier 2: DeepSeek V3.2 (OpenAI-compatible endpoint/model IDs).
+
+Rationale:
+
+- Better structured extraction and narrative quality for Tier 2/reporting tasks.
+- Acceptable cost profile for current low-volume personal-scale operation.
+- Retain lower-cost secondary provider for resilience/cost fallback during upstream incidents.

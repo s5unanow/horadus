@@ -166,6 +166,11 @@ async def test_run_gold_set_benchmark_writes_results(
     assert payload["items_evaluated"] == 2
     assert payload["require_human_verified"] is False
     assert payload["label_verification_counts"] == {"human_verified": 1, "llm_seeded": 1}
+    assert payload["dataset_scope"] == {"max_items": 2, "require_human_verified": False}
+    assert isinstance(payload["gold_set_fingerprint_sha256"], str)
+    assert len(payload["gold_set_fingerprint_sha256"]) == 64
+    assert isinstance(payload["gold_set_item_ids_sha256"], str)
+    assert len(payload["gold_set_item_ids_sha256"]) == 64
     assert len(payload["configs"]) == 1
     assert payload["configs"][0]["name"] == "baseline"
     assert payload["configs"][0]["tier1_metrics"]["queue_threshold"] == 5
@@ -210,6 +215,7 @@ async def test_run_gold_set_benchmark_filters_human_verified(
     assert payload["items_evaluated"] == 1
     assert payload["require_human_verified"] is True
     assert payload["label_verification_counts"] == {"human_verified": 1}
+    assert payload["dataset_scope"] == {"max_items": 10, "require_human_verified": True}
 
 
 def test_load_gold_set_requires_human_verified_rows(tmp_path: Path) -> None:

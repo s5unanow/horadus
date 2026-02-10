@@ -72,5 +72,11 @@ Notes:
 Baseline update procedure:
 1. Run `horadus eval audit` (and fail on warnings for release gates).
 2. Run `horadus eval benchmark` with the candidate prompt/model config.
-3. Compare candidate results against `ai/eval/baselines/current.json` per `docs/PROMPT_EVAL_POLICY.md`.
-4. On approval, replace `ai/eval/baselines/current.json` with the accepted benchmark artifact and commit.
+3. Confirm `dataset_scope`, `gold_set_fingerprint_sha256`, and `gold_set_item_ids_sha256` match when comparing candidate vs baseline.
+4. Compare candidate results against `ai/eval/baselines/current.json` per `docs/PROMPT_EVAL_POLICY.md`.
+5. On approval, move previous `current.json` to `ai/eval/baselines/history/<date>-<tag>.json`.
+6. Replace `ai/eval/baselines/current.json` with the accepted benchmark artifact and commit.
+
+Gold-set update rule:
+- If `ai/eval/gold_set.jsonl` rows or labels change, previous pass/fail baselines are superseded.
+- Keep prior baselines for history only; do not use them as gate comparisons for the new dataset version.

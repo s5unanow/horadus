@@ -34,8 +34,19 @@ Two artifact types are required:
 2. Accepted baseline artifact (pinned):
 - Keep one committed baseline JSON in Git, e.g. `ai/eval/baselines/current.json`.
 - Update this file only when a prompt change is explicitly accepted.
+- Keep previous accepted baselines under `ai/eval/baselines/history/` when replacing `current.json`.
 
 Without a pinned baseline, comparisons become ambiguous over time.
+
+## Gold-Set Change Supersession Rule
+
+When `ai/eval/gold_set.jsonl` content or labels change, prior pass/fail comparisons are superseded.
+
+Required handling:
+- Treat existing `current.json` comparisons as historical-only for the previous dataset version.
+- Run fresh audit + benchmark against the updated dataset before any promotion decision.
+- Promote a new `current.json` only from runs that share the same dataset fingerprint metadata.
+- Archive the replaced baseline under `ai/eval/baselines/history/` with a date/tag.
 
 ## Release Gate Workflow
 
@@ -48,7 +59,7 @@ Without a pinned baseline, comparisons become ambiguous over time.
 - Temporary fallback (until TASK-044): run without `--require-human-verified`, and mark run as provisional.
 
 3. Compare candidate vs pinned baseline
-- Compare the same config(s), same dataset scope, and same queue threshold assumptions.
+- Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.
 - Record comparison notes in PR description.
 
 4. Decision
@@ -75,6 +86,7 @@ After acceptance:
 
 1. Merge prompt change.
 2. Commit/update pinned baseline artifact.
+   - Move old `ai/eval/baselines/current.json` into `ai/eval/baselines/history/` first.
 3. Deploy worker/runtime before the next scheduled processing window.
 
 Operational note:

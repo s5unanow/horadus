@@ -9,12 +9,28 @@
 ## Active Tasks
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
-- `TASK-047` Pinned Evaluation Baseline Artifact — Blocked pending runtime API key for benchmark generation (`OPENAI_API_KEY`)
+- `TASK-047` Pinned Evaluation Baseline Artifact — Blocked by provider quota (`429 insufficient_quota`) while generating benchmark artifact
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` — Awaiting manual trend authoring/reviewer sign-off
 
 ---
 
 ## Completed This Sprint
+
+### TASK-068: Gold-Set Change Governance and Baseline Supersession
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Define and implement process controls for baseline handling when gold-set content/labels change.
+
+**Completed**:
+- [x] Added backlog governance task for dataset-version supersession policy
+- [x] Added benchmark dataset fingerprint metadata (`gold_set_fingerprint_sha256`, `gold_set_item_ids_sha256`, `dataset_scope`)
+- [x] Added test coverage for dataset metadata in benchmark output
+- [x] Updated prompt-eval policy with explicit supersession and baseline-history archival rules
+- [x] Updated eval/baseline docs with operational checklist for dataset-version transitions
+
+---
 
 ### TASK-051: API Key Hash Hardening and Migration
 **Status**: DONE ✓  

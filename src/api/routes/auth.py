@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -13,6 +14,7 @@ from src.core.api_key_manager import APIKeyRecord, get_api_key_manager
 from src.core.config import settings
 
 router = APIRouter()
+logger = structlog.get_logger(__name__)
 
 
 class APIKeySummary(BaseModel):
@@ -99,12 +101,53 @@ def _ensure_admin_access(request: Request) -> None:
     )
 
 
+def _audit_admin_action(
+    *,
+    request: Request,
+    action: str,
+    outcome: str,
+    target_key_id: str | None = None,
+    detail: str | None = None,
+    requested_name: str | None = None,
+    requested_rate_limit: int | None = None,
+) -> None:
+    client_host = request.client.host if request.client is not None else None
+    logger.info(
+        "Admin auth operation",
+        action=action,
+        outcome=outcome,
+        actor_api_key_id=getattr(request.state, "api_key_id", None),
+        actor_api_key_name=getattr(request.state, "api_key_name", None),
+        client_ip=client_host,
+        target_key_id=target_key_id,
+        detail=detail,
+        requested_name=requested_name,
+        requested_rate_limit=requested_rate_limit,
+    )
+
+
 @router.get("/keys", response_model=list[APIKeySummary])
 async def list_api_keys(request: Request) -> list[APIKeySummary]:
     """List API keys (metadata only)."""
-    _ensure_admin_access(request)
+    try:
+        _ensure_admin_access(request)
+    except HTTPException as exc:
+        _audit_admin_action(
+            request=request,
+            action="list_keys",
+            outcome="denied",
+            detail=str(exc.detail),
+        )
+        raise
     manager = get_api_key_manager()
-    return [_to_summary(record) for record in manager.list_keys()]
+    records = manager.list_keys()
+    _audit_admin_action(
+        request=request,
+        action="list_keys",
+        outcome="success",
+        detail=f"count={len(records)}",
+    )
+    return [_to_summary(record) for record in records]
 
 
 @router.post("/keys", response_model=APIKeyCreateResponse, status_code=status.HTTP_201_CREATED)
@@ -113,11 +156,30 @@ async def create_api_key(
     request: Request,
 ) -> APIKeyCreateResponse:
     """Create a new API key."""
-    _ensure_admin_access(request)
+    try:
+        _ensure_admin_access(request)
+    except HTTPException as exc:
+        _audit_admin_action(
+            request=request,
+            action="create_key",
+            outcome="denied",
+            detail=str(exc.detail),
+            requested_name=payload.name,
+            requested_rate_limit=payload.rate_limit_per_minute,
+        )
+        raise
     manager = get_api_key_manager()
     record, raw_key = manager.create_key(
         name=payload.name,
         rate_limit_per_minute=payload.rate_limit_per_minute,
+    )
+    _audit_admin_action(
+        request=request,
+        action="create_key",
+        outcome="success",
+        target_key_id=record.id,
+        requested_name=payload.name,
+        requested_rate_limit=payload.rate_limit_per_minute,
     )
     return APIKeyCreateResponse(
         key=_to_summary(record),
@@ -131,14 +193,36 @@ async def revoke_api_key(
     request: Request,
 ) -> None:
     """Revoke an API key by id."""
-    _ensure_admin_access(request)
+    try:
+        _ensure_admin_access(request)
+    except HTTPException as exc:
+        _audit_admin_action(
+            request=request,
+            action="revoke_key",
+            outcome="denied",
+            target_key_id=key_id,
+            detail=str(exc.detail),
+        )
+        raise
     manager = get_api_key_manager()
     revoked = manager.revoke_key(key_id)
     if not revoked:
+        _audit_admin_action(
+            request=request,
+            action="revoke_key",
+            outcome="not_found",
+            target_key_id=key_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"API key '{key_id}' not found",
         )
+    _audit_admin_action(
+        request=request,
+        action="revoke_key",
+        outcome="success",
+        target_key_id=key_id,
+    )
 
 
 @router.post("/keys/{key_id}/rotate", response_model=APIKeyCreateResponse)
@@ -147,15 +231,37 @@ async def rotate_api_key(
     request: Request,
 ) -> APIKeyCreateResponse:
     """Rotate an API key by id and return a replacement credential."""
-    _ensure_admin_access(request)
+    try:
+        _ensure_admin_access(request)
+    except HTTPException as exc:
+        _audit_admin_action(
+            request=request,
+            action="rotate_key",
+            outcome="denied",
+            target_key_id=key_id,
+            detail=str(exc.detail),
+        )
+        raise
     manager = get_api_key_manager()
     rotated = manager.rotate_key(key_id)
     if rotated is None:
+        _audit_admin_action(
+            request=request,
+            action="rotate_key",
+            outcome="not_found",
+            target_key_id=key_id,
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"API key '{key_id}' not found",
         )
     record, raw_key = rotated
+    _audit_admin_action(
+        request=request,
+        action="rotate_key",
+        outcome="success",
+        target_key_id=key_id,
+    )
     return APIKeyCreateResponse(
         key=_to_summary(record),
         api_key=raw_key,

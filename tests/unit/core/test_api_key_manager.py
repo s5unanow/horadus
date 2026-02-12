@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -17,6 +18,9 @@ def _build_manager(
     auth_enabled: bool = True,
     rate_limit_per_minute: int = 5,
     persist_path: str | None = None,
+    redis_client: Any | None = None,
+    rate_limit_backend: str = "auto",
+    wall_time_fn: Any | None = None,
 ) -> APIKeyManager:
     return APIKeyManager(
         auth_enabled=auth_enabled,
@@ -24,7 +28,62 @@ def _build_manager(
         static_api_keys=[],
         default_rate_limit_per_minute=rate_limit_per_minute,
         persist_path=persist_path,
+        redis_client=redis_client,
+        rate_limit_backend=rate_limit_backend,
+        wall_time_fn=wall_time_fn,
     )
+
+
+class _FakeRedisPipeline:
+    def __init__(self, client: _FakeRedisClient) -> None:
+        self._client = client
+        self._commands: list[tuple[str, str, int | None]] = []
+
+    def incr(self, key: str) -> _FakeRedisPipeline:
+        self._commands.append(("incr", key, None))
+        return self
+
+    def expireat(self, key: str, when: int) -> _FakeRedisPipeline:
+        self._commands.append(("expireat", key, when))
+        return self
+
+    def execute(self) -> list[int | bool]:
+        results: list[int | bool] = []
+        for action, key, arg in self._commands:
+            if action == "incr":
+                results.append(self._client.incr(key))
+            elif action == "expireat":
+                assert arg is not None
+                results.append(self._client.expireat(key, arg))
+        return results
+
+
+class _FakeRedisClient:
+    def __init__(self, now_fn) -> None:
+        self._now_fn = now_fn
+        self._values: dict[str, int] = {}
+        self._expire_at: dict[str, int] = {}
+
+    def pipeline(self, transaction: bool = True) -> _FakeRedisPipeline:
+        _ = transaction
+        return _FakeRedisPipeline(self)
+
+    def incr(self, key: str) -> int:
+        self._purge_if_expired(key)
+        self._values[key] = self._values.get(key, 0) + 1
+        return self._values[key]
+
+    def expireat(self, key: str, when: int) -> bool:
+        self._expire_at[key] = when
+        return True
+
+    def _purge_if_expired(self, key: str) -> None:
+        expires = self._expire_at.get(key)
+        if expires is None:
+            return
+        if int(self._now_fn()) >= expires:
+            self._values.pop(key, None)
+            self._expire_at.pop(key, None)
 
 
 def test_authenticate_accepts_configured_keys() -> None:
@@ -130,3 +189,62 @@ def test_rotate_key_revokes_old_and_returns_new() -> None:
     assert new_record.id != record.id
     assert manager.authenticate(raw_key) is None
     assert manager.authenticate(new_raw_key) is not None
+
+
+def test_distributed_rate_limit_is_shared_across_manager_instances(tmp_path: Path) -> None:
+    now = [1_700_000_000.0]
+    redis_client = _FakeRedisClient(now_fn=lambda: now[0])
+    persist_path = str(tmp_path / "api_keys.json")
+    manager_one = _build_manager(
+        persist_path=persist_path,
+        redis_client=redis_client,
+        rate_limit_backend="redis",
+        wall_time_fn=lambda: now[0],
+    )
+    _record, credential = manager_one.create_key(name="shared-limit", rate_limit_per_minute=1)
+
+    manager_two = _build_manager(
+        persist_path=persist_path,
+        redis_client=redis_client,
+        rate_limit_backend="redis",
+        wall_time_fn=lambda: now[0],
+    )
+    record_one = manager_one.authenticate(credential)
+    record_two = manager_two.authenticate(credential)
+    assert record_one is not None
+    assert record_two is not None
+
+    allowed_first, retry_first = manager_one.check_rate_limit(record_one.id)
+    allowed_second, retry_second = manager_two.check_rate_limit(record_two.id)
+
+    assert allowed_first is True
+    assert retry_first is None
+    assert allowed_second is False
+    assert retry_second is not None
+    assert retry_second > 0
+
+
+def test_distributed_rate_limit_retry_after_is_deterministic() -> None:
+    now = [120.0]
+    redis_client = _FakeRedisClient(now_fn=lambda: now[0])
+    manager = _build_manager(
+        redis_client=redis_client,
+        rate_limit_backend="redis",
+        wall_time_fn=lambda: now[0],
+        rate_limit_per_minute=1,
+    )
+    record, credential = manager.create_key(name="edge-limit", rate_limit_per_minute=1)
+    assert manager.authenticate(credential) is not None
+
+    allowed_first, retry_first = manager.check_rate_limit(record.id)
+    blocked_second, retry_second = manager.check_rate_limit(record.id)
+
+    assert allowed_first is True
+    assert retry_first is None
+    assert blocked_second is False
+    assert retry_second == 60
+
+    now[0] = 179.0
+    blocked_third, retry_third = manager.check_rate_limit(record.id)
+    assert blocked_third is False
+    assert retry_third == 1

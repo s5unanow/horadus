@@ -186,6 +186,16 @@ class Settings(BaseSettings):
         ge=1,
         description="Default per-key API request limit per minute",
     )
+    API_RATE_LIMIT_WINDOW_SECONDS: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        description="Rolling window size for API rate limiting in seconds",
+    )
+    API_RATE_LIMIT_REDIS_PREFIX: str = Field(
+        default="horadus:api_rate_limit",
+        description="Redis key prefix used for distributed API rate limiting buckets",
+    )
     API_KEYS_PERSIST_PATH: str | None = Field(
         default=None,
         description="Optional JSON file path for persisting runtime API key metadata",

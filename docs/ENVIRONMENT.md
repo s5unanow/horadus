@@ -23,6 +23,8 @@ This document lists environment variables used by the Horadus backend.
 | `API_KEYS` | empty | Comma-separated accepted API keys. |
 | `API_ADMIN_KEY` | empty | Required for key-management endpoints. |
 | `API_RATE_LIMIT_PER_MINUTE` | `120` | Per-key request budget. |
+| `API_RATE_LIMIT_WINDOW_SECONDS` | `60` | Distributed rate-limit window size. |
+| `API_RATE_LIMIT_REDIS_PREFIX` | `horadus:api_rate_limit` | Redis key prefix for per-key rate-limit buckets. |
 | `API_KEYS_PERSIST_PATH` | empty | Optional file path for persisted runtime API key metadata. |
 | `CORS_ORIGINS` | local origins | Comma-separated origin list. |
 | `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret; set a high-entropy value in production. |

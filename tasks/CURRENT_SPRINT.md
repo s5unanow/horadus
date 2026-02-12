@@ -15,6 +15,22 @@
 
 ## Completed This Sprint
 
+### TASK-062: Hermetic Integration Test Environment Parity
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Align local and CI integration environments to eliminate config drift and silent failures.
+
+**Completed**:
+- [x] Switched CI integration Postgres to the same repo Docker image (`docker/postgres/Dockerfile`) used locally, guaranteeing `timescaledb` and `vector` extension availability
+- [x] Added explicit CI extension verification to fail fast when required database capabilities are missing
+- [x] Unified integration DB/Redis URLs via shared CI env variables and mirrored local defaults in `Makefile` (`INTEGRATION_DATABASE_URL`, `INTEGRATION_REDIS_URL`)
+- [x] Removed split migration/test execution pattern in CI by running migrations and integration tests in a single strict shell step (`set -euo pipefail`)
+- [x] Added deterministic integration DB setup/teardown fixture (`tests/integration/conftest.py`) that truncates public tables before and after each integration test
+
+---
+
 ### TASK-061: Recency-Aware Novelty + Per-Indicator Decay
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

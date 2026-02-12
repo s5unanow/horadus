@@ -238,6 +238,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
+    decay_half_life_days: 10
     keywords: ["troops"]
 """.strip(),
         encoding="utf-8",
@@ -250,6 +251,7 @@ indicators:
     assert result.errors == []
     added = mock_db_session.add.call_args.args[0]
     assert added.indicators["military_movement"]["type"] == "leading"
+    assert added.indicators["military_movement"]["decay_half_life_days"] == 10
     assert added.definition["disqualifiers"][0]["effect"] == "reset_to_baseline"
     assert added.definition["falsification_criteria"]["decrease_confidence"] == [
         "Sustained de-escalation"

@@ -31,6 +31,7 @@ class TrendIndicatorConfig(BaseModel):
     weight: float = Field(..., ge=0.0, le=1.0)
     direction: Literal["escalatory", "de_escalatory"]
     type: Literal["leading", "lagging"] = "leading"
+    decay_half_life_days: int | None = Field(default=None, ge=1)
     keywords: list[str] = Field(default_factory=list)
 
 

@@ -57,6 +57,8 @@ MAX_DELTA_PER_EVENT: float = 0.5
 # Default values
 DEFAULT_DECAY_HALF_LIFE_DAYS: int = 30
 DEFAULT_BASELINE_PROBABILITY: float = 0.10
+DEFAULT_NOVELTY_MIN_SCORE: float = 0.30
+DEFAULT_NOVELTY_RECOVERY_HALF_LIFE_DAYS: float = 7.0
 
 
 # =============================================================================
@@ -172,6 +174,8 @@ class EvidenceFactors:
         credibility: Source reliability score
         corroboration: Factor from multiple sources
         novelty: Factor for new vs repeated info
+        evidence_age_days: Age of the signal/event in days
+        temporal_decay_multiplier: Time-decay multiplier applied to this indicator
         direction_multiplier: +1 for escalatory, -1 for de-escalatory
         raw_delta: Calculated delta before clamping
         clamped_delta: Final delta after clamping
@@ -183,6 +187,8 @@ class EvidenceFactors:
     credibility: float
     corroboration: float
     novelty: float
+    evidence_age_days: float
+    temporal_decay_multiplier: float
     direction_multiplier: float
     raw_delta: float
     clamped_delta: float
@@ -196,10 +202,38 @@ class EvidenceFactors:
             "credibility": self.credibility,
             "corroboration": self.corroboration,
             "novelty": self.novelty,
+            "evidence_age_days": self.evidence_age_days,
+            "temporal_decay_multiplier": self.temporal_decay_multiplier,
             "direction_multiplier": self.direction_multiplier,
             "raw_delta": self.raw_delta,
             "clamped_delta": self.clamped_delta,
         }
+
+
+def calculate_recency_novelty(
+    *,
+    last_seen_at: datetime | None,
+    as_of: datetime | None = None,
+    min_score: float = DEFAULT_NOVELTY_MIN_SCORE,
+    recovery_half_life_days: float = DEFAULT_NOVELTY_RECOVERY_HALF_LIFE_DAYS,
+) -> float:
+    """
+    Calculate a continuous novelty score from prior evidence recency.
+
+    - No prior evidence => 1.0 (fully novel)
+    - Very recent prior evidence => near `min_score`
+    - Older prior evidence => asymptotically approaches 1.0
+    """
+    if last_seen_at is None:
+        return 1.0
+
+    min_score = max(0.0, min(1.0, min_score))
+    half_life = max(0.1, recovery_half_life_days)
+    now = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
+    age_days = max(0.0, (now - _as_utc(last_seen_at)).total_seconds() / 86400.0)
+
+    novelty = 1.0 - (1.0 - min_score) * math.exp(-age_days / half_life)
+    return max(min_score, min(1.0, novelty))
 
 
 def calculate_evidence_delta(
@@ -211,6 +245,8 @@ def calculate_evidence_delta(
     direction: str,
     severity: float = 1.0,
     confidence: float = 1.0,
+    evidence_age_days: float = 0.0,
+    indicator_decay_half_life_days: float | None = None,
 ) -> tuple[float, EvidenceFactors]:
     """
     Calculate log-odds delta from evidence factors.
@@ -243,6 +279,8 @@ def calculate_evidence_delta(
                   - 0.7-0.9: Major (mobilization, direct threats)
                   - 1.0: Critical (active conflict, use of force)
         confidence: LLM's classification confidence (0.0 to 1.0, default 1.0)
+        evidence_age_days: Age of event evidence in days (0 means current)
+        indicator_decay_half_life_days: Optional indicator-specific temporal half-life
 
     Returns:
         Tuple of (delta, factors_breakdown)
@@ -273,10 +311,18 @@ def calculate_evidence_delta(
     # Clamp severity and confidence to valid range
     severity = max(0.0, min(1.0, severity))
     confidence = max(0.0, min(1.0, confidence))
+    novelty_score = max(0.0, min(1.0, novelty_score))
+    evidence_age_days = max(0.0, evidence_age_days)
 
     # Calculate corroboration factor
     # 1 source = 0.33, 4 sources = 0.67, 9+ sources = 1.0
     corroboration = min(1.0, math.sqrt(max(1, corroboration_count)) / 3.0)
+
+    if indicator_decay_half_life_days is None:
+        temporal_decay_multiplier = 1.0
+    else:
+        half_life = max(0.1, indicator_decay_half_life_days)
+        temporal_decay_multiplier = math.pow(0.5, evidence_age_days / half_life)
 
     # Direction multiplier
     direction_mult = 1.0 if direction == "escalatory" else -1.0
@@ -289,6 +335,7 @@ def calculate_evidence_delta(
         * source_credibility
         * corroboration
         * novelty_score
+        * temporal_decay_multiplier
         * direction_mult
     )
 
@@ -302,6 +349,8 @@ def calculate_evidence_delta(
         credibility=source_credibility,
         corroboration=corroboration,
         novelty=novelty_score,
+        evidence_age_days=evidence_age_days,
+        temporal_decay_multiplier=temporal_decay_multiplier,
         direction_multiplier=direction_mult,
         raw_delta=raw_delta,
         clamped_delta=clamped_delta,
@@ -433,6 +482,8 @@ class TrendEngine:
             credibility_score=factors.credibility,
             corroboration_factor=factors.corroboration,
             novelty_score=factors.novelty,
+            evidence_age_days=factors.evidence_age_days,
+            temporal_decay_factor=factors.temporal_decay_multiplier,
             severity_score=factors.severity,
             confidence_score=factors.confidence,
             delta_log_odds=delta,

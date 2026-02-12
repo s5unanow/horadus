@@ -15,6 +15,22 @@
 
 ## Completed This Sprint
 
+### TASK-061: Recency-Aware Novelty + Per-Indicator Decay
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Improve evidence weighting realism using continuous novelty and indicator-specific temporal decay.
+
+**Completed**:
+- [x] Replaced binary novelty with continuous recency-aware novelty scoring derived from latest prior evidence timestamp
+- [x] Added optional per-indicator `decay_half_life_days` support in trend config schema and pipeline weighting
+- [x] Extended evidence factor provenance with temporal fields (`evidence_age_days`, `temporal_decay_multiplier`) and persisted them to `trend_evidence`
+- [x] Added Alembic migration `0007_evidence_decay_fields` for new `trend_evidence` provenance columns
+- [x] Added unit coverage for recency novelty behavior, indicator decay weighting, and persisted provenance fields
+
+---
+
 ### TASK-060: Counterfactual Simulation API
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

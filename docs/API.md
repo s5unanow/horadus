@@ -72,6 +72,7 @@ curl -X POST http://localhost:8000/api/v1/sources \
 - `GET /api/v1/trends/{trend_id}/evidence`
 - `GET /api/v1/trends/{trend_id}/history`
 - `GET /api/v1/trends/{trend_id}/retrospective`
+- `POST /api/v1/trends/{trend_id}/simulate`
 - `POST /api/v1/trends/{trend_id}/outcomes`
 - `GET /api/v1/trends/{trend_id}/calibration`
 
@@ -85,6 +86,24 @@ Retrospective example:
 
 ```bash
 curl "http://localhost:8000/api/v1/trends/<trend-id>/retrospective?start_date=2026-01-01T00:00:00Z&end_date=2026-02-01T00:00:00Z"
+```
+
+Counterfactual simulation example (non-persistent):
+
+```bash
+curl -X POST "http://localhost:8000/api/v1/trends/<trend-id>/simulate" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "inject_hypothetical_signal",
+    "signal_type": "military_movement",
+    "indicator_weight": 0.04,
+    "source_credibility": 0.9,
+    "corroboration_count": 3,
+    "novelty_score": 1.0,
+    "direction": "escalatory",
+    "severity": 0.8,
+    "confidence": 0.95
+  }'
 ```
 
 Record an outcome for calibration:

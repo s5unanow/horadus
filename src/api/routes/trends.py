@@ -26,7 +26,7 @@ from src.core.risk import (
     get_risk_level,
 )
 from src.core.trend_config import TrendConfig
-from src.core.trend_engine import logodds_to_prob, prob_to_logodds
+from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
 from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
 
@@ -180,6 +180,96 @@ class TrendEvidenceResponse(BaseModel):
     delta_log_odds: float
     reasoning: str | None
     created_at: datetime
+
+
+class RemoveEventImpactSimulationRequest(BaseModel):
+    """Simulation payload for removing historical event impact from a trend."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "mode": "remove_event_impact",
+                "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                "signal_type": "military_movement",
+            }
+        }
+    )
+
+    mode: Literal["remove_event_impact"]
+    event_id: UUID
+    signal_type: str | None = Field(default=None, min_length=1)
+
+
+class InjectHypotheticalSignalSimulationRequest(BaseModel):
+    """Simulation payload for injecting a hypothetical signal impact."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "mode": "inject_hypothetical_signal",
+                "signal_type": "military_movement",
+                "indicator_weight": 0.04,
+                "source_credibility": 0.9,
+                "corroboration_count": 3,
+                "novelty_score": 1.0,
+                "direction": "escalatory",
+                "severity": 0.8,
+                "confidence": 0.95,
+            }
+        }
+    )
+
+    mode: Literal["inject_hypothetical_signal"]
+    signal_type: str = Field(..., min_length=1)
+    indicator_weight: float = Field(..., gt=0)
+    source_credibility: float = Field(..., ge=0, le=1)
+    corroboration_count: int = Field(..., ge=1)
+    novelty_score: float = Field(..., ge=0, le=1)
+    direction: Literal["escalatory", "de_escalatory"]
+    severity: float = Field(default=1.0, ge=0, le=1)
+    confidence: float = Field(default=1.0, ge=0, le=1)
+
+
+TrendSimulationRequest = Annotated[
+    RemoveEventImpactSimulationRequest | InjectHypotheticalSignalSimulationRequest,
+    Field(discriminator="mode"),
+]
+
+
+class TrendSimulationResponse(BaseModel):
+    """Response payload for counterfactual trend simulations."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "mode": "inject_hypothetical_signal",
+                "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
+                "current_probability": 0.18,
+                "projected_probability": 0.204,
+                "delta_probability": 0.024,
+                "delta_log_odds": 0.15,
+                "factor_breakdown": {
+                    "base_weight": 0.04,
+                    "severity": 0.8,
+                    "confidence": 0.95,
+                    "credibility": 0.9,
+                    "corroboration": 0.577,
+                    "novelty": 1.0,
+                    "direction_multiplier": 1.0,
+                    "raw_delta": 0.0158,
+                    "clamped_delta": 0.0158,
+                },
+            }
+        }
+    )
+
+    mode: Literal["remove_event_impact", "inject_hypothetical_signal"]
+    trend_id: UUID
+    current_probability: float
+    projected_probability: float
+    delta_probability: float
+    delta_log_odds: float
+    factor_breakdown: dict[str, Any]
 
 
 class TrendHistoryPoint(BaseModel):
@@ -798,6 +888,67 @@ async def get_trend_history(
     snapshots = list((await session.scalars(query)).all())
     downsampled = _downsample_snapshots(snapshots=snapshots, interval=interval)
     return [_to_history_point(snapshot) for snapshot in downsampled]
+
+
+@router.post("/{trend_id}/simulate", response_model=TrendSimulationResponse)
+async def simulate_trend(
+    trend_id: UUID,
+    payload: TrendSimulationRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TrendSimulationResponse:
+    """
+    Run a non-persistent trend projection from either historical removal or hypothetical injection.
+    """
+    trend = await _get_trend_or_404(session, trend_id)
+    current_log_odds = float(trend.current_log_odds)
+    current_probability = logodds_to_prob(current_log_odds)
+
+    if payload.mode == "remove_event_impact":
+        query = select(TrendEvidence).where(
+            TrendEvidence.trend_id == trend_id,
+            TrendEvidence.event_id == payload.event_id,
+        )
+        if payload.signal_type is not None:
+            query = query.where(TrendEvidence.signal_type == payload.signal_type)
+
+        evidence_rows = list((await session.scalars(query)).all())
+        if not evidence_rows:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No matching trend evidence found for requested simulation.",
+            )
+
+        removed_delta = sum(float(row.delta_log_odds) for row in evidence_rows)
+        delta_log_odds = -removed_delta
+        factor_breakdown: dict[str, Any] = {
+            "evidence_count": len(evidence_rows),
+            "removed_sum_delta_log_odds": round(removed_delta, 6),
+        }
+        if payload.signal_type is not None:
+            factor_breakdown["signal_type"] = payload.signal_type
+    else:
+        delta_log_odds, factors = calculate_evidence_delta(
+            signal_type=payload.signal_type,
+            indicator_weight=payload.indicator_weight,
+            source_credibility=payload.source_credibility,
+            corroboration_count=payload.corroboration_count,
+            novelty_score=payload.novelty_score,
+            direction=payload.direction,
+            severity=payload.severity,
+            confidence=payload.confidence,
+        )
+        factor_breakdown = factors.to_dict()
+
+    projected_probability = logodds_to_prob(current_log_odds + delta_log_odds)
+    return TrendSimulationResponse(
+        mode=payload.mode,
+        trend_id=trend.id,
+        current_probability=current_probability,
+        projected_probability=projected_probability,
+        delta_probability=projected_probability - current_probability,
+        delta_log_odds=delta_log_odds,
+        factor_breakdown=factor_breakdown,
+    )
 
 
 @router.get("/{trend_id}/retrospective", response_model=TrendRetrospectiveResponse)

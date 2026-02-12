@@ -62,6 +62,7 @@ Tasks that have been completed and verified.
 - TASK-055: Stuck Processing Reaper Worker ✅
 - TASK-056: Bounded Embedding Cache ✅
 - TASK-057: Runtime Resilience Guardrails ✅
+- TASK-060: Counterfactual Simulation API ✅
 - TASK-067: Report Narrative Prompt Hardening ✅
 - TASK-068: Gold-Set Change Governance and Baseline Supersession ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅

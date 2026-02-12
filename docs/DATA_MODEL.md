@@ -255,7 +255,9 @@ Audit trail of all probability updates.
 | signal_type | VARCHAR(100) | No | | Type of signal detected |
 | credibility_score | DECIMAL(3,2) | Yes | | Source credibility (0.00-1.00) |
 | corroboration_factor | DECIMAL(5,2) | Yes | | sqrt(sources)/3 |
-| novelty_score | DECIMAL(3,2) | Yes | | 1.0 new, 0.3 repeat |
+| novelty_score | DECIMAL(3,2) | Yes | | Continuous recency-aware novelty (0.30-1.00) |
+| evidence_age_days | DECIMAL(6,2) | Yes | | Event age in days at scoring time |
+| temporal_decay_factor | DECIMAL(5,4) | Yes | | Indicator temporal decay multiplier |
 | severity_score | DECIMAL(3,2) | Yes | | Event severity |
 | confidence_score | DECIMAL(3,2) | Yes | | LLM confidence |
 | delta_log_odds | DECIMAL(10,6) | No | | Probability change |
@@ -270,9 +272,12 @@ Audit trail of all probability updates.
 
 **Delta calculation:**
 ```
-delta = weight × credibility × corroboration × novelty × direction × severity × confidence
+delta = weight × credibility × corroboration × novelty × temporal_decay × direction × severity × confidence
 
-where direction = +1 (escalatory) or -1 (de_escalatory)
+where:
+  novelty = recency-aware continuous score for prior (trend_id, signal_type) evidence
+  temporal_decay = 0.5^(evidence_age_days / decay_half_life_days)
+  direction = +1 (escalatory) or -1 (de_escalatory)
 ```
 
 ---

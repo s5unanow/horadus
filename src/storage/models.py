@@ -558,6 +558,8 @@ class TrendEvidence(Base):
     credibility_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
     corroboration_factor: Mapped[float | None] = mapped_column(Numeric(5, 2))
     novelty_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
+    evidence_age_days: Mapped[float | None] = mapped_column(Numeric(6, 2))
+    temporal_decay_factor: Mapped[float | None] = mapped_column(Numeric(5, 4))
     severity_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
     confidence_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
 

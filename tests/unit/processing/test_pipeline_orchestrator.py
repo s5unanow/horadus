@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -381,7 +381,96 @@ async def test_process_items_skips_unknown_signal_weight(mock_db_session) -> Non
     assert result.errors == 0
     assert result.trend_impacts_seen == 1
     assert result.trend_updates == 0
-    mock_trend_engine.apply_evidence.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_items_applies_indicator_decay_factor(mock_db_session) -> None:
+    item = _build_item()
+    trend = _build_trend()
+    trend.decay_half_life_days = 30
+    trend.indicators["military_movement"]["decay_half_life_days"] = 7
+
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Seed summary",
+        extracted_when=datetime.now(tz=UTC) - timedelta(days=14),
+        extracted_claims={
+            "trend_impacts": [
+                {
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.8,
+                    "confidence": 0.9,
+                    "rationale": "Visible force buildup pattern",
+                }
+            ]
+        },
+        source_count=3,
+        unique_source_count=3,
+    )
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=True,
+                merged=False,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True)],
+                Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
+    tier2 = SimpleNamespace(
+        classify_event=AsyncMock(
+            return_value=(
+                Tier2EventResult(
+                    event_id=event.id,
+                    categories_count=1,
+                    trend_impacts_count=1,
+                ),
+                Tier2Usage(prompt_tokens=20, completion_tokens=6, api_calls=1),
+            )
+        )
+    )
+    mock_trend_engine = SimpleNamespace(
+        apply_evidence=AsyncMock(
+            return_value=TrendUpdate(
+                previous_probability=0.10,
+                new_probability=0.11,
+                delta_applied=0.01,
+                direction="up",
+            )
+        )
+    )
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None, None])
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+        trend_engine=mock_trend_engine,
+    )
+
+    await pipeline.process_items([item], trends=[trend])
+
+    call = mock_trend_engine.apply_evidence.await_args
+    factors = call.kwargs["factors"]
+    assert factors.evidence_age_days == pytest.approx(14.0, rel=0.05)
+    assert factors.temporal_decay_multiplier == pytest.approx(0.25, rel=0.05)
+    mock_trend_engine.apply_evidence.assert_awaited_once()
 
 
 @pytest.mark.asyncio

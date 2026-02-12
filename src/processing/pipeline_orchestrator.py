@@ -5,7 +5,7 @@ Processing pipeline orchestration for pending raw items.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
@@ -17,7 +17,7 @@ from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
 )
-from src.core.trend_engine import TrendEngine, calculate_evidence_delta
+from src.core.trend_engine import TrendEngine, calculate_evidence_delta, calculate_recency_novelty
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
@@ -423,6 +423,10 @@ class ProcessingPipeline:
                     signal_type=signal_type,
                 )
                 continue
+            indicator_decay_half_life_days = self._resolve_indicator_decay_half_life(
+                trend=trend, signal_type=signal_type
+            )
+            evidence_age_days = self._event_age_days(event)
 
             trend_id = trend.id
             if trend_id is None:
@@ -448,6 +452,8 @@ class ProcessingPipeline:
                 direction=impact["direction"],
                 severity=impact["severity"],
                 confidence=impact["confidence"],
+                evidence_age_days=evidence_age_days,
+                indicator_decay_half_life_days=indicator_decay_half_life_days,
             )
             update = await self.trend_engine.apply_evidence(
                 trend=trend,
@@ -493,17 +499,14 @@ class ProcessingPipeline:
         signal_type: str,
         event_id: UUID,
     ) -> float:
-        recent_window_start = datetime.now(tz=UTC) - timedelta(days=7)
         query = (
-            select(TrendEvidence.id)
+            select(func.max(TrendEvidence.created_at))
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.signal_type == signal_type)
             .where(TrendEvidence.event_id != event_id)
-            .where(TrendEvidence.created_at >= recent_window_start)
-            .limit(1)
         )
-        prior_evidence_id: UUID | None = await self.session.scalar(query)
-        return 0.3 if prior_evidence_id is not None else 1.0
+        last_seen_at: datetime | None = await self.session.scalar(query)
+        return calculate_recency_novelty(last_seen_at=last_seen_at)
 
     @staticmethod
     def _corroboration_count(event: Event) -> int:
@@ -541,6 +544,42 @@ class ProcessingPipeline:
         if weight <= 0:
             return None
         return weight
+
+    @staticmethod
+    def _resolve_indicator_decay_half_life(*, trend: Trend, signal_type: str) -> float | None:
+        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
+        indicator_config = indicators.get(signal_type)
+
+        if isinstance(indicator_config, dict):
+            raw_indicator_half_life = indicator_config.get("decay_half_life_days")
+            if isinstance(raw_indicator_half_life, str | int | float):
+                try:
+                    parsed = float(raw_indicator_half_life)
+                except (TypeError, ValueError):
+                    parsed = 0.0
+                if parsed > 0:
+                    return parsed
+
+        raw_trend_half_life = getattr(trend, "decay_half_life_days", None)
+        if isinstance(raw_trend_half_life, str | int | float):
+            try:
+                parsed = float(raw_trend_half_life)
+            except (TypeError, ValueError):
+                return None
+            if parsed > 0:
+                return parsed
+        return None
+
+    @staticmethod
+    def _event_age_days(event: Event) -> float:
+        reference_time = event.extracted_when or event.last_mention_at or event.first_seen_at
+        if reference_time is None:
+            return 0.0
+        if reference_time.tzinfo is None:
+            reference_time = reference_time.replace(tzinfo=UTC)
+        else:
+            reference_time = reference_time.astimezone(UTC)
+        return max(0.0, (datetime.now(tz=UTC) - reference_time).total_seconds() / 86400.0)
 
     @staticmethod
     def _parse_trend_impact(payload: Any) -> dict[str, Any] | None:

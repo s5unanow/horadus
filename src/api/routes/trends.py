@@ -159,6 +159,8 @@ class TrendEvidenceResponse(BaseModel):
                 "credibility_score": 0.9,
                 "corroboration_factor": 0.67,
                 "novelty_score": 1.0,
+                "evidence_age_days": 2.4,
+                "temporal_decay_factor": 0.91,
                 "severity_score": 0.8,
                 "confidence_score": 0.95,
                 "delta_log_odds": 0.021,
@@ -175,6 +177,8 @@ class TrendEvidenceResponse(BaseModel):
     credibility_score: float | None
     corroboration_factor: float | None
     novelty_score: float | None
+    evidence_age_days: float | None
+    temporal_decay_factor: float | None
     severity_score: float | None
     confidence_score: float | None
     delta_log_odds: float
@@ -602,6 +606,14 @@ def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
             else None
         ),
         novelty_score=float(evidence.novelty_score) if evidence.novelty_score is not None else None,
+        evidence_age_days=(
+            float(evidence.evidence_age_days) if evidence.evidence_age_days is not None else None
+        ),
+        temporal_decay_factor=(
+            float(evidence.temporal_decay_factor)
+            if evidence.temporal_decay_factor is not None
+            else None
+        ),
         severity_score=(
             float(evidence.severity_score) if evidence.severity_score is not None else None
         ),

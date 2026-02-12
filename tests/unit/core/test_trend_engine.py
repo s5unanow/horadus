@@ -22,6 +22,7 @@ from src.core.trend_engine import (
     TrendEngine,
     TrendUpdate,
     calculate_evidence_delta,
+    calculate_recency_novelty,
     format_direction,
     format_probability,
     logodds_to_prob,
@@ -243,6 +244,46 @@ class TestCalculateEvidenceDelta:
         # Should be proportional
         assert abs(delta_new) / abs(delta_old) == pytest.approx(1.0 / 0.3, rel=0.01)
 
+    def test_indicator_decay_affects_delta(self):
+        """Older evidence should be down-weighted by indicator decay half-life."""
+        delta_recent, factors_recent = calculate_evidence_delta(
+            signal_type="test",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            evidence_age_days=0.0,
+            indicator_decay_half_life_days=7.0,
+        )
+        delta_old, factors_old = calculate_evidence_delta(
+            signal_type="test",
+            indicator_weight=0.04,
+            source_credibility=0.9,
+            corroboration_count=1,
+            novelty_score=1.0,
+            direction="escalatory",
+            evidence_age_days=14.0,
+            indicator_decay_half_life_days=7.0,
+        )
+
+        assert abs(delta_old) < abs(delta_recent)
+        assert factors_recent.temporal_decay_multiplier == pytest.approx(1.0)
+        assert factors_old.temporal_decay_multiplier == pytest.approx(0.25, rel=0.01)
+        assert factors_old.evidence_age_days == pytest.approx(14.0)
+
+    def test_calculate_recency_novelty(self):
+        """Novelty should increase continuously as prior evidence ages."""
+        now = datetime.now(tz=UTC)
+        no_prior = calculate_recency_novelty(last_seen_at=None, as_of=now)
+        immediate_repeat = calculate_recency_novelty(last_seen_at=now, as_of=now)
+        stale_repeat = calculate_recency_novelty(last_seen_at=now - timedelta(days=14), as_of=now)
+
+        assert no_prior == pytest.approx(1.0)
+        assert 0.29 <= immediate_repeat <= 0.31
+        assert stale_repeat > immediate_repeat
+        assert stale_repeat < 1.0
+
     def test_severity_affects_delta(self):
         """Higher severity (magnitude) should produce larger delta."""
         delta_major, factors_major = calculate_evidence_delta(
@@ -410,6 +451,8 @@ class TestTrendEngine:
             credibility=0.9,
             corroboration=0.67,
             novelty=1.0,
+            evidence_age_days=0.0,
+            temporal_decay_multiplier=1.0,
             direction_multiplier=1.0,
             raw_delta=0.024,
             clamped_delta=0.024,
@@ -483,6 +526,11 @@ class TestTrendEngine:
 
         # Should have called session.add with an evidence record
         mock_session.add.assert_called_once()
+        evidence_record = mock_session.add.call_args.args[0]
+        assert evidence_record.evidence_age_days == pytest.approx(sample_factors.evidence_age_days)
+        assert evidence_record.temporal_decay_factor == pytest.approx(
+            sample_factors.temporal_decay_multiplier
+        )
 
     @pytest.mark.asyncio
     async def test_apply_evidence_duplicate_is_noop(self, mock_session, mock_trend, sample_factors):

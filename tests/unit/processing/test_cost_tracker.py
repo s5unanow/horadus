@@ -7,7 +7,8 @@ from types import SimpleNamespace
 import pytest
 
 from src.core.config import settings
-from src.processing.cost_tracker import TIER1, CostTracker
+from src.processing import cost_tracker as cost_tracker_module
+from src.processing.cost_tracker import TIER1, BudgetExceededError, CostTracker
 from src.storage.models import ApiUsage
 
 pytestmark = pytest.mark.unit
@@ -76,6 +77,7 @@ async def test_record_usage_updates_counters_and_cost(mock_db_session, monkeypat
         estimated_cost_usd=0,
     )
     mock_db_session.scalar.side_effect = [usage, Decimal("0.3")]
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [usage])
     tracker = CostTracker(session=mock_db_session)
 
     await tracker.record_usage(tier=TIER1, input_tokens=1_000_000, output_tokens=500_000)
@@ -85,6 +87,35 @@ async def test_record_usage_updates_counters_and_cost(mock_db_session, monkeypat
     assert usage.output_tokens == 500_000
     assert float(usage.estimated_cost_usd) == pytest.approx(0.3)
     assert mock_db_session.flush.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_record_usage_denies_when_call_limit_reached(mock_db_session, monkeypatch) -> None:
+    monkeypatch.setattr(settings, "TIER1_MAX_DAILY_CALLS", 1)
+    today = datetime.now(tz=UTC).date()
+    usage = ApiUsage(
+        usage_date=today,
+        tier=TIER1,
+        call_count=1,
+        input_tokens=100,
+        output_tokens=50,
+        estimated_cost_usd=0.1,
+    )
+    mock_db_session.scalar.return_value = usage
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [usage])
+    budget_denials: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        cost_tracker_module,
+        "record_budget_denial",
+        lambda *, tier, reason: budget_denials.append((tier, reason)),
+    )
+    tracker = CostTracker(session=mock_db_session)
+
+    with pytest.raises(BudgetExceededError, match="daily call limit"):
+        await tracker.record_usage(tier=TIER1, input_tokens=1000, output_tokens=100)
+
+    assert usage.call_count == 1
+    assert budget_denials == [(TIER1, "daily_call_limit")]
 
 
 @pytest.mark.asyncio

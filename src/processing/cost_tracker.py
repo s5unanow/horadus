@@ -10,9 +10,11 @@ from typing import Any
 
 import structlog
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.observability import record_budget_denial
 from src.storage.models import ApiUsage
 
 logger = structlog.get_logger(__name__)
@@ -42,10 +44,17 @@ class CostTracker:
 
     async def ensure_within_budget(self, tier: str) -> None:
         """Raise BudgetExceededError if the requested tier budget is exhausted."""
-        allowed, reason = await self.check_budget(tier)
+        normalized_tier = self._normalize_tier(tier)
+        allowed, reason = await self.check_budget(normalized_tier)
         if allowed:
             return
-        msg = reason or f"{tier} budget exceeded"
+        reason_code = self._denial_reason_code(reason)
+        self._log_budget_denial(
+            tier=normalized_tier,
+            reason_code=reason_code,
+            reason_detail=reason,
+        )
+        msg = reason or f"{normalized_tier} budget exceeded"
         raise BudgetExceededError(msg)
 
     async def check_budget(self, tier: str) -> tuple[bool, str | None]:
@@ -78,11 +87,9 @@ class CostTracker:
         input_tokens: int,
         output_tokens: int,
     ) -> None:
-        """Persist token and cost counters for one successful API call."""
+        """Atomically enforce limits and persist usage for one API call."""
         normalized_tier = self._normalize_tier(tier)
         today = datetime.now(tz=UTC).date()
-        usage = await self._get_or_create_usage(today, normalized_tier)
-
         safe_input_tokens = max(0, int(input_tokens))
         safe_output_tokens = max(0, int(output_tokens))
         input_rate, output_rate = COST_PER_1M_TOKENS.get(
@@ -93,7 +100,37 @@ class CostTracker:
             Decimal(safe_output_tokens) / Decimal(1_000_000)
         ) * output_rate
 
-        usage.call_count += 1
+        usage = await self._get_or_create_usage(today, normalized_tier)
+        usage_rows = await self._load_usage_rows_for_date(today, for_update=True)
+        usage_by_tier = {row.tier: row for row in usage_rows}
+        usage = usage_by_tier.get(normalized_tier, usage)
+
+        call_limit = self._call_limit_for_tier(normalized_tier)
+        projected_calls = usage.call_count + 1
+        if call_limit > 0 and projected_calls > call_limit:
+            reason = f"{normalized_tier} daily call limit ({call_limit}) exceeded"
+            self._log_budget_denial(
+                tier=normalized_tier,
+                reason_code="daily_call_limit",
+                reason_detail=reason,
+            )
+            raise BudgetExceededError(reason)
+
+        total_cost = sum(Decimal(str(row.estimated_cost_usd)) for row in usage_rows)
+        daily_limit = Decimal(str(settings.DAILY_COST_LIMIT_USD))
+        projected_total_cost = total_cost + estimated_cost
+        if daily_limit > 0 and projected_total_cost > daily_limit:
+            reason = f"daily cost limit (${settings.DAILY_COST_LIMIT_USD}) exceeded"
+            self._log_budget_denial(
+                tier=normalized_tier,
+                reason_code="daily_cost_limit",
+                reason_detail=reason,
+                projected_total_cost=projected_total_cost,
+                daily_limit=daily_limit,
+            )
+            raise BudgetExceededError(reason)
+
+        usage.call_count = projected_calls
         usage.input_tokens += safe_input_tokens
         usage.output_tokens += safe_output_tokens
         usage.estimated_cost_usd = float(Decimal(str(usage.estimated_cost_usd)) + estimated_cost)
@@ -141,7 +178,11 @@ class CostTracker:
             "tiers": tiers,
         }
 
-    async def _get_or_create_usage(self, usage_date: date, tier: str) -> ApiUsage:
+    async def _get_or_create_usage(
+        self,
+        usage_date: date,
+        tier: str,
+    ) -> ApiUsage:
         query = (
             select(ApiUsage)
             .where(ApiUsage.usage_date == usage_date)
@@ -152,17 +193,40 @@ class CostTracker:
         if usage is not None:
             return usage
 
-        usage = ApiUsage(
-            usage_date=usage_date,
-            tier=tier,
-            call_count=0,
-            input_tokens=0,
-            output_tokens=0,
-            estimated_cost_usd=0,
+        try:
+            async with self.session.begin_nested():
+                usage = ApiUsage(
+                    usage_date=usage_date,
+                    tier=tier,
+                    call_count=0,
+                    input_tokens=0,
+                    output_tokens=0,
+                    estimated_cost_usd=0,
+                )
+                self.session.add(usage)
+                await self.session.flush()
+            return usage
+        except IntegrityError:
+            pass
+
+        existing = await self.session.scalar(query)
+        if existing is None:
+            msg = f"Failed to create or load api_usage row for {usage_date} ({tier})"
+            raise RuntimeError(msg)
+        return existing
+
+    async def _load_usage_rows_for_date(
+        self,
+        usage_date: date,
+        *,
+        for_update: bool,
+    ) -> list[ApiUsage]:
+        query = (
+            select(ApiUsage).where(ApiUsage.usage_date == usage_date).order_by(ApiUsage.tier.asc())
         )
-        self.session.add(usage)
-        await self.session.flush()
-        return usage
+        if for_update:
+            query = query.with_for_update()
+        return list((await self.session.scalars(query)).all())
 
     async def _total_cost_for_date(self, usage_date: date) -> Decimal:
         query = (
@@ -209,3 +273,33 @@ class CostTracker:
             msg = f"Unsupported cost tracker tier '{tier}'"
             raise ValueError(msg)
         return normalized
+
+    @staticmethod
+    def _denial_reason_code(reason: str | None) -> str:
+        normalized = (reason or "").lower()
+        if "daily call limit" in normalized:
+            return "daily_call_limit"
+        if "daily cost limit" in normalized:
+            return "daily_cost_limit"
+        return "budget_denied"
+
+    def _log_budget_denial(
+        self,
+        *,
+        tier: str,
+        reason_code: str,
+        reason_detail: str | None,
+        projected_total_cost: Decimal | None = None,
+        daily_limit: Decimal | None = None,
+    ) -> None:
+        record_budget_denial(tier=tier, reason=reason_code)
+        logger.warning(
+            "LLM budget enforcement denied request",
+            tier=tier,
+            reason_code=reason_code,
+            reason=reason_detail,
+            projected_total_cost_usd=(
+                float(projected_total_cost) if projected_total_cost is not None else None
+            ),
+            daily_limit_usd=float(daily_limit) if daily_limit is not None else None,
+        )

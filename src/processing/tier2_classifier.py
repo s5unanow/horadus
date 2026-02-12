@@ -254,11 +254,6 @@ class Tier2Classifier:
             temperature=0,
             response_format={"type": "json_object"},
         )
-        output = self._parse_output(response)
-        self._validate_output_alignment(output, trends=trends)
-        self._apply_output(event=event, output=output)
-        await self.session.flush()
-
         usage = self._extract_usage(response)
         usage.api_calls = 1
         await self.cost_tracker.record_usage(
@@ -271,6 +266,11 @@ class Tier2Classifier:
             completion_tokens=usage.completion_tokens,
             model=active_model,
         )
+
+        output = self._parse_output(response)
+        self._validate_output_alignment(output, trends=trends)
+        self._apply_output(event=event, output=output)
+        await self.session.flush()
 
         result = Tier2EventResult(
             event_id=event.id,

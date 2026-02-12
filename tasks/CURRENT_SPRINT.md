@@ -9,12 +9,27 @@
 ## Active Tasks
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
-- `TASK-047` Pinned Evaluation Baseline Artifact — Blocked by provider quota (`429 insufficient_quota`) while generating benchmark artifact
+- `TASK-047` Pinned Evaluation Baseline Artifact — Blocked by Tier-2 output validation failures (`duplicated trend id`) during benchmark runs beyond single-item scope
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` — Awaiting manual trend authoring/reviewer sign-off
 
 ---
 
 ## Completed This Sprint
+
+### TASK-053: Atomic Budget Enforcement Under Concurrency
+**Status**: DONE ✓  
+**Priority**: P1 (Critical)  
+**Spec**: `tasks/BACKLOG.md`
+
+Eliminate race windows between budget checks and usage recording across concurrent workers.
+
+**Completed**:
+- [x] Reworked `CostTracker.record_usage` to enforce check+record atomically in one transactional path with row locking
+- [x] Prevented call/cost counter overshoot under concurrent execution by validating projected totals before write
+- [x] Added structured denial logging and Prometheus metric (`llm_budget_denials_total`) for budget enforcement denials
+- [x] Added concurrency integration tests for call-limit and cost-limit overshoot scenarios
+
+---
 
 ### TASK-052: Distributed Rate Limiting + Admin Audit Trail
 **Status**: DONE ✓  

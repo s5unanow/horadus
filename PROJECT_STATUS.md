@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-10
+**Last Updated**: 2026-02-12
 **Current Phase**: Phase 6 - Calibration (complete)
 
 ## Progress Overview
@@ -151,6 +151,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Benchmark artifacts now include dataset fingerprint metadata for comparison integrity
 - [x] Distributed Redis-backed API rate limiting with deterministic Retry-After semantics
 - [x] Structured admin auth audit logs for key-management operations (list/create/revoke/rotate)
+- [x] Atomic budget check-and-record enforcement under concurrency with denial telemetry (`llm_budget_denials_total`)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -158,22 +159,22 @@ Phase 6: Calibration (NEW)   [████████████████�
 ## In Progress
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
-- `TASK-047` Pinned Evaluation Baseline Artifact (blocked by provider quota during benchmark generation)
+- `TASK-047` Pinned Evaluation Baseline Artifact (blocked by Tier-2 duplicate trend-id output validation during benchmark generation)
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` (manual trend definition/review pending)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
-- `TASK-047` requires available provider quota to run benchmark and pin `ai/eval/baselines/current.json`.
+- `TASK-047` requires Tier-2 duplicate trend-id handling/alignment to complete multi-item benchmark and pin `ai/eval/baselines/current.json`.
 - `TASK-066` requires human-authored trend definitions and reviewer sign-off before completion.
 
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-047` pinned benchmark baseline artifact after API key is configured
-3. Complete `TASK-053` atomic budget enforcement under concurrency
-4. Complete `TASK-054` LLM input safety guardrails (injection + token precheck)
-5. Complete `TASK-057` runtime resilience guardrails
+2. Complete `TASK-047` pinned benchmark baseline artifact after Tier-2 duplicate-id blocker is resolved
+3. Complete `TASK-054` LLM input safety guardrails (injection + token precheck)
+4. Complete `TASK-057` runtime resilience guardrails
+5. Complete `TASK-060` counterfactual simulation API
 
 ## Expert Feedback Integration ✅
 
@@ -215,7 +216,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- None yet
+- Benchmark runs beyond single-item scope can fail on strict Tier-2 alignment when model output duplicates trend IDs (`TASK-047` blocker).
 
 ## Architecture Validated ✅
 

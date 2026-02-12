@@ -57,6 +57,7 @@ Tasks that have been completed and verified.
 - TASK-051: API Key Hash Hardening and Migration ✅
 - TASK-052: Distributed Rate Limiting + Admin Audit Trail ✅
 - TASK-053: Atomic Budget Enforcement Under Concurrency ✅
+- TASK-054: LLM Input Safety Guardrails (Injection + Token Precheck) ✅
 - TASK-055: Stuck Processing Reaper Worker ✅
 - TASK-056: Bounded Embedding Cache ✅
 - TASK-067: Report Narrative Prompt Hardening ✅

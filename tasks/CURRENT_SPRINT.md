@@ -16,6 +16,23 @@
 
 ## Completed This Sprint
 
+### TASK-054: LLM Input Safety Guardrails (Injection + Token Precheck)
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Harden Tier1/Tier2 input handling against malicious prompt content and context-window overruns.
+
+**Completed**:
+- [x] Added explicit untrusted-content delimiters in Tier1/Tier2 payloads (`UNTRUSTED_ARTICLE_CONTENT`, `UNTRUSTED_EVENT_CONTEXT`)
+- [x] Added token-estimation safety helpers and deterministic truncation markers (`[TRUNCATED]`)
+- [x] Added Tier1 pre-call token budget checks with automatic batch splitting for oversized payloads
+- [x] Added Tier2 payload budget enforcement with context-chunk reduction before LLM calls
+- [x] Added unit tests covering adversarial instruction-like content and token-budget truncation behavior
+- [x] Updated Tier1/Tier2 prompt contracts to explicitly ignore instruction-like strings inside untrusted content blocks
+
+---
+
 ### TASK-053: Atomic Budget Enforcement Under Concurrency
 **Status**: DONE ✓  
 **Priority**: P1 (Critical)  

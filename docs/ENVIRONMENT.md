@@ -80,6 +80,9 @@ This document lists environment variables used by the Horadus backend.
 | `ENABLE_GDELT_INGESTION` | `true` | Enables periodic GDELT collection. |
 | `ENABLE_TELEGRAM_INGESTION` | `false` | Enables Telegram ingestion path. |
 | `ENABLE_PROCESSING_PIPELINE` | `true` | Enables processing task execution. |
+| `WORKER_HEARTBEAT_REDIS_KEY` | `horadus:worker:last_activity` | Redis key where workers publish latest activity heartbeat payload. |
+| `WORKER_HEARTBEAT_STALE_SECONDS` | `900` | Age threshold after which worker heartbeat is treated as stale in health checks. |
+| `WORKER_HEARTBEAT_TTL_SECONDS` | `3600` | TTL for worker heartbeat key in Redis. |
 | `RSS_COLLECTION_INTERVAL` | `30` | In minutes. |
 | `GDELT_COLLECTION_INTERVAL` | `60` | In minutes. |
 | `TREND_SNAPSHOT_INTERVAL_MINUTES` | `60` | Snapshot cadence. |
@@ -114,6 +117,7 @@ This document lists environment variables used by the Horadus backend.
 | `DATABASE_URL_SYNC` | derived | Sync URL used by Alembic. |
 | `DATABASE_POOL_SIZE` | `10` | SQLAlchemy async pool size. |
 | `DATABASE_MAX_OVERFLOW` | `20` | SQLAlchemy max overflow connections. |
+| `DATABASE_POOL_TIMEOUT_SECONDS` | `30` | Seconds to wait for a pooled DB connection before timeout. |
 | `REDIS_URL` | `redis://localhost:6379/0` | General Redis connection URL. |
 
 ## File-Based Secrets (`*_FILE`)

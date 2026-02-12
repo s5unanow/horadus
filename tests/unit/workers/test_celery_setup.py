@@ -18,6 +18,11 @@ celery_app_module = importlib.import_module("src.workers.celery_app")
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def disable_worker_heartbeat(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(tasks_module, "_record_worker_activity", lambda **_: None)
+
+
 def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -117,6 +122,49 @@ def test_celery_routes_include_processing_queue() -> None:
     assert routes["workers.reap_stale_processing_items"]["queue"] == "processing"
     assert routes["workers.generate_weekly_reports"]["queue"] == "processing"
     assert routes["workers.generate_monthly_reports"]["queue"] == "processing"
+
+
+def test_run_task_with_heartbeat_records_start_and_success(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, str | None]] = []
+
+    def fake_record(*, task_name: str, status: str, error: str | None = None) -> None:
+        calls.append((task_name, status, error))
+
+    monkeypatch.setattr(tasks_module, "_record_worker_activity", fake_record)
+
+    result = tasks_module._run_task_with_heartbeat(
+        task_name="workers.sample",
+        runner=lambda: {"status": "ok"},
+    )
+
+    assert result == {"status": "ok"}
+    assert calls == [
+        ("workers.sample", "started", None),
+        ("workers.sample", "ok", None),
+    ]
+
+
+def test_run_task_with_heartbeat_records_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[str, str, str | None]] = []
+
+    def fake_record(*, task_name: str, status: str, error: str | None = None) -> None:
+        calls.append((task_name, status, error))
+
+    monkeypatch.setattr(tasks_module, "_record_worker_activity", fake_record)
+
+    def failing_runner() -> dict[str, object]:
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        tasks_module._run_task_with_heartbeat(
+            task_name="workers.sample",
+            runner=failing_runner,
+        )
+
+    assert calls[0] == ("workers.sample", "started", None)
+    assert calls[1][0] == "workers.sample"
+    assert calls[1][1] == "failed"
+    assert "boom" in str(calls[1][2])
 
 
 def test_collect_rss_task_uses_async_collector(

@@ -7,6 +7,7 @@ including database and Redis connectivity checks.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from typing import Any
 
@@ -40,6 +41,7 @@ class HealthStatus(BaseModel):
                 "checks": {
                     "database": {"status": "healthy", "latency_ms": 3.2},
                     "redis": {"status": "healthy", "latency_ms": 1.8},
+                    "worker": {"status": "healthy", "age_seconds": 12.4},
                 },
             }
         }
@@ -102,6 +104,11 @@ async def health_check(
     redis_check = await check_redis()
     checks["redis"] = redis_check
     if redis_check["status"] != "healthy":
+        overall_status = "degraded" if overall_status == "healthy" else overall_status
+
+    worker_check = await check_worker_activity()
+    checks["worker"] = worker_check
+    if worker_check["status"] != "healthy":
         overall_status = "degraded" if overall_status == "healthy" else overall_status
 
     return HealthStatus(
@@ -193,6 +200,70 @@ async def check_redis() -> dict[str, Any]:
         }
     except Exception as e:
         logger.warning("Redis health check failed", error=str(e))
+        return {
+            "status": "unhealthy",
+            "message": str(e),
+        }
+
+
+async def check_worker_activity() -> dict[str, Any]:
+    """Check latest worker activity heartbeat from Redis."""
+    try:
+        import redis.asyncio as redis
+
+        from src.core.config import settings
+
+        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        raw_payload = await client.get(settings.WORKER_HEARTBEAT_REDIS_KEY)
+        await client.close()
+
+        if not raw_payload:
+            return {
+                "status": "unhealthy",
+                "message": "No worker heartbeat found",
+            }
+
+        try:
+            payload = json.loads(raw_payload)
+        except json.JSONDecodeError:
+            return {
+                "status": "unhealthy",
+                "message": "Worker heartbeat payload is invalid JSON",
+            }
+
+        timestamp_raw = payload.get("timestamp")
+        if not isinstance(timestamp_raw, str) or not timestamp_raw.strip():
+            return {
+                "status": "unhealthy",
+                "message": "Worker heartbeat timestamp missing",
+            }
+
+        last_seen = datetime.fromisoformat(timestamp_raw.replace("Z", "+00:00"))
+        now = datetime.now(UTC)
+        age_seconds = max(0.0, (now - last_seen.astimezone(UTC)).total_seconds())
+        stale_threshold = float(settings.WORKER_HEARTBEAT_STALE_SECONDS)
+        if age_seconds > stale_threshold:
+            return {
+                "status": "unhealthy",
+                "age_seconds": round(age_seconds, 2),
+                "last_task": payload.get("task"),
+                "last_status": payload.get("status"),
+                "message": f"Worker heartbeat stale (>{settings.WORKER_HEARTBEAT_STALE_SECONDS}s)",
+            }
+
+        return {
+            "status": "healthy",
+            "age_seconds": round(age_seconds, 2),
+            "last_task": payload.get("task"),
+            "last_status": payload.get("status"),
+        }
+    except ImportError:
+        return {
+            "status": "skipped",
+            "message": "Redis client not installed",
+        }
+    except Exception as e:
+        logger.warning("Worker heartbeat check failed", error=str(e))
         return {
             "status": "unhealthy",
             "message": str(e),

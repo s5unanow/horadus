@@ -1,6 +1,6 @@
 """Add Timescale retention/compression policies for trend snapshots.
 
-Revision ID: 0006_add_trend_snapshot_retention_compression
+Revision ID: 0006_snapshot_retention
 Revises: 0005_add_processing_started_at
 Create Date: 2026-02-12
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0006_add_trend_snapshot_retention_compression"
+revision = "0006_snapshot_retention"
 down_revision = "0005_add_processing_started_at"
 branch_labels = None
 depends_on = None

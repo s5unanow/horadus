@@ -12,6 +12,7 @@ from src.api.routes.feedback import (
     create_event_feedback,
     create_trend_override,
     list_feedback,
+    list_review_queue,
 )
 from src.storage.models import Event, HumanFeedback, Trend, TrendEvidence
 
@@ -168,3 +169,150 @@ async def test_create_trend_override_returns_404_for_unknown_trend(mock_db_sessi
         )
 
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_list_review_queue_orders_by_ranking_score(mock_db_session) -> None:
+    trend = Trend(
+        id=uuid4(),
+        name="EU-Russia",
+        definition={"id": "eu-russia"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-1.0,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    low_event = Event(
+        id=uuid4(),
+        canonical_summary="Low-priority event",
+        lifecycle_status="confirmed",
+        source_count=4,
+        unique_source_count=4,
+        has_contradictions=False,
+    )
+    high_event = Event(
+        id=uuid4(),
+        canonical_summary="High-priority contradictory event",
+        lifecycle_status="confirmed",
+        source_count=3,
+        unique_source_count=2,
+        has_contradictions=True,
+        extracted_claims={
+            "claim_graph": {
+                "links": [
+                    {"relation": "contradict"},
+                    {"relation": "contradict"},
+                ]
+            }
+        },
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [low_event, high_event])
+    mock_db_session.execute.side_effect = [
+        SimpleNamespace(
+            all=lambda: [
+                (
+                    low_event.id,
+                    trend.id,
+                    trend.name,
+                    "military_movement",
+                    0.20,
+                    0.95,
+                    0.90,
+                ),
+                (
+                    high_event.id,
+                    trend.id,
+                    trend.name,
+                    "military_movement",
+                    0.30,
+                    0.40,
+                    0.30,
+                ),
+            ]
+        ),
+        SimpleNamespace(all=list),
+    ]
+
+    result = await list_review_queue(days=7, limit=10, session=mock_db_session)
+
+    assert len(result) == 2
+    assert result[0].event_id == high_event.id
+    assert result[0].ranking_score > result[1].ranking_score
+
+
+@pytest.mark.asyncio
+async def test_list_review_queue_filters_unreviewed_and_trend(mock_db_session) -> None:
+    trend_a = Trend(
+        id=uuid4(),
+        name="Trend A",
+        definition={"id": "trend-a"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-1.0,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    trend_b = Trend(
+        id=uuid4(),
+        name="Trend B",
+        definition={"id": "trend-b"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-1.0,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    reviewed_event = Event(
+        id=uuid4(),
+        canonical_summary="Reviewed",
+        lifecycle_status="confirmed",
+        source_count=2,
+        unique_source_count=2,
+    )
+    candidate_event = Event(
+        id=uuid4(),
+        canonical_summary="Needs review",
+        lifecycle_status="confirmed",
+        source_count=2,
+        unique_source_count=2,
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(
+        all=lambda: [reviewed_event, candidate_event]
+    )
+    mock_db_session.execute.side_effect = [
+        SimpleNamespace(
+            all=lambda: [
+                (
+                    reviewed_event.id,
+                    trend_a.id,
+                    trend_a.name,
+                    "military_movement",
+                    0.15,
+                    0.70,
+                    0.60,
+                ),
+                (
+                    candidate_event.id,
+                    trend_b.id,
+                    trend_b.name,
+                    "sanctions",
+                    0.25,
+                    0.55,
+                    0.50,
+                ),
+            ]
+        ),
+        SimpleNamespace(all=lambda: [(reviewed_event.id, "pin")]),
+    ]
+
+    unreviewed = await list_review_queue(
+        limit=10,
+        trend_id=trend_b.id,
+        unreviewed_only=True,
+        session=mock_db_session,
+    )
+
+    assert len(unreviewed) == 1
+    assert unreviewed[0].event_id == candidate_event.id
+    assert unreviewed[0].feedback_count == 0

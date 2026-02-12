@@ -165,6 +165,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Advisory source/source-tier reliability diagnostics in calibration dashboard output with sparse-sample confidence gating (read-only)
 - [x] Historical replay champion/challenger harness with quality/cost/latency comparison artifacts and documented promotion gates
 - [x] Independence-aware corroboration using claim-graph support/contradiction links and source-cluster-weighted corroboration scoring
+- [x] Active-learning review queue endpoint (`GET /api/v1/review-queue`) with deterministic uncertainty/delta/contradiction ranking
 
 ## In Progress
 
@@ -178,10 +179,9 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-059` active-learning human review queue (autonomous)
-2. Complete `TASK-058` vector retrieval quality tuning (autonomous)
-3. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-4. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
+1. Complete `TASK-058` vector retrieval quality tuning (autonomous)
+2. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
+3. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
 
 ## Expert Feedback Integration ✅
 

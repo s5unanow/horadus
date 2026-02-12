@@ -207,6 +207,7 @@ curl -X POST http://localhost:8000/api/v1/auth/keys \
 ## Feedback
 
 - `GET /api/v1/feedback`
+- `GET /api/v1/review-queue`
 - `POST /api/v1/events/{event_id}/feedback` (`pin`, `mark_noise`, `invalidate`)
 - `POST /api/v1/trends/{trend_id}/override`
 
@@ -216,4 +217,10 @@ Invalidate example:
 curl -X POST "http://localhost:8000/api/v1/events/<event-id>/feedback" \
   -H "Content-Type: application/json" \
   -d '{"action":"invalidate","notes":"Analyst invalidation after contradiction review"}'
+```
+
+Review queue example:
+
+```bash
+curl "http://localhost:8000/api/v1/review-queue?days=7&limit=25&unreviewed_only=true"
 ```

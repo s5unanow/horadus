@@ -15,6 +15,22 @@
 
 ## Completed This Sprint
 
+### TASK-059: Active-Learning Human Review Queue
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Prioritize analyst review with deterministic expected-information-gain ranking.
+
+**Completed**:
+- [x] Added `GET /api/v1/review-queue` endpoint for ranked analyst candidates
+- [x] Implemented ranking formula `uncertainty_score x projected_delta x contradiction_risk`
+- [x] Added triage payload fields for reviewer context and label-provenance follow-up (`feedback_count`, `feedback_actions`, `requires_human_verification`)
+- [x] Added filters for `trend_id`, `days`, and `unreviewed_only` to support queue slicing
+- [x] Added unit tests for deterministic ranking order and filter behavior
+
+---
+
 ### TASK-065: Independence-Aware Corroboration and Claim Graph
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

@@ -9,12 +9,27 @@
 ## Active Tasks
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
-- `TASK-047` Pinned Evaluation Baseline Artifact — Blocked by Tier-2 output validation failures (`duplicated trend id`) during benchmark runs beyond single-item scope
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` — Awaiting manual trend authoring/reviewer sign-off
 
 ---
 
 ## Completed This Sprint
+
+### TASK-047: Pinned Evaluation Baseline Artifact
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Create and maintain a committed benchmark baseline artifact for prompt/model comparisons.
+
+**Completed**:
+- [x] Updated benchmark execution to tolerate per-item Tier-1/Tier-2 output alignment `ValueError`s and record failures in metrics instead of aborting full runs
+- [x] Added benchmark unit coverage for Tier-1 and Tier-2 per-item failure handling paths
+- [x] Generated benchmark artifact from current accepted configuration (`baseline`) and pinned it at `ai/eval/baselines/current.json`
+- [x] Confirmed pinned artifact includes run context metadata (`generated_at`, model config, `dataset_scope`, `queue_threshold`, dataset fingerprints)
+- [x] Confirmed baseline process docs remain aligned with committed path and promotion procedure
+
+---
 
 ### TASK-057: Runtime Resilience Guardrails
 **Status**: DONE ✓  

@@ -51,6 +51,7 @@ Tasks that have been completed and verified.
 - TASK-043: Eval Threshold Alignment + Label Provenance ✅
 - TASK-045: Gold-Set Quality Audit Tooling ✅
 - TASK-046: Release Process Runbook ✅
+- TASK-047: Pinned Evaluation Baseline Artifact ✅
 - TASK-048: CI Gate Hardening for Integration and Security ✅
 - TASK-049: Documentation Drift and Consistency Cleanup ✅
 - TASK-050: Upgrade Tier 2 LLM from gpt-4o-mini to gpt-4.1-mini ✅

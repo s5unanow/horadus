@@ -65,7 +65,7 @@ repos:
         args: [--baseline, .secrets.baseline]
         # Exclude low-risk, high-churn docs/task text from secrets scanning.
         # Keep scanning code/config where secrets are most likely to appear.
-        exclude: '(^docs/|^tasks/|\.env\.example$)'
+        exclude: '(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)'
 
   # -------------------------------------------------------------------------
   # Security: Bandit (Python security linter)

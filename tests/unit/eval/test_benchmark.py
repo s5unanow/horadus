@@ -136,6 +136,21 @@ class _FakeTier2Classifier:
         )
 
 
+class _FailingTier1Classifier(_FakeTier1Classifier):
+    async def classify_items(self, items, trends):
+        if items and "troop movement" in (items[0].title or "").lower():
+            msg = "Tier 1 response trend ids mismatch for item"
+            raise ValueError(msg)
+        return await super().classify_items(items, trends)
+
+
+class _FailingTier2Classifier(_FakeTier2Classifier):
+    async def classify_event(self, *, event, trends, context_chunks):
+        _ = (event, trends, context_chunks)
+        msg = "Tier 2 response duplicated trend id eu-russia"
+        raise ValueError(msg)
+
+
 @pytest.mark.asyncio
 async def test_run_gold_set_benchmark_writes_results(
     tmp_path: Path,
@@ -242,3 +257,67 @@ def test_load_gold_set_requires_human_verified_rows(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="no human-verified items"):
         benchmark_module.load_gold_set(path, require_human_verified=True)
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_records_tier1_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_gold_set(gold_set_path)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FailingTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    tier1_metrics = payload["configs"][0]["tier1_metrics"]
+    assert tier1_metrics["items_total"] == 2
+    assert tier1_metrics["failures"] == 1
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_records_tier2_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_gold_set(gold_set_path)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FailingTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    tier2_metrics = payload["configs"][0]["tier2_metrics"]
+    usage = payload["configs"][0]["usage"]
+    assert tier2_metrics["items_total"] == 1
+    assert tier2_metrics["failures"] == 1
+    assert usage["tier2_api_calls"] == 0

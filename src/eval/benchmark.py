@@ -72,6 +72,7 @@ class GoldSetItem:
 class _Tier1Metrics:
     queue_threshold: int = settings.TIER1_RELEVANCE_THRESHOLD
     items_total: int = 0
+    failures: int = 0
     score_pairs_total: int = 0
     queue_accuracy_total: int = 0
     score_abs_error_sum: float = 0.0
@@ -96,6 +97,14 @@ class _Tier1Metrics:
         if predicted.should_queue_tier2 == expected_queue:
             self.queue_accuracy_total += 1
 
+    def record_failure(self, *, gold: GoldSetItem) -> None:
+        self.items_total += 1
+        self.failures += 1
+        for expected_score in gold.tier1.trend_scores.values():
+            self.score_pairs_total += 1
+            self.score_abs_error_sum += abs(expected_score)
+        self.max_relevance_abs_error_sum += abs(gold.tier1.max_relevance)
+
     def to_dict(self) -> dict[str, float | int]:
         score_mae = (
             self.score_abs_error_sum / self.score_pairs_total if self.score_pairs_total > 0 else 0.0
@@ -106,6 +115,7 @@ class _Tier1Metrics:
         queue_acc = self.queue_accuracy_total / self.items_total if self.items_total > 0 else 0.0
         return {
             "items_total": self.items_total,
+            "failures": self.failures,
             "score_pairs_total": self.score_pairs_total,
             "score_mae": round(score_mae, 6),
             "max_relevance_mae": round(max_mae, 6),
@@ -529,7 +539,7 @@ async def run_gold_set_benchmark(
             session=cast("Any", noop_session),
             client=client,
             model=config.tier1_model,
-            batch_size=10,
+            batch_size=1,
             cost_tracker=cast("Any", noop_cost_tracker),
         )
         tier2 = Tier2Classifier(
@@ -539,14 +549,28 @@ async def run_gold_set_benchmark(
             cost_tracker=cast("Any", noop_cost_tracker),
         )
 
-        tier1_results, tier1_usage = await tier1.classify_items(raw_items, trends)
-        tier1_by_item_id = {result.item_id: result for result in tier1_results}
         tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)
-        for item in gold_items:
-            prediction = tier1_by_item_id.get(_item_uuid(item.item_id))
+        tier1_usage = Tier1Usage()
+        for item, raw_item in zip(gold_items, raw_items, strict=True):
+            try:
+                tier1_results, tier1_call_usage = await tier1.classify_items([raw_item], trends)
+            except ValueError:
+                tier1_metrics.record_failure(gold=item)
+                continue
+
+            tier1_usage.prompt_tokens += tier1_call_usage.prompt_tokens
+            tier1_usage.completion_tokens += tier1_call_usage.completion_tokens
+            tier1_usage.api_calls += tier1_call_usage.api_calls
+            tier1_usage.estimated_cost_usd += tier1_call_usage.estimated_cost_usd
+
+            prediction = next(
+                (result for result in tier1_results if result.item_id == _item_uuid(item.item_id)),
+                None,
+            )
             if prediction is None:
-                msg = f"Tier-1 output missing item {item.item_id}"
-                raise RuntimeError(msg)
+                tier1_metrics.record_failure(gold=item)
+                continue
+
             tier1_metrics.record(gold=item, predicted=prediction)
 
         tier2_metrics = _Tier2Metrics()
@@ -556,15 +580,19 @@ async def run_gold_set_benchmark(
                 continue
 
             event = _build_event(item)
-            _, call_usage = await tier2.classify_event(
-                event=event,
-                trends=trends,
-                context_chunks=[f"{item.title}\n\n{item.content}"],
-            )
-            tier2_usage.prompt_tokens += call_usage.prompt_tokens
-            tier2_usage.completion_tokens += call_usage.completion_tokens
-            tier2_usage.api_calls += call_usage.api_calls
-            tier2_usage.estimated_cost_usd += call_usage.estimated_cost_usd
+            try:
+                _, tier2_call_usage = await tier2.classify_event(
+                    event=event,
+                    trends=trends,
+                    context_chunks=[f"{item.title}\n\n{item.content}"],
+                )
+            except ValueError:
+                tier2_metrics.record(expected=item.tier2, predicted=None)
+                continue
+            tier2_usage.prompt_tokens += tier2_call_usage.prompt_tokens
+            tier2_usage.completion_tokens += tier2_call_usage.completion_tokens
+            tier2_usage.api_calls += tier2_call_usage.api_calls
+            tier2_usage.estimated_cost_usd += tier2_call_usage.estimated_cost_usd
 
             tier2_prediction = _extract_first_impact(event)
             tier2_metrics.record(expected=item.tier2, predicted=tier2_prediction)

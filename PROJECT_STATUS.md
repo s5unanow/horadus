@@ -162,6 +162,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Counterfactual simulation API (`POST /api/v1/trends/{id}/simulate`) for side-effect-free remove/inject what-if projections
 - [x] Recency-aware novelty scoring + per-indicator temporal decay with explicit trend-evidence provenance factors
 - [x] Hermetic integration parity: CI now uses repo Postgres image with verified `timescaledb` + `vector`, unified integration URLs, and deterministic integration DB setup/teardown fixtures
+- [x] Advisory source/source-tier reliability diagnostics in calibration dashboard output with sparse-sample confidence gating (read-only)
 
 ## In Progress
 
@@ -176,10 +177,10 @@ Phase 6: Calibration (NEW)   [████████████████�
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-063` source reliability diagnostics (read-only)
-3. Complete `TASK-064` historical replay and champion/challenger harness
-4. Complete `TASK-065` independence-aware corroboration and claim graph
-5. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
+2. Complete `TASK-064` historical replay and champion/challenger harness
+3. Complete `TASK-065` independence-aware corroboration and claim graph
+4. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
+5. Continue `TASK-044` manual gold-set curation/reviewer sign-off flow
 
 ## Expert Feedback Integration ✅
 

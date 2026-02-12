@@ -15,6 +15,22 @@
 
 ## Completed This Sprint
 
+### TASK-063: Source Reliability Diagnostics (Read-Only)
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add source and source-tier reliability visibility to calibration reporting without automatic weighting changes.
+
+**Completed**:
+- [x] Added `source_reliability` and `source_tier_reliability` diagnostics to calibration dashboard service and API response payloads
+- [x] Implemented read-only advisory diagnostics derived from resolved outcomes and linked source evidence (no automatic source-weight mutations)
+- [x] Added sample-size confidence gating (`insufficient`/`low`/`medium`/`high`) and explicit sparse-sample advisory notes
+- [x] Added unit tests for reliability aggregation correctness and sparse-data guardrail behavior
+- [x] Updated API documentation to describe new advisory diagnostics fields and confidence gating
+
+---
+
 ### TASK-062: Hermetic Integration Test Environment Parity
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

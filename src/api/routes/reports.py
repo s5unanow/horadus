@@ -162,6 +162,32 @@ class CalibrationCoverageResponse(BaseModel):
     coverage_sufficient: bool
 
 
+class ReliabilityDiagnosticRowResponse(BaseModel):
+    """Source or source-tier reliability diagnostic row."""
+
+    key: str
+    label: str
+    sample_size: int
+    mean_predicted_probability: float
+    observed_rate: float
+    mean_brier_score: float
+    calibration_gap: float
+    confidence: str
+    eligible: bool
+    advisory_note: str
+
+
+class ReliabilityDiagnosticsResponse(BaseModel):
+    """Reliability diagnostics summary for one aggregation dimension."""
+
+    dimension: str
+    advisory_only: bool
+    min_sample_size: int
+    eligible_rows: int
+    sparse_rows: int
+    rows: list[ReliabilityDiagnosticRowResponse]
+
+
 class CalibrationDashboardResponse(BaseModel):
     """Cross-trend calibration dashboard payload."""
 
@@ -238,6 +264,48 @@ class CalibrationDashboardResponse(BaseModel):
                     ],
                     "coverage_sufficient": False,
                 },
+                "source_reliability": {
+                    "dimension": "source",
+                    "advisory_only": True,
+                    "min_sample_size": 5,
+                    "eligible_rows": 1,
+                    "sparse_rows": 0,
+                    "rows": [
+                        {
+                            "key": "f8be6ea0-c6f0-4707-9966-4fa7cd95f4bb",
+                            "label": "Reuters",
+                            "sample_size": 7,
+                            "mean_predicted_probability": 0.42,
+                            "observed_rate": 0.57,
+                            "mean_brier_score": 0.164,
+                            "calibration_gap": 0.15,
+                            "confidence": "low",
+                            "eligible": True,
+                            "advisory_note": "Advisory-only diagnostic. Requires analyst review before any source-weighting changes.",
+                        }
+                    ],
+                },
+                "source_tier_reliability": {
+                    "dimension": "source_tier",
+                    "advisory_only": True,
+                    "min_sample_size": 5,
+                    "eligible_rows": 1,
+                    "sparse_rows": 0,
+                    "rows": [
+                        {
+                            "key": "wire",
+                            "label": "wire",
+                            "sample_size": 8,
+                            "mean_predicted_probability": 0.45,
+                            "observed_rate": 0.5,
+                            "mean_brier_score": 0.172,
+                            "calibration_gap": 0.05,
+                            "confidence": "low",
+                            "eligible": True,
+                            "advisory_note": "Advisory-only diagnostic. Requires analyst review before any source-weighting changes.",
+                        }
+                    ],
+                },
             }
         }
     )
@@ -254,6 +322,8 @@ class CalibrationDashboardResponse(BaseModel):
     trend_movements: list[TrendMovementResponse]
     drift_alerts: list[CalibrationDriftAlertResponse]
     coverage: CalibrationCoverageResponse
+    source_reliability: ReliabilityDiagnosticsResponse
+    source_tier_reliability: ReliabilityDiagnosticsResponse
 
 
 def _normalize_top_events(value: Any) -> list[dict[str, Any]] | None:
@@ -418,6 +488,50 @@ async def get_calibration_dashboard(
                 for row in dashboard.coverage.low_sample_trends
             ],
             coverage_sufficient=dashboard.coverage.coverage_sufficient,
+        ),
+        source_reliability=ReliabilityDiagnosticsResponse(
+            dimension=dashboard.source_reliability.dimension,
+            advisory_only=dashboard.source_reliability.advisory_only,
+            min_sample_size=dashboard.source_reliability.min_sample_size,
+            eligible_rows=dashboard.source_reliability.eligible_rows,
+            sparse_rows=dashboard.source_reliability.sparse_rows,
+            rows=[
+                ReliabilityDiagnosticRowResponse(
+                    key=row.key,
+                    label=row.label,
+                    sample_size=row.sample_size,
+                    mean_predicted_probability=row.mean_predicted_probability,
+                    observed_rate=row.observed_rate,
+                    mean_brier_score=row.mean_brier_score,
+                    calibration_gap=row.calibration_gap,
+                    confidence=row.confidence,
+                    eligible=row.eligible,
+                    advisory_note=row.advisory_note,
+                )
+                for row in dashboard.source_reliability.rows
+            ],
+        ),
+        source_tier_reliability=ReliabilityDiagnosticsResponse(
+            dimension=dashboard.source_tier_reliability.dimension,
+            advisory_only=dashboard.source_tier_reliability.advisory_only,
+            min_sample_size=dashboard.source_tier_reliability.min_sample_size,
+            eligible_rows=dashboard.source_tier_reliability.eligible_rows,
+            sparse_rows=dashboard.source_tier_reliability.sparse_rows,
+            rows=[
+                ReliabilityDiagnosticRowResponse(
+                    key=row.key,
+                    label=row.label,
+                    sample_size=row.sample_size,
+                    mean_predicted_probability=row.mean_predicted_probability,
+                    observed_rate=row.observed_rate,
+                    mean_brier_score=row.mean_brier_score,
+                    calibration_gap=row.calibration_gap,
+                    confidence=row.confidence,
+                    eligible=row.eligible,
+                    advisory_note=row.advisory_note,
+                )
+                for row in dashboard.source_tier_reliability.rows
+            ],
         ),
     )
 

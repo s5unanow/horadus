@@ -161,6 +161,9 @@ Calibration dashboard responses include `drift_alerts` when Brier/bucket error
 thresholds are breached after minimum sample requirements are met.
 Responses also include `coverage` guardrail metrics (resolved ratio and per-trend
 low-sample breakdown) for calibration SLO monitoring.
+Responses now also include advisory-only `source_reliability` and
+`source_tier_reliability` diagnostics with sample-size confidence gating
+(`eligible` / `confidence`) to prevent over-interpreting sparse outcome samples.
 When `CALIBRATION_DRIFT_WEBHOOK_URL` is configured, alert payloads are also sent
 to the webhook with bounded retry/backoff on transient delivery failures.
 Operational response guidance for these alerts is documented in

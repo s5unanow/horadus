@@ -22,7 +22,16 @@ from src.core.drift_alert_notifier import DriftAlertWebhookNotifier
 from src.core.observability import record_calibration_drift_alert
 from src.core.risk import get_risk_level
 from src.core.trend_engine import logodds_to_prob
-from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
+from src.storage.models import (
+    EventItem,
+    OutcomeType,
+    RawItem,
+    Source,
+    Trend,
+    TrendEvidence,
+    TrendOutcome,
+    TrendSnapshot,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -104,6 +113,56 @@ class CalibrationCoverageSummary:
 
 
 @dataclass
+class ReliabilityDiagnosticRow:
+    """Advisory reliability row for source or source-tier diagnostics."""
+
+    key: str
+    label: str
+    sample_size: int
+    mean_predicted_probability: float
+    observed_rate: float
+    mean_brier_score: float
+    calibration_gap: float
+    confidence: str
+    eligible: bool
+    advisory_note: str
+
+
+@dataclass
+class ReliabilityDiagnosticsSummary:
+    """Advisory diagnostics summary for one aggregation dimension."""
+
+    dimension: str
+    advisory_only: bool
+    min_sample_size: int
+    eligible_rows: int
+    sparse_rows: int
+    rows: list[ReliabilityDiagnosticRow]
+
+
+@dataclass
+class _ReliabilityAccumulator:
+    """Internal aggregation state for diagnostics."""
+
+    label: str
+    outcome_ids: set[UUID] = field(default_factory=set)
+    predicted_sum: float = 0.0
+    actual_sum: float = 0.0
+    brier_sum: float = 0.0
+
+
+def _empty_reliability_summary(dimension: str) -> ReliabilityDiagnosticsSummary:
+    return ReliabilityDiagnosticsSummary(
+        dimension=dimension,
+        advisory_only=True,
+        min_sample_size=max(1, settings.CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND),
+        eligible_rows=0,
+        sparse_rows=0,
+        rows=[],
+    )
+
+
+@dataclass
 class CalibrationDashboardReport:
     """Dashboard payload for calibration and movement visibility."""
 
@@ -119,6 +178,12 @@ class CalibrationDashboardReport:
     trend_movements: list[TrendMovement]
     coverage: CalibrationCoverageSummary
     drift_alerts: list[CalibrationDriftAlert] = field(default_factory=list)
+    source_reliability: ReliabilityDiagnosticsSummary = field(
+        default_factory=lambda: _empty_reliability_summary("source")
+    )
+    source_tier_reliability: ReliabilityDiagnosticsSummary = field(
+        default_factory=lambda: _empty_reliability_summary("source_tier")
+    )
 
 
 class CalibrationDashboardService:
@@ -162,6 +227,10 @@ class CalibrationDashboardService:
             resolved_by_trend=resolved_by_trend,
             trend_name_by_id=trend_name_by_id,
         )
+        (
+            source_reliability,
+            source_tier_reliability,
+        ) = await self._build_source_reliability_diagnostics(scored_outcomes=scored_outcomes)
         calibration_curve = [
             CalibrationBucketSummary(
                 bucket_start=bucket.bucket_start,
@@ -207,6 +276,8 @@ class CalibrationDashboardService:
             trend_movements=movements,
             coverage=coverage,
             drift_alerts=drift_alerts,
+            source_reliability=source_reliability,
+            source_tier_reliability=source_tier_reliability,
         )
 
     def _build_drift_alerts(
@@ -467,6 +538,198 @@ class CalibrationDashboardService:
             trends_below_min=trends_below_min,
             low_sample_trends=low_sample_trends,
             coverage_sufficient=coverage_sufficient,
+        )
+
+    async def _build_source_reliability_diagnostics(
+        self,
+        *,
+        scored_outcomes: list[TrendOutcome],
+    ) -> tuple[ReliabilityDiagnosticsSummary, ReliabilityDiagnosticsSummary]:
+        min_sample_size = max(1, settings.CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND)
+        outcome_metrics: dict[UUID, tuple[float, float, float]] = {}
+
+        for outcome in scored_outcomes:
+            if outcome.outcome is None:
+                continue
+            try:
+                outcome_type = OutcomeType(outcome.outcome)
+            except ValueError:
+                continue
+
+            actual = self._actual_outcome_value(outcome_type)
+            if actual is None:
+                continue
+
+            predicted_probability = float(outcome.predicted_probability)
+            brier_score = (
+                float(outcome.brier_score)
+                if outcome.brier_score is not None
+                else calculate_brier_score(predicted_probability, outcome_type)
+            )
+            if brier_score is None:
+                continue
+
+            outcome_metrics[outcome.id] = (
+                predicted_probability,
+                actual,
+                brier_score,
+            )
+
+        if not outcome_metrics:
+            return (
+                _empty_reliability_summary("source"),
+                _empty_reliability_summary("source_tier"),
+            )
+
+        pair_query = (
+            select(
+                TrendOutcome.id,
+                Source.id,
+                Source.name,
+                Source.source_tier,
+            )
+            .select_from(TrendOutcome)
+            .join(
+                TrendEvidence,
+                (TrendEvidence.trend_id == TrendOutcome.trend_id)
+                & (TrendEvidence.created_at <= TrendOutcome.prediction_date),
+            )
+            .join(EventItem, EventItem.event_id == TrendEvidence.event_id)
+            .join(RawItem, RawItem.id == EventItem.item_id)
+            .join(Source, Source.id == RawItem.source_id)
+            .where(TrendOutcome.id.in_(tuple(outcome_metrics.keys())))
+            .distinct()
+        )
+        rows = (await self.session.execute(pair_query)).all()
+
+        source_pairs: list[tuple[str, str, UUID]] = []
+        tier_pairs: list[tuple[str, str, UUID]] = []
+
+        for outcome_id, source_id, source_name, source_tier in rows:
+            source_pairs.append((str(source_id), source_name, outcome_id))
+            tier_label = source_tier or "unknown"
+            tier_pairs.append((tier_label, tier_label, outcome_id))
+
+        source_reliability = self._build_reliability_summary_from_pairs(
+            dimension="source",
+            min_sample_size=min_sample_size,
+            pairs=source_pairs,
+            outcome_metrics=outcome_metrics,
+        )
+        source_tier_reliability = self._build_reliability_summary_from_pairs(
+            dimension="source_tier",
+            min_sample_size=min_sample_size,
+            pairs=tier_pairs,
+            outcome_metrics=outcome_metrics,
+        )
+        return source_reliability, source_tier_reliability
+
+    def _build_reliability_summary_from_pairs(
+        self,
+        *,
+        dimension: str,
+        min_sample_size: int,
+        pairs: list[tuple[str, str, UUID]],
+        outcome_metrics: dict[UUID, tuple[float, float, float]],
+    ) -> ReliabilityDiagnosticsSummary:
+        accumulators: dict[str, _ReliabilityAccumulator] = {}
+
+        for key, label, outcome_id in pairs:
+            metrics = outcome_metrics.get(outcome_id)
+            if metrics is None:
+                continue
+            accumulator = accumulators.setdefault(key, _ReliabilityAccumulator(label=label))
+            if outcome_id in accumulator.outcome_ids:
+                continue
+
+            predicted_probability, actual_rate, brier_score = metrics
+            accumulator.outcome_ids.add(outcome_id)
+            accumulator.predicted_sum += predicted_probability
+            accumulator.actual_sum += actual_rate
+            accumulator.brier_sum += brier_score
+
+        rows: list[ReliabilityDiagnosticRow] = []
+        for key, accumulator in accumulators.items():
+            sample_size = len(accumulator.outcome_ids)
+            if sample_size == 0:
+                continue
+
+            mean_predicted_probability = accumulator.predicted_sum / sample_size
+            observed_rate = accumulator.actual_sum / sample_size
+            mean_brier_score = accumulator.brier_sum / sample_size
+            calibration_gap = abs(observed_rate - mean_predicted_probability)
+            eligible = sample_size >= min_sample_size
+            rows.append(
+                ReliabilityDiagnosticRow(
+                    key=key,
+                    label=accumulator.label,
+                    sample_size=sample_size,
+                    mean_predicted_probability=round(mean_predicted_probability, 6),
+                    observed_rate=round(observed_rate, 6),
+                    mean_brier_score=round(mean_brier_score, 6),
+                    calibration_gap=round(calibration_gap, 6),
+                    confidence=self._confidence_band(
+                        sample_size=sample_size,
+                        min_sample_size=min_sample_size,
+                    ),
+                    eligible=eligible,
+                    advisory_note=self._advisory_note(
+                        sample_size=sample_size,
+                        min_sample_size=min_sample_size,
+                    ),
+                )
+            )
+
+        rows.sort(key=lambda row: (row.sample_size, row.calibration_gap), reverse=True)
+        eligible_rows = sum(1 for row in rows if row.eligible)
+        sparse_rows = len(rows) - eligible_rows
+        return ReliabilityDiagnosticsSummary(
+            dimension=dimension,
+            advisory_only=True,
+            min_sample_size=min_sample_size,
+            eligible_rows=eligible_rows,
+            sparse_rows=sparse_rows,
+            rows=rows,
+        )
+
+    @staticmethod
+    def _actual_outcome_value(outcome_type: OutcomeType) -> float | None:
+        if outcome_type == OutcomeType.OCCURRED:
+            return 1.0
+        if outcome_type == OutcomeType.DID_NOT_OCCUR:
+            return 0.0
+        if outcome_type == OutcomeType.PARTIAL:
+            return 0.5
+        return None
+
+    @staticmethod
+    def _confidence_band(
+        *,
+        sample_size: int,
+        min_sample_size: int,
+    ) -> str:
+        if sample_size < min_sample_size:
+            return "insufficient"
+        if sample_size >= min_sample_size * 3:
+            return "high"
+        if sample_size >= min_sample_size * 2:
+            return "medium"
+        return "low"
+
+    @staticmethod
+    def _advisory_note(
+        *,
+        sample_size: int,
+        min_sample_size: int,
+    ) -> str:
+        if sample_size < min_sample_size:
+            return (
+                "Sparse sample. Advisory-only diagnostic; do not mutate source weighting from "
+                "this row without additional outcomes."
+            )
+        return (
+            "Advisory-only diagnostic. Requires analyst review before any source-weighting "
+            "changes."
         )
 
     def _scored_outcomes(self, outcomes: list[TrendOutcome]) -> list[TrendOutcome]:

@@ -246,6 +246,8 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
     assert len(result.drift_alerts) == 1
     assert result.drift_alerts[0].alert_type == "mean_brier_drift"
     assert result.coverage.coverage_sufficient is True
+    assert result.source_reliability.dimension == "source"
+    assert result.source_tier_reliability.dimension == "source_tier"
 
 
 @pytest.mark.asyncio

@@ -15,6 +15,23 @@
 
 ## Completed This Sprint
 
+### TASK-064: Historical Replay and Champion/Challenger Harness
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add a deterministic replay workflow for side-by-side release decisions on historical windows.
+
+**Completed**:
+- [x] Added historical replay runner (`horadus eval replay`) over shared time-window inputs with optional trend scoping
+- [x] Added champion/challenger policy profiles and side-by-side comparison artifact generation (`replay-*.json`)
+- [x] Included replay dataset counts for historical `raw_items`, `events`, `trend_evidence`, `trend_snapshots`, and `trend_outcomes`
+- [x] Added quality/cost/latency comparison outputs and automated promotion assessment gates
+- [x] Documented champion/challenger promotion criteria in `docs/PROMPT_EVAL_POLICY.md`
+- [x] Added unit coverage for replay metrics, promotion assessment, artifact writing, and CLI replay command parsing
+
+---
+
 ### TASK-063: Source Reliability Diagnostics (Read-Only)
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

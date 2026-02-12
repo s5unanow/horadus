@@ -80,6 +80,26 @@ Use these simple thresholds first; tune later if needed:
 
 If any required gate fails, reject or revise the prompt.
 
+## Champion/Challenger Replay Gate
+
+Before promotion, run historical replay on the same time window and scope for
+both candidate policies:
+
+- `uv run --no-sync horadus eval replay --output-dir ai/eval/results --champion-config stable --challenger-config fast_lower_threshold --days 90`
+
+Replay artifacts (`ai/eval/results/replay-*.json`) include:
+- Shared window + dataset counts (`raw_items`, `events`, `trend_evidence`, `trend_snapshots`, `trend_outcomes`)
+- Side-by-side quality/cost/latency metrics
+- Numeric deltas and a promotion assessment block
+
+Default replay promotion criteria:
+- `quality.decision_accuracy`: challenger must not regress by more than `-0.01`
+- `quality.mean_brier_score`: challenger must not worsen by more than `+0.01`
+- `cost.estimated_total_cost_usd`: challenger must not increase by more than `20%`
+- `latency.estimated_p95_latency_ms`: challenger must not increase by more than `20%`
+
+If replay gate fails, keep champion and revise challenger config/prompt.
+
 ## Promotion and Deployment
 
 After acceptance:

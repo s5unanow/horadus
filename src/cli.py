@@ -7,12 +7,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections.abc import Sequence
+from datetime import datetime
+from uuid import UUID
 
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
 from src.core.config import settings
 from src.core.dashboard_export import export_calibration_dashboard
 from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
+from src.eval.replay import available_replay_configs, run_historical_replay_comparison
 from src.storage.database import async_session_maker
 
 
@@ -35,6 +38,17 @@ def _format_trend_status_lines(movement: TrendMovement) -> list[str]:
     )
     movers = ", ".join(movement.top_movers_7d) if movement.top_movers_7d else "none"
     return [header, f"  Top movers: {movers}"]
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    return datetime.fromisoformat(normalized)
 
 
 async def _run_trends_status(*, limit: int) -> int:
@@ -88,6 +102,30 @@ async def _run_eval_benchmark(
         require_human_verified=require_human_verified,
     )
     print(f"Benchmark output: {output_path}")
+    return 0
+
+
+async def _run_eval_replay(
+    *,
+    output_dir: str,
+    champion_config: str,
+    challenger_config: str,
+    trend_id: str | None,
+    start_date: str | None,
+    end_date: str | None,
+    days: int,
+) -> int:
+    parsed_trend_id = UUID(trend_id) if trend_id else None
+    output_path = await run_historical_replay_comparison(
+        output_dir=output_dir,
+        champion_config_name=champion_config,
+        challenger_config_name=challenger_config,
+        trend_id=parsed_trend_id,
+        start_date=_parse_iso_datetime(start_date),
+        end_date=_parse_iso_datetime(end_date),
+        days=max(1, days),
+    )
+    print(f"Replay output: {output_path}")
     return 0
 
 
@@ -210,6 +248,50 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return non-zero exit code if audit warnings are present.",
     )
+
+    eval_replay_parser = eval_subparsers.add_parser(
+        "replay",
+        help="Run historical champion/challenger replay over stored outcomes.",
+    )
+    eval_replay_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for replay result artifacts.",
+    )
+    replay_configs = sorted(available_replay_configs().keys())
+    eval_replay_parser.add_argument(
+        "--champion-config",
+        default="stable",
+        choices=replay_configs,
+        help="Champion replay policy config.",
+    )
+    eval_replay_parser.add_argument(
+        "--challenger-config",
+        default="fast_lower_threshold",
+        choices=replay_configs,
+        help="Challenger replay policy config.",
+    )
+    eval_replay_parser.add_argument(
+        "--trend-id",
+        default=None,
+        help="Optional trend UUID scope.",
+    )
+    eval_replay_parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Optional ISO-8601 start datetime (e.g. 2026-01-01T00:00:00Z).",
+    )
+    eval_replay_parser.add_argument(
+        "--end-date",
+        default=None,
+        help="Optional ISO-8601 end datetime (defaults to now).",
+    )
+    eval_replay_parser.add_argument(
+        "--days",
+        type=int,
+        default=90,
+        help="Replay window in days when start-date is not provided.",
+    )
     return parser
 
 
@@ -242,6 +324,18 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
             max_items=args.max_items,
             fail_on_warnings=args.fail_on_warnings,
+        )
+    if args.command == "eval" and args.eval_command == "replay":
+        return asyncio.run(
+            _run_eval_replay(
+                output_dir=args.output_dir,
+                champion_config=args.champion_config,
+                challenger_config=args.challenger_config,
+                trend_id=args.trend_id,
+                start_date=args.start_date,
+                end_date=args.end_date,
+                days=args.days,
+            )
         )
 
     parser.print_help()

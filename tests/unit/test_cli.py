@@ -98,3 +98,37 @@ def test_build_parser_accepts_eval_audit_command() -> None:
     assert args.output_dir == "ai/eval/results"
     assert args.max_items == 200
     assert args.fail_on_warnings is True
+
+
+def test_build_parser_accepts_eval_replay_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "replay",
+            "--output-dir",
+            "ai/eval/results",
+            "--champion-config",
+            "stable",
+            "--challenger-config",
+            "fast_lower_threshold",
+            "--trend-id",
+            "0f8fad5b-d9cb-469f-a165-70867728950e",
+            "--start-date",
+            "2026-01-01T00:00:00Z",
+            "--end-date",
+            "2026-02-01T00:00:00Z",
+            "--days",
+            "30",
+        ]
+    )
+
+    assert args.command == "eval"
+    assert args.eval_command == "replay"
+    assert args.output_dir == "ai/eval/results"
+    assert args.champion_config == "stable"
+    assert args.challenger_config == "fast_lower_threshold"
+    assert args.trend_id == "0f8fad5b-d9cb-469f-a165-70867728950e"
+    assert args.start_date == "2026-01-01T00:00:00Z"
+    assert args.end_date == "2026-02-01T00:00:00Z"
+    assert args.days == 30

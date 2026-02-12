@@ -50,6 +50,7 @@ def create_engine() -> AsyncEngine:
         echo=settings.SQL_ECHO,
         pool_size=settings.DATABASE_POOL_SIZE,
         max_overflow=settings.DATABASE_MAX_OVERFLOW,
+        pool_timeout=settings.DATABASE_POOL_TIMEOUT_SECONDS,
         pool_pre_ping=True,
     )
 

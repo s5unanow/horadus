@@ -16,6 +16,22 @@
 
 ## Completed This Sprint
 
+### TASK-057: Runtime Resilience Guardrails
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Strengthen runtime safety for production operations and health visibility.
+
+**Completed**:
+- [x] Added CPU/memory resource limits and reservations for `api`, `worker`, `beat`, `postgres`, and `redis` in `docker-compose.prod.yml`
+- [x] Added worker activity heartbeat publishing in worker task entrypoints and exposed worker heartbeat health in `/health`
+- [x] Added Timescale retention/compression Alembic migration for `trend_snapshots` (`0006_add_trend_snapshot_retention_compression`)
+- [x] Added configurable DB pool timeout (`DATABASE_POOL_TIMEOUT_SECONDS`) and wired it into SQLAlchemy engine creation
+- [x] Added unit coverage for health worker component, worker heartbeat wrappers, and DB pool-timeout engine configuration
+
+---
+
 ### TASK-054: LLM Input Safety Guardrails (Injection + Token Precheck)
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

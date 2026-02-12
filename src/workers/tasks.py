@@ -69,6 +69,49 @@ def _push_dead_letter(payload: dict[str, Any]) -> None:
             client.close()
 
 
+def _record_worker_activity(
+    *,
+    task_name: str,
+    status: str,
+    error: str | None = None,
+) -> None:
+    client: redis.Redis[str] | None = None
+    try:
+        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
+        payload = {
+            "task": task_name,
+            "status": status,
+            "timestamp": datetime.now(tz=UTC).isoformat(),
+        }
+        if error:
+            payload["error"] = error[:500]
+        client.set(
+            settings.WORKER_HEARTBEAT_REDIS_KEY,
+            json.dumps(payload),
+            ex=max(60, settings.WORKER_HEARTBEAT_TTL_SECONDS),
+        )
+    except Exception:
+        logger.exception("Failed to record worker heartbeat", task_name=task_name, status=status)
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _run_task_with_heartbeat(
+    *,
+    task_name: str,
+    runner: Callable[[], dict[str, Any]],
+) -> dict[str, Any]:
+    _record_worker_activity(task_name=task_name, status="started")
+    try:
+        result = runner()
+    except Exception as exc:
+        _record_worker_activity(task_name=task_name, status="failed", error=str(exc))
+        raise
+    _record_worker_activity(task_name=task_name, status="ok")
+    return result
+
+
 def _handle_task_failure(
     sender: Any = None,
     task_id: str | None = None,
@@ -367,110 +410,159 @@ async def _generate_monthly_reports_async() -> dict[str, Any]:
 )
 def process_pending_items(limit: int | None = None) -> dict[str, Any]:
     """Run processing pipeline for pending raw items."""
-    configured_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
-    run_limit = max(1, limit or configured_limit)
 
-    logger.info("Starting processing pipeline task", limit=run_limit)
-    result = _run_async(_process_pending_async(limit=run_limit))
-    record_pipeline_metrics(result)
-    logger.info(
-        "Finished processing pipeline task",
-        scanned=result["scanned"],
-        processed=result["processed"],
-        classified=result["classified"],
-        noise=result["noise"],
-        errors=result["errors"],
+    def _runner() -> dict[str, Any]:
+        configured_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
+        run_limit = max(1, limit or configured_limit)
+
+        logger.info("Starting processing pipeline task", limit=run_limit)
+        result = _run_async(_process_pending_async(limit=run_limit))
+        record_pipeline_metrics(result)
+        logger.info(
+            "Finished processing pipeline task",
+            scanned=result["scanned"],
+            processed=result["processed"],
+            classified=result["classified"],
+            noise=result["noise"],
+            errors=result["errors"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.process_pending_items",
+        runner=_runner,
     )
-    return result
 
 
 @typed_shared_task(name="workers.reap_stale_processing_items")
 def reap_stale_processing_items() -> dict[str, Any]:
     """Reset stale processing items after worker crashes/timeouts."""
-    logger.info(
-        "Starting stale processing reaper task",
-        timeout_minutes=settings.PROCESSING_STALE_TIMEOUT_MINUTES,
+
+    def _runner() -> dict[str, Any]:
+        logger.info(
+            "Starting stale processing reaper task",
+            timeout_minutes=settings.PROCESSING_STALE_TIMEOUT_MINUTES,
+        )
+        result = _run_async(_reap_stale_processing_async())
+        record_processing_reaper_resets(reset_count=int(result["reset"]))
+        logger.info(
+            "Finished stale processing reaper task",
+            reset=result["reset"],
+            scanned=result["scanned"],
+            reset_item_ids=result["reset_item_ids"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.reap_stale_processing_items",
+        runner=_runner,
     )
-    result = _run_async(_reap_stale_processing_async())
-    record_processing_reaper_resets(reset_count=int(result["reset"]))
-    logger.info(
-        "Finished stale processing reaper task",
-        reset=result["reset"],
-        scanned=result["scanned"],
-        reset_item_ids=result["reset_item_ids"],
-    )
-    return result
 
 
 @typed_shared_task(name="workers.snapshot_trends")
 def snapshot_trends() -> dict[str, Any]:
     """Persist point-in-time snapshots for active trends."""
-    logger.info("Starting trend snapshot task")
-    result = _run_async(_snapshot_trends_async())
-    logger.info(
-        "Finished trend snapshot task",
-        scanned=result["scanned"],
-        created=result["created"],
-        skipped=result["skipped"],
+
+    def _runner() -> dict[str, Any]:
+        logger.info("Starting trend snapshot task")
+        result = _run_async(_snapshot_trends_async())
+        logger.info(
+            "Finished trend snapshot task",
+            scanned=result["scanned"],
+            created=result["created"],
+            skipped=result["skipped"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.snapshot_trends",
+        runner=_runner,
     )
-    return result
 
 
 @typed_shared_task(name="workers.apply_trend_decay")
 def apply_trend_decay() -> dict[str, Any]:
     """Apply time-based decay to all active trends."""
-    logger.info("Starting trend decay task")
-    result = _run_async(_decay_trends_async())
-    logger.info(
-        "Finished trend decay task",
-        scanned=result["scanned"],
-        decayed=result["decayed"],
-        unchanged=result["unchanged"],
+
+    def _runner() -> dict[str, Any]:
+        logger.info("Starting trend decay task")
+        result = _run_async(_decay_trends_async())
+        logger.info(
+            "Finished trend decay task",
+            scanned=result["scanned"],
+            decayed=result["decayed"],
+            unchanged=result["unchanged"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.apply_trend_decay",
+        runner=_runner,
     )
-    return result
 
 
 @typed_shared_task(name="workers.generate_weekly_reports")
 def generate_weekly_reports() -> dict[str, Any]:
     """Generate and store weekly reports for all active trends."""
-    logger.info("Starting weekly report generation task")
-    result = _run_async(_generate_weekly_reports_async())
-    logger.info(
-        "Finished weekly report generation task",
-        scanned=result["scanned"],
-        created=result["created"],
-        updated=result["updated"],
-        period_end=result["period_end"],
+
+    def _runner() -> dict[str, Any]:
+        logger.info("Starting weekly report generation task")
+        result = _run_async(_generate_weekly_reports_async())
+        logger.info(
+            "Finished weekly report generation task",
+            scanned=result["scanned"],
+            created=result["created"],
+            updated=result["updated"],
+            period_end=result["period_end"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.generate_weekly_reports",
+        runner=_runner,
     )
-    return result
 
 
 @typed_shared_task(name="workers.check_event_lifecycles")
 def check_event_lifecycles() -> dict[str, Any]:
     """Periodically transition events across lifecycle states."""
-    logger.info("Starting event lifecycle check task")
-    result = _run_async(_check_event_lifecycles_async())
-    logger.info(
-        "Finished event lifecycle check task",
-        confirmed_to_fading=result["confirmed_to_fading"],
-        fading_to_archived=result["fading_to_archived"],
+
+    def _runner() -> dict[str, Any]:
+        logger.info("Starting event lifecycle check task")
+        result = _run_async(_check_event_lifecycles_async())
+        logger.info(
+            "Finished event lifecycle check task",
+            confirmed_to_fading=result["confirmed_to_fading"],
+            fading_to_archived=result["fading_to_archived"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.check_event_lifecycles",
+        runner=_runner,
     )
-    return result
 
 
 @typed_shared_task(name="workers.generate_monthly_reports")
 def generate_monthly_reports() -> dict[str, Any]:
     """Generate and store monthly reports for all active trends."""
-    logger.info("Starting monthly report generation task")
-    result = _run_async(_generate_monthly_reports_async())
-    logger.info(
-        "Finished monthly report generation task",
-        scanned=result["scanned"],
-        created=result["created"],
-        updated=result["updated"],
-        period_end=result["period_end"],
+
+    def _runner() -> dict[str, Any]:
+        logger.info("Starting monthly report generation task")
+        result = _run_async(_generate_monthly_reports_async())
+        logger.info(
+            "Finished monthly report generation task",
+            scanned=result["scanned"],
+            created=result["created"],
+            updated=result["updated"],
+            period_end=result["period_end"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.generate_monthly_reports",
+        runner=_runner,
     )
-    return result
 
 
 @typed_shared_task(
@@ -483,26 +575,33 @@ def generate_monthly_reports() -> dict[str, Any]:
 )
 def collect_rss() -> dict[str, Any]:
     """Collect RSS sources and store new raw items."""
-    if not settings.ENABLE_RSS_INGESTION:
-        return {"status": "disabled", "collector": "rss"}
 
-    logger.info("Starting RSS collection task")
-    result = _run_async(_collect_rss_async())
-    record_collector_metrics(
-        collector="rss",
-        fetched=int(result["fetched"]),
-        stored=int(result["stored"]),
-        skipped=int(result["skipped"]),
-        errors=int(result["errors"]),
+    def _runner() -> dict[str, Any]:
+        if not settings.ENABLE_RSS_INGESTION:
+            return {"status": "disabled", "collector": "rss"}
+
+        logger.info("Starting RSS collection task")
+        result = _run_async(_collect_rss_async())
+        record_collector_metrics(
+            collector="rss",
+            fetched=int(result["fetched"]),
+            stored=int(result["stored"]),
+            skipped=int(result["skipped"]),
+            errors=int(result["errors"]),
+        )
+        _queue_processing_for_new_items(collector="rss", stored_items=int(result["stored"]))
+        logger.info(
+            "Finished RSS collection task",
+            stored=result["stored"],
+            skipped=result["skipped"],
+            errors=result["errors"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.collect_rss",
+        runner=_runner,
     )
-    _queue_processing_for_new_items(collector="rss", stored_items=int(result["stored"]))
-    logger.info(
-        "Finished RSS collection task",
-        stored=result["stored"],
-        skipped=result["skipped"],
-        errors=result["errors"],
-    )
-    return result
 
 
 @typed_shared_task(
@@ -515,32 +614,46 @@ def collect_rss() -> dict[str, Any]:
 )
 def collect_gdelt() -> dict[str, Any]:
     """Collect GDELT sources and store new raw items."""
-    if not settings.ENABLE_GDELT_INGESTION:
-        return {"status": "disabled", "collector": "gdelt"}
 
-    logger.info("Starting GDELT collection task")
-    result = _run_async(_collect_gdelt_async())
-    record_collector_metrics(
-        collector="gdelt",
-        fetched=int(result["fetched"]),
-        stored=int(result["stored"]),
-        skipped=int(result["skipped"]),
-        errors=int(result["errors"]),
+    def _runner() -> dict[str, Any]:
+        if not settings.ENABLE_GDELT_INGESTION:
+            return {"status": "disabled", "collector": "gdelt"}
+
+        logger.info("Starting GDELT collection task")
+        result = _run_async(_collect_gdelt_async())
+        record_collector_metrics(
+            collector="gdelt",
+            fetched=int(result["fetched"]),
+            stored=int(result["stored"]),
+            skipped=int(result["skipped"]),
+            errors=int(result["errors"]),
+        )
+        _queue_processing_for_new_items(collector="gdelt", stored_items=int(result["stored"]))
+        logger.info(
+            "Finished GDELT collection task",
+            stored=result["stored"],
+            skipped=result["skipped"],
+            errors=result["errors"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.collect_gdelt",
+        runner=_runner,
     )
-    _queue_processing_for_new_items(collector="gdelt", stored_items=int(result["stored"]))
-    logger.info(
-        "Finished GDELT collection task",
-        stored=result["stored"],
-        skipped=result["skipped"],
-        errors=result["errors"],
-    )
-    return result
 
 
 @typed_shared_task(name="workers.ping")
-def ping() -> dict[str, str]:
+def ping() -> dict[str, Any]:
     """Simple task to verify worker is up and processing jobs."""
-    return {
-        "status": "ok",
-        "timestamp": datetime.now(tz=UTC).isoformat(),
-    }
+
+    def _runner() -> dict[str, str]:
+        return {
+            "status": "ok",
+            "timestamp": datetime.now(tz=UTC).isoformat(),
+        }
+
+    return _run_task_with_heartbeat(
+        task_name="workers.ping",
+        runner=_runner,
+    )

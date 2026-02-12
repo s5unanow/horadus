@@ -62,6 +62,12 @@ class Settings(BaseSettings):
     )
     DATABASE_POOL_SIZE: int = Field(default=10, ge=1, le=100)
     DATABASE_MAX_OVERFLOW: int = Field(default=20, ge=0, le=100)
+    DATABASE_POOL_TIMEOUT_SECONDS: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Seconds to wait for a DB connection from pool before timing out",
+    )
 
     @model_validator(mode="after")
     def _load_secret_file_values(self) -> Settings:
@@ -352,6 +358,20 @@ class Settings(BaseSettings):
     CELERY_RESULT_BACKEND_FILE: str | None = Field(
         default=None,
         description="Path to file containing CELERY_RESULT_BACKEND",
+    )
+    WORKER_HEARTBEAT_REDIS_KEY: str = Field(
+        default="horadus:worker:last_activity",
+        description="Redis key storing the latest worker activity heartbeat payload",
+    )
+    WORKER_HEARTBEAT_STALE_SECONDS: int = Field(
+        default=900,
+        ge=30,
+        description="Worker heartbeat age threshold before health reports stale worker activity",
+    )
+    WORKER_HEARTBEAT_TTL_SECONDS: int = Field(
+        default=3600,
+        ge=60,
+        description="Redis TTL for worker heartbeat payload key",
     )
 
     # =========================================================================

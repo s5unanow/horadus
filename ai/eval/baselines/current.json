@@ -1,0 +1,53 @@
+{
+  "configs": [
+    {
+      "name": "baseline",
+      "provider": "openai",
+      "tier1_metrics": {
+        "failures": 0,
+        "items_total": 50,
+        "max_relevance_mae": 0.74,
+        "queue_accuracy": 1.0,
+        "queue_threshold": 5,
+        "score_mae": 1.086667,
+        "score_pairs_total": 150
+      },
+      "tier1_model": "gpt-4.1-nano",
+      "tier2_metrics": {
+        "confidence_mae": 0.214474,
+        "direction_accuracy": 0.763158,
+        "failures": 9,
+        "items_total": 38,
+        "severity_mae": 0.149474,
+        "signal_type_accuracy": 0.763158,
+        "trend_match_accuracy": 0.763158
+      },
+      "tier2_model": "gpt-4o-mini",
+      "usage": {
+        "estimated_cost_per_item_usd": 0.00027425,
+        "tier1_api_calls": 50,
+        "tier1_completion_tokens": 8023,
+        "tier1_estimated_cost_usd": 0.0061105,
+        "tier1_prompt_tokens": 29013,
+        "tier2_api_calls": 29,
+        "tier2_completion_tokens": 6647,
+        "tier2_estimated_cost_usd": 0.007602,
+        "tier2_prompt_tokens": 24092,
+        "total_estimated_cost_usd": 0.0137125
+      }
+    }
+  ],
+  "dataset_scope": {
+    "max_items": 50,
+    "require_human_verified": false
+  },
+  "generated_at": "2026-02-12T08:26:11.849198+00:00",
+  "gold_set_fingerprint_sha256": "08c921b1c6472a2501c35a8589d97edcb72be204ca39afe6cfa76e74ec35d641",
+  "gold_set_item_ids_sha256": "9c5a78570b225d152d64b2ba57c13a7cea20ee2d4eeb3cc541270b6f5c3d92ac",
+  "gold_set_path": "ai/eval/gold_set.jsonl",
+  "items_evaluated": 50,
+  "label_verification_counts": {
+    "llm_seeded": 50
+  },
+  "require_human_verified": false
+}

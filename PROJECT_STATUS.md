@@ -149,6 +149,8 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Hardened weekly/monthly/retrospective narrative prompts with anti-injection and uncertainty guardrails
 - [x] Gold-set update governance policy with baseline supersession + history archival workflow
 - [x] Benchmark artifacts now include dataset fingerprint metadata for comparison integrity
+- [x] Benchmark runs now record per-item Tier-1/Tier-2 alignment failures without aborting entire evaluation runs
+- [x] Pinned benchmark baseline artifact committed at `ai/eval/baselines/current.json`
 - [x] Distributed Redis-backed API rate limiting with deterministic Retry-After semantics
 - [x] Structured admin auth audit logs for key-management operations (list/create/revoke/rotate)
 - [x] Atomic budget check-and-record enforcement under concurrency with denial telemetry (`llm_budget_denials_total`)
@@ -161,22 +163,20 @@ Phase 6: Calibration (NEW)   [████████████████�
 ## In Progress
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
-- `TASK-047` Pinned Evaluation Baseline Artifact (blocked by Tier-2 duplicate trend-id output validation during benchmark generation)
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` (manual trend definition/review pending)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
-- `TASK-047` requires Tier-2 duplicate trend-id handling/alignment to complete multi-item benchmark and pin `ai/eval/baselines/current.json`.
 - `TASK-066` requires human-authored trend definitions and reviewer sign-off before completion.
 
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-047` pinned benchmark baseline artifact after Tier-2 duplicate-id blocker is resolved
-3. Complete `TASK-060` counterfactual simulation API
-4. Complete `TASK-061` recency-aware novelty + per-indicator decay
-5. Complete `TASK-062` hermetic integration test environment parity
+2. Complete `TASK-060` counterfactual simulation API
+3. Complete `TASK-061` recency-aware novelty + per-indicator decay
+4. Complete `TASK-062` hermetic integration test environment parity
+5. Complete `TASK-063` source reliability diagnostics (read-only)
 
 ## Expert Feedback Integration ✅
 
@@ -218,7 +218,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Benchmark runs beyond single-item scope can fail on strict Tier-2 alignment when model output duplicates trend IDs (`TASK-047` blocker).
+- None currently blocking autonomous engineering tasks.
 
 ## Architecture Validated ✅
 

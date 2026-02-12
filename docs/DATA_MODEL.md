@@ -119,7 +119,11 @@ Individual articles/posts collected from sources.
 - Index: `processing_started_at`
 - Index: `content_hash`
 - Index: `fetched_at DESC`
-- IVFFlat: `embedding` (vector_cosine_ops, lists=100)
+- IVFFlat: `embedding` (vector_cosine_ops, lists=64)
+
+Strategy note:
+- Default ANN profile is IVFFlat (`lists=64`) for current small-table regime.
+- Re-run strategy selection with `horadus eval vector-benchmark` before changing index type/params.
 
 **Processing status flow:**
 ```
@@ -154,7 +158,7 @@ Clustered news events (multiple raw_items about the same story).
 
 **Indexes:**
 - Primary key: `id`
-- IVFFlat: `embedding` (vector_cosine_ops, lists=100)
+- IVFFlat: `embedding` (vector_cosine_ops, lists=64)
 - GIN: `categories`
 - Index: `first_seen_at DESC`
 

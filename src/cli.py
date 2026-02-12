@@ -16,6 +16,7 @@ from src.core.dashboard_export import export_calibration_dashboard
 from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
 from src.eval.replay import available_replay_configs, run_historical_replay_comparison
+from src.eval.vector_benchmark import run_vector_retrieval_benchmark
 from src.storage.database import async_session_maker
 
 
@@ -126,6 +127,31 @@ async def _run_eval_replay(
         days=max(1, days),
     )
     print(f"Replay output: {output_path}")
+    return 0
+
+
+async def _run_eval_vector_benchmark(
+    *,
+    output_dir: str,
+    database_url: str | None,
+    dataset_size: int,
+    query_count: int,
+    dimensions: int,
+    top_k: int,
+    similarity_threshold: float,
+    seed: int,
+) -> int:
+    output_path = await run_vector_retrieval_benchmark(
+        output_dir=output_dir,
+        database_url=database_url,
+        dataset_size=max(100, dataset_size),
+        query_count=max(10, query_count),
+        dimensions=max(8, dimensions),
+        top_k=max(1, top_k),
+        similarity_threshold=similarity_threshold,
+        seed=seed,
+    )
+    print(f"Vector benchmark output: {output_path}")
     return 0
 
 
@@ -292,6 +318,57 @@ def _build_parser() -> argparse.ArgumentParser:
         default=90,
         help="Replay window in days when start-date is not provided.",
     )
+
+    eval_vector_parser = eval_subparsers.add_parser(
+        "vector-benchmark",
+        help="Benchmark exact vs IVFFlat vs HNSW retrieval quality/latency.",
+    )
+    eval_vector_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for vector benchmark artifacts.",
+    )
+    eval_vector_parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Optional PostgreSQL URL override (defaults to DATABASE_URL).",
+    )
+    eval_vector_parser.add_argument(
+        "--dataset-size",
+        type=int,
+        default=4000,
+        help="Number of benchmark vectors to generate.",
+    )
+    eval_vector_parser.add_argument(
+        "--query-count",
+        type=int,
+        default=200,
+        help="Number of query vectors to evaluate.",
+    )
+    eval_vector_parser.add_argument(
+        "--dimensions",
+        type=int,
+        default=64,
+        help="Embedding dimensions for synthetic benchmark vectors.",
+    )
+    eval_vector_parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="Neighbors returned per query.",
+    )
+    eval_vector_parser.add_argument(
+        "--similarity-threshold",
+        type=float,
+        default=0.88,
+        help="Cosine similarity threshold used for retrieval filtering.",
+    )
+    eval_vector_parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for deterministic synthetic data.",
+    )
     return parser
 
 
@@ -335,6 +412,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                 start_date=args.start_date,
                 end_date=args.end_date,
                 days=args.days,
+            )
+        )
+    if args.command == "eval" and args.eval_command == "vector-benchmark":
+        return asyncio.run(
+            _run_eval_vector_benchmark(
+                output_dir=args.output_dir,
+                database_url=args.database_url,
+                dataset_size=args.dataset_size,
+                query_count=args.query_count,
+                dimensions=args.dimensions,
+                top_k=args.top_k,
+                similarity_threshold=args.similarity_threshold,
+                seed=args.seed,
             )
         )
 

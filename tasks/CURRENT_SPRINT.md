@@ -15,6 +15,23 @@
 
 ## Completed This Sprint
 
+### TASK-058: Vector Retrieval Quality Tuning (HNSW vs IVFFlat)
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Tune vector retrieval strategy selection for current small-table operating regime.
+
+**Completed**:
+- [x] Added deterministic vector retrieval benchmark harness (`horadus eval vector-benchmark`) comparing exact, IVFFlat, and HNSW
+- [x] Added strategy recommendation logic using recall and latency gates (`recall_at_k >= 0.95` and >=5% latency improvement over exact)
+- [x] Confirmed benchmark recommendation for current dataset profile selects IVFFlat as default ANN strategy
+- [x] Added Alembic migration `0008_vector_index_strategy_profile` to apply tuned IVFFlat profile (`lists=64`) with downgrade path to legacy profile
+- [x] Added vector similarity helper utilities and nearest-neighbor threshold tests for deterministic thresholded behavior
+- [x] Updated data-model documentation with selected strategy and benchmark revalidation command
+
+---
+
 ### TASK-059: Active-Learning Human Review Queue
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

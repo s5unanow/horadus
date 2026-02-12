@@ -132,3 +132,40 @@ def test_build_parser_accepts_eval_replay_command() -> None:
     assert args.start_date == "2026-01-01T00:00:00Z"
     assert args.end_date == "2026-02-01T00:00:00Z"
     assert args.days == 30
+
+
+def test_build_parser_accepts_eval_vector_benchmark_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "vector-benchmark",
+            "--output-dir",
+            "ai/eval/results",
+            "--database-url",
+            "postgresql+asyncpg://localhost:5432/geoint_test",
+            "--dataset-size",
+            "2000",
+            "--query-count",
+            "150",
+            "--dimensions",
+            "64",
+            "--top-k",
+            "12",
+            "--similarity-threshold",
+            "0.9",
+            "--seed",
+            "7",
+        ]
+    )
+
+    assert args.command == "eval"
+    assert args.eval_command == "vector-benchmark"
+    assert args.output_dir == "ai/eval/results"
+    assert args.database_url == "postgresql+asyncpg://localhost:5432/geoint_test"
+    assert args.dataset_size == 2000
+    assert args.query_count == 150
+    assert args.dimensions == 64
+    assert args.top_k == 12
+    assert args.similarity_threshold == pytest.approx(0.9)
+    assert args.seed == 7

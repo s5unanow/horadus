@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.models import RawItem
 
 
@@ -172,7 +173,7 @@ class DeduplicationService:
             msg = "embedding must not be empty"
             raise ValueError(msg)
 
-        max_distance = 1.0 - similarity_threshold
+        max_distance = max_distance_for_similarity(similarity_threshold)
         distance_expr = RawItem.embedding.cosine_distance(embedding)
 
         query = (

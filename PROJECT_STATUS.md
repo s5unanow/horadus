@@ -152,6 +152,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Distributed Redis-backed API rate limiting with deterministic Retry-After semantics
 - [x] Structured admin auth audit logs for key-management operations (list/create/revoke/rotate)
 - [x] Atomic budget check-and-record enforcement under concurrency with denial telemetry (`llm_budget_denials_total`)
+- [x] Tier1/Tier2 input safety guardrails (untrusted-content delimiters + token prechecks + safe truncation markers)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -172,9 +173,9 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
 2. Complete `TASK-047` pinned benchmark baseline artifact after Tier-2 duplicate-id blocker is resolved
-3. Complete `TASK-054` LLM input safety guardrails (injection + token precheck)
-4. Complete `TASK-057` runtime resilience guardrails
-5. Complete `TASK-060` counterfactual simulation API
+3. Complete `TASK-057` runtime resilience guardrails
+4. Complete `TASK-060` counterfactual simulation API
+5. Complete `TASK-061` recency-aware novelty + per-indicator decay
 
 ## Expert Feedback Integration ✅
 

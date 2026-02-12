@@ -19,6 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.processing.cost_tracker import TIER1, CostTracker
 from src.processing.llm_failover import LLMChatFailoverInvoker, LLMChatRoute
+from src.processing.llm_input_safety import (
+    DEFAULT_CHARS_PER_TOKEN,
+    DEFAULT_TRUNCATION_MARKER,
+    estimate_tokens,
+    truncate_to_token_limit,
+    wrap_untrusted_text,
+)
 from src.storage.models import ProcessingStatus, RawItem, Trend
 
 
@@ -94,6 +101,11 @@ class Tier1Classifier:
         "gpt-4.1-mini": (0.40, 1.60),
         "gpt-4o-mini": (0.15, 0.60),
     }
+    _MAX_REQUEST_INPUT_TOKENS: ClassVar[int] = 6000
+    _MAX_TITLE_TOKENS: ClassVar[int] = 80
+    _MAX_ITEM_CONTENT_TOKENS: ClassVar[int] = 300
+    _CHARS_PER_TOKEN: ClassVar[int] = DEFAULT_CHARS_PER_TOKEN
+    _TRUNCATION_MARKER: ClassVar[str] = DEFAULT_TRUNCATION_MARKER
 
     def __init__(
         self,
@@ -234,6 +246,24 @@ class Tier1Classifier:
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
+        if (
+            self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS
+            and len(items) > 1
+        ):
+            midpoint = max(1, len(items) // 2)
+            left_results, left_usage = await self._classify_batch(items[:midpoint], trends)
+            right_results, right_usage = await self._classify_batch(items[midpoint:], trends)
+            return (
+                [*left_results, *right_results],
+                Tier1Usage(
+                    prompt_tokens=left_usage.prompt_tokens + right_usage.prompt_tokens,
+                    completion_tokens=left_usage.completion_tokens + right_usage.completion_tokens,
+                    api_calls=left_usage.api_calls + right_usage.api_calls,
+                    estimated_cost_usd=left_usage.estimated_cost_usd
+                    + right_usage.estimated_cost_usd,
+                ),
+            )
+
         await self.cost_tracker.ensure_within_budget(TIER1)
         messages = [
             {"role": "system", "content": self.prompt_template},
@@ -302,20 +332,37 @@ class Tier1Classifier:
 
     @staticmethod
     def _item_payload(item: RawItem) -> dict[str, str]:
+        max_title_tokens = Tier1Classifier._MAX_TITLE_TOKENS
+        max_content_tokens = Tier1Classifier._MAX_ITEM_CONTENT_TOKENS
+        chars_per_token = Tier1Classifier._CHARS_PER_TOKEN
+        truncation_marker = Tier1Classifier._TRUNCATION_MARKER
         if item.id is None:
             msg = "RawItem must have an id for Tier 1 classification"
             raise ValueError(msg)
 
-        title = (item.title or "").strip()
-        content = item.raw_content.strip()
-        if len(content) > 4000:
-            content = f"{content[:4000]}..."
+        title = truncate_to_token_limit(
+            text=(item.title or "").strip(),
+            max_tokens=max_title_tokens,
+            marker=truncation_marker,
+            chars_per_token=chars_per_token,
+        )
+        content = truncate_to_token_limit(
+            text=item.raw_content.strip(),
+            max_tokens=max_content_tokens,
+            marker=truncation_marker,
+            chars_per_token=chars_per_token,
+        )
+        content = wrap_untrusted_text(text=content, tag="UNTRUSTED_ARTICLE_CONTENT")
 
         return {
             "item_id": str(item.id),
             "title": title,
             "content": content,
         }
+
+    def _estimate_payload_tokens(self, payload: dict[str, Any]) -> int:
+        serialized = json.dumps(payload, ensure_ascii=True)
+        return estimate_tokens(text=serialized, chars_per_token=self._CHARS_PER_TOKEN)
 
     @staticmethod
     def _trend_payload(trend: Trend) -> dict[str, Any]:

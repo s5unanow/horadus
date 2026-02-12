@@ -19,6 +19,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.processing.cost_tracker import TIER2, CostTracker
 from src.processing.llm_failover import LLMChatFailoverInvoker, LLMChatRoute
+from src.processing.llm_input_safety import (
+    DEFAULT_CHARS_PER_TOKEN,
+    DEFAULT_TRUNCATION_MARKER,
+    estimate_tokens,
+    truncate_to_token_limit,
+    wrap_untrusted_text,
+)
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -109,6 +116,11 @@ class Tier2Classifier:
         "gpt-4o-mini": (0.15, 0.60),
         "gpt-4.1-nano": (0.10, 0.40),
     }
+    _MAX_REQUEST_INPUT_TOKENS: ClassVar[int] = 8000
+    _MAX_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 350
+    _MIN_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 64
+    _CHARS_PER_TOKEN: ClassVar[int] = DEFAULT_CHARS_PER_TOKEN
+    _TRUNCATION_MARKER: ClassVar[str] = DEFAULT_TRUNCATION_MARKER
 
     def __init__(
         self,
@@ -321,12 +333,60 @@ class Tier2Classifier:
         trends: list[Trend],
         context_chunks: list[str],
     ) -> dict[str, Any]:
-        return {
+        sanitized_chunks = [
+            truncate_to_token_limit(
+                text=chunk,
+                max_tokens=self._MAX_CONTEXT_CHUNK_TOKENS,
+                marker=self._TRUNCATION_MARKER,
+                chars_per_token=self._CHARS_PER_TOKEN,
+            )
+            for chunk in context_chunks
+            if chunk.strip()
+        ]
+
+        if not sanitized_chunks:
+            sanitized_chunks = [self._TRUNCATION_MARKER]
+
+        payload = {
             "event_id": str(event.id),
             "summary": event.canonical_summary,
-            "context_chunks": context_chunks,
+            "context_chunks": sanitized_chunks,
             "trends": [self._trend_payload(trend) for trend in trends],
         }
+        self._enforce_payload_budget(payload)
+        payload["context_chunks"] = [
+            wrap_untrusted_text(text=str(chunk), tag="UNTRUSTED_EVENT_CONTEXT")
+            for chunk in payload["context_chunks"]
+        ]
+        return payload
+
+    def _enforce_payload_budget(self, payload: dict[str, Any]) -> None:
+        if self._estimate_payload_tokens(payload) <= self._MAX_REQUEST_INPUT_TOKENS:
+            return
+
+        context_chunks = payload.get("context_chunks")
+        if not isinstance(context_chunks, list):
+            return
+
+        while (
+            len(context_chunks) > 1
+            and self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS
+        ):
+            context_chunks.pop()
+
+        if self._estimate_payload_tokens(payload) <= self._MAX_REQUEST_INPUT_TOKENS:
+            return
+
+        context_chunks[0] = truncate_to_token_limit(
+            text=str(context_chunks[0]),
+            max_tokens=self._MIN_CONTEXT_CHUNK_TOKENS,
+            marker=self._TRUNCATION_MARKER,
+            chars_per_token=self._CHARS_PER_TOKEN,
+        )
+
+    def _estimate_payload_tokens(self, payload: dict[str, Any]) -> int:
+        serialized = json.dumps(payload, ensure_ascii=True)
+        return estimate_tokens(text=serialized, chars_per_token=self._CHARS_PER_TOKEN)
 
     @staticmethod
     def _trend_payload(trend: Trend) -> dict[str, Any]:

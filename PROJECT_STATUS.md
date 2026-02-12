@@ -164,6 +164,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Hermetic integration parity: CI now uses repo Postgres image with verified `timescaledb` + `vector`, unified integration URLs, and deterministic integration DB setup/teardown fixtures
 - [x] Advisory source/source-tier reliability diagnostics in calibration dashboard output with sparse-sample confidence gating (read-only)
 - [x] Historical replay champion/challenger harness with quality/cost/latency comparison artifacts and documented promotion gates
+- [x] Independence-aware corroboration using claim-graph support/contradiction links and source-cluster-weighted corroboration scoring
 
 ## In Progress
 
@@ -177,10 +178,10 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-065` independence-aware corroboration and claim graph
-3. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
-4. Continue `TASK-044` manual gold-set curation/reviewer sign-off flow
+1. Complete `TASK-059` active-learning human review queue (autonomous)
+2. Complete `TASK-058` vector retrieval quality tuning (autonomous)
+3. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
+4. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
 
 ## Expert Feedback Integration ✅
 

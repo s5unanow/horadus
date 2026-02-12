@@ -108,6 +108,12 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert event.has_contradictions is True
     assert event.contradiction_notes is not None
     assert isinstance(event.extracted_claims, dict)
+    assert "claim_graph" in event.extracted_claims
+    claim_graph = event.extracted_claims["claim_graph"]
+    assert isinstance(claim_graph, dict)
+    assert isinstance(claim_graph["nodes"], list)
+    assert len(claim_graph["nodes"]) == 2
+    assert isinstance(claim_graph["links"], list)
     assert len(event.extracted_claims["trend_impacts"]) == 1
     assert usage.api_calls == 1
     assert usage.prompt_tokens == 120

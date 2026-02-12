@@ -15,6 +15,23 @@
 
 ## Completed This Sprint
 
+### TASK-065: Independence-Aware Corroboration and Claim Graph
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Reduce false confidence from derivative coverage by introducing claim-graph structure and independent-source corroboration scoring.
+
+**Completed**:
+- [x] Added normalized claim representation on events via `extracted_claims.claim_graph` (`nodes` + `support`/`contradict` links)
+- [x] Reworked pipeline corroboration scoring to use independent source clusters instead of raw source counts
+- [x] Added derivative-coverage penalties through reporting-type weighting in corroboration scoring
+- [x] Added contradiction-aware corroboration penalties driven by claim-graph contradiction links
+- [x] Extended unit coverage for derivative overcount prevention and contradiction-aware corroboration behavior
+- [x] Updated data-model documentation for claim graph and effective corroboration formula semantics
+
+---
+
 ### TASK-064: Historical Replay and Champion/Challenger Harness
 **Status**: DONE ✓  
 **Priority**: P2 (Medium)  

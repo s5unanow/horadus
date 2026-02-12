@@ -144,7 +144,7 @@ Clustered news events (multiple raw_items about the same story).
 | extracted_what | TEXT | Yes | | What happened |
 | extracted_where | TEXT | Yes | | Location |
 | extracted_when | TIMESTAMPTZ | Yes | | When it happened |
-| extracted_claims | JSONB | Yes | | Structured claims/facts |
+| extracted_claims | JSONB | Yes | | Structured claims + normalized claim graph (`nodes`/`links`) |
 | categories | TEXT[] | Yes | | Classification categories |
 | source_count | INTEGER | No | 1 | Number of sources reporting this |
 | first_seen_at | TIMESTAMPTZ | No | NOW() | First time we saw this event |
@@ -254,7 +254,7 @@ Audit trail of all probability updates.
 | event_id | UUID | No | | Foreign key to events |
 | signal_type | VARCHAR(100) | No | | Type of signal detected |
 | credibility_score | DECIMAL(3,2) | Yes | | Source credibility (0.00-1.00) |
-| corroboration_factor | DECIMAL(5,2) | Yes | | sqrt(sources)/3 |
+| corroboration_factor | DECIMAL(5,2) | Yes | | sqrt(effective_independent_corroboration)/3 |
 | novelty_score | DECIMAL(3,2) | Yes | | Continuous recency-aware novelty (0.30-1.00) |
 | evidence_age_days | DECIMAL(6,2) | Yes | | Event age in days at scoring time |
 | temporal_decay_factor | DECIMAL(5,4) | Yes | | Indicator temporal decay multiplier |
@@ -275,6 +275,9 @@ Audit trail of all probability updates.
 delta = weight × credibility × corroboration × novelty × temporal_decay × direction × severity × confidence
 
 where:
+  corroboration = sqrt(effective_independent_corroboration_score) / 3
+  effective_independent_corroboration_score = sum(independent source-cluster weights) × contradiction_penalty
+  contradiction_penalty = 1.0 normally, reduced when claim-graph contradiction links exist
   novelty = recency-aware continuous score for prior (trend_id, signal_type) evidence
   temporal_decay = 0.5^(evidence_age_days / decay_half_life_days)
   direction = +1 (escalatory) or -1 (de_escalatory)

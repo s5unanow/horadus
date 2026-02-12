@@ -309,6 +309,80 @@ async def test_process_items_applies_trend_impacts(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_corroboration_score_prevents_derivative_overcount(mock_db_session) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Corroboration test",
+        source_count=5,
+        unique_source_count=5,
+    )
+    rows = [
+        (uuid4(), "wire", "aggregator"),
+        (uuid4(), "wire", "aggregator"),
+        (uuid4(), "wire", "aggregator"),
+        (uuid4(), "wire", "aggregator"),
+        (uuid4(), "wire", "firsthand"),
+    ]
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=SimpleNamespace(),
+        embedding_service=SimpleNamespace(),
+        event_clusterer=SimpleNamespace(),
+        tier1_classifier=SimpleNamespace(),
+        tier2_classifier=SimpleNamespace(),
+        trend_engine=SimpleNamespace(),
+    )
+
+    score = await pipeline._corroboration_score(event)
+
+    assert score == pytest.approx(1.35, rel=0.01)
+    assert score < 5.0
+
+
+@pytest.mark.asyncio
+async def test_corroboration_score_applies_contradiction_penalty(mock_db_session) -> None:
+    rows = [
+        (uuid4(), "wire", "firsthand"),
+        (uuid4(), "major", "firsthand"),
+    ]
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=SimpleNamespace(),
+        embedding_service=SimpleNamespace(),
+        event_clusterer=SimpleNamespace(),
+        tier1_classifier=SimpleNamespace(),
+        tier2_classifier=SimpleNamespace(),
+        trend_engine=SimpleNamespace(),
+    )
+
+    baseline_event = Event(id=uuid4(), canonical_summary="Baseline")
+    contradiction_event = Event(
+        id=uuid4(),
+        canonical_summary="Contradiction",
+        has_contradictions=True,
+        extracted_claims={
+            "claim_graph": {
+                "links": [
+                    {"relation": "contradict"},
+                    {"relation": "contradict"},
+                ]
+            }
+        },
+    )
+
+    baseline_score = await pipeline._corroboration_score(baseline_event)
+    contradiction_score = await pipeline._corroboration_score(contradiction_event)
+
+    assert baseline_score == pytest.approx(2.0, rel=0.01)
+    assert contradiction_score == pytest.approx(1.4, rel=0.01)
+    assert contradiction_score < baseline_score
+
+
+@pytest.mark.asyncio
 async def test_process_items_skips_unknown_signal_weight(mock_db_session) -> None:
     item = _build_item()
     trend = _build_trend()

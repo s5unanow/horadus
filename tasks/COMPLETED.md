@@ -67,6 +67,7 @@ Tasks that have been completed and verified.
 - TASK-062: Hermetic Integration Test Environment Parity ✅
 - TASK-063: Source Reliability Diagnostics (Read-Only) ✅
 - TASK-064: Historical Replay and Champion/Challenger Harness ✅
+- TASK-065: Independence-Aware Corroboration and Claim Graph ✅
 - TASK-067: Report Narrative Prompt Hardening ✅
 - TASK-068: Gold-Set Change Governance and Baseline Supersession ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅

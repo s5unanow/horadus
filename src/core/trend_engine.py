@@ -240,7 +240,7 @@ def calculate_evidence_delta(
     signal_type: str,
     indicator_weight: float,
     source_credibility: float,
-    corroboration_count: int,
+    corroboration_count: float,
     novelty_score: float,
     direction: str,
     severity: float = 1.0,
@@ -259,7 +259,7 @@ def calculate_evidence_delta(
         - severity: Magnitude of the signal (0.0-1.0), e.g., routine=0.2, major=0.8
         - confidence: LLM's certainty in classification (0.0-1.0)
         - credibility: Source reliability (0-1)
-        - corroboration: sqrt(num_sources) / 3, capped at 1.0
+        - corroboration: sqrt(effective_independent_sources) / 3, capped at 1.0
         - novelty: 1.0 for new info, 0.3 for repeated
         - direction: +1 for escalatory, -1 for de-escalatory
 
@@ -270,7 +270,7 @@ def calculate_evidence_delta(
         signal_type: Type of signal detected (for logging)
         indicator_weight: Base weight from trend config
         source_credibility: Source reliability score (0.0 to 1.0)
-        corroboration_count: Number of independent sources
+        corroboration_count: Effective independent corroboration score (supports fractional penalties)
         novelty_score: Novelty factor (0.0 to 1.0, typically 1.0 or 0.3)
         direction: 'escalatory' or 'de_escalatory'
         severity: Magnitude of the signal (0.0 to 1.0, default 1.0)
@@ -315,8 +315,9 @@ def calculate_evidence_delta(
     evidence_age_days = max(0.0, evidence_age_days)
 
     # Calculate corroboration factor
-    # 1 source = 0.33, 4 sources = 0.67, 9+ sources = 1.0
-    corroboration = min(1.0, math.sqrt(max(1, corroboration_count)) / 3.0)
+    # 1.0 score = 0.33, 4.0 score = 0.67, 9.0+ score = 1.0
+    effective_corroboration = max(0.1, float(corroboration_count))
+    corroboration = min(1.0, math.sqrt(effective_corroboration) / 3.0)
 
     if indicator_decay_half_life_days is None:
         temporal_decay_multiplier = 1.0

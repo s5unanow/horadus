@@ -16,6 +16,21 @@
 
 ## Completed This Sprint
 
+### TASK-052: Distributed Rate Limiting + Admin Audit Trail
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Move API key rate limiting out of process memory and add traceability for privileged auth operations.
+
+**Completed**:
+- [x] Added Redis-backed per-key rate limiting with TTL window buckets shared across API instances
+- [x] Preserved deterministic `Retry-After` behavior using window-end calculations
+- [x] Added structured audit logging for admin key-management actions (`list/create/revoke/rotate`) including denied/not-found outcomes
+- [x] Added tests for distributed multi-manager consistency and rate-limit edge behavior near window boundaries
+
+---
+
 ### TASK-068: Gold-Set Change Governance and Baseline Supersession
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

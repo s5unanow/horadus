@@ -149,6 +149,8 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Hardened weekly/monthly/retrospective narrative prompts with anti-injection and uncertainty guardrails
 - [x] Gold-set update governance policy with baseline supersession + history archival workflow
 - [x] Benchmark artifacts now include dataset fingerprint metadata for comparison integrity
+- [x] Distributed Redis-backed API rate limiting with deterministic Retry-After semantics
+- [x] Structured admin auth audit logs for key-management operations (list/create/revoke/rotate)
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
@@ -169,9 +171,9 @@ Phase 6: Calibration (NEW)   [████████████████�
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
 2. Complete `TASK-047` pinned benchmark baseline artifact after API key is configured
-3. Complete `TASK-052` distributed rate limiting + admin audit trail
-4. Complete `TASK-053` atomic budget enforcement under concurrency
-5. Complete `TASK-054` LLM input safety guardrails (injection + token precheck)
+3. Complete `TASK-053` atomic budget enforcement under concurrency
+4. Complete `TASK-054` LLM input safety guardrails (injection + token precheck)
+5. Complete `TASK-057` runtime resilience guardrails
 
 ## Expert Feedback Integration ✅
 

@@ -1,5 +1,5 @@
 """
-API key authentication and in-memory per-key rate limiting.
+API key authentication and distributed per-key rate limiting.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import json
 import secrets
 import time
 from collections import deque
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -19,7 +20,12 @@ from threading import RLock
 from typing import Literal
 from uuid import uuid4
 
+import redis
+import structlog
+
 from src.core.config import settings
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -46,6 +52,7 @@ class APIKeyManager:
     _SCRYPT_R = 8
     _SCRYPT_P = 1
     _SCRYPT_DKLEN = 32
+    _RATE_LIMIT_DEGRADE_RETRY_SECONDS = 30
 
     def __init__(
         self,
@@ -55,6 +62,9 @@ class APIKeyManager:
         static_api_keys: list[str],
         default_rate_limit_per_minute: int,
         persist_path: str | None = None,
+        redis_client: redis.Redis[str] | None = None,
+        rate_limit_backend: Literal["auto", "redis", "memory"] = "auto",
+        wall_time_fn: Callable[[], float] | None = None,
     ) -> None:
         self._auth_enabled = auth_enabled
         self._default_rate_limit_per_minute = max(1, default_rate_limit_per_minute)
@@ -62,6 +72,14 @@ class APIKeyManager:
         self._request_windows: dict[str, deque[float]] = {}
         self._lock = RLock()
         self._persist_path = Path(persist_path).expanduser() if persist_path else None
+        self._rate_limit_backend = rate_limit_backend
+        self._rate_limit_window_seconds = max(1, settings.API_RATE_LIMIT_WINDOW_SECONDS)
+        self._rate_limit_redis_prefix = (
+            settings.API_RATE_LIMIT_REDIS_PREFIX.strip() or "horadus:api_rate_limit"
+        )
+        self._redis_client = redis_client
+        self._redis_unavailable_until = 0.0
+        self._wall_time_fn = wall_time_fn or time.time
 
         bootstrap_keys = [key for key in [legacy_api_key, *static_api_keys] if key]
         for index, raw_key in enumerate(bootstrap_keys, start=1):
@@ -158,22 +176,81 @@ class APIKeyManager:
             return replacement_record, replacement_raw_key
 
     def check_rate_limit(self, key_id: str) -> tuple[bool, int | None]:
-        now = time.monotonic()
+        now = self._wall_time_fn()
         with self._lock:
             record = self._records_by_id.get(key_id)
             if record is None or not record.is_active:
                 return (False, None)
+            per_minute_limit = record.rate_limit_per_minute
 
+        distributed_result = self._check_rate_limit_distributed(
+            key_id=key_id,
+            per_minute_limit=per_minute_limit,
+            now=now,
+        )
+        if distributed_result is not None:
+            return distributed_result
+
+        with self._lock:
             window = self._request_windows.setdefault(key_id, deque())
-            while window and (now - window[0]) >= 60.0:
+            while window and (now - window[0]) >= self._rate_limit_window_seconds:
                 window.popleft()
 
-            if len(window) >= record.rate_limit_per_minute:
-                retry_after = int(max(1, 60 - (now - window[0])))
+            if len(window) >= per_minute_limit:
+                retry_after = int(max(1, self._rate_limit_window_seconds - (now - window[0])))
                 return (False, retry_after)
 
             window.append(now)
             return (True, None)
+
+    def _check_rate_limit_distributed(
+        self,
+        *,
+        key_id: str,
+        per_minute_limit: int,
+        now: float,
+    ) -> tuple[bool, int | None] | None:
+        if self._rate_limit_backend == "memory":
+            return None
+        if now < self._redis_unavailable_until:
+            return None
+
+        try:
+            redis_client = self._get_redis_client()
+            window_start = (
+                int(now // self._rate_limit_window_seconds) * self._rate_limit_window_seconds
+            )
+            window_end = window_start + self._rate_limit_window_seconds
+            bucket_key = f"{self._rate_limit_redis_prefix}:{key_id}:{window_start}"
+
+            pipeline = redis_client.pipeline(transaction=True)
+            pipeline.incr(bucket_key)
+            pipeline.expireat(bucket_key, window_end + 1)
+            count_raw, _expire_set = pipeline.execute()
+            count = int(count_raw)
+            if count <= per_minute_limit:
+                return (True, None)
+
+            retry_after = max(1, window_end - int(now))
+            return (False, retry_after)
+        except Exception:
+            self._redis_unavailable_until = now + self._RATE_LIMIT_DEGRADE_RETRY_SECONDS
+            logger.warning(
+                "Rate limit backend degraded to memory",
+                backend=self._rate_limit_backend,
+                retry_after_seconds=self._RATE_LIMIT_DEGRADE_RETRY_SECONDS,
+            )
+            return None
+
+    def _get_redis_client(self) -> redis.Redis[str]:
+        if self._redis_client is None:
+            self._redis_client = redis.from_url(
+                settings.REDIS_URL,
+                decode_responses=True,
+                socket_connect_timeout=0.1,
+                socket_timeout=0.1,
+            )
+        return self._redis_client
 
     def _add_key(
         self,

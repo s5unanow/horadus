@@ -55,6 +55,7 @@ Tasks that have been completed and verified.
 - TASK-049: Documentation Drift and Consistency Cleanup ✅
 - TASK-050: Upgrade Tier 2 LLM from gpt-4o-mini to gpt-4.1-mini ✅
 - TASK-051: API Key Hash Hardening and Migration ✅
+- TASK-052: Distributed Rate Limiting + Admin Audit Trail ✅
 - TASK-055: Stuck Processing Reaper Worker ✅
 - TASK-056: Bounded Embedding Cache ✅
 - TASK-067: Report Narrative Prompt Hardening ✅

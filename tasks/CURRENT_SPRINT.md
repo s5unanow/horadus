@@ -15,6 +15,21 @@
 
 ## Completed This Sprint
 
+### TASK-060: Counterfactual Simulation API
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Provide non-persistent what-if probability projections using deterministic trend math.
+
+**Completed**:
+- [x] Added `POST /api/v1/trends/{trend_id}/simulate` with mode `remove_event_impact` (reverse historical event deltas without DB mutation)
+- [x] Added mode `inject_hypothetical_signal` using deterministic `calculate_evidence_delta` factor math
+- [x] Returned projected probability, probability delta, log-odds delta, and factor breakdown for both modes
+- [x] Added unit tests for both simulation modes and explicit side-effect-free behavior (no session mutation calls)
+
+---
+
 ### TASK-047: Pinned Evaluation Baseline Artifact
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

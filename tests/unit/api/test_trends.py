@@ -21,6 +21,7 @@ from src.api.routes.trends import (
     list_trends,
     load_trends_from_config,
     record_trend_outcome,
+    simulate_trend,
     update_trend,
 )
 from src.core.calibration import CalibrationBucket, CalibrationReport
@@ -363,6 +364,114 @@ async def test_list_trend_evidence_rejects_invalid_date_range(mock_db_session) -
 
     assert exc.value.status_code == 400
     mock_db_session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_simulate_trend_injects_hypothetical_signal_without_db_mutation(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+
+    payload = trends_module.InjectHypotheticalSignalSimulationRequest(
+        mode="inject_hypothetical_signal",
+        signal_type="military_movement",
+        indicator_weight=0.04,
+        source_credibility=0.9,
+        corroboration_count=3,
+        novelty_score=1.0,
+        direction="escalatory",
+        severity=0.8,
+        confidence=0.95,
+    )
+    expected_delta, _ = trends_module.calculate_evidence_delta(
+        signal_type=payload.signal_type,
+        indicator_weight=payload.indicator_weight,
+        source_credibility=payload.source_credibility,
+        corroboration_count=payload.corroboration_count,
+        novelty_score=payload.novelty_score,
+        direction=payload.direction,
+        severity=payload.severity,
+        confidence=payload.confidence,
+    )
+
+    result = await simulate_trend(
+        trend_id=trend.id,
+        payload=payload,
+        session=mock_db_session,
+    )
+
+    assert result.mode == "inject_hypothetical_signal"
+    assert result.trend_id == trend.id
+    assert result.delta_log_odds == pytest.approx(expected_delta)
+    assert result.projected_probability == pytest.approx(
+        logodds_to_prob(float(trend.current_log_odds) + expected_delta),
+    )
+    assert result.factor_breakdown["base_weight"] == pytest.approx(payload.indicator_weight)
+    mock_db_session.add.assert_not_called()
+    mock_db_session.flush.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_simulate_trend_removes_event_impact_without_db_mutation(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    event_id = uuid4()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(
+        all=lambda: [
+            TrendEvidence(
+                id=uuid4(),
+                trend_id=trend.id,
+                event_id=event_id,
+                signal_type="military_movement",
+                delta_log_odds=0.02,
+            ),
+            TrendEvidence(
+                id=uuid4(),
+                trend_id=trend.id,
+                event_id=event_id,
+                signal_type="diplomatic_breakdown",
+                delta_log_odds=-0.01,
+            ),
+        ]
+    )
+
+    result = await simulate_trend(
+        trend_id=trend.id,
+        payload=trends_module.RemoveEventImpactSimulationRequest(
+            mode="remove_event_impact",
+            event_id=event_id,
+        ),
+        session=mock_db_session,
+    )
+
+    assert result.mode == "remove_event_impact"
+    assert result.delta_log_odds == pytest.approx(-0.01)
+    assert result.factor_breakdown["evidence_count"] == 2
+    assert result.factor_breakdown["removed_sum_delta_log_odds"] == pytest.approx(0.01)
+    mock_db_session.add.assert_not_called()
+    mock_db_session.flush.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_simulate_trend_remove_event_returns_404_when_no_evidence(mock_db_session) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+
+    with pytest.raises(HTTPException, match="No matching trend evidence found") as exc:
+        await simulate_trend(
+            trend_id=trend.id,
+            payload=trends_module.RemoveEventImpactSimulationRequest(
+                mode="remove_event_impact",
+                event_id=uuid4(),
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 404
 
 
 @pytest.mark.asyncio

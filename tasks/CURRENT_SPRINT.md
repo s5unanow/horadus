@@ -15,6 +15,105 @@
 
 ## Completed This Sprint
 
+### TASK-058: Vector Retrieval Quality Tuning (HNSW vs IVFFlat)
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Tune vector retrieval strategy selection for current small-table operating regime.
+
+**Completed**:
+- [x] Added deterministic vector retrieval benchmark harness (`horadus eval vector-benchmark`) comparing exact, IVFFlat, and HNSW
+- [x] Added strategy recommendation logic using recall and latency gates (`recall_at_k >= 0.95` and >=5% latency improvement over exact)
+- [x] Confirmed benchmark recommendation for current dataset profile selects IVFFlat as default ANN strategy
+- [x] Added Alembic migration `0008_vector_index_strategy_profile` to apply tuned IVFFlat profile (`lists=64`) with downgrade path to legacy profile
+- [x] Added vector similarity helper utilities and nearest-neighbor threshold tests for deterministic thresholded behavior
+- [x] Updated data-model documentation with selected strategy and benchmark revalidation command
+
+---
+
+### TASK-059: Active-Learning Human Review Queue
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Prioritize analyst review with deterministic expected-information-gain ranking.
+
+**Completed**:
+- [x] Added `GET /api/v1/review-queue` endpoint for ranked analyst candidates
+- [x] Implemented ranking formula `uncertainty_score x projected_delta x contradiction_risk`
+- [x] Added triage payload fields for reviewer context and label-provenance follow-up (`feedback_count`, `feedback_actions`, `requires_human_verification`)
+- [x] Added filters for `trend_id`, `days`, and `unreviewed_only` to support queue slicing
+- [x] Added unit tests for deterministic ranking order and filter behavior
+
+---
+
+### TASK-065: Independence-Aware Corroboration and Claim Graph
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Reduce false confidence from derivative coverage by introducing claim-graph structure and independent-source corroboration scoring.
+
+**Completed**:
+- [x] Added normalized claim representation on events via `extracted_claims.claim_graph` (`nodes` + `support`/`contradict` links)
+- [x] Reworked pipeline corroboration scoring to use independent source clusters instead of raw source counts
+- [x] Added derivative-coverage penalties through reporting-type weighting in corroboration scoring
+- [x] Added contradiction-aware corroboration penalties driven by claim-graph contradiction links
+- [x] Extended unit coverage for derivative overcount prevention and contradiction-aware corroboration behavior
+- [x] Updated data-model documentation for claim graph and effective corroboration formula semantics
+
+---
+
+### TASK-064: Historical Replay and Champion/Challenger Harness
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add a deterministic replay workflow for side-by-side release decisions on historical windows.
+
+**Completed**:
+- [x] Added historical replay runner (`horadus eval replay`) over shared time-window inputs with optional trend scoping
+- [x] Added champion/challenger policy profiles and side-by-side comparison artifact generation (`replay-*.json`)
+- [x] Included replay dataset counts for historical `raw_items`, `events`, `trend_evidence`, `trend_snapshots`, and `trend_outcomes`
+- [x] Added quality/cost/latency comparison outputs and automated promotion assessment gates
+- [x] Documented champion/challenger promotion criteria in `docs/PROMPT_EVAL_POLICY.md`
+- [x] Added unit coverage for replay metrics, promotion assessment, artifact writing, and CLI replay command parsing
+
+---
+
+### TASK-063: Source Reliability Diagnostics (Read-Only)
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add source and source-tier reliability visibility to calibration reporting without automatic weighting changes.
+
+**Completed**:
+- [x] Added `source_reliability` and `source_tier_reliability` diagnostics to calibration dashboard service and API response payloads
+- [x] Implemented read-only advisory diagnostics derived from resolved outcomes and linked source evidence (no automatic source-weight mutations)
+- [x] Added sample-size confidence gating (`insufficient`/`low`/`medium`/`high`) and explicit sparse-sample advisory notes
+- [x] Added unit tests for reliability aggregation correctness and sparse-data guardrail behavior
+- [x] Updated API documentation to describe new advisory diagnostics fields and confidence gating
+
+---
+
+### TASK-062: Hermetic Integration Test Environment Parity
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Align local and CI integration environments to eliminate config drift and silent failures.
+
+**Completed**:
+- [x] Switched CI integration Postgres to the same repo Docker image (`docker/postgres/Dockerfile`) used locally, guaranteeing `timescaledb` and `vector` extension availability
+- [x] Added explicit CI extension verification to fail fast when required database capabilities are missing
+- [x] Unified integration DB/Redis URLs via shared CI env variables and mirrored local defaults in `Makefile` (`INTEGRATION_DATABASE_URL`, `INTEGRATION_REDIS_URL`)
+- [x] Removed split migration/test execution pattern in CI by running migrations and integration tests in a single strict shell step (`set -euo pipefail`)
+- [x] Added deterministic integration DB setup/teardown fixture (`tests/integration/conftest.py`) that truncates public tables before and after each integration test
+
+---
+
 ### TASK-061: Recency-Aware Novelty + Per-Indicator Decay
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

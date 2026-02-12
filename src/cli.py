@@ -7,12 +7,16 @@ from __future__ import annotations
 import argparse
 import asyncio
 from collections.abc import Sequence
+from datetime import datetime
+from uuid import UUID
 
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
 from src.core.config import settings
 from src.core.dashboard_export import export_calibration_dashboard
 from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
+from src.eval.replay import available_replay_configs, run_historical_replay_comparison
+from src.eval.vector_benchmark import run_vector_retrieval_benchmark
 from src.storage.database import async_session_maker
 
 
@@ -35,6 +39,17 @@ def _format_trend_status_lines(movement: TrendMovement) -> list[str]:
     )
     movers = ", ".join(movement.top_movers_7d) if movement.top_movers_7d else "none"
     return [header, f"  Top movers: {movers}"]
+
+
+def _parse_iso_datetime(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    if normalized.endswith("Z"):
+        normalized = normalized[:-1] + "+00:00"
+    return datetime.fromisoformat(normalized)
 
 
 async def _run_trends_status(*, limit: int) -> int:
@@ -88,6 +103,55 @@ async def _run_eval_benchmark(
         require_human_verified=require_human_verified,
     )
     print(f"Benchmark output: {output_path}")
+    return 0
+
+
+async def _run_eval_replay(
+    *,
+    output_dir: str,
+    champion_config: str,
+    challenger_config: str,
+    trend_id: str | None,
+    start_date: str | None,
+    end_date: str | None,
+    days: int,
+) -> int:
+    parsed_trend_id = UUID(trend_id) if trend_id else None
+    output_path = await run_historical_replay_comparison(
+        output_dir=output_dir,
+        champion_config_name=champion_config,
+        challenger_config_name=challenger_config,
+        trend_id=parsed_trend_id,
+        start_date=_parse_iso_datetime(start_date),
+        end_date=_parse_iso_datetime(end_date),
+        days=max(1, days),
+    )
+    print(f"Replay output: {output_path}")
+    return 0
+
+
+async def _run_eval_vector_benchmark(
+    *,
+    output_dir: str,
+    database_url: str | None,
+    dataset_size: int,
+    query_count: int,
+    dimensions: int,
+    top_k: int,
+    similarity_threshold: float,
+    seed: int,
+) -> int:
+    output_path = await run_vector_retrieval_benchmark(
+        output_dir=output_dir,
+        database_url=database_url,
+        dataset_size=max(100, dataset_size),
+        query_count=max(10, query_count),
+        dimensions=max(8, dimensions),
+        top_k=max(1, top_k),
+        similarity_threshold=similarity_threshold,
+        seed=seed,
+    )
+    print(f"Vector benchmark output: {output_path}")
     return 0
 
 
@@ -210,6 +274,101 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return non-zero exit code if audit warnings are present.",
     )
+
+    eval_replay_parser = eval_subparsers.add_parser(
+        "replay",
+        help="Run historical champion/challenger replay over stored outcomes.",
+    )
+    eval_replay_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for replay result artifacts.",
+    )
+    replay_configs = sorted(available_replay_configs().keys())
+    eval_replay_parser.add_argument(
+        "--champion-config",
+        default="stable",
+        choices=replay_configs,
+        help="Champion replay policy config.",
+    )
+    eval_replay_parser.add_argument(
+        "--challenger-config",
+        default="fast_lower_threshold",
+        choices=replay_configs,
+        help="Challenger replay policy config.",
+    )
+    eval_replay_parser.add_argument(
+        "--trend-id",
+        default=None,
+        help="Optional trend UUID scope.",
+    )
+    eval_replay_parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Optional ISO-8601 start datetime (e.g. 2026-01-01T00:00:00Z).",
+    )
+    eval_replay_parser.add_argument(
+        "--end-date",
+        default=None,
+        help="Optional ISO-8601 end datetime (defaults to now).",
+    )
+    eval_replay_parser.add_argument(
+        "--days",
+        type=int,
+        default=90,
+        help="Replay window in days when start-date is not provided.",
+    )
+
+    eval_vector_parser = eval_subparsers.add_parser(
+        "vector-benchmark",
+        help="Benchmark exact vs IVFFlat vs HNSW retrieval quality/latency.",
+    )
+    eval_vector_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for vector benchmark artifacts.",
+    )
+    eval_vector_parser.add_argument(
+        "--database-url",
+        default=None,
+        help="Optional PostgreSQL URL override (defaults to DATABASE_URL).",
+    )
+    eval_vector_parser.add_argument(
+        "--dataset-size",
+        type=int,
+        default=4000,
+        help="Number of benchmark vectors to generate.",
+    )
+    eval_vector_parser.add_argument(
+        "--query-count",
+        type=int,
+        default=200,
+        help="Number of query vectors to evaluate.",
+    )
+    eval_vector_parser.add_argument(
+        "--dimensions",
+        type=int,
+        default=64,
+        help="Embedding dimensions for synthetic benchmark vectors.",
+    )
+    eval_vector_parser.add_argument(
+        "--top-k",
+        type=int,
+        default=10,
+        help="Neighbors returned per query.",
+    )
+    eval_vector_parser.add_argument(
+        "--similarity-threshold",
+        type=float,
+        default=0.88,
+        help="Cosine similarity threshold used for retrieval filtering.",
+    )
+    eval_vector_parser.add_argument(
+        "--seed",
+        type=int,
+        default=42,
+        help="Random seed for deterministic synthetic data.",
+    )
     return parser
 
 
@@ -242,6 +401,31 @@ def main(argv: Sequence[str] | None = None) -> int:
             output_dir=args.output_dir,
             max_items=args.max_items,
             fail_on_warnings=args.fail_on_warnings,
+        )
+    if args.command == "eval" and args.eval_command == "replay":
+        return asyncio.run(
+            _run_eval_replay(
+                output_dir=args.output_dir,
+                champion_config=args.champion_config,
+                challenger_config=args.challenger_config,
+                trend_id=args.trend_id,
+                start_date=args.start_date,
+                end_date=args.end_date,
+                days=args.days,
+            )
+        )
+    if args.command == "eval" and args.eval_command == "vector-benchmark":
+        return asyncio.run(
+            _run_eval_vector_benchmark(
+                output_dir=args.output_dir,
+                database_url=args.database_url,
+                dataset_size=args.dataset_size,
+                query_count=args.query_count,
+                dimensions=args.dimensions,
+                top_k=args.top_k,
+                similarity_threshold=args.similarity_threshold,
+                seed=args.seed,
+            )
         )
 
     parser.print_help()

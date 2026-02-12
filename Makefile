@@ -23,6 +23,8 @@ export UV_CACHE_DIR
 UV_RUN := $(UV) run --no-sync
 PYTHON := $(shell command -v python3.12 >/dev/null 2>&1 && echo python3.12 || echo python3)
 DOCKER_COMPOSE := $(shell if command -v docker-compose >/dev/null 2>&1; then echo docker-compose; else echo "docker compose"; fi)
+INTEGRATION_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432/geoint_test # pragma: allowlist secret
+INTEGRATION_REDIS_URL ?= redis://localhost:6379/0
 
 # Colors for terminal output
 BLUE := \033[34m
@@ -99,7 +101,7 @@ test-unit: deps-dev ## Run unit tests only
 	$(UV_RUN) pytest tests/unit/ -v -m unit
 
 test-integration: deps-dev ## Run integration tests only
-	$(UV_RUN) pytest tests/integration/ -v -m integration
+	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" REDIS_URL="$(INTEGRATION_REDIS_URL)" $(UV_RUN) pytest tests/integration/ -v -m integration
 
 test-cov: deps-dev ## Run tests with coverage report
 	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html

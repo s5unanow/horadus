@@ -15,6 +15,10 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
+  INTEGRATION_DB_USER: "postgres"
+  INTEGRATION_DB_PASSWORD: "postgres"  # pragma: allowlist secret
+  INTEGRATION_DB_NAME: "geoint_test"
+  INTEGRATION_REDIS_URL: "redis://localhost:6379/0"
 
 jobs:
   # ---------------------------------------------------------------------------
@@ -111,20 +115,6 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.draft == false
 
     services:
-      postgres:
-        image: timescale/timescaledb:latest-pg16
-        env:
-          POSTGRES_USER: geoint
-          POSTGRES_PASSWORD: geoint  # pragma: allowlist secret
-          POSTGRES_DB: geoint_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
       redis:
         image: redis:7-alpine
         ports:
@@ -151,21 +141,61 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev --frozen
 
-      - name: Wait for services
+      - name: Build pgvector-capable Postgres image
+        run: docker build -t geoint-postgres:ci -f docker/postgres/Dockerfile docker/postgres
+
+      - name: Start integration Postgres
         run: |
-          sleep 5
+          docker run -d \
+            --name geoint-postgres-ci \
+            -e POSTGRES_USER=${{ env.INTEGRATION_DB_USER }} \
+            -e POSTGRES_PASSWORD=${{ env.INTEGRATION_DB_PASSWORD }} \
+            -e POSTGRES_DB=${{ env.INTEGRATION_DB_NAME }} \
+            -p 5432:5432 \
+            -v "${GITHUB_WORKSPACE}/docker/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro" \
+            geoint-postgres:ci
 
-      - name: Run database migrations
-        env:
-          DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
-        run: uv run --no-sync alembic upgrade head
+      - name: Wait for integration services
+        run: |
+          for attempt in {1..30}; do
+            if docker exec geoint-postgres-ci pg_isready -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}"; then
+              break
+            fi
+            if [ "$attempt" -eq 30 ]; then
+              docker logs geoint-postgres-ci
+              exit 1
+            fi
+            sleep 2
+          done
+          sleep 3
 
-      - name: Run integration tests
+      - name: Verify required Postgres extensions
+        run: |
+          installed_count=$(
+            docker exec geoint-postgres-ci \
+              psql -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}" \
+              -tAc "SELECT count(*) FROM pg_extension WHERE extname IN ('timescaledb', 'vector');"
+          )
+          if [ "$installed_count" -ne 2 ]; then
+            docker exec geoint-postgres-ci \
+              psql -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}" \
+              -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;"
+            exit 1
+          fi
+
+      - name: Run integration migrations and tests
         env:
-          DATABASE_URL: postgresql+asyncpg://geoint:geoint@localhost:5432/geoint_test  # pragma: allowlist secret
-          REDIS_URL: redis://localhost:6379/0
+          DATABASE_URL: postgresql+asyncpg://${{ env.INTEGRATION_DB_USER }}:${{ env.INTEGRATION_DB_PASSWORD }}@localhost:5432/${{ env.INTEGRATION_DB_NAME }}  # pragma: allowlist secret
+          REDIS_URL: ${{ env.INTEGRATION_REDIS_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: uv run --no-sync pytest tests/integration/ -v -m integration
+        run: |
+          set -euo pipefail
+          uv run --no-sync alembic upgrade head
+          uv run --no-sync pytest tests/integration/ -v -m integration
+
+      - name: Dump Postgres logs on failure
+        if: failure()
+        run: docker logs geoint-postgres-ci
 
   # ---------------------------------------------------------------------------
   # Security Scanning

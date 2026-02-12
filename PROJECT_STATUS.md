@@ -161,6 +161,12 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
 - [x] Counterfactual simulation API (`POST /api/v1/trends/{id}/simulate`) for side-effect-free remove/inject what-if projections
 - [x] Recency-aware novelty scoring + per-indicator temporal decay with explicit trend-evidence provenance factors
+- [x] Hermetic integration parity: CI now uses repo Postgres image with verified `timescaledb` + `vector`, unified integration URLs, and deterministic integration DB setup/teardown fixtures
+- [x] Advisory source/source-tier reliability diagnostics in calibration dashboard output with sparse-sample confidence gating (read-only)
+- [x] Historical replay champion/challenger harness with quality/cost/latency comparison artifacts and documented promotion gates
+- [x] Independence-aware corroboration using claim-graph support/contradiction links and source-cluster-weighted corroboration scoring
+- [x] Active-learning review queue endpoint (`GET /api/v1/review-queue`) with deterministic uncertainty/delta/contradiction ranking
+- [x] Vector retrieval strategy benchmark harness (exact vs IVFFlat vs HNSW) with tuned IVFFlat index profile (`lists=64`) and migration path
 
 ## In Progress
 
@@ -175,10 +181,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-062` hermetic integration test environment parity
-3. Complete `TASK-063` source reliability diagnostics (read-only)
-4. Complete `TASK-064` historical replay and champion/challenger harness
-5. Complete `TASK-065` independence-aware corroboration and claim graph
+2. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
 
 ## Expert Feedback Integration ✅
 

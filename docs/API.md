@@ -161,6 +161,9 @@ Calibration dashboard responses include `drift_alerts` when Brier/bucket error
 thresholds are breached after minimum sample requirements are met.
 Responses also include `coverage` guardrail metrics (resolved ratio and per-trend
 low-sample breakdown) for calibration SLO monitoring.
+Responses now also include advisory-only `source_reliability` and
+`source_tier_reliability` diagnostics with sample-size confidence gating
+(`eligible` / `confidence`) to prevent over-interpreting sparse outcome samples.
 When `CALIBRATION_DRIFT_WEBHOOK_URL` is configured, alert payloads are also sent
 to the webhook with bounded retry/backoff on transient delivery failures.
 Operational response guidance for these alerts is documented in
@@ -204,6 +207,7 @@ curl -X POST http://localhost:8000/api/v1/auth/keys \
 ## Feedback
 
 - `GET /api/v1/feedback`
+- `GET /api/v1/review-queue`
 - `POST /api/v1/events/{event_id}/feedback` (`pin`, `mark_noise`, `invalidate`)
 - `POST /api/v1/trends/{trend_id}/override`
 
@@ -213,4 +217,10 @@ Invalidate example:
 curl -X POST "http://localhost:8000/api/v1/events/<event-id>/feedback" \
   -H "Content-Type: application/json" \
   -d '{"action":"invalidate","notes":"Analyst invalidation after contradiction review"}'
+```
+
+Review queue example:
+
+```bash
+curl "http://localhost:8000/api/v1/review-queue?days=7&limit=25&unreviewed_only=true"
 ```

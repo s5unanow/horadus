@@ -62,8 +62,14 @@ Tasks that have been completed and verified.
 - TASK-055: Stuck Processing Reaper Worker ✅
 - TASK-056: Bounded Embedding Cache ✅
 - TASK-057: Runtime Resilience Guardrails ✅
+- TASK-058: Vector Retrieval Quality Tuning (HNSW vs IVFFlat) ✅
+- TASK-059: Active-Learning Human Review Queue ✅
 - TASK-060: Counterfactual Simulation API ✅
 - TASK-061: Recency-Aware Novelty + Per-Indicator Decay ✅
+- TASK-062: Hermetic Integration Test Environment Parity ✅
+- TASK-063: Source Reliability Diagnostics (Read-Only) ✅
+- TASK-064: Historical Replay and Champion/Challenger Harness ✅
+- TASK-065: Independence-Aware Corroboration and Claim Graph ✅
 - TASK-067: Report Narrative Prompt Hardening ✅
 - TASK-068: Gold-Set Change Governance and Baseline Supersession ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅

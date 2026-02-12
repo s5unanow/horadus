@@ -26,6 +26,7 @@ from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Ti
 from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.models import (
     Event,
+    EventItem,
     HumanFeedback,
     ProcessingStatus,
     RawItem,
@@ -393,7 +394,7 @@ class ProcessingPipeline:
 
         trend_by_id = {self._trend_identifier(trend): trend for trend in trends}
         source_credibility = await self._load_event_source_credibility(event)
-        corroboration_count = self._corroboration_count(event)
+        corroboration_score = await self._corroboration_score(event)
 
         impacts_seen = 0
         updates_applied = 0
@@ -447,7 +448,7 @@ class ProcessingPipeline:
                 signal_type=signal_type,
                 indicator_weight=indicator_weight,
                 source_credibility=source_credibility,
-                corroboration_count=corroboration_count,
+                corroboration_count=corroboration_score,
                 novelty_score=novelty_score,
                 direction=impact["direction"],
                 severity=impact["severity"],
@@ -508,13 +509,99 @@ class ProcessingPipeline:
         last_seen_at: datetime | None = await self.session.scalar(query)
         return calculate_recency_novelty(last_seen_at=last_seen_at)
 
+    async def _corroboration_score(self, event: Event) -> float:
+        base_score = self._fallback_corroboration_score(event)
+        if event.id is None:
+            return max(0.1, base_score * self._contradiction_penalty(event))
+
+        try:
+            query = (
+                select(
+                    Source.id,
+                    Source.source_tier,
+                    Source.reporting_type,
+                )
+                .join(RawItem, RawItem.source_id == Source.id)
+                .join(EventItem, EventItem.item_id == RawItem.id)
+                .where(EventItem.event_id == event.id)
+            )
+            result = await self.session.execute(query)
+            rows_raw = result.all()
+            if hasattr(rows_raw, "__await__"):
+                rows_raw = await rows_raw
+        except Exception:
+            return max(0.1, base_score * self._contradiction_penalty(event))
+
+        if not isinstance(rows_raw, list):
+            return max(0.1, base_score * self._contradiction_penalty(event))
+        rows = [row for row in rows_raw if isinstance(row, tuple) and len(row) >= 3]
+        if not rows:
+            return max(0.1, base_score * self._contradiction_penalty(event))
+
+        cluster_weights: dict[str, float] = {}
+        for source_id, source_tier, reporting_type in rows:
+            cluster_key = self._source_cluster_key(
+                source_id=source_id,
+                source_tier=source_tier,
+                reporting_type=reporting_type,
+            )
+            weight = self._reporting_type_weight(reporting_type)
+            cluster_weights[cluster_key] = max(cluster_weights.get(cluster_key, 0.0), weight)
+
+        independent_score = sum(cluster_weights.values())
+        contradiction_penalty = self._contradiction_penalty(event)
+        return max(0.1, independent_score * contradiction_penalty)
+
     @staticmethod
-    def _corroboration_count(event: Event) -> int:
+    def _fallback_corroboration_score(event: Event) -> float:
         if event.unique_source_count and event.unique_source_count > 0:
-            return int(event.unique_source_count)
+            return float(event.unique_source_count)
         if event.source_count and event.source_count > 0:
-            return int(event.source_count)
-        return 1
+            return float(event.source_count)
+        return 1.0
+
+    @staticmethod
+    def _source_cluster_key(
+        *,
+        source_id: UUID,
+        source_tier: str | None,
+        reporting_type: str | None,
+    ) -> str:
+        tier = (source_tier or "unknown").strip().lower()
+        reporting = (reporting_type or "unknown").strip().lower()
+        if reporting == "firsthand":
+            return f"firsthand:{source_id}"
+        return f"{tier}:{reporting}"
+
+    @staticmethod
+    def _reporting_type_weight(reporting_type: str | None) -> float:
+        reporting = (reporting_type or "").strip().lower()
+        if reporting == "firsthand":
+            return 1.0
+        if reporting == "secondary":
+            return 0.6
+        if reporting == "aggregator":
+            return 0.35
+        return 0.5
+
+    @staticmethod
+    def _contradiction_penalty(event: Event) -> float:
+        claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+        claim_graph = claims.get("claim_graph", {})
+        links = claim_graph.get("links", []) if isinstance(claim_graph, dict) else []
+        contradiction_links = 0
+        if isinstance(links, list):
+            contradiction_links = sum(
+                1
+                for link in links
+                if isinstance(link, dict) and link.get("relation") == "contradict"
+            )
+
+        if contradiction_links > 0:
+            return max(0.4, 1.0 - 0.15 * contradiction_links)
+        if event.has_contradictions:
+            return 0.7
+        return 1.0
 
     @staticmethod
     def _trend_identifier(trend: Trend) -> str:

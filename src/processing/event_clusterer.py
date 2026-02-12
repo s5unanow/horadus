@@ -19,6 +19,7 @@ from src.core.source_credibility import (
     source_multiplier_expression,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
+from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.models import Event, EventItem, RawItem, Source
 
 
@@ -128,7 +129,7 @@ class EventClusterer:
         reference_time: datetime,
     ) -> tuple[Event, float] | None:
         window_start = reference_time - timedelta(hours=settings.CLUSTER_TIME_WINDOW_HOURS)
-        max_distance = 1.0 - settings.CLUSTER_SIMILARITY_THRESHOLD
+        max_distance = max_distance_for_similarity(settings.CLUSTER_SIMILARITY_THRESHOLD)
         distance_expr = Event.embedding.cosine_distance(item_embedding)
 
         query = (

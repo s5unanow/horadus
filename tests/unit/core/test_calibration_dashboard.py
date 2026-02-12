@@ -156,6 +156,67 @@ def test_build_coverage_alerts_emits_low_sample_warning() -> None:
     assert alerts[0].alert_type == "low_sample_coverage"
 
 
+def test_build_reliability_summary_aggregates_source_metrics() -> None:
+    service = CalibrationDashboardService(session=AsyncMock())
+    outcome_id_one = uuid4()
+    outcome_id_two = uuid4()
+    outcome_id_three = uuid4()
+
+    summary = service._build_reliability_summary_from_pairs(
+        dimension="source",
+        min_sample_size=2,
+        pairs=[
+            ("source-a", "Reuters", outcome_id_one),
+            ("source-a", "Reuters", outcome_id_two),
+            ("source-b", "AP", outcome_id_three),
+        ],
+        outcome_metrics={
+            outcome_id_one: (0.8, 1.0, 0.04),
+            outcome_id_two: (0.2, 0.0, 0.04),
+            outcome_id_three: (0.6, 1.0, 0.16),
+        },
+    )
+
+    assert summary.dimension == "source"
+    assert summary.advisory_only is True
+    assert summary.eligible_rows == 1
+    assert summary.sparse_rows == 1
+    assert summary.rows[0].label == "Reuters"
+    assert summary.rows[0].sample_size == 2
+    assert summary.rows[0].mean_predicted_probability == pytest.approx(0.5)
+    assert summary.rows[0].observed_rate == pytest.approx(0.5)
+    assert summary.rows[0].mean_brier_score == pytest.approx(0.04)
+    assert summary.rows[0].calibration_gap == pytest.approx(0.0)
+    assert summary.rows[0].eligible is True
+
+
+def test_build_reliability_summary_applies_sparse_guardrails() -> None:
+    service = CalibrationDashboardService(session=AsyncMock())
+    outcome_id_one = uuid4()
+    outcome_id_two = uuid4()
+
+    summary = service._build_reliability_summary_from_pairs(
+        dimension="source_tier",
+        min_sample_size=3,
+        pairs=[
+            ("wire", "wire", outcome_id_one),
+            ("wire", "wire", outcome_id_one),
+            ("wire", "wire", outcome_id_two),
+        ],
+        outcome_metrics={
+            outcome_id_one: (0.7, 1.0, 0.09),
+            outcome_id_two: (0.4, 0.0, 0.16),
+        },
+    )
+
+    assert summary.eligible_rows == 0
+    assert summary.sparse_rows == 1
+    assert summary.rows[0].sample_size == 2
+    assert summary.rows[0].eligible is False
+    assert summary.rows[0].confidence == "insufficient"
+    assert "Sparse sample" in summary.rows[0].advisory_note
+
+
 @pytest.mark.asyncio
 async def test_emit_drift_notifications_forwards_to_webhook_notifier() -> None:
     notifier = AsyncMock()

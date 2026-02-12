@@ -461,6 +461,8 @@ class Tier2Classifier:
         event.extracted_where = output.extracted_where.strip() if output.extracted_where else None
         event.extracted_when = self._parse_datetime(output.extracted_when)
         event.categories = self._dedupe_strings(output.categories)
+        claims = self._dedupe_strings(output.claims)
+        claim_graph = self._build_claim_graph(claims)
 
         trend_impacts = [
             TrendImpact(
@@ -484,7 +486,8 @@ class Tier2Classifier:
         event.has_contradictions = has_contradictions
         event.contradiction_notes = contradiction_notes if has_contradictions else None
         event.extracted_claims = {
-            "claims": self._dedupe_strings(output.claims),
+            "claims": claims,
+            "claim_graph": claim_graph,
             "trend_impacts": trend_impacts,
         }
 
@@ -496,6 +499,106 @@ class Tier2Classifier:
             if normalized and normalized not in deduped:
                 deduped.append(normalized)
         return deduped
+
+    def _build_claim_graph(self, claims: list[str]) -> dict[str, Any]:
+        nodes = [
+            {
+                "claim_id": f"claim_{index + 1}",
+                "text": claim,
+                "normalized_text": self._normalize_claim_text(claim),
+            }
+            for index, claim in enumerate(claims)
+        ]
+
+        links: list[dict[str, str]] = []
+        for index, source_node in enumerate(nodes):
+            source_text = str(source_node["text"])
+            for target_node in nodes[index + 1 :]:
+                target_text = str(target_node["text"])
+                relation = self._claim_relation(source_text, target_text)
+                if relation is None:
+                    continue
+                links.append(
+                    {
+                        "source_claim_id": str(source_node["claim_id"]),
+                        "target_claim_id": str(target_node["claim_id"]),
+                        "relation": relation,
+                    }
+                )
+
+        return {"nodes": nodes, "links": links}
+
+    @staticmethod
+    def _normalize_claim_text(value: str) -> str:
+        normalized = value.lower().strip()
+        chars = [ch if ch.isalnum() or ch.isspace() else " " for ch in normalized]
+        return " ".join("".join(chars).split())
+
+    def _claim_relation(self, first: str, second: str) -> str | None:
+        first_tokens = self._claim_tokens(first)
+        second_tokens = self._claim_tokens(second)
+        overlap = first_tokens.intersection(second_tokens)
+        if len(overlap) < 2:
+            return None
+
+        first_polarity = self._claim_polarity(first)
+        second_polarity = self._claim_polarity(second)
+        if first_polarity != second_polarity:
+            return "contradict"
+        return "support"
+
+    def _claim_tokens(self, value: str) -> set[str]:
+        stop_words = {
+            "a",
+            "an",
+            "and",
+            "are",
+            "as",
+            "at",
+            "by",
+            "for",
+            "from",
+            "in",
+            "is",
+            "of",
+            "on",
+            "or",
+            "that",
+            "the",
+            "to",
+            "was",
+            "were",
+            "with",
+        }
+        normalized = self._normalize_claim_text(value)
+        return {
+            token
+            for token in normalized.split()
+            if token and len(token) > 2 and token not in stop_words
+        }
+
+    @staticmethod
+    def _claim_polarity(value: str) -> str:
+        lowered = value.lower()
+        negative_markers = (
+            " not ",
+            " no ",
+            " never ",
+            " deny",
+            " denied",
+            " denies",
+            " refute",
+            " refuted",
+            " refutes",
+            " false",
+            " without ",
+            "did not",
+            "didn't",
+        )
+        for marker in negative_markers:
+            if marker in f" {lowered} ":
+                return "negative"
+        return "positive"
 
     @staticmethod
     def _parse_datetime(raw_value: str | None) -> datetime | None:

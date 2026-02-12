@@ -728,8 +728,7 @@ class CalibrationDashboardService:
                 "this row without additional outcomes."
             )
         return (
-            "Advisory-only diagnostic. Requires analyst review before any source-weighting "
-            "changes."
+            "Advisory-only diagnostic. Requires analyst review before any source-weighting changes."
         )
 
     def _scored_outcomes(self, outcomes: list[TrendOutcome]) -> list[TrendOutcome]:

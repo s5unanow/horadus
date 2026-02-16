@@ -61,6 +61,17 @@ After completing work:
 - Agents must not implement, close, or mark those tasks DONE until a human explicitly confirms manual completion.
 - Agents may prepare scaffolding/checklists for `[REQUIRES_HUMAN]` tasks, but must stop before the manual step and report that human action is required.
 
+## Task Dependency and Execution Rules (Hard Rule)
+
+- When a task is not fully atomic, it must include explicit dependency metadata in `tasks/BACKLOG.md` using:
+  - `**Depends On**: None` (if independent), or
+  - `**Depends On**: TASK-XXX[, TASK-YYY...]` (if blocked by upstream work).
+- Execution order for autonomous work is:
+  1. Highest priority first (`P0` > `P1` > `P2`)
+  2. Within same priority, only choose unblocked tasks (all dependencies completed)
+  3. If still tied, use lowest task ID first
+- Agents must not start a task whose declared dependencies are not completed.
+
 ## Project-Specific Patterns
 
 ### pgvector similarity (clustering)

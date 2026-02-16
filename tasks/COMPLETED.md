@@ -84,6 +84,17 @@ Tasks that have been completed and verified.
 - TASK-081: Readiness Probe HTTP Semantics Fix ✅
 - TASK-082: Vector Index Profile Parity (Model vs Migration) ✅
 - TASK-083: Documentation and OpenAPI Drift Cleanup ✅
+- TASK-086: LLM Route Retry Before Failover ✅
+- TASK-087: Budget and Safety Guardrails for Report/Retrospective LLM Calls ✅
+- TASK-088: Remove or Integrate Legacy `_process_item` Pipeline Path ✅
+- TASK-089: Adopt Strict Structured Outputs for Tier-1/Tier-2 ✅
+- TASK-090: Responses API Migration Plan and Pilot ✅
+- TASK-091: Batch/Flex Evaluation and Backfill Cost Mode ✅
+- TASK-092: End-to-End OpenTelemetry Tracing ✅
+- TASK-093: Vector Strategy Revalidation Cadence and Gate ✅
+- TASK-094: Pipeline Cost Metrics Parity in Observability ✅
+- TASK-095: CI Docs Freshness and Drift Guard ✅
+- TASK-107: Task Dependency Governance and Execution Policy ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

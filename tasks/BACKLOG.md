@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-086`.
+- Next available task IDs start at `TASK-108`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -17,6 +17,17 @@ Tasks are organized by phase and priority.
 
 - `[REQUIRES_HUMAN]`: task includes a mandatory manual step and must not be auto-completed by an agent.
 - For `[REQUIRES_HUMAN]` tasks, agents may prepare instructions/checklists only and must stop for human completion.
+
+## Task Dependency Policy (Hard Rule)
+
+- Non-atomic tasks must declare dependency metadata:
+  - `**Depends On**: None` for independent tasks
+  - `**Depends On**: TASK-XXX[, TASK-YYY...]` for blocked tasks
+- Execution order rule for autonomous work:
+  1. Priority-first (`P0` > `P1` > `P2`)
+  2. Then dependency-unblocked only (all `Depends On` completed)
+  3. Then lowest task ID
+- If dependencies are missing for a non-atomic task, add them before implementation.
 
 ---
 
@@ -1323,6 +1334,7 @@ state.
 
 **Acceptance Criteria**:
 - [ ] Update `docs/ARCHITECTURE.md` sections that still describe now-implemented features as future work
+- [ ] Sync `docs/DATA_MODEL.md` with currently implemented tables/indexes (including reports, usage, outcomes, and feedback entities)
 - [ ] Refresh or explicitly archive stale `docs/POTENTIAL_ISSUES.md` snapshot content so status labels are accurate
 - [ ] Fix stale OpenAPI/auth wording in API bootstrap comments/descriptions
 - [ ] Add concrete "last verified" timestamps where appropriate in operational docs
@@ -1361,10 +1373,372 @@ key-management endpoints.
 
 ---
 
+### TASK-086: LLM Route Retry Before Failover
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Improve LLM resilience by adding bounded retries for transient failures on each
+route before escalating to failover.
+
+**Acceptance Criteria**:
+- [ ] Add configurable retry policy to `LLMChatFailoverInvoker` for transient errors (429/5xx/timeouts/connection errors)
+- [ ] Retry primary route with bounded attempts and backoff before secondary failover route
+- [ ] Retry secondary route with bounded attempts before final failure
+- [ ] Preserve failover observability fields (provider/model/reason) and add retry-attempt telemetry
+- [ ] Add unit tests covering primary retry success, failover after primary retries, and total failure after retry budgets
+
+---
+
+### TASK-087: Budget and Safety Guardrails for Report/Retrospective LLM Calls
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Apply the same budget, failover, and input-safety protections used by Tier-1/2
+to report and retrospective narrative generation paths.
+
+**Acceptance Criteria**:
+- [ ] Route report/retrospective LLM calls through budget enforcement (`CostTracker`) with usage recording
+- [ ] Add provider/model failover for narrative calls on retryable failures
+- [ ] Add payload-size/token precheck and safe truncation behavior for narrative prompts
+- [ ] Ensure fallback narrative still works when budget is exceeded or both routes fail
+- [ ] Add unit tests for budget denial, failover, and truncation behavior
+
+---
+
+### TASK-088: Remove or Integrate Legacy `_process_item` Pipeline Path
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Eliminate duplicate execution logic in pipeline orchestration to reduce drift and
+maintenance risk.
+
+**Acceptance Criteria**:
+- [ ] Confirm legacy `_process_item` path is unreachable from production flow
+- [ ] Remove dead method or integrate it into the current execution path (single canonical implementation)
+- [ ] Keep behavior/metrics parity with current orchestrator flow
+- [ ] Add/adjust tests to ensure canonical path coverage and prevent regression
+
+---
+
+### TASK-089: Adopt Strict Structured Outputs for Tier-1/Tier-2
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Migrate from JSON-object mode to strict schema-constrained outputs where
+supported to improve output contract adherence.
+
+**Acceptance Criteria**:
+- [ ] Replace `response_format={"type": "json_object"}` with strict schema-driven output mode for Tier-1 and Tier-2 calls
+- [ ] Keep existing Pydantic alignment/validation semantics and explicit error handling
+- [ ] Preserve failover behavior and usage accounting
+- [ ] Add tests for schema-constrained output pass/fail behavior
+- [ ] Document model compatibility and fallback behavior if strict schema mode is unavailable
+
+---
+
+### TASK-090: Responses API Migration Plan and Pilot
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+
+Incrementally migrate chat-completions call sites to Responses API primitives
+for forward compatibility.
+
+**Acceptance Criteria**:
+- [ ] Produce migration inventory for LLM call sites (Tier-1, Tier-2, reports, retrospectives, eval)
+- [ ] Implement pilot migration for one non-critical call path with parity tests
+- [ ] Define adapter layer to avoid duplicating provider-specific request/response plumbing
+- [ ] Document migration strategy, risks, and rollback path
+- [ ] Add follow-up checklist for remaining call sites
+
+---
+
+### TASK-091: Batch/Flex Evaluation and Backfill Cost Mode
+**Priority**: P2 (Medium)
+**Estimate**: 3-5 hours
+
+Add optional lower-cost execution modes for non-real-time workloads
+(benchmark/audit/replay/backfills).
+
+**Acceptance Criteria**:
+- [ ] Add optional batch-oriented mode for eligible offline commands
+- [ ] Add optional flex/low-priority mode flags where provider capabilities support it
+- [ ] Keep default behavior unchanged for real-time paths
+- [ ] Add clear CLI/docs guidance for when to use each mode
+- [ ] Add tests for option parsing and mode-selection behavior
+
+---
+
+### TASK-092: End-to-End OpenTelemetry Tracing
+**Priority**: P2 (Medium)
+**Estimate**: 4-8 hours
+
+Introduce distributed tracing across API, workers, DB, Redis, and LLM calls.
+
+**Acceptance Criteria**:
+- [x] Add OpenTelemetry SDK/instrumentation dependencies and bootstrap config
+- [x] Propagate trace context from FastAPI requests into Celery tasks
+- [x] Instrument SQLAlchemy, HTTP/LLM client, and Redis interactions
+- [x] Add configuration toggles and exporter configuration docs
+- [x] Validate traces locally with a documented quickstart collector/viewer setup
+
+---
+
+### TASK-093: Vector Strategy Revalidation Cadence and Gate
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Operationalize periodic ANN strategy revalidation as dataset scale and
+distribution change over time.
+
+**Acceptance Criteria**:
+- [x] Define a revalidation cadence trigger (time- or data-growth-based)
+- [x] Add command/runbook step to execute `horadus eval vector-benchmark` against current data profile
+- [x] Define promotion criteria for changing IVFFlat/HNSW/exact strategy parameters
+- [x] Persist benchmark artifacts and recommendation summary for historical comparison
+- [x] Update docs with revalidation policy and operator checklist
+
+---
+
+### TASK-094: Pipeline Cost Metrics Parity in Observability
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+
+Fix mismatch between pipeline result payload and observability recorder so LLM
+cost counters reflect actual run outputs.
+
+**Acceptance Criteria**:
+- [ ] Align `ProcessingPipeline.run_result_to_dict` and `record_pipeline_metrics` on expected cost fields
+- [ ] Ensure estimated cost metrics are emitted for tier1, tier2, and embeddings (or explicitly remove/replace unsupported counters)
+- [ ] Add tests covering recorder behavior with real pipeline result payload shape
+- [ ] Confirm Prometheus counters update correctly in integration path
+
+---
+
+### TASK-095: CI Docs Freshness and Drift Guard
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Add automated checks that catch stale architecture/status/security statements
+before merge.
+
+**Acceptance Criteria**:
+- [ ] Add a docs consistency check command that validates key invariants across `docs/`, `PROJECT_STATUS.md`, and runtime reality markers
+- [ ] Fail CI when stale known-risk statements conflict with implemented controls (e.g., auth/rate-limit status claims)
+- [ ] Add a lightweight allowlist/override mechanism for intentional temporary drift with explicit rationale
+- [ ] Document remediation workflow when docs freshness gate fails
+
+---
+
+### TASK-096: Unified LLM Invocation Policy Layer
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+**Depends On**: None
+
+Introduce a shared LLM invocation layer so all call sites enforce consistent
+policy (budget, retry/failover, safety, and telemetry) without duplicated logic.
+
+**Acceptance Criteria**:
+- [ ] Define shared invocation interface usable by Tier1, Tier2, reports, and retrospectives
+- [ ] Centralize budget checks/usage accounting, retry/failover handling, and safety preprocessing hooks
+- [ ] Preserve per-stage model/provider configurability
+- [ ] Introduce provider-neutral invocation error taxonomy so retry/failover behavior is not coupled to OpenAI exception types
+- [ ] Centralize per-model pricing metadata outside classifier classes to avoid hard-coded OpenAI-specific cost tables
+- [ ] Migrate at least one non-Tier path (report or retrospective) to the unified layer with parity tests
+- [ ] Document migration plan for remaining call sites
+
+---
+
+### TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window)
+**Priority**: P2 (Medium)
+**Estimate**: 3-5 hours
+**Depends On**: None
+
+Reduce boundary-burst behavior from fixed-window rate limiting while preserving
+operator clarity and deterministic throttling semantics.
+
+**Acceptance Criteria**:
+- [ ] Add configurable rate-limit strategy modes (`fixed_window` default + `token_bucket` or `sliding_window`)
+- [ ] Implement distributed-safe algorithm path for Redis backend with atomic updates
+- [ ] Preserve or improve `Retry-After` correctness for denied requests
+- [ ] Add tests for minute-boundary burst behavior and multi-worker consistency
+- [ ] Update auth/deployment docs with strategy tradeoffs and recommended defaults
+
+---
+
+### TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+**Depends On**: TASK-096
+
+Add a shared cache for repeated classification payloads so duplicate items across
+workers do not repeatedly incur LLM cost.
+
+**Acceptance Criteria**:
+- [ ] Add optional Redis-backed semantic cache for Tier-1 and Tier-2 response payloads
+- [ ] Define stable cache keys including model, prompt/version hash, and normalized input payload hash
+- [ ] Add TTL and size-control policy with safe fallback when cache backend is unavailable
+- [ ] Emit cache hit/miss metrics by stage and verify no correctness regressions on cache hits
+- [ ] Add tests for cache key stability, hit/miss behavior, and invalidation on prompt/model changes
+
+---
+
+### TASK-099: Backpressure-Aware Processing Scheduling
+**Priority**: P2 (Medium)
+**Estimate**: 3-5 hours
+**Depends On**: None
+
+Prevent queue thrash and uneven latency by adapting processing dispatch to queue
+depth, worker saturation, and budget posture.
+
+**Acceptance Criteria**:
+- [ ] Add scheduler controls that modulate `process_pending_items` dispatch based on backlog depth and in-flight processing
+- [ ] Keep ingestion-triggered fast-path queueing while preventing duplicate or excessive task fan-out
+- [ ] Add guardrails tying dispatch aggressiveness to budget-denial signals or budget headroom
+- [ ] Emit metrics for backlog depth, dispatch decisions, and throttle reasons
+- [ ] Add tests for normal, burst, and throttled scheduling scenarios
+
+---
+
+### TASK-100: Embedding Lineage and Re-Embedding Safety Gate
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+**Depends On**: None
+
+Prevent silent vector-space drift when embedding models change, and make
+re-embedding operations explicit and auditable.
+
+**Acceptance Criteria**:
+- [ ] Add embedding lineage metadata for stored vectors (model identifier and created-at/version marker) on relevant entities
+- [ ] Prevent cross-model similarity comparisons in dedup/clustering paths (fail-safe skip or explicit fallback behavior)
+- [ ] Add operator command/report to detect mixed embedding-model populations and estimate re-embed scope
+- [ ] Document embedding-model upgrade workflow (cutover strategy, backfill order, rollback)
+- [ ] Add tests for lineage persistence and cross-model safety checks
+
+---
+
+### TASK-101: Multilingual Coverage Policy and Processing Guardrails
+**Priority**: P2 (Medium)
+**Estimate**: 3-5 hours
+**Depends On**: None
+
+Replace implicit multilingual handling with an explicit, testable language
+coverage policy.
+
+**Acceptance Criteria**:
+- [ ] Define launch language policy with explicit support targets: English (`en`), Ukrainian (`uk`), Russian (`ru`)
+- [ ] Add deterministic handling for unsupported languages (explicit skip/defer/translate mode, documented)
+- [ ] Emit language-segmented quality/cost metrics (ingested, Tier-1 pass rate, Tier-2 usage)
+- [ ] Add evaluation coverage for all three launch languages (`en`/`uk`/`ru`) including clustering and Tier-1/Tier-2 quality checks
+- [ ] Update architecture and ops docs with language support guarantees and limits
+
+---
+
+### TASK-102: Deterministic Grounding Verification for Narratives
+**Priority**: P1 (High)
+**Estimate**: 3-6 hours
+**Depends On**: None
+
+Reduce report/retrospective hallucination risk by validating generated narratives
+against structured evidence before persistence.
+
+**Acceptance Criteria**:
+- [ ] Add post-generation grounding verifier that checks narrative claims against provided statistics/top-events payload
+- [ ] Enforce fail-safe behavior (fallback narrative or flagged output) when unsupported claims exceed threshold
+- [ ] Persist grounding metadata (`grounding_status`, violation_count, optional references) with generated narratives
+- [ ] Expose grounding metadata in report/retrospective API responses for operator visibility
+- [ ] Add tests for grounded pass, unsupported-claim failure, and fallback behavior
+
+---
+
+### TASK-103: Six-Hour Polling Operating Profile and Defaults
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Depends On**: None
+
+Align scheduler cadence and operational docs with the intended low-frequency
+usage pattern (6-hour polling, daily review).
+
+**Acceptance Criteria**:
+- [ ] Define and document a 6-hour ingestion profile with concrete baseline defaults: `RSS_COLLECTION_INTERVAL=360`, `GDELT_COLLECTION_INTERVAL=360`, `PROCESS_PENDING_INTERVAL_MINUTES=15`, `PROCESSING_PIPELINE_BATCH_SIZE=200`
+- [ ] Define source-window defaults for 6-hour mode to avoid gaps: `default_lookback_hours=12` for GDELT and `default_max_items_per_fetch=200` for RSS (with documented per-source override guidance)
+- [ ] Ensure scheduler/task behavior remains safe and deterministic for 6-hour cadence under bursty ingestion volumes
+- [ ] Add/adjust tests for beat schedule composition under 6-hour interval configuration
+- [ ] Update deployment/environment docs with a “6-hour mode” example and tuning checklist (`batch size`, `pending interval`, `worker concurrency`, `per-source max items`)
+- [ ] Add a short operator runbook for manual catch-up/replay when the service was down for multiple days
+
+---
+
+### TASK-104: Ingestion Completeness Watermark and Overlap Guard
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+**Depends On**: TASK-103
+
+Prevent silent ingestion gaps by tracking per-source progress and enforcing safe
+window overlap semantics.
+
+**Acceptance Criteria**:
+- [ ] Persist per-source ingestion progress markers (last successful window end / high-water timestamp) for GDELT and RSS collectors
+- [ ] Enforce overlap-aware next-window calculation so delayed runs do not create uncovered time ranges
+- [ ] Add duplicate-safe behavior for overlap reprocessing (idempotent upsert/dedup remains authoritative)
+- [ ] Emit structured metrics/logs for window coverage (`expected_start`, `actual_start`, `gap_seconds`, `overlap_seconds`)
+- [ ] Add tests covering on-time runs, delayed runs, and restart-after-outage continuity
+
+---
+
+### TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+**Depends On**: TASK-104
+
+Detect missed collection windows early and recover automatically before data loss
+accumulates.
+
+**Acceptance Criteria**:
+- [ ] Define freshness SLO thresholds per collector (for example alert when `last_fetched_at` exceeds `2x` interval)
+- [ ] Add stale-source detector task that scans source freshness and emits alertable metrics/events
+- [ ] Trigger bounded catch-up dispatch when freshness SLO is violated (with dedup-safe overlap)
+- [ ] Add operator-visible status endpoint/CLI summary for stale sources and catch-up progress
+- [ ] Add tests for stale detection, catch-up triggering, and non-trigger cases
+
+---
+
+### TASK-106: Collector Retry and Timeout Hardening for Low-Frequency Mode
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Depends On**: TASK-103, TASK-104
+
+Harden collector failure handling so a single transient outage does not wipe out
+an entire 6-hour collection window.
+
+**Acceptance Criteria**:
+- [ ] Review and tune retry/backoff settings for `workers.collect_rss` and `workers.collect_gdelt` against 6-hour cadence assumptions
+- [ ] Add explicit collector timeout budgets and failure classification (transient vs terminal) with deterministic logging fields
+- [ ] Add bounded requeue behavior for transient collector failures before marking run as failed
+- [ ] Add tests for transient network failures, prolonged outage behavior, and successful recovery paths
+- [ ] Document retry/timeout policy with concrete operational examples and expected worst-case recovery time
+
+---
+
+### TASK-107: Task Dependency Governance and Execution Policy
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+**Depends On**: None
+
+Formalize dependency metadata and enforce a priority+dependency execution policy
+for autonomous task selection.
+
+**Acceptance Criteria**:
+- [x] Add a hard-rule dependency policy section to task governance docs
+- [x] Require and document `Depends On` metadata for non-atomic backlog tasks
+- [x] Add dependency metadata for currently open engineering tasks (`TASK-096`..`TASK-106`)
+- [x] Update sprint/project execution guidance to choose work by priority, then dependency readiness, then task ID
+- [x] Keep `[REQUIRES_HUMAN]` gating behavior unchanged and explicit
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] WebSocket for real-time trend updates
-- [ ] Multi-language support
 - [ ] Custom trend definitions via API
 - [ ] Trend correlations (how trends affect each other)
 - [ ] Knowledge graph of actors/orgs/locations (Neo4j if needed)

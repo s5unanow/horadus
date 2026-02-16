@@ -18,7 +18,214 @@
 
 ---
 
+## Execution Policy (Hard Rule)
+
+- Pick tasks by priority first (`P0` > `P1` > `P2`), then dependency readiness, then task ID.
+- Do not start a task until all `Depends On` tasks are completed.
+- `[REQUIRES_HUMAN]` tasks stay blocked for autonomous execution until manual sign-off.
+
+## Next Non-Human Queue (Priority + Dependency Aware)
+
+1. `TASK-100`
+2. `TASK-102`
+3. `TASK-103`
+4. `TASK-104` (after `TASK-103`)
+5. `TASK-105` (after `TASK-104`)
+6. `TASK-106` (after `TASK-103` + `TASK-104`)
+7. `TASK-096`
+8. `TASK-097`
+9. `TASK-098` (after `TASK-096`)
+10. `TASK-099`
+11. `TASK-101`
+
+---
+
 ## Completed This Sprint
+
+### TASK-107: Task Dependency Governance and Execution Policy
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Codify dependency metadata as a hard rule and align autonomous task execution
+order to priority + dependency readiness.
+
+**Completed**:
+- [x] Added hard-rule task dependency/execution policy to `AGENTS.md`
+- [x] Added canonical dependency policy block to `tasks/BACKLOG.md`
+- [x] Added explicit `Depends On` metadata for open engineering tasks `TASK-096`..`TASK-106`
+- [x] Updated sprint execution guidance and non-human queue ordering to be dependency-aware
+- [x] Updated project status next-up ordering to priority-first and dependency-aware execution
+
+---
+
+### TASK-093: Vector Strategy Revalidation Cadence and Gate
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Operationalize ANN strategy revalidation with explicit cadence/growth triggers,
+promotion criteria, and historical recommendation tracking.
+
+**Completed**:
+- [x] Added revalidation cadence/growth settings (`VECTOR_REVALIDATION_CADENCE_DAYS`, `VECTOR_REVALIDATION_DATASET_GROWTH_PCT`) and environment docs/templates
+- [x] Extended vector benchmark artifacts with `revalidation_policy` metadata (cadence trigger + promotion criteria)
+- [x] Added rolling benchmark recommendation summary persistence (`ai/eval/results/vector-benchmark-summary.json`) for historical comparison
+- [x] Added operator runbook (`docs/VECTOR_REVALIDATION.md`) with command usage and promotion checklist
+- [x] Added unit tests for summary/history artifact persistence helpers in vector benchmark module
+
+---
+
+### TASK-092: End-to-End OpenTelemetry Tracing
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add distributed tracing bootstrap/instrumentation and documented local
+collector/viewer validation flow.
+
+**Completed**:
+- [x] Added OpenTelemetry SDK/exporter/instrumentation dependencies and lockfile updates
+- [x] Added shared tracing bootstrap module (`src/core/tracing.py`) with runtime-safe enable/disable behavior
+- [x] Wired FastAPI + Celery tracing initialization and Celery trace-context header propagation hooks
+- [x] Instrumented SQLAlchemy, HTTPX (including LLM calls), and Redis client paths when tracing is enabled
+- [x] Added tracing configuration toggles to settings, `.env.example`, and `docs/ENVIRONMENT.md`
+- [x] Added local collector/viewer quickstart + validation checklist in `docs/TRACING.md`
+- [x] Added unit tests for trace context helper behavior and Celery signal hook propagation
+
+---
+
+### TASK-095: CI Docs Freshness and Drift Guard
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add enforceable documentation freshness checks to CI with scoped override support.
+
+**Completed**:
+- [x] Added docs consistency checker module (`src/core/docs_freshness.py`) with required marker checks and runtime/docs invariant checks
+- [x] Added explicit stale-risk conflict detection rules for auth/rate-limit claims with override-aware enforcement
+- [x] Added override policy file (`docs/DOCS_FRESHNESS_OVERRIDES.json`) supporting scoped temporary drift with rationale + expiry
+- [x] Added command entrypoint (`scripts/check_docs_freshness.py`) and Make target (`make docs-freshness`)
+- [x] Wired docs freshness check into CI test job (`.github/workflows/ci.yml`) as a fail-closed gate
+- [x] Added remediation workflow documentation in `docs/RELEASING.md`
+- [x] Added unit coverage for conflict detection, override behavior, and stale marker detection
+
+---
+
+### TASK-094: Pipeline Cost Metrics Parity in Observability
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Fix cost-metric payload mismatch between pipeline run serialization and observability recorder.
+
+**Completed**:
+- [x] Extended `PipelineUsage`/aggregation to carry `tier1_estimated_cost_usd` and `tier2_estimated_cost_usd` through orchestrator execution
+- [x] Emitted explicit estimated-cost fields from `ProcessingPipeline.run_result_to_dict` (including embedding cost placeholder field for payload parity)
+- [x] Kept `record_pipeline_metrics` contract aligned with serialized pipeline payload shape
+- [x] Added/updated unit tests to verify serialized run payload includes estimated-cost fields and workers forward them to observability recorder
+- [x] Verified processing-worker observability tests pass with cost fields present in integration-like task flow
+
+---
+
+### TASK-091: Batch/Flex Evaluation and Backfill Cost Mode
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add optional offline eval execution modes for lower-cost benchmark/backfill operation while keeping default runtime behavior unchanged.
+
+**Completed**:
+- [x] Added benchmark execution-mode controls: `dispatch_mode` (`realtime`/`batch`) and `request_priority` (`realtime`/`flex`)
+- [x] Implemented batch-oriented Tier-1 benchmark dispatch path for offline runs with deterministic result mapping
+- [x] Added provider request override plumbing (`request_overrides`) through Tier-1/Tier-2 invocations and adapter routing
+- [x] Mapped flex mode to provider low-priority hint (`service_tier=flex`) when supported
+- [x] Updated CLI flags (`horadus eval benchmark --dispatch-mode ... --request-priority ...`) and eval README usage guidance
+- [x] Added unit tests for mode parsing/selection and benchmark mode application behavior
+
+---
+
+### TASK-090: Responses API Migration Plan and Pilot
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Introduce shared invocation adapter plumbing and pilot Responses API usage on a non-critical path.
+
+**Completed**:
+- [x] Produced call-site migration inventory and rollout plan in `docs/RESPONSES_API_MIGRATION.md`
+- [x] Added shared invocation adapter (`src/processing/llm_invocation_adapter.py`) supporting `chat_completions` and `responses` modes
+- [x] Routed `LLMChatFailoverInvoker` through the adapter to avoid duplicated API-specific invocation plumbing
+- [x] Implemented pilot Responses-mode migration for report narrative generation (`LLM_REPORT_API_MODE=responses`) with rollback-safe default (`chat_completions`)
+- [x] Added parity-focused unit tests for adapter normalization and report Responses pilot path
+- [x] Documented migration risks, rollback procedure, and follow-up checklist for remaining call sites
+
+---
+
+### TASK-089: Adopt Strict Structured Outputs for Tier-1/Tier-2
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Switch Tier-1/Tier-2 calls to strict schema-constrained output mode with safe compatibility fallback.
+
+**Completed**:
+- [x] Replaced default Tier-1/Tier-2 response format with strict JSON-schema mode (`json_schema` + `strict=true`) derived from existing Pydantic contracts
+- [x] Preserved explicit parsing/validation semantics and error handling through existing Pydantic validators
+- [x] Kept failover/retry + usage accounting behavior unchanged across strict/fallback paths
+- [x] Added deterministic compatibility fallback to `json_object` mode when providers return schema-unsupported HTTP 400 errors
+- [x] Added unit coverage for strict-mode default behavior and schema-unsupported fallback for both Tier-1 and Tier-2
+- [x] Updated API docs with strict-mode compatibility fallback behavior notes
+
+---
+
+### TASK-088: Remove or Integrate Legacy `_process_item` Pipeline Path
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Remove dead legacy single-item orchestration path in favor of the current prepared-item canonical flow.
+
+**Completed**:
+- [x] Confirmed production flow runs through `process_items` canonical prepared-item + batch Tier-1/Tier-2 path
+- [x] Removed unreachable legacy `_process_item` method from `ProcessingPipeline`
+- [x] Preserved run-result/status/usage behavior through existing canonical path helpers
+- [x] Added regression test to prevent reintroduction of legacy `_process_item` execution path
+
+---
+
+### TASK-087: Budget and Safety Guardrails for Report/Retrospective LLM Calls
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Apply Tier-1/2-like budget, failover, and input-safety protections to narrative generation paths.
+
+**Completed**:
+- [x] Routed report and retrospective narrative generation through `CostTracker` budget checks and usage recording
+- [x] Added primary/secondary failover + bounded retries for narrative calls via `LLMChatFailoverInvoker`
+- [x] Added narrative payload token precheck with safe truncation markers and untrusted-input wrapping
+- [x] Kept deterministic fallback narratives when budget is denied or both routes fail
+- [x] Added unit coverage for budget denial, failover behavior, and truncation handling in both report and retrospective services
+
+---
+
+### TASK-086: LLM Route Retry Before Failover
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add bounded per-route transient retries with backoff before failover.
+
+**Completed**:
+- [x] Added configurable retry policy support to `LLMChatFailoverInvoker` (`LLM_ROUTE_RETRY_ATTEMPTS`, `LLM_ROUTE_RETRY_BACKOFF_SECONDS`)
+- [x] Retried primary route with bounded attempts/backoff before failover activation
+- [x] Retried secondary route with bounded attempts before terminal failure
+- [x] Preserved failover observability fields and added retry-attempt telemetry in logs
+- [x] Added unit coverage for primary retry success, failover after retry budget, and terminal failure after both route retry budgets
+
+---
 
 ### TASK-069: Baseline Source-of-Truth Unification for Decay
 **Status**: DONE ✓  

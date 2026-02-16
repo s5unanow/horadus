@@ -13,7 +13,7 @@ Phase 3: Trend Engine        [████████████████�
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
 Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
-Phase 8: Hardening (NEW)     [█████████████████░░░]  85%  🚧 IN PROGRESS
+Phase 8: Hardening (NEW)     [██████████████████░░]  88%  🚧 IN PROGRESS
 ```
 
 ## What's Working
@@ -179,6 +179,9 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Vector index metadata parity aligned to migration profile (`lists=64`) with regression tests
 - [x] Architecture/OpenAPI/docs drift cleanup with operational last-verified timestamps and archived stale risk snapshot doc
 - [x] Decay baseline source-of-truth unified to `Trend.baseline_log_odds` with synced `definition.baseline_probability` metadata + one-time backfill migration
+- [x] Vector strategy revalidation policy and rolling benchmark summary artifact (`vector-benchmark-summary.json`) with operator runbook
+- [x] Optional end-to-end OpenTelemetry tracing bootstrap (FastAPI/Celery/SQLAlchemy/Redis/HTTPX) with Celery trace-context propagation and local Jaeger quickstart
+- [x] Hard-rule task dependency governance (`Depends On` metadata + priority/dependency execution policy) across backlog/sprint process docs
 
 ## In Progress
 
@@ -198,10 +201,15 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
-3. Complete `TASK-070` baseline prior review/sign-off for active trends
-4. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+Execution is now priority-first and dependency-aware.
+
+1. `TASK-100`, `TASK-102`, `TASK-103` (P1, unblocked)
+2. `TASK-104` (after `TASK-103`)
+3. `TASK-105` (after `TASK-104`)
+4. `TASK-106` (after `TASK-103` + `TASK-104`)
+5. `TASK-096`, `TASK-097`, `TASK-099`, `TASK-101` (P2, unblocked)
+6. `TASK-098` (after `TASK-096`)
+7. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅
 

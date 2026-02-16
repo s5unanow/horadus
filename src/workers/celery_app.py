@@ -44,6 +44,11 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
         "task": "workers.reap_stale_processing_items",
         "schedule": timedelta(minutes=max(1, settings.PROCESSING_REAPER_INTERVAL_MINUTES)),
     }
+    if settings.ENABLE_PROCESSING_PIPELINE:
+        schedule["process-pending-items"] = {
+            "task": "workers.process_pending_items",
+            "schedule": timedelta(minutes=max(1, settings.PROCESS_PENDING_INTERVAL_MINUTES)),
+        }
     schedule["generate-weekly-reports"] = {
         "task": "workers.generate_weekly_reports",
         "schedule": crontab(

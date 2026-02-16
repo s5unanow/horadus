@@ -1,6 +1,6 @@
 # Current Sprint
 
-**Sprint Goal**: Execute Phase 6 calibration hardening  
+**Sprint Goal**: Execute Phase 8 hardening and close remaining governance gaps  
 **Sprint Number**: 1  
 **Sprint Dates**: 2026-02-02 to 2026-02-16
 
@@ -10,10 +10,207 @@
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` — Awaiting manual data curation/review
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` — Awaiting manual trend authoring/reviewer sign-off
+- `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` — Awaiting manual analyst baseline validation
+- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
+- `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
+- `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
+- `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 
 ---
 
 ## Completed This Sprint
+
+### TASK-069: Baseline Source-of-Truth Unification for Decay
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Unify decay baseline behavior around canonical DB baseline log-odds and keep definition metadata synchronized.
+
+**Completed**:
+- [x] Updated trend decay logic to use `Trend.baseline_log_odds` as the canonical baseline source
+- [x] Synchronized `definition.baseline_probability` on create/update/config-sync trend mutation paths
+- [x] Added one-time Alembic backfill migration to align existing `definition.baseline_probability` values with stored baseline log-odds
+- [x] Added unit tests for stale/missing definition baseline metadata to confirm decay targets DB baseline
+- [x] Updated data-model docs to clarify canonical baseline field and synchronized metadata behavior
+
+---
+
+### TASK-083: Documentation and OpenAPI Drift Cleanup
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Refresh stale architecture/ops docs and API bootstrap OpenAPI wording.
+
+**Completed**:
+- [x] Updated architecture flow docs to match current implemented processing order
+- [x] Archived stale `docs/POTENTIAL_ISSUES.md` snapshot with explicit superseded-status banner
+- [x] Fixed stale API auth/OpenAPI description wording in FastAPI bootstrap
+- [x] Added concrete "Last Verified" timestamps in operational docs (`DEPLOYMENT`, `ENVIRONMENT`, `RELEASING`)
+
+---
+
+### TASK-082: Vector Index Profile Parity (Model vs Migration)
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Align ORM metadata with migration-managed IVFFlat vector index profile.
+
+**Completed**:
+- [x] Updated model metadata for `idx_raw_items_embedding` and `idx_events_embedding` to `lists=64`
+- [x] Added metadata assertions for IVFFlat profile values in unit tests
+- [x] Kept docs aligned with `lists=64` index profile references
+
+---
+
+### TASK-081: Readiness Probe HTTP Semantics Fix
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Return non-2xx readiness status when dependencies are unavailable.
+
+**Completed**:
+- [x] Updated `/health/ready` to return HTTP 503 with stable payload on failure
+- [x] Kept success path HTTP 200 payload unchanged
+- [x] Preserved structured warning logging on readiness failures
+- [x] Added unit tests for readiness success/failure status-code semantics
+
+---
+
+### TASK-079: Periodic Pending Processing Schedule
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add periodic beat scheduling for pending-item processing.
+
+**Completed**:
+- [x] Added beat schedule entry for `workers.process_pending_items`
+- [x] Gated schedule by `ENABLE_PROCESSING_PIPELINE`
+- [x] Added configurable cadence setting `PROCESS_PENDING_INTERVAL_MINUTES`
+- [x] Added/updated unit tests for schedule composition and enable/disable behavior
+- [x] Updated environment docs/template with new scheduling setting
+
+---
+
+### TASK-078: Tier-1 Batch Classification in Orchestrator
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Use Tier-1 batch classification path in orchestrator flow.
+
+**Completed**:
+- [x] Refactored pipeline orchestration to prepare items, run batched Tier-1 classification, then finalize Tier-2 path
+- [x] Preserved deterministic item/result mapping and original output ordering
+- [x] Added batch-failure fallback to per-item Tier-1 classification for partial-failure isolation
+- [x] Preserved budget-exceeded handling semantics (`pending` with retry path)
+- [x] Added unit coverage for batched mapping/order and partial-failure fallback behavior
+
+---
+
+### TASK-076: Trend Taxonomy Contract and Gold-Set Validation Gate
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/076-trend-taxonomy-validation-gate.md`
+
+Add deterministic taxonomy-validation tooling to prevent trend-config/eval-dataset drift.
+
+**Completed**:
+- [x] Added `horadus eval validate-taxonomy` command for trend YAML + gold-set compatibility checks
+- [x] Validated trend YAML loading through `TrendConfig`, with duplicate/missing trend-id detection
+- [x] Added Tier-1 trend key contract modes (`strict` and documented `subset` compatibility mode)
+- [x] Added Tier-2 trend-id validation and configurable signal-type mismatch handling (`strict`/`warn`)
+- [x] Added unit coverage for pass path and required failure modes (duplicate/missing IDs, unknown trend ID, key mismatch, unknown signal type)
+- [x] Wired taxonomy validation into local/CI eval quality path and documented strict vs transitional usage
+
+---
+
+### TASK-075: Container Secret Provisioning and Rotation Runbook
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/specs/075-container-secret-provisioning-rotation.md`
+
+Standardize production secret handling for Docker deployments using mounted files and `*_FILE` variables.
+
+**Completed**:
+- [x] Added operator runbook for container secret provisioning with host-side layout, ownership, and permission checklist
+- [x] Documented concrete Docker Compose mount + `*_FILE` mapping pattern for `api`, `worker`, and `beat`
+- [x] Added secret rotation workflow (pre-flight validation, atomic symlink switch, controlled service recreation)
+- [x] Added rollback workflow with known-good release restoration and post-rollback verification checklist
+- [x] Updated deployment and environment docs to discourage plaintext production `.env` secrets and cross-link to the runbook
+
+---
+
+### TASK-074: Enforce Strict Alembic Check Gate by Default
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Enable strict autogenerate parity validation in default local and CI quality gates.
+
+**Completed**:
+- [x] Set strict mode (`MIGRATION_GATE_VALIDATE_AUTOGEN=true`) in CI integration workflow
+- [x] Set strict mode by default in local integration path (`make test-integration`)
+- [x] Kept explicit emergency bypass path (`MIGRATION_GATE_VALIDATE_AUTOGEN=false`) in script/Make targets
+- [x] Updated release/deployment/environment docs with strict-gate expectations and bypass policy
+- [x] Verified strict migration gate command paths pass with current baseline
+
+---
+
+### TASK-073: Alembic Autogenerate Baseline Drift Cleanup
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Resolve model/schema parity diffs so `alembic check` can be enforced fail-closed.
+
+**Completed**:
+- [x] Reproduced and documented baseline `alembic check` drift (API usage defaults + index metadata mismatches)
+- [x] Aligned SQLAlchemy metadata with migration baseline for `api_usage` server defaults
+- [x] Added model metadata for migration-managed pgvector indexes (`idx_raw_items_embedding`, `idx_events_embedding`)
+- [x] Excluded TimescaleDB-managed index (`trend_snapshots_timestamp_idx`) from autogenerate comparisons
+- [x] Added unit regression tests for drift-sensitive model metadata defaults/indexes
+- [x] Validated `alembic check` passes after `alembic upgrade head`
+
+---
+
+### TASK-072: Runtime Migration Parity Health Signal
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Expose runtime schema parity in health/startup paths to prevent long-lived migration drift.
+
+**Completed**:
+- [x] Added migration parity utility service (`src/core/migration_parity.py`) comparing `alembic_version` to Alembic head
+- [x] Added migration parity component to `/health` payload (`checks.migrations`)
+- [x] Added strict startup behavior (`MIGRATION_PARITY_STRICT_STARTUP`) to fail boot when parity is unhealthy
+- [x] Added optional runtime toggle (`MIGRATION_PARITY_CHECK_ENABLED`) for controlled rollout/testing
+- [x] Added unit coverage for healthy/drifted parity states and strict startup failure behavior
+- [x] Updated environment/deployment docs for runtime parity controls
+
+---
+
+### TASK-071: Migration Drift Quality Gates
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Add enforceable migration parity gates so schema drift fails fast in local/CI workflows.
+
+**Completed**:
+- [x] Added migration drift gate script (`scripts/check_migration_drift.sh`) that validates current revision == head
+- [x] Added optional strict autogenerate parity mode (`MIGRATION_GATE_VALIDATE_AUTOGEN=true`) for `alembic check`
+- [x] Added `make db-migration-gate` target for explicit operator/developer migration gating
+- [x] Wired migration gate into local integration workflow (`make test-integration`)
+- [x] Wired migration gate into CI integration workflow before integration tests
+- [x] Updated release/deployment docs with migration gate usage
+
+---
 
 ### TASK-058: Vector Retrieval Quality Tuning (HNSW vs IVFFlat)
 **Status**: DONE ✓  

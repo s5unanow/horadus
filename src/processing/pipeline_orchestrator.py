@@ -95,6 +95,17 @@ class _ItemExecution:
     usage: PipelineUsage = field(default_factory=PipelineUsage)
 
 
+@dataclass(slots=True)
+class _PreparedItem:
+    """Item state prepared for Tier-1 batch classification."""
+
+    item: RawItem
+    item_id: UUID
+    cluster_result: ClusterResult
+    event: Event
+    embedded: bool
+
+
 class ProcessingPipeline:
     """Orchestrate deduplication, embedding, clustering, and LLM classification."""
 
@@ -140,41 +151,435 @@ class ProcessingPipeline:
             raise ValueError(msg)
 
         run_result = PipelineRunResult(scanned=len(items))
+        execution_by_item: dict[UUID, _ItemExecution] = {}
+        prepared_items: list[_PreparedItem] = []
+
         for item in items:
-            execution = await self._process_item(item=item, trends=active_trends)
+            prepared, execution = await self._prepare_item_for_tier1(item=item)
+            if prepared is not None:
+                prepared_items.append(prepared)
+                if execution is not None:
+                    self._accumulate_usage(run_result=run_result, usage=execution.usage)
+                continue
+            if execution is not None:
+                execution_by_item[self._item_id(item)] = execution
+                self._accumulate_usage(run_result=run_result, usage=execution.usage)
+                continue
+
+        tier1_result_by_item: dict[UUID, Tier1ItemResult] = {}
+        tier1_failed_by_item: dict[UUID, _ItemExecution] = {}
+        tier1_usage = PipelineUsage()
+        if prepared_items:
+            (
+                tier1_result_by_item,
+                tier1_failed_by_item,
+                tier1_usage,
+            ) = await self._classify_tier1_prepared_items(
+                prepared_items=prepared_items, trends=active_trends
+            )
+            self._accumulate_usage(run_result=run_result, usage=tier1_usage)
+
+        for prepared in prepared_items:
+            if prepared.item_id in tier1_failed_by_item:
+                execution_by_item[prepared.item_id] = tier1_failed_by_item[prepared.item_id]
+                continue
+
+            tier1_result = tier1_result_by_item.get(prepared.item_id)
+            if tier1_result is None:
+                prepared.item.processing_status = ProcessingStatus.ERROR
+                prepared.item.processing_started_at = None
+                prepared.item.error_message = (
+                    "Tier 1 classifier returned no result for prepared pipeline item"
+                )
+                await self.session.flush()
+                execution_by_item[prepared.item_id] = _ItemExecution(
+                    result=PipelineItemResult(
+                        item_id=prepared.item_id,
+                        final_status=prepared.item.processing_status,
+                        error_message=prepared.item.error_message,
+                    )
+                )
+                continue
+
+            execution = await self._process_after_tier1(
+                prepared=prepared,
+                tier1_result=tier1_result,
+                trends=active_trends,
+            )
+            execution_by_item[prepared.item_id] = execution
+            self._accumulate_usage(run_result=run_result, usage=execution.usage)
+
+        for item in items:
+            item_id = self._item_id(item)
+            execution = execution_by_item.get(item_id)
+            if execution is None:
+                item.processing_status = ProcessingStatus.ERROR
+                item.processing_started_at = None
+                item.error_message = "Pipeline execution result missing"
+                await self.session.flush()
+                execution = _ItemExecution(
+                    result=PipelineItemResult(
+                        item_id=item_id,
+                        final_status=item.processing_status,
+                        error_message=item.error_message,
+                    )
+                )
+                execution_by_item[item_id] = execution
             run_result.results.append(execution.result)
-            run_result.usage.embedding_api_calls += execution.usage.embedding_api_calls
-            run_result.usage.tier1_prompt_tokens += execution.usage.tier1_prompt_tokens
-            run_result.usage.tier1_completion_tokens += execution.usage.tier1_completion_tokens
-            run_result.usage.tier1_api_calls += execution.usage.tier1_api_calls
-            run_result.usage.tier2_prompt_tokens += execution.usage.tier2_prompt_tokens
-            run_result.usage.tier2_completion_tokens += execution.usage.tier2_completion_tokens
-            run_result.usage.tier2_api_calls += execution.usage.tier2_api_calls
-
-            status = execution.result.final_status
-            if status == ProcessingStatus.ERROR:
-                run_result.errors += 1
-                continue
-            if status == ProcessingStatus.PENDING:
-                continue
-
-            run_result.processed += 1
-            if status == ProcessingStatus.CLASSIFIED:
-                run_result.classified += 1
-            if status == ProcessingStatus.NOISE:
-                run_result.noise += 1
-            if execution.result.duplicate:
-                run_result.duplicates += 1
-            if execution.result.embedded:
-                run_result.embedded += 1
-            if execution.result.event_created:
-                run_result.events_created += 1
-            if execution.result.event_merged:
-                run_result.events_merged += 1
-            run_result.trend_impacts_seen += execution.result.trend_impacts_seen
-            run_result.trend_updates += execution.result.trend_updates
-
+            self._accumulate_result_counters(run_result=run_result, execution=execution)
         return run_result
+
+    @staticmethod
+    def _accumulate_usage(*, run_result: PipelineRunResult, usage: PipelineUsage) -> None:
+        run_result.usage.embedding_api_calls += usage.embedding_api_calls
+        run_result.usage.tier1_prompt_tokens += usage.tier1_prompt_tokens
+        run_result.usage.tier1_completion_tokens += usage.tier1_completion_tokens
+        run_result.usage.tier1_api_calls += usage.tier1_api_calls
+        run_result.usage.tier2_prompt_tokens += usage.tier2_prompt_tokens
+        run_result.usage.tier2_completion_tokens += usage.tier2_completion_tokens
+        run_result.usage.tier2_api_calls += usage.tier2_api_calls
+
+    @staticmethod
+    def _accumulate_result_counters(
+        *,
+        run_result: PipelineRunResult,
+        execution: _ItemExecution,
+    ) -> None:
+        status = execution.result.final_status
+        if status == ProcessingStatus.ERROR:
+            run_result.errors += 1
+            return
+        if status == ProcessingStatus.PENDING:
+            return
+
+        run_result.processed += 1
+        if status == ProcessingStatus.CLASSIFIED:
+            run_result.classified += 1
+        if status == ProcessingStatus.NOISE:
+            run_result.noise += 1
+        if execution.result.duplicate:
+            run_result.duplicates += 1
+        if execution.result.embedded:
+            run_result.embedded += 1
+        if execution.result.event_created:
+            run_result.events_created += 1
+        if execution.result.event_merged:
+            run_result.events_merged += 1
+        run_result.trend_impacts_seen += execution.result.trend_impacts_seen
+        run_result.trend_updates += execution.result.trend_updates
+
+    async def _prepare_item_for_tier1(
+        self,
+        *,
+        item: RawItem,
+    ) -> tuple[_PreparedItem | None, _ItemExecution | None]:
+        item_id = self._item_id(item)
+        item.processing_status = ProcessingStatus.PROCESSING
+        item.processing_started_at = datetime.now(tz=UTC)
+        item.error_message = None
+        await self.session.flush()
+
+        embedded = False
+        cluster_result: ClusterResult | None = None
+        try:
+            duplicate_result = await self.deduplication_service.find_duplicate(
+                external_id=item.external_id,
+                url=item.url,
+                content_hash=item.content_hash,
+                exclude_item_id=item_id,
+            )
+            if duplicate_result.is_duplicate:
+                item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
+                await self.session.flush()
+                return (
+                    None,
+                    _ItemExecution(
+                        result=PipelineItemResult(
+                            item_id=item_id,
+                            final_status=item.processing_status,
+                            duplicate=True,
+                        )
+                    ),
+                )
+
+            raw_content = item.raw_content.strip()
+            if not raw_content:
+                msg = "RawItem.raw_content must not be empty for pipeline processing"
+                raise ValueError(msg)
+
+            embedding_api_calls = 0
+            if item.embedding is None:
+                (
+                    vectors,
+                    _cache_hits,
+                    embedding_api_calls,
+                ) = await self.embedding_service.embed_texts([raw_content])
+                item.embedding = vectors[0]
+                embedded = True
+
+            cluster_result = await self.event_clusterer.cluster_item(item)
+            event = await self._load_event(cluster_result.event_id)
+            if event is None:
+                msg = f"Event {cluster_result.event_id} not found after clustering"
+                raise ValueError(msg)
+
+            suppression_action = await self._event_suppression_action(
+                event_id=cluster_result.event_id
+            )
+            if suppression_action is not None:
+                item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
+                await self.session.flush()
+                logger.info(
+                    "Skipping event due to human feedback suppression",
+                    item_id=str(item_id),
+                    event_id=str(cluster_result.event_id),
+                    action=suppression_action,
+                )
+                return (
+                    None,
+                    _ItemExecution(
+                        result=self._build_item_result(
+                            item_id=item_id,
+                            status=item.processing_status,
+                            cluster_result=cluster_result,
+                            embedded=embedded,
+                        ),
+                        usage=PipelineUsage(embedding_api_calls=embedding_api_calls),
+                    ),
+                )
+
+            return (
+                _PreparedItem(
+                    item=item,
+                    item_id=item_id,
+                    cluster_result=cluster_result,
+                    event=event,
+                    embedded=embedded,
+                ),
+                _ItemExecution(
+                    result=PipelineItemResult(
+                        item_id=item_id,
+                        final_status=ProcessingStatus.PROCESSING,
+                    ),
+                    usage=PipelineUsage(embedding_api_calls=embedding_api_calls),
+                ),
+            )
+        except BudgetExceededError as exc:
+            item.processing_status = ProcessingStatus.PENDING
+            item.processing_started_at = None
+            item.error_message = None
+            await self.session.flush()
+            logger.warning(
+                "Budget exceeded; leaving item pending for retry",
+                item_id=str(item_id),
+                reason=str(exc),
+            )
+            return (
+                None,
+                _ItemExecution(
+                    result=self._build_item_result(
+                        item_id=item_id,
+                        status=item.processing_status,
+                        cluster_result=cluster_result,
+                        embedded=embedded,
+                        error_message=str(exc),
+                    )
+                ),
+            )
+        except Exception as exc:
+            item.processing_status = ProcessingStatus.ERROR
+            item.processing_started_at = None
+            item.error_message = str(exc)[:1000]
+            await self.session.flush()
+            logger.exception(
+                "Processing pipeline failed for item",
+                item_id=str(item_id),
+            )
+            return (
+                None,
+                _ItemExecution(
+                    result=PipelineItemResult(
+                        item_id=item_id,
+                        final_status=item.processing_status,
+                        error_message=item.error_message,
+                    )
+                ),
+            )
+
+    async def _classify_tier1_prepared_items(
+        self,
+        *,
+        prepared_items: list[_PreparedItem],
+        trends: list[Trend],
+    ) -> tuple[dict[UUID, Tier1ItemResult], dict[UUID, _ItemExecution], PipelineUsage]:
+        items = [prepared.item for prepared in prepared_items]
+        usage = PipelineUsage()
+        result_by_item: dict[UUID, Tier1ItemResult] = {}
+        failed_by_item: dict[UUID, _ItemExecution] = {}
+
+        def _record_usage(tier1_usage: Tier1Usage) -> None:
+            usage.tier1_prompt_tokens += tier1_usage.prompt_tokens
+            usage.tier1_completion_tokens += tier1_usage.completion_tokens
+            usage.tier1_api_calls += tier1_usage.api_calls
+
+        try:
+            batch_results, batch_usage = await self.tier1_classifier.classify_items(items, trends)
+            _record_usage(batch_usage)
+            result_by_item = {result.item_id: result for result in batch_results}
+            return (result_by_item, failed_by_item, usage)
+        except BudgetExceededError as exc:
+            for prepared in prepared_items:
+                prepared.item.processing_status = ProcessingStatus.PENDING
+                prepared.item.processing_started_at = None
+                prepared.item.error_message = None
+                failed_by_item[prepared.item_id] = _ItemExecution(
+                    result=self._build_item_result(
+                        item_id=prepared.item_id,
+                        status=prepared.item.processing_status,
+                        cluster_result=prepared.cluster_result,
+                        embedded=prepared.embedded,
+                        error_message=str(exc),
+                    )
+                )
+            await self.session.flush()
+            logger.warning(
+                "Tier 1 batch classification budget exceeded; leaving prepared items pending",
+                prepared_items=len(prepared_items),
+                reason=str(exc),
+            )
+            return ({}, failed_by_item, usage)
+        except Exception as exc:
+            logger.warning(
+                "Tier 1 batch classification failed; falling back to per-item classification",
+                prepared_items=len(prepared_items),
+                reason=str(exc),
+            )
+
+        for prepared in prepared_items:
+            try:
+                item_result, item_usage = await self._classify_tier1(
+                    item=prepared.item, trends=trends
+                )
+                _record_usage(item_usage)
+                result_by_item[prepared.item_id] = item_result
+            except BudgetExceededError as exc:
+                prepared.item.processing_status = ProcessingStatus.PENDING
+                prepared.item.processing_started_at = None
+                prepared.item.error_message = None
+                failed_by_item[prepared.item_id] = _ItemExecution(
+                    result=self._build_item_result(
+                        item_id=prepared.item_id,
+                        status=prepared.item.processing_status,
+                        cluster_result=prepared.cluster_result,
+                        embedded=prepared.embedded,
+                        error_message=str(exc),
+                    )
+                )
+            except Exception as exc:
+                prepared.item.processing_status = ProcessingStatus.ERROR
+                prepared.item.processing_started_at = None
+                prepared.item.error_message = str(exc)[:1000]
+                failed_by_item[prepared.item_id] = _ItemExecution(
+                    result=PipelineItemResult(
+                        item_id=prepared.item_id,
+                        final_status=prepared.item.processing_status,
+                        error_message=prepared.item.error_message,
+                    )
+                )
+
+        await self.session.flush()
+        return (result_by_item, failed_by_item, usage)
+
+    async def _process_after_tier1(
+        self,
+        *,
+        prepared: _PreparedItem,
+        tier1_result: Tier1ItemResult,
+        trends: list[Trend],
+    ) -> _ItemExecution:
+        usage = PipelineUsage()
+        item = prepared.item
+        try:
+            if not tier1_result.should_queue_tier2:
+                item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
+                await self.session.flush()
+                return _ItemExecution(
+                    result=self._build_item_result(
+                        item_id=prepared.item_id,
+                        status=item.processing_status,
+                        cluster_result=prepared.cluster_result,
+                        embedded=prepared.embedded,
+                    ),
+                    usage=usage,
+                )
+
+            _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
+                event=prepared.event,
+                trends=trends,
+            )
+            usage.tier2_prompt_tokens += tier2_usage.prompt_tokens
+            usage.tier2_completion_tokens += tier2_usage.completion_tokens
+            usage.tier2_api_calls += tier2_usage.api_calls
+            trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
+                event=prepared.event,
+                trends=trends,
+            )
+
+            item.processing_status = ProcessingStatus.CLASSIFIED
+            item.processing_started_at = None
+            await self.session.flush()
+            return _ItemExecution(
+                result=self._build_item_result(
+                    item_id=prepared.item_id,
+                    status=item.processing_status,
+                    cluster_result=prepared.cluster_result,
+                    embedded=prepared.embedded,
+                    tier2_applied=True,
+                    trend_impacts_seen=trend_impacts_seen,
+                    trend_updates=trend_updates,
+                ),
+                usage=usage,
+            )
+        except BudgetExceededError as exc:
+            item.processing_status = ProcessingStatus.PENDING
+            item.processing_started_at = None
+            item.error_message = None
+            await self.session.flush()
+            logger.warning(
+                "Budget exceeded; leaving item pending for retry",
+                item_id=str(prepared.item_id),
+                reason=str(exc),
+            )
+            return _ItemExecution(
+                result=self._build_item_result(
+                    item_id=prepared.item_id,
+                    status=item.processing_status,
+                    cluster_result=prepared.cluster_result,
+                    embedded=prepared.embedded,
+                    error_message=str(exc),
+                ),
+                usage=usage,
+            )
+        except Exception as exc:
+            item.processing_status = ProcessingStatus.ERROR
+            item.processing_started_at = None
+            item.error_message = str(exc)[:1000]
+            await self.session.flush()
+            logger.exception(
+                "Processing pipeline failed for item",
+                item_id=str(prepared.item_id),
+            )
+            return _ItemExecution(
+                result=PipelineItemResult(
+                    item_id=prepared.item_id,
+                    final_status=item.processing_status,
+                    error_message=item.error_message,
+                ),
+                usage=usage,
+            )
 
     async def _process_item(self, *, item: RawItem, trends: list[Trend]) -> _ItemExecution:
         item_id = self._item_id(item)

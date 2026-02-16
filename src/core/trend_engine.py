@@ -56,7 +56,6 @@ MAX_DELTA_PER_EVENT: float = 0.5
 
 # Default values
 DEFAULT_DECAY_HALF_LIFE_DAYS: int = 30
-DEFAULT_BASELINE_PROBABILITY: float = 0.10
 DEFAULT_NOVELTY_MIN_SCORE: float = 0.30
 DEFAULT_NOVELTY_RECOVERY_HALF_LIFE_DAYS: float = 7.0
 
@@ -570,12 +569,8 @@ class TrendEngine:
         """
         as_of = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
 
-        # Get baseline
-        baseline_prob = trend.definition.get(
-            "baseline_probability",
-            DEFAULT_BASELINE_PROBABILITY,
-        )
-        baseline_lo = prob_to_logodds(baseline_prob)
+        # Canonical baseline source of truth lives in the DB baseline log-odds field.
+        baseline_lo = float(trend.baseline_log_odds)
 
         # Get half-life
         half_life = trend.decay_half_life_days or DEFAULT_DECAY_HALF_LIFE_DAYS

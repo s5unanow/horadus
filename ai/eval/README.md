@@ -28,6 +28,18 @@ Run quality audit:
 uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
 ```
 
+Validate trend-taxonomy and gold-set contract (strict mode):
+
+```bash
+uv run --no-sync horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode strict --signal-type-mode strict --unknown-trend-mode strict
+```
+
+Validate in transitional compatibility mode (subset/warn):
+
+```bash
+uv run --no-sync horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode subset --signal-type-mode warn --unknown-trend-mode warn
+```
+
 Run audit with failing exit code when warnings are present:
 
 ```bash
@@ -68,6 +80,8 @@ Notes:
 - Use LLM-seeded labels as silver/pre-label drafts, then human-correct.
 - Keep gold data small, curated, and representative.
 - Avoid storing sensitive content.
+- CI and `make audit-eval` currently run taxonomy validation in transitional mode
+  (`subset`/`warn`) until human-gated taxonomy/gold-set harmonization is complete.
 
 Baseline update procedure:
 1. Run `horadus eval audit` (and fail on warnings for release gates).

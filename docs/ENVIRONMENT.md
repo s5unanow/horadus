@@ -1,5 +1,7 @@
 # Environment Variables
 
+**Last Verified**: 2026-02-16
+
 This document lists environment variables used by the Horadus backend.
 
 ## Core Runtime (Required)
@@ -86,6 +88,7 @@ This document lists environment variables used by the Horadus backend.
 | `RSS_COLLECTION_INTERVAL` | `30` | In minutes. |
 | `GDELT_COLLECTION_INTERVAL` | `60` | In minutes. |
 | `TREND_SNAPSHOT_INTERVAL_MINUTES` | `60` | Snapshot cadence. |
+| `PROCESS_PENDING_INTERVAL_MINUTES` | `5` | Cadence for periodic `workers.process_pending_items` beat schedule. |
 | `PROCESSING_REAPER_INTERVAL_MINUTES` | `15` | Cadence for stale-processing recovery task. |
 | `WEEKLY_REPORT_DAY_OF_WEEK` | `1` | UTC day (`0=Sun..6=Sat`). |
 | `WEEKLY_REPORT_HOUR_UTC` | `7` | UTC hour. |
@@ -118,12 +121,21 @@ This document lists environment variables used by the Horadus backend.
 | `DATABASE_POOL_SIZE` | `10` | SQLAlchemy async pool size. |
 | `DATABASE_MAX_OVERFLOW` | `20` | SQLAlchemy max overflow connections. |
 | `DATABASE_POOL_TIMEOUT_SECONDS` | `30` | Seconds to wait for a pooled DB connection before timeout. |
+| `MIGRATION_PARITY_CHECK_ENABLED` | `true` | Enables runtime migration parity checks in startup and `/health`. |
+| `MIGRATION_PARITY_STRICT_STARTUP` | `false` | Fails API startup when migration parity check is unhealthy. |
+| `MIGRATION_GATE_VALIDATE_AUTOGEN` | `true` | Release/integration migration-gate strictness. `true` runs `alembic check`; set `false` only for documented emergency bypass. |
 | `REDIS_URL` | `redis://localhost:6379/0` | General Redis connection URL. |
 
 ## File-Based Secrets (`*_FILE`)
 
 For containerized production, each sensitive variable also supports a file path variant.
 When `<VAR>_FILE` is set, Horadus reads the file content and uses it as `<VAR>`.
+
+Production guidance:
+
+- Treat `.env` as non-secret configuration only.
+- Keep secret values in mounted files and set only `*_FILE` variables.
+- Use `docs/SECRETS_RUNBOOK.md` for host layout, permissions, rotation, and rollback.
 
 Supported file-backed variables:
 

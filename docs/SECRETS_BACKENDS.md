@@ -8,6 +8,7 @@ via `*_FILE` settings. This makes runtime wiring portable across secret backends
 - sidecar/CSI integrations from managed secret stores
 
 See `docs/ENVIRONMENT.md` for the full variable list and `*_FILE` mappings.
+See `docs/SECRETS_RUNBOOK.md` for Docker Compose provisioning/rotation/rollback workflow.
 
 ## Preferred Runtime Pattern
 

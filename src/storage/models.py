@@ -27,6 +27,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
@@ -299,6 +300,14 @@ class RawItem(Base):
         Index("idx_raw_items_hash", "content_hash"),
         Index("idx_raw_items_fetched", "fetched_at"),
         Index("idx_raw_items_source_fetched", "source_id", "fetched_at"),
+        # Keep model metadata aligned with migration-managed pgvector index.
+        Index(
+            "idx_raw_items_embedding",
+            "embedding",
+            postgresql_using="ivfflat",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"lists": 64},
+        ),
     )
 
 
@@ -406,7 +415,14 @@ class Event(Base):
         Index("idx_events_first_seen", "first_seen_at"),
         Index("idx_events_categories", "categories", postgresql_using="gin"),
         Index("idx_events_lifecycle", "lifecycle_status", "last_mention_at"),
-        # Vector index created separately with specific params
+        # Keep model metadata aligned with migration-managed pgvector index.
+        Index(
+            "idx_events_embedding",
+            "embedding",
+            postgresql_using="ivfflat",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"lists": 64},
+        ),
     )
 
 
@@ -692,6 +708,7 @@ class ApiUsage(Base):
         PGUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
+        server_default=func.gen_random_uuid(),
     )
     usage_date: Mapped[date] = mapped_column(
         "date",
@@ -705,21 +722,25 @@ class ApiUsage(Base):
     call_count: Mapped[int] = mapped_column(
         Integer,
         default=0,
+        server_default=text("0"),
         nullable=False,
     )
     input_tokens: Mapped[int] = mapped_column(
         Integer,
         default=0,
+        server_default=text("0"),
         nullable=False,
     )
     output_tokens: Mapped[int] = mapped_column(
         Integer,
         default=0,
+        server_default=text("0"),
         nullable=False,
     )
     estimated_cost_usd: Mapped[float] = mapped_column(
         Numeric(10, 4),
         default=0,
+        server_default=text("0"),
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

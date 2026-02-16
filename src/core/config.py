@@ -68,6 +68,14 @@ class Settings(BaseSettings):
         le=600,
         description="Seconds to wait for a DB connection from pool before timing out",
     )
+    MIGRATION_PARITY_CHECK_ENABLED: bool = Field(
+        default=True,
+        description="Enable migration parity checks in runtime health/startup paths",
+    )
+    MIGRATION_PARITY_STRICT_STARTUP: bool = Field(
+        default=False,
+        description="Fail API startup when migration parity check is unhealthy",
+    )
 
     @model_validator(mode="after")
     def _load_secret_file_values(self) -> Settings:
@@ -436,6 +444,11 @@ class Settings(BaseSettings):
         default=15,
         ge=1,
         description="Interval in minutes for stale-processing reaper task schedule",
+    )
+    PROCESS_PENDING_INTERVAL_MINUTES: int = Field(
+        default=5,
+        ge=1,
+        description="Interval in minutes for periodic workers.process_pending_items schedule",
     )
 
     # =========================================================================

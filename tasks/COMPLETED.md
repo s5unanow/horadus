@@ -72,6 +72,18 @@ Tasks that have been completed and verified.
 - TASK-065: Independence-Aware Corroboration and Claim Graph ✅
 - TASK-067: Report Narrative Prompt Hardening ✅
 - TASK-068: Gold-Set Change Governance and Baseline Supersession ✅
+- TASK-069: Baseline Source-of-Truth Unification for Decay ✅
+- TASK-071: Migration Drift Quality Gates ✅
+- TASK-072: Runtime Migration Parity Health Signal ✅
+- TASK-073: Alembic Autogenerate Baseline Drift Cleanup ✅
+- TASK-074: Enforce Strict Alembic Check Gate by Default ✅
+- TASK-075: Container Secret Provisioning and Rotation Runbook ✅
+- TASK-076: Trend Taxonomy Contract and Gold-Set Validation Gate ✅
+- TASK-078: Tier-1 Batch Classification in Orchestrator ✅
+- TASK-079: Periodic Pending Processing Schedule ✅
+- TASK-081: Readiness Probe HTTP Semantics Fix ✅
+- TASK-082: Vector Index Profile Parity (Model vs Migration) ✅
+- TASK-083: Documentation and OpenAPI Drift Cleanup ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

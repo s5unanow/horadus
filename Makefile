@@ -9,7 +9,8 @@
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
-        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human audit-eval pre-commit check all
+        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval pre-commit check all \
+        db-migration-gate
 
 # Default target
 .DEFAULT_GOAL := help
@@ -23,8 +24,10 @@ export UV_CACHE_DIR
 UV_RUN := $(UV) run --no-sync
 PYTHON := $(shell command -v python3.12 >/dev/null 2>&1 && echo python3.12 || echo python3)
 DOCKER_COMPOSE := $(shell if command -v docker-compose >/dev/null 2>&1; then echo docker-compose; else echo "docker compose"; fi)
-INTEGRATION_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432/geoint_test # pragma: allowlist secret
+INTEGRATION_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:5432/geoint_test  # pragma: allowlist secret
 INTEGRATION_REDIS_URL ?= redis://localhost:6379/0
+MIGRATION_GATE_DATABASE_URL ?= $(INTEGRATION_DATABASE_URL)
+MIGRATION_GATE_VALIDATE_AUTOGEN ?= true
 
 # Colors for terminal output
 BLUE := \033[34m
@@ -101,6 +104,8 @@ test-unit: deps-dev ## Run unit tests only
 	$(UV_RUN) pytest tests/unit/ -v -m unit
 
 test-integration: deps-dev ## Run integration tests only
+	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" $(UV_RUN) alembic upgrade head
+	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)" ./scripts/check_migration_drift.sh
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" REDIS_URL="$(INTEGRATION_REDIS_URL)" $(UV_RUN) pytest tests/integration/ -v -m integration
 
 test-cov: deps-dev ## Run tests with coverage report
@@ -168,6 +173,9 @@ db-history: deps ## Show migration history
 db-current: deps ## Show current migration
 	$(UV_RUN) alembic current
 
+db-migration-gate: deps ## Fail if target DB revision drifts from Alembic head or model state
+	DATABASE_URL="$(MIGRATION_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)" ./scripts/check_migration_drift.sh
+
 # =============================================================================
 # Run Application
 # =============================================================================
@@ -190,7 +198,10 @@ benchmark-eval: deps ## Run Tier-1/Tier-2 benchmark against gold set
 benchmark-eval-human: deps ## Run benchmark using only human-verified labels
 	$(UV_RUN) horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --require-human-verified
 
-audit-eval: deps ## Audit evaluation dataset quality and provenance
+validate-taxonomy-eval: deps ## Validate trend taxonomy contract against eval gold set
+	$(UV_RUN) horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode subset --signal-type-mode warn --unknown-trend-mode warn
+
+audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and provenance
 	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
 
 # =============================================================================

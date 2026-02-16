@@ -28,6 +28,21 @@ if config.config_file_name is not None:
 # Model metadata for 'autogenerate' support
 target_metadata = Base.metadata
 
+# TimescaleDB creates internal indexes that are not ORM-managed.
+IGNORED_AUTOGEN_INDEXES = {"trend_snapshots_timestamp_idx"}
+
+
+def include_object(
+    obj: object,
+    name: str | None,
+    type_: str,
+    reflected: bool,
+    compare_to: object | None,
+) -> bool:
+    """Exclude known DB-managed objects from autogenerate drift checks."""
+    del obj, reflected, compare_to
+    return not (type_ == "index" and name in IGNORED_AUTOGEN_INDEXES)
+
 
 def run_migrations_offline() -> None:
     """
@@ -51,6 +66,7 @@ def run_migrations_offline() -> None:
         # Compare types for better autogenerate
         compare_type=True,
         compare_server_default=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():
@@ -64,6 +80,7 @@ def do_run_migrations(connection: Connection) -> None:
         target_metadata=target_metadata,
         compare_type=True,
         compare_server_default=True,
+        include_object=include_object,
     )
 
     with context.begin_transaction():

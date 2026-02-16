@@ -1,7 +1,7 @@
 # Project Status
 
-**Last Updated**: 2026-02-12
-**Current Phase**: Phase 6 - Calibration (complete)
+**Last Updated**: 2026-02-16
+**Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
 
 ## Progress Overview
 
@@ -13,6 +13,7 @@ Phase 3: Trend Engine        [████████████████�
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
 Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
+Phase 8: Hardening (NEW)     [█████████████████░░░]  85%  🚧 IN PROGRESS
 ```
 
 ## What's Working
@@ -159,6 +160,7 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
 - [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
 - [x] Backup verification automation + retention enforcement (`make verify-backups`)
+- [x] Container secret provisioning + rotation + rollback runbook (`docs/SECRETS_RUNBOOK.md`) with deployment/environment cross-links
 - [x] Counterfactual simulation API (`POST /api/v1/trends/{id}/simulate`) for side-effect-free remove/inject what-if projections
 - [x] Recency-aware novelty scoring + per-indicator temporal decay with explicit trend-evidence provenance factors
 - [x] Hermetic integration parity: CI now uses repo Postgres image with verified `timescaledb` + `vector`, unified integration URLs, and deterministic integration DB setup/teardown fixtures
@@ -167,21 +169,39 @@ Phase 6: Calibration (NEW)   [████████████████�
 - [x] Independence-aware corroboration using claim-graph support/contradiction links and source-cluster-weighted corroboration scoring
 - [x] Active-learning review queue endpoint (`GET /api/v1/review-queue`) with deterministic uncertainty/delta/contradiction ranking
 - [x] Vector retrieval strategy benchmark harness (exact vs IVFFlat vs HNSW) with tuned IVFFlat index profile (`lists=64`) and migration path
+- [x] Migration drift quality gates (`scripts/check_migration_drift.sh`) wired into Makefile integration flow and CI integration checks with strict autogenerate parity enabled by default
+- [x] Runtime migration parity checks in `/health` (`checks.migrations`) and startup strict mode (`MIGRATION_PARITY_STRICT_STARTUP`)
+- [x] Alembic baseline parity cleanup completed (`alembic check` now clean after `alembic upgrade head`)
+- [x] Trend taxonomy contract validator (`horadus eval validate-taxonomy`) with Tier-1/Tier-2 drift checks, unit coverage, and CI/local integration
+- [x] Orchestrator now uses batched Tier-1 classification with deterministic mapping and per-item fallback on batch failure
+- [x] Periodic pending-processing beat schedule (`process-pending-items`) with config toggle and cadence control (`PROCESS_PENDING_INTERVAL_MINUTES`)
+- [x] Readiness probe now returns HTTP 503 on dependency failure with stable non-ready payload
+- [x] Vector index metadata parity aligned to migration profile (`lists=64`) with regression tests
+- [x] Architecture/OpenAPI/docs drift cleanup with operational last-verified timestamps and archived stale risk snapshot doc
+- [x] Decay baseline source-of-truth unified to `Trend.baseline_log_odds` with synced `definition.baseline_probability` metadata + one-time backfill migration
 
 ## In Progress
 
 - `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline `[REQUIRES_HUMAN]` (manual trend definition/review pending)
+- `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` (manual baseline validation pending)
+- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` (manual execution/approval pending)
+- `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
+- `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
+- `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
 - `TASK-066` requires human-authored trend definitions and reviewer sign-off before completion.
+- `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
 
 ## Next Up (Priority Order)
 
 1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
 2. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
+3. Complete `TASK-070` baseline prior review/sign-off for active trends
+4. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅
 
@@ -219,11 +239,11 @@ Based on expert review, added 9 new tasks:
 | M5: Trend engine operational | Week 5 | ✅ Complete |
 | M6: Weekly reports generating | Week 6 | ✅ Complete |
 | M7: Reporting APIs operational | Week 7 | ✅ Complete |
-| M8: Full system operational | Week 8 | 🔲 Not Started |
+| M8: Full system operational | Week 8 | 🚧 In Progress |
 
 ## Known Issues
 
-- None currently blocking autonomous engineering tasks.
+- Human-gated trend/eval curation (`TASK-044`, `TASK-066`) remains the main completion bottleneck.
 
 ## Architecture Validated ✅
 
@@ -245,7 +265,7 @@ Expert confirmed core design:
 
 ## Technical Debt
 
-- None yet (fresh project)
+- None currently requiring immediate autonomous remediation.
 
 ## Notes
 

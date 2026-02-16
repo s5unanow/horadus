@@ -33,6 +33,12 @@ def _build_item() -> RawItem:
     )
 
 
+def _build_item_with_title(title: str) -> RawItem:
+    item = _build_item()
+    item.title = title
+    return item
+
+
 def _build_trend() -> object:
     return SimpleNamespace(
         id=uuid4(),
@@ -204,6 +210,167 @@ async def test_process_items_sets_error_status_on_failure(mock_db_session) -> No
     assert result.trend_updates == 0
     assert item.processing_status == ProcessingStatus.ERROR
     assert item.error_message is not None
+    tier2.classify_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_items_batches_tier1_and_preserves_result_order(mock_db_session) -> None:
+    item_one = _build_item_with_title("Pipeline item one")
+    item_two = _build_item_with_title("Pipeline item two")
+    event_one = Event(id=uuid4(), canonical_summary="Seed summary one")
+    event_two = Event(id=uuid4(), canonical_summary="Seed summary two")
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            side_effect=[
+                ClusterResult(
+                    item_id=item_one.id,
+                    event_id=event_one.id,
+                    created=True,
+                    merged=False,
+                ),
+                ClusterResult(
+                    item_id=item_two.id,
+                    event_id=event_two.id,
+                    created=True,
+                    merged=False,
+                ),
+            ]
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [
+                    Tier1ItemResult(
+                        item_id=item_one.id,
+                        max_relevance=8,
+                        should_queue_tier2=True,
+                    ),
+                    Tier1ItemResult(
+                        item_id=item_two.id,
+                        max_relevance=2,
+                        should_queue_tier2=False,
+                    ),
+                ],
+                Tier1Usage(prompt_tokens=20, completion_tokens=8, api_calls=1),
+            )
+        )
+    )
+    tier2 = SimpleNamespace(
+        classify_event=AsyncMock(
+            return_value=(
+                Tier2EventResult(
+                    event_id=event_one.id,
+                    categories_count=1,
+                    trend_impacts_count=1,
+                ),
+                Tier2Usage(prompt_tokens=15, completion_tokens=5, api_calls=1),
+            )
+        )
+    )
+    mock_db_session.scalar = AsyncMock(side_effect=[event_one, None, event_two, None])
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item_one, item_two], trends=[_build_trend()])
+
+    assert result.scanned == 2
+    assert result.processed == 2
+    assert result.classified == 1
+    assert result.noise == 1
+    assert result.errors == 0
+    assert [row.item_id for row in result.results] == [item_one.id, item_two.id]
+    assert result.results[0].final_status == ProcessingStatus.CLASSIFIED
+    assert result.results[1].final_status == ProcessingStatus.NOISE
+    assert tier1.classify_items.await_count == 1
+    tier1_call = tier1.classify_items.await_args
+    assert [row.id for row in tier1_call.args[0]] == [item_one.id, item_two.id]
+    tier2.classify_event.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_process_items_tier1_batch_fallback_handles_partial_failures(mock_db_session) -> None:
+    item_fail = _build_item_with_title("Pipeline item fail")
+    item_ok = _build_item_with_title("Pipeline item ok")
+    event_fail = Event(id=uuid4(), canonical_summary="Seed summary fail")
+    event_ok = Event(id=uuid4(), canonical_summary="Seed summary ok")
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            side_effect=[
+                ClusterResult(
+                    item_id=item_fail.id,
+                    event_id=event_fail.id,
+                    created=True,
+                    merged=False,
+                ),
+                ClusterResult(
+                    item_id=item_ok.id,
+                    event_id=event_ok.id,
+                    created=True,
+                    merged=False,
+                ),
+            ]
+        )
+    )
+
+    async def classify_items(items, trends):
+        _ = trends
+        if len(items) > 1:
+            raise ValueError("Tier 1 response item ids do not match input batch")
+
+        current_item = items[0]
+        if current_item.id == item_fail.id:
+            raise ValueError("Tier 1 response trend ids mismatch for item")
+
+        return (
+            [
+                Tier1ItemResult(
+                    item_id=current_item.id,
+                    max_relevance=1,
+                    should_queue_tier2=False,
+                )
+            ],
+            Tier1Usage(prompt_tokens=4, completion_tokens=2, api_calls=1),
+        )
+
+    tier1 = SimpleNamespace(classify_items=AsyncMock(side_effect=classify_items))
+    tier2 = SimpleNamespace(classify_event=AsyncMock())
+    mock_db_session.scalar = AsyncMock(side_effect=[event_fail, None, event_ok, None])
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item_fail, item_ok], trends=[_build_trend()])
+
+    assert result.scanned == 2
+    assert result.processed == 1
+    assert result.classified == 0
+    assert result.noise == 1
+    assert result.errors == 1
+    assert result.results[0].final_status == ProcessingStatus.ERROR
+    assert result.results[1].final_status == ProcessingStatus.NOISE
+    assert item_fail.processing_status == ProcessingStatus.ERROR
+    assert item_ok.processing_status == ProcessingStatus.NOISE
+    assert tier1.classify_items.await_count == 3
     tier2.classify_event.assert_not_called()
 
 

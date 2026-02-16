@@ -259,6 +259,28 @@ class Settings(BaseSettings):
             return normalized or None
         return str(value).strip() or None
 
+    @field_validator("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS", mode="before")
+    @classmethod
+    def parse_optional_otel_fields(cls, value: Any) -> str | None:
+        """Normalize optional OpenTelemetry config values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value).strip() or None
+
+    @field_validator("LLM_REPORT_API_MODE", mode="before")
+    @classmethod
+    def parse_llm_report_api_mode(cls, value: Any) -> str:
+        """Normalize report API mode and enforce supported values."""
+        normalized = str(value or "chat_completions").strip().lower()
+        allowed = {"chat_completions", "responses"}
+        if normalized not in allowed:
+            msg = "LLM_REPORT_API_MODE must be one of: chat_completions, responses"
+            raise ValueError(msg)
+        return normalized
+
     # =========================================================================
     # OpenAI Configuration
     # =========================================================================
@@ -314,6 +336,22 @@ class Settings(BaseSettings):
         default="gpt-4.1-mini",
         description="Model for weekly report narrative generation",
     )
+    LLM_REPORT_API_MODE: str = Field(
+        default="chat_completions",
+        description="Report narrative API mode: chat_completions or responses",
+    )
+    NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Maximum unsupported deterministic claims allowed before grounding fallback",
+    )
+    NARRATIVE_GROUNDING_NUMERIC_TOLERANCE: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=10.0,
+        description="Absolute tolerance for numeric claim grounding checks",
+    )
     LLM_RETROSPECTIVE_MODEL: str = Field(
         default="gpt-4.1-mini",
         description="Model for retrospective analysis narrative generation",
@@ -325,6 +363,18 @@ class Settings(BaseSettings):
         ge=1,
         le=256,
         description="Maximum raw items per Tier 1 classification API request",
+    )
+    LLM_ROUTE_RETRY_ATTEMPTS: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Per-route transient retry attempts before failover/terminal failure",
+    )
+    LLM_ROUTE_RETRY_BACKOFF_SECONDS: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=10.0,
+        description="Base retry backoff in seconds (linear by attempt index)",
     )
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-small",
@@ -345,6 +395,18 @@ class Settings(BaseSettings):
         default=2048,
         ge=1,
         description="Maximum in-memory embedding cache entries before LRU eviction",
+    )
+    VECTOR_REVALIDATION_CADENCE_DAYS: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        description="Target cadence (days) for ANN strategy revalidation benchmark runs",
+    )
+    VECTOR_REVALIDATION_DATASET_GROWTH_PCT: int = Field(
+        default=20,
+        ge=1,
+        le=500,
+        description="Dataset-size growth trigger (%) for early ANN strategy revalidation",
     )
 
     # =========================================================================
@@ -403,6 +465,32 @@ class Settings(BaseSettings):
     )
     LOG_LEVEL: str = Field(default="INFO")
     LOG_FORMAT: str = Field(default="json", description="json or console")
+    OTEL_ENABLED: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry tracing instrumentation",
+    )
+    OTEL_SERVICE_NAME: str = Field(
+        default="horadus-backend",
+        description="OpenTelemetry service.name resource attribute",
+    )
+    OTEL_SERVICE_NAMESPACE: str = Field(
+        default="horadus",
+        description="OpenTelemetry service.namespace resource attribute",
+    )
+    OTEL_TRACES_SAMPLER_RATIO: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling ratio for OpenTelemetry spans (0.0-1.0)",
+    )
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = Field(
+        default=None,
+        description="Optional OTLP/HTTP traces endpoint (e.g., http://localhost:4318/v1/traces)",
+    )
+    OTEL_EXPORTER_OTLP_HEADERS: str | None = Field(
+        default=None,
+        description="Optional OTLP exporter headers as comma-separated key=value pairs",
+    )
 
     # =========================================================================
     # Processing
@@ -431,7 +519,7 @@ class Settings(BaseSettings):
         description="Time window for event clustering",
     )
     PROCESSING_PIPELINE_BATCH_SIZE: int = Field(
-        default=50,
+        default=200,
         ge=1,
         description="Max pending items processed per pipeline task run",
     )
@@ -446,7 +534,7 @@ class Settings(BaseSettings):
         description="Interval in minutes for stale-processing reaper task schedule",
     )
     PROCESS_PENDING_INTERVAL_MINUTES: int = Field(
-        default=5,
+        default=15,
         ge=1,
         description="Interval in minutes for periodic workers.process_pending_items schedule",
     )
@@ -549,8 +637,30 @@ class Settings(BaseSettings):
     # =========================================================================
     # Collection
     # =========================================================================
-    RSS_COLLECTION_INTERVAL: int = Field(default=30, description="Minutes")
-    GDELT_COLLECTION_INTERVAL: int = Field(default=60, description="Minutes")
+    RSS_COLLECTION_INTERVAL: int = Field(default=360, description="Minutes")
+    GDELT_COLLECTION_INTERVAL: int = Field(default=360, description="Minutes")
+    INGESTION_WINDOW_OVERLAP_SECONDS: int = Field(
+        default=300,
+        ge=0,
+        description="Overlap applied between collection windows to avoid uncovered ingestion ranges",
+    )
+    SOURCE_FRESHNESS_ALERT_MULTIPLIER: float = Field(
+        default=2.0,
+        ge=1.0,
+        le=24.0,
+        description="Source freshness SLO multiplier against collector interval before marked stale",
+    )
+    SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES: int = Field(
+        default=30,
+        ge=1,
+        description="Cadence in minutes for stale-source freshness checks",
+    )
+    SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+        description="Maximum collector catch-up dispatches emitted per freshness-check run",
+    )
     MAX_ITEMS_PER_COLLECTION: int = Field(default=100, ge=1)
     WEEKLY_REPORT_DAY_OF_WEEK: int = Field(
         default=1,

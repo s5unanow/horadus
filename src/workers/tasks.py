@@ -23,9 +23,12 @@ from src.core.observability import (
     record_collector_metrics,
     record_pipeline_metrics,
     record_processing_reaper_resets,
+    record_source_catchup_dispatch,
+    record_source_freshness_stale,
     record_worker_error,
 )
 from src.core.report_generator import ReportGenerator
+from src.core.source_freshness import build_source_freshness_report
 from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
@@ -184,6 +187,65 @@ async def _collect_gdelt_async() -> dict[str, Any]:
         "skipped": sum(result.items_skipped for result in results),
         "errors": sum(len(result.errors) for result in results),
         "results": [asdict(result) for result in results],
+    }
+
+
+async def _check_source_freshness_async() -> dict[str, Any]:
+    async with async_session_maker() as session:
+        report = await build_source_freshness_report(session=session)
+
+    stale_rows = [row for row in report.rows if row.is_stale]
+    stale_by_collector: dict[str, int] = {}
+    for row in stale_rows:
+        stale_by_collector[row.collector] = stale_by_collector.get(row.collector, 0) + 1
+
+    for collector, stale_count in stale_by_collector.items():
+        record_source_freshness_stale(collector=collector, stale_count=stale_count)
+
+    catchup_dispatched: list[str] = []
+    dispatch_budget = max(0, settings.SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES)
+    if dispatch_budget > 0:
+        stale_collectors = set(report.stale_collectors)
+        if (
+            "rss" in stale_collectors
+            and settings.ENABLE_RSS_INGESTION
+            and len(catchup_dispatched) < dispatch_budget
+        ):
+            cast("Any", collect_rss).delay()
+            record_source_catchup_dispatch(collector="rss")
+            catchup_dispatched.append("rss")
+        if (
+            "gdelt" in stale_collectors
+            and settings.ENABLE_GDELT_INGESTION
+            and len(catchup_dispatched) < dispatch_budget
+        ):
+            cast("Any", collect_gdelt).delay()
+            record_source_catchup_dispatch(collector="gdelt")
+            catchup_dispatched.append("gdelt")
+
+    stale_source_rows = [
+        {
+            "source_id": str(row.source_id),
+            "source_name": row.source_name,
+            "collector": row.collector,
+            "last_fetched_at": row.last_fetched_at.isoformat() if row.last_fetched_at else None,
+            "age_seconds": row.age_seconds,
+            "stale_after_seconds": row.stale_after_seconds,
+        }
+        for row in stale_rows
+    ]
+
+    return {
+        "status": "ok",
+        "task": "check_source_freshness",
+        "checked_at": report.checked_at.isoformat(),
+        "stale_multiplier": report.stale_multiplier,
+        "stale_count": len(stale_rows),
+        "stale_collectors": list(report.stale_collectors),
+        "stale_by_collector": stale_by_collector,
+        "catchup_dispatch_budget": dispatch_budget,
+        "catchup_dispatched": catchup_dispatched,
+        "stale_sources": stale_source_rows,
     }
 
 
@@ -639,6 +701,27 @@ def collect_gdelt() -> dict[str, Any]:
 
     return _run_task_with_heartbeat(
         task_name="workers.collect_gdelt",
+        runner=_runner,
+    )
+
+
+@typed_shared_task(name="workers.check_source_freshness")
+def check_source_freshness() -> dict[str, Any]:
+    """Evaluate source freshness SLOs and trigger bounded catch-up dispatch."""
+
+    def _runner() -> dict[str, Any]:
+        logger.info("Starting source freshness check task")
+        result = _run_async(_check_source_freshness_async())
+        logger.info(
+            "Finished source freshness check task",
+            stale_count=result["stale_count"],
+            stale_collectors=result["stale_collectors"],
+            catchup_dispatched=result["catchup_dispatched"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.check_source_freshness",
         runner=_runner,
     )
 

@@ -2,6 +2,8 @@
 
 **Last Verified**: 2026-02-16
 
+Operational tracing setup and validation steps are documented in `docs/TRACING.md`.
+
 ## System Context
 
 ```
@@ -106,6 +108,11 @@
                     │  processing │
                     └─────────────┘
 ```
+
+Ingestion tracks per-source high-water coverage timestamps and applies overlap-aware
+next-window starts to avoid silent gaps on delayed runs/restarts.
+Periodic freshness checks (`workers.check_source_freshness`) alert on stale sources
+and trigger bounded collector catch-up dispatch before gap risk accumulates.
 
 ### 2. Processing Flow
 
@@ -214,10 +221,11 @@ Current model mapping (see ADR-002):
 │   3. Generate narrative (LLM):                                  │
 │      ├─▶ Input: computed statistics (NOT raw events)            │
 │      ├─▶ Prompt: "Write a 2-paragraph intelligence brief..."    │
-│      └─▶ Output: narrative text                                 │
+│      ├─▶ Output: narrative text                                 │
+│      └─▶ Deterministic grounding check against supplied stats   │
 │                                                                 │
 │   4. Store report:                                              │
-│      └─▶ reports table (JSON + narrative)                       │
+│      └─▶ reports table (JSON + narrative + grounding metadata)  │
 │                                                                 │
 │   5. Expose via API:                                            │
 │      └─▶ GET /api/v1/reports/{id}                               │
@@ -238,6 +246,8 @@ Benefit: Evidence is additive, always produces valid probabilities.
 Why: Same story appears in 50 sources.
 How: Cluster by embedding similarity (cosine > 0.88 within 48h).
 Benefit: One event with corroboration count, not 50 duplicate items.
+Safety: Similarity matching is constrained to vectors with the same `embedding_model`
+lineage value to avoid cross-model drift.
 
 ### 3. Two-Tier LLM Processing (ADR-005)
 

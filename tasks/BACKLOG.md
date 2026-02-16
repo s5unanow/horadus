@@ -1608,11 +1608,11 @@ Prevent silent vector-space drift when embedding models change, and make
 re-embedding operations explicit and auditable.
 
 **Acceptance Criteria**:
-- [ ] Add embedding lineage metadata for stored vectors (model identifier and created-at/version marker) on relevant entities
-- [ ] Prevent cross-model similarity comparisons in dedup/clustering paths (fail-safe skip or explicit fallback behavior)
-- [ ] Add operator command/report to detect mixed embedding-model populations and estimate re-embed scope
-- [ ] Document embedding-model upgrade workflow (cutover strategy, backfill order, rollback)
-- [ ] Add tests for lineage persistence and cross-model safety checks
+- [x] Add embedding lineage metadata for stored vectors (model identifier and created-at/version marker) on relevant entities
+- [x] Prevent cross-model similarity comparisons in dedup/clustering paths (fail-safe skip or explicit fallback behavior)
+- [x] Add operator command/report to detect mixed embedding-model populations and estimate re-embed scope
+- [x] Document embedding-model upgrade workflow (cutover strategy, backfill order, rollback)
+- [x] Add tests for lineage persistence and cross-model safety checks
 
 ---
 
@@ -1642,11 +1642,11 @@ Reduce report/retrospective hallucination risk by validating generated narrative
 against structured evidence before persistence.
 
 **Acceptance Criteria**:
-- [ ] Add post-generation grounding verifier that checks narrative claims against provided statistics/top-events payload
-- [ ] Enforce fail-safe behavior (fallback narrative or flagged output) when unsupported claims exceed threshold
-- [ ] Persist grounding metadata (`grounding_status`, violation_count, optional references) with generated narratives
-- [ ] Expose grounding metadata in report/retrospective API responses for operator visibility
-- [ ] Add tests for grounded pass, unsupported-claim failure, and fallback behavior
+- [x] Add post-generation grounding verifier that checks narrative claims against provided statistics/top-events payload
+- [x] Enforce fail-safe behavior (fallback narrative or flagged output) when unsupported claims exceed threshold
+- [x] Persist grounding metadata (`grounding_status`, violation_count, optional references) with generated narratives
+- [x] Expose grounding metadata in report/retrospective API responses for operator visibility
+- [x] Add tests for grounded pass, unsupported-claim failure, and fallback behavior
 
 ---
 
@@ -1659,12 +1659,12 @@ Align scheduler cadence and operational docs with the intended low-frequency
 usage pattern (6-hour polling, daily review).
 
 **Acceptance Criteria**:
-- [ ] Define and document a 6-hour ingestion profile with concrete baseline defaults: `RSS_COLLECTION_INTERVAL=360`, `GDELT_COLLECTION_INTERVAL=360`, `PROCESS_PENDING_INTERVAL_MINUTES=15`, `PROCESSING_PIPELINE_BATCH_SIZE=200`
-- [ ] Define source-window defaults for 6-hour mode to avoid gaps: `default_lookback_hours=12` for GDELT and `default_max_items_per_fetch=200` for RSS (with documented per-source override guidance)
-- [ ] Ensure scheduler/task behavior remains safe and deterministic for 6-hour cadence under bursty ingestion volumes
-- [ ] Add/adjust tests for beat schedule composition under 6-hour interval configuration
-- [ ] Update deployment/environment docs with a “6-hour mode” example and tuning checklist (`batch size`, `pending interval`, `worker concurrency`, `per-source max items`)
-- [ ] Add a short operator runbook for manual catch-up/replay when the service was down for multiple days
+- [x] Define and document a 6-hour ingestion profile with concrete baseline defaults: `RSS_COLLECTION_INTERVAL=360`, `GDELT_COLLECTION_INTERVAL=360`, `PROCESS_PENDING_INTERVAL_MINUTES=15`, `PROCESSING_PIPELINE_BATCH_SIZE=200`
+- [x] Define source-window defaults for 6-hour mode to avoid gaps: `default_lookback_hours=12` for GDELT and `default_max_items_per_fetch=200` for RSS (with documented per-source override guidance)
+- [x] Ensure scheduler/task behavior remains safe and deterministic for 6-hour cadence under bursty ingestion volumes
+- [x] Add/adjust tests for beat schedule composition under 6-hour interval configuration
+- [x] Update deployment/environment docs with a “6-hour mode” example and tuning checklist (`batch size`, `pending interval`, `worker concurrency`, `per-source max items`)
+- [x] Add a short operator runbook for manual catch-up/replay when the service was down for multiple days
 
 ---
 
@@ -1677,11 +1677,11 @@ Prevent silent ingestion gaps by tracking per-source progress and enforcing safe
 window overlap semantics.
 
 **Acceptance Criteria**:
-- [ ] Persist per-source ingestion progress markers (last successful window end / high-water timestamp) for GDELT and RSS collectors
-- [ ] Enforce overlap-aware next-window calculation so delayed runs do not create uncovered time ranges
-- [ ] Add duplicate-safe behavior for overlap reprocessing (idempotent upsert/dedup remains authoritative)
-- [ ] Emit structured metrics/logs for window coverage (`expected_start`, `actual_start`, `gap_seconds`, `overlap_seconds`)
-- [ ] Add tests covering on-time runs, delayed runs, and restart-after-outage continuity
+- [x] Persist per-source ingestion progress markers (last successful window end / high-water timestamp) for GDELT and RSS collectors
+- [x] Enforce overlap-aware next-window calculation so delayed runs do not create uncovered time ranges
+- [x] Add duplicate-safe behavior for overlap reprocessing (idempotent upsert/dedup remains authoritative)
+- [x] Emit structured metrics/logs for window coverage (`expected_start`, `actual_start`, `gap_seconds`, `overlap_seconds`)
+- [x] Add tests covering on-time runs, delayed runs, and restart-after-outage continuity
 
 ---
 
@@ -1694,11 +1694,11 @@ Detect missed collection windows early and recover automatically before data los
 accumulates.
 
 **Acceptance Criteria**:
-- [ ] Define freshness SLO thresholds per collector (for example alert when `last_fetched_at` exceeds `2x` interval)
-- [ ] Add stale-source detector task that scans source freshness and emits alertable metrics/events
-- [ ] Trigger bounded catch-up dispatch when freshness SLO is violated (with dedup-safe overlap)
-- [ ] Add operator-visible status endpoint/CLI summary for stale sources and catch-up progress
-- [ ] Add tests for stale detection, catch-up triggering, and non-trigger cases
+- [x] Define freshness SLO thresholds per collector (for example alert when `last_fetched_at` exceeds `2x` interval)
+- [x] Add stale-source detector task that scans source freshness and emits alertable metrics/events
+- [x] Trigger bounded catch-up dispatch when freshness SLO is violated (with dedup-safe overlap)
+- [x] Add operator-visible status endpoint/CLI summary for stale sources and catch-up progress
+- [x] Add tests for stale detection, catch-up triggering, and non-trigger cases
 
 ---
 

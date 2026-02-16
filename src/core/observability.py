@@ -40,6 +40,16 @@ PROCESSING_REAPER_RESETS_TOTAL = Counter(
     "processing_reaper_resets_total",
     "Count of raw items reset from processing to pending by stale-item reaper.",
 )
+SOURCE_FRESHNESS_STALE_TOTAL = Counter(
+    "source_freshness_stale_total",
+    "Stale source detections by collector type.",
+    ["collector"],
+)
+SOURCE_CATCHUP_DISPATCH_TOTAL = Counter(
+    "source_catchup_dispatch_total",
+    "Catch-up collector dispatches triggered by freshness checks.",
+    ["collector"],
+)
 
 
 def record_collector_metrics(
@@ -90,3 +100,11 @@ def record_calibration_drift_alert(*, alert_type: str, severity: str) -> None:
 
 def record_processing_reaper_resets(*, reset_count: int) -> None:
     PROCESSING_REAPER_RESETS_TOTAL.inc(max(0, reset_count))
+
+
+def record_source_freshness_stale(*, collector: str, stale_count: int) -> None:
+    SOURCE_FRESHNESS_STALE_TOTAL.labels(collector=collector).inc(max(0, stale_count))
+
+
+def record_source_catchup_dispatch(*, collector: str) -> None:
+    SOURCE_CATCHUP_DISPATCH_TOTAL.labels(collector=collector).inc()

@@ -26,21 +26,104 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-100`
-2. `TASK-102`
-3. `TASK-103`
-4. `TASK-104` (after `TASK-103`)
-5. `TASK-105` (after `TASK-104`)
-6. `TASK-106` (after `TASK-103` + `TASK-104`)
-7. `TASK-096`
-8. `TASK-097`
-9. `TASK-098` (after `TASK-096`)
-10. `TASK-099`
-11. `TASK-101`
+1. `TASK-106`
+2. `TASK-096`
+3. `TASK-097`
+4. `TASK-098` (after `TASK-096`)
+5. `TASK-099`
+6. `TASK-101`
 
 ---
 
 ## Completed This Sprint
+
+### TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Added stale-source freshness detection, alertable metrics, bounded catch-up
+dispatch automation, and operator status surfaces.
+
+**Completed**:
+- [x] Added source freshness SLO evaluation module (`src/core/source_freshness.py`) with per-collector stale thresholds based on runtime intervals and configurable multiplier
+- [x] Added periodic stale-source worker task (`workers.check_source_freshness`) with Prometheus counters for stale detections and catch-up dispatches
+- [x] Added bounded automatic catch-up dispatch (`SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES`) for RSS/GDELT collectors when freshness SLO is violated
+- [x] Added operator visibility via `GET /api/v1/sources/freshness` and `uv run horadus eval source-freshness`
+- [x] Added unit coverage for stale detection, dispatch-budget behavior, and non-stale/no-trigger paths
+
+---
+
+### TASK-104: Ingestion Completeness Watermark and Overlap Guard
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Added per-source ingestion high-water tracking and overlap-aware window
+calculation to reduce silent coverage gaps on delayed or restart scenarios.
+
+**Completed**:
+- [x] Added persistent source ingestion watermark (`sources.ingestion_window_end_at`) with migration `0012_source_ingestion_watermark`
+- [x] Implemented overlap-aware next-window start logic for RSS and GDELT collectors using source watermarks
+- [x] Preserved duplicate-safe overlap reprocessing via existing dedup/idempotent insert behavior
+- [x] Emitted structured window coverage logs (`expected_start`, `actual_start`, `gap_seconds`, `overlap_seconds`) for both collectors
+- [x] Added unit coverage for first-run, overlap-window, and restart continuity behavior in RSS/GDELT collectors
+
+---
+
+### TASK-103: Six-Hour Polling Operating Profile and Defaults
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Aligned runtime defaults and operator docs to the intended 6-hour polling /
+daily review operating profile.
+
+**Completed**:
+- [x] Updated runtime defaults to 6-hour cadence profile (`RSS_COLLECTION_INTERVAL=360`, `GDELT_COLLECTION_INTERVAL=360`, `PROCESS_PENDING_INTERVAL_MINUTES=15`, `PROCESSING_PIPELINE_BATCH_SIZE=200`)
+- [x] Set source-window defaults for low-frequency mode (`default_lookback_hours=12`, `default_max_items_per_fetch=200`) while preserving per-source override support
+- [x] Added deterministic beat-schedule coverage for the 6-hour profile
+- [x] Added environment/deployment documentation with 6-hour mode example and tuning checklist
+- [x] Added short outage catch-up operator runbook (`docs/LOW_FREQUENCY_MODE.md`)
+
+---
+
+### TASK-102: Deterministic Grounding Verification for Narratives
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Reduce narrative hallucination risk by verifying numeric claims against structured
+evidence payloads and exposing fallback/violation metadata to operators.
+
+**Completed**:
+- [x] Added deterministic grounding verifier (`src/core/narrative_grounding.py`) for narrative-vs-payload numeric claim checks
+- [x] Enforced fail-safe fallback when unsupported claims exceed threshold (`NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS`)
+- [x] Added report persistence metadata fields (`grounding_status`, `grounding_violation_count`, `grounding_references`) with migration `0011_report_grounding_metadata`
+- [x] Exposed grounding metadata in report and retrospective API responses
+- [x] Added configuration/docs for grounding controls (`.env.example`, `docs/ENVIRONMENT.md`, `docs/API.md`)
+- [x] Added unit coverage for grounded pass, unsupported-claim fallback, and metadata persistence paths
+
+---
+
+### TASK-100: Embedding Lineage and Re-Embedding Safety Gate
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Prevent silent vector-space drift when embedding models change by storing
+lineage metadata, blocking cross-model similarity matching, and adding an
+operator re-embed audit command.
+
+**Completed**:
+- [x] Added embedding lineage fields on vector-bearing entities (`embedding_model`, `embedding_generated_at`) with migration `0010_embedding_lineage`
+- [x] Persisted lineage metadata during raw-item/event embedding writes and pipeline embedding creation
+- [x] Added cross-model safety checks in deduplication and clustering (fail-safe skip when lineage is missing or mismatched)
+- [x] Added `horadus eval embedding-lineage` command with mixed-population detection and re-embed scope reporting
+- [x] Added embedding-model upgrade runbook (`docs/EMBEDDING_MODEL_UPGRADE.md`) and linked docs updates
+- [x] Added unit coverage for lineage persistence, model-safety filters, and lineage report aggregation
+
+---
 
 ### TASK-107: Task Dependency Governance and Execution Policy
 **Status**: DONE ✓  

@@ -94,6 +94,11 @@ Tasks that have been completed and verified.
 - TASK-093: Vector Strategy Revalidation Cadence and Gate ✅
 - TASK-094: Pipeline Cost Metrics Parity in Observability ✅
 - TASK-095: CI Docs Freshness and Drift Guard ✅
+- TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅
+- TASK-102: Deterministic Grounding Verification for Narratives ✅
+- TASK-103: Six-Hour Polling Operating Profile and Defaults ✅
+- TASK-104: Ingestion Completeness Watermark and Overlap Guard ✅
+- TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch ✅
 - TASK-107: Task Dependency Governance and Execution Policy ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅

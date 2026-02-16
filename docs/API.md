@@ -40,6 +40,7 @@ curl http://localhost:8000/health
 
 - `GET /api/v1/sources`
 - `POST /api/v1/sources`
+- `GET /api/v1/sources/freshness`
 - `GET /api/v1/sources/{source_id}`
 - `PATCH /api/v1/sources/{source_id}`
 - `DELETE /api/v1/sources/{source_id}`
@@ -60,6 +61,17 @@ curl -X POST http://localhost:8000/api/v1/sources \
     "is_active": true
   }'
 ```
+
+Freshness status example:
+
+```bash
+curl "http://localhost:8000/api/v1/sources/freshness"
+```
+
+Freshness response includes:
+- stale summary (`stale_count`, `stale_collectors`)
+- bounded catch-up plan (`catchup_dispatch_budget`, `catchup_candidates`)
+- per-source freshness rows (`age_seconds`, `stale_after_seconds`, `is_stale`)
 
 ## Trends
 
@@ -87,6 +99,11 @@ Retrospective example:
 ```bash
 curl "http://localhost:8000/api/v1/trends/<trend-id>/retrospective?start_date=2026-01-01T00:00:00Z&end_date=2026-02-01T00:00:00Z"
 ```
+
+Retrospective responses include narrative grounding metadata:
+- `grounding_status` (`grounded`, `fallback`, `flagged`)
+- `grounding_violation_count`
+- optional `grounding_references.unsupported_claims`
 
 Counterfactual simulation example (non-persistent):
 
@@ -171,6 +188,13 @@ Operational response guidance for these alerts is documented in
 
 Report `statistics` for weekly/monthly entries now include `contradiction_analytics`
 with resolved/unresolved counts, resolution rate, and action mix for contradicted events.
+Report narrative generation supports a pilot Responses API mode via
+`LLM_REPORT_API_MODE=responses`; migration details and rollback are documented in
+`docs/RESPONSES_API_MIGRATION.md`.
+Report responses now also include narrative grounding metadata:
+- `grounding_status` (`grounded`, `fallback`, `flagged`)
+- `grounding_violation_count`
+- optional `grounding_references.unsupported_claims`
 
 ## Budget
 
@@ -180,7 +204,12 @@ Returns current UTC-day LLM usage by tier (`tier1`, `tier2`, `embedding`) with
 call counters, token totals, estimated cost, and remaining daily budget.
 Tier-1 and Tier-2 processing calls support automatic primary/secondary model
 failover on transient provider errors (429/5xx/timeouts) when secondary models
-are configured.
+are configured. Each route now performs bounded retry/backoff before switching
+or surfacing terminal failure.
+Tier-1 and Tier-2 request strict JSON-schema constrained outputs by default;
+when a model/provider returns a 400 schema-unsupported response, Horadus falls
+back to `json_object` mode for compatibility while retaining Pydantic
+validation.
 
 Example:
 

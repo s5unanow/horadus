@@ -11,9 +11,6 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from alembic.config import Config
-from alembic.script import ScriptDirectory
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI_PATH = PROJECT_ROOT / "alembic.ini"
 ALEMBIC_SCRIPT_PATH = PROJECT_ROOT / "alembic"
@@ -22,6 +19,9 @@ ALEMBIC_SCRIPT_PATH = PROJECT_ROOT / "alembic"
 @lru_cache(maxsize=1)
 def get_expected_migration_heads() -> tuple[str, ...]:
     """Return Alembic head revision identifiers for this repository."""
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
     config = Config(str(ALEMBIC_INI_PATH))
     config.set_main_option("script_location", str(ALEMBIC_SCRIPT_PATH))
     script = ScriptDirectory.from_config(config)

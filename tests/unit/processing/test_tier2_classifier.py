@@ -68,7 +68,52 @@ class _StrictSchemaUnsupportedError(Exception):
         self.status_code = 400
 
 
-def _build_classifier(mock_db_session):
+@dataclass(slots=True)
+class InMemorySemanticCache:
+    entries: dict[str, str]
+
+    @staticmethod
+    def _key(*, stage: str, model: str, prompt_template: str, payload: object) -> str:
+        serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+        return f"{stage}:{model}:{prompt_template}:{serialized}"
+
+    def get(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+    ) -> str | None:
+        return self.entries.get(
+            self._key(
+                stage=stage,
+                model=model,
+                prompt_template=prompt_template,
+                payload=payload,
+            )
+        )
+
+    def set(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+        value: str,
+    ) -> None:
+        self.entries[
+            self._key(
+                stage=stage,
+                model=model,
+                prompt_template=prompt_template,
+                payload=payload,
+            )
+        ] = value
+
+
+def _build_classifier(mock_db_session, *, semantic_cache: InMemorySemanticCache | None = None):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
     cost_tracker = SimpleNamespace(
@@ -80,6 +125,7 @@ def _build_classifier(mock_db_session):
         client=client,
         model="gpt-4o-mini",
         cost_tracker=cost_tracker,
+        semantic_cache=semantic_cache,
     )
     return classifier, chat, cost_tracker
 
@@ -136,6 +182,37 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert mock_db_session.flush.await_count == 1
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_event_uses_semantic_cache_hits(mock_db_session) -> None:
+    semantic_cache = InMemorySemanticCache(entries={})
+    classifier, chat, cost_tracker = _build_classifier(
+        mock_db_session,
+        semantic_cache=semantic_cache,
+    )
+    event_id = uuid4()
+    first_event = Event(id=event_id, canonical_summary="Initial summary")
+    second_event = Event(id=event_id, canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    first_result, first_usage = await classifier.classify_event(
+        event=first_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+    second_result, second_usage = await classifier.classify_event(
+        event=second_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert first_result.event_id == event_id
+    assert second_result.event_id == event_id
+    assert first_usage.api_calls == 1
+    assert second_usage.api_calls == 0
+    assert len(chat.calls) == 1
+    assert cost_tracker.ensure_within_budget.await_count == 1
 
 
 @pytest.mark.asyncio

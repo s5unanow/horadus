@@ -391,6 +391,24 @@ class Settings(BaseSettings):
         le=10.0,
         description="Base retry backoff in seconds (linear by attempt index)",
     )
+    LLM_SEMANTIC_CACHE_ENABLED: bool = Field(
+        default=False,
+        description="Enable optional Redis-backed semantic cache for Tier-1/Tier-2 outputs",
+    )
+    LLM_SEMANTIC_CACHE_TTL_SECONDS: int = Field(
+        default=21600,
+        ge=1,
+        description="TTL for semantic cache entries in seconds",
+    )
+    LLM_SEMANTIC_CACHE_MAX_ENTRIES: int = Field(
+        default=10000,
+        ge=1,
+        description="Best-effort max semantic cache entries per stage before oldest eviction",
+    )
+    LLM_SEMANTIC_CACHE_REDIS_PREFIX: str = Field(
+        default="horadus:llm_semantic_cache",
+        description="Redis prefix for semantic cache keys/indexes",
+    )
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-small",
         description="Model for text embedding generation",

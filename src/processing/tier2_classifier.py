@@ -30,6 +30,7 @@ from src.processing.llm_policy import (
     build_safe_payload_content,
     invoke_with_policy,
 )
+from src.processing.semantic_cache import LLMSemanticCache
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -144,6 +145,7 @@ class Tier2Classifier:
         primary_base_url: str | None = None,
         secondary_base_url: str | None = None,
         request_overrides: dict[str, Any] | None = None,
+        semantic_cache: LLMSemanticCache | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_TIER2_MODEL
@@ -162,6 +164,7 @@ class Tier2Classifier:
         )
         self.secondary_client = self._build_secondary_client(secondary_client=secondary_client)
         self.cost_tracker = cost_tracker or CostTracker(session=session)
+        self.semantic_cache = semantic_cache or LLMSemanticCache()
 
     @staticmethod
     def _create_client(*, api_key: str, base_url: str | None = None) -> AsyncOpenAI:
@@ -251,6 +254,28 @@ class Tier2Classifier:
             else await self._load_event_context(event.id)
         )
         payload = self._build_payload(event=event, trends=trends, context_chunks=chunks)
+        cached_content = self.semantic_cache.get(
+            stage=TIER2,
+            model=self.model,
+            prompt_template=self.prompt_template,
+            payload=payload,
+        )
+        if isinstance(cached_content, str) and cached_content.strip():
+            try:
+                cached_output = _Tier2Output.model_validate(json.loads(cached_content))
+                self._validate_output_alignment(cached_output, trends=trends)
+                self._apply_output(event=event, output=cached_output)
+                await self.session.flush()
+                return (
+                    Tier2EventResult(
+                        event_id=event.id,
+                        categories_count=len(event.categories or []),
+                        trend_impacts_count=len(cached_output.trend_impacts),
+                    ),
+                    Tier2Usage(),
+                )
+            except (ValueError, json.JSONDecodeError):
+                pass
 
         payload_content = build_safe_payload_content(
             payload,
@@ -299,6 +324,18 @@ class Tier2Classifier:
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, trends=trends)
         self._apply_output(event=event, output=output)
+        response_choices = getattr(invocation.response, "choices", None)
+        if isinstance(response_choices, list) and response_choices:
+            message = getattr(response_choices[0], "message", None)
+            raw_content = getattr(message, "content", None)
+            if isinstance(raw_content, str) and raw_content.strip():
+                self.semantic_cache.set(
+                    stage=TIER2,
+                    model=self.model,
+                    prompt_template=self.prompt_template,
+                    payload=payload,
+                    value=raw_content,
+                )
         await self.session.flush()
 
         result = Tier2EventResult(

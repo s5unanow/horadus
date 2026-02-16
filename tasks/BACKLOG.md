@@ -1574,11 +1574,11 @@ Add a shared cache for repeated classification payloads so duplicate items acros
 workers do not repeatedly incur LLM cost.
 
 **Acceptance Criteria**:
-- [ ] Add optional Redis-backed semantic cache for Tier-1 and Tier-2 response payloads
-- [ ] Define stable cache keys including model, prompt/version hash, and normalized input payload hash
-- [ ] Add TTL and size-control policy with safe fallback when cache backend is unavailable
-- [ ] Emit cache hit/miss metrics by stage and verify no correctness regressions on cache hits
-- [ ] Add tests for cache key stability, hit/miss behavior, and invalidation on prompt/model changes
+- [x] Add optional Redis-backed semantic cache for Tier-1 and Tier-2 response payloads
+- [x] Define stable cache keys including model, prompt/version hash, and normalized input payload hash
+- [x] Add TTL and size-control policy with safe fallback when cache backend is unavailable
+- [x] Emit cache hit/miss metrics by stage and verify no correctness regressions on cache hits
+- [x] Add tests for cache key stability, hit/miss behavior, and invalidation on prompt/model changes
 
 ---
 

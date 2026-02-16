@@ -32,6 +32,7 @@ from src.processing.llm_policy import (
     build_safe_payload_content,
     invoke_with_policy,
 )
+from src.processing.semantic_cache import LLMSemanticCache
 from src.storage.models import ProcessingStatus, RawItem, Trend
 
 
@@ -132,6 +133,7 @@ class Tier1Classifier:
         primary_base_url: str | None = None,
         secondary_base_url: str | None = None,
         request_overrides: dict[str, Any] | None = None,
+        semantic_cache: LLMSemanticCache | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_TIER1_MODEL
@@ -152,6 +154,7 @@ class Tier1Classifier:
         )
         self.secondary_client = self._build_secondary_client(secondary_client=secondary_client)
         self.cost_tracker = cost_tracker or CostTracker(session=session)
+        self.semantic_cache = semantic_cache or LLMSemanticCache()
 
     @staticmethod
     def _create_client(*, api_key: str, base_url: str | None = None) -> AsyncOpenAI:
@@ -260,6 +263,20 @@ class Tier1Classifier:
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
+        cached_content = self.semantic_cache.get(
+            stage=TIER1,
+            model=self.model,
+            prompt_template=self.prompt_template,
+            payload=payload,
+        )
+        if isinstance(cached_content, str) and cached_content.strip():
+            try:
+                output = _Tier1Output.model_validate(json.loads(cached_content))
+                self._validate_output_alignment(output, items=items, trends=trends)
+                return (self._to_item_results(output), Tier1Usage())
+            except (ValueError, json.JSONDecodeError):
+                pass
+
         if (
             self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS
             and len(items) > 1
@@ -318,6 +335,18 @@ class Tier1Classifier:
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, items=items, trends=trends)
         results = self._to_item_results(output)
+        response_choices = getattr(invocation.response, "choices", None)
+        if isinstance(response_choices, list) and response_choices:
+            message = getattr(response_choices[0], "message", None)
+            raw_content = getattr(message, "content", None)
+            if isinstance(raw_content, str) and raw_content.strip():
+                self.semantic_cache.set(
+                    stage=TIER1,
+                    model=self.model,
+                    prompt_template=self.prompt_template,
+                    payload=payload,
+                    value=raw_content,
+                )
 
         usage = Tier1Usage(
             prompt_tokens=invocation.prompt_tokens,

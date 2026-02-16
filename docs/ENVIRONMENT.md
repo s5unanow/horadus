@@ -63,6 +63,10 @@ Rate-limit strategy guidance:
 | `LLM_TIER1_BATCH_SIZE` | `10` | Max items per tier-1 call. |
 | `LLM_ROUTE_RETRY_ATTEMPTS` | `2` | Retry attempts per LLM route before failover/final failure. |
 | `LLM_ROUTE_RETRY_BACKOFF_SECONDS` | `0.25` | Base retry delay in seconds (linear by attempt). |
+| `LLM_SEMANTIC_CACHE_ENABLED` | `false` | Enables Redis-backed semantic response cache for Tier-1/Tier-2. |
+| `LLM_SEMANTIC_CACHE_TTL_SECONDS` | `21600` | TTL for semantic cache entries (seconds). |
+| `LLM_SEMANTIC_CACHE_MAX_ENTRIES` | `10000` | Best-effort max entries per stage before oldest eviction. |
+| `LLM_SEMANTIC_CACHE_REDIS_PREFIX` | `horadus:llm_semantic_cache` | Redis key prefix for semantic cache data/indexes. |
 | `PROCESSING_PIPELINE_BATCH_SIZE` | `200` | Pending items handled per pipeline run. |
 | `PROCESSING_STALE_TIMEOUT_MINUTES` | `30` | Age threshold before stale `processing` items are reset to `pending`. |
 

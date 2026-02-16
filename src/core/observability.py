@@ -50,6 +50,11 @@ SOURCE_CATCHUP_DISPATCH_TOTAL = Counter(
     "Catch-up collector dispatches triggered by freshness checks.",
     ["collector"],
 )
+LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL = Counter(
+    "llm_semantic_cache_lookups_total",
+    "LLM semantic cache lookups by stage and result.",
+    ["stage", "result"],
+)
 
 
 def record_collector_metrics(
@@ -108,3 +113,7 @@ def record_source_freshness_stale(*, collector: str, stale_count: int) -> None:
 
 def record_source_catchup_dispatch(*, collector: str) -> None:
     SOURCE_CATCHUP_DISPATCH_TOTAL.labels(collector=collector).inc()
+
+
+def record_llm_semantic_cache_lookup(*, stage: str, result: str) -> None:
+    LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL.labels(stage=stage, result=result).inc()

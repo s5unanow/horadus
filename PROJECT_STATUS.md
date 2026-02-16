@@ -190,6 +190,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Collector timeout/retry hardening with transient-vs-terminal classification and bounded requeue for transient all-source outages
 - [x] Unified LLM invocation policy layer with shared budget/safety/retry handling, provider-neutral error taxonomy, and centralized model pricing metadata
 - [x] Configurable API rate-limit smoothing strategy with Redis-atomic sliding-window mode and deterministic throttling semantics
+- [x] Optional cross-worker semantic cache for Tier-1/Tier-2 with stable keying, bounded eviction policy, and stage-level hit/miss metrics
 
 ## In Progress
 
@@ -212,8 +213,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 Execution is now priority-first and dependency-aware.
 
 1. `TASK-099`, `TASK-101` (P2, unblocked)
-2. `TASK-098` (P2, unblocked after `TASK-096`)
-3. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+2. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅
 

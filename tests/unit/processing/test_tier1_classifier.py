@@ -70,7 +70,57 @@ class _StrictSchemaUnsupportedError(Exception):
         self.status_code = 400
 
 
-def _build_classifier(mock_db_session, *, batch_size: int = 2):
+@dataclass(slots=True)
+class InMemorySemanticCache:
+    entries: dict[str, str]
+
+    @staticmethod
+    def _key(*, stage: str, model: str, prompt_template: str, payload: object) -> str:
+        serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+        return f"{stage}:{model}:{prompt_template}:{serialized}"
+
+    def get(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+    ) -> str | None:
+        return self.entries.get(
+            self._key(
+                stage=stage,
+                model=model,
+                prompt_template=prompt_template,
+                payload=payload,
+            )
+        )
+
+    def set(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+        value: str,
+    ) -> None:
+        self.entries[
+            self._key(
+                stage=stage,
+                model=model,
+                prompt_template=prompt_template,
+                payload=payload,
+            )
+        ] = value
+
+
+def _build_classifier(
+    mock_db_session,
+    *,
+    batch_size: int = 2,
+    semantic_cache: InMemorySemanticCache | None = None,
+):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
     cost_tracker = SimpleNamespace(
@@ -83,6 +133,7 @@ def _build_classifier(mock_db_session, *, batch_size: int = 2):
         model="gpt-4.1-nano",
         batch_size=batch_size,
         cost_tracker=cost_tracker,
+        semantic_cache=semantic_cache,
     )
     return classifier, chat, cost_tracker
 
@@ -137,6 +188,28 @@ async def test_classify_items_batches_and_tracks_usage(mock_db_session) -> None:
     )
     assert cost_tracker.ensure_within_budget.await_count == 2
     assert cost_tracker.record_usage.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_classify_items_uses_semantic_cache_hits(mock_db_session) -> None:
+    semantic_cache = InMemorySemanticCache(entries={})
+    classifier, chat, cost_tracker = _build_classifier(
+        mock_db_session,
+        batch_size=2,
+        semantic_cache=semantic_cache,
+    )
+    items = [_build_item("eu-russia update")]
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    first_results, first_usage = await classifier.classify_items(items, trends)
+    second_results, second_usage = await classifier.classify_items(items, trends)
+
+    assert len(first_results) == 1
+    assert len(second_results) == 1
+    assert first_usage.api_calls == 1
+    assert second_usage.api_calls == 0
+    assert len(chat.calls) == 1
+    assert cost_tracker.ensure_within_budget.await_count == 1
 
 
 @pytest.mark.asyncio

@@ -26,13 +26,29 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-098`
-2. `TASK-099`
-3. `TASK-101`
+1. `TASK-099`
+2. `TASK-101`
 
 ---
 
 ## Completed This Sprint
+
+### TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Added optional Redis-backed semantic response cache to suppress duplicate Tier-1
+and Tier-2 LLM calls across workers.
+
+**Completed**:
+- [x] Added semantic cache module (`src/processing/semantic_cache.py`) with stable key derivation (`model` + `prompt hash` + normalized payload hash)
+- [x] Added TTL and best-effort max-entry eviction policy with backend-degrade fail-open behavior
+- [x] Integrated semantic cache lookups/writes into Tier-1 and Tier-2 classifiers while preserving output alignment validation
+- [x] Added cache hit/miss Prometheus metric (`llm_semantic_cache_lookups_total`) by stage/result
+- [x] Added unit coverage for key stability, model/prompt invalidation, cache hit/miss paths, and classifier-level cache-hit behavior
+
+---
 
 ### TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window)
 **Status**: DONE ✓  

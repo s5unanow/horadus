@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.core.config import settings
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.models import Event
@@ -24,6 +25,11 @@ class FakeChatCompletions:
         self.calls.append(kwargs)
         messages = kwargs.get("messages", [])
         user_message = messages[-1]["content"] if isinstance(messages, list) and messages else "{}"
+        if isinstance(user_message, str):
+            user_message = user_message.replace("<UNTRUSTED_TIER2_PAYLOAD>", "").replace(
+                "</UNTRUSTED_TIER2_PAYLOAD>",
+                "",
+            )
         payload = json.loads(user_message)
 
         trend_id = payload["trends"][0]["trend_id"]
@@ -56,7 +62,58 @@ class FakeChatCompletions:
         )
 
 
-def _build_classifier(mock_db_session):
+class _StrictSchemaUnsupportedError(Exception):
+    def __init__(self):
+        super().__init__("json_schema response_format strict mode unavailable")
+        self.status_code = 400
+
+
+@dataclass(slots=True)
+class InMemorySemanticCache:
+    entries: dict[str, str]
+
+    @staticmethod
+    def _key(*, stage: str, model: str, prompt_template: str, payload: object) -> str:
+        serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
+        return f"{stage}:{model}:{prompt_template}:{serialized}"
+
+    def get(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+    ) -> str | None:
+        return self.entries.get(
+            self._key(
+                stage=stage,
+                model=model,
+                prompt_template=prompt_template,
+                payload=payload,
+            )
+        )
+
+    def set(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+        value: str,
+    ) -> None:
+        self.entries[
+            self._key(
+                stage=stage,
+                model=model,
+                prompt_template=prompt_template,
+                payload=payload,
+            )
+        ] = value
+
+
+def _build_classifier(mock_db_session, *, semantic_cache: InMemorySemanticCache | None = None):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
     cost_tracker = SimpleNamespace(
@@ -68,6 +125,7 @@ def _build_classifier(mock_db_session):
         client=client,
         model="gpt-4o-mini",
         cost_tracker=cost_tracker,
+        semantic_cache=semantic_cache,
     )
     return classifier, chat, cost_tracker
 
@@ -120,9 +178,67 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert usage.completion_tokens == 80
     assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
     assert len(chat.calls) == 1
+    assert chat.calls[0]["response_format"]["type"] == "json_schema"
     assert mock_db_session.flush.await_count == 1
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_event_uses_semantic_cache_hits(mock_db_session) -> None:
+    semantic_cache = InMemorySemanticCache(entries={})
+    classifier, chat, cost_tracker = _build_classifier(
+        mock_db_session,
+        semantic_cache=semantic_cache,
+    )
+    event_id = uuid4()
+    first_event = Event(id=event_id, canonical_summary="Initial summary")
+    second_event = Event(id=event_id, canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    first_result, first_usage = await classifier.classify_event(
+        event=first_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+    second_result, second_usage = await classifier.classify_event(
+        event=second_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert first_result.event_id == event_id
+    assert second_result.event_id == event_id
+    assert first_usage.api_calls == 1
+    assert second_usage.api_calls == 0
+    assert len(chat.calls) == 1
+    assert cost_tracker.ensure_within_budget.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "context_chunk",
+    [
+        "Troop deployments increased near the border after overnight movements.",
+        "Перекидання військ посилилося поблизу кордону після нічних рухів.",
+        "Переброска войск усилилась \u0443 границы после ночных перемещений.",
+    ],
+)
+async def test_classify_event_supports_launch_languages(
+    mock_db_session,
+    context_chunk: str,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=[context_chunk],
+    )
+
+    assert result.trend_impacts_count == 1
 
 
 @pytest.mark.asyncio
@@ -286,7 +402,12 @@ async def test_classify_event_clears_contradiction_note_when_not_contradicted(
 
 
 @pytest.mark.asyncio
-async def test_classify_event_fails_over_to_secondary_on_timeout(mock_db_session) -> None:
+async def test_classify_event_fails_over_to_secondary_on_timeout(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_BACKOFF_SECONDS", 0.0)
     primary_calls: list[dict[str, object]] = []
 
     class PrimaryCompletions:
@@ -312,7 +433,70 @@ async def test_classify_event_fails_over_to_secondary_on_timeout(mock_db_session
     assert result.trend_impacts_count == 1
     assert usage.api_calls == 1
     assert usage.estimated_cost_usd == pytest.approx(0.000044, rel=0.001)
-    assert len(primary_calls) == 1
+    assert len(primary_calls) == 2
     assert len(secondary_chat.calls) == 1
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_event_falls_back_when_strict_schema_mode_unavailable(
+    mock_db_session,
+) -> None:
+    response_formats: list[dict[str, object] | None] = []
+
+    class StrictFallbackCompletions:
+        async def create(self, **kwargs):
+            response_format = kwargs.get("response_format")
+            if isinstance(response_format, dict):
+                response_formats.append(response_format)
+            else:
+                response_formats.append(None)
+            if response_format == {"type": "json_object"}:
+                payload = {
+                    "summary": "S1. S2.",
+                    "extracted_who": ["A"],
+                    "extracted_what": "W",
+                    "extracted_where": None,
+                    "extracted_when": None,
+                    "claims": [],
+                    "categories": ["security"],
+                    "has_contradictions": False,
+                    "contradiction_notes": None,
+                    "trend_impacts": [
+                        {
+                            "trend_id": "eu-russia",
+                            "signal_type": "military_movement",
+                            "direction": "escalatory",
+                            "severity": 0.3,
+                            "confidence": 0.8,
+                            "rationale": "match",
+                        }
+                    ],
+                }
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                    usage=SimpleNamespace(prompt_tokens=11, completion_tokens=7),
+                )
+            raise _StrictSchemaUnsupportedError
+
+    classifier, _chat, cost_tracker = _build_classifier(mock_db_session)
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=StrictFallbackCompletions())
+    )
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    result, usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert usage.api_calls == 1
+    assert response_formats[0] is not None
+    assert response_formats[0].get("type") == "json_schema"
+    assert response_formats[1] == {"type": "json_object"}
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()

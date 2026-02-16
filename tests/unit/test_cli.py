@@ -64,6 +64,10 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
             "--config",
             "baseline",
             "--require-human-verified",
+            "--dispatch-mode",
+            "batch",
+            "--request-priority",
+            "flex",
         ]
     )
 
@@ -74,6 +78,8 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
     assert args.max_items == 100
     assert args.config == ["baseline"]
     assert args.require_human_verified is True
+    assert args.dispatch_mode == "batch"
+    assert args.request_priority == "flex"
 
 
 def test_build_parser_accepts_eval_audit_command() -> None:
@@ -205,3 +211,39 @@ def test_build_parser_accepts_eval_vector_benchmark_command() -> None:
     assert args.top_k == 12
     assert args.similarity_threshold == pytest.approx(0.9)
     assert args.seed == 7
+
+
+def test_build_parser_accepts_eval_embedding_lineage_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "embedding-lineage",
+            "--target-model",
+            "text-embedding-3-large",
+            "--fail-on-mixed",
+        ]
+    )
+
+    assert args.command == "eval"
+    assert args.eval_command == "embedding-lineage"
+    assert args.target_model == "text-embedding-3-large"
+    assert args.fail_on_mixed is True
+
+
+def test_build_parser_accepts_eval_source_freshness_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "source-freshness",
+            "--stale-multiplier",
+            "1.5",
+            "--fail-on-stale",
+        ]
+    )
+
+    assert args.command == "eval"
+    assert args.eval_command == "source-freshness"
+    assert args.stale_multiplier == pytest.approx(1.5)
+    assert args.fail_on_stale is True

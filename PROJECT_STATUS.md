@@ -13,7 +13,7 @@ Phase 3: Trend Engine        [████████████████�
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
 Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
-Phase 8: Hardening (NEW)     [█████████████████░░░]  85%  🚧 IN PROGRESS
+Phase 8: Hardening (NEW)     [██████████████████░░]  90%  🚧 IN PROGRESS
 ```
 
 ## What's Working
@@ -180,6 +180,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Architecture/OpenAPI/docs drift cleanup with operational last-verified timestamps and archived stale risk snapshot doc
 - [x] Decay baseline source-of-truth unified to `Trend.baseline_log_odds` with synced `definition.baseline_probability` metadata + one-time backfill migration
 - [x] Task delivery guardrails enforced: mandatory `main` sync workflow, one-task-per-branch/PR policy, PR task-scope CI guard, local branch-name commit/push hook, and main-branch protection automation (`make protect-main`)
+- [x] Stranded `TASK-086..TASK-107` recovery from `task-061` applied on `main` lineage with deterministic recovery matrix (`tasks/assessments/TASK-112-recovery-matrix.md`)
+- [x] Reconstructed missing adapter/tracing/lineage/grounding modules and migrations required for recovered runtime paths
 
 ## In Progress
 
@@ -190,6 +192,9 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)
+- `TASK-113` Complete deferred TASK-091/TASK-093 recovery artifacts (non-human)
+- `TASK-114` Complete deferred TASK-095 docs freshness gate recovery (non-human)
+- `TASK-115` Complete partial TASK-092/TASK-100/TASK-102 recovery parity (non-human)
 
 ## Blocked
 
@@ -199,10 +204,13 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-2. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
-3. Complete `TASK-070` baseline prior review/sign-off for active trends
-4. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+1. Complete `TASK-113` deferred eval/revalidation recovery gaps from TASK-112
+2. Complete `TASK-114` docs freshness CI/local gate recovery
+3. Complete `TASK-115` tracing/lineage/grounding parity recovery
+4. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
+5. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
+6. Complete `TASK-070` baseline prior review/sign-off for active trends
+7. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅
 

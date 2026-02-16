@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.processing.cost_tracker import TIER2, CostTracker
-from src.processing.llm_failover import LLMChatFailoverInvoker, LLMChatRoute
+from src.processing.llm_failover import LLMChatRoute
 from src.processing.llm_input_safety import (
     DEFAULT_CHARS_PER_TOKEN,
     DEFAULT_TRUNCATION_MARKER,
@@ -26,6 +26,11 @@ from src.processing.llm_input_safety import (
     truncate_to_token_limit,
     wrap_untrusted_text,
 )
+from src.processing.llm_policy import (
+    build_safe_payload_content,
+    invoke_with_policy,
+)
+from src.processing.semantic_cache import LLMSemanticCache
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -111,16 +116,20 @@ class Tier2Classifier:
     Thorough event classifier with strict structured output validation.
     """
 
-    _MODEL_PRICING_USD_PER_1M: ClassVar[dict[str, tuple[float, float]]] = {
-        "gpt-4.1-mini": (0.40, 1.60),
-        "gpt-4o-mini": (0.15, 0.60),
-        "gpt-4.1-nano": (0.10, 0.40),
-    }
     _MAX_REQUEST_INPUT_TOKENS: ClassVar[int] = 8000
     _MAX_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 350
     _MIN_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 64
     _CHARS_PER_TOKEN: ClassVar[int] = DEFAULT_CHARS_PER_TOKEN
     _TRUNCATION_MARKER: ClassVar[str] = DEFAULT_TRUNCATION_MARKER
+    _STRICT_RESPONSE_FORMAT: ClassVar[dict[str, Any]] = {
+        "type": "json_schema",
+        "json_schema": {
+            "name": "tier2_event_classification",
+            "schema": _Tier2Output.model_json_schema(),
+            "strict": True,
+        },
+    }
+    _JSON_OBJECT_RESPONSE_FORMAT: ClassVar[dict[str, str]] = {"type": "json_object"}
 
     def __init__(
         self,
@@ -135,6 +144,8 @@ class Tier2Classifier:
         secondary_provider: str | None = None,
         primary_base_url: str | None = None,
         secondary_base_url: str | None = None,
+        request_overrides: dict[str, Any] | None = None,
+        semantic_cache: LLMSemanticCache | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_TIER2_MODEL
@@ -143,6 +154,9 @@ class Tier2Classifier:
         self.secondary_provider = secondary_provider or settings.LLM_SECONDARY_PROVIDER
         self.primary_base_url = primary_base_url or settings.LLM_PRIMARY_BASE_URL
         self.secondary_base_url = secondary_base_url or settings.LLM_SECONDARY_BASE_URL
+        self.request_overrides = (
+            dict(request_overrides) if isinstance(request_overrides, dict) else None
+        )
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         self.client = client or self._create_client(
             api_key=settings.OPENAI_API_KEY,
@@ -150,6 +164,7 @@ class Tier2Classifier:
         )
         self.secondary_client = self._build_secondary_client(secondary_client=secondary_client)
         self.cost_tracker = cost_tracker or CostTracker(session=session)
+        self.semantic_cache = semantic_cache or LLMSemanticCache()
 
     @staticmethod
     def _create_client(*, api_key: str, base_url: str | None = None) -> AsyncOpenAI:
@@ -239,11 +254,41 @@ class Tier2Classifier:
             else await self._load_event_context(event.id)
         )
         payload = self._build_payload(event=event, trends=trends, context_chunks=chunks)
+        cached_content = self.semantic_cache.get(
+            stage=TIER2,
+            model=self.model,
+            prompt_template=self.prompt_template,
+            payload=payload,
+        )
+        if isinstance(cached_content, str) and cached_content.strip():
+            try:
+                cached_output = _Tier2Output.model_validate(json.loads(cached_content))
+                self._validate_output_alignment(cached_output, trends=trends)
+                self._apply_output(event=event, output=cached_output)
+                await self.session.flush()
+                return (
+                    Tier2EventResult(
+                        event_id=event.id,
+                        categories_count=len(event.categories or []),
+                        trend_impacts_count=len(cached_output.trend_impacts),
+                    ),
+                    Tier2Usage(),
+                )
+            except (ValueError, json.JSONDecodeError):
+                pass
 
-        await self.cost_tracker.ensure_within_budget(TIER2)
+        payload_content = build_safe_payload_content(
+            payload,
+            tag="UNTRUSTED_TIER2_PAYLOAD",
+            max_tokens=self._MAX_REQUEST_INPUT_TOKENS,
+            chars_per_token=self._CHARS_PER_TOKEN,
+            truncation_marker=self._TRUNCATION_MARKER,
+            warning_message="Tier 2 payload exceeded token budget; truncating",
+            warning_context={"stage": TIER2, "model": self.model},
+        )
         messages = [
             {"role": "system", "content": self.prompt_template},
-            {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
+            {"role": "user", "content": payload_content},
         ]
         secondary_route = None
         if self.secondary_client is not None and self.secondary_model is not None:
@@ -251,37 +296,46 @@ class Tier2Classifier:
                 provider=self.secondary_provider or self.primary_provider,
                 model=self.secondary_model,
                 client=self.secondary_client,
+                request_overrides=self.request_overrides,
             )
-        failover_invoker = LLMChatFailoverInvoker(
+        invocation = await invoke_with_policy(
             stage=TIER2,
-            primary=LLMChatRoute(
+            messages=messages,
+            primary_route=LLMChatRoute(
                 provider=self.primary_provider,
                 model=self.model,
                 client=self.client,
+                request_overrides=self.request_overrides,
             ),
-            secondary=secondary_route,
-        )
-        response, active_model = await failover_invoker.create_chat_completion(
-            messages=messages,
+            secondary_route=secondary_route,
             temperature=0,
-            response_format={"type": "json_object"},
+            strict_response_format=self._STRICT_RESPONSE_FORMAT,
+            fallback_response_format=self._JSON_OBJECT_RESPONSE_FORMAT,
+            cost_tracker=self.cost_tracker,
+            budget_tier=TIER2,
         )
-        usage = self._extract_usage(response)
-        usage.api_calls = 1
-        await self.cost_tracker.record_usage(
-            tier=TIER2,
-            input_tokens=usage.prompt_tokens,
-            output_tokens=usage.completion_tokens,
-        )
-        usage.estimated_cost_usd = self._estimate_cost_usd(
-            prompt_tokens=usage.prompt_tokens,
-            completion_tokens=usage.completion_tokens,
-            model=active_model,
+        usage = Tier2Usage(
+            prompt_tokens=invocation.prompt_tokens,
+            completion_tokens=invocation.completion_tokens,
+            api_calls=1,
+            estimated_cost_usd=invocation.estimated_cost_usd,
         )
 
-        output = self._parse_output(response)
+        output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, trends=trends)
         self._apply_output(event=event, output=output)
+        response_choices = getattr(invocation.response, "choices", None)
+        if isinstance(response_choices, list) and response_choices:
+            message = getattr(response_choices[0], "message", None)
+            raw_content = getattr(message, "content", None)
+            if isinstance(raw_content, str) and raw_content.strip():
+                self.semantic_cache.set(
+                    stage=TIER2,
+                    model=self.model,
+                    prompt_template=self.prompt_template,
+                    payload=payload,
+                    value=raw_content,
+                )
         await self.session.flush()
 
         result = Tier2EventResult(
@@ -609,32 +663,3 @@ class Tier2Classifier:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=UTC)
         return parsed.astimezone(UTC)
-
-    @staticmethod
-    def _extract_usage(response: Any) -> Tier2Usage:
-        usage_obj = getattr(response, "usage", None)
-        prompt_tokens = int(getattr(usage_obj, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage_obj, "completion_tokens", 0) or 0)
-        return Tier2Usage(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
-
-    def _estimate_cost_usd(
-        self,
-        *,
-        prompt_tokens: int,
-        completion_tokens: int,
-        model: str | None = None,
-    ) -> float:
-        model_name = model or self.model
-        input_price, output_price = self._price_for_model(model_name)
-        return (prompt_tokens * input_price) / 1_000_000 + (
-            completion_tokens * output_price
-        ) / 1_000_000
-
-    def _price_for_model(self, model: str) -> tuple[float, float]:
-        direct = self._MODEL_PRICING_USD_PER_1M.get(model)
-        if direct is not None:
-            return direct
-        for known_model, price in self._MODEL_PRICING_USD_PER_1M.items():
-            if model.startswith(known_model):
-                return price
-        return (0.0, 0.0)

@@ -4,7 +4,7 @@ Retrospective analysis service for trend evidence and outcomes.
 
 from __future__ import annotations
 
-import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,31 +16,101 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.narrative_grounding import (
+    build_grounding_references,
+    evaluate_narrative_grounding,
+)
+from src.processing.cost_tracker import TIER2, BudgetExceededError, CostTracker
+from src.processing.llm_failover import LLMChatRoute
+from src.processing.llm_input_safety import (
+    DEFAULT_CHARS_PER_TOKEN,
+    DEFAULT_TRUNCATION_MARKER,
+)
+from src.processing.llm_policy import build_safe_payload_content, invoke_with_policy
 from src.storage.models import Event, Trend, TrendEvidence, TrendOutcome
 
 logger = structlog.get_logger(__name__)
 
 
+@dataclass(slots=True)
+class NarrativeResult:
+    narrative: str
+    grounding_status: str
+    grounding_violation_count: int
+    grounding_references: dict[str, Any] | None = None
+
+
 class RetrospectiveAnalyzer:
     """Build retrospective trend analysis over a time window."""
+
+    _MAX_NARRATIVE_INPUT_TOKENS = 9000
+    _CHARS_PER_TOKEN = DEFAULT_CHARS_PER_TOKEN
+    _TRUNCATION_MARKER = DEFAULT_TRUNCATION_MARKER
 
     def __init__(
         self,
         session: AsyncSession,
         client: AsyncOpenAI | Any | None = None,
+        secondary_client: AsyncOpenAI | Any | None = None,
         model: str | None = None,
+        secondary_model: str | None = None,
         prompt_path: str = "ai/prompts/retrospective_analysis.md",
+        cost_tracker: CostTracker | None = None,
+        primary_provider: str | None = None,
+        secondary_provider: str | None = None,
+        primary_base_url: str | None = None,
+        secondary_base_url: str | None = None,
     ) -> None:
         self.session = session
         self.model = model or settings.LLM_RETROSPECTIVE_MODEL
+        self.secondary_model = secondary_model or settings.LLM_TIER2_SECONDARY_MODEL
+        self.primary_provider = primary_provider or settings.LLM_PRIMARY_PROVIDER
+        self.secondary_provider = secondary_provider or settings.LLM_SECONDARY_PROVIDER
+        self.primary_base_url = primary_base_url or settings.LLM_PRIMARY_BASE_URL
+        self.secondary_base_url = secondary_base_url or settings.LLM_SECONDARY_BASE_URL
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
-        self.client = client if client is not None else self._create_client_optional()
+        self.client = (
+            client
+            if client is not None
+            else self._create_client_optional(
+                api_key=settings.OPENAI_API_KEY,
+                base_url=self.primary_base_url,
+            )
+        )
+        self.secondary_client = self._build_secondary_client(secondary_client=secondary_client)
+        self.cost_tracker = cost_tracker or CostTracker(session=session)
 
     @staticmethod
-    def _create_client_optional() -> AsyncOpenAI | None:
-        if not settings.OPENAI_API_KEY.strip():
+    def _create_client_optional(
+        *,
+        api_key: str,
+        base_url: str | None = None,
+    ) -> AsyncOpenAI | None:
+        if not api_key.strip():
             return None
-        return AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+        if isinstance(base_url, str) and base_url.strip():
+            return AsyncOpenAI(api_key=api_key, base_url=base_url.strip())
+        return AsyncOpenAI(api_key=api_key)
+
+    def _build_secondary_client(
+        self,
+        *,
+        secondary_client: AsyncOpenAI | Any | None,
+    ) -> AsyncOpenAI | Any | None:
+        if self.secondary_model is None:
+            return None
+        if secondary_client is not None:
+            return secondary_client
+
+        secondary_api_key = settings.LLM_SECONDARY_API_KEY or settings.OPENAI_API_KEY
+        if not secondary_api_key.strip():
+            msg = "LLM secondary failover configured without API key"
+            raise ValueError(msg)
+
+        return self._create_client_optional(
+            api_key=secondary_api_key,
+            base_url=self.secondary_base_url,
+        )
 
     async def analyze(
         self,
@@ -90,7 +160,10 @@ class RetrospectiveAnalyzer:
             "category_breakdown": category_breakdown,
             "predictive_signals": predictive_signals,
             "accuracy_assessment": accuracy_assessment,
-            "narrative": narrative,
+            "narrative": narrative.narrative,
+            "grounding_status": narrative.grounding_status,
+            "grounding_violation_count": narrative.grounding_violation_count,
+            "grounding_references": narrative.grounding_references,
         }
 
     @staticmethod
@@ -241,7 +314,7 @@ class RetrospectiveAnalyzer:
         pivotal_events: list[dict[str, Any]],
         predictive_signals: list[dict[str, Any]],
         accuracy_assessment: dict[str, int | float | None],
-    ) -> str:
+    ) -> NarrativeResult:
         payload = {
             "trend": {
                 "id": str(trend.id),
@@ -256,25 +329,57 @@ class RetrospectiveAnalyzer:
         }
 
         if self.client is None:
-            return self._fallback_narrative(
+            return self._build_fallback_narrative_result(
                 trend_name=trend.name,
                 pivotal_events=pivotal_events,
                 predictive_signals=predictive_signals,
                 accuracy_assessment=accuracy_assessment,
+                payload=payload,
             )
 
-        try:
-            response = await self.client.chat.completions.create(
-                model=self.model,
-                temperature=0.2,
-                messages=[
-                    {"role": "system", "content": self.prompt_template},
-                    {"role": "user", "content": json.dumps(payload, ensure_ascii=True)},
-                ],
+        payload_content = self._build_narrative_payload_content(payload)
+        messages = [
+            {"role": "system", "content": self.prompt_template},
+            {"role": "user", "content": payload_content},
+        ]
+        secondary_route = None
+        if self.secondary_client is not None and self.secondary_model is not None:
+            secondary_route = LLMChatRoute(
+                provider=self.secondary_provider or self.primary_provider,
+                model=self.secondary_model,
+                client=self.secondary_client,
             )
+        try:
+            invocation = await invoke_with_policy(
+                stage="retrospective",
+                messages=messages,
+                primary_route=LLMChatRoute(
+                    provider=self.primary_provider,
+                    model=self.model,
+                    client=self.client,
+                ),
+                secondary_route=secondary_route,
+                temperature=0.2,
+                cost_tracker=self.cost_tracker,
+                budget_tier=TIER2,
+            )
+            response = invocation.response
             content = getattr(response.choices[0].message, "content", None)
             if isinstance(content, str) and content.strip():
-                return content.strip()
+                return self._verify_narrative_grounding(
+                    narrative=content.strip(),
+                    payload=payload,
+                    trend=trend,
+                    pivotal_events=pivotal_events,
+                    predictive_signals=predictive_signals,
+                    accuracy_assessment=accuracy_assessment,
+                )
+        except BudgetExceededError:
+            logger.warning(
+                "Retrospective narrative generation budget denied; using fallback",
+                trend_id=str(trend.id),
+                trend_name=trend.name,
+            )
         except Exception:
             logger.exception(
                 "Retrospective narrative generation failed; using fallback",
@@ -282,11 +387,88 @@ class RetrospectiveAnalyzer:
                 trend_name=trend.name,
             )
 
-        return self._fallback_narrative(
+        return self._build_fallback_narrative_result(
             trend_name=trend.name,
             pivotal_events=pivotal_events,
             predictive_signals=predictive_signals,
             accuracy_assessment=accuracy_assessment,
+            payload=payload,
+        )
+
+    def _verify_narrative_grounding(
+        self,
+        *,
+        narrative: str,
+        payload: dict[str, Any],
+        trend: Trend,
+        pivotal_events: list[dict[str, Any]],
+        predictive_signals: list[dict[str, Any]],
+        accuracy_assessment: dict[str, int | float | None],
+    ) -> NarrativeResult:
+        evaluation = evaluate_narrative_grounding(
+            narrative=narrative,
+            evidence_payload=payload,
+            violation_threshold=settings.NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS,
+            numeric_tolerance=settings.NARRATIVE_GROUNDING_NUMERIC_TOLERANCE,
+        )
+        if evaluation.is_grounded:
+            return NarrativeResult(
+                narrative=narrative,
+                grounding_status="grounded",
+                grounding_violation_count=evaluation.violation_count,
+                grounding_references=build_grounding_references(evaluation),
+            )
+
+        logger.warning(
+            "Retrospective narrative grounding failed; using fallback",
+            trend_id=str(trend.id),
+            trend_name=trend.name,
+            violation_count=evaluation.violation_count,
+        )
+        return self._build_fallback_narrative_result(
+            trend_name=trend.name,
+            pivotal_events=pivotal_events,
+            predictive_signals=predictive_signals,
+            accuracy_assessment=accuracy_assessment,
+            payload=payload,
+        )
+
+    def _build_fallback_narrative_result(
+        self,
+        *,
+        trend_name: str,
+        pivotal_events: list[dict[str, Any]],
+        predictive_signals: list[dict[str, Any]],
+        accuracy_assessment: dict[str, int | float | None],
+        payload: dict[str, Any],
+    ) -> NarrativeResult:
+        narrative = self._fallback_narrative(
+            trend_name=trend_name,
+            pivotal_events=pivotal_events,
+            predictive_signals=predictive_signals,
+            accuracy_assessment=accuracy_assessment,
+        )
+        evaluation = evaluate_narrative_grounding(
+            narrative=narrative,
+            evidence_payload=payload,
+            violation_threshold=settings.NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS,
+            numeric_tolerance=settings.NARRATIVE_GROUNDING_NUMERIC_TOLERANCE,
+        )
+        return NarrativeResult(
+            narrative=narrative,
+            grounding_status="fallback" if evaluation.is_grounded else "flagged",
+            grounding_violation_count=evaluation.violation_count,
+            grounding_references=build_grounding_references(evaluation),
+        )
+
+    def _build_narrative_payload_content(self, payload: dict[str, Any]) -> str:
+        return build_safe_payload_content(
+            payload,
+            tag="UNTRUSTED_RETROSPECTIVE_PAYLOAD",
+            max_tokens=self._MAX_NARRATIVE_INPUT_TOKENS,
+            chars_per_token=self._CHARS_PER_TOKEN,
+            truncation_marker=self._TRUNCATION_MARKER,
+            warning_message="Retrospective narrative payload exceeded token budget; truncating",
         )
 
     @staticmethod

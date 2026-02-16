@@ -4,7 +4,7 @@ Prometheus metrics registry and helper recorders.
 
 from __future__ import annotations
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge
 
 INGESTION_ITEMS_TOTAL = Counter(
     "ingestion_items_total",
@@ -39,6 +39,45 @@ CALIBRATION_DRIFT_ALERTS_TOTAL = Counter(
 PROCESSING_REAPER_RESETS_TOTAL = Counter(
     "processing_reaper_resets_total",
     "Count of raw items reset from processing to pending by stale-item reaper.",
+)
+SOURCE_FRESHNESS_STALE_TOTAL = Counter(
+    "source_freshness_stale_total",
+    "Stale source detections by collector type.",
+    ["collector"],
+)
+SOURCE_CATCHUP_DISPATCH_TOTAL = Counter(
+    "source_catchup_dispatch_total",
+    "Catch-up collector dispatches triggered by freshness checks.",
+    ["collector"],
+)
+PROCESSING_BACKLOG_DEPTH = Gauge(
+    "processing_backlog_depth",
+    "Current pending raw-item backlog depth observed during dispatch planning.",
+)
+PROCESSING_DISPATCH_DECISIONS_TOTAL = Counter(
+    "processing_dispatch_decisions_total",
+    "Processing dispatch decisions by outcome and reason.",
+    ["decision", "reason"],
+)
+PROCESSING_INGESTED_LANGUAGE_TOTAL = Counter(
+    "processing_ingested_language_total",
+    "Processed raw-item intake counts segmented by language code.",
+    ["language"],
+)
+PROCESSING_TIER1_LANGUAGE_OUTCOME_TOTAL = Counter(
+    "processing_tier1_language_outcome_total",
+    "Tier-1 routing outcomes segmented by language code.",
+    ["language", "outcome"],
+)
+PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL = Counter(
+    "processing_tier2_language_usage_total",
+    "Tier-2 classification usage segmented by language code.",
+    ["language"],
+)
+LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL = Counter(
+    "llm_semantic_cache_lookups_total",
+    "LLM semantic cache lookups by stage and result.",
+    ["stage", "result"],
 )
 
 
@@ -90,3 +129,44 @@ def record_calibration_drift_alert(*, alert_type: str, severity: str) -> None:
 
 def record_processing_reaper_resets(*, reset_count: int) -> None:
     PROCESSING_REAPER_RESETS_TOTAL.inc(max(0, reset_count))
+
+
+def record_source_freshness_stale(*, collector: str, stale_count: int) -> None:
+    SOURCE_FRESHNESS_STALE_TOTAL.labels(collector=collector).inc(max(0, stale_count))
+
+
+def record_source_catchup_dispatch(*, collector: str) -> None:
+    SOURCE_CATCHUP_DISPATCH_TOTAL.labels(collector=collector).inc()
+
+
+def record_llm_semantic_cache_lookup(*, stage: str, result: str) -> None:
+    LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL.labels(stage=stage, result=result).inc()
+
+
+def record_processing_backlog_depth(*, pending_count: int) -> None:
+    PROCESSING_BACKLOG_DEPTH.set(max(0, pending_count))
+
+
+def record_processing_dispatch_decision(*, dispatched: bool, reason: str) -> None:
+    decision = "dispatched" if dispatched else "throttled"
+    normalized_reason = reason.strip() or "unspecified"
+    PROCESSING_DISPATCH_DECISIONS_TOTAL.labels(
+        decision=decision,
+        reason=normalized_reason,
+    ).inc()
+
+
+def record_processing_ingested_language(*, language: str) -> None:
+    PROCESSING_INGESTED_LANGUAGE_TOTAL.labels(language=language).inc()
+
+
+def record_processing_tier1_language_outcome(*, language: str, outcome: str) -> None:
+    normalized_outcome = outcome.strip() or "unknown"
+    PROCESSING_TIER1_LANGUAGE_OUTCOME_TOTAL.labels(
+        language=language,
+        outcome=normalized_outcome,
+    ).inc()
+
+
+def record_processing_tier2_language_usage(*, language: str) -> None:
+    PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL.labels(language=language).inc()

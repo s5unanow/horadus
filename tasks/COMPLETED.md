@@ -84,9 +84,32 @@ Tasks that have been completed and verified.
 - TASK-081: Readiness Probe HTTP Semantics Fix ✅
 - TASK-082: Vector Index Profile Parity (Model vs Migration) ✅
 - TASK-083: Documentation and OpenAPI Drift Cleanup ✅
+- TASK-086: LLM Route Retry Before Failover ✅
+- TASK-087: Budget and Safety Guardrails for Report/Retrospective LLM Calls ✅
+- TASK-088: Remove or Integrate Legacy `_process_item` Pipeline Path ✅
+- TASK-089: Adopt Strict Structured Outputs for Tier-1/Tier-2 ✅
+- TASK-090: Responses API Migration Plan and Pilot ✅
+- TASK-091: Batch/Flex Evaluation and Backfill Cost Mode ✅ (partial recovery; follow-up `TASK-113`)
+- TASK-092: End-to-End OpenTelemetry Tracing ✅ (partial recovery; follow-up `TASK-115`)
+- TASK-093: Vector Strategy Revalidation Cadence and Gate ✅ (partial recovery; follow-up `TASK-113`)
+- TASK-094: Pipeline Cost Metrics Parity in Observability ✅
+- TASK-095: CI Docs Freshness and Drift Guard ✅ (deferred recovery; follow-up `TASK-114`)
+- TASK-096: Unified LLM Invocation Policy Layer ✅
+- TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window) ✅
+- TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2 ✅
+- TASK-099: Backpressure-Aware Processing Scheduling ✅
+- TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅ (partial recovery; follow-up `TASK-115`)
+- TASK-101: Multilingual Coverage Policy and Processing Guardrails ✅
+- TASK-102: Deterministic Grounding Verification for Narratives ✅ (partial recovery; follow-up `TASK-115`)
+- TASK-103: Six-Hour Polling Operating Profile and Defaults ✅
+- TASK-104: Ingestion Completeness Watermark and Overlap Guard ✅
+- TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch ✅
+- TASK-106: Collector Retry and Timeout Hardening for Low-Frequency Mode ✅
+- TASK-107: Task Dependency Governance and Execution Policy ✅
 - TASK-109: Enforce Branch-Per-Task Delivery Policy ✅
 - TASK-110: Task Delivery Workflow Guardrails and Enforcement ✅
 - TASK-111: Main Branch Merge-Completeness Audit ✅
+- TASK-112: Recover Stranded TASK-086..TASK-107 from `task-061` ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

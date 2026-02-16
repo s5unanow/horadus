@@ -11,6 +11,7 @@ from celery import Celery
 from celery.schedules import crontab
 
 from src.core.config import settings
+from src.core.tracing import configure_tracing
 
 
 def _build_beat_schedule() -> dict[str, dict[str, Any]]:
@@ -49,6 +50,10 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
             "task": "workers.process_pending_items",
             "schedule": timedelta(minutes=max(1, settings.PROCESS_PENDING_INTERVAL_MINUTES)),
         }
+    schedule["check-source-freshness"] = {
+        "task": "workers.check_source_freshness",
+        "schedule": timedelta(minutes=max(1, settings.SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES)),
+    }
     schedule["generate-weekly-reports"] = {
         "task": "workers.generate_weekly_reports",
         "schedule": crontab(
@@ -86,6 +91,7 @@ celery_app.conf.update(
         "workers.collect_rss": {"queue": "ingestion"},
         "workers.collect_gdelt": {"queue": "ingestion"},
         "workers.process_pending_items": {"queue": "processing"},
+        "workers.check_source_freshness": {"queue": "processing"},
         "workers.snapshot_trends": {"queue": "processing"},
         "workers.apply_trend_decay": {"queue": "processing"},
         "workers.check_event_lifecycles": {"queue": "processing"},
@@ -100,3 +106,4 @@ celery_app.conf.update(
 )
 
 celery_app.autodiscover_tasks(["src.workers"])
+configure_tracing(celery_app=celery_app)

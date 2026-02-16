@@ -33,6 +33,16 @@ For a full variable reference, see `docs/ENVIRONMENT.md`.
 For release and rollback governance, see `docs/RELEASING.md`.
 For calibration alert triage and review operations, see `docs/CALIBRATION_RUNBOOK.md`.
 For managed backend options, see `docs/SECRETS_BACKENDS.md`.
+For 6-hour low-frequency defaults and outage catch-up steps, see `docs/LOW_FREQUENCY_MODE.md`.
+
+6-hour baseline deployment profile:
+
+```dotenv
+RSS_COLLECTION_INTERVAL=360
+GDELT_COLLECTION_INTERVAL=360
+PROCESS_PENDING_INTERVAL_MINUTES=15
+PROCESSING_PIPELINE_BATCH_SIZE=200
+```
 
 Recommended production hardening:
 
@@ -40,6 +50,7 @@ Recommended production hardening:
 - Set `MIGRATION_PARITY_STRICT_STARTUP=true` once migration workflow is validated in your environment.
 - Restrict `CORS_ORIGINS` to trusted frontend domains only.
 - Provide `POSTGRES_PASSWORD` via runtime environment (not committed files) when running bundled `postgres`.
+- Keep `API_RATE_LIMIT_STRATEGY=fixed_window` by default for low-overhead operation; switch to `sliding_window` only when boundary-burst smoothing is required.
 
 ## 2) Build production images
 

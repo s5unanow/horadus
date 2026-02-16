@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.ingestion.rate_limiter import DomainRateLimiter
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
@@ -38,7 +39,7 @@ class GDELTQueryConfig:
     actors: list[str] = field(default_factory=list)
     countries: list[str] = field(default_factory=list)
     languages: list[str] = field(default_factory=list)
-    lookback_hours: int = 24
+    lookback_hours: int = 12
     max_records_per_page: int = 100
     max_pages: int = 3
     source_tier: str = "aggregator"
@@ -53,7 +54,7 @@ class GDELTSettings:
 
     request_timeout_seconds: int = 30
     user_agent: str = "GeopoliticalIntel/1.0 (GDELT Client)"
-    default_lookback_hours: int = 24
+    default_lookback_hours: int = 12
     default_max_records_per_page: int = 100
     default_max_pages: int = 3
 
@@ -68,6 +69,12 @@ class GDELTCollectionResult:
     items_stored: int = 0
     items_skipped: int = 0
     errors: list[str] = field(default_factory=list)
+    transient_errors: int = 0
+    terminal_errors: int = 0
+    expected_start: datetime | None = None
+    actual_start: datetime | None = None
+    gap_seconds: int = 0
+    overlap_seconds: int = 0
     duration_seconds: float = 0.0
 
 
@@ -94,7 +101,7 @@ class GDELTClient:
         self._queries: list[GDELTQueryConfig] = []
         self._config_mtime: float | None = None
 
-        self.total_timeout_seconds = 300
+        self.total_timeout_seconds = settings.GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS
         self.max_retries = 3
         self.dedup_window_days = 7
         self.deduplication_service = DeduplicationService(session=session)
@@ -156,8 +163,29 @@ class GDELTClient:
         source = await self._get_or_create_source(query)
 
         now_utc = datetime.now(tz=UTC)
-        window_start = now_utc - timedelta(hours=query.lookback_hours)
+        expected_start, window_start = self._determine_collection_window(
+            source=source,
+            now_utc=now_utc,
+            lookback_hours=query.lookback_hours,
+        )
+        gap_seconds, overlap_seconds = self._window_coverage_metrics(
+            expected_start=expected_start,
+            actual_start=window_start,
+        )
+        result.expected_start = expected_start
+        result.actual_start = window_start
+        result.gap_seconds = gap_seconds
+        result.overlap_seconds = overlap_seconds
         window_end = now_utc
+
+        logger.info(
+            "GDELT collection window",
+            query_name=query.name,
+            expected_start=expected_start.isoformat(),
+            actual_start=window_start.isoformat(),
+            gap_seconds=gap_seconds,
+            overlap_seconds=overlap_seconds,
+        )
 
         try:
             async with asyncio.timeout(self.total_timeout_seconds):
@@ -202,19 +230,41 @@ class GDELTClient:
                         break
                     window_end = next_window_end
         except Exception as exc:
-            error_message = f"GDELT collection failed: {exc}"
+            failure_class = "transient" if self._is_transient_failure(exc) else "terminal"
+            failure_reason = self._failure_reason(exc)
+            if failure_class == "transient":
+                result.transient_errors += 1
+            else:
+                result.terminal_errors += 1
+            error_message = f"[{failure_class}] GDELT collection failed ({failure_reason}): {exc}"
             logger.warning(
                 "GDELT query collection failed",
                 query_name=query.name,
                 query_expression=self._build_query_string(query),
                 error=str(exc),
+                failure_class=failure_class,
+                failure_reason=failure_reason,
+                timeout_budget_seconds=self.total_timeout_seconds,
+                retry_attempts=max(1, self.max_retries + 1),
             )
             result.errors.append(error_message)
             await self._record_source_failure(source, error_message)
         else:
-            await self._record_source_success(source)
+            await self._record_source_success(source, window_end=window_end)
 
         result.duration_seconds = round(time.monotonic() - started, 3)
+        logger.info(
+            "GDELT collection window coverage",
+            query_name=query.name,
+            expected_start=result.expected_start.isoformat() if result.expected_start else None,
+            actual_start=result.actual_start.isoformat() if result.actual_start else None,
+            gap_seconds=result.gap_seconds,
+            overlap_seconds=result.overlap_seconds,
+            pages_fetched=result.pages_fetched,
+            items_fetched=result.items_fetched,
+            items_stored=result.items_stored,
+            items_skipped=result.items_skipped,
+        )
         return result
 
     async def _fetch_articles(
@@ -382,8 +432,42 @@ class GDELTClient:
         )
         return result.is_duplicate
 
-    async def _record_source_success(self, source: Source) -> None:
+    def _determine_collection_window(
+        self,
+        *,
+        source: Source,
+        now_utc: datetime,
+        lookback_hours: int,
+    ) -> tuple[datetime, datetime]:
+        window_end_at = getattr(source, "ingestion_window_end_at", None)
+        if window_end_at is None:
+            expected_start = now_utc - timedelta(hours=max(1, lookback_hours))
+            return (expected_start, expected_start)
+
+        expected_start = self._as_utc(window_end_at)
+        overlap_seconds = max(0, settings.INGESTION_WINDOW_OVERLAP_SECONDS)
+        actual_start = expected_start - timedelta(seconds=overlap_seconds)
+        return (expected_start, actual_start)
+
+    @staticmethod
+    def _window_coverage_metrics(
+        *,
+        expected_start: datetime,
+        actual_start: datetime,
+    ) -> tuple[int, int]:
+        gap_seconds = max(0, int((actual_start - expected_start).total_seconds()))
+        overlap_seconds = max(0, int((expected_start - actual_start).total_seconds()))
+        return (gap_seconds, overlap_seconds)
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    async def _record_source_success(self, source: Source, *, window_end: datetime) -> None:
         source.last_fetched_at = datetime.now(tz=UTC)
+        source.ingestion_window_end_at = self._as_utc(window_end)
         source.error_count = 0
         source.last_error = None
         await self.session.flush()
@@ -398,7 +482,7 @@ class GDELTClient:
         return GDELTSettings(
             request_timeout_seconds=int(raw_settings.get("request_timeout_seconds", 30)),
             user_agent=str(raw_settings.get("user_agent", "GeopoliticalIntel/1.0 (GDELT Client)")),
-            default_lookback_hours=int(raw_settings.get("default_lookback_hours", 24)),
+            default_lookback_hours=int(raw_settings.get("default_lookback_hours", 12)),
             default_max_records_per_page=int(raw_settings.get("default_max_records_per_page", 100)),
             default_max_pages=int(raw_settings.get("default_max_pages", 3)),
         )
@@ -408,7 +492,7 @@ class GDELTClient:
         raw_settings: dict[str, Any],
         raw_queries: list[Any],
     ) -> list[GDELTQueryConfig]:
-        default_lookback_hours = int(raw_settings.get("default_lookback_hours", 24))
+        default_lookback_hours = int(raw_settings.get("default_lookback_hours", 12))
         default_max_records = int(raw_settings.get("default_max_records_per_page", 100))
         default_max_pages = int(raw_settings.get("default_max_pages", 3))
 
@@ -755,6 +839,26 @@ class GDELTClient:
     @staticmethod
     def _is_retryable_status(status_code: int) -> bool:
         return status_code == 429 or status_code >= 500
+
+    @staticmethod
+    def _is_transient_failure(exc: BaseException) -> bool:
+        if isinstance(
+            exc, httpx.TimeoutException | httpx.NetworkError | TimeoutError | asyncio.TimeoutError
+        ):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return GDELTClient._is_retryable_status(exc.response.status_code)
+        return False
+
+    @staticmethod
+    def _failure_reason(exc: BaseException) -> str:
+        if isinstance(exc, httpx.TimeoutException | TimeoutError | asyncio.TimeoutError):
+            return "timeout"
+        if isinstance(exc, httpx.NetworkError):
+            return "network"
+        if isinstance(exc, httpx.HTTPStatusError):
+            return f"http_{exc.response.status_code}"
+        return type(exc).__name__.lower()
 
     @staticmethod
     def _backoff_seconds(attempt: int) -> float:

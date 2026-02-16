@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-111`.
+- Next available task IDs start at `TASK-112`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -1404,6 +1404,23 @@ CI scope guard, local branch guard hooks, and main-branch protection defaults).
 - [x] Add local hook guard to block commit/push when branch name does not match task-branch pattern
 - [x] Require and document one-task-per-branch and one-task-per-PR as non-negotiable
 - [x] Apply repository protection settings: PR-required, checks-required, admins-enforced, direct-push blocked, linear history/squash-rebase policy
+
+---
+
+### TASK-111: Main Branch Merge-Completeness Audit
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+**Depends On**: None
+
+Verify whether backlog-tracked implemented work is actually merged into `main`,
+and produce a deterministic list of any missing/unmerged task work.
+
+**Acceptance Criteria**:
+- [x] Create an auditable inventory of task branches/PRs relative to `main`
+- [x] Verify merge status for completed backlog tasks and identify gaps
+- [x] Produce a list of missing/unmerged tasks (or explicit confirmation none missing)
+- [x] Document findings with concrete references (branch, PR, commit where applicable)
+- [x] Record recommended remediation sequence for any missing task merges
 
 ---
 

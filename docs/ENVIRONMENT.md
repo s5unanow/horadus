@@ -114,6 +114,10 @@ Rate-limit strategy guidance:
 | `COLLECTOR_RETRY_BACKOFF_MAX_SECONDS` | `300` | Maximum backoff delay between collector task retries. |
 | `TREND_SNAPSHOT_INTERVAL_MINUTES` | `60` | Snapshot cadence. |
 | `PROCESS_PENDING_INTERVAL_MINUTES` | `15` | Cadence for periodic `workers.process_pending_items` beat schedule. |
+| `PROCESSING_DISPATCH_MAX_IN_FLIGHT` | `1` | Ingestion-triggered dispatch throttles when in-flight processing tasks reach this count. |
+| `PROCESSING_DISPATCH_LOCK_TTL_SECONDS` | `30` | Redis lock TTL used to deduplicate ingestion-triggered dispatch fan-out. |
+| `PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT` | `10` | Low-headroom threshold (%) where ingestion-triggered dispatch becomes less aggressive. |
+| `PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT` | `50` | Maximum ingestion-triggered dispatch `limit` while low-headroom throttling is active. |
 | `PROCESSING_REAPER_INTERVAL_MINUTES` | `15` | Cadence for stale-processing recovery task. |
 | `WEEKLY_REPORT_DAY_OF_WEEK` | `1` | UTC day (`0=Sun..6=Sat`). |
 | `WEEKLY_REPORT_HOUR_UTC` | `7` | UTC hour. |

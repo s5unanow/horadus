@@ -1591,11 +1591,11 @@ Prevent queue thrash and uneven latency by adapting processing dispatch to queue
 depth, worker saturation, and budget posture.
 
 **Acceptance Criteria**:
-- [ ] Add scheduler controls that modulate `process_pending_items` dispatch based on backlog depth and in-flight processing
-- [ ] Keep ingestion-triggered fast-path queueing while preventing duplicate or excessive task fan-out
-- [ ] Add guardrails tying dispatch aggressiveness to budget-denial signals or budget headroom
-- [ ] Emit metrics for backlog depth, dispatch decisions, and throttle reasons
-- [ ] Add tests for normal, burst, and throttled scheduling scenarios
+- [x] Add scheduler controls that modulate `process_pending_items` dispatch based on backlog depth and in-flight processing
+- [x] Keep ingestion-triggered fast-path queueing while preventing duplicate or excessive task fan-out
+- [x] Add guardrails tying dispatch aggressiveness to budget-denial signals or budget headroom
+- [x] Emit metrics for backlog depth, dispatch decisions, and throttle reasons
+- [x] Add tests for normal, burst, and throttled scheduling scenarios
 
 ---
 

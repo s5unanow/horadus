@@ -97,6 +97,7 @@ Tasks that have been completed and verified.
 - TASK-096: Unified LLM Invocation Policy Layer ✅
 - TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window) ✅
 - TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2 ✅
+- TASK-099: Backpressure-Aware Processing Scheduling ✅
 - TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅
 - TASK-102: Deterministic Grounding Verification for Narratives ✅
 - TASK-103: Six-Hour Polling Operating Profile and Defaults ✅

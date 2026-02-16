@@ -571,6 +571,27 @@ class Settings(BaseSettings):
         ge=1,
         description="Interval in minutes for periodic workers.process_pending_items schedule",
     )
+    PROCESSING_DISPATCH_MAX_IN_FLIGHT: int = Field(
+        default=1,
+        ge=1,
+        description="Maximum concurrent process_pending_items tasks before ingestion-triggered dispatch is throttled",
+    )
+    PROCESSING_DISPATCH_LOCK_TTL_SECONDS: int = Field(
+        default=30,
+        ge=0,
+        description="Redis lock TTL seconds for deduplicating ingestion-triggered process_pending_items dispatches",
+    )
+    PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT: int = Field(
+        default=10,
+        ge=0,
+        le=100,
+        description="Reduce ingestion-triggered dispatch aggressiveness when remaining daily LLM budget falls below this percent",
+    )
+    PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT: int = Field(
+        default=50,
+        ge=1,
+        description="Maximum ingestion-triggered dispatch task limit while low-budget-headroom throttling is active",
+    )
 
     # =========================================================================
     # Trend Engine

@@ -26,12 +26,28 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-099`
-2. `TASK-101`
+1. `TASK-101`
 
 ---
 
 ## Completed This Sprint
+
+### TASK-099: Backpressure-Aware Processing Scheduling
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Implemented ingestion-triggered processing dispatch controls that react to
+pending backlog depth, concurrent in-flight processing, and budget headroom.
+
+**Completed**:
+- [x] Added backpressure dispatch planning for ingestion-triggered queueing with backlog/in-flight/budget inputs
+- [x] Added duplicate-fanout guard via Redis dispatch lock and in-flight processing counters
+- [x] Added budget-headroom throttling controls (`PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT`, `PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT`)
+- [x] Added observability metrics for backlog depth and dispatch outcomes/reasons
+- [x] Added unit coverage for normal, burst, and throttled dispatch decision scenarios in worker tests
+
+---
 
 ### TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2
 **Status**: DONE ✓  

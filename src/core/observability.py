@@ -4,7 +4,7 @@ Prometheus metrics registry and helper recorders.
 
 from __future__ import annotations
 
-from prometheus_client import Counter
+from prometheus_client import Counter, Gauge
 
 INGESTION_ITEMS_TOTAL = Counter(
     "ingestion_items_total",
@@ -49,6 +49,15 @@ SOURCE_CATCHUP_DISPATCH_TOTAL = Counter(
     "source_catchup_dispatch_total",
     "Catch-up collector dispatches triggered by freshness checks.",
     ["collector"],
+)
+PROCESSING_BACKLOG_DEPTH = Gauge(
+    "processing_backlog_depth",
+    "Current pending raw-item backlog depth observed during dispatch planning.",
+)
+PROCESSING_DISPATCH_DECISIONS_TOTAL = Counter(
+    "processing_dispatch_decisions_total",
+    "Processing dispatch decisions by outcome and reason.",
+    ["decision", "reason"],
 )
 LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL = Counter(
     "llm_semantic_cache_lookups_total",
@@ -117,3 +126,16 @@ def record_source_catchup_dispatch(*, collector: str) -> None:
 
 def record_llm_semantic_cache_lookup(*, stage: str, result: str) -> None:
     LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL.labels(stage=stage, result=result).inc()
+
+
+def record_processing_backlog_depth(*, pending_count: int) -> None:
+    PROCESSING_BACKLOG_DEPTH.set(max(0, pending_count))
+
+
+def record_processing_dispatch_decision(*, dispatched: bool, reason: str) -> None:
+    decision = "dispatched" if dispatched else "throttled"
+    normalized_reason = reason.strip() or "unspecified"
+    PROCESSING_DISPATCH_DECISIONS_TOTAL.labels(
+        decision=decision,
+        reason=normalized_reason,
+    ).inc()

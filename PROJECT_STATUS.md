@@ -191,6 +191,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Unified LLM invocation policy layer with shared budget/safety/retry handling, provider-neutral error taxonomy, and centralized model pricing metadata
 - [x] Configurable API rate-limit smoothing strategy with Redis-atomic sliding-window mode and deterministic throttling semantics
 - [x] Optional cross-worker semantic cache for Tier-1/Tier-2 with stable keying, bounded eviction policy, and stage-level hit/miss metrics
+- [x] Backpressure-aware processing dispatch with backlog/in-flight/budget guardrails, duplicate-fanout lock, and dispatch decision metrics
 
 ## In Progress
 
@@ -212,7 +213,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 Execution is now priority-first and dependency-aware.
 
-1. `TASK-099`, `TASK-101` (P2, unblocked)
+1. `TASK-101` (P2, unblocked)
 2. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅

@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Callable, Coroutine
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, TypeVar, cast
 
@@ -16,12 +16,14 @@ import redis
 import structlog
 from celery import shared_task
 from celery.signals import task_failure
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from src.core.config import settings
 from src.core.observability import (
     record_collector_metrics,
     record_pipeline_metrics,
+    record_processing_backlog_depth,
+    record_processing_dispatch_decision,
     record_processing_reaper_resets,
     record_source_catchup_dispatch,
     record_source_freshness_stale,
@@ -32,6 +34,7 @@ from src.core.source_freshness import build_source_freshness_report
 from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
+from src.processing.cost_tracker import CostTracker
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
@@ -41,12 +44,25 @@ logger = structlog.get_logger(__name__)
 
 DEAD_LETTER_KEY = "celery:dead_letter"
 DEAD_LETTER_MAX_ITEMS = 1000
+PROCESSING_IN_FLIGHT_KEY = "horadus:processing:in_flight"
+PROCESSING_DISPATCH_LOCK_KEY = "horadus:processing:dispatch_lock"
 
 TaskFunc = TypeVar("TaskFunc", bound=Callable[..., Any])
 
 
 class CollectorTransientRunError(RuntimeError):
     """Raised when a collector run should be requeued for transient outages."""
+
+
+@dataclass(slots=True)
+class ProcessingDispatchPlan:
+    should_dispatch: bool
+    reason: str
+    task_limit: int
+    pending_backlog: int
+    in_flight: int
+    budget_status: str
+    budget_remaining_usd: float | None
 
 
 def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[TaskFunc], TaskFunc]:
@@ -167,6 +183,176 @@ def _handle_task_failure(
 task_failure.connect(_handle_task_failure)
 
 
+def _build_processing_dispatch_plan(
+    *,
+    stored_items: int,
+    pending_backlog: int,
+    in_flight: int,
+    budget_status: str,
+    budget_remaining_usd: float | None,
+    daily_cost_limit_usd: float,
+) -> ProcessingDispatchPlan:
+    if stored_items <= 0:
+        return ProcessingDispatchPlan(
+            should_dispatch=False,
+            reason="no_new_items",
+            task_limit=0,
+            pending_backlog=max(0, pending_backlog),
+            in_flight=max(0, in_flight),
+            budget_status=budget_status,
+            budget_remaining_usd=budget_remaining_usd,
+        )
+    if not settings.ENABLE_PROCESSING_PIPELINE:
+        return ProcessingDispatchPlan(
+            should_dispatch=False,
+            reason="pipeline_disabled",
+            task_limit=0,
+            pending_backlog=max(0, pending_backlog),
+            in_flight=max(0, in_flight),
+            budget_status=budget_status,
+            budget_remaining_usd=budget_remaining_usd,
+        )
+
+    max_in_flight = max(1, settings.PROCESSING_DISPATCH_MAX_IN_FLIGHT)
+    if in_flight >= max_in_flight:
+        return ProcessingDispatchPlan(
+            should_dispatch=False,
+            reason="in_flight_throttle",
+            task_limit=0,
+            pending_backlog=max(0, pending_backlog),
+            in_flight=max(0, in_flight),
+            budget_status=budget_status,
+            budget_remaining_usd=budget_remaining_usd,
+        )
+
+    queue_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
+    base_limit = min(queue_limit, max(stored_items, min(pending_backlog, queue_limit)))
+    if budget_status == "sleep_mode":
+        return ProcessingDispatchPlan(
+            should_dispatch=False,
+            reason="budget_denied",
+            task_limit=0,
+            pending_backlog=max(0, pending_backlog),
+            in_flight=max(0, in_flight),
+            budget_status=budget_status,
+            budget_remaining_usd=budget_remaining_usd,
+        )
+
+    min_headroom_pct = max(0, settings.PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT)
+    if (
+        budget_remaining_usd is not None
+        and daily_cost_limit_usd > 0
+        and min_headroom_pct > 0
+        and ((budget_remaining_usd / daily_cost_limit_usd) * 100.0) <= min_headroom_pct
+    ):
+        throttled_limit = min(base_limit, max(1, settings.PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT))
+        return ProcessingDispatchPlan(
+            should_dispatch=throttled_limit > 0,
+            reason="budget_low_headroom",
+            task_limit=throttled_limit,
+            pending_backlog=max(0, pending_backlog),
+            in_flight=max(0, in_flight),
+            budget_status=budget_status,
+            budget_remaining_usd=budget_remaining_usd,
+        )
+
+    return ProcessingDispatchPlan(
+        should_dispatch=True,
+        reason="ok",
+        task_limit=base_limit,
+        pending_backlog=max(0, pending_backlog),
+        in_flight=max(0, in_flight),
+        budget_status=budget_status,
+        budget_remaining_usd=budget_remaining_usd,
+    )
+
+
+def _get_redis_client() -> redis.Redis[str]:
+    return redis.from_url(settings.REDIS_URL, decode_responses=True)
+
+
+def _get_processing_in_flight_count() -> int:
+    client: redis.Redis[str] | None = None
+    try:
+        client = _get_redis_client()
+        raw_value = client.get(PROCESSING_IN_FLIGHT_KEY)
+        return max(0, int(raw_value or 0))
+    except Exception:
+        return 0
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _increment_processing_in_flight() -> int:
+    client: redis.Redis[str] | None = None
+    try:
+        client = _get_redis_client()
+        current = int(client.incr(PROCESSING_IN_FLIGHT_KEY))
+        client.expire(PROCESSING_IN_FLIGHT_KEY, 3600)
+        return max(0, current)
+    except Exception:
+        return 0
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _decrement_processing_in_flight() -> int:
+    client: redis.Redis[str] | None = None
+    try:
+        client = _get_redis_client()
+        updated = int(client.decr(PROCESSING_IN_FLIGHT_KEY))
+        if updated <= 0:
+            client.delete(PROCESSING_IN_FLIGHT_KEY)
+            return 0
+        return updated
+    except Exception:
+        return 0
+    finally:
+        if client is not None:
+            client.close()
+
+
+def _acquire_processing_dispatch_lock() -> bool:
+    lock_ttl = max(0, settings.PROCESSING_DISPATCH_LOCK_TTL_SECONDS)
+    if lock_ttl == 0:
+        return True
+
+    client: redis.Redis[str] | None = None
+    try:
+        client = _get_redis_client()
+        acquired = client.set(
+            PROCESSING_DISPATCH_LOCK_KEY,
+            datetime.now(tz=UTC).isoformat(),
+            ex=lock_ttl,
+            nx=True,
+        )
+        return bool(acquired)
+    except Exception:
+        return True
+    finally:
+        if client is not None:
+            client.close()
+
+
+async def _load_processing_dispatch_inputs_async() -> dict[str, Any]:
+    async with async_session_maker() as session:
+        pending_count_raw = await session.scalar(
+            select(func.count(RawItem.id)).where(
+                RawItem.processing_status == ProcessingStatus.PENDING
+            )
+        )
+        pending_count = int(pending_count_raw or 0)
+        budget_summary = await CostTracker(session=session).get_daily_summary()
+    return {
+        "pending_backlog": pending_count,
+        "budget_status": str(budget_summary.get("status", "active")),
+        "budget_remaining_usd": budget_summary.get("budget_remaining_usd"),
+        "daily_cost_limit_usd": float(budget_summary.get("daily_cost_limit_usd", 0.0) or 0.0),
+    }
+
+
 async def _collect_rss_async() -> dict[str, Any]:
     async with (
         httpx.AsyncClient() as http_client,
@@ -275,19 +461,62 @@ async def _check_source_freshness_async() -> dict[str, Any]:
 
 
 def _queue_processing_for_new_items(*, collector: str, stored_items: int) -> bool:
-    if stored_items <= 0:
-        return False
-    if not settings.ENABLE_PROCESSING_PIPELINE:
+    dispatch_inputs = _run_async(_load_processing_dispatch_inputs_async())
+    pending_backlog = int(dispatch_inputs["pending_backlog"])
+    budget_status = str(dispatch_inputs["budget_status"])
+    budget_remaining_raw = dispatch_inputs.get("budget_remaining_usd")
+    budget_remaining = (
+        float(budget_remaining_raw) if isinstance(budget_remaining_raw, int | float) else None
+    )
+    daily_cost_limit = float(dispatch_inputs.get("daily_cost_limit_usd", 0.0) or 0.0)
+    in_flight = _get_processing_in_flight_count()
+
+    plan = _build_processing_dispatch_plan(
+        stored_items=stored_items,
+        pending_backlog=pending_backlog,
+        in_flight=in_flight,
+        budget_status=budget_status,
+        budget_remaining_usd=budget_remaining,
+        daily_cost_limit_usd=daily_cost_limit,
+    )
+    record_processing_backlog_depth(pending_count=pending_backlog)
+
+    if plan.should_dispatch and not _acquire_processing_dispatch_lock():
+        record_processing_dispatch_decision(dispatched=False, reason="dispatch_lock_active")
+        logger.info(
+            "Skipped processing dispatch due to active dispatch lock",
+            collector=collector,
+            stored_items=stored_items,
+            pending_backlog=pending_backlog,
+            in_flight=in_flight,
+        )
         return False
 
-    queue_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
-    task_limit = min(stored_items, queue_limit)
-    cast("Any", process_pending_items).delay(limit=task_limit)
+    if not plan.should_dispatch:
+        record_processing_dispatch_decision(dispatched=False, reason=plan.reason)
+        logger.info(
+            "Skipped processing dispatch",
+            collector=collector,
+            stored_items=stored_items,
+            reason=plan.reason,
+            pending_backlog=plan.pending_backlog,
+            in_flight=plan.in_flight,
+            budget_status=plan.budget_status,
+            budget_remaining_usd=plan.budget_remaining_usd,
+        )
+        return False
+
+    cast("Any", process_pending_items).delay(limit=plan.task_limit)
+    record_processing_dispatch_decision(dispatched=True, reason=plan.reason)
     logger.info(
         "Queued processing pipeline task",
         collector=collector,
         stored_items=stored_items,
-        task_limit=task_limit,
+        task_limit=plan.task_limit,
+        pending_backlog=plan.pending_backlog,
+        in_flight=plan.in_flight,
+        budget_status=plan.budget_status,
+        budget_remaining_usd=plan.budget_remaining_usd,
     )
     return True
 
@@ -501,19 +730,27 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
     def _runner() -> dict[str, Any]:
         configured_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
         run_limit = max(1, limit or configured_limit)
+        in_flight = _increment_processing_in_flight()
 
-        logger.info("Starting processing pipeline task", limit=run_limit)
-        result = _run_async(_process_pending_async(limit=run_limit))
-        record_pipeline_metrics(result)
-        logger.info(
-            "Finished processing pipeline task",
-            scanned=result["scanned"],
-            processed=result["processed"],
-            classified=result["classified"],
-            noise=result["noise"],
-            errors=result["errors"],
-        )
-        return result
+        logger.info("Starting processing pipeline task", limit=run_limit, in_flight=in_flight)
+        try:
+            result = _run_async(_process_pending_async(limit=run_limit))
+            record_pipeline_metrics(result)
+            logger.info(
+                "Finished processing pipeline task",
+                scanned=result["scanned"],
+                processed=result["processed"],
+                classified=result["classified"],
+                noise=result["noise"],
+                errors=result["errors"],
+            )
+            return result
+        finally:
+            remaining_in_flight = _decrement_processing_in_flight()
+            logger.debug(
+                "Updated processing in-flight counter",
+                in_flight=remaining_in_flight,
+            )
 
     return _run_task_with_heartbeat(
         task_name="workers.process_pending_items",

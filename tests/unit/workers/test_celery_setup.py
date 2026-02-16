@@ -364,6 +364,94 @@ def test_should_requeue_collector_run_for_transient_outage() -> None:
     )
 
 
+def test_build_processing_dispatch_plan_normal() -> None:
+    plan = tasks_module._build_processing_dispatch_plan(
+        stored_items=8,
+        pending_backlog=40,
+        in_flight=0,
+        budget_status="active",
+        budget_remaining_usd=4.0,
+        daily_cost_limit_usd=5.0,
+    )
+
+    assert plan.should_dispatch is True
+    assert plan.reason == "ok"
+    assert plan.task_limit == 40
+
+
+def test_build_processing_dispatch_plan_burst_uses_batch_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 100)
+
+    plan = tasks_module._build_processing_dispatch_plan(
+        stored_items=12,
+        pending_backlog=500,
+        in_flight=0,
+        budget_status="active",
+        budget_remaining_usd=10.0,
+        daily_cost_limit_usd=20.0,
+    )
+
+    assert plan.should_dispatch is True
+    assert plan.task_limit == 100
+
+
+def test_build_processing_dispatch_plan_throttles_on_budget_headroom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT", 10)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT", 25)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 200)
+
+    plan = tasks_module._build_processing_dispatch_plan(
+        stored_items=80,
+        pending_backlog=180,
+        in_flight=0,
+        budget_status="active",
+        budget_remaining_usd=0.4,
+        daily_cost_limit_usd=10.0,
+    )
+
+    assert plan.should_dispatch is True
+    assert plan.reason == "budget_low_headroom"
+    assert plan.task_limit == 25
+
+
+def test_queue_processing_for_new_items_skips_when_dispatch_lock_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_PROCESSING_PIPELINE", True)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 100)
+
+    def fake_run_async(coro):
+        coro.close()
+        return {
+            "pending_backlog": 50,
+            "budget_status": "active",
+            "budget_remaining_usd": 5.0,
+            "daily_cost_limit_usd": 10.0,
+        }
+
+    monkeypatch.setattr(tasks_module, "_run_async", fake_run_async)
+    monkeypatch.setattr(tasks_module, "_get_processing_in_flight_count", lambda: 0)
+    monkeypatch.setattr(tasks_module, "_acquire_processing_dispatch_lock", lambda: False)
+    monkeypatch.setattr(tasks_module, "record_processing_backlog_depth", lambda **_: None)
+    monkeypatch.setattr(tasks_module, "record_processing_dispatch_decision", lambda **_: None)
+
+    queued: list[int] = []
+    monkeypatch.setattr(
+        tasks_module,
+        "process_pending_items",
+        MagicMock(delay=lambda *, limit: queued.append(limit)),
+    )
+
+    dispatched = tasks_module._queue_processing_for_new_items(collector="rss", stored_items=6)
+
+    assert dispatched is False
+    assert queued == []
+
+
 def test_collect_rss_requeues_transient_outage(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -84,6 +84,7 @@ Tasks that have been completed and verified.
 - TASK-081: Readiness Probe HTTP Semantics Fix ✅
 - TASK-082: Vector Index Profile Parity (Model vs Migration) ✅
 - TASK-083: Documentation and OpenAPI Drift Cleanup ✅
+- TASK-109: Enforce Branch-Per-Task Delivery Policy ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

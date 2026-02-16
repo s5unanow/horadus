@@ -20,6 +20,23 @@
 
 ## Completed This Sprint
 
+### TASK-109: Enforce Branch-Per-Task Delivery Policy
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Added explicit branch-per-task governance so implementation stays isolated per
+task and PR scope.
+
+**Completed**:
+- [x] Added hard branch-per-task rule to `AGENTS.md`
+- [x] Added matching task branching policy to `tasks/BACKLOG.md`
+- [x] Required single-task branch scope and one PR per task branch
+- [x] Required merge-only after green checks and post-merge branch deletion
+- [x] Required new task + new branch for unrelated mid-task follow-up work
+
+---
+
 ### TASK-069: Baseline Source-of-Truth Unification for Decay
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

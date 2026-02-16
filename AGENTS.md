@@ -61,6 +61,14 @@ After completing work:
 - Agents must not implement, close, or mark those tasks DONE until a human explicitly confirms manual completion.
 - Agents may prepare scaffolding/checklists for `[REQUIRES_HUMAN]` tasks, but must stop before the manual step and report that human action is required.
 
+## Task Branching and PR Rules (Hard Rule)
+
+- Every engineering task must run on its own dedicated git branch created from `main`.
+- Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
+- Open one PR per task branch and merge only after required checks are green.
+- After merge, delete the task branch to avoid stale branch drift.
+- If a follow-up is discovered mid-task and is not required for current acceptance criteria, create a new task and handle it on a separate branch.
+
 ## Project-Specific Patterns
 
 ### pgvector similarity (clustering)

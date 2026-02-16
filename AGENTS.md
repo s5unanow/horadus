@@ -67,7 +67,10 @@ After completing work:
 - Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
 - Open one PR per task branch and merge only after required checks are green.
 - After merge, delete the task branch to avoid stale branch drift.
-- If a follow-up is discovered mid-task and is not required for current acceptance criteria, create a new task and handle it on a separate branch.
+- Task start sequence is mandatory: `git switch main` → `git pull --ff-only` → create/switch task branch.
+- Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.
+- If unrelated work is discovered mid-task, create a new task immediately but do not switch branches by default; continue current task unless the new work is a blocker/urgent.
+- Never mix two tasks in one commit/PR; blockers must be handled via a separate task branch after a safe checkpoint.
 
 ## Project-Specific Patterns
 

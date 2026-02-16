@@ -9,6 +9,58 @@ Goals:
 - Ensure quality gates run before shipping.
 - Make rollback predictable when issues appear.
 
+## Mandatory Task Delivery Workflow (Hard Rule)
+
+For any engineering change (including docs/process changes):
+
+1. Start from updated `main`:
+```bash
+git switch main
+git pull --ff-only
+```
+2. Create/confirm a `TASK-XXX` and open a dedicated branch from `main`:
+```bash
+git switch -c codex/task-XXX-short-name
+```
+3. Keep branch scope to one task only; open one PR for that task.
+4. Merge only when all required checks are green.
+5. Delete merged branch.
+6. Return to `main`, sync, and verify merge commit exists locally:
+```bash
+git switch main
+git pull --ff-only
+git log --oneline -n 1
+```
+
+If unrelated work is discovered during implementation:
+- Create a new follow-up task immediately.
+- Do **not** switch branches by default.
+- Continue current task unless the new work is blocker/urgent.
+- Never mix two tasks in one commit/PR.
+
+## Repository Guardrails (Required)
+
+- `main` is protected with PR-required merge flow.
+- Required checks must pass before merge.
+- Admins are also enforced by branch protection.
+- Direct push to `main` is blocked by protection settings.
+- Linear history is required; merge commits are disabled at repo level (squash/rebase path).
+- One task = one branch = one PR is non-negotiable.
+
+Automation:
+- Local hook guard install:
+```bash
+make hooks
+```
+- Manual branch guard check:
+```bash
+make branch-guard
+```
+- Apply/refresh GitHub `main` protection defaults:
+```bash
+make protect-main
+```
+
 ## Release Scope and Cadence
 
 - Use semantic version tags: `vMAJOR.MINOR.PATCH`.

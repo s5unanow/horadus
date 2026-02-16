@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval pre-commit check all \
-        db-migration-gate
+        db-migration-gate branch-guard protect-main
 
 # Default target
 .DEFAULT_GOAL := help
@@ -63,6 +63,7 @@ deps-dev: venv ## Install development dependencies (prefers uv)
 
 hooks: deps-dev ## Install git hooks (pre-commit + commit-msg)
 	$(UV_RUN) pre-commit install
+	$(UV_RUN) pre-commit install --hook-type pre-push
 	$(UV_RUN) pre-commit install --hook-type commit-msg
 
 install: deps ## Back-compat alias for deps
@@ -92,6 +93,12 @@ check: format lint typecheck ## Run all code quality checks
 
 pre-commit: ## Run pre-commit on all files
 	$(UV_RUN) pre-commit run --all-files
+
+branch-guard: ## Validate current branch naming policy
+	./scripts/check_branch_name.sh
+
+protect-main: ## Apply required main-branch protection + merge policy (requires gh auth)
+	./scripts/enforce_main_protection.sh
 
 # =============================================================================
 # Testing

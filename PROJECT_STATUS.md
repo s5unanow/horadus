@@ -179,6 +179,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Vector index metadata parity aligned to migration profile (`lists=64`) with regression tests
 - [x] Architecture/OpenAPI/docs drift cleanup with operational last-verified timestamps and archived stale risk snapshot doc
 - [x] Decay baseline source-of-truth unified to `Trend.baseline_log_odds` with synced `definition.baseline_probability` metadata + one-time backfill migration
+- [x] Task delivery guardrails enforced: mandatory `main` sync workflow, one-task-per-branch/PR policy, PR task-scope CI guard, local branch-name commit/push hook, and main-branch protection automation (`make protect-main`)
 
 ## In Progress
 

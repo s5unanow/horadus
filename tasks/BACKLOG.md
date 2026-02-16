@@ -1625,11 +1625,11 @@ Replace implicit multilingual handling with an explicit, testable language
 coverage policy.
 
 **Acceptance Criteria**:
-- [ ] Define launch language policy with explicit support targets: English (`en`), Ukrainian (`uk`), Russian (`ru`)
-- [ ] Add deterministic handling for unsupported languages (explicit skip/defer/translate mode, documented)
-- [ ] Emit language-segmented quality/cost metrics (ingested, Tier-1 pass rate, Tier-2 usage)
-- [ ] Add evaluation coverage for all three launch languages (`en`/`uk`/`ru`) including clustering and Tier-1/Tier-2 quality checks
-- [ ] Update architecture and ops docs with language support guarantees and limits
+- [x] Define launch language policy with explicit support targets: English (`en`), Ukrainian (`uk`), Russian (`ru`)
+- [x] Add deterministic handling for unsupported languages (explicit skip/defer/translate mode, documented)
+- [x] Emit language-segmented quality/cost metrics (ingested, Tier-1 pass rate, Tier-2 usage)
+- [x] Add evaluation coverage for all three launch languages (`en`/`uk`/`ru`) including clustering and Tier-1/Tier-2 quality checks
+- [x] Update architecture and ops docs with language support guarantees and limits
 
 ---
 

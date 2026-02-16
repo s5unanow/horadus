@@ -99,6 +99,7 @@ Tasks that have been completed and verified.
 - TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2 ✅
 - TASK-099: Backpressure-Aware Processing Scheduling ✅
 - TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅
+- TASK-101: Multilingual Coverage Policy and Processing Guardrails ✅
 - TASK-102: Deterministic Grounding Verification for Narratives ✅
 - TASK-103: Six-Hour Polling Operating Profile and Defaults ✅
 - TASK-104: Ingestion Completeness Watermark and Overlap Guard ✅

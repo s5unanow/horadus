@@ -117,3 +117,20 @@ def test_settings_rejects_invalid_rate_limit_strategy() -> None:
             _env_file=None,
             API_RATE_LIMIT_STRATEGY="token_bucket",
         )
+
+
+def test_settings_normalizes_supported_languages() -> None:
+    settings = Settings(
+        _env_file=None,
+        LANGUAGE_POLICY_SUPPORTED_LANGUAGES="EN, ukrainian, RU",
+    )
+
+    assert settings.LANGUAGE_POLICY_SUPPORTED_LANGUAGES == ["en", "uk", "ru"]
+
+
+def test_settings_rejects_invalid_unsupported_language_mode() -> None:
+    with pytest.raises(ValidationError, match="LANGUAGE_POLICY_UNSUPPORTED_MODE"):
+        Settings(
+            _env_file=None,
+            LANGUAGE_POLICY_UNSUPPORTED_MODE="translate",
+        )

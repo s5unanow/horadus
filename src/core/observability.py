@@ -59,6 +59,21 @@ PROCESSING_DISPATCH_DECISIONS_TOTAL = Counter(
     "Processing dispatch decisions by outcome and reason.",
     ["decision", "reason"],
 )
+PROCESSING_INGESTED_LANGUAGE_TOTAL = Counter(
+    "processing_ingested_language_total",
+    "Processed raw-item intake counts segmented by language code.",
+    ["language"],
+)
+PROCESSING_TIER1_LANGUAGE_OUTCOME_TOTAL = Counter(
+    "processing_tier1_language_outcome_total",
+    "Tier-1 routing outcomes segmented by language code.",
+    ["language", "outcome"],
+)
+PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL = Counter(
+    "processing_tier2_language_usage_total",
+    "Tier-2 classification usage segmented by language code.",
+    ["language"],
+)
 LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL = Counter(
     "llm_semantic_cache_lookups_total",
     "LLM semantic cache lookups by stage and result.",
@@ -139,3 +154,19 @@ def record_processing_dispatch_decision(*, dispatched: bool, reason: str) -> Non
         decision=decision,
         reason=normalized_reason,
     ).inc()
+
+
+def record_processing_ingested_language(*, language: str) -> None:
+    PROCESSING_INGESTED_LANGUAGE_TOTAL.labels(language=language).inc()
+
+
+def record_processing_tier1_language_outcome(*, language: str, outcome: str) -> None:
+    normalized_outcome = outcome.strip() or "unknown"
+    PROCESSING_TIER1_LANGUAGE_OUTCOME_TOTAL.labels(
+        language=language,
+        outcome=normalized_outcome,
+    ).inc()
+
+
+def record_processing_tier2_language_usage(*, language: str) -> None:
+    PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL.labels(language=language).inc()

@@ -26,11 +26,28 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-101`
+- None (all currently available non-human tasks are complete)
 
 ---
 
 ## Completed This Sprint
+
+### TASK-101: Multilingual Coverage Policy and Processing Guardrails
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Implemented explicit launch-language processing policy (`en`/`uk`/`ru`) with
+deterministic unsupported-language handling and language-segmented metrics.
+
+**Completed**:
+- [x] Added language policy runtime controls (`LANGUAGE_POLICY_SUPPORTED_LANGUAGES`, `LANGUAGE_POLICY_UNSUPPORTED_MODE`)
+- [x] Added deterministic unsupported-language handling in processing pipeline (`skip` -> noise, `defer` -> pending)
+- [x] Added language-segmented observability counters for intake, Tier-1 outcomes, and Tier-2 usage
+- [x] Added multilingual (`en`/`uk`/`ru`) unit coverage for clustering, Tier-1, Tier-2, and pipeline policy behavior
+- [x] Updated architecture and environment docs with language support guarantees and operational limits
+
+---
 
 ### TASK-099: Backpressure-Aware Processing Scheduling
 **Status**: DONE ✓  

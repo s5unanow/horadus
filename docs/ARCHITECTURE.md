@@ -120,6 +120,13 @@ Current model mapping (see ADR-002):
 - Tier 1 (filter): `gpt-4.1-nano`
 - Tier 2 (classify/summarize): `gpt-4.1-mini`
 
+Launch language policy:
+- Supported processing languages: `en`, `uk`, `ru`
+- Unsupported-language handling is deterministic via `LANGUAGE_POLICY_UNSUPPORTED_MODE`:
+  - `skip`: mark item as `noise`
+  - `defer`: leave item `pending` for later/manual handling
+- Missing/unknown language metadata is currently processed as `unknown` (not auto-dropped)
+
 ```
 ┌─────────────┐
 │  raw_item   │
@@ -169,6 +176,11 @@ Current model mapping (see ADR-002):
 │ evidence provenance record) │
 └─────────────────────────────┘
 ```
+
+Language-segmented operational metrics are emitted for:
+- intake (`processing_ingested_language_total`)
+- Tier-1 routing outcomes (`processing_tier1_language_outcome_total`)
+- Tier-2 usage (`processing_tier2_language_usage_total`)
 
 ### 3. Probability Update (Detail)
 

@@ -216,6 +216,32 @@ async def test_classify_event_uses_semantic_cache_hits(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "context_chunk",
+    [
+        "Troop deployments increased near the border after overnight movements.",
+        "Перекидання військ посилилося поблизу кордону після нічних рухів.",
+        "Переброска войск усилилась \u0443 границы после ночных перемещений.",
+    ],
+)
+async def test_classify_event_supports_launch_languages(
+    mock_db_session,
+    context_chunk: str,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=[context_chunk],
+    )
+
+    assert result.trend_impacts_count == 1
+
+
+@pytest.mark.asyncio
 async def test_build_payload_wraps_and_truncates_untrusted_context(mock_db_session) -> None:
     classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
     classifier._MAX_CONTEXT_CHUNK_TOKENS = 10

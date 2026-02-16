@@ -252,6 +252,39 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return normalized
 
+    @field_validator("LANGUAGE_POLICY_SUPPORTED_LANGUAGES", mode="before")
+    @classmethod
+    def parse_supported_languages(cls, value: Any) -> list[str]:
+        """Parse and normalize supported language policy values."""
+        if value is None:
+            return ["en", "uk", "ru"]
+        if isinstance(value, str):
+            raw_values = [chunk.strip() for chunk in value.split(",")]
+        elif isinstance(value, list):
+            raw_values = [str(chunk).strip() for chunk in value]
+        else:
+            raw_values = [str(value).strip()]
+
+        normalized: list[str] = []
+        for raw in raw_values:
+            if not raw:
+                continue
+            code = raw.lower()[:2]
+            if code and code not in normalized:
+                normalized.append(code)
+        return normalized or ["en", "uk", "ru"]
+
+    @field_validator("LANGUAGE_POLICY_UNSUPPORTED_MODE", mode="before")
+    @classmethod
+    def parse_unsupported_language_mode(cls, value: Any) -> str:
+        """Normalize unsupported-language handling mode."""
+        normalized = str(value or "skip").strip().lower()
+        allowed = {"skip", "defer"}
+        if normalized not in allowed:
+            msg = "LANGUAGE_POLICY_UNSUPPORTED_MODE must be one of: skip, defer"
+            raise ValueError(msg)
+        return normalized
+
     @field_validator("CALIBRATION_DRIFT_WEBHOOK_URL", mode="before")
     @classmethod
     def parse_optional_webhook_url(cls, value: Any) -> str | None:
@@ -591,6 +624,14 @@ class Settings(BaseSettings):
         default=50,
         ge=1,
         description="Maximum ingestion-triggered dispatch task limit while low-budget-headroom throttling is active",
+    )
+    LANGUAGE_POLICY_SUPPORTED_LANGUAGES: list[str] = Field(
+        default_factory=lambda: ["en", "uk", "ru"],
+        description="Supported language codes for launch processing policy",
+    )
+    LANGUAGE_POLICY_UNSUPPORTED_MODE: str = Field(
+        default="skip",
+        description="Unsupported-language handling mode (`skip` or `defer`)",
     )
 
     # =========================================================================

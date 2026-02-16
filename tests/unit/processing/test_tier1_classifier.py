@@ -213,6 +213,31 @@ async def test_classify_items_uses_semantic_cache_hits(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("title", "raw_content"),
+    [
+        ("eu-russia escalation update", "Troop movements increased near the border."),
+        ("eu-russia оновлення", "Військові підрозділи перекинуто до кордону."),
+        ("eu-russia обновление", "Военные подразделения переброшены к границе."),
+    ],
+)
+async def test_classify_items_supports_launch_languages(
+    mock_db_session,
+    title: str,
+    raw_content: str,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=1)
+    item = _build_item(title)
+    item.raw_content = raw_content
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    results, _usage = await classifier.classify_items([item], trends)
+
+    assert len(results) == 1
+    assert results[0].should_queue_tier2 is True
+
+
+@pytest.mark.asyncio
 async def test_item_payload_delimits_and_truncates_untrusted_content(
     mock_db_session,
     monkeypatch,

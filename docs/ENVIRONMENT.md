@@ -69,6 +69,8 @@ Rate-limit strategy guidance:
 | `LLM_SEMANTIC_CACHE_REDIS_PREFIX` | `horadus:llm_semantic_cache` | Redis key prefix for semantic cache data/indexes. |
 | `PROCESSING_PIPELINE_BATCH_SIZE` | `200` | Pending items handled per pipeline run. |
 | `PROCESSING_STALE_TIMEOUT_MINUTES` | `30` | Age threshold before stale `processing` items are reset to `pending`. |
+| `LANGUAGE_POLICY_SUPPORTED_LANGUAGES` | `en,uk,ru` | Launch language support targets enforced by processing policy. |
+| `LANGUAGE_POLICY_UNSUPPORTED_MODE` | `skip` | Unsupported-language handling (`skip` marks noise, `defer` leaves pending). |
 
 ## Cost and Safety Controls
 

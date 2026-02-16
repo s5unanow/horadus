@@ -95,6 +95,7 @@ Tasks that have been completed and verified.
 - TASK-094: Pipeline Cost Metrics Parity in Observability ✅
 - TASK-095: CI Docs Freshness and Drift Guard ✅
 - TASK-096: Unified LLM Invocation Policy Layer ✅
+- TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window) ✅
 - TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅
 - TASK-102: Deterministic Grounding Verification for Narratives ✅
 - TASK-103: Six-Hour Polling Operating Profile and Defaults ✅

@@ -206,6 +206,10 @@ class Settings(BaseSettings):
         le=3600,
         description="Rolling window size for API rate limiting in seconds",
     )
+    API_RATE_LIMIT_STRATEGY: str = Field(
+        default="fixed_window",
+        description="API rate limit strategy (`fixed_window` or `sliding_window`)",
+    )
     API_RATE_LIMIT_REDIS_PREFIX: str = Field(
         default="horadus:api_rate_limit",
         description="Redis key prefix used for distributed API rate limiting buckets",
@@ -236,6 +240,17 @@ class Settings(BaseSettings):
         if isinstance(v, list):
             return [str(key).strip() for key in v if str(key).strip()]
         return []
+
+    @field_validator("API_RATE_LIMIT_STRATEGY", mode="before")
+    @classmethod
+    def parse_rate_limit_strategy(cls, value: Any) -> str:
+        """Normalize API rate-limit strategy values."""
+        normalized = str(value or "fixed_window").strip().lower()
+        allowed = {"fixed_window", "sliding_window"}
+        if normalized not in allowed:
+            msg = "API_RATE_LIMIT_STRATEGY must be one of: fixed_window, sliding_window"
+            raise ValueError(msg)
+        return normalized
 
     @field_validator("CALIBRATION_DRIFT_WEBHOOK_URL", mode="before")
     @classmethod

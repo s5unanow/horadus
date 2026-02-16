@@ -73,3 +73,47 @@ def test_settings_derives_sync_url_after_file_load(tmp_path: Path) -> None:
 
     assert settings.DATABASE_URL.startswith("postgresql+asyncpg://")
     assert settings.DATABASE_URL_SYNC.startswith("postgresql://")
+
+
+def test_settings_rejects_invalid_report_api_mode() -> None:
+    with pytest.raises(ValidationError, match="LLM_REPORT_API_MODE"):
+        Settings(
+            _env_file=None,
+            LLM_REPORT_API_MODE="invalid_mode",
+        )
+
+
+def test_settings_normalizes_optional_otel_fields() -> None:
+    settings = Settings(
+        _env_file=None,
+        OTEL_EXPORTER_OTLP_ENDPOINT="  ",
+        OTEL_EXPORTER_OTLP_HEADERS="  ",
+    )
+
+    assert settings.OTEL_EXPORTER_OTLP_ENDPOINT is None
+    assert settings.OTEL_EXPORTER_OTLP_HEADERS is None
+
+
+def test_settings_rejects_invalid_trace_sampler_ratio() -> None:
+    with pytest.raises(ValidationError, match="OTEL_TRACES_SAMPLER_RATIO"):
+        Settings(
+            _env_file=None,
+            OTEL_TRACES_SAMPLER_RATIO=1.5,
+        )
+
+
+def test_settings_normalizes_rate_limit_strategy() -> None:
+    settings = Settings(
+        _env_file=None,
+        API_RATE_LIMIT_STRATEGY=" Sliding_Window ",
+    )
+
+    assert settings.API_RATE_LIMIT_STRATEGY == "sliding_window"
+
+
+def test_settings_rejects_invalid_rate_limit_strategy() -> None:
+    with pytest.raises(ValidationError, match="API_RATE_LIMIT_STRATEGY"):
+        Settings(
+            _env_file=None,
+            API_RATE_LIMIT_STRATEGY="token_bucket",
+        )

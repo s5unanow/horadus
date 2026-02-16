@@ -189,6 +189,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Stale-source freshness SLO detection with bounded automatic catch-up dispatch and operator status surfaces (`/api/v1/sources/freshness`, `horadus eval source-freshness`)
 - [x] Collector timeout/retry hardening with transient-vs-terminal classification and bounded requeue for transient all-source outages
 - [x] Unified LLM invocation policy layer with shared budget/safety/retry handling, provider-neutral error taxonomy, and centralized model pricing metadata
+- [x] Configurable API rate-limit smoothing strategy with Redis-atomic sliding-window mode and deterministic throttling semantics
 
 ## In Progress
 
@@ -210,8 +211,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 Execution is now priority-first and dependency-aware.
 
-1. `TASK-097`, `TASK-099`, `TASK-101` (P2, unblocked)
-2. `TASK-098` (unblocked after `TASK-096`)
+1. `TASK-099`, `TASK-101` (P2, unblocked)
+2. `TASK-098` (P2, unblocked after `TASK-096`)
 3. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅

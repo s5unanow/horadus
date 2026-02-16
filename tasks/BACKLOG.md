@@ -1557,11 +1557,11 @@ Reduce boundary-burst behavior from fixed-window rate limiting while preserving
 operator clarity and deterministic throttling semantics.
 
 **Acceptance Criteria**:
-- [ ] Add configurable rate-limit strategy modes (`fixed_window` default + `token_bucket` or `sliding_window`)
-- [ ] Implement distributed-safe algorithm path for Redis backend with atomic updates
-- [ ] Preserve or improve `Retry-After` correctness for denied requests
-- [ ] Add tests for minute-boundary burst behavior and multi-worker consistency
-- [ ] Update auth/deployment docs with strategy tradeoffs and recommended defaults
+- [x] Add configurable rate-limit strategy modes (`fixed_window` default + `token_bucket` or `sliding_window`)
+- [x] Implement distributed-safe algorithm path for Redis backend with atomic updates
+- [x] Preserve or improve `Retry-After` correctness for denied requests
+- [x] Add tests for minute-boundary burst behavior and multi-worker consistency
+- [x] Update auth/deployment docs with strategy tradeoffs and recommended defaults
 
 ---
 

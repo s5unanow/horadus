@@ -26,14 +26,30 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-097`
-2. `TASK-098`
-3. `TASK-099`
-4. `TASK-101`
+1. `TASK-098`
+2. `TASK-099`
+3. `TASK-101`
 
 ---
 
 ## Completed This Sprint
+
+### TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window)
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Added configurable per-key API rate-limit strategy selection with atomic
+distributed sliding-window enforcement and improved boundary-burst behavior.
+
+**Completed**:
+- [x] Added `API_RATE_LIMIT_STRATEGY` runtime setting with validated values (`fixed_window`, `sliding_window`)
+- [x] Implemented Redis Lua-backed atomic sliding-window algorithm with deterministic `Retry-After` behavior
+- [x] Kept fixed-window as recommended default while preserving distributed/memory fallback behavior
+- [x] Added unit coverage for minute-boundary burst behavior and multi-instance distributed consistency in `tests/unit/core/test_api_key_manager.py`
+- [x] Updated auth/deployment docs with strategy tradeoffs and default guidance (`docs/API.md`, `docs/ENVIRONMENT.md`, `docs/DEPLOYMENT.md`)
+
+---
 
 ### TASK-096: Unified LLM Invocation Policy Layer
 **Status**: DONE ✓  

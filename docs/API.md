@@ -16,6 +16,8 @@ API key auth and rate limiting are controlled by environment config.
 - Set `API_AUTH_ENABLED=true` to enforce auth globally
 - Configure keys via `API_KEY` and/or `API_KEYS`
 - Per-key default rate limit is controlled by `API_RATE_LIMIT_PER_MINUTE`
+- Rate-limit algorithm is configured via `API_RATE_LIMIT_STRATEGY` (`fixed_window` default, `sliding_window` optional)
+- On throttling, API returns `429` with `Retry-After` seconds
 
 Example:
 

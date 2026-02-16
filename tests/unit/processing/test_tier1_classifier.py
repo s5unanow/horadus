@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.core.config import settings
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.tier1_classifier import Tier1Classifier
 from src.storage.models import ProcessingStatus, RawItem
@@ -23,6 +24,11 @@ class FakeChatCompletions:
         self.calls.append(kwargs)
         messages = kwargs.get("messages", [])
         user_message = messages[-1]["content"] if isinstance(messages, list) and messages else "{}"
+        if isinstance(user_message, str):
+            user_message = user_message.replace("<UNTRUSTED_TIER1_PAYLOAD>", "").replace(
+                "</UNTRUSTED_TIER1_PAYLOAD>",
+                "",
+            )
         payload = json.loads(user_message)
 
         trends = payload["trends"]
@@ -56,6 +62,12 @@ class _HttpStatusError(Exception):
     def __init__(self, status_code: int):
         super().__init__(f"status {status_code}")
         self.status_code = status_code
+
+
+class _StrictSchemaUnsupportedError(Exception):
+    def __init__(self):
+        super().__init__("response_format json_schema strict mode is not supported")
+        self.status_code = 400
 
 
 def _build_classifier(mock_db_session, *, batch_size: int = 2):
@@ -118,6 +130,11 @@ async def test_classify_items_batches_and_tracks_usage(mock_db_session) -> None:
     assert usage.completion_tokens == 40
     assert usage.estimated_cost_usd == pytest.approx(0.000036, rel=0.001)
     assert len(chat.calls) == 2
+    assert all(
+        isinstance(call.get("response_format"), dict)
+        and call["response_format"].get("type") == "json_schema"
+        for call in chat.calls
+    )
     assert cost_tracker.ensure_within_budget.await_count == 2
     assert cost_tracker.record_usage.await_count == 2
 
@@ -144,7 +161,7 @@ async def test_item_payload_delimits_and_truncates_untrusted_content(
 @pytest.mark.asyncio
 async def test_classify_batch_splits_when_payload_estimate_exceeds_limit(mock_db_session) -> None:
     classifier, chat, cost_tracker = _build_classifier(mock_db_session, batch_size=2)
-    classifier._MAX_REQUEST_INPUT_TOKENS = 10
+    classifier._MAX_REQUEST_INPUT_TOKENS = 1000
 
     def fake_estimate(payload: dict[str, object]) -> int:
         items = payload.get("items", [])
@@ -249,7 +266,12 @@ async def test_classify_items_raises_when_budget_exceeded(mock_db_session) -> No
 
 
 @pytest.mark.asyncio
-async def test_classify_items_fails_over_to_secondary_on_retryable_error(mock_db_session) -> None:
+async def test_classify_items_fails_over_to_secondary_on_retryable_error(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_BACKOFF_SECONDS", 0.0)
     primary_calls: list[dict[str, object]] = []
 
     class PrimaryCompletions:
@@ -271,7 +293,7 @@ async def test_classify_items_fails_over_to_secondary_on_retryable_error(mock_db
     assert len(results) == 1
     assert usage.api_calls == 1
     assert usage.estimated_cost_usd == pytest.approx(0.000027, rel=0.001)
-    assert len(primary_calls) == 1
+    assert len(primary_calls) == 2
     assert len(secondary_chat.calls) == 1
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
@@ -297,3 +319,55 @@ async def test_classify_items_does_not_fail_over_on_non_retryable_error(mock_db_
     with pytest.raises(_HttpStatusError):
         await classifier.classify_items([item], trends)
     assert len(secondary_chat.calls) == 0
+
+
+@pytest.mark.asyncio
+async def test_classify_items_falls_back_when_strict_schema_mode_unavailable(
+    mock_db_session,
+) -> None:
+    response_formats: list[dict[str, object] | None] = []
+
+    class StrictFallbackCompletions:
+        async def create(self, **kwargs):
+            response_format = kwargs.get("response_format")
+            if isinstance(response_format, dict):
+                response_formats.append(response_format)
+            else:
+                response_formats.append(None)
+            if response_format == {"type": "json_object"}:
+                payload = {
+                    "items": [
+                        {
+                            "item_id": str(item.id),
+                            "trend_scores": [
+                                {
+                                    "trend_id": "eu-russia",
+                                    "relevance_score": 8,
+                                    "rationale": "match",
+                                }
+                            ],
+                        }
+                    ]
+                }
+                return SimpleNamespace(
+                    choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                    usage=SimpleNamespace(prompt_tokens=7, completion_tokens=3),
+                )
+            raise _StrictSchemaUnsupportedError
+
+    classifier, _chat, cost_tracker = _build_classifier(mock_db_session, batch_size=1)
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=StrictFallbackCompletions())
+    )
+    item = _build_item("eu-russia escalation")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    results, usage = await classifier.classify_items([item], trends)
+
+    assert len(results) == 1
+    assert usage.api_calls == 1
+    assert response_formats[0] is not None
+    assert response_formats[0].get("type") == "json_schema"
+    assert response_formats[1] == {"type": "json_object"}
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once()

@@ -26,15 +26,31 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-096`
-2. `TASK-097`
-3. `TASK-098` (after `TASK-096`)
-4. `TASK-099`
-5. `TASK-101`
+1. `TASK-097`
+2. `TASK-098`
+3. `TASK-099`
+4. `TASK-101`
 
 ---
 
 ## Completed This Sprint
+
+### TASK-096: Unified LLM Invocation Policy Layer
+**Status**: DONE ✓  
+**Priority**: P2 (Medium)  
+**Spec**: `tasks/BACKLOG.md`
+
+Consolidated duplicated LLM invocation behavior into a shared policy layer with
+centralized safety, retry/failover, budget enforcement, and usage/cost handling.
+
+**Completed**:
+- [x] Added shared invocation policy module (`src/processing/llm_policy.py`) and pricing catalog (`src/processing/llm_pricing.py`)
+- [x] Added provider-neutral failover error taxonomy (`LLMInvocationErrorCode`) and classifier integration in `src/processing/llm_failover.py`
+- [x] Migrated Tier-1/Tier-2/report/retrospective call sites to shared policy invocations while preserving per-stage model/provider routing
+- [x] Added/updated parity unit coverage for policy helpers, failover taxonomy, classifiers, and report/retrospective narrative paths
+- [x] Updated migration docs with unified-policy status and remaining call-site plan in `docs/RESPONSES_API_MIGRATION.md`
+
+---
 
 ### TASK-106: Collector Retry and Timeout Hardening for Low-Frequency Mode
 **Status**: DONE ✓  

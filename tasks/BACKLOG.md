@@ -1538,13 +1538,13 @@ Introduce a shared LLM invocation layer so all call sites enforce consistent
 policy (budget, retry/failover, safety, and telemetry) without duplicated logic.
 
 **Acceptance Criteria**:
-- [ ] Define shared invocation interface usable by Tier1, Tier2, reports, and retrospectives
-- [ ] Centralize budget checks/usage accounting, retry/failover handling, and safety preprocessing hooks
-- [ ] Preserve per-stage model/provider configurability
-- [ ] Introduce provider-neutral invocation error taxonomy so retry/failover behavior is not coupled to OpenAI exception types
-- [ ] Centralize per-model pricing metadata outside classifier classes to avoid hard-coded OpenAI-specific cost tables
-- [ ] Migrate at least one non-Tier path (report or retrospective) to the unified layer with parity tests
-- [ ] Document migration plan for remaining call sites
+- [x] Define shared invocation interface usable by Tier1, Tier2, reports, and retrospectives
+- [x] Centralize budget checks/usage accounting, retry/failover handling, and safety preprocessing hooks
+- [x] Preserve per-stage model/provider configurability
+- [x] Introduce provider-neutral invocation error taxonomy so retry/failover behavior is not coupled to OpenAI exception types
+- [x] Centralize per-model pricing metadata outside classifier classes to avoid hard-coded OpenAI-specific cost tables
+- [x] Migrate at least one non-Tier path (report or retrospective) to the unified layer with parity tests
+- [x] Document migration plan for remaining call sites
 
 ---
 

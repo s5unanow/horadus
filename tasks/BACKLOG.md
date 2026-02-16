@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-086`.
+- Next available task IDs start at `TASK-110`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -17,6 +17,14 @@ Tasks are organized by phase and priority.
 
 - `[REQUIRES_HUMAN]`: task includes a mandatory manual step and must not be auto-completed by an agent.
 - For `[REQUIRES_HUMAN]` tasks, agents may prepare instructions/checklists only and must stop for human completion.
+
+## Task Branching Policy (Hard Rule)
+
+- Every implementation task must be executed on a dedicated task branch created from `main`.
+- Each task branch must contain changes for one `TASK-XXX` only.
+- Open one PR per task branch; merge only after required checks are green.
+- Delete merged task branches to reduce stale branch drift.
+- If additional unrelated work appears during implementation, create a new task and separate branch.
 
 ---
 
@@ -1358,6 +1366,23 @@ key-management endpoints.
 - [ ] Return clear 403/configuration errors when admin key is missing or invalid
 - [ ] Add/adjust endpoint tests for authorized, unauthorized, and misconfigured admin scenarios
 - [ ] Update auth/deployment docs with explicit admin-key requirements
+
+---
+
+### TASK-109: Enforce Branch-Per-Task Delivery Policy
+**Priority**: P1 (High)
+**Estimate**: 30-60 minutes
+**Depends On**: None
+
+Add explicit governance rules requiring dedicated task branches and one-task PR
+scope to prevent multi-task working tree drift.
+
+**Acceptance Criteria**:
+- [x] Add branch-per-task hard rule to `AGENTS.md`
+- [x] Add matching branch policy to `tasks/BACKLOG.md`
+- [x] Require single-task branch scope (`TASK-XXX`) and one PR per task branch
+- [x] Require merge-only-on-green-checks and post-merge branch deletion
+- [x] Require creating a new task + branch for unrelated mid-task discoveries
 
 ---
 

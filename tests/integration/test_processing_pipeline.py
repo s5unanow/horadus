@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -29,6 +30,15 @@ from src.storage.models import (
 pytestmark = pytest.mark.integration
 
 
+def _load_wrapped_json_payload(raw_content: str) -> dict[str, Any]:
+    start = raw_content.find("{")
+    end = raw_content.rfind("}")
+    if start < 0 or end < start:
+        msg = "Unable to locate JSON payload in wrapped content"
+        raise ValueError(msg)
+    return json.loads(raw_content[start : end + 1])
+
+
 class FakeEmbeddingsAPI:
     async def create(self, *, model: str, input: list[str]) -> object:
         _ = model
@@ -47,7 +57,7 @@ class FakeTier1Completions:
         self.calls += 1
         messages = kwargs.get("messages", [])
         user_content = messages[-1]["content"] if messages else "{}"
-        payload = json.loads(user_content)
+        payload = _load_wrapped_json_payload(user_content)
         trend_id = payload["trends"][0]["trend_id"]
 
         items = []
@@ -81,7 +91,7 @@ class FakeTier2Completions:
         self.calls += 1
         messages = kwargs.get("messages", [])
         user_content = messages[-1]["content"] if messages else "{}"
-        payload = json.loads(user_content)
+        payload = _load_wrapped_json_payload(user_content)
         trend_id = payload["trends"][0]["trend_id"]
 
         response_payload = {

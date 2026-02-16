@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from threading import RLock
-from typing import ClassVar, Literal
+from typing import Any, ClassVar, Literal, cast
 from uuid import uuid4
 
 import redis
@@ -318,7 +318,7 @@ return {0, retry_ms}
         now_ms = int(now * 1000)
         bucket_key = f"{self._rate_limit_redis_prefix}:sw:{key_id}"
         request_member = f"{now_ms}:{secrets.token_hex(8)}"
-        result_raw = redis_client.eval(
+        result_raw = cast("Any", redis_client).eval(
             self._SLIDING_WINDOW_LUA,
             1,
             bucket_key,

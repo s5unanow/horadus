@@ -68,14 +68,14 @@ async def create_route_completion(
         if response_format is not None:
             msg = "Responses API adapter does not support response_format yet"
             raise ValueError(msg)
-        create_kwargs: dict[str, Any] = {
+        responses_create_kwargs: dict[str, Any] = {
             "model": route.model,
             "temperature": temperature,
             "input": _to_responses_input(messages),
         }
         if isinstance(request_overrides, dict):
-            create_kwargs.update(request_overrides)
-        raw_response = await route.client.responses.create(**create_kwargs)
+            responses_create_kwargs.update(request_overrides)
+        raw_response = await route.client.responses.create(**responses_create_kwargs)
         output_text = _extract_responses_output_text(raw_response)
         usage = getattr(raw_response, "usage", None)
         prompt_tokens = int(getattr(usage, "input_tokens", 0) or 0)

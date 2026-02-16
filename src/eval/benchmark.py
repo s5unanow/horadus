@@ -501,6 +501,8 @@ async def run_gold_set_benchmark(
     max_items: int = 200,
     config_names: list[str] | None = None,
     require_human_verified: bool = False,
+    dispatch_mode: str = "realtime",
+    request_priority: str = "realtime",
 ) -> Path:
     """
     Run Tier-1/Tier-2 benchmark over a gold set and persist JSON results.
@@ -521,6 +523,8 @@ async def run_gold_set_benchmark(
         "gold_set_path": str(Path(gold_set_path)),
         "items_evaluated": len(gold_items),
         "require_human_verified": require_human_verified,
+        "dispatch_mode": dispatch_mode,
+        "request_priority": request_priority,
         "label_verification_counts": label_verification_counts,
         "dataset_scope": {
             "max_items": bounded_max_items,

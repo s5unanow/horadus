@@ -86,6 +86,7 @@ Tasks that have been completed and verified.
 - TASK-083: Documentation and OpenAPI Drift Cleanup ✅
 - TASK-109: Enforce Branch-Per-Task Delivery Policy ✅
 - TASK-110: Task Delivery Workflow Guardrails and Enforcement ✅
+- TASK-111: Main Branch Merge-Completeness Audit ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

@@ -1,0 +1,372 @@
+{
+  "completed_task_count": 80,
+  "main_task_id_count": 70,
+  "missing_from_main_commit_text": [
+    "TASK-001",
+    "TASK-007",
+    "TASK-008",
+    "TASK-009",
+    "TASK-028",
+    "TASK-029",
+    "TASK-030",
+    "TASK-032",
+    "TASK-053",
+    "TASK-054",
+    "TASK-057"
+  ],
+  "branch_status_counts": {
+    "merged_ancestor": 1,
+    "merged_via_squash_or_rewrite": 52,
+    "open_pr_unmerged": 0,
+    "no_pr_unmerged": 2
+  },
+  "unmerged_branches": [
+    {
+      "remote_branch": "origin/codex/task-039-calibration-runbook",
+      "status": "no_pr_unmerged",
+      "latest_commit": "4382340\tdocs(repo): add calibration ops runbook",
+      "task_ids": [
+        "TASK-039"
+      ],
+      "open_prs": [],
+      "merged_prs": []
+    },
+    {
+      "remote_branch": "origin/codex/task-054-llm-input-safety",
+      "status": "no_pr_unmerged",
+      "latest_commit": "8e15b23\tfeat(processing): harden llm input safety guardrails",
+      "task_ids": [
+        "TASK-054"
+      ],
+      "open_prs": [],
+      "merged_prs": []
+    }
+  ],
+  "missing_task_candidates": [],
+  "unmerged_branches_without_task_id": [],
+  "task_branch_coverage": {
+    "TASK-005": {
+      "merged_branches": [
+        "origin/codex/task-005-source-management"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-006": {
+      "merged_branches": [
+        "origin/codex/task-006-integration-verification",
+        "origin/codex/task-006-rss-collector"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-007": {
+      "merged_branches": [
+        "origin/codex/task-007-gdelt-client"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-008": {
+      "merged_branches": [
+        "origin/codex/task-008-celery-setup"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-009": {
+      "merged_branches": [
+        "origin/codex/task-009-telegram-harvester"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-010": {
+      "merged_branches": [
+        "origin/codex/task-010-embedding-service"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-011": {
+      "merged_branches": [
+        "origin/codex/task-011-deduplication-service"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-012": {
+      "merged_branches": [
+        "origin/codex/task-012-event-clusterer"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-013": {
+      "merged_branches": [
+        "origin/codex/task-013-tier1-classifier"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-014": {
+      "merged_branches": [
+        "origin/codex/task-014-tier2-classifier"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-015": {
+      "merged_branches": [
+        "origin/codex/task-015-processing-pipeline"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-016": {
+      "merged_branches": [
+        "origin/codex/task-016-trend-management"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-017": {
+      "merged_branches": [
+        "origin/codex/task-017-trend-engine"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-018": {
+      "merged_branches": [
+        "origin/codex/task-018-evidence-orchestration"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-019": {
+      "merged_branches": [
+        "origin/codex/task-019-trend-snapshots"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-020": {
+      "merged_branches": [
+        "origin/codex/task-020-decay-worker"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-021": {
+      "merged_branches": [
+        "origin/codex/task-021-weekly-reports"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-022": {
+      "merged_branches": [
+        "origin/codex/task-022-monthly-reports"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-023": {
+      "merged_branches": [
+        "origin/codex/task-023-retrospective-analysis"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-024": {
+      "merged_branches": [
+        "origin/codex/task-024-api-docs"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-025": {
+      "merged_branches": [
+        "origin/codex/task-025-auth-rate-limit"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-026": {
+      "merged_branches": [
+        "origin/codex/task-026-monitoring-alerting"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-027": {
+      "merged_branches": [
+        "origin/codex/task-027-deployment-configuration"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-028": {
+      "merged_branches": [
+        "origin/codex/task-028-risk-levels"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-029": {
+      "merged_branches": [
+        "origin/codex/task-029-enhanced-trend-config"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-030": {
+      "merged_branches": [
+        "origin/codex/task-030-event-lifecycle"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-031": {
+      "merged_branches": [
+        "origin/codex/task-031-source-credibility-multipliers"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-032": {
+      "merged_branches": [
+        "origin/codex/task-032-trend-outcomes"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-033": {
+      "merged_branches": [
+        "origin/codex/task-033-contradiction-detection"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-034": {
+      "merged_branches": [
+        "origin/codex/task-034-human-feedback"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-035": {
+      "merged_branches": [
+        "origin/codex/task-035-calibration-dashboard"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-036": {
+      "merged_branches": [
+        "origin/codex/task-036-cost-protection"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-037": {
+      "merged_branches": [
+        "origin/codex/task-037-coverage-guardrails"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-038": {
+      "merged_branches": [
+        "origin/codex/task-038-drift-alert-delivery"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-039": {
+      "merged_branches": [
+        "origin/codex/task-039-calibration-runbook-2"
+      ],
+      "unmerged_branches": [
+        "origin/codex/task-039-calibration-runbook"
+      ]
+    },
+    "TASK-040": {
+      "merged_branches": [
+        "origin/codex/task-040-llm-failover"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-041": {
+      "merged_branches": [
+        "origin/codex/task-041-model-eval-benchmark"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-042": {
+      "merged_branches": [
+        "origin/codex/task-042-ci-uv-toolchain"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-043": {
+      "merged_branches": [
+        "origin/codex/task-043-eval-human-gating"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-045": {
+      "merged_branches": [
+        "origin/codex/task-045-eval-audit-tooling"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-046": {
+      "merged_branches": [
+        "origin/codex/task-046-050-governance-hardening"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-047": {
+      "merged_branches": [
+        "origin/codex/task-047-baseline-v2"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-052": {
+      "merged_branches": [
+        "origin/codex/task-052-distributed-rate-limit"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-053": {
+      "merged_branches": [
+        "origin/codex/task-053-atomic-budget-enforcement"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-054": {
+      "merged_branches": [
+        "origin/codex/task-054-llm-input-safety-v2"
+      ],
+      "unmerged_branches": [
+        "origin/codex/task-054-llm-input-safety"
+      ]
+    },
+    "TASK-055": {
+      "merged_branches": [
+        "origin/codex/task-055-056-067-hardening"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-057": {
+      "merged_branches": [
+        "origin/codex/task-057-runtime-resilience"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-060": {
+      "merged_branches": [
+        "origin/codex/task-060-counterfactual-api"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-061": {
+      "merged_branches": [
+        "origin/codex/task-061-recency-decay"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-065": {
+      "merged_branches": [
+        "origin/codex/task-061-recency-decay"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-068": {
+      "merged_branches": [
+        "origin/codex/task-068-goldset-supersession-policy"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-109": {
+      "merged_branches": [
+        "origin/codex/task-109-branch-policy"
+      ],
+      "unmerged_branches": []
+    },
+    "TASK-110": {
+      "merged_branches": [
+        "origin/codex/task-110-workflow-guards"
+      ],
+      "unmerged_branches": []
+    }
+  }
+}

@@ -498,6 +498,19 @@ def _ensure_definition_id(definition: dict[str, Any], *, trend_name: str) -> dic
     return updated_definition
 
 
+def _sync_definition_baseline_probability(
+    definition: dict[str, Any],
+    *,
+    baseline_log_odds: float,
+) -> dict[str, Any]:
+    updated_definition = dict(definition)
+    updated_definition["baseline_probability"] = round(
+        logodds_to_prob(float(baseline_log_odds)),
+        6,
+    )
+    return updated_definition
+
+
 async def _get_evidence_stats(
     session: AsyncSession,
     *,
@@ -726,6 +739,10 @@ async def load_trends_from_config(
                 parsed_config.model_dump(mode="json", exclude_none=True),
                 trend_name=trend_name,
             )
+            definition = _sync_definition_baseline_probability(
+                definition,
+                baseline_log_odds=baseline_log_odds,
+            )
 
             existing = await session.scalar(select(Trend).where(Trend.name == trend_name).limit(1))
             if existing is None:
@@ -794,6 +811,10 @@ async def create_trend(
 
     definition = _ensure_definition_id(trend.definition, trend_name=trend.name)
     baseline_log_odds = prob_to_logodds(trend.baseline_probability)
+    definition = _sync_definition_baseline_probability(
+        definition,
+        baseline_log_odds=baseline_log_odds,
+    )
     current_probability = (
         trend.current_probability
         if trend.current_probability is not None
@@ -1107,6 +1128,15 @@ async def update_trend(
 
     if "baseline_probability" in updates and updates["baseline_probability"] is not None:
         updates["baseline_log_odds"] = prob_to_logodds(updates.pop("baseline_probability"))
+
+    if "definition" in updates or "baseline_log_odds" in updates:
+        baseline_log_odds = updates.get("baseline_log_odds", float(trend_record.baseline_log_odds))
+        base_definition = updates.get("definition", trend_record.definition)
+        updates["definition"] = _sync_definition_baseline_probability(
+            base_definition,
+            baseline_log_odds=baseline_log_odds,
+        )
+
     if "current_probability" in updates and updates["current_probability"] is not None:
         updates["current_log_odds"] = prob_to_logodds(updates.pop("current_probability"))
 

@@ -1,7 +1,12 @@
 # Potential Issues & Technical Debt
 
-**Last Updated**: 2026-01-04
-**Status**: Active review document
+**Last Updated**: 2026-02-16
+**Status**: Archived historical snapshot (superseded)
+
+> This document is retained for historical context from early scaffolding.
+> Many items below are resolved. Use `tasks/CURRENT_SPRINT.md`,
+> `tasks/BACKLOG.md`, and `PROJECT_STATUS.md` as the authoritative current
+> status/risk trackers.
 
 This document tracks identified issues, vulnerabilities, and technical debt that require attention before production readiness.
 

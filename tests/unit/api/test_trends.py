@@ -101,7 +101,7 @@ async def test_create_trend_persists_new_record(mock_db_session) -> None:
         trend=TrendCreate(
             name="EU-Russia Conflict",
             description="Tracks conflict probability",
-            definition={},
+            definition={"baseline_probability": 0.99},
             baseline_probability=0.08,
             indicators={"military_movement": {"direction": "escalatory"}},
         ),
@@ -113,6 +113,7 @@ async def test_create_trend_persists_new_record(mock_db_session) -> None:
     assert result.name == "EU-Russia Conflict"
     assert result.current_probability == pytest.approx(0.08, rel=0.01)
     assert added.definition["id"] == "eu-russia-conflict"
+    assert added.definition["baseline_probability"] == pytest.approx(0.08, rel=0.001)
     assert float(added.baseline_log_odds) == pytest.approx(prob_to_logodds(0.08), rel=0.001)
     assert mock_db_session.flush.await_count == 1
 
@@ -164,11 +165,31 @@ async def test_update_trend_updates_fields_and_probabilities(mock_db_session) ->
 
     assert trend.name == "Updated Trend"
     assert trend.definition["id"] == "updated-trend"
+    assert trend.definition["baseline_probability"] == pytest.approx(0.25, rel=0.001)
     assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.25), rel=0.001)
     assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.35), rel=0.001)
     assert trend.is_active is False
     assert result.current_probability == pytest.approx(0.35, rel=0.01)
     assert mock_db_session.flush.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_update_trend_syncs_definition_baseline_without_definition_payload(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    trend.definition = {"id": "test-trend", "baseline_probability": 0.9}
+    mock_db_session.get.return_value = trend
+
+    await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(baseline_probability=0.2),
+        session=mock_db_session,
+    )
+
+    assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    assert trend.definition["baseline_probability"] == pytest.approx(0.2, rel=0.001)
+    assert trend.definition["id"] == "test-trend"
 
 
 @pytest.mark.asyncio
@@ -211,6 +232,7 @@ indicators:
     added = mock_db_session.add.call_args.args[0]
     assert added.name == "Sample Trend"
     assert logodds_to_prob(float(added.baseline_log_odds)) == pytest.approx(0.15, rel=0.01)
+    assert added.definition["baseline_probability"] == pytest.approx(0.15, rel=0.001)
     assert mock_db_session.flush.await_count == 1
 
 

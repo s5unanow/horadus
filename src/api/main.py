@@ -24,6 +24,7 @@ from src.api.middleware.auth import APIKeyAuthMiddleware
 from src.api.routes import auth, budget, events, feedback, health, metrics, reports, sources, trends
 from src.core.config import settings
 from src.core.logging_setup import configure_logging
+from src.core.migration_parity import check_migration_parity
 from src.storage.database import async_session_maker, engine
 
 logger = structlog.get_logger(__name__)
@@ -94,6 +95,25 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
     try:
         async with async_session_maker() as session:
             await session.execute(text("SELECT 1"))
+            if settings.MIGRATION_PARITY_CHECK_ENABLED:
+                migration_check = await check_migration_parity(session)
+                if migration_check["status"] == "healthy":
+                    logger.info(
+                        "Migration parity verified",
+                        current_revision=migration_check.get("current_revision"),
+                        expected_head=migration_check.get("expected_head"),
+                    )
+                else:
+                    logger.warning(
+                        "Migration parity check failed",
+                        details=migration_check,
+                    )
+                    if settings.MIGRATION_PARITY_STRICT_STARTUP:
+                        raise RuntimeError(
+                            f"Migration parity check failed: {migration_check.get('message')}",
+                        )
+            else:
+                logger.info("Migration parity check disabled by configuration")
         logger.info("Database connection verified")
     except Exception as e:
         logger.error("Database connection failed", error=str(e))
@@ -125,8 +145,8 @@ def create_app() -> FastAPI:
         scheme_name="ApiKeyAuth",
         auto_error=False,
         description=(
-            "Optional API key header. This is documented now and will be enforced "
-            "once TASK-025 authentication middleware lands."
+            "API key header evaluated by runtime auth middleware. "
+            "Required when API auth is enabled or keys are configured."
         ),
     )
 

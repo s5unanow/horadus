@@ -16,6 +16,11 @@ from src.core.dashboard_export import export_calibration_dashboard
 from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
 from src.eval.replay import available_replay_configs, run_historical_replay_comparison
+from src.eval.taxonomy_validation import (
+    Tier1TrendMode,
+    TrendMode,
+    run_trend_taxonomy_validation,
+)
 from src.eval.vector_benchmark import run_vector_retrieval_benchmark
 from src.storage.database import async_session_maker
 
@@ -177,6 +182,41 @@ def _run_eval_audit(
     return 0
 
 
+def _run_eval_validate_taxonomy(
+    *,
+    trend_config_dir: str,
+    gold_set: str,
+    output_dir: str,
+    max_items: int,
+    tier1_trend_mode: Tier1TrendMode,
+    signal_type_mode: TrendMode,
+    unknown_trend_mode: TrendMode,
+    fail_on_warnings: bool,
+) -> int:
+    result = run_trend_taxonomy_validation(
+        trend_config_dir=trend_config_dir,
+        gold_set_path=gold_set,
+        output_dir=output_dir,
+        max_items=max(1, max_items),
+        tier1_trend_mode=tier1_trend_mode,
+        signal_type_mode=signal_type_mode,
+        unknown_trend_mode=unknown_trend_mode,
+    )
+    print(f"Taxonomy validation output: {result.output_path}")
+    if result.warnings:
+        print("Taxonomy validation warnings:")
+        for warning in result.warnings:
+            print(f"- {warning}")
+    if result.errors:
+        print("Taxonomy validation errors:")
+        for error in result.errors:
+            print(f"- {error}")
+        return 2
+    if fail_on_warnings and result.warnings:
+        return 2
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="horadus")
     subparsers = parser.add_subparsers(dest="command")
@@ -273,6 +313,55 @@ def _build_parser() -> argparse.ArgumentParser:
         "--fail-on-warnings",
         action="store_true",
         help="Return non-zero exit code if audit warnings are present.",
+    )
+
+    eval_taxonomy_parser = eval_subparsers.add_parser(
+        "validate-taxonomy",
+        help="Validate trend config taxonomy contract against the evaluation gold set.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--trend-config-dir",
+        default="config/trends",
+        help="Directory containing trend config YAML files.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--gold-set",
+        default="ai/eval/gold_set.jsonl",
+        help="Path to gold-set JSONL file.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for taxonomy validation result artifacts.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--max-items",
+        type=int,
+        default=200,
+        help="Maximum dataset rows to validate.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--tier1-trend-mode",
+        choices=["strict", "subset"],
+        default="strict",
+        help="Tier-1 key validation mode: strict exact match or subset compatibility.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--signal-type-mode",
+        choices=["strict", "warn"],
+        default="strict",
+        help="Tier-2 signal-type mismatch behavior.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--unknown-trend-mode",
+        choices=["strict", "warn"],
+        default="strict",
+        help="Unknown trend_id mismatch behavior for Tier-1/Tier-2 labels.",
+    )
+    eval_taxonomy_parser.add_argument(
+        "--fail-on-warnings",
+        action="store_true",
+        help="Return non-zero exit code when warnings are emitted.",
     )
 
     eval_replay_parser = eval_subparsers.add_parser(
@@ -400,6 +489,17 @@ def main(argv: Sequence[str] | None = None) -> int:
             gold_set=args.gold_set,
             output_dir=args.output_dir,
             max_items=args.max_items,
+            fail_on_warnings=args.fail_on_warnings,
+        )
+    if args.command == "eval" and args.eval_command == "validate-taxonomy":
+        return _run_eval_validate_taxonomy(
+            trend_config_dir=args.trend_config_dir,
+            gold_set=args.gold_set,
+            output_dir=args.output_dir,
+            max_items=args.max_items,
+            tier1_trend_mode=args.tier1_trend_mode,
+            signal_type_mode=args.signal_type_mode,
+            unknown_trend_mode=args.unknown_trend_mode,
             fail_on_warnings=args.fail_on_warnings,
         )
     if args.command == "eval" and args.eval_command == "replay":

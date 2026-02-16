@@ -50,19 +50,23 @@ Required handling:
 
 ## Release Gate Workflow
 
-1. Validate dataset quality
+1. Validate taxonomy contract
+- Strict gate (target state): `uv run --no-sync horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode strict --signal-type-mode strict --unknown-trend-mode strict`
+- Transitional gate (while taxonomy/gold-set alignment is still in progress): `uv run --no-sync horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode subset --signal-type-mode warn --unknown-trend-mode warn`
+
+2. Validate dataset quality
 - Run: `uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --fail-on-warnings`
 - If audit fails, do not promote prompt changes.
 
-2. Run benchmark
+3. Run benchmark
 - Preferred (true gold): `uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --require-human-verified`
 - Temporary fallback (until TASK-044): run without `--require-human-verified`, and mark run as provisional.
 
-3. Compare candidate vs pinned baseline
+4. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.
 - Record comparison notes in PR description.
 
-4. Decision
+5. Decision
 - Promote only if candidate passes all required gates below.
 
 ## Required Gates (Initial Defaults)

@@ -1,5 +1,7 @@
 # Architecture Overview
 
+**Last Verified**: 2026-02-16
+
 ## System Context
 
 ```
@@ -119,57 +121,46 @@ Current model mapping (see ADR-002):
        │
        ▼
 ┌─────────────┐
+│ Dedup check │
+│ (url/hash)  │
+└──────┬──────┘
+       │
+       ├──────── duplicate ───────▶ mark as noise
+       │
+       ▼
+┌─────────────┐
+│  Compute    │
+│  embedding  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
+│ Cluster to  │
+│ event       │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────┐
 │ Tier 1 LLM  │
-│ (nano)      │
 │ relevance   │
 │ score 0-10  │
 └──────┬──────┘
        │
-       ├─────────────────────────────────┐
-       │ score < 5                       │ score >= 5
-       ▼                                 ▼
-┌─────────────┐                   ┌─────────────┐
-│   Mark as   │                   │ Tier 2 LLM  │
-│   "noise"   │                   │ (mini)      │
-│   Archive   │                   │             │
-└─────────────┘                   │ • classify  │
-                                  │ • extract   │
-                                  │ • summarize │
-                                  └──────┬──────┘
-                                         │
-                                         ▼
-                                  ┌─────────────┐
-                                  │  Compute    │
-                                  │  embedding  │
-                                  └──────┬──────┘
-                                         │
-                                         ▼
-                                  ┌─────────────┐     ┌─────────────┐
-                                  │  Find       │────▶│   Merge     │
-                                  │  similar    │sim  │   into      │
-                                  │  events     │>0.88│   existing  │
-                                  └──────┬──────┘     │   event     │
-                                         │new         └──────┬──────┘
-                                         ▼                   │
-                                  ┌─────────────┐            │
-                                  │  Create     │            │
-                                  │  new event  │            │
-                                  └──────┬──────┘            │
-                                         │                   │
-                                         └─────────┬─────────┘
-                                                   │
-                                                   ▼
-                                  ┌─────────────────────────────┐
-                                  │   For each matching trend:  │
-                                  │                             │
-                                  │   1. Identify signal type   │
-                                  │   2. Get source credibility │
-                                  │   3. Count corroboration    │
-                                  │   4. Assess novelty         │
-                                  │   5. Calculate delta        │
-                                  │   6. Update log_odds        │
-                                  │   7. Store evidence record  │
-                                  └─────────────────────────────┘
+       ├──────── score < threshold ───▶ mark as noise
+       │
+       ▼
+┌─────────────┐
+│ Tier 2 LLM  │
+│ classify +  │
+│ extraction  │
+└──────┬──────┘
+       │
+       ▼
+┌─────────────────────────────┐
+│ Apply deterministic trend   │
+│ deltas (log-odds update +   │
+│ evidence provenance record) │
+└─────────────────────────────┘
 ```
 
 ### 3. Probability Update (Detail)
@@ -359,7 +350,7 @@ feeds:
 
 1. **API Keys**: Stored in environment variables, never in code
 2. **Database**: No PII stored (news is public data)
-3. **API Access**: Rate limiting (future)
+3. **API Access**: Redis-backed API key auth + rate limiting is implemented
 4. **Telegram**: Session files encrypted at rest
 5. **LLM**: No sensitive data sent to external APIs
 

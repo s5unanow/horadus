@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-069`.
+- Next available task IDs start at `TASK-086`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -1093,6 +1093,271 @@ Define how evaluation baselines are handled when the gold-set content/labels cha
 - [ ] Ensure benchmark artifacts include dataset fingerprint metadata for comparison integrity
 - [ ] Update eval policy and baseline docs with a concrete operator checklist for dataset-version transitions
 - [ ] Keep process aligned with `[REQUIRES_HUMAN]` gold-set curation flow (`TASK-044`)
+
+---
+
+### TASK-069: Baseline Source-of-Truth Unification for Decay
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Fix baseline inconsistency so trend decay always uses the canonical stored baseline.
+
+**Acceptance Criteria**:
+- [ ] Update decay logic to use `Trend.baseline_log_odds` as the single source of truth (no decay fallback to `definition.baseline_probability`)
+- [ ] Keep `definition.baseline_probability` synchronized on trend create/update/config-sync paths for metadata consistency
+- [ ] Add one-time baseline backfill to align existing `definition.baseline_probability` values with stored `baseline_log_odds`
+- [ ] Add unit tests covering stale/missing `definition.baseline_probability` and confirming decay targets DB baseline
+- [ ] Update docs to clarify canonical baseline field and synchronization behavior
+
+---
+
+### TASK-070: Trend Baseline Prior Review and Sign-Off [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours (human analysis + review)
+
+Manually validate whether initial trend baselines reflect defensible priors before relying on long-run decay behavior.
+
+**Acceptance Criteria**:
+- [ ] Human analyst reviews baseline probability for each active trend and documents rationale + date stamp
+- [ ] Human analyst approves or adjusts each baseline prior (with justification) in config/API records
+- [ ] Baseline decisions are logged in sprint notes with reviewer sign-off
+- [ ] Post-review check confirms DB baseline and trend definition baseline are consistent for reviewed trends
+- [ ] Task remains blocked for autonomous completion until explicit human sign-off is recorded
+
+---
+
+### TASK-071: Migration Drift Quality Gates
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Add enforceable migration parity gates so schema drift is caught before tests/release checks.
+
+**Acceptance Criteria**:
+- [ ] Add a reusable migration-drift check script that fails when current DB revision != Alembic head
+- [ ] Include optional strict Alembic autogenerate parity mode (`MIGRATION_GATE_VALIDATE_AUTOGEN=true`)
+- [ ] Wire migration gate into local integration workflow (Make target / integration test path)
+- [ ] Wire migration gate into CI integration path before tests execute
+- [ ] Document migration gate command(s) in release and deployment runbooks
+
+---
+
+### TASK-072: Runtime Migration Parity Health Signal
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Expose schema revision parity at runtime to prevent long-lived drift in always-on environments.
+
+**Acceptance Criteria**:
+- [ ] Add startup/runtime check that compares app DB revision to Alembic head
+- [ ] Surface migration parity state in `/health` payload for operators
+- [ ] Add strict mode option to fail startup when migration drift is detected
+- [ ] Add tests for healthy, drifted, and strict-mode startup behavior
+- [ ] Document runtime migration parity controls in environment/deployment docs
+
+---
+
+### TASK-073: Alembic Autogenerate Baseline Drift Cleanup
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Resolve existing model/schema parity diffs so `alembic check` can be enforced as a fail-closed default gate.
+
+**Acceptance Criteria**:
+- [ ] Reproduce and document current `alembic check` drift findings in a deterministic local command path
+- [ ] Align SQLAlchemy models and migrations to eliminate known autogenerate drift (server-default/index metadata mismatches)
+- [ ] Add or adjust migration(s) where needed so upgraded DB state matches model metadata
+- [ ] Validate `alembic check` passes on the integration DB after `alembic upgrade head`
+- [ ] Add/adjust tests to prevent regression of the fixed drift cases
+
+---
+
+### TASK-074: Enforce Strict Alembic Check Gate by Default
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Enable strict autogenerate parity validation in default local and CI quality gates after baseline cleanup.
+
+**Acceptance Criteria**:
+- [ ] Set migration gate strict mode (`MIGRATION_GATE_VALIDATE_AUTOGEN=true`) in CI integration workflow
+- [ ] Set migration gate strict mode in local integration path (`make test-integration`) by default
+- [ ] Keep an explicit override path for emergency bypass (`MIGRATION_GATE_VALIDATE_AUTOGEN=false`) while documenting policy
+- [ ] Update release/deployment/environment docs with strict-gate expectations and remediation steps
+- [ ] Verify CI/local integration commands pass with strict mode enabled
+
+---
+
+### TASK-075: Container Secret Provisioning and Rotation Runbook
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours  
+**Spec**: `tasks/specs/075-container-secret-provisioning-rotation.md`
+
+Standardize production secret handling for containerized deploys using mounted
+secret files + `*_FILE` variables, with a documented low-risk rotation workflow.
+
+**Acceptance Criteria**:
+- [ ] Document production secret provisioning via read-only mounted files and `*_FILE` environment variables (no raw secrets in `.env`)
+- [ ] Provide a concrete host-side secret layout example and Docker Compose mount pattern for `api`, `worker`, and `beat`
+- [ ] Document key rotation workflow (prepare new secret, apply mount/env updates, restart/recreate app containers, verify health)
+- [ ] Document emergency rollback flow for failed secret rotation
+- [ ] Update deployment and environment docs with an operator checklist for secret hygiene (`chmod`, ownership, access scope)
+
+---
+
+### TASK-076: Trend Taxonomy Contract and Gold-Set Validation Gate
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours  
+**Spec**: `tasks/specs/076-trend-taxonomy-validation-gate.md`
+
+Add an enforceable validation gate that prevents `trend_id`/schema drift between
+`config/trends/*.yaml` and evaluation datasets (gold sets).
+
+**Acceptance Criteria**:
+- [ ] Add a reusable validation command/script that loads and validates all trend YAMLs via `TrendConfig`
+- [ ] Fail when trend `id` values are duplicated or missing in trend configs
+- [ ] Validate gold-set `tier2.trend_id` values are members of configured trend IDs
+- [ ] Validate gold-set `tier1.trend_scores` keys match configured trend IDs (strict mode) with a documented subset/lenient mode if needed
+- [ ] Validate `tier2.signal_type` exists in configured trend indicators for the selected `trend_id` (strict or warning mode, documented)
+- [ ] Add unit tests for pass/fail scenarios (duplicate IDs, unknown trend IDs, key mismatch, unknown signal types)
+- [ ] Wire validation into local/CI quality gate path and document usage
+
+---
+
+### TASK-077: Cost-First Pipeline Ordering [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Reduce avoidable compute cost by ensuring high-noise items are filtered before
+embedding/clustering work where feasible.
+
+**Acceptance Criteria**:
+- [ ] Refactor pipeline flow so Tier-1 relevance filtering runs before embedding + clustering for new pending raw items
+- [ ] Keep deterministic duplicate suppression behavior intact and idempotent
+- [ ] Ensure Tier-1 noise items do not trigger embedding API calls or clustering operations
+- [ ] Preserve metric accounting for scanned/noise/classified flows after reordering
+- [ ] Add/adjust unit and integration tests for reordered pipeline behavior
+
+---
+
+### TASK-078: Tier-1 Batch Classification in Orchestrator
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Use existing Tier-1 batch capability from orchestrator execution instead of
+single-item invocation to improve token/call efficiency.
+
+**Acceptance Criteria**:
+- [ ] Replace per-item Tier-1 invocation with batched `classify_items` orchestration
+- [ ] Respect configured Tier-1 batch-size controls
+- [ ] Preserve one-to-one mapping from item to Tier-1 result with deterministic ordering
+- [ ] Keep budget, retry, and failure handling semantics unchanged
+- [ ] Add/adjust tests for batch result mapping and partial failure handling
+
+---
+
+### TASK-079: Periodic Pending Processing Schedule
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Prevent pending-item stalls during quiet ingestion periods by adding periodic
+`workers.process_pending_items` scheduling.
+
+**Acceptance Criteria**:
+- [ ] Add Celery beat schedule entry for `workers.process_pending_items`
+- [ ] Gate schedule by `ENABLE_PROCESSING_PIPELINE`
+- [ ] Add configurable interval setting for periodic pending processing cadence
+- [ ] Ensure schedule is idempotent and safe under concurrent worker execution
+- [ ] Add tests for beat schedule composition and setting-driven enable/disable behavior
+
+---
+
+### TASK-080: Telegram Collector Task Wiring [REQUIRES_HUMAN]
+**Priority**: P2 (Medium)
+**Estimate**: 3-5 hours
+
+Wire existing Telegram harvester into worker task and scheduler paths.
+
+**Acceptance Criteria**:
+- [ ] Add `workers.collect_telegram` task implementation in worker tasks module
+- [ ] Add Celery routing and beat scheduling for Telegram collection
+- [ ] Gate execution via `ENABLE_TELEGRAM_INGESTION`
+- [ ] Add configurable Telegram collection interval setting
+- [ ] Add tests for scheduling/task wiring and disabled-mode behavior
+
+---
+
+### TASK-081: Readiness Probe HTTP Semantics Fix
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Ensure readiness endpoint returns proper non-2xx status when dependencies fail.
+
+**Acceptance Criteria**:
+- [ ] Update `/health/ready` to return HTTP 503 on readiness failures
+- [ ] Keep success response as HTTP 200 with stable payload shape
+- [ ] Preserve structured warning logs for failure reasons
+- [ ] Add/adjust API tests validating status-code semantics for success/failure
+
+---
+
+### TASK-082: Vector Index Profile Parity (Model vs Migration)
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Align vector index metadata with deployed migration profile to avoid drift and
+operator confusion.
+
+**Acceptance Criteria**:
+- [ ] Align SQLAlchemy model metadata index profile with current migration-managed profile (`lists=64`) or explicitly document intentional divergence
+- [ ] Ensure `alembic check` remains clean after alignment
+- [ ] Add/adjust tests asserting expected vector index metadata values
+- [ ] Update docs where vector index profile is referenced
+
+---
+
+### TASK-083: Documentation and OpenAPI Drift Cleanup
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Remove stale statements that conflict with current implementation and hardening
+state.
+
+**Acceptance Criteria**:
+- [ ] Update `docs/ARCHITECTURE.md` sections that still describe now-implemented features as future work
+- [ ] Refresh or explicitly archive stale `docs/POTENTIAL_ISSUES.md` snapshot content so status labels are accurate
+- [ ] Fix stale OpenAPI/auth wording in API bootstrap comments/descriptions
+- [ ] Add concrete "last verified" timestamps where appropriate in operational docs
+
+---
+
+### TASK-084: Production Security Default Guardrails [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Reduce accidental insecure deployments by enforcing fail-fast checks for
+production runtime configuration.
+
+**Acceptance Criteria**:
+- [ ] Add production-mode validation that rejects known insecure defaults (e.g., weak `SECRET_KEY`)
+- [ ] Add production-mode validation/policy for API auth enablement expectations
+- [ ] Keep local development defaults ergonomic without weakening production safeguards
+- [ ] Add tests for production config validation pass/fail paths
+- [ ] Update environment/deployment docs with explicit production-safe defaults
+
+---
+
+### TASK-085: Require Explicit Admin Key for Key Management [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 2-3 hours
+
+Tighten admin access controls by removing permissive fallback behavior for auth
+key-management endpoints.
+
+**Acceptance Criteria**:
+- [ ] Remove fallback that grants admin access from any authenticated API key when `API_ADMIN_KEY` is unset
+- [ ] Require explicit admin credential configuration for key-management operations
+- [ ] Return clear 403/configuration errors when admin key is missing or invalid
+- [ ] Add/adjust endpoint tests for authorized, unauthorized, and misconfigured admin scenarios
+- [ ] Update auth/deployment docs with explicit admin-key requirements
 
 ---
 

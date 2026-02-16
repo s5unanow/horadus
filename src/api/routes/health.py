@@ -12,11 +12,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
+from src.core.migration_parity import check_migration_parity
 from src.storage.database import get_session
 
 logger = structlog.get_logger(__name__)
@@ -42,6 +45,11 @@ class HealthStatus(BaseModel):
                     "database": {"status": "healthy", "latency_ms": 3.2},
                     "redis": {"status": "healthy", "latency_ms": 1.8},
                     "worker": {"status": "healthy", "age_seconds": 12.4},
+                    "migrations": {
+                        "status": "healthy",
+                        "current_revision": "0008_vector_index_profile",
+                        "expected_head": "0008_vector_index_profile",
+                    },
                 },
             }
         }
@@ -111,6 +119,17 @@ async def health_check(
     if worker_check["status"] != "healthy":
         overall_status = "degraded" if overall_status == "healthy" else overall_status
 
+    if settings.MIGRATION_PARITY_CHECK_ENABLED:
+        migration_check = await check_migration_parity(session)
+    else:
+        migration_check = {
+            "status": "skipped",
+            "message": "Migration parity checks disabled by configuration",
+        }
+    checks["migrations"] = migration_check
+    if migration_check["status"] != "healthy":
+        overall_status = "degraded" if overall_status == "healthy" else overall_status
+
     return HealthStatus(
         status=overall_status,
         timestamp=datetime.now(UTC).isoformat(),
@@ -130,10 +149,10 @@ async def liveness_check() -> dict[str, str]:
     return {"status": "alive"}
 
 
-@router.get("/health/ready")
+@router.get("/health/ready", response_model=None)
 async def readiness_check(
     session: AsyncSession = Depends(get_session),
-) -> dict[str, str]:
+) -> dict[str, str] | JSONResponse:
     """
     Kubernetes readiness probe.
 
@@ -145,7 +164,10 @@ async def readiness_check(
         return {"status": "ready"}
     except Exception as e:
         logger.warning("Readiness check failed", error=str(e))
-        return {"status": "not_ready", "reason": str(e)}
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "not_ready", "reason": str(e)},
+        )
 
 
 # =============================================================================
@@ -181,8 +203,6 @@ async def check_redis() -> dict[str, Any]:
     try:
         import redis.asyncio as redis
 
-        from src.core.config import settings
-
         start = time.perf_counter()
         client = redis.from_url(settings.REDIS_URL)
         await client.ping()
@@ -210,8 +230,6 @@ async def check_worker_activity() -> dict[str, Any]:
     """Check latest worker activity heartbeat from Redis."""
     try:
         import redis.asyncio as redis
-
-        from src.core.config import settings
 
         client = redis.from_url(settings.REDIS_URL, decode_responses=True)
         raw_payload = await client.get(settings.WORKER_HEARTBEAT_REDIS_KEY)

@@ -28,10 +28,12 @@ def test_build_beat_schedule_includes_enabled_collectors(
 ) -> None:
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", True)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", True)
     monkeypatch.setattr(celery_app_module.settings, "RSS_COLLECTION_INTERVAL", 15)
     monkeypatch.setattr(celery_app_module.settings, "GDELT_COLLECTION_INTERVAL", 45)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 120)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 20)
+    monkeypatch.setattr(celery_app_module.settings, "PROCESS_PENDING_INTERVAL_MINUTES", 7)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 6)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 30)
@@ -53,6 +55,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
     assert schedule["reap-stale-processing-items"]["task"] == "workers.reap_stale_processing_items"
     assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=20)
+    assert schedule["process-pending-items"]["task"] == "workers.process_pending_items"
+    assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=7)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="2",
@@ -72,6 +76,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
 ) -> None:
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", False)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 10)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 1)

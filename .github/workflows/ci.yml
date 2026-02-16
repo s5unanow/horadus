@@ -96,6 +96,17 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev --frozen
 
+      - name: Validate eval taxonomy contract
+        run: |
+          uv run --no-sync horadus eval validate-taxonomy \
+            --gold-set ai/eval/gold_set.jsonl \
+            --trend-config-dir config/trends \
+            --output-dir ai/eval/results \
+            --max-items 200 \
+            --tier1-trend-mode subset \
+            --signal-type-mode warn \
+            --unknown-trend-mode warn
+
       - name: Run unit tests
         run: uv run --no-sync pytest tests/unit/ -v --cov=src --cov-report=xml
 
@@ -187,10 +198,12 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://${{ env.INTEGRATION_DB_USER }}:${{ env.INTEGRATION_DB_PASSWORD }}@localhost:5432/${{ env.INTEGRATION_DB_NAME }}  # pragma: allowlist secret
           REDIS_URL: ${{ env.INTEGRATION_REDIS_URL }}
+          MIGRATION_GATE_VALIDATE_AUTOGEN: "true"
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
           set -euo pipefail
           uv run --no-sync alembic upgrade head
+          ./scripts/check_migration_drift.sh
           uv run --no-sync pytest tests/integration/ -v -m integration
 
       - name: Dump Postgres logs on failure

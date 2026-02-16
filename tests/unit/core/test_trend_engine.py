@@ -435,6 +435,7 @@ class TestTrendEngine:
         trend = MagicMock()
         trend.id = uuid4()
         trend.name = "Test Trend"
+        trend.baseline_log_odds = prob_to_logodds(0.1)
         trend.current_log_odds = 0.0  # 50% probability
         trend.updated_at = datetime.now(UTC)
         trend.decay_half_life_days = 30
@@ -602,6 +603,46 @@ class TestTrendEngine:
         expected_prob = logodds_to_prob(expected_lo)
 
         assert new_prob == pytest.approx(expected_prob, rel=0.01)
+
+    @pytest.mark.asyncio
+    async def test_apply_decay_uses_baseline_log_odds_when_definition_stale(
+        self,
+        mock_session,
+        mock_trend,
+    ):
+        """Decay baseline should come from baseline_log_odds, not definition metadata."""
+        engine = TrendEngine(mock_session)
+
+        mock_trend.baseline_log_odds = prob_to_logodds(0.3)
+        mock_trend.definition = {"baseline_probability": 0.1}
+        mock_trend.current_log_odds = 0.0
+        mock_trend.updated_at = datetime.now(UTC) - timedelta(days=30)
+
+        new_prob = await engine.apply_decay(mock_trend)
+
+        baseline_lo = prob_to_logodds(0.3)
+        expected_lo = baseline_lo + (0 - baseline_lo) * 0.5
+        assert new_prob == pytest.approx(logodds_to_prob(expected_lo), rel=0.01)
+
+    @pytest.mark.asyncio
+    async def test_apply_decay_uses_baseline_log_odds_when_definition_missing_baseline(
+        self,
+        mock_session,
+        mock_trend,
+    ):
+        """Decay should work even when definition metadata lacks baseline_probability."""
+        engine = TrendEngine(mock_session)
+
+        mock_trend.baseline_log_odds = prob_to_logodds(0.2)
+        mock_trend.definition = {}
+        mock_trend.current_log_odds = 0.0
+        mock_trend.updated_at = datetime.now(UTC) - timedelta(days=30)
+
+        new_prob = await engine.apply_decay(mock_trend)
+
+        baseline_lo = prob_to_logodds(0.2)
+        expected_lo = baseline_lo + (0 - baseline_lo) * 0.5
+        assert new_prob == pytest.approx(logodds_to_prob(expected_lo), rel=0.01)
 
     @pytest.mark.asyncio
     async def test_apply_decay_no_change_if_recent(self, mock_session, mock_trend):

@@ -1,5 +1,7 @@
 # Release Process Runbook
 
+**Last Verified**: 2026-02-16
+
 This runbook defines the standard release workflow for Horadus.
 
 Goals:
@@ -41,7 +43,12 @@ make test
 3. Database migration sanity:
 ```bash
 make db-upgrade
+make db-migration-gate MIGRATION_GATE_DATABASE_URL="<target-db-url>"
 ```
+
+`make db-migration-gate` is strict by default and runs `alembic check`. Use
+`MIGRATION_GATE_VALIDATE_AUTOGEN=false` only as a temporary emergency bypass
+with explicit documentation in release notes.
 
 4. Evaluation policy gates (prompt/model changes only):
 ```bash
@@ -63,6 +70,7 @@ CI gates are fail-closed for integration and security checks. If a gate fails:
 2. Reproduce locally with equivalent commands:
 ```bash
 uv run --no-sync alembic upgrade head
+DATABASE_URL="<target-db-url>" ./scripts/check_migration_drift.sh
 uv run --no-sync pytest tests/integration/ -v -m integration
 uv run --no-sync bandit -c pyproject.toml -r src/
 ```

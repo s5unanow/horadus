@@ -100,6 +100,42 @@ def test_build_parser_accepts_eval_audit_command() -> None:
     assert args.fail_on_warnings is True
 
 
+def test_build_parser_accepts_eval_validate_taxonomy_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "eval",
+            "validate-taxonomy",
+            "--trend-config-dir",
+            "config/trends",
+            "--gold-set",
+            "ai/eval/gold_set.jsonl",
+            "--output-dir",
+            "ai/eval/results",
+            "--max-items",
+            "120",
+            "--tier1-trend-mode",
+            "subset",
+            "--signal-type-mode",
+            "warn",
+            "--unknown-trend-mode",
+            "warn",
+            "--fail-on-warnings",
+        ]
+    )
+
+    assert args.command == "eval"
+    assert args.eval_command == "validate-taxonomy"
+    assert args.trend_config_dir == "config/trends"
+    assert args.gold_set == "ai/eval/gold_set.jsonl"
+    assert args.output_dir == "ai/eval/results"
+    assert args.max_items == 120
+    assert args.tier1_trend_mode == "subset"
+    assert args.signal_type_mode == "warn"
+    assert args.unknown_trend_mode == "warn"
+    assert args.fail_on_warnings is True
+
+
 def test_build_parser_accepts_eval_replay_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(

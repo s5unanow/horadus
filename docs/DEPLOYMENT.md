@@ -1,12 +1,14 @@
 # Deployment Guide
 
+**Last Verified**: 2026-02-16
+
 This guide covers a single-host Docker Compose deployment using:
 
 - `docker/api/Dockerfile`
 - `docker/worker/Dockerfile`
 - `docker-compose.prod.yml`
 
-## 1) Prepare environment file
+## 1) Prepare environment and secret files
 
 Copy the template and set production values:
 
@@ -14,24 +16,30 @@ Copy the template and set production values:
 cp .env.example .env
 ```
 
-Required minimum values:
+Required minimum settings:
 
-- `OPENAI_API_KEY`
 - `API_AUTH_ENABLED=true`
-- `API_KEYS` (one or more keys)
-- `API_ADMIN_KEY`
-- `POSTGRES_PASSWORD` (in your shell or `.env`)
+- `API_KEYS_FILE`
+- `API_ADMIN_KEY_FILE`
+- `OPENAI_API_KEY_FILE`
+
+Production secret policy:
+
+- Keep raw secret values out of `.env`.
+- Mount read-only secret files into containers and wire via `*_FILE`.
+- Follow `docs/SECRETS_RUNBOOK.md` for provisioning, rotation, and rollback.
 
 For a full variable reference, see `docs/ENVIRONMENT.md`.
 For release and rollback governance, see `docs/RELEASING.md`.
 For calibration alert triage and review operations, see `docs/CALIBRATION_RUNBOOK.md`.
+For managed backend options, see `docs/SECRETS_BACKENDS.md`.
 
 Recommended production hardening:
 
-- Prefer `*_FILE` variables backed by secret mounts (instead of plaintext `.env` secrets).
 - Set `SQL_ECHO=false`.
+- Set `MIGRATION_PARITY_STRICT_STARTUP=true` once migration workflow is validated in your environment.
 - Restrict `CORS_ORIGINS` to trusted frontend domains only.
-- Use managed secret backend integration patterns in `docs/SECRETS_BACKENDS.md`.
+- Provide `POSTGRES_PASSWORD` via runtime environment (not committed files) when running bundled `postgres`.
 
 ## 2) Build production images
 
@@ -43,6 +51,19 @@ docker compose -f docker-compose.prod.yml build
 
 ```bash
 docker compose -f docker-compose.prod.yml --profile ops run --rm migrate
+```
+
+Validate migration parity against Alembic head:
+
+```bash
+make db-migration-gate MIGRATION_GATE_DATABASE_URL="<production-db-url>"
+```
+
+Strict autogenerate parity (`alembic check`) is enabled by default. Emergency bypass
+is explicit-only:
+
+```bash
+make db-migration-gate MIGRATION_GATE_DATABASE_URL="<production-db-url>" MIGRATION_GATE_VALIDATE_AUTOGEN=false
 ```
 
 ## 4) Start services

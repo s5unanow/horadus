@@ -229,6 +229,10 @@ baseline_prob = 0.08
 baseline_log_odds = prob_to_logodds(0.08)  # -2.44
 ```
 
+**Baseline source-of-truth note:**
+- Canonical decay baseline is `trends.baseline_log_odds`.
+- `trends.definition.baseline_probability` is synchronized metadata for operator visibility and config parity.
+
 **Example indicators:**
 ```json
 {

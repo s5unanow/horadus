@@ -20,6 +20,23 @@
 
 ## Completed This Sprint
 
+### TASK-110: Task Delivery Workflow Guardrails and Enforcement
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Implemented hard delivery guardrails spanning docs, CI, local hooks, and
+repository protection defaults to prevent multi-task branch drift.
+
+**Completed**:
+- [x] Documented mandatory task start/finish workflow (`main` sync, task branch, PR+green, merge/delete, `main` resync)
+- [x] Clarified unrelated-work handling to create follow-up task without auto-switching branches unless blocked/urgent
+- [x] Added PR CI guard for task scope (`TASK-XXX` required and single-task constraint)
+- [x] Added local pre-commit/pre-push branch-name guard and hook installation updates
+- [x] Applied/enforced main-branch protection defaults (PR required, checks required, admins enforced, direct push blocked, linear history)
+
+---
+
 ### TASK-109: Enforce Branch-Per-Task Delivery Policy
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

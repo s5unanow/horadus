@@ -11,6 +11,18 @@ default_language_version:
 
 repos:
   # -------------------------------------------------------------------------
+  # Local workflow guards
+  # -------------------------------------------------------------------------
+  - repo: local
+    hooks:
+      - id: branch-name-guard
+        name: branch-name-guard
+        entry: ./scripts/check_branch_name.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-commit, pre-push]
+
+  # -------------------------------------------------------------------------
   # General file checks
   # -------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks

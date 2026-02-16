@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-110`.
+- Next available task IDs start at `TASK-111`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -24,7 +24,10 @@ Tasks are organized by phase and priority.
 - Each task branch must contain changes for one `TASK-XXX` only.
 - Open one PR per task branch; merge only after required checks are green.
 - Delete merged task branches to reduce stale branch drift.
-- If additional unrelated work appears during implementation, create a new task and separate branch.
+- Mandatory start sequence per task: `git switch main` → `git pull --ff-only` → create/switch task branch.
+- Mandatory completion sequence per task: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify merge commit is present locally.
+- If unrelated work appears, create a new task immediately but do not switch branches by default; continue current task unless the new work blocks current acceptance criteria or is urgent.
+- Never mix two tasks in one commit/PR; blockers must be done on a separate task branch after a safe checkpoint.
 
 ---
 
@@ -1383,6 +1386,24 @@ scope to prevent multi-task working tree drift.
 - [x] Require single-task branch scope (`TASK-XXX`) and one PR per task branch
 - [x] Require merge-only-on-green-checks and post-merge branch deletion
 - [x] Require creating a new task + branch for unrelated mid-task discoveries
+
+---
+
+### TASK-110: Task Delivery Workflow Guardrails and Enforcement
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Depends On**: TASK-109
+
+Codify and enforce the mandatory task delivery workflow (task-scoped branch/PR,
+CI scope guard, local branch guard hooks, and main-branch protection defaults).
+
+**Acceptance Criteria**:
+- [x] Document hard workflow sequence (`main` sync → task branch → PR/green → merge/delete → `main` sync/verify)
+- [x] Clarify unrelated-work handling: create follow-up task immediately but do not auto-switch branches unless blocked/urgent
+- [x] Add CI guard that fails PRs when `TASK-XXX` is missing or multiple task IDs are present
+- [x] Add local hook guard to block commit/push when branch name does not match task-branch pattern
+- [x] Require and document one-task-per-branch and one-task-per-PR as non-negotiable
+- [x] Apply repository protection settings: PR-required, checks-required, admins-enforced, direct-push blocked, linear history/squash-rebase policy
 
 ---
 

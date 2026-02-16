@@ -7,11 +7,16 @@ from uuid import uuid4
 
 import pytest
 
+import src.processing.pipeline_orchestrator as orchestrator_module
 from src.core.trend_engine import TrendUpdate
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationResult
 from src.processing.event_clusterer import ClusterResult
-from src.processing.pipeline_orchestrator import ProcessingPipeline
+from src.processing.pipeline_orchestrator import (
+    PipelineRunResult,
+    PipelineUsage,
+    ProcessingPipeline,
+)
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2EventResult, Tier2Usage
 from src.storage.models import Event, ProcessingStatus, RawItem
@@ -119,6 +124,55 @@ async def test_process_items_classifies_relevant_item(mock_db_session) -> None:
     assert result.usage.tier2_api_calls == 1
     assert item.processing_status == ProcessingStatus.CLASSIFIED
     assert item.error_message is None
+
+
+@pytest.mark.asyncio
+async def test_process_items_sets_item_embedding_lineage_when_embedding_created(
+    mock_db_session,
+) -> None:
+    item = _build_item()
+    event = Event(id=uuid4(), canonical_summary="Seed summary")
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(
+        model="test-embedding-model",
+        embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)),
+    )
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=True,
+                merged=False,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=1, should_queue_tier2=False)],
+                Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
+    tier2 = SimpleNamespace(classify_event=AsyncMock())
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert item.embedding == [0.1, 0.2, 0.3]
+    assert item.embedding_model == "test-embedding-model"
+    assert item.embedding_generated_at is not None
 
 
 @pytest.mark.asyncio
@@ -851,3 +905,185 @@ async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_sessio
     assert item.processing_status == ProcessingStatus.NOISE
     tier1.classify_items.assert_not_called()
     tier2.classify_event.assert_not_called()
+
+
+def test_processing_pipeline_legacy_process_item_path_removed() -> None:
+    assert not hasattr(ProcessingPipeline, "_process_item")
+
+
+def test_run_result_to_dict_includes_estimated_cost_fields() -> None:
+    run_result = PipelineRunResult(
+        usage=PipelineUsage(
+            embedding_api_calls=2,
+            embedding_estimated_cost_usd=0.00001,
+            tier1_prompt_tokens=100,
+            tier1_completion_tokens=20,
+            tier1_api_calls=1,
+            tier1_estimated_cost_usd=0.00002,
+            tier2_prompt_tokens=80,
+            tier2_completion_tokens=40,
+            tier2_api_calls=1,
+            tier2_estimated_cost_usd=0.00003,
+        )
+    )
+
+    payload = ProcessingPipeline.run_result_to_dict(run_result)
+
+    assert payload["embedding_estimated_cost_usd"] == pytest.approx(0.00001)
+    assert payload["tier1_estimated_cost_usd"] == pytest.approx(0.00002)
+    assert payload["tier2_estimated_cost_usd"] == pytest.approx(0.00003)
+
+
+@pytest.mark.asyncio
+async def test_process_items_skips_unsupported_language_when_mode_skip(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        orchestrator_module.settings, "LANGUAGE_POLICY_SUPPORTED_LANGUAGES", ["en", "uk", "ru"]
+    )
+    monkeypatch.setattr(orchestrator_module.settings, "LANGUAGE_POLICY_UNSUPPORTED_MODE", "skip")
+    item = _build_item()
+    item.language = "es"
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock())
+    clusterer = SimpleNamespace(cluster_item=AsyncMock())
+    tier1 = SimpleNamespace(classify_items=AsyncMock())
+    tier2 = SimpleNamespace(classify_event=AsyncMock())
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert result.scanned == 1
+    assert result.processed == 1
+    assert result.noise == 1
+    assert result.classified == 0
+    assert result.results[0].final_status == ProcessingStatus.NOISE
+    assert item.error_message == "unsupported_language:es:skip"
+    embedding.embed_texts.assert_not_called()
+    clusterer.cluster_item.assert_not_called()
+    tier1.classify_items.assert_not_called()
+    tier2.classify_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_items_defers_unsupported_language_when_mode_defer(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        orchestrator_module.settings, "LANGUAGE_POLICY_SUPPORTED_LANGUAGES", ["en", "uk", "ru"]
+    )
+    monkeypatch.setattr(orchestrator_module.settings, "LANGUAGE_POLICY_UNSUPPORTED_MODE", "defer")
+    item = _build_item()
+    item.language = "fr"
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock())
+    clusterer = SimpleNamespace(cluster_item=AsyncMock())
+    tier1 = SimpleNamespace(classify_items=AsyncMock())
+    tier2 = SimpleNamespace(classify_event=AsyncMock())
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+
+    result = await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert result.scanned == 1
+    assert result.processed == 0
+    assert result.noise == 0
+    assert result.classified == 0
+    assert result.results[0].final_status == ProcessingStatus.PENDING
+    assert item.error_message == "unsupported_language:fr:defer"
+    embedding.embed_texts.assert_not_called()
+    clusterer.cluster_item.assert_not_called()
+    tier1.classify_items.assert_not_called()
+    tier2.classify_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_items_records_language_segmented_metrics(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = _build_item()
+    item.language = "uk"
+    event = Event(id=uuid4(), canonical_summary="Seed summary")
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=True,
+                merged=False,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=9, should_queue_tier2=True)],
+                Tier1Usage(prompt_tokens=1, completion_tokens=1, api_calls=1),
+            )
+        )
+    )
+    tier2 = SimpleNamespace(
+        classify_event=AsyncMock(
+            return_value=(
+                Tier2EventResult(event_id=event.id, categories_count=1, trend_impacts_count=1),
+                Tier2Usage(prompt_tokens=1, completion_tokens=1, api_calls=1),
+            )
+        )
+    )
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
+
+    ingested: list[str] = []
+    tier1_outcomes: list[tuple[str, str]] = []
+    tier2_usage: list[str] = []
+    monkeypatch.setattr(
+        orchestrator_module,
+        "record_processing_ingested_language",
+        lambda *, language: ingested.append(language),
+    )
+    monkeypatch.setattr(
+        orchestrator_module,
+        "record_processing_tier1_language_outcome",
+        lambda *, language, outcome: tier1_outcomes.append((language, outcome)),
+    )
+    monkeypatch.setattr(
+        orchestrator_module,
+        "record_processing_tier2_language_usage",
+        lambda *, language: tier2_usage.append(language),
+    )
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+    )
+    result = await pipeline.process_items([item], trends=[_build_trend()])
+
+    assert result.classified == 1
+    assert ingested == ["uk"]
+    assert tier1_outcomes == [("uk", "pass")]
+    assert tier2_usage == ["uk"]

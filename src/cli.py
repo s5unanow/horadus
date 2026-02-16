@@ -13,6 +13,8 @@ from uuid import UUID
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
 from src.core.config import settings
 from src.core.dashboard_export import export_calibration_dashboard
+from src.core.embedding_lineage import EmbeddingLineageSummary, build_embedding_lineage_report
+from src.core.source_freshness import build_source_freshness_report
 from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
 from src.eval.replay import available_replay_configs, run_historical_replay_comparison
@@ -57,6 +59,12 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
     return datetime.fromisoformat(normalized)
 
 
+def _format_embedding_model_counts(summary: EmbeddingLineageSummary) -> str:
+    if not summary.model_counts:
+        return "none"
+    return ", ".join(f"{entry.model}={entry.count}" for entry in summary.model_counts)
+
+
 async def _run_trends_status(*, limit: int) -> int:
     async with async_session_maker() as session:
         service = CalibrationDashboardService(session)
@@ -98,6 +106,8 @@ async def _run_eval_benchmark(
     max_items: int,
     config_names: list[str] | None,
     require_human_verified: bool,
+    dispatch_mode: str,
+    request_priority: str,
 ) -> int:
     output_path = await run_gold_set_benchmark(
         gold_set_path=gold_set,
@@ -106,6 +116,8 @@ async def _run_eval_benchmark(
         max_items=max(1, max_items),
         config_names=config_names,
         require_human_verified=require_human_verified,
+        dispatch_mode=dispatch_mode,
+        request_priority=request_priority,
     )
     print(f"Benchmark output: {output_path}")
     return 0
@@ -157,6 +169,75 @@ async def _run_eval_vector_benchmark(
         seed=seed,
     )
     print(f"Vector benchmark output: {output_path}")
+    return 0
+
+
+async def _run_eval_embedding_lineage(
+    *,
+    target_model: str,
+    fail_on_mixed: bool,
+) -> int:
+    async with async_session_maker() as session:
+        report = await build_embedding_lineage_report(session, target_model=target_model)
+
+    print(f"Embedding target model: {report.target_model}")
+    for summary in (report.raw_items, report.events):
+        print(
+            f"{summary.entity}: vectors={summary.vectors}, "
+            f"target={summary.target_model_vectors}, "
+            f"other_models={summary.vectors_other_models}, "
+            f"missing_model={summary.vectors_missing_model}, "
+            f"reembed_scope={summary.reembed_scope}"
+        )
+        print(f"  model_counts: {_format_embedding_model_counts(summary)}")
+
+    print(
+        f"total_vectors={report.total_vectors}, "
+        f"total_reembed_scope={report.total_reembed_scope}, "
+        f"mixed_population={str(report.has_mixed_populations).lower()}"
+    )
+    if fail_on_mixed and report.has_mixed_populations:
+        return 2
+    return 0
+
+
+async def _run_eval_source_freshness(
+    *,
+    stale_multiplier: float | None,
+    fail_on_stale: bool,
+) -> int:
+    async with async_session_maker() as session:
+        report = await build_source_freshness_report(
+            session=session,
+            stale_multiplier=stale_multiplier,
+        )
+
+    enabled_collectors: list[str] = []
+    if settings.ENABLE_RSS_INGESTION:
+        enabled_collectors.append("rss")
+    if settings.ENABLE_GDELT_INGESTION:
+        enabled_collectors.append("gdelt")
+
+    dispatch_budget = max(0, settings.SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES)
+    catchup_candidates = [
+        collector for collector in report.stale_collectors if collector in enabled_collectors
+    ][:dispatch_budget]
+
+    print(f"checked_at={report.checked_at.isoformat()}")
+    print(f"stale_multiplier={report.stale_multiplier}")
+    print(f"stale_count={report.stale_count}")
+    print("catchup_candidates=" + (",".join(catchup_candidates) if catchup_candidates else "none"))
+    for row in report.rows:
+        last_fetched = row.last_fetched_at.isoformat() if row.last_fetched_at else "never"
+        age = row.age_seconds if row.age_seconds is not None else "unknown"
+        print(
+            f"- {row.collector}:{row.source_name} stale={str(row.is_stale).lower()} "
+            f"age_seconds={age} stale_after_seconds={row.stale_after_seconds} "
+            f"last_fetched_at={last_fetched}"
+        )
+
+    if fail_on_stale and report.stale_count > 0:
+        return 2
     return 0
 
 
@@ -287,6 +368,18 @@ def _build_parser() -> argparse.ArgumentParser:
         "--require-human-verified",
         action="store_true",
         help="Evaluate only rows where label_verification=human_verified.",
+    )
+    eval_benchmark_parser.add_argument(
+        "--dispatch-mode",
+        choices=["realtime", "batch"],
+        default="realtime",
+        help="Offline dispatch profile: realtime (single-item calls) or batch (grouped Tier-1 calls).",
+    )
+    eval_benchmark_parser.add_argument(
+        "--request-priority",
+        choices=["realtime", "flex"],
+        default="realtime",
+        help="Provider priority hint for offline runs (flex when supported by provider).",
     )
 
     eval_audit_parser = eval_subparsers.add_parser(
@@ -458,6 +551,37 @@ def _build_parser() -> argparse.ArgumentParser:
         default=42,
         help="Random seed for deterministic synthetic data.",
     )
+
+    eval_embedding_lineage_parser = eval_subparsers.add_parser(
+        "embedding-lineage",
+        help="Report embedding model lineage and re-embed scope.",
+    )
+    eval_embedding_lineage_parser.add_argument(
+        "--target-model",
+        default=settings.EMBEDDING_MODEL,
+        help="Embedding model that should be considered canonical.",
+    )
+    eval_embedding_lineage_parser.add_argument(
+        "--fail-on-mixed",
+        action="store_true",
+        help="Return non-zero when multiple embedding models are detected.",
+    )
+
+    eval_source_freshness_parser = eval_subparsers.add_parser(
+        "source-freshness",
+        help="Report stale RSS/GDELT sources and catch-up candidates.",
+    )
+    eval_source_freshness_parser.add_argument(
+        "--stale-multiplier",
+        type=float,
+        default=None,
+        help="Optional override for freshness stale threshold multiplier.",
+    )
+    eval_source_freshness_parser.add_argument(
+        "--fail-on-stale",
+        action="store_true",
+        help="Return non-zero exit code when any stale source is detected.",
+    )
     return parser
 
 
@@ -482,6 +606,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 max_items=args.max_items,
                 config_names=args.config,
                 require_human_verified=args.require_human_verified,
+                dispatch_mode=args.dispatch_mode,
+                request_priority=args.request_priority,
             )
         )
     if args.command == "eval" and args.eval_command == "audit":
@@ -525,6 +651,20 @@ def main(argv: Sequence[str] | None = None) -> int:
                 top_k=args.top_k,
                 similarity_threshold=args.similarity_threshold,
                 seed=args.seed,
+            )
+        )
+    if args.command == "eval" and args.eval_command == "embedding-lineage":
+        return asyncio.run(
+            _run_eval_embedding_lineage(
+                target_model=args.target_model,
+                fail_on_mixed=args.fail_on_mixed,
+            )
+        )
+    if args.command == "eval" and args.eval_command == "source-freshness":
+        return asyncio.run(
+            _run_eval_source_freshness(
+                stale_multiplier=args.stale_multiplier,
+                fail_on_stale=args.fail_on_stale,
             )
         )
 

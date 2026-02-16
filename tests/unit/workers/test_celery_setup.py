@@ -11,6 +11,7 @@ import pytest
 from celery.schedules import crontab
 
 import src.workers.tasks as tasks_module
+from src.core.source_freshness import SourceFreshnessReport, SourceFreshnessRow
 from src.storage.models import ProcessingStatus, RawItem
 
 celery_app_module = importlib.import_module("src.workers.celery_app")
@@ -34,6 +35,7 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 120)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 20)
     monkeypatch.setattr(celery_app_module.settings, "PROCESS_PENDING_INTERVAL_MINUTES", 7)
+    monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 6)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 30)
@@ -57,6 +59,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=20)
     assert schedule["process-pending-items"]["task"] == "workers.process_pending_items"
     assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=7)
+    assert schedule["check-source-freshness"]["task"] == "workers.check_source_freshness"
+    assert schedule["check-source-freshness"]["schedule"] == timedelta(minutes=30)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="2",
@@ -79,6 +83,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", False)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 10)
+    monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 1)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 7)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 0)
@@ -93,6 +98,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
         "apply-trend-decay",
         "check-event-lifecycles",
         "reap-stale-processing-items",
+        "check-source-freshness",
         "generate-weekly-reports",
         "generate-monthly-reports",
     ]
@@ -104,6 +110,8 @@ def test_build_beat_schedule_omits_disabled_collectors(
     assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
     assert schedule["reap-stale-processing-items"]["task"] == "workers.reap_stale_processing_items"
     assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=10)
+    assert schedule["check-source-freshness"]["task"] == "workers.check_source_freshness"
+    assert schedule["check-source-freshness"]["schedule"] == timedelta(minutes=30)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="1",
@@ -118,9 +126,29 @@ def test_build_beat_schedule_omits_disabled_collectors(
     )
 
 
+def test_build_beat_schedule_supports_six_hour_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", True)
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", True)
+    monkeypatch.setattr(celery_app_module.settings, "RSS_COLLECTION_INTERVAL", 360)
+    monkeypatch.setattr(celery_app_module.settings, "GDELT_COLLECTION_INTERVAL", 360)
+    monkeypatch.setattr(celery_app_module.settings, "PROCESS_PENDING_INTERVAL_MINUTES", 15)
+    monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 60)
+    monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 15)
+
+    schedule = celery_app_module._build_beat_schedule()
+
+    assert schedule["collect-rss"]["schedule"] == timedelta(minutes=360)
+    assert schedule["collect-gdelt"]["schedule"] == timedelta(minutes=360)
+    assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=15)
+
+
 def test_celery_routes_include_processing_queue() -> None:
     routes = celery_app_module.celery_app.conf.task_routes
     assert routes["workers.process_pending_items"]["queue"] == "processing"
+    assert routes["workers.check_source_freshness"]["queue"] == "processing"
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
     assert routes["workers.check_event_lifecycles"]["queue"] == "processing"
@@ -190,6 +218,10 @@ def test_collect_rss_task_uses_async_collector(
             "stored": 2,
             "skipped": 1,
             "errors": 0,
+            "transient_errors": 0,
+            "terminal_errors": 0,
+            "sources_succeeded": 1,
+            "sources_failed": 0,
             "results": [],
         }
 
@@ -218,6 +250,10 @@ def test_collect_rss_records_observability_metrics(
             "stored": 3,
             "skipped": 2,
             "errors": 1,
+            "transient_errors": 0,
+            "terminal_errors": 1,
+            "sources_succeeded": 1,
+            "sources_failed": 1,
             "results": [],
         }
 
@@ -274,6 +310,10 @@ def test_collect_gdelt_task_uses_async_collector(
             "stored": 3,
             "skipped": 1,
             "errors": 0,
+            "transient_errors": 0,
+            "terminal_errors": 0,
+            "sources_succeeded": 1,
+            "sources_failed": 0,
             "results": [],
         }
 
@@ -286,6 +326,239 @@ def test_collect_gdelt_task_uses_async_collector(
     assert result["collector"] == "gdelt"
     assert result["stored"] == 3
     assert queue_calls == [("gdelt", 3)]
+
+
+def test_should_requeue_collector_run_for_transient_outage() -> None:
+    assert (
+        tasks_module._should_requeue_collector_run(
+            {
+                "transient_errors": 2,
+                "terminal_errors": 0,
+                "sources_succeeded": 0,
+                "sources_failed": 2,
+            }
+        )
+        is True
+    )
+    assert (
+        tasks_module._should_requeue_collector_run(
+            {
+                "transient_errors": 1,
+                "terminal_errors": 1,
+                "sources_succeeded": 0,
+                "sources_failed": 1,
+            }
+        )
+        is False
+    )
+    assert (
+        tasks_module._should_requeue_collector_run(
+            {
+                "transient_errors": 1,
+                "terminal_errors": 0,
+                "sources_succeeded": 1,
+                "sources_failed": 1,
+            }
+        )
+        is False
+    )
+
+
+def test_build_processing_dispatch_plan_normal() -> None:
+    plan = tasks_module._build_processing_dispatch_plan(
+        stored_items=8,
+        pending_backlog=40,
+        in_flight=0,
+        budget_status="active",
+        budget_remaining_usd=4.0,
+        daily_cost_limit_usd=5.0,
+    )
+
+    assert plan.should_dispatch is True
+    assert plan.reason == "ok"
+    assert plan.task_limit == 40
+
+
+def test_build_processing_dispatch_plan_burst_uses_batch_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 100)
+
+    plan = tasks_module._build_processing_dispatch_plan(
+        stored_items=12,
+        pending_backlog=500,
+        in_flight=0,
+        budget_status="active",
+        budget_remaining_usd=10.0,
+        daily_cost_limit_usd=20.0,
+    )
+
+    assert plan.should_dispatch is True
+    assert plan.task_limit == 100
+
+
+def test_build_processing_dispatch_plan_throttles_on_budget_headroom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT", 10)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT", 25)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 200)
+
+    plan = tasks_module._build_processing_dispatch_plan(
+        stored_items=80,
+        pending_backlog=180,
+        in_flight=0,
+        budget_status="active",
+        budget_remaining_usd=0.4,
+        daily_cost_limit_usd=10.0,
+    )
+
+    assert plan.should_dispatch is True
+    assert plan.reason == "budget_low_headroom"
+    assert plan.task_limit == 25
+
+
+def test_queue_processing_for_new_items_skips_when_dispatch_lock_active(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_PROCESSING_PIPELINE", True)
+    monkeypatch.setattr(tasks_module.settings, "PROCESSING_PIPELINE_BATCH_SIZE", 100)
+
+    def fake_run_async(coro):
+        coro.close()
+        return {
+            "pending_backlog": 50,
+            "budget_status": "active",
+            "budget_remaining_usd": 5.0,
+            "daily_cost_limit_usd": 10.0,
+        }
+
+    monkeypatch.setattr(tasks_module, "_run_async", fake_run_async)
+    monkeypatch.setattr(tasks_module, "_get_processing_in_flight_count", lambda: 0)
+    monkeypatch.setattr(tasks_module, "_acquire_processing_dispatch_lock", lambda: False)
+    monkeypatch.setattr(tasks_module, "record_processing_backlog_depth", lambda **_: None)
+    monkeypatch.setattr(tasks_module, "record_processing_dispatch_decision", lambda **_: None)
+
+    queued: list[int] = []
+    monkeypatch.setattr(
+        tasks_module,
+        "process_pending_items",
+        MagicMock(delay=lambda *, limit: queued.append(limit)),
+    )
+
+    dispatched = tasks_module._queue_processing_for_new_items(collector="rss", stored_items=6)
+
+    assert dispatched is False
+    assert queued == []
+
+
+def test_collect_rss_requeues_transient_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "rss",
+            "fetched": 0,
+            "stored": 0,
+            "skipped": 0,
+            "errors": 2,
+            "transient_errors": 2,
+            "terminal_errors": 0,
+            "sources_succeeded": 0,
+            "sources_failed": 2,
+            "results": [],
+        }
+
+    monkeypatch.setattr(tasks_module, "_collect_rss_async", fake_collect)
+    monkeypatch.setattr(
+        tasks_module,
+        "_queue_processing_for_new_items",
+        lambda **kwargs: queue_calls.append(
+            (str(kwargs["collector"]), int(kwargs["stored_items"]))
+        ),
+    )
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", lambda **_: None)
+
+    with pytest.raises(tasks_module.CollectorTransientRunError, match="Transient RSS"):
+        tasks_module.collect_rss.run()
+
+    assert queue_calls == []
+
+
+def test_collect_gdelt_requeues_transient_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_GDELT_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "gdelt",
+            "fetched": 0,
+            "stored": 0,
+            "skipped": 0,
+            "errors": 1,
+            "transient_errors": 1,
+            "terminal_errors": 0,
+            "sources_succeeded": 0,
+            "sources_failed": 1,
+            "results": [],
+        }
+
+    monkeypatch.setattr(tasks_module, "_collect_gdelt_async", fake_collect)
+    monkeypatch.setattr(
+        tasks_module,
+        "_queue_processing_for_new_items",
+        lambda **kwargs: queue_calls.append(
+            (str(kwargs["collector"]), int(kwargs["stored_items"]))
+        ),
+    )
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", lambda **_: None)
+
+    with pytest.raises(tasks_module.CollectorTransientRunError, match="Transient GDELT"):
+        tasks_module.collect_gdelt.run()
+
+    assert queue_calls == []
+
+
+def test_collect_rss_does_not_requeue_with_partial_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "rss",
+            "fetched": 2,
+            "stored": 1,
+            "skipped": 1,
+            "errors": 1,
+            "transient_errors": 1,
+            "terminal_errors": 0,
+            "sources_succeeded": 1,
+            "sources_failed": 1,
+            "results": [],
+        }
+
+    def fake_queue(*, collector: str, stored_items: int) -> bool:
+        queue_calls.append((collector, stored_items))
+        return True
+
+    monkeypatch.setattr(tasks_module, "_collect_rss_async", fake_collect)
+    monkeypatch.setattr(tasks_module, "_queue_processing_for_new_items", fake_queue)
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", lambda **_: None)
+
+    result = tasks_module.collect_rss.run()
+
+    assert result["status"] == "ok"
+    assert queue_calls == [("rss", 1)]
 
 
 def test_process_pending_items_task_uses_async_pipeline(
@@ -307,12 +580,15 @@ def test_process_pending_items_task_uses_async_pipeline(
             "events_created": 1,
             "events_merged": limit - 1,
             "embedding_api_calls": 2,
+            "embedding_estimated_cost_usd": 0.00001,
             "tier1_prompt_tokens": 100,
             "tier1_completion_tokens": 20,
             "tier1_api_calls": 1,
+            "tier1_estimated_cost_usd": 0.00002,
             "tier2_prompt_tokens": 80,
             "tier2_completion_tokens": 40,
             "tier2_api_calls": 1,
+            "tier2_estimated_cost_usd": 0.00003,
         }
 
     monkeypatch.setattr(tasks_module, "_process_pending_async", fake_process)
@@ -345,12 +621,15 @@ def test_process_pending_items_records_observability_metrics(
             "events_created": 1,
             "events_merged": limit - 1,
             "embedding_api_calls": 2,
+            "embedding_estimated_cost_usd": 0.00001,
             "tier1_prompt_tokens": 100,
             "tier1_completion_tokens": 20,
             "tier1_api_calls": 1,
+            "tier1_estimated_cost_usd": 0.00002,
             "tier2_prompt_tokens": 80,
             "tier2_completion_tokens": 40,
             "tier2_api_calls": 1,
+            "tier2_estimated_cost_usd": 0.00003,
         }
 
     def fake_record(run_result: dict[str, object]) -> None:
@@ -364,6 +643,9 @@ def test_process_pending_items_records_observability_metrics(
     assert len(captured) == 1
     assert captured[0]["task"] == "processing_pipeline"
     assert captured[0]["processed"] == 10
+    assert captured[0]["tier1_estimated_cost_usd"] == pytest.approx(0.00002)
+    assert captured[0]["tier2_estimated_cost_usd"] == pytest.approx(0.00003)
+    assert captured[0]["embedding_estimated_cost_usd"] == pytest.approx(0.00001)
 
 
 def test_snapshot_trends_task_uses_async_worker(
@@ -572,11 +854,177 @@ def test_generate_monthly_reports_task_uses_async_worker(
     assert result["created"] == 3
 
 
+@pytest.mark.asyncio
+async def test_check_source_freshness_async_dispatches_catchup_for_stale_collectors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_at = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
+    stale_rows = (
+        SourceFreshnessRow(
+            source_id=uuid4(),
+            source_name="RSS Source",
+            collector="rss",
+            last_fetched_at=checked_at - timedelta(hours=5),
+            age_seconds=18000,
+            stale_after_seconds=7200,
+            is_stale=True,
+        ),
+        SourceFreshnessRow(
+            source_id=uuid4(),
+            source_name="GDELT Source",
+            collector="gdelt",
+            last_fetched_at=checked_at - timedelta(hours=5),
+            age_seconds=18000,
+            stale_after_seconds=7200,
+            is_stale=True,
+        ),
+    )
+    report = SourceFreshnessReport(
+        checked_at=checked_at,
+        stale_multiplier=2.0,
+        rows=stale_rows,
+    )
+    mock_session = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_session_maker():
+        yield mock_session
+
+    async def fake_report(*, session: object) -> SourceFreshnessReport:
+        assert session is mock_session
+        return report
+
+    rss_dispatches: list[str] = []
+    gdelt_dispatches: list[str] = []
+    stale_metric_calls: list[tuple[str, int]] = []
+    catchup_metric_calls: list[str] = []
+
+    monkeypatch.setattr(tasks_module, "async_session_maker", fake_session_maker)
+    monkeypatch.setattr(tasks_module, "build_source_freshness_report", fake_report)
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(tasks_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
+    monkeypatch.setattr(
+        tasks_module,
+        "collect_rss",
+        MagicMock(delay=lambda: rss_dispatches.append("rss")),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "collect_gdelt",
+        MagicMock(delay=lambda: gdelt_dispatches.append("gdelt")),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "record_source_freshness_stale",
+        lambda *, collector, stale_count: stale_metric_calls.append((collector, stale_count)),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "record_source_catchup_dispatch",
+        lambda *, collector: catchup_metric_calls.append(collector),
+    )
+
+    result = await tasks_module._check_source_freshness_async()
+
+    assert result["stale_count"] == 2
+    assert result["stale_collectors"] == ["gdelt", "rss"]
+    assert result["stale_by_collector"] == {"rss": 1, "gdelt": 1}
+    assert result["catchup_dispatch_budget"] == 2
+    assert sorted(result["catchup_dispatched"]) == ["gdelt", "rss"]
+    assert rss_dispatches == ["rss"]
+    assert gdelt_dispatches == ["gdelt"]
+    assert sorted(stale_metric_calls) == [("gdelt", 1), ("rss", 1)]
+    assert sorted(catchup_metric_calls) == ["gdelt", "rss"]
+
+
+@pytest.mark.asyncio
+async def test_check_source_freshness_async_respects_dispatch_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_at = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
+    report = SourceFreshnessReport(
+        checked_at=checked_at,
+        stale_multiplier=2.0,
+        rows=(
+            SourceFreshnessRow(
+                source_id=uuid4(),
+                source_name="RSS Source",
+                collector="rss",
+                last_fetched_at=checked_at - timedelta(hours=5),
+                age_seconds=18000,
+                stale_after_seconds=7200,
+                is_stale=True,
+            ),
+            SourceFreshnessRow(
+                source_id=uuid4(),
+                source_name="GDELT Source",
+                collector="gdelt",
+                last_fetched_at=checked_at - timedelta(hours=5),
+                age_seconds=18000,
+                stale_after_seconds=7200,
+                is_stale=True,
+            ),
+        ),
+    )
+    mock_session = AsyncMock()
+
+    @asynccontextmanager
+    async def fake_session_maker():
+        yield mock_session
+
+    async def fake_report(*, session: object) -> SourceFreshnessReport:
+        assert session is mock_session
+        return report
+
+    rss_dispatches: list[str] = []
+    gdelt_dispatches: list[str] = []
+
+    monkeypatch.setattr(tasks_module, "async_session_maker", fake_session_maker)
+    monkeypatch.setattr(tasks_module, "build_source_freshness_report", fake_report)
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(tasks_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 1)
+    monkeypatch.setattr(
+        tasks_module,
+        "collect_rss",
+        MagicMock(delay=lambda: rss_dispatches.append("rss")),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "collect_gdelt",
+        MagicMock(delay=lambda: gdelt_dispatches.append("gdelt")),
+    )
+    monkeypatch.setattr(tasks_module, "record_source_freshness_stale", lambda **_: None)
+    monkeypatch.setattr(tasks_module, "record_source_catchup_dispatch", lambda **_: None)
+
+    result = await tasks_module._check_source_freshness_async()
+
+    assert result["catchup_dispatch_budget"] == 1
+    assert result["catchup_dispatched"] in (["rss"], ["gdelt"])
+    assert len(result["catchup_dispatched"]) == 1
+    assert len(rss_dispatches) + len(gdelt_dispatches) == 1
+
+
 def test_task_retry_configuration() -> None:
     assert tasks_module.collect_rss.autoretry_for
-    assert tasks_module.collect_rss.retry_kwargs == {"max_retries": 3}
+    assert tasks_module.CollectorTransientRunError in tasks_module.collect_rss.autoretry_for
+    assert tasks_module.collect_rss.retry_kwargs["max_retries"] == (
+        tasks_module.settings.COLLECTOR_TASK_MAX_RETRIES
+    )
+    assert (
+        tasks_module.collect_rss.retry_backoff_max
+        == tasks_module.settings.COLLECTOR_RETRY_BACKOFF_MAX_SECONDS
+    )
     assert tasks_module.collect_gdelt.autoretry_for
-    assert tasks_module.collect_gdelt.retry_kwargs == {"max_retries": 3}
+    assert tasks_module.CollectorTransientRunError in tasks_module.collect_gdelt.autoretry_for
+    assert tasks_module.collect_gdelt.retry_kwargs["max_retries"] == (
+        tasks_module.settings.COLLECTOR_TASK_MAX_RETRIES
+    )
+    assert (
+        tasks_module.collect_gdelt.retry_backoff_max
+        == tasks_module.settings.COLLECTOR_RETRY_BACKOFF_MAX_SECONDS
+    )
     assert tasks_module.process_pending_items.autoretry_for
     assert tasks_module.process_pending_items.retry_kwargs == {"max_retries": 3}
 

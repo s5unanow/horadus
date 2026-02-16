@@ -15,6 +15,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
+from src.core.source_freshness import build_source_freshness_report
 from src.storage.database import get_session
 from src.storage.models import ReportingType, Source, SourceTier, SourceType
 
@@ -117,6 +119,30 @@ class SourceResponse(BaseModel):
     error_count: int
 
 
+class SourceFreshnessRowResponse(BaseModel):
+    """Freshness status for one source."""
+
+    source_id: UUID
+    source_name: str
+    collector: str
+    last_fetched_at: datetime | None
+    age_seconds: int | None
+    stale_after_seconds: int
+    is_stale: bool
+
+
+class SourceFreshnessResponse(BaseModel):
+    """Freshness summary across active RSS/GDELT sources."""
+
+    checked_at: datetime
+    stale_multiplier: float
+    stale_count: int
+    stale_collectors: list[str]
+    catchup_dispatch_budget: int
+    catchup_candidates: list[str]
+    rows: list[SourceFreshnessRowResponse]
+
+
 # =============================================================================
 # Helpers
 # =============================================================================
@@ -165,6 +191,45 @@ async def list_sources(
 
     sources = (await session.scalars(query)).all()
     return [_to_response(source) for source in sources]
+
+
+@router.get("/freshness", response_model=SourceFreshnessResponse)
+async def get_source_freshness(
+    session: AsyncSession = Depends(get_session),
+) -> SourceFreshnessResponse:
+    """Get freshness SLO status for active RSS/GDELT sources."""
+    report = await build_source_freshness_report(session=session)
+    enabled_collectors: list[str] = []
+    if settings.ENABLE_RSS_INGESTION:
+        enabled_collectors.append("rss")
+    if settings.ENABLE_GDELT_INGESTION:
+        enabled_collectors.append("gdelt")
+
+    catchup_dispatch_budget = max(0, settings.SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES)
+    catchup_candidates = [
+        collector for collector in report.stale_collectors if collector in enabled_collectors
+    ][:catchup_dispatch_budget]
+
+    return SourceFreshnessResponse(
+        checked_at=report.checked_at,
+        stale_multiplier=report.stale_multiplier,
+        stale_count=report.stale_count,
+        stale_collectors=list(report.stale_collectors),
+        catchup_dispatch_budget=catchup_dispatch_budget,
+        catchup_candidates=catchup_candidates,
+        rows=[
+            SourceFreshnessRowResponse(
+                source_id=row.source_id,
+                source_name=row.source_name,
+                collector=row.collector,
+                last_fetched_at=row.last_fetched_at,
+                age_seconds=row.age_seconds,
+                stale_after_seconds=row.stale_after_seconds,
+                is_stale=row.is_stale,
+            )
+            for row in report.rows
+        ],
+    )
 
 
 @router.post("", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)

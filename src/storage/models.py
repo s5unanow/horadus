@@ -155,6 +155,7 @@ class Source(Base):
         config: Source-specific configuration (JSON)
         is_active: Whether source is being collected
         last_fetched_at: Last successful fetch time
+        ingestion_window_end_at: High-water timestamp for source collection coverage
         error_count: Consecutive error count
         last_error: Most recent error message
     """
@@ -192,6 +193,7 @@ class Source(Base):
     config: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ingestion_window_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     error_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_error: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
@@ -218,6 +220,7 @@ class Source(Base):
         Index("idx_sources_active", "is_active"),
         Index("idx_sources_type", "type"),
         Index("idx_sources_tier", "source_tier"),
+        Index("idx_sources_ingestion_window_end_at", "ingestion_window_end_at"),
     )
 
 
@@ -243,6 +246,8 @@ class RawItem(Base):
         fetched_at: When we collected it
         raw_content: Extracted text content
         embedding: Vector embedding for similarity and clustering
+        embedding_model: Embedding model identifier used for current vector
+        embedding_generated_at: Timestamp when current vector was generated
         content_hash: SHA256 hash for deduplication
         language: Detected language code (e.g., 'en', 'ru')
         processing_status: Current pipeline status
@@ -273,6 +278,8 @@ class RawItem(Base):
     )
     raw_content: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
+    embedding_model: Mapped[str | None] = mapped_column(String(255))
+    embedding_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256
     language: Mapped[str | None] = mapped_column(String(10))
     processing_status: Mapped[ProcessingStatus] = mapped_column(
@@ -327,6 +334,8 @@ class Event(Base):
         id: Unique identifier
         canonical_summary: LLM-generated summary of the event
         embedding: Vector embedding for similarity search
+        embedding_model: Embedding model identifier used for current vector
+        embedding_generated_at: Timestamp when current vector was generated
         extracted_who: Entities involved (people, organizations)
         extracted_what: What happened
         extracted_where: Location
@@ -351,6 +360,8 @@ class Event(Base):
     )
     canonical_summary: Mapped[str] = mapped_column(Text, nullable=False)
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
+    embedding_model: Mapped[str | None] = mapped_column(String(255))
+    embedding_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # LLM-extracted structured data
     extracted_who: Mapped[list[str] | None] = mapped_column(ARRAY(String))
@@ -675,6 +686,9 @@ class Report(Base):
     # Report content
     statistics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     narrative: Mapped[str | None] = mapped_column(Text)
+    grounding_status: Mapped[str] = mapped_column(String(20), default="not_checked", nullable=False)
+    grounding_violation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    grounding_references: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     top_events: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     created_at: Mapped[datetime] = mapped_column(

@@ -13,6 +13,12 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
+from src.core.observability import (
+    record_processing_ingested_language,
+    record_processing_tier1_language_outcome,
+    record_processing_tier2_language_usage,
+)
 from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
@@ -43,12 +49,15 @@ class PipelineUsage:
     """Usage and API call metrics across one pipeline run."""
 
     embedding_api_calls: int = 0
+    embedding_estimated_cost_usd: float = 0.0
     tier1_prompt_tokens: int = 0
     tier1_completion_tokens: int = 0
     tier1_api_calls: int = 0
+    tier1_estimated_cost_usd: float = 0.0
     tier2_prompt_tokens: int = 0
     tier2_completion_tokens: int = 0
     tier2_api_calls: int = 0
+    tier2_estimated_cost_usd: float = 0.0
 
 
 @dataclass(slots=True)
@@ -155,6 +164,8 @@ class ProcessingPipeline:
         prepared_items: list[_PreparedItem] = []
 
         for item in items:
+            language_label = self._language_metric_label(item.language)
+            record_processing_ingested_language(language=language_label)
             prepared, execution = await self._prepare_item_for_tier1(item=item)
             if prepared is not None:
                 prepared_items.append(prepared)
@@ -201,6 +212,10 @@ class ProcessingPipeline:
                 )
                 continue
 
+            record_processing_tier1_language_outcome(
+                language=self._language_metric_label(prepared.item.language),
+                outcome="pass" if tier1_result.should_queue_tier2 else "noise",
+            )
             execution = await self._process_after_tier1(
                 prepared=prepared,
                 tier1_result=tier1_result,
@@ -232,12 +247,15 @@ class ProcessingPipeline:
     @staticmethod
     def _accumulate_usage(*, run_result: PipelineRunResult, usage: PipelineUsage) -> None:
         run_result.usage.embedding_api_calls += usage.embedding_api_calls
+        run_result.usage.embedding_estimated_cost_usd += usage.embedding_estimated_cost_usd
         run_result.usage.tier1_prompt_tokens += usage.tier1_prompt_tokens
         run_result.usage.tier1_completion_tokens += usage.tier1_completion_tokens
         run_result.usage.tier1_api_calls += usage.tier1_api_calls
+        run_result.usage.tier1_estimated_cost_usd += usage.tier1_estimated_cost_usd
         run_result.usage.tier2_prompt_tokens += usage.tier2_prompt_tokens
         run_result.usage.tier2_completion_tokens += usage.tier2_completion_tokens
         run_result.usage.tier2_api_calls += usage.tier2_api_calls
+        run_result.usage.tier2_estimated_cost_usd += usage.tier2_estimated_cost_usd
 
     @staticmethod
     def _accumulate_result_counters(
@@ -307,6 +325,31 @@ class ProcessingPipeline:
             if not raw_content:
                 msg = "RawItem.raw_content must not be empty for pipeline processing"
                 raise ValueError(msg)
+            if self._is_unsupported_language(item.language):
+                unsupported_mode = settings.LANGUAGE_POLICY_UNSUPPORTED_MODE
+                item.processing_status = (
+                    ProcessingStatus.PENDING
+                    if unsupported_mode == "defer"
+                    else ProcessingStatus.NOISE
+                )
+                item.processing_started_at = None
+                normalized_language = self._language_metric_label(item.language)
+                item.error_message = (
+                    f"unsupported_language:{normalized_language}:{unsupported_mode}"
+                )
+                await self.session.flush()
+                return (
+                    None,
+                    _ItemExecution(
+                        result=self._build_item_result(
+                            item_id=item_id,
+                            status=item.processing_status,
+                            cluster_result=cluster_result,
+                            embedded=False,
+                            error_message=item.error_message,
+                        )
+                    ),
+                )
 
             embedding_api_calls = 0
             if item.embedding is None:
@@ -316,6 +359,12 @@ class ProcessingPipeline:
                     embedding_api_calls,
                 ) = await self.embedding_service.embed_texts([raw_content])
                 item.embedding = vectors[0]
+                item.embedding_model = getattr(
+                    self.embedding_service,
+                    "model",
+                    settings.EMBEDDING_MODEL,
+                )
+                item.embedding_generated_at = datetime.now(tz=UTC)
                 embedded = True
 
             cluster_result = await self.event_clusterer.cluster_item(item)
@@ -423,6 +472,7 @@ class ProcessingPipeline:
             usage.tier1_prompt_tokens += tier1_usage.prompt_tokens
             usage.tier1_completion_tokens += tier1_usage.completion_tokens
             usage.tier1_api_calls += tier1_usage.api_calls
+            usage.tier1_estimated_cost_usd += tier1_usage.estimated_cost_usd
 
         try:
             batch_results, batch_usage = await self.tier1_classifier.classify_items(items, trends)
@@ -520,9 +570,13 @@ class ProcessingPipeline:
                 event=prepared.event,
                 trends=trends,
             )
+            record_processing_tier2_language_usage(
+                language=self._language_metric_label(item.language),
+            )
             usage.tier2_prompt_tokens += tier2_usage.prompt_tokens
             usage.tier2_completion_tokens += tier2_usage.completion_tokens
             usage.tier2_api_calls += tier2_usage.api_calls
+            usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
             trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
                 event=prepared.event,
                 trends=trends,
@@ -581,164 +635,6 @@ class ProcessingPipeline:
                 usage=usage,
             )
 
-    async def _process_item(self, *, item: RawItem, trends: list[Trend]) -> _ItemExecution:
-        item_id = self._item_id(item)
-        item.processing_status = ProcessingStatus.PROCESSING
-        item.processing_started_at = datetime.now(tz=UTC)
-        item.error_message = None
-        await self.session.flush()
-
-        usage = PipelineUsage()
-        embedded = False
-        cluster_result: ClusterResult | None = None
-        try:
-            duplicate_result = await self.deduplication_service.find_duplicate(
-                external_id=item.external_id,
-                url=item.url,
-                content_hash=item.content_hash,
-                exclude_item_id=item_id,
-            )
-            if duplicate_result.is_duplicate:
-                item.processing_status = ProcessingStatus.NOISE
-                item.processing_started_at = None
-                await self.session.flush()
-                return _ItemExecution(
-                    result=PipelineItemResult(
-                        item_id=item_id,
-                        final_status=item.processing_status,
-                        duplicate=True,
-                    ),
-                    usage=usage,
-                )
-
-            raw_content = item.raw_content.strip()
-            if not raw_content:
-                msg = "RawItem.raw_content must not be empty for pipeline processing"
-                raise ValueError(msg)
-
-            if item.embedding is None:
-                (
-                    vectors,
-                    _cache_hits,
-                    embedding_api_calls,
-                ) = await self.embedding_service.embed_texts([raw_content])
-                item.embedding = vectors[0]
-                usage.embedding_api_calls += embedding_api_calls
-                embedded = True
-
-            cluster_result = await self.event_clusterer.cluster_item(item)
-            event = await self._load_event(cluster_result.event_id)
-            if event is None:
-                msg = f"Event {cluster_result.event_id} not found after clustering"
-                raise ValueError(msg)
-
-            suppression_action = await self._event_suppression_action(
-                event_id=cluster_result.event_id
-            )
-            if suppression_action is not None:
-                item.processing_status = ProcessingStatus.NOISE
-                item.processing_started_at = None
-                await self.session.flush()
-                logger.info(
-                    "Skipping event due to human feedback suppression",
-                    item_id=str(item_id),
-                    event_id=str(cluster_result.event_id),
-                    action=suppression_action,
-                )
-                return _ItemExecution(
-                    result=self._build_item_result(
-                        item_id=item_id,
-                        status=item.processing_status,
-                        cluster_result=cluster_result,
-                        embedded=embedded,
-                    ),
-                    usage=usage,
-                )
-
-            tier1_result, tier1_usage = await self._classify_tier1(item=item, trends=trends)
-            usage.tier1_prompt_tokens += tier1_usage.prompt_tokens
-            usage.tier1_completion_tokens += tier1_usage.completion_tokens
-            usage.tier1_api_calls += tier1_usage.api_calls
-
-            if not tier1_result.should_queue_tier2:
-                item.processing_status = ProcessingStatus.NOISE
-                item.processing_started_at = None
-                await self.session.flush()
-                return _ItemExecution(
-                    result=self._build_item_result(
-                        item_id=item_id,
-                        status=item.processing_status,
-                        cluster_result=cluster_result,
-                        embedded=embedded,
-                    ),
-                    usage=usage,
-                )
-
-            _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
-                event=event,
-                trends=trends,
-            )
-            usage.tier2_prompt_tokens += tier2_usage.prompt_tokens
-            usage.tier2_completion_tokens += tier2_usage.completion_tokens
-            usage.tier2_api_calls += tier2_usage.api_calls
-            trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
-                event=event,
-                trends=trends,
-            )
-
-            item.processing_status = ProcessingStatus.CLASSIFIED
-            item.processing_started_at = None
-            await self.session.flush()
-            return _ItemExecution(
-                result=self._build_item_result(
-                    item_id=item_id,
-                    status=item.processing_status,
-                    cluster_result=cluster_result,
-                    embedded=embedded,
-                    tier2_applied=True,
-                    trend_impacts_seen=trend_impacts_seen,
-                    trend_updates=trend_updates,
-                ),
-                usage=usage,
-            )
-        except BudgetExceededError as exc:
-            item.processing_status = ProcessingStatus.PENDING
-            item.processing_started_at = None
-            item.error_message = None
-            await self.session.flush()
-            logger.warning(
-                "Budget exceeded; leaving item pending for retry",
-                item_id=str(item_id),
-                reason=str(exc),
-            )
-            return _ItemExecution(
-                result=self._build_item_result(
-                    item_id=item_id,
-                    status=item.processing_status,
-                    cluster_result=cluster_result,
-                    embedded=embedded,
-                    error_message=str(exc),
-                ),
-                usage=usage,
-            )
-        except Exception as exc:
-            item.processing_status = ProcessingStatus.ERROR
-            item.processing_started_at = None
-            item.error_message = str(exc)[:1000]
-            await self.session.flush()
-            logger.exception(
-                "Processing pipeline failed for item",
-                item_id=str(item_id),
-            )
-            return _ItemExecution(
-                result=PipelineItemResult(
-                    item_id=item_id,
-                    final_status=item.processing_status,
-                    error_message=item.error_message,
-                ),
-                usage=usage,
-            )
-
     async def _classify_tier1(
         self,
         *,
@@ -760,6 +656,42 @@ class ProcessingPipeline:
             .with_for_update(skip_locked=True)
         )
         return list((await self.session.scalars(query)).all())
+
+    @staticmethod
+    def _normalize_language_code(value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().lower()
+        if not normalized:
+            return None
+        mapping = {
+            "english": "en",
+            "eng": "en",
+            "ukrainian": "uk",
+            "ukr": "uk",
+            "russian": "ru",
+            "rus": "ru",
+        }
+        if normalized in mapping:
+            return mapping[normalized]
+        if len(normalized) >= 2:
+            return normalized[:2]
+        return normalized
+
+    @classmethod
+    def _language_metric_label(cls, value: str | None) -> str:
+        normalized = cls._normalize_language_code(value)
+        if normalized is None:
+            return "unknown"
+        return normalized
+
+    @classmethod
+    def _is_unsupported_language(cls, value: str | None) -> bool:
+        normalized = cls._normalize_language_code(value)
+        if normalized is None:
+            return False
+        supported = set(settings.LANGUAGE_POLICY_SUPPORTED_LANGUAGES)
+        return normalized not in supported
 
     async def _load_active_trends(self) -> list[Trend]:
         query = select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
@@ -1170,10 +1102,13 @@ class ProcessingPipeline:
             "trend_impacts_seen": result.trend_impacts_seen,
             "trend_updates": result.trend_updates,
             "embedding_api_calls": result.usage.embedding_api_calls,
+            "embedding_estimated_cost_usd": round(result.usage.embedding_estimated_cost_usd, 8),
             "tier1_prompt_tokens": result.usage.tier1_prompt_tokens,
             "tier1_completion_tokens": result.usage.tier1_completion_tokens,
             "tier1_api_calls": result.usage.tier1_api_calls,
+            "tier1_estimated_cost_usd": round(result.usage.tier1_estimated_cost_usd, 8),
             "tier2_prompt_tokens": result.usage.tier2_prompt_tokens,
             "tier2_completion_tokens": result.usage.tier2_completion_tokens,
             "tier2_api_calls": result.usage.tier2_api_calls,
+            "tier2_estimated_cost_usd": round(result.usage.tier2_estimated_cost_usd, 8),
         }

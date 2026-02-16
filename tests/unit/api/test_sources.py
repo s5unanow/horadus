@@ -2,20 +2,24 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
 
+import src.api.routes.sources as sources_route
 from src.api.routes.sources import (
     SourceCreate,
     SourceUpdate,
     create_source,
     delete_source,
     get_source,
+    get_source_freshness,
     list_sources,
     update_source,
 )
+from src.core.source_freshness import SourceFreshnessReport, SourceFreshnessRow
 from src.storage.models import Source, SourceType
 
 pytestmark = pytest.mark.unit
@@ -144,3 +148,46 @@ async def test_delete_source_returns_404_when_missing(mock_db_session) -> None:
         await delete_source(source_id=uuid4(), session=mock_db_session)
 
     assert exc_info.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_get_source_freshness_returns_report(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_at = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
+    report = SourceFreshnessReport(
+        checked_at=checked_at,
+        stale_multiplier=2.0,
+        rows=(
+            SourceFreshnessRow(
+                source_id=uuid4(),
+                source_name="Stale RSS",
+                collector="rss",
+                last_fetched_at=checked_at,
+                age_seconds=7201,
+                stale_after_seconds=7200,
+                is_stale=True,
+            ),
+        ),
+    )
+    monkeypatch.setattr(sources_route.settings, "ENABLE_RSS_INGESTION", True)
+    monkeypatch.setattr(sources_route.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(sources_route.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
+    monkeypatch.setattr(
+        sources_route,
+        "build_source_freshness_report",
+        AsyncMock(return_value=report),
+    )
+
+    result = await get_source_freshness(session=mock_db_session)
+
+    assert result.checked_at == checked_at
+    assert result.stale_multiplier == pytest.approx(2.0)
+    assert result.stale_count == 1
+    assert result.stale_collectors == ["rss"]
+    assert result.catchup_dispatch_budget == 2
+    assert result.catchup_candidates == ["rss"]
+    assert len(result.rows) == 1
+    assert result.rows[0].source_name == "Stale RSS"
+    assert result.rows[0].is_stale is True

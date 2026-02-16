@@ -17,7 +17,7 @@ from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
 from threading import RLock
-from typing import Literal
+from typing import Any, ClassVar, Literal, cast
 from uuid import uuid4
 
 import redis
@@ -53,6 +53,34 @@ class APIKeyManager:
     _SCRYPT_P = 1
     _SCRYPT_DKLEN = 32
     _RATE_LIMIT_DEGRADE_RETRY_SECONDS = 30
+    _RATE_LIMIT_STRATEGY_VALUES: ClassVar[set[str]] = {"fixed_window", "sliding_window"}
+    _SLIDING_WINDOW_LUA = """
+local key = KEYS[1]
+local now_ms = tonumber(ARGV[1])
+local window_ms = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local member = ARGV[4]
+local cutoff = now_ms - window_ms
+
+redis.call("ZREMRANGEBYSCORE", key, "-inf", cutoff)
+local count = redis.call("ZCARD", key)
+if count < limit then
+  redis.call("ZADD", key, now_ms, member)
+  redis.call("PEXPIRE", key, window_ms + 1000)
+  return {1, 0}
+end
+
+local oldest = redis.call("ZRANGE", key, 0, 0, "WITHSCORES")
+if oldest == nil or #oldest < 2 then
+  return {0, window_ms}
+end
+local oldest_score = tonumber(oldest[2])
+local retry_ms = window_ms - (now_ms - oldest_score)
+if retry_ms < 1 then
+  retry_ms = 1
+end
+return {0, retry_ms}
+"""
 
     def __init__(
         self,
@@ -64,16 +92,31 @@ class APIKeyManager:
         persist_path: str | None = None,
         redis_client: redis.Redis[str] | None = None,
         rate_limit_backend: Literal["auto", "redis", "memory"] = "auto",
+        rate_limit_strategy: Literal["fixed_window", "sliding_window"] | None = None,
         wall_time_fn: Callable[[], float] | None = None,
     ) -> None:
         self._auth_enabled = auth_enabled
         self._default_rate_limit_per_minute = max(1, default_rate_limit_per_minute)
         self._records_by_id: dict[str, APIKeyRecord] = {}
         self._request_windows: dict[str, deque[float]] = {}
+        self._fixed_window_counts: dict[str, tuple[int, int]] = {}
         self._lock = RLock()
         self._persist_path = Path(persist_path).expanduser() if persist_path else None
         self._rate_limit_backend = rate_limit_backend
         self._rate_limit_window_seconds = max(1, settings.API_RATE_LIMIT_WINDOW_SECONDS)
+        configured_strategy = (
+            str(rate_limit_strategy or settings.API_RATE_LIMIT_STRATEGY).strip().lower()
+        )
+        if configured_strategy not in self._RATE_LIMIT_STRATEGY_VALUES:
+            msg = (
+                "API rate limit strategy must be one of: "
+                f"{', '.join(sorted(self._RATE_LIMIT_STRATEGY_VALUES))}"
+            )
+            raise ValueError(msg)
+        if configured_strategy == "sliding_window":
+            self._rate_limit_strategy: Literal["fixed_window", "sliding_window"] = "sliding_window"
+        else:
+            self._rate_limit_strategy = "fixed_window"
         self._rate_limit_redis_prefix = (
             settings.API_RATE_LIMIT_REDIS_PREFIX.strip() or "horadus:api_rate_limit"
         )
@@ -153,6 +196,7 @@ class APIKeyManager:
             record.is_active = False
             record.revoked_at = datetime.now(tz=UTC)
             self._request_windows.pop(key_id, None)
+            self._fixed_window_counts.pop(key_id, None)
             self._save_persisted_keys()
             return True
 
@@ -172,6 +216,7 @@ class APIKeyManager:
             record.is_active = False
             record.revoked_at = datetime.now(tz=UTC)
             self._request_windows.pop(record.id, None)
+            self._fixed_window_counts.pop(record.id, None)
             self._save_persisted_keys()
             return replacement_record, replacement_raw_key
 
@@ -192,16 +237,17 @@ class APIKeyManager:
             return distributed_result
 
         with self._lock:
-            window = self._request_windows.setdefault(key_id, deque())
-            while window and (now - window[0]) >= self._rate_limit_window_seconds:
-                window.popleft()
-
-            if len(window) >= per_minute_limit:
-                retry_after = int(max(1, self._rate_limit_window_seconds - (now - window[0])))
-                return (False, retry_after)
-
-            window.append(now)
-            return (True, None)
+            if self._rate_limit_strategy == "sliding_window":
+                return self._check_rate_limit_memory_sliding_window(
+                    key_id=key_id,
+                    per_minute_limit=per_minute_limit,
+                    now=now,
+                )
+            return self._check_rate_limit_memory_fixed_window(
+                key_id=key_id,
+                per_minute_limit=per_minute_limit,
+                now=now,
+            )
 
     def _check_rate_limit_distributed(
         self,
@@ -216,31 +262,120 @@ class APIKeyManager:
             return None
 
         try:
-            redis_client = self._get_redis_client()
-            window_start = (
-                int(now // self._rate_limit_window_seconds) * self._rate_limit_window_seconds
+            if self._rate_limit_strategy == "sliding_window":
+                return self._check_rate_limit_distributed_sliding_window(
+                    key_id=key_id,
+                    per_minute_limit=per_minute_limit,
+                    now=now,
+                )
+            return self._check_rate_limit_distributed_fixed_window(
+                key_id=key_id,
+                per_minute_limit=per_minute_limit,
+                now=now,
             )
-            window_end = window_start + self._rate_limit_window_seconds
-            bucket_key = f"{self._rate_limit_redis_prefix}:{key_id}:{window_start}"
-
-            pipeline = redis_client.pipeline(transaction=True)
-            pipeline.incr(bucket_key)
-            pipeline.expireat(bucket_key, window_end + 1)
-            count_raw, _expire_set = pipeline.execute()
-            count = int(count_raw)
-            if count <= per_minute_limit:
-                return (True, None)
-
-            retry_after = max(1, window_end - int(now))
-            return (False, retry_after)
         except Exception:
             self._redis_unavailable_until = now + self._RATE_LIMIT_DEGRADE_RETRY_SECONDS
             logger.warning(
                 "Rate limit backend degraded to memory",
                 backend=self._rate_limit_backend,
+                strategy=self._rate_limit_strategy,
                 retry_after_seconds=self._RATE_LIMIT_DEGRADE_RETRY_SECONDS,
             )
             return None
+
+    def _check_rate_limit_distributed_fixed_window(
+        self,
+        *,
+        key_id: str,
+        per_minute_limit: int,
+        now: float,
+    ) -> tuple[bool, int | None]:
+        redis_client = self._get_redis_client()
+        window_start = int(now // self._rate_limit_window_seconds) * self._rate_limit_window_seconds
+        window_end = window_start + self._rate_limit_window_seconds
+        bucket_key = f"{self._rate_limit_redis_prefix}:fw:{key_id}:{window_start}"
+
+        pipeline = redis_client.pipeline(transaction=True)
+        pipeline.incr(bucket_key)
+        pipeline.expireat(bucket_key, window_end + 1)
+        count_raw, _expire_set = pipeline.execute()
+        count = int(count_raw)
+        if count <= per_minute_limit:
+            return (True, None)
+
+        retry_after = max(1, window_end - int(now))
+        return (False, retry_after)
+
+    def _check_rate_limit_distributed_sliding_window(
+        self,
+        *,
+        key_id: str,
+        per_minute_limit: int,
+        now: float,
+    ) -> tuple[bool, int | None]:
+        redis_client = self._get_redis_client()
+        window_ms = self._rate_limit_window_seconds * 1000
+        now_ms = int(now * 1000)
+        bucket_key = f"{self._rate_limit_redis_prefix}:sw:{key_id}"
+        request_member = f"{now_ms}:{secrets.token_hex(8)}"
+        result_raw = cast("Any", redis_client).eval(
+            self._SLIDING_WINDOW_LUA,
+            1,
+            bucket_key,
+            now_ms,
+            window_ms,
+            per_minute_limit,
+            request_member,
+        )
+        if not isinstance(result_raw, list) or len(result_raw) < 2:
+            msg = "Invalid Redis sliding-window result"
+            raise RuntimeError(msg)
+        allowed = int(result_raw[0]) == 1
+        retry_after_ms = max(0, int(result_raw[1]))
+        if allowed:
+            return (True, None)
+
+        retry_after = max(1, (retry_after_ms + 999) // 1000)
+        return (False, retry_after)
+
+    def _check_rate_limit_memory_fixed_window(
+        self,
+        *,
+        key_id: str,
+        per_minute_limit: int,
+        now: float,
+    ) -> tuple[bool, int | None]:
+        window_start = int(now // self._rate_limit_window_seconds) * self._rate_limit_window_seconds
+        window_end = window_start + self._rate_limit_window_seconds
+        previous_window_start, previous_count = self._fixed_window_counts.get(
+            key_id,
+            (window_start, 0),
+        )
+        current_count = previous_count if previous_window_start == window_start else 0
+        if current_count >= per_minute_limit:
+            retry_after = max(1, window_end - int(now))
+            return (False, retry_after)
+
+        self._fixed_window_counts[key_id] = (window_start, current_count + 1)
+        return (True, None)
+
+    def _check_rate_limit_memory_sliding_window(
+        self,
+        *,
+        key_id: str,
+        per_minute_limit: int,
+        now: float,
+    ) -> tuple[bool, int | None]:
+        window = self._request_windows.setdefault(key_id, deque())
+        while window and (now - window[0]) >= self._rate_limit_window_seconds:
+            window.popleft()
+
+        if len(window) >= per_minute_limit:
+            retry_after = int(max(1, self._rate_limit_window_seconds - (now - window[0])))
+            return (False, retry_after)
+
+        window.append(now)
+        return (True, None)
 
     def _get_redis_client(self) -> redis.Redis[str]:
         if self._redis_client is None:

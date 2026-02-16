@@ -62,7 +62,17 @@ class EventClusterer:
             await self._add_event_link(event.id, item_id)
             return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
 
-        matched = await self._find_matching_event(item.embedding, self._item_timestamp(item))
+        item_embedding_model = item.embedding_model.strip() if item.embedding_model else None
+        if not item_embedding_model:
+            event = await self._create_event(item)
+            await self._add_event_link(event.id, item_id)
+            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+
+        matched = await self._find_matching_event(
+            item.embedding,
+            item_embedding_model,
+            self._item_timestamp(item),
+        )
         if matched is None:
             event = await self._create_event(item)
             await self._add_event_link(event.id, item_id)
@@ -98,6 +108,8 @@ class EventClusterer:
         event = Event(
             canonical_summary=self._build_canonical_summary(item),
             embedding=item.embedding,
+            embedding_model=item.embedding_model,
+            embedding_generated_at=item.embedding_generated_at,
             source_count=1,
             unique_source_count=1,
             first_seen_at=timestamp,
@@ -117,6 +129,8 @@ class EventClusterer:
         event.last_mention_at = mention_time
         if event.embedding is None and item.embedding is not None:
             event.embedding = item.embedding
+            event.embedding_model = item.embedding_model
+            event.embedding_generated_at = item.embedding_generated_at
 
         await self._update_primary_item(event, item.id)
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
@@ -126,6 +140,7 @@ class EventClusterer:
     async def _find_matching_event(
         self,
         item_embedding: list[float],
+        embedding_model: str,
         reference_time: datetime,
     ) -> tuple[Event, float] | None:
         window_start = reference_time - timedelta(hours=settings.CLUSTER_TIME_WINDOW_HOURS)
@@ -136,6 +151,7 @@ class EventClusterer:
             select(Event, distance_expr.label("distance"))
             .where(Event.last_mention_at >= window_start)
             .where(Event.embedding.is_not(None))
+            .where(Event.embedding_model == embedding_model)
             .where(distance_expr <= max_distance)
             .order_by(distance_expr.asc())
             .limit(1)

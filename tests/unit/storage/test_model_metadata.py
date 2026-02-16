@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from src.storage.models import ApiUsage, Event, RawItem
+from src.storage.models import ApiUsage, Event, RawItem, Report, Source
 
 pytestmark = pytest.mark.unit
 
@@ -46,3 +46,23 @@ def test_pgvector_indexes_match_migration_profile_lists_setting() -> None:
 
     assert raw_item_index.dialect_options["postgresql"]["with"] == {"lists": 64}
     assert event_index.dialect_options["postgresql"]["with"] == {"lists": 64}
+
+
+def test_embedding_lineage_columns_present_in_model_metadata() -> None:
+    assert "embedding_model" in RawItem.__table__.c
+    assert "embedding_generated_at" in RawItem.__table__.c
+    assert "embedding_model" in Event.__table__.c
+    assert "embedding_generated_at" in Event.__table__.c
+
+
+def test_report_grounding_columns_present_in_model_metadata() -> None:
+    assert "grounding_status" in Report.__table__.c
+    assert "grounding_violation_count" in Report.__table__.c
+    assert "grounding_references" in Report.__table__.c
+
+
+def test_source_ingestion_watermark_column_present_in_model_metadata() -> None:
+    assert "ingestion_window_end_at" in Source.__table__.c
+    assert any(
+        index.name == "idx_sources_ingestion_window_end_at" for index in Source.__table__.indexes
+    )

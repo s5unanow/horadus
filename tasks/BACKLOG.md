@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-112`.
+- Next available task IDs start at `TASK-116`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -1421,6 +1421,72 @@ and produce a deterministic list of any missing/unmerged task work.
 - [x] Produce a list of missing/unmerged tasks (or explicit confirmation none missing)
 - [x] Document findings with concrete references (branch, PR, commit where applicable)
 - [x] Record recommended remediation sequence for any missing task merges
+
+---
+
+### TASK-112: Recover Stranded TASK-086..TASK-107 from `task-061`
+**Priority**: P0 (Critical)
+**Estimate**: 4-8 hours
+**Depends On**: TASK-111
+
+Recover backlog-tracked work that remained on `codex/task-061-recency-decay`
+and was not merged into `main`, then reconcile task-status docs with recovered
+implementation reality.
+
+**Acceptance Criteria**:
+- [x] Produce deterministic recovery matrix for `TASK-086..TASK-107` (recoverable commits vs missing artifacts)
+- [x] Cherry-pick/apply recoverable committed changes from `codex/task-061-recency-decay` onto `main` lineage with conflict resolution
+- [x] Reconstruct or explicitly defer tasks whose required files were never committed on `task-061` (with concrete follow-up tasks)
+- [x] Run targeted validation for recovered areas (unit tests + CI green)
+- [x] Update `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, and `PROJECT_STATUS.md` to match recovered state
+
+---
+
+### TASK-113: Complete Deferred Eval Mode and Vector Revalidation Recovery
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+**Depends On**: TASK-112
+
+Complete deferred recovery gaps for TASK-091 and TASK-093 where task-061 only
+landed partial plumbing without full benchmark/runtime integration artifacts.
+
+**Acceptance Criteria**:
+- [ ] Implement benchmark runtime support for `dispatch_mode` and `request_priority` flags
+- [ ] Restore vector revalidation artifacts (runbook + summary persistence + tests)
+- [ ] Validate eval docs/examples match actual CLI/runtime behavior
+- [ ] Add/update unit tests for deferred paths and pass targeted eval tests
+
+---
+
+### TASK-114: Complete Deferred Docs Freshness Gate Recovery
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Depends On**: TASK-112
+
+Recover TASK-095 artifacts that were missing from committed task-061 history
+(docs freshness checker, override policy, and CI/local gate wiring).
+
+**Acceptance Criteria**:
+- [ ] Add docs freshness checker module and command entrypoint
+- [ ] Add override policy file with expiry/rationale schema checks
+- [ ] Wire docs freshness gate into CI and local quality targets
+- [ ] Add/restore unit tests for conflict detection and override behavior
+
+---
+
+### TASK-115: Finish Partial Recovery for Tracing/Lineage/Grounding
+**Priority**: P1 (High)
+**Estimate**: 3-6 hours
+**Depends On**: TASK-112
+
+Close remaining partials left after TASK-112 for TASK-092, TASK-100, and
+TASK-102 (dependency parity, remaining runtime guards, and API exposure parity).
+
+**Acceptance Criteria**:
+- [ ] Add missing tracing dependency lock/runtime parity and API bootstrap instrumentation
+- [ ] Complete embedding-lineage safety checks in deduplication/clustering paths and docs
+- [ ] Expose grounding metadata parity across report/retrospective API response contracts
+- [ ] Run targeted unit tests for tracing, lineage, grounding, and affected API routes
 
 ---
 

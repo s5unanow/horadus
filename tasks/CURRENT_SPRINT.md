@@ -15,10 +15,31 @@
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
+- `TASK-113` Complete Deferred Eval Mode and Vector Revalidation Recovery — Ready for implementation
+- `TASK-114` Complete Deferred Docs Freshness Gate Recovery — Ready for implementation
+- `TASK-115` Finish Partial Recovery for Tracing/Lineage/Grounding — Ready for implementation
 
 ---
 
 ## Completed This Sprint
+
+### TASK-112: Recover Stranded TASK-086..TASK-107 from `task-061`
+**Status**: DONE ✓  
+**Priority**: P0 (Critical)  
+**Spec**: `tasks/BACKLOG.md`
+
+Recovered committed task-061 backlog work onto `main` lineage, reconstructed
+missing required modules/migrations, and documented unresolved recovery gaps as
+explicit follow-up tasks.
+
+**Completed**:
+- [x] Produced deterministic per-task recovery matrix (`tasks/assessments/TASK-112-recovery-matrix.md`)
+- [x] Applied recoverable committed code/docs/tests from `origin/codex/task-061-recency-decay`
+- [x] Reconstructed missing adapter/tracing/lineage/grounding artifacts required for runnable recovered paths
+- [x] Added deferred follow-up tasks for artifacts not fully recoverable from committed history (`TASK-113`, `TASK-114`, `TASK-115`)
+- [x] Ran targeted changed-area validation (186 unit tests passing)
+
+---
 
 ### TASK-111: Main Branch Merge-Completeness Audit
 **Status**: DONE ✓  

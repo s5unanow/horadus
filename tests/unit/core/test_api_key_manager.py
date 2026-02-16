@@ -20,6 +20,7 @@ def _build_manager(
     persist_path: str | None = None,
     redis_client: Any | None = None,
     rate_limit_backend: str = "auto",
+    rate_limit_strategy: str = "fixed_window",
     wall_time_fn: Any | None = None,
 ) -> APIKeyManager:
     return APIKeyManager(
@@ -30,6 +31,7 @@ def _build_manager(
         persist_path=persist_path,
         redis_client=redis_client,
         rate_limit_backend=rate_limit_backend,
+        rate_limit_strategy=rate_limit_strategy,
         wall_time_fn=wall_time_fn,
     )
 
@@ -63,6 +65,7 @@ class _FakeRedisClient:
         self._now_fn = now_fn
         self._values: dict[str, int] = {}
         self._expire_at: dict[str, int] = {}
+        self._zset_values: dict[str, dict[str, int]] = {}
 
     def pipeline(self, transaction: bool = True) -> _FakeRedisPipeline:
         _ = transaction
@@ -76,6 +79,34 @@ class _FakeRedisClient:
     def expireat(self, key: str, when: int) -> bool:
         self._expire_at[key] = when
         return True
+
+    def eval(
+        self,
+        script: str,
+        numkeys: int,
+        key: str,
+        now_ms: int,
+        window_ms: int,
+        limit: int,
+        member: str,
+    ) -> list[int]:
+        _ = script
+        if numkeys != 1:
+            raise ValueError("fake redis eval only supports one key")
+
+        cutoff = now_ms - window_ms
+        zset = self._zset_values.setdefault(key, {})
+        stale_members = [entry for entry, score in zset.items() if score <= cutoff]
+        for stale_member in stale_members:
+            zset.pop(stale_member, None)
+
+        if len(zset) < limit:
+            zset[member] = now_ms
+            return [1, 0]
+
+        oldest_score = min(zset.values()) if zset else now_ms
+        retry_after_ms = max(1, window_ms - (now_ms - oldest_score))
+        return [0, retry_after_ms]
 
     def _purge_if_expired(self, key: str) -> None:
         expires = self._expire_at.get(key)
@@ -133,6 +164,48 @@ def test_per_key_rate_limit_blocks_after_threshold() -> None:
     assert blocked is False
     assert retry3 is not None
     assert retry3 > 0
+
+
+def test_fixed_window_allows_boundary_burst() -> None:
+    now = [59.9]
+    manager = _build_manager(
+        rate_limit_per_minute=1,
+        rate_limit_backend="memory",
+        rate_limit_strategy="fixed_window",
+        wall_time_fn=lambda: now[0],
+    )
+    record, credential = manager.create_key(name="fixed-window")
+    assert manager.authenticate(credential) is not None
+
+    allowed_first, _retry_first = manager.check_rate_limit(record.id)
+    now[0] = 60.1
+    allowed_second, retry_second = manager.check_rate_limit(record.id)
+
+    assert allowed_first is True
+    assert allowed_second is True
+    assert retry_second is None
+
+
+def test_sliding_window_blocks_boundary_burst() -> None:
+    now = [59.9]
+    manager = _build_manager(
+        rate_limit_per_minute=1,
+        rate_limit_backend="memory",
+        rate_limit_strategy="sliding_window",
+        wall_time_fn=lambda: now[0],
+    )
+    record, credential = manager.create_key(name="sliding-window")
+    assert manager.authenticate(credential) is not None
+
+    allowed_first, retry_first = manager.check_rate_limit(record.id)
+    assert allowed_first is True
+    assert retry_first is None
+
+    now[0] = 60.1
+    allowed_second, retry_second = manager.check_rate_limit(record.id)
+    assert allowed_second is False
+    assert retry_second is not None
+    assert retry_second > 0
 
 
 def test_runtime_keys_persist_and_reload(tmp_path: Path) -> None:
@@ -248,3 +321,38 @@ def test_distributed_rate_limit_retry_after_is_deterministic() -> None:
     blocked_third, retry_third = manager.check_rate_limit(record.id)
     assert blocked_third is False
     assert retry_third == 1
+
+
+def test_distributed_sliding_window_is_shared_across_manager_instances(tmp_path: Path) -> None:
+    now = [59.9]
+    redis_client = _FakeRedisClient(now_fn=lambda: now[0])
+    persist_path = str(tmp_path / "api_keys.json")
+    manager_one = _build_manager(
+        persist_path=persist_path,
+        redis_client=redis_client,
+        rate_limit_backend="redis",
+        rate_limit_strategy="sliding_window",
+        wall_time_fn=lambda: now[0],
+    )
+    _record, credential = manager_one.create_key(name="shared-sliding", rate_limit_per_minute=1)
+    manager_two = _build_manager(
+        persist_path=persist_path,
+        redis_client=redis_client,
+        rate_limit_backend="redis",
+        rate_limit_strategy="sliding_window",
+        wall_time_fn=lambda: now[0],
+    )
+    record_one = manager_one.authenticate(credential)
+    record_two = manager_two.authenticate(credential)
+    assert record_one is not None
+    assert record_two is not None
+
+    allowed_first, retry_first = manager_one.check_rate_limit(record_one.id)
+    assert allowed_first is True
+    assert retry_first is None
+
+    now[0] = 60.1
+    blocked_second, retry_second = manager_two.check_rate_limit(record_two.id)
+    assert blocked_second is False
+    assert retry_second is not None
+    assert retry_second > 0

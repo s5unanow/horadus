@@ -1711,11 +1711,11 @@ Harden collector failure handling so a single transient outage does not wipe out
 an entire 6-hour collection window.
 
 **Acceptance Criteria**:
-- [ ] Review and tune retry/backoff settings for `workers.collect_rss` and `workers.collect_gdelt` against 6-hour cadence assumptions
-- [ ] Add explicit collector timeout budgets and failure classification (transient vs terminal) with deterministic logging fields
-- [ ] Add bounded requeue behavior for transient collector failures before marking run as failed
-- [ ] Add tests for transient network failures, prolonged outage behavior, and successful recovery paths
-- [ ] Document retry/timeout policy with concrete operational examples and expected worst-case recovery time
+- [x] Review and tune retry/backoff settings for `workers.collect_rss` and `workers.collect_gdelt` against 6-hour cadence assumptions
+- [x] Add explicit collector timeout budgets and failure classification (transient vs terminal) with deterministic logging fields
+- [x] Add bounded requeue behavior for transient collector failures before marking run as failed
+- [x] Add tests for transient network failures, prolonged outage behavior, and successful recovery paths
+- [x] Document retry/timeout policy with concrete operational examples and expected worst-case recovery time
 
 ---
 

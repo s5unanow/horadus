@@ -45,6 +45,10 @@ DEAD_LETTER_MAX_ITEMS = 1000
 TaskFunc = TypeVar("TaskFunc", bound=Callable[..., Any])
 
 
+class CollectorTransientRunError(RuntimeError):
+    """Raised when a collector run should be requeued for transient outages."""
+
+
 def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[TaskFunc], TaskFunc]:
     """
     Typed wrapper around Celery's shared_task decorator.
@@ -57,6 +61,19 @@ def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[TaskFunc
 
 def _run_async(coro: Coroutine[Any, Any, dict[str, Any]]) -> dict[str, Any]:
     return asyncio.run(coro)
+
+
+def _should_requeue_collector_run(result: dict[str, Any]) -> bool:
+    transient_errors = int(result.get("transient_errors", 0))
+    terminal_errors = int(result.get("terminal_errors", 0))
+    sources_succeeded = int(result.get("sources_succeeded", 0))
+    sources_failed = int(result.get("sources_failed", 0))
+    return (
+        transient_errors > 0
+        and terminal_errors == 0
+        and sources_succeeded == 0
+        and sources_failed > 0
+    )
 
 
 def _push_dead_letter(payload: dict[str, Any]) -> None:
@@ -166,6 +183,10 @@ async def _collect_rss_async() -> dict[str, Any]:
         "stored": sum(result.items_stored for result in results),
         "skipped": sum(result.items_skipped for result in results),
         "errors": sum(len(result.errors) for result in results),
+        "transient_errors": sum(result.transient_errors for result in results),
+        "terminal_errors": sum(result.terminal_errors for result in results),
+        "sources_succeeded": sum(1 for result in results if not result.errors),
+        "sources_failed": sum(1 for result in results if result.errors),
         "results": [asdict(result) for result in results],
     }
 
@@ -186,6 +207,10 @@ async def _collect_gdelt_async() -> dict[str, Any]:
         "stored": sum(result.items_stored for result in results),
         "skipped": sum(result.items_skipped for result in results),
         "errors": sum(len(result.errors) for result in results),
+        "transient_errors": sum(result.transient_errors for result in results),
+        "terminal_errors": sum(result.terminal_errors for result in results),
+        "sources_succeeded": sum(1 for result in results if not result.errors),
+        "sources_failed": sum(1 for result in results if result.errors),
         "results": [asdict(result) for result in results],
     }
 
@@ -629,11 +654,17 @@ def generate_monthly_reports() -> dict[str, Any]:
 
 @typed_shared_task(
     name="workers.collect_rss",
-    autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
+    autoretry_for=(
+        httpx.TimeoutException,
+        httpx.NetworkError,
+        ConnectionError,
+        TimeoutError,
+        CollectorTransientRunError,
+    ),
     retry_backoff=True,
-    retry_backoff_max=300,
+    retry_backoff_max=settings.COLLECTOR_RETRY_BACKOFF_MAX_SECONDS,
     retry_jitter=True,
-    retry_kwargs={"max_retries": 3},
+    retry_kwargs={"max_retries": settings.COLLECTOR_TASK_MAX_RETRIES},
 )
 def collect_rss() -> dict[str, Any]:
     """Collect RSS sources and store new raw items."""
@@ -651,12 +682,32 @@ def collect_rss() -> dict[str, Any]:
             skipped=int(result["skipped"]),
             errors=int(result["errors"]),
         )
+        if _should_requeue_collector_run(result):
+            request = getattr(cast("Any", collect_rss), "request", None)
+            current_retries = int(getattr(request, "retries", 0))
+            max_retries = max(0, settings.COLLECTOR_TASK_MAX_RETRIES)
+            logger.warning(
+                "Transient RSS collector outage; requeueing",
+                collector="rss",
+                transient_errors=int(result["transient_errors"]),
+                terminal_errors=int(result["terminal_errors"]),
+                sources_failed=int(result["sources_failed"]),
+                sources_succeeded=int(result["sources_succeeded"]),
+                timeout_budget_seconds=settings.RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS,
+                current_retries=current_retries,
+                max_retries=max_retries,
+                remaining_retries=max(0, max_retries - current_retries),
+            )
+            raise CollectorTransientRunError("Transient RSS collector outage")
         _queue_processing_for_new_items(collector="rss", stored_items=int(result["stored"]))
         logger.info(
             "Finished RSS collection task",
             stored=result["stored"],
             skipped=result["skipped"],
             errors=result["errors"],
+            transient_errors=int(result.get("transient_errors", 0)),
+            terminal_errors=int(result.get("terminal_errors", 0)),
+            sources_failed=int(result.get("sources_failed", 0)),
         )
         return result
 
@@ -668,11 +719,17 @@ def collect_rss() -> dict[str, Any]:
 
 @typed_shared_task(
     name="workers.collect_gdelt",
-    autoretry_for=(httpx.TimeoutException, httpx.NetworkError, ConnectionError, TimeoutError),
+    autoretry_for=(
+        httpx.TimeoutException,
+        httpx.NetworkError,
+        ConnectionError,
+        TimeoutError,
+        CollectorTransientRunError,
+    ),
     retry_backoff=True,
-    retry_backoff_max=300,
+    retry_backoff_max=settings.COLLECTOR_RETRY_BACKOFF_MAX_SECONDS,
     retry_jitter=True,
-    retry_kwargs={"max_retries": 3},
+    retry_kwargs={"max_retries": settings.COLLECTOR_TASK_MAX_RETRIES},
 )
 def collect_gdelt() -> dict[str, Any]:
     """Collect GDELT sources and store new raw items."""
@@ -690,12 +747,32 @@ def collect_gdelt() -> dict[str, Any]:
             skipped=int(result["skipped"]),
             errors=int(result["errors"]),
         )
+        if _should_requeue_collector_run(result):
+            request = getattr(cast("Any", collect_gdelt), "request", None)
+            current_retries = int(getattr(request, "retries", 0))
+            max_retries = max(0, settings.COLLECTOR_TASK_MAX_RETRIES)
+            logger.warning(
+                "Transient GDELT collector outage; requeueing",
+                collector="gdelt",
+                transient_errors=int(result["transient_errors"]),
+                terminal_errors=int(result["terminal_errors"]),
+                sources_failed=int(result["sources_failed"]),
+                sources_succeeded=int(result["sources_succeeded"]),
+                timeout_budget_seconds=settings.GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS,
+                current_retries=current_retries,
+                max_retries=max_retries,
+                remaining_retries=max(0, max_retries - current_retries),
+            )
+            raise CollectorTransientRunError("Transient GDELT collector outage")
         _queue_processing_for_new_items(collector="gdelt", stored_items=int(result["stored"]))
         logger.info(
             "Finished GDELT collection task",
             stored=result["stored"],
             skipped=result["skipped"],
             errors=result["errors"],
+            transient_errors=int(result.get("transient_errors", 0)),
+            terminal_errors=int(result.get("terminal_errors", 0)),
+            sources_failed=int(result.get("sources_failed", 0)),
         )
         return result
 

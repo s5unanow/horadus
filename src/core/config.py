@@ -661,6 +661,30 @@ class Settings(BaseSettings):
         le=10,
         description="Maximum collector catch-up dispatches emitted per freshness-check run",
     )
+    RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        ge=30,
+        le=7200,
+        description="Total timeout budget in seconds for a single RSS feed collection run",
+    )
+    GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        ge=30,
+        le=7200,
+        description="Total timeout budget in seconds for a single GDELT query collection run",
+    )
+    COLLECTOR_TASK_MAX_RETRIES: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Bounded worker requeue attempts for transient collector task failures",
+    )
+    COLLECTOR_RETRY_BACKOFF_MAX_SECONDS: int = Field(
+        default=300,
+        ge=1,
+        le=7200,
+        description="Maximum retry backoff delay in seconds for collector task retries",
+    )
     MAX_ITEMS_PER_COLLECTION: int = Field(default=100, ge=1)
     WEEKLY_REPORT_DAY_OF_WEEK: int = Field(
         default=1,

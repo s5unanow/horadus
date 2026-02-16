@@ -98,6 +98,10 @@ This document lists environment variables used by the Horadus backend.
 | `SOURCE_FRESHNESS_ALERT_MULTIPLIER` | `2.0` | Marks a source stale when `last_fetched_at` age exceeds `collector_interval × multiplier`. |
 | `SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES` | `30` | Beat cadence for `workers.check_source_freshness` stale-source scan. |
 | `SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES` | `2` | Maximum bounded collector catch-up dispatches emitted per freshness check run. |
+| `RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS` | `300` | Total timeout budget per RSS feed collection run. |
+| `GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS` | `300` | Total timeout budget per GDELT query collection run. |
+| `COLLECTOR_TASK_MAX_RETRIES` | `3` | Bounded requeue attempts for transient collector outages. |
+| `COLLECTOR_RETRY_BACKOFF_MAX_SECONDS` | `300` | Maximum backoff delay between collector task retries. |
 | `TREND_SNAPSHOT_INTERVAL_MINUTES` | `60` | Snapshot cadence. |
 | `PROCESS_PENDING_INTERVAL_MINUTES` | `15` | Cadence for periodic `workers.process_pending_items` beat schedule. |
 | `PROCESSING_REAPER_INTERVAL_MINUTES` | `15` | Cadence for stale-processing recovery task. |
@@ -130,6 +134,8 @@ Tuning checklist:
 Manual outage recovery / catch-up steps are documented in `docs/LOW_FREQUENCY_MODE.md`.
 Freshness status is available via `GET /api/v1/sources/freshness` and
 `uv run horadus eval source-freshness`.
+Collector failure policy is transient-vs-terminal classified; transient all-source
+outages requeue up to `COLLECTOR_TASK_MAX_RETRIES`.
 
 ## Backup Operations
 

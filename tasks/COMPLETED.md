@@ -99,6 +99,7 @@ Tasks that have been completed and verified.
 - TASK-103: Six-Hour Polling Operating Profile and Defaults ✅
 - TASK-104: Ingestion Completeness Watermark and Overlap Guard ✅
 - TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch ✅
+- TASK-106: Collector Retry and Timeout Hardening for Low-Frequency Mode ✅
 - TASK-107: Task Dependency Governance and Execution Policy ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅

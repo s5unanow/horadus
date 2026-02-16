@@ -9,7 +9,7 @@ import calendar
 import hashlib
 import time
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from time import struct_time
 from typing import Any
@@ -23,6 +23,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.config import settings
 from src.ingestion.content_extractor import ContentExtractor
 from src.ingestion.rate_limiter import DomainRateLimiter
 from src.processing.deduplication_service import DeduplicationService
@@ -40,7 +41,7 @@ class FeedConfig:
     credibility: float
     categories: list[str] = field(default_factory=list)
     check_interval_minutes: int = 30
-    max_items_per_fetch: int = 30
+    max_items_per_fetch: int = 200
     language: str | None = None
     source_tier: str = "regional"
     reporting_type: str = "secondary"
@@ -54,6 +55,7 @@ class CollectorSettings:
 
     request_timeout_seconds: int = 30
     user_agent: str = "GeopoliticalIntel/1.0 (RSS Collector)"
+    default_lookback_hours: int = 12
 
 
 @dataclass(slots=True)
@@ -65,6 +67,12 @@ class CollectionResult:
     items_stored: int = 0
     items_skipped: int = 0
     errors: list[str] = field(default_factory=list)
+    transient_errors: int = 0
+    terminal_errors: int = 0
+    expected_start: datetime | None = None
+    actual_start: datetime | None = None
+    gap_seconds: int = 0
+    overlap_seconds: int = 0
     duration_seconds: float = 0.0
 
 
@@ -89,7 +97,7 @@ class RSSCollector:
         self._feeds: list[FeedConfig] = []
         self._config_mtime: float | None = None
 
-        self.feed_total_timeout_seconds = 300
+        self.feed_total_timeout_seconds = settings.RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS
         self.article_timeout_seconds = 30
         self.max_retries = 3
         self.dedup_window_days = 7
@@ -157,6 +165,22 @@ class RSSCollector:
         result = CollectionResult(feed_name=feed.name)
 
         source = await self._get_or_create_source(feed)
+        now_utc = datetime.now(tz=UTC)
+        expected_start, window_start = self._determine_collection_window(
+            source=source,
+            now_utc=now_utc,
+        )
+        result.expected_start = expected_start
+        result.actual_start = window_start
+
+        logger.info(
+            "RSS collection window",
+            feed=feed.name,
+            expected_start=expected_start.isoformat(),
+            actual_start=window_start.isoformat(),
+        )
+
+        published_timestamps: list[datetime] = []
 
         try:
             async with asyncio.timeout(self.feed_total_timeout_seconds):
@@ -165,6 +189,10 @@ class RSSCollector:
                 result.items_fetched = min(len(entries), feed.max_items_per_fetch)
 
                 for entry in entries[: feed.max_items_per_fetch]:
+                    entry_data = dict(entry) if hasattr(entry, "items") else {}
+                    published_at = self._parse_published_at(entry_data)
+                    if published_at is not None:
+                        published_timestamps.append(published_at)
                     try:
                         was_stored = await self._process_entry(source, feed, entry)
                     except Exception as exc:
@@ -182,19 +210,53 @@ class RSSCollector:
                     else:
                         result.items_skipped += 1
         except Exception as exc:
-            error_message = f"Feed collection failed: {exc}"
+            failure_class = "transient" if self._is_transient_failure(exc) else "terminal"
+            failure_reason = self._failure_reason(exc)
+            if failure_class == "transient":
+                result.transient_errors += 1
+            else:
+                result.terminal_errors += 1
+            error_message = f"[{failure_class}] Feed collection failed ({failure_reason}): {exc}"
             logger.warning(
                 "RSS feed collection failed",
                 feed=feed.name,
                 source_url=feed.url,
                 error=str(exc),
+                failure_class=failure_class,
+                failure_reason=failure_reason,
+                timeout_budget_seconds=self.feed_total_timeout_seconds,
+                retry_attempts=max(1, self.max_retries + 1),
             )
             result.errors.append(error_message)
             await self._record_source_failure(source, error_message)
         else:
-            await self._record_source_success(source)
+            if published_timestamps:
+                result.actual_start = min(published_timestamps)
+                window_end = max(published_timestamps)
+            else:
+                result.actual_start = window_start
+                window_end = now_utc
+
+            gap_seconds, overlap_seconds = self._window_coverage_metrics(
+                expected_start=expected_start,
+                actual_start=result.actual_start,
+            )
+            result.gap_seconds = gap_seconds
+            result.overlap_seconds = overlap_seconds
+            await self._record_source_success(source, window_end=window_end)
 
         result.duration_seconds = round(time.monotonic() - started, 3)
+        logger.info(
+            "RSS collection window coverage",
+            feed=feed.name,
+            expected_start=result.expected_start.isoformat() if result.expected_start else None,
+            actual_start=result.actual_start.isoformat() if result.actual_start else None,
+            gap_seconds=result.gap_seconds,
+            overlap_seconds=result.overlap_seconds,
+            items_fetched=result.items_fetched,
+            items_stored=result.items_stored,
+            items_skipped=result.items_skipped,
+        )
         return result
 
     async def _process_entry(self, source: Source, feed: FeedConfig, entry: Any) -> bool:
@@ -374,8 +436,41 @@ class RSSCollector:
             return None
         return item
 
-    async def _record_source_success(self, source: Source) -> None:
+    def _determine_collection_window(
+        self,
+        *,
+        source: Source,
+        now_utc: datetime,
+    ) -> tuple[datetime, datetime]:
+        window_end_at = getattr(source, "ingestion_window_end_at", None)
+        if window_end_at is None:
+            expected_start = now_utc - timedelta(hours=max(1, self.settings.default_lookback_hours))
+            return (expected_start, expected_start)
+
+        expected_start = self._as_utc(window_end_at)
+        overlap_seconds = max(0, settings.INGESTION_WINDOW_OVERLAP_SECONDS)
+        actual_start = expected_start - timedelta(seconds=overlap_seconds)
+        return (expected_start, actual_start)
+
+    @staticmethod
+    def _window_coverage_metrics(
+        *,
+        expected_start: datetime,
+        actual_start: datetime,
+    ) -> tuple[int, int]:
+        gap_seconds = max(0, int((actual_start - expected_start).total_seconds()))
+        overlap_seconds = max(0, int((expected_start - actual_start).total_seconds()))
+        return (gap_seconds, overlap_seconds)
+
+    @staticmethod
+    def _as_utc(value: datetime) -> datetime:
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
+
+    async def _record_source_success(self, source: Source, *, window_end: datetime) -> None:
         source.last_fetched_at = datetime.now(tz=UTC)
+        source.ingestion_window_end_at = self._as_utc(window_end)
         source.error_count = 0
         source.last_error = None
         await self.session.flush()
@@ -392,6 +487,7 @@ class RSSCollector:
         return CollectorSettings(
             request_timeout_seconds=int(timeout_value),
             user_agent=str(user_agent),
+            default_lookback_hours=int(raw_settings.get("default_lookback_hours", 12)),
         )
 
     @staticmethod
@@ -400,7 +496,7 @@ class RSSCollector:
         raw_feeds: list[Any],
     ) -> list[FeedConfig]:
         default_interval = int(raw_settings.get("default_check_interval_minutes", 30))
-        default_max_items = int(raw_settings.get("default_max_items_per_fetch", 30))
+        default_max_items = int(raw_settings.get("default_max_items_per_fetch", 200))
 
         parsed_feeds: list[FeedConfig] = []
         for raw_feed in raw_feeds:
@@ -519,6 +615,26 @@ class RSSCollector:
     @staticmethod
     def _is_retryable_status(status_code: int) -> bool:
         return status_code == 429 or status_code >= 500
+
+    @staticmethod
+    def _is_transient_failure(exc: BaseException) -> bool:
+        if isinstance(
+            exc, httpx.TimeoutException | httpx.NetworkError | TimeoutError | asyncio.TimeoutError
+        ):
+            return True
+        if isinstance(exc, httpx.HTTPStatusError):
+            return RSSCollector._is_retryable_status(exc.response.status_code)
+        return False
+
+    @staticmethod
+    def _failure_reason(exc: BaseException) -> str:
+        if isinstance(exc, httpx.TimeoutException | TimeoutError | asyncio.TimeoutError):
+            return "timeout"
+        if isinstance(exc, httpx.NetworkError):
+            return "network"
+        if isinstance(exc, httpx.HTTPStatusError):
+            return f"http_{exc.response.status_code}"
+        return type(exc).__name__.lower()
 
     @staticmethod
     def _parse_retry_after(raw_retry_after: str | None) -> float | None:

@@ -187,6 +187,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] 6-hour low-frequency operating profile defaults with source-window baseline tuning and outage catch-up runbook
 - [x] Per-source ingestion watermark tracking with overlap-aware window starts and explicit coverage gap/overlap logging
 - [x] Stale-source freshness SLO detection with bounded automatic catch-up dispatch and operator status surfaces (`/api/v1/sources/freshness`, `horadus eval source-freshness`)
+- [x] Collector timeout/retry hardening with transient-vs-terminal classification and bounded requeue for transient all-source outages
 
 ## In Progress
 
@@ -208,10 +209,9 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 Execution is now priority-first and dependency-aware.
 
-1. `TASK-106` (P1, unblocked)
-2. `TASK-096`, `TASK-097`, `TASK-099`, `TASK-101` (P2, unblocked)
-3. `TASK-098` (after `TASK-096`)
-4. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+1. `TASK-096`, `TASK-097`, `TASK-099`, `TASK-101` (P2, unblocked)
+2. `TASK-098` (after `TASK-096`)
+3. Complete blocked human-gated tasks (`TASK-044`, `TASK-066`, `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅
 

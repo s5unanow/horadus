@@ -26,16 +26,32 @@
 
 ## Next Non-Human Queue (Priority + Dependency Aware)
 
-1. `TASK-106`
-2. `TASK-096`
-3. `TASK-097`
-4. `TASK-098` (after `TASK-096`)
-5. `TASK-099`
-6. `TASK-101`
+1. `TASK-096`
+2. `TASK-097`
+3. `TASK-098` (after `TASK-096`)
+4. `TASK-099`
+5. `TASK-101`
 
 ---
 
 ## Completed This Sprint
+
+### TASK-106: Collector Retry and Timeout Hardening for Low-Frequency Mode
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Hardened collector retry/timeout handling with deterministic transient-vs-terminal
+classification and bounded requeue behavior.
+
+**Completed**:
+- [x] Tuned collector task retry controls via runtime settings (`COLLECTOR_TASK_MAX_RETRIES`, `COLLECTOR_RETRY_BACKOFF_MAX_SECONDS`) for 6-hour cadence operation
+- [x] Added explicit collector timeout budgets (`RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS`, `GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS`) and deterministic failure classification/logging
+- [x] Added bounded requeue gating for transient all-source outages using `CollectorTransientRunError` in collector worker tasks
+- [x] Added unit coverage for transient timeout recovery, retry-budget exhaustion, transient/terminal classification, and requeue decision behavior
+- [x] Documented retry/timeout policy and worst-case transient recovery horizon in `docs/LOW_FREQUENCY_MODE.md`
+
+---
 
 ### TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch
 **Status**: DONE ✓  

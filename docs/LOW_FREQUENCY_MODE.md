@@ -20,6 +20,23 @@ Per-source overrides remain available:
 - RSS feed-level `max_items_per_fetch`
 - GDELT query-level `lookback_hours`, `max_records_per_page`, `max_pages`
 
+## Retry and Timeout Policy
+
+- Collector runs classify failures as `transient` (timeout/network/429/5xx) or
+  `terminal` (validation/non-retryable errors).
+- A collector task is automatically requeued only when all attempted sources in
+  that run failed transiently.
+- Requeue budget and delay are bounded by:
+  - `COLLECTOR_TASK_MAX_RETRIES` (default `3`)
+  - `COLLECTOR_RETRY_BACKOFF_MAX_SECONDS` (default `300`)
+- Per-run timeout budgets:
+  - `RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS` (default `300`)
+  - `GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS` (default `300`)
+
+Worst-case transient-recovery horizon (default settings):
+- `4` total attempts (`1` initial + `3` retries)
+- up to `4 * 300s + 3 * 300s = 2100s` (~35 minutes) before final failure
+
 ## Catch-Up Runbook (Service Down Multiple Days)
 
 1. **Increase source windows temporarily**

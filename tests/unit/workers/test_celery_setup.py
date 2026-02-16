@@ -218,6 +218,10 @@ def test_collect_rss_task_uses_async_collector(
             "stored": 2,
             "skipped": 1,
             "errors": 0,
+            "transient_errors": 0,
+            "terminal_errors": 0,
+            "sources_succeeded": 1,
+            "sources_failed": 0,
             "results": [],
         }
 
@@ -246,6 +250,10 @@ def test_collect_rss_records_observability_metrics(
             "stored": 3,
             "skipped": 2,
             "errors": 1,
+            "transient_errors": 0,
+            "terminal_errors": 1,
+            "sources_succeeded": 1,
+            "sources_failed": 1,
             "results": [],
         }
 
@@ -302,6 +310,10 @@ def test_collect_gdelt_task_uses_async_collector(
             "stored": 3,
             "skipped": 1,
             "errors": 0,
+            "transient_errors": 0,
+            "terminal_errors": 0,
+            "sources_succeeded": 1,
+            "sources_failed": 0,
             "results": [],
         }
 
@@ -314,6 +326,151 @@ def test_collect_gdelt_task_uses_async_collector(
     assert result["collector"] == "gdelt"
     assert result["stored"] == 3
     assert queue_calls == [("gdelt", 3)]
+
+
+def test_should_requeue_collector_run_for_transient_outage() -> None:
+    assert (
+        tasks_module._should_requeue_collector_run(
+            {
+                "transient_errors": 2,
+                "terminal_errors": 0,
+                "sources_succeeded": 0,
+                "sources_failed": 2,
+            }
+        )
+        is True
+    )
+    assert (
+        tasks_module._should_requeue_collector_run(
+            {
+                "transient_errors": 1,
+                "terminal_errors": 1,
+                "sources_succeeded": 0,
+                "sources_failed": 1,
+            }
+        )
+        is False
+    )
+    assert (
+        tasks_module._should_requeue_collector_run(
+            {
+                "transient_errors": 1,
+                "terminal_errors": 0,
+                "sources_succeeded": 1,
+                "sources_failed": 1,
+            }
+        )
+        is False
+    )
+
+
+def test_collect_rss_requeues_transient_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "rss",
+            "fetched": 0,
+            "stored": 0,
+            "skipped": 0,
+            "errors": 2,
+            "transient_errors": 2,
+            "terminal_errors": 0,
+            "sources_succeeded": 0,
+            "sources_failed": 2,
+            "results": [],
+        }
+
+    monkeypatch.setattr(tasks_module, "_collect_rss_async", fake_collect)
+    monkeypatch.setattr(
+        tasks_module,
+        "_queue_processing_for_new_items",
+        lambda **kwargs: queue_calls.append(
+            (str(kwargs["collector"]), int(kwargs["stored_items"]))
+        ),
+    )
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", lambda **_: None)
+
+    with pytest.raises(tasks_module.CollectorTransientRunError, match="Transient RSS"):
+        tasks_module.collect_rss.run()
+
+    assert queue_calls == []
+
+
+def test_collect_gdelt_requeues_transient_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_GDELT_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "gdelt",
+            "fetched": 0,
+            "stored": 0,
+            "skipped": 0,
+            "errors": 1,
+            "transient_errors": 1,
+            "terminal_errors": 0,
+            "sources_succeeded": 0,
+            "sources_failed": 1,
+            "results": [],
+        }
+
+    monkeypatch.setattr(tasks_module, "_collect_gdelt_async", fake_collect)
+    monkeypatch.setattr(
+        tasks_module,
+        "_queue_processing_for_new_items",
+        lambda **kwargs: queue_calls.append(
+            (str(kwargs["collector"]), int(kwargs["stored_items"]))
+        ),
+    )
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", lambda **_: None)
+
+    with pytest.raises(tasks_module.CollectorTransientRunError, match="Transient GDELT"):
+        tasks_module.collect_gdelt.run()
+
+    assert queue_calls == []
+
+
+def test_collect_rss_does_not_requeue_with_partial_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(tasks_module.settings, "ENABLE_RSS_INGESTION", True)
+    queue_calls: list[tuple[str, int]] = []
+
+    async def fake_collect() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "collector": "rss",
+            "fetched": 2,
+            "stored": 1,
+            "skipped": 1,
+            "errors": 1,
+            "transient_errors": 1,
+            "terminal_errors": 0,
+            "sources_succeeded": 1,
+            "sources_failed": 1,
+            "results": [],
+        }
+
+    def fake_queue(*, collector: str, stored_items: int) -> bool:
+        queue_calls.append((collector, stored_items))
+        return True
+
+    monkeypatch.setattr(tasks_module, "_collect_rss_async", fake_collect)
+    monkeypatch.setattr(tasks_module, "_queue_processing_for_new_items", fake_queue)
+    monkeypatch.setattr(tasks_module, "record_collector_metrics", lambda **_: None)
+
+    result = tasks_module.collect_rss.run()
+
+    assert result["status"] == "ok"
+    assert queue_calls == [("rss", 1)]
 
 
 def test_process_pending_items_task_uses_async_pipeline(
@@ -763,9 +920,23 @@ async def test_check_source_freshness_async_respects_dispatch_budget(
 
 def test_task_retry_configuration() -> None:
     assert tasks_module.collect_rss.autoretry_for
-    assert tasks_module.collect_rss.retry_kwargs == {"max_retries": 3}
+    assert tasks_module.CollectorTransientRunError in tasks_module.collect_rss.autoretry_for
+    assert tasks_module.collect_rss.retry_kwargs["max_retries"] == (
+        tasks_module.settings.COLLECTOR_TASK_MAX_RETRIES
+    )
+    assert (
+        tasks_module.collect_rss.retry_backoff_max
+        == tasks_module.settings.COLLECTOR_RETRY_BACKOFF_MAX_SECONDS
+    )
     assert tasks_module.collect_gdelt.autoretry_for
-    assert tasks_module.collect_gdelt.retry_kwargs == {"max_retries": 3}
+    assert tasks_module.CollectorTransientRunError in tasks_module.collect_gdelt.autoretry_for
+    assert tasks_module.collect_gdelt.retry_kwargs["max_retries"] == (
+        tasks_module.settings.COLLECTOR_TASK_MAX_RETRIES
+    )
+    assert (
+        tasks_module.collect_gdelt.retry_backoff_max
+        == tasks_module.settings.COLLECTOR_RETRY_BACKOFF_MAX_SECONDS
+    )
     assert tasks_module.process_pending_items.autoretry_for
     assert tasks_module.process_pending_items.retry_kwargs == {"max_retries": 3}
 

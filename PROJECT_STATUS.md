@@ -183,6 +183,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Task delivery guardrails enforced: mandatory `main` sync workflow, one-task-per-branch/PR policy, PR task-scope CI guard, local branch-name commit/push hook, and main-branch protection automation (`make protect-main`)
 - [x] Stranded `TASK-086..TASK-107` recovery from `task-061` applied on `main` lineage with deterministic recovery matrix (`tasks/assessments/TASK-112-recovery-matrix.md`)
 - [x] Reconstructed missing adapter/tracing/lineage/grounding modules and migrations required for recovered runtime paths
+- [x] Status-ledger reconciliation across `CURRENT_SPRINT`, `COMPLETED`, and `PROJECT_STATUS` for active vs done task parity
 
 ## In Progress
 
@@ -193,25 +194,22 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-113` Complete deferred TASK-091/TASK-093 recovery artifacts (non-human)
-- `TASK-114` Complete deferred TASK-095 docs freshness gate recovery (non-human)
-- `TASK-115` Complete partial TASK-092/TASK-100/TASK-102 recovery parity (non-human)
+- `TASK-118` Launch Readiness and Guidance Drift Assessment `[REQUIRES_HUMAN]` (awaiting human remediation-order and launch criteria sign-off)
 
 ## Blocked
 
 - `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
 - `TASK-066` requires human-authored trend definitions and reviewer sign-off before completion.
 - `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
+- `TASK-118` requires explicit human approval for remediation ordering and launch go/no-go criteria.
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-113` deferred eval/revalidation recovery gaps from TASK-112
-2. Complete `TASK-114` docs freshness CI/local gate recovery
-3. Complete `TASK-115` tracing/lineage/grounding parity recovery
-4. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-5. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
-6. Complete `TASK-070` baseline prior review/sign-off for active trends
-7. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+1. Complete `TASK-118` human sign-off on remediation order and launch criteria
+2. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
+3. Complete `TASK-066` multi-trend baseline expansion with reviewer sign-off
+4. Complete `TASK-070` baseline prior review/sign-off for active trends
+5. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
 
 ## Expert Feedback Integration ✅
 
@@ -253,7 +251,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Human-gated trend/eval curation (`TASK-044`, `TASK-066`) remains the main completion bottleneck.
+- Human-gated sign-off and curation tasks (`TASK-118`, `TASK-044`, `TASK-066`) remain the main completion bottleneck.
 
 ## Architecture Validated ✅
 

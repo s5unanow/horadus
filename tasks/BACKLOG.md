@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-124`.
+- Next available task IDs start at `TASK-125`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2000,11 +2000,27 @@ versioned sprint archive files and keeping `tasks/CURRENT_SPRINT.md` focused on
 active execution state.
 
 **Acceptance Criteria**:
-- [ ] Archive current `tasks/CURRENT_SPRINT.md` detailed history into `tasks/sprints/SPRINT_001.md`
-- [ ] Replace `tasks/CURRENT_SPRINT.md` with a concise active-sprint view (goal, active tasks, immediate done)
-- [ ] Preserve traceability via explicit links between `CURRENT_SPRINT.md` and archived sprint files
-- [ ] Update `tasks/COMPLETED.md` with `TASK-123` completion record
-- [ ] Keep backlog task-ID policy aligned after reserving `TASK-123`
+- [x] Archive current `tasks/CURRENT_SPRINT.md` detailed history into `tasks/sprints/SPRINT_001.md`
+- [x] Replace `tasks/CURRENT_SPRINT.md` with a concise active-sprint view (goal, active tasks, immediate done)
+- [x] Preserve traceability via explicit links between `CURRENT_SPRINT.md` and archived sprint files
+- [x] Update `tasks/COMPLETED.md` with `TASK-123` completion record
+- [x] Keep backlog task-ID policy aligned after reserving `TASK-123`
+
+---
+
+### TASK-124: Status Ledger Reconciliation and Active Queue Cleanup
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+**Depends On**: TASK-123
+
+Reconcile status/task ledgers so active and completed task views are consistent
+with source-of-truth precedence and current sprint execution reality.
+
+**Acceptance Criteria**:
+- [x] Align `PROJECT_STATUS.md` in-progress and next-up sections with `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`
+- [x] Remove already completed non-human tasks from active/in-progress status narratives
+- [x] Ensure open `[REQUIRES_HUMAN]` launch-readiness task (`TASK-118`) is consistently visible in active/blocked priorities
+- [x] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) to record `TASK-124` completion and next available task ID
 
 ---
 

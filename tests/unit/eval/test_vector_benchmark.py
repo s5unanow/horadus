@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import pytest
 
 from src.eval import vector_benchmark as vector_benchmark_module
@@ -50,3 +53,76 @@ def test_recommend_strategy_falls_back_to_exact_when_recall_or_speed_not_met() -
     assert (
         vector_benchmark_module._recommend_strategy(metrics_by_strategy=not_fast_enough) == "exact"
     )
+
+
+def test_update_revalidation_summary_writes_latest_and_history(tmp_path: Path) -> None:
+    payload = {
+        "generated_at": "2026-02-16T00:00:00+00:00",
+        "dataset": {
+            "size": 4000,
+            "dimensions": 64,
+            "query_count": 200,
+            "vector_fingerprint_sha256": "abc123",
+        },
+        "recommendation": {
+            "selected_default": "ivfflat",
+            "selection_rule": "rule",
+        },
+    }
+    artifact_path = tmp_path / "vector-benchmark-1.json"
+    artifact_path.write_text("{}", encoding="utf-8")
+
+    summary_path = vector_benchmark_module._update_revalidation_summary(
+        output_dir=tmp_path,
+        payload=payload,
+        artifact_path=artifact_path,
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["latest"]["artifact"] == "vector-benchmark-1.json"
+    assert summary["latest"]["selected_default"] == "ivfflat"
+    assert len(summary["history"]) == 1
+
+
+def test_update_revalidation_summary_appends_history_entries(tmp_path: Path) -> None:
+    base_payload = {
+        "generated_at": "2026-02-16T00:00:00+00:00",
+        "dataset": {
+            "size": 4000,
+            "dimensions": 64,
+            "query_count": 200,
+            "vector_fingerprint_sha256": "abc123",
+        },
+        "recommendation": {
+            "selected_default": "ivfflat",
+            "selection_rule": "rule",
+        },
+    }
+    first_artifact = tmp_path / "vector-benchmark-1.json"
+    second_artifact = tmp_path / "vector-benchmark-2.json"
+    first_artifact.write_text("{}", encoding="utf-8")
+    second_artifact.write_text("{}", encoding="utf-8")
+
+    vector_benchmark_module._update_revalidation_summary(
+        output_dir=tmp_path,
+        payload=base_payload,
+        artifact_path=first_artifact,
+    )
+    second_payload = {
+        **base_payload,
+        "generated_at": "2026-02-17T00:00:00+00:00",
+        "recommendation": {
+            "selected_default": "hnsw",
+            "selection_rule": "rule",
+        },
+    }
+    summary_path = vector_benchmark_module._update_revalidation_summary(
+        output_dir=tmp_path,
+        payload=second_payload,
+        artifact_path=second_artifact,
+    )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
+    assert summary["latest"]["artifact"] == "vector-benchmark-2.json"
+    assert summary["latest"]["selected_default"] == "hnsw"
+    assert len(summary["history"]) == 2

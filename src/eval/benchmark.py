@@ -24,6 +24,11 @@ from src.processing.tier2_classifier import (
 from src.storage.models import Event, ProcessingStatus, RawItem
 
 HUMAN_VERIFIED_LABEL = "human_verified"
+DISPATCH_MODE_REALTIME = "realtime"
+DISPATCH_MODE_BATCH = "batch"
+REQUEST_PRIORITY_REALTIME = "realtime"
+REQUEST_PRIORITY_FLEX = "flex"
+_BATCH_DISPATCH_SIZE = 10
 
 
 @dataclass(slots=True)
@@ -208,6 +213,30 @@ DEFAULT_CONFIGS: tuple[EvalConfig, EvalConfig] = (
 def available_configs() -> dict[str, EvalConfig]:
     """Return default named benchmark configurations."""
     return {config.name: config for config in DEFAULT_CONFIGS}
+
+
+def _normalize_dispatch_mode(value: str) -> str:
+    normalized = value.strip().lower()
+    allowed = {DISPATCH_MODE_REALTIME, DISPATCH_MODE_BATCH}
+    if normalized not in allowed:
+        msg = f"Unsupported dispatch mode '{value}'. Allowed: {', '.join(sorted(allowed))}"
+        raise ValueError(msg)
+    return normalized
+
+
+def _normalize_request_priority(value: str) -> str:
+    normalized = value.strip().lower()
+    allowed = {REQUEST_PRIORITY_REALTIME, REQUEST_PRIORITY_FLEX}
+    if normalized not in allowed:
+        msg = f"Unsupported request priority '{value}'. Allowed: {', '.join(sorted(allowed))}"
+        raise ValueError(msg)
+    return normalized
+
+
+def _request_overrides_for_priority(priority: str) -> dict[str, Any] | None:
+    if priority == REQUEST_PRIORITY_FLEX:
+        return {"service_tier": "flex"}
+    return None
 
 
 def load_gold_set(
@@ -501,8 +530,8 @@ async def run_gold_set_benchmark(
     max_items: int = 200,
     config_names: list[str] | None = None,
     require_human_verified: bool = False,
-    dispatch_mode: str = "realtime",
-    request_priority: str = "realtime",
+    dispatch_mode: str = DISPATCH_MODE_REALTIME,
+    request_priority: str = REQUEST_PRIORITY_REALTIME,
 ) -> Path:
     """
     Run Tier-1/Tier-2 benchmark over a gold set and persist JSON results.
@@ -512,6 +541,9 @@ async def run_gold_set_benchmark(
         max_items=max(1, max_items),
         require_human_verified=require_human_verified,
     )
+    normalized_dispatch_mode = _normalize_dispatch_mode(dispatch_mode)
+    normalized_request_priority = _normalize_request_priority(request_priority)
+    request_overrides = _request_overrides_for_priority(normalized_request_priority)
     configs = _resolve_configs(config_names)
     trends = _build_trends()
     raw_items = [_build_raw_item(item) for item in gold_items]
@@ -530,6 +562,10 @@ async def run_gold_set_benchmark(
             "max_items": bounded_max_items,
             "require_human_verified": require_human_verified,
         },
+        "execution_mode": {
+            "dispatch_mode": normalized_dispatch_mode,
+            "request_priority": normalized_request_priority,
+        },
         "gold_set_fingerprint_sha256": _gold_set_fingerprint(gold_items),
         "gold_set_item_ids_sha256": _gold_set_item_ids_fingerprint(gold_items),
         "configs": [],
@@ -539,27 +575,35 @@ async def run_gold_set_benchmark(
         client = _build_openai_client(api_key=api_key, base_url=config.base_url)
         noop_session = _NoopSession()
         noop_cost_tracker = _NoopCostTracker()
+        tier1_batch_size = (
+            1 if normalized_dispatch_mode == DISPATCH_MODE_REALTIME else _BATCH_DISPATCH_SIZE
+        )
         tier1 = Tier1Classifier(
             session=cast("Any", noop_session),
             client=client,
             model=config.tier1_model,
-            batch_size=1,
+            batch_size=tier1_batch_size,
             cost_tracker=cast("Any", noop_cost_tracker),
+            request_overrides=request_overrides,
         )
         tier2 = Tier2Classifier(
             session=cast("Any", noop_session),
             client=client,
             model=config.tier2_model,
             cost_tracker=cast("Any", noop_cost_tracker),
+            request_overrides=request_overrides,
         )
 
         tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)
         tier1_usage = Tier1Usage()
-        for item, raw_item in zip(gold_items, raw_items, strict=True):
+        for batch_start in range(0, len(gold_items), tier1_batch_size):
+            item_batch = gold_items[batch_start : batch_start + tier1_batch_size]
+            raw_batch = raw_items[batch_start : batch_start + tier1_batch_size]
             try:
-                tier1_results, tier1_call_usage = await tier1.classify_items([raw_item], trends)
+                tier1_results, tier1_call_usage = await tier1.classify_items(raw_batch, trends)
             except ValueError:
-                tier1_metrics.record_failure(gold=item)
+                for item in item_batch:
+                    tier1_metrics.record_failure(gold=item)
                 continue
 
             tier1_usage.prompt_tokens += tier1_call_usage.prompt_tokens
@@ -567,15 +611,14 @@ async def run_gold_set_benchmark(
             tier1_usage.api_calls += tier1_call_usage.api_calls
             tier1_usage.estimated_cost_usd += tier1_call_usage.estimated_cost_usd
 
-            prediction = next(
-                (result for result in tier1_results if result.item_id == _item_uuid(item.item_id)),
-                None,
-            )
-            if prediction is None:
-                tier1_metrics.record_failure(gold=item)
-                continue
+            predictions_by_item = {result.item_id: result for result in tier1_results}
+            for item in item_batch:
+                prediction = predictions_by_item.get(_item_uuid(item.item_id))
+                if prediction is None:
+                    tier1_metrics.record_failure(gold=item)
+                    continue
 
-            tier1_metrics.record(gold=item, predicted=prediction)
+                tier1_metrics.record(gold=item, predicted=prediction)
 
         tier2_metrics = _Tier2Metrics()
         tier2_usage = Tier2Usage()

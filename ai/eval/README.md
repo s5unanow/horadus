@@ -22,6 +22,19 @@ Run benchmark:
 uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 50
 ```
 
+Offline cost-oriented modes:
+
+```bash
+# Batch Tier-1 dispatch + flex priority hint (when provider supports service_tier)
+uv run --no-sync horadus eval benchmark --dispatch-mode batch --request-priority flex
+```
+
+Mode guidance:
+- `--dispatch-mode realtime` (default): one-item Tier-1 calls; closest to production request shape.
+- `--dispatch-mode batch`: grouped Tier-1 calls for lower-cost offline sweeps/backfills.
+- `--request-priority flex`: low-priority provider hint for non-urgent offline runs.
+- Keep real-time runtime paths unchanged; these flags are intended for offline eval/backfill workflows.
+
 Run quality audit:
 
 ```bash
@@ -57,6 +70,22 @@ Run full 200-item benchmark:
 ```bash
 uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
 ```
+
+Run ANN vector strategy benchmark:
+
+```bash
+uv run --no-sync horadus eval vector-benchmark --output-dir ai/eval/results
+```
+
+Run embedding lineage audit (model drift + re-embed scope):
+
+```bash
+uv run --no-sync horadus eval embedding-lineage --target-model text-embedding-3-small
+```
+
+Vector benchmark now also maintains:
+- `ai/eval/results/vector-benchmark-summary.json` (rolling recommendation history)
+- Operator cadence/promote checklist: `docs/VECTOR_REVALIDATION.md`
 
 You can select a specific model pair:
 

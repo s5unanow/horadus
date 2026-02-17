@@ -211,6 +211,19 @@ feeds:
 
 The project uses a `Makefile` to simplify common tasks. Run `make help` to see all available commands.
 
+Task workflow guard commands:
+
+```bash
+make task-preflight
+make task-start TASK=117 NAME=short-name
+```
+
+Each task PR must include:
+
+```text
+Primary-Task: TASK-XXX
+```
+
 ## Production Deployment
 
 Use the production Compose stack and container definitions:

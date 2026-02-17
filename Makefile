@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate branch-guard protect-main
+        db-migration-gate branch-guard task-preflight task-start protect-main
 
 # Default target
 .DEFAULT_GOAL := help
@@ -96,6 +96,16 @@ pre-commit: ## Run pre-commit on all files
 
 branch-guard: ## Validate current branch naming policy
 	./scripts/check_branch_name.sh
+
+task-preflight: ## Validate task-start sequencing preflight on main
+	./scripts/check_task_start_preflight.sh
+
+task-start: ## Start a new task branch with sequencing guards (TASK=117 NAME=short-name)
+	@if [ -z "$(TASK)" ] || [ -z "$(NAME)" ]; then \
+		echo "Usage: make task-start TASK=117 NAME=short-name"; \
+		exit 1; \
+	fi
+	./scripts/start_task_branch.sh "$(TASK)" "$(NAME)"
 
 protect-main: ## Apply required main-branch protection + merge policy (requires gh auth)
 	./scripts/enforce_main_protection.sh

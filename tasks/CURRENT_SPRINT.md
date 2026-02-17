@@ -15,11 +15,27 @@
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
-- `TASK-117` Enforce Task Sequencing Guards End-to-End — Ready for implementation
 
 ---
 
 ## Completed This Sprint
+
+### TASK-117: Enforce Task Sequencing Guards End-to-End
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Implemented start-sequence guardrails and hardened PR task metadata validation
+to enforce one-task-at-a-time workflow.
+
+**Completed**:
+- [x] Added task-start preflight guard for clean/synced `main` + no open task PRs (`scripts/check_task_start_preflight.sh`)
+- [x] Added guarded task-branch creation command (`scripts/start_task_branch.sh`, `make task-start`)
+- [x] Enforced post-merge resync requirement through preflight `main` SHA parity checks (`origin/main`)
+- [x] Hardened CI PR scope guard to require canonical `Primary-Task: TASK-XXX`
+- [x] Updated runbook/docs and workflow policy with enforced sequencing commands and PR metadata format
+
+---
 
 ### TASK-115: Finish Partial Recovery for Tracing/Lineage/Grounding
 **Status**: DONE ✓  

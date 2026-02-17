@@ -18,14 +18,22 @@ For any engineering change (including docs/process changes):
 git switch main
 git pull --ff-only
 ```
-2. Create/confirm a `TASK-XXX` and open a dedicated branch from `main`:
+2. Run task-start preflight (clean/synced `main`, no open task PR):
 ```bash
-git switch -c codex/task-XXX-short-name
+make task-preflight
 ```
-3. Keep branch scope to one task only; open one PR for that task.
-4. Merge only when all required checks are green.
-5. Delete merged branch.
-6. Return to `main`, sync, and verify merge commit exists locally:
+3. Create/confirm a `TASK-XXX` and open a dedicated branch from `main`:
+```bash
+make task-start TASK=XXX NAME=short-name
+```
+4. Keep branch scope to one task only; open one PR for that task.
+5. Include canonical PR metadata field in body:
+```text
+Primary-Task: TASK-XXX
+```
+6. Merge only when all required checks are green.
+7. Delete merged branch.
+8. Return to `main`, sync, and verify merge commit exists locally:
 ```bash
 git switch main
 git pull --ff-only
@@ -55,6 +63,11 @@ make hooks
 - Manual branch guard check:
 ```bash
 make branch-guard
+```
+- Mandatory task-start sequencing guard:
+```bash
+make task-preflight
+make task-start TASK=XXX NAME=short-name
 ```
 - Apply/refresh GitHub `main` protection defaults:
 ```bash

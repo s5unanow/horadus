@@ -42,5 +42,7 @@
 
 - `tasks/CURRENT_SPRINT.md` is now the operational execution file and should remain concise.
 - Detailed completed-task history belongs in `tasks/sprints/SPRINT_XXX.md` archive files.
+- `TASK-044` reviewer checklist: `tasks/assessments/TASK-044-human-curation-checklist-2026-02-17.md`.
+- `TASK-044` sign-off record (fill before marking DONE): Reviewer=`TBD`; Date=`TBD`; Decision=`Pending`; human_verified=`TBD`; Notes=`TBD`.
 - `TASK-066` reviewer checklist: `tasks/assessments/TASK-066-human-signoff-checklist-2026-02-17.md`.
 - `TASK-066` sign-off record: Reviewer=`s5una`; Date=`2026-02-17`; Decision=`Approved`; Notes=`All 15 added trends approved via human review; taxonomy validation passes with non-blocking legacy gold-set warnings.`

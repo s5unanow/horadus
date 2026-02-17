@@ -15,6 +15,7 @@ API key auth and rate limiting are controlled by environment config.
 - Admin header for key management: `X-Admin-API-Key: <admin-key>`
 - Set `API_AUTH_ENABLED=true` to enforce auth globally
 - Configure keys via `API_KEY` and/or `API_KEYS`
+- Key-management endpoints require a configured admin key; authenticated non-admin API keys are not an admin fallback
 - Per-key default rate limit is controlled by `API_RATE_LIMIT_PER_MINUTE`
 - Rate-limit algorithm is configured via `API_RATE_LIMIT_STRATEGY` (`fixed_window` default, `sliding_window` optional)
 - On throttling, API returns `429` with `Retry-After` seconds
@@ -31,6 +32,10 @@ curl -H "X-API-Key: dev-key" http://localhost:8000/api/v1/trends
 - `GET /health/live`
 - `GET /health/ready`
 - `GET /metrics` (Prometheus exposition format)
+
+Readiness semantics:
+- `/health/ready` returns `200` only when critical dependencies are healthy.
+- If dependencies are unavailable, it returns `503` with a `not_ready` payload.
 
 Example:
 

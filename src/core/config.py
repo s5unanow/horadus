@@ -13,6 +13,10 @@ from typing import Any
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+DEV_SECRET_KEY_DEFAULT = (
+    "dev-secret-key-change-in-production"  # pragma: allowlist secret # nosec B105
+)
+
 
 def _read_secret_file(path: str) -> str:
     try:
@@ -137,6 +141,39 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return self
 
+    @model_validator(mode="after")
+    def _validate_production_security_guardrails(self) -> Settings:
+        if not self.is_production:
+            return self
+
+        validation_errors: list[str] = []
+
+        if self.SECRET_KEY.strip() == DEV_SECRET_KEY_DEFAULT:
+            validation_errors.append(
+                "SECRET_KEY must be explicitly configured in production; dev default is not allowed"
+            )
+
+        if not self.API_AUTH_ENABLED:
+            validation_errors.append("API_AUTH_ENABLED must be true in production")
+
+        has_bootstrap_api_key = bool((self.API_KEY or "").strip()) or bool(self.API_KEYS)
+        has_persisted_key_store = bool((self.API_KEYS_PERSIST_PATH or "").strip())
+        if not has_bootstrap_api_key and not has_persisted_key_store:
+            validation_errors.append(
+                "Production auth requires at least one bootstrap key "
+                "(API_KEY/API_KEYS) or API_KEYS_PERSIST_PATH"
+            )
+
+        if not (self.API_ADMIN_KEY or "").strip():
+            validation_errors.append(
+                "API_ADMIN_KEY must be configured in production for key-management endpoints"
+            )
+
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
+
+        return self
+
     # =========================================================================
     # Redis
     # =========================================================================
@@ -160,7 +197,7 @@ class Settings(BaseSettings):
     # Security
     # =========================================================================
     SECRET_KEY: str = Field(
-        default="dev-secret-key-change-in-production",
+        default=DEV_SECRET_KEY_DEFAULT,
         description="Secret key for signing tokens",
     )
     SECRET_KEY_FILE: str | None = Field(

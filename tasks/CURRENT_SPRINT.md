@@ -17,7 +17,6 @@
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-118` Launch Readiness and Guidance Drift Assessment `[REQUIRES_HUMAN]` — Awaiting human sign-off on remediation order and launch criteria
-- `TASK-122` Launch-Critical Production Guardrails Hardening — Pending implementation
 
 ---
 
@@ -27,6 +26,7 @@
 - `TASK-119` Guidance Hierarchy and AGENTS Router Tightening — DONE ✓
 - `TASK-120` Documentation Drift Fixes (ADR References + Data Model Coverage) — DONE ✓
 - `TASK-121` Docs Freshness Gate Expansion (Integrity + Coverage Rules) — DONE ✓
+- `TASK-122` Launch-Critical Production Guardrails Hardening — DONE ✓
 
 ---
 

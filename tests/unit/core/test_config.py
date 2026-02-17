@@ -9,6 +9,9 @@ from src.core.config import Settings
 
 pytestmark = pytest.mark.unit
 
+TEST_BOOTSTRAP_KEY = "bootstrap-key"  # pragma: allowlist secret
+TEST_ADMIN_KEY = "admin-key"  # pragma: allowlist secret
+
 
 def _write_secret(path: Path, value: str) -> str:
     path.write_text(value, encoding="utf-8")
@@ -134,3 +137,72 @@ def test_settings_rejects_invalid_unsupported_language_mode() -> None:
             _env_file=None,
             LANGUAGE_POLICY_UNSUPPORTED_MODE="translate",
         )
+
+
+def test_settings_rejects_production_default_secret_key() -> None:
+    with pytest.raises(ValidationError, match="SECRET_KEY must be explicitly configured"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            API_AUTH_ENABLED=True,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+        )
+
+
+def test_settings_rejects_production_without_auth_enabled() -> None:
+    with pytest.raises(ValidationError, match="API_AUTH_ENABLED must be true in production"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            SECRET_KEY="x" * 48,
+            API_AUTH_ENABLED=False,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+        )
+
+
+def test_settings_rejects_production_without_admin_key() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="API_ADMIN_KEY must be configured in production",
+    ):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            SECRET_KEY="x" * 48,
+            API_AUTH_ENABLED=True,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=None,
+        )
+
+
+def test_settings_rejects_production_without_bootstrap_key_or_persist_store() -> None:
+    with pytest.raises(
+        ValidationError,
+        match="Production auth requires at least one bootstrap key",
+    ):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            SECRET_KEY="x" * 48,
+            API_AUTH_ENABLED=True,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+            API_KEY=None,
+            API_KEYS=[],
+            API_KEYS_PERSIST_PATH=None,
+        )
+
+
+def test_settings_accepts_production_guardrail_compliant_config() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="production",
+        SECRET_KEY="x" * 48,
+        API_AUTH_ENABLED=True,
+        API_KEY=TEST_BOOTSTRAP_KEY,
+        API_ADMIN_KEY=TEST_ADMIN_KEY,
+    )
+
+    assert settings.is_production is True
+    assert settings.API_AUTH_ENABLED is True

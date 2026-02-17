@@ -71,6 +71,14 @@ _CONFLICT_RULES: tuple[_ConflictRule, ...] = (
     ),
 )
 
+_HIERARCHY_POLICY_PATH = "AGENTS.md"
+_HIERARCHY_POLICY_HEADING = "## Canonical Source-of-Truth Hierarchy"
+_HIERARCHY_POLICY_REFERENCE_FILES: tuple[str, ...] = (
+    "PROJECT_STATUS.md",
+    "tasks/CURRENT_SPRINT.md",
+)
+_HIERARCHY_POLICY_REFERENCE_TEXT = "Canonical Source-of-Truth Hierarchy"
+
 
 def _load_overrides(override_path: Path) -> tuple[_Override, ...]:
     if not override_path.exists():
@@ -216,6 +224,59 @@ def run_docs_freshness_check(
                     path=relative_path,
                 )
             )
+
+    hierarchy_policy_path = repo_root / _HIERARCHY_POLICY_PATH
+    if not hierarchy_policy_path.exists():
+        errors.append(
+            DocsFreshnessIssue(
+                level="error",
+                rule_id="hierarchy_policy_file_missing",
+                message=f"Missing hierarchy policy file: {_HIERARCHY_POLICY_PATH}",
+                path=_HIERARCHY_POLICY_PATH,
+            )
+        )
+    else:
+        hierarchy_policy = hierarchy_policy_path.read_text(encoding="utf-8")
+        if _HIERARCHY_POLICY_HEADING not in hierarchy_policy:
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="hierarchy_policy_heading_missing",
+                    message=(
+                        f"AGENTS.md missing hierarchy heading: '{_HIERARCHY_POLICY_HEADING}'."
+                    ),
+                    path=_HIERARCHY_POLICY_PATH,
+                )
+            )
+
+    for reference_path in _HIERARCHY_POLICY_REFERENCE_FILES:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="hierarchy_policy_reference_file_missing",
+                    message=f"Missing hierarchy reference file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+            continue
+
+        content = file_path.read_text(encoding="utf-8")
+        if "AGENTS.md" in content and _HIERARCHY_POLICY_REFERENCE_TEXT in content:
+            continue
+
+        errors.append(
+            DocsFreshnessIssue(
+                level="error",
+                rule_id="hierarchy_policy_reference_missing",
+                message=(
+                    f"{reference_path} must reference AGENTS hierarchy policy "
+                    f"('{_HIERARCHY_POLICY_REFERENCE_TEXT}')."
+                ),
+                path=reference_path,
+            )
+        )
 
     api_main_path = repo_root / "src" / "api" / "main.py"
     api_docs_path = repo_root / "docs" / "API.md"

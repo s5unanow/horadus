@@ -15,9 +15,22 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     (repo_root / "docs").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "api").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "core").mkdir(parents=True, exist_ok=True)
+    (repo_root / "tasks").mkdir(parents=True, exist_ok=True)
 
     (repo_root / "PROJECT_STATUS.md").write_text(
-        f"**Last Updated**: {marker_date}\n",
+        (
+            f"**Last Updated**: {marker_date}\n"
+            "**Source-of-truth policy**: "
+            "See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`\n"
+        ),
+        encoding="utf-8",
+    )
+    (repo_root / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`\n",
+        encoding="utf-8",
+    )
+    (repo_root / "AGENTS.md").write_text(
+        "## Canonical Source-of-Truth Hierarchy\n",
         encoding="utf-8",
     )
     (repo_root / "docs" / "ARCHITECTURE.md").write_text(
@@ -106,3 +119,32 @@ def test_docs_freshness_flags_stale_last_verified_marker(tmp_path: Path) -> None
     )
 
     assert any(issue.rule_id == "required_marker_stale" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_hierarchy_heading(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "AGENTS.md").write_text("# Agent Instructions\n", encoding="utf-8")
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "hierarchy_policy_heading_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_hierarchy_reference_link(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "This sprint file has no hierarchy link.\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "hierarchy_policy_reference_missing" for issue in result.errors)

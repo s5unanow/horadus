@@ -9,10 +9,28 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 
 ## Where To Look First (Fast Orientation)
 
-1. `PROJECT_STATUS.md` — current phase and what’s actually implemented vs planned
-2. `tasks/CURRENT_SPRINT.md` — what to do next (source of truth for active work)
-3. `docs/ARCHITECTURE.md` — system design and data flows
-4. `docs/DATA_MODEL.md` — schema and entity definitions
+1. `tasks/CURRENT_SPRINT.md` — active execution queue (authoritative for in-progress work)
+2. `PROJECT_STATUS.md` — phase-level summary and milestone narrative
+3. `tasks/BACKLOG.md` — canonical task specifications and acceptance criteria
+4. `docs/ARCHITECTURE.md` — system design and runtime flow
+5. `docs/DATA_MODEL.md` — schema and entity definitions
+
+## Canonical Source-of-Truth Hierarchy
+
+When guidance conflicts, resolve it in this order.
+
+Execution precedence:
+1. Runtime truth: `src/`, `alembic/`, and `tests/`
+2. Active execution plan: `tasks/CURRENT_SPRINT.md`
+3. Task scope records: `tasks/BACKLOG.md` and `tasks/COMPLETED.md`
+4. Phase/status summary: `PROJECT_STATUS.md`
+5. Design/ops docs: `docs/`
+6. Historical snapshots: `docs/POTENTIAL_ISSUES.md` and `tasks/sprints/` (non-authoritative)
+
+Status precedence:
+1. `tasks/CURRENT_SPRINT.md` for what is active now
+2. `tasks/COMPLETED.md` for what is done
+3. `PROJECT_STATUS.md` for high-level progress narrative
 
 ## Repo Map
 
@@ -76,57 +94,12 @@ After completing work:
 - If unrelated work is discovered mid-task, create a new task immediately but do not switch branches by default; continue current task unless the new work is a blocker/urgent.
 - Never mix two tasks in one commit/PR; blockers must be handled via a separate task branch after a safe checkpoint.
 
-## Project-Specific Patterns
+## Implementation Pointers (Keep It Lean)
 
-### pgvector similarity (clustering)
-```python
-from datetime import datetime, timedelta
-
-from sqlalchemy import select
-
-from src.core.config import settings
-from src.storage.models import Event
-
-# Our config uses cosine *similarity* thresholds.
-# pgvector queries often use cosine *distance* (≈ 1 - similarity when normalized).
-max_distance = 1.0 - settings.CLUSTER_SIMILARITY_THRESHOLD
-window_start = datetime.utcnow() - timedelta(hours=settings.CLUSTER_TIME_WINDOW_HOURS)
-
-query = (
-    select(Event)
-    .where(Event.last_mention_at >= window_start)
-    .where(Event.embedding.cosine_distance(target_embedding) <= max_distance)
-)
-```
-
-### Log-odds conversion (always use helpers)
-```python
-from src.core.trend_engine import logodds_to_prob, prob_to_logodds
-
-baseline_lo = prob_to_logodds(0.08)
-new_probability = logodds_to_prob(baseline_lo + delta_log_odds)
-```
-
-### Evidence delta calculation (severity + confidence)
-```python
-from src.core.trend_engine import calculate_evidence_delta
-
-delta_log_odds, factors = calculate_evidence_delta(
-    signal_type="military_movement",
-    indicator_weight=0.04,
-    source_credibility=0.9,
-    corroboration_count=3,
-    novelty_score=1.0,
-    direction="escalatory",
-    severity=0.8,
-    confidence=0.95,
-)
-```
-
-### LLM calls (budget + retry + failover)
-- Check budget **before** calling (`TASK-036`).
-- Retry only on transient failures (429/5xx/timeouts), then fail over (`TASK-038`).
-- Validate strict JSON; don’t silently coerce malformed outputs.
+- Clustering threshold semantics: check `src/processing/event_clusterer.py` and `docs/ARCHITECTURE.md`.
+- Probability math and log-odds helpers: `src/core/trend_engine.py`.
+- LLM budget/retry/failover policy: `src/processing/` and ADRs in `docs/adr/`.
+- Treat this file as a router; keep detailed implementation recipes in module docs/runbooks.
 
 ## Development Commands
 
@@ -138,11 +111,8 @@ delta_log_odds, factors = calculate_evidence_delta(
 ## Git Conventions
 
 Branch naming:
-- `main`
-- `feature/TASK-XXX-short-description`
-- `fix/TASK-XXX-short-description`
-- `refactor/short-description`
-- `docs/short-description`
+- Task branches are enforced as `codex/task-XXX-short-name` via `make task-start`.
+- `main` is protected and must stay merge-only.
 
 Commit message format:
 - `<type>(<scope>): <subject>`

@@ -23,6 +23,22 @@
 
 ## Completed This Sprint
 
+### TASK-116: Backlog Continuity Restoration for TASK-086..TASK-108
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Restored full backlog task specs for recovered phase-8 tasks and reintroduced
+missing TASK-108 as an open, not-yet-completed item.
+
+**Completed**:
+- [x] Restored explicit backlog descriptions for `TASK-086`..`TASK-107`
+- [x] Reintroduced `TASK-108` with full scope and open acceptance criteria
+- [x] Preserved completion tracking in `tasks/COMPLETED.md` without marking `TASK-108` done
+- [x] Updated next available task ID after reserving `TASK-116`
+
+---
+
 ### TASK-112: Recover Stranded TASK-086..TASK-107 from `task-061`
 **Status**: DONE ✓  
 **Priority**: P0 (Critical)  

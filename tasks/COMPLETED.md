@@ -110,6 +110,7 @@ Tasks that have been completed and verified.
 - TASK-110: Task Delivery Workflow Guardrails and Enforcement ✅
 - TASK-111: Main Branch Merge-Completeness Audit ✅
 - TASK-112: Recover Stranded TASK-086..TASK-107 from `task-061` ✅
+- TASK-116: Backlog Continuity Restoration for TASK-086..TASK-108 ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
 - TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅

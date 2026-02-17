@@ -1,0 +1,108 @@
+from __future__ import annotations
+
+import json
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from src.core.docs_freshness import run_docs_freshness_check
+
+pytestmark = pytest.mark.unit
+
+
+def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
+    (repo_root / "docs").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "api").mkdir(parents=True, exist_ok=True)
+    (repo_root / "src" / "core").mkdir(parents=True, exist_ok=True)
+
+    (repo_root / "PROJECT_STATUS.md").write_text(
+        f"**Last Updated**: {marker_date}\n",
+        encoding="utf-8",
+    )
+    (repo_root / "docs" / "ARCHITECTURE.md").write_text(
+        f"**Last Verified**: {marker_date}\n",
+        encoding="utf-8",
+    )
+    (repo_root / "docs" / "DEPLOYMENT.md").write_text(
+        f"**Last Verified**: {marker_date}\n",
+        encoding="utf-8",
+    )
+    (repo_root / "docs" / "ENVIRONMENT.md").write_text(
+        f"**Last Verified**: {marker_date}\nAPI_RATE_LIMIT_PER_MINUTE\n",
+        encoding="utf-8",
+    )
+    (repo_root / "docs" / "RELEASING.md").write_text(
+        f"**Last Verified**: {marker_date}\n",
+        encoding="utf-8",
+    )
+    (repo_root / "docs" / "API.md").write_text(
+        "X-API-Key\nAPI_AUTH_ENABLED\n",
+        encoding="utf-8",
+    )
+    (repo_root / "src" / "api" / "main.py").write_text(
+        "app.add_middleware(APIKeyAuthMiddleware)\n",
+        encoding="utf-8",
+    )
+    (repo_root / "src" / "core" / "api_key_manager.py").write_text(
+        "API_RATE_LIMIT_PER_MINUTE = 120\n",
+        encoding="utf-8",
+    )
+
+
+def test_docs_freshness_detects_unoverridden_conflict_rule(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "POTENTIAL_ISSUES.md").write_text(
+        "All API endpoints have no authentication checks.\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "stale_auth_unenforced_claim" for issue in result.errors)
+
+
+def test_docs_freshness_applies_override_with_rationale(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "POTENTIAL_ISSUES.md").write_text(
+        "All API endpoints have no authentication checks.\n",
+        encoding="utf-8",
+    )
+    overrides = {
+        "overrides": [
+            {
+                "rule_id": "stale_auth_unenforced_claim",
+                "path": "docs/POTENTIAL_ISSUES.md",
+                "reason": "Archived historical snapshot.",
+                "expires_on": "2099-12-31",
+            }
+        ]
+    }
+    override_path = tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json"
+    override_path.write_text(json.dumps(overrides), encoding="utf-8")
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=override_path,
+    )
+
+    assert not any(issue.rule_id == "stale_auth_unenforced_claim" for issue in result.errors)
+    assert any(issue.rule_id == "docs_freshness_override_applied" for issue in result.warnings)
+
+
+def test_docs_freshness_flags_stale_last_verified_marker(tmp_path: Path) -> None:
+    stale_date = (datetime.now(tz=UTC) - timedelta(days=120)).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=stale_date)
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+        max_age_days=30,
+    )
+
+    assert any(issue.rule_id == "required_marker_stale" for issue in result.errors)

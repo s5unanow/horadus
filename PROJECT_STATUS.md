@@ -1,7 +1,8 @@
 # Project Status
 
-**Last Updated**: 2026-02-16
+**Last Updated**: 2026-02-17
 **Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
+**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
 ## Progress Overview
 

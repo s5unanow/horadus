@@ -3,6 +3,7 @@
 **Sprint Goal**: Launch-readiness hardening and guidance/doc consistency cleanup  
 **Sprint Number**: 2  
 **Sprint Dates**: 2026-02-17 to 2026-03-03
+**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
 ---
 
@@ -16,7 +17,6 @@
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-118` Launch Readiness and Guidance Drift Assessment `[REQUIRES_HUMAN]` — Awaiting human sign-off on remediation order and launch criteria
-- `TASK-119` Guidance Hierarchy and AGENTS Router Tightening — Pending implementation
 - `TASK-120` Documentation Drift Fixes (ADR References + Data Model Coverage) — Pending implementation
 - `TASK-121` Docs Freshness Gate Expansion (Integrity + Coverage Rules) — Pending implementation
 - `TASK-122` Launch-Critical Production Guardrails Hardening — Pending implementation
@@ -25,19 +25,8 @@
 
 ## Completed This Sprint
 
-### TASK-123: Current Sprint File Right-Sizing and Sprint Archive Split
-**Status**: DONE ✓  
-**Priority**: P1 (High)  
-**Spec**: `tasks/BACKLOG.md`
-
-Reduce `CURRENT_SPRINT.md` execution noise by archiving historical sprint detail
-and switching to a lean active-sprint format.
-
-**Completed**:
-- [x] Archived prior detailed sprint ledger to `tasks/sprints/SPRINT_001.md`
-- [x] Replaced `tasks/CURRENT_SPRINT.md` with concise active-sprint structure
-- [x] Preserved traceability via explicit archive pointer and sprint metadata
-- [x] Updated backlog task-ID policy and completion tracking for `TASK-123`
+- `TASK-123` Current Sprint File Right-Sizing and Sprint Archive Split — DONE ✓
+- `TASK-119` Guidance Hierarchy and AGENTS Router Tightening — DONE ✓
 
 ---
 

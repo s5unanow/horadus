@@ -1932,11 +1932,11 @@ Reduce guidance ambiguity by keeping `AGENTS.md` strictly map-oriented and
 making source-of-truth precedence explicit across task/status docs.
 
 **Acceptance Criteria**:
-- [ ] Add a concise source-of-truth hierarchy section in `AGENTS.md` (execution + status precedence)
-- [ ] Remove or relocate non-critical procedural prose from `AGENTS.md` into task/runbook docs
-- [ ] Ensure `AGENTS.md` "Where to look first" ordering is consistent with current workflow
-- [ ] Add cross-links from `PROJECT_STATUS.md` and `tasks/CURRENT_SPRINT.md` to the hierarchy policy
-- [ ] Add/update unit-level docs checks if needed to enforce the hierarchy marker presence
+- [x] Add a concise source-of-truth hierarchy section in `AGENTS.md` (execution + status precedence)
+- [x] Remove or relocate non-critical procedural prose from `AGENTS.md` into task/runbook docs
+- [x] Ensure `AGENTS.md` "Where to look first" ordering is consistent with current workflow
+- [x] Add cross-links from `PROJECT_STATUS.md` and `tasks/CURRENT_SPRINT.md` to the hierarchy policy
+- [x] Add/update unit-level docs checks if needed to enforce the hierarchy marker presence
 
 ---
 

@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-117`.
+- Next available task IDs start at `TASK-118`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -1883,6 +1883,23 @@ missing TASK-108 specification so backlog reflects full historical task record.
 - [x] Restore explicit `TASK-108` task specification with open (not completed) status
 - [x] Keep `TASK-108` absent from completed-task records until implementation is done
 - [x] Preserve existing task sequencing and update next available task ID
+
+---
+
+### TASK-117: Enforce Task Sequencing Guards End-to-End
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+**Depends On**: TASK-110
+
+Add hard workflow enforcement so autonomous/local agents cannot start or advance
+task work outside the required sequence.
+
+**Acceptance Criteria**:
+- [ ] Add a preflight guard that blocks task-branch start unless `main` is clean and synced (`git switch main && git pull --ff-only`)
+- [ ] Add a single-active-task guard that blocks starting a new task when there is an open, non-merged task PR
+- [ ] Add a post-merge guard that blocks next task start until local `main` is synced to remote `main`
+- [ ] Harden PR scope policy to use one canonical metadata field (`Primary-Task: TASK-XXX`) instead of parsing arbitrary PR text
+- [ ] Update runbook/docs and local hook instructions with the enforced sequencing workflow
 
 ---
 

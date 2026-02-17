@@ -18,6 +18,7 @@
 - `TASK-113` Complete Deferred Eval Mode and Vector Revalidation Recovery — Ready for implementation
 - `TASK-114` Complete Deferred Docs Freshness Gate Recovery — Ready for implementation
 - `TASK-115` Finish Partial Recovery for Tracing/Lineage/Grounding — Ready for implementation
+- `TASK-117` Enforce Task Sequencing Guards End-to-End — Ready for implementation
 
 ---
 

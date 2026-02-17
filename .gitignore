@@ -130,6 +130,7 @@ data/downloads/
 reports/generated/
 artifacts/dashboard/
 backups/
+ai/eval/results/*.json
 
 # Temporary files
 tmp/

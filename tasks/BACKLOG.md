@@ -1863,10 +1863,10 @@ Close remaining partials left after TASK-112 for TASK-092, TASK-100, and
 TASK-102 (dependency parity, remaining runtime guards, and API exposure parity).
 
 **Acceptance Criteria**:
-- [ ] Add missing tracing dependency lock/runtime parity and API bootstrap instrumentation
-- [ ] Complete embedding-lineage safety checks in deduplication/clustering paths and docs
-- [ ] Expose grounding metadata parity across report/retrospective API response contracts
-- [ ] Run targeted unit tests for tracing, lineage, grounding, and affected API routes
+- [x] Add missing tracing dependency lock/runtime parity and API bootstrap instrumentation
+- [x] Complete embedding-lineage safety checks in deduplication/clustering paths and docs
+- [x] Expose grounding metadata parity across report/retrospective API response contracts
+- [x] Run targeted unit tests for tracing, lineage, grounding, and affected API routes
 
 ---
 

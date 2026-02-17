@@ -166,6 +166,10 @@ async def test_embed_raw_items_without_embedding_persists_vectors(mock_db_sessio
 
     assert first_item.embedding == [1.0, 2.0, 3.0]
     assert second_item.embedding == [4.0, 5.0, 6.0]
+    assert first_item.embedding_model == "test-embedding-model"
+    assert second_item.embedding_model == "test-embedding-model"
+    assert first_item.embedding_generated_at is not None
+    assert second_item.embedding_generated_at is not None
     assert result.entity_type == "raw_items"
     assert result.scanned == 2
     assert result.embedded == 2
@@ -190,6 +194,10 @@ async def test_embed_events_without_embedding_persists_vectors(mock_db_session) 
 
     assert first_event.embedding == [0.1, 0.2, 0.3]
     assert second_event.embedding == [0.4, 0.5, 0.6]
+    assert first_event.embedding_model == "test-embedding-model"
+    assert second_event.embedding_model == "test-embedding-model"
+    assert first_event.embedding_generated_at is not None
+    assert second_event.embedding_generated_at is not None
     assert result.entity_type == "events"
     assert result.scanned == 2
     assert result.embedded == 2

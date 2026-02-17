@@ -634,6 +634,9 @@ async def test_get_trend_retrospective_returns_analysis(mock_db_session, monkeyp
                     "resolved_rate": 1.0,
                 },
                 "narrative": "Signals were dominated by military movement in the period.",
+                "grounding_status": "grounded",
+                "grounding_violation_count": 0,
+                "grounding_references": None,
             }
 
     monkeypatch.setattr(trends_module, "RetrospectiveAnalyzer", FakeAnalyzer)
@@ -651,6 +654,8 @@ async def test_get_trend_retrospective_returns_analysis(mock_db_session, monkeyp
     assert result.pivotal_events[0].direction == "up"
     assert result.predictive_signals[0].signal_type == "military_movement"
     assert result.accuracy_assessment["mean_brier_score"] == pytest.approx(0.18)
+    assert result.grounding_status == "grounded"
+    assert result.grounding_violation_count == 0
 
 
 @pytest.mark.asyncio

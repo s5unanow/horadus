@@ -7,7 +7,9 @@ from uuid import uuid4
 
 import pytest
 
-from src.core.report_generator import ReportGenerator
+from src.core.config import settings
+from src.core.report_generator import NarrativeResult, ReportGenerator
+from src.processing.cost_tracker import TIER2, BudgetExceededError
 
 pytestmark = pytest.mark.unit
 
@@ -206,3 +208,299 @@ def test_fallback_narrative_monthly_scales_confidence_with_coverage() -> None:
 
     assert "monthly change of -2.0%" in narrative
     assert "Confidence is high" in narrative
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_uses_fallback_when_budget_denied(mock_db_session) -> None:
+    create_mock = AsyncMock()
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create_mock)))
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(side_effect=BudgetExceededError("budget denied")),
+        record_usage=AsyncMock(return_value=None),
+    )
+    generator = ReportGenerator(
+        session=mock_db_session,
+        client=client,
+        cost_tracker=cost_tracker,
+    )
+    trend = SimpleNamespace(id=uuid4(), name="Signal Watch", description="desc")
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+        },
+        top_events=[],
+        period_start=datetime.now(tz=UTC) - timedelta(days=7),
+        period_end=datetime.now(tz=UTC),
+        prompt_template="prompt",
+        report_type="weekly",
+    )
+
+    assert "Signal Watch is currently at" in result.narrative
+    assert result.grounding_status == "fallback"
+    create_mock.assert_not_awaited()
+    cost_tracker.record_usage.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_fails_over_to_secondary_route(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_BACKOFF_SECONDS", 0.0)
+    primary_calls: list[dict[str, object]] = []
+    secondary_calls: list[dict[str, object]] = []
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            primary_calls.append(kwargs)
+            raise TimeoutError("primary timeout")
+
+    class SecondaryCompletions:
+        async def create(self, **kwargs):
+            secondary_calls.append(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content="LLM report narrative"))],
+                usage=SimpleNamespace(prompt_tokens=15, completion_tokens=6),
+            )
+
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
+    generator = ReportGenerator(
+        session=mock_db_session,
+        client=SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions())),
+        secondary_client=SimpleNamespace(chat=SimpleNamespace(completions=SecondaryCompletions())),
+        secondary_model="gpt-4.1-nano",
+        cost_tracker=cost_tracker,
+        primary_provider="openai",
+        secondary_provider="openai-secondary",
+    )
+    trend = SimpleNamespace(id=uuid4(), name="Signal Watch", description="desc")
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+        },
+        top_events=[{"summary": "s", "impact_score": 1.0, "evidence_count": 1, "categories": []}],
+        period_start=datetime.now(tz=UTC) - timedelta(days=7),
+        period_end=datetime.now(tz=UTC),
+        prompt_template="prompt",
+        report_type="weekly",
+    )
+
+    assert result.narrative == "LLM report narrative"
+    assert result.grounding_status == "grounded"
+    assert len(primary_calls) == 2
+    assert len(secondary_calls) == 1
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once_with(
+        tier=TIER2,
+        input_tokens=15,
+        output_tokens=6,
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_supports_responses_api_mode_pilot(mock_db_session) -> None:
+    responses_calls: list[dict[str, object]] = []
+
+    class ResponsesApi:
+        async def create(self, **kwargs):
+            responses_calls.append(kwargs)
+            return SimpleNamespace(
+                output_text="LLM report narrative (responses)",
+                usage=SimpleNamespace(input_tokens=12, output_tokens=5),
+            )
+
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
+    generator = ReportGenerator(
+        session=mock_db_session,
+        client=SimpleNamespace(responses=ResponsesApi()),
+        report_api_mode="responses",
+        cost_tracker=cost_tracker,
+    )
+    trend = SimpleNamespace(id=uuid4(), name="Signal Watch", description="desc")
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+        },
+        top_events=[],
+        period_start=datetime.now(tz=UTC) - timedelta(days=7),
+        period_end=datetime.now(tz=UTC),
+        prompt_template="prompt",
+        report_type="weekly",
+    )
+
+    assert result.narrative == "LLM report narrative (responses)"
+    assert result.grounding_status == "grounded"
+    assert len(responses_calls) == 1
+    cost_tracker.ensure_within_budget.assert_awaited_once()
+    cost_tracker.record_usage.assert_awaited_once_with(
+        tier=TIER2,
+        input_tokens=12,
+        output_tokens=5,
+    )
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_falls_back_when_grounding_fails(mock_db_session) -> None:
+    class CompletionsApi:
+        async def create(self, **kwargs):
+            _ = kwargs
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(content="Probability is 90% with 4 updates.")
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=9, completion_tokens=5),
+            )
+
+    cost_tracker = SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
+    generator = ReportGenerator(
+        session=mock_db_session,
+        client=SimpleNamespace(chat=SimpleNamespace(completions=CompletionsApi())),
+        cost_tracker=cost_tracker,
+    )
+    trend = SimpleNamespace(id=uuid4(), name="Signal Watch", description="desc")
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+        },
+        top_events=[],
+        period_start=datetime.now(tz=UTC) - timedelta(days=7),
+        period_end=datetime.now(tz=UTC),
+        prompt_template="prompt",
+        report_type="weekly",
+    )
+
+    assert result.grounding_status == "fallback"
+    assert "Signal Watch is currently at 42.0%" in result.narrative
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_falls_back_when_all_routes_fail(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_BACKOFF_SECONDS", 0.0)
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            raise TimeoutError("primary timeout")
+
+    class SecondaryCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            raise TimeoutError("secondary timeout")
+
+    generator = ReportGenerator(
+        session=mock_db_session,
+        client=SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions())),
+        secondary_client=SimpleNamespace(chat=SimpleNamespace(completions=SecondaryCompletions())),
+        secondary_model="gpt-4.1-nano",
+        cost_tracker=SimpleNamespace(
+            ensure_within_budget=AsyncMock(return_value=None),
+            record_usage=AsyncMock(return_value=None),
+        ),
+    )
+    trend = SimpleNamespace(id=uuid4(), name="Signal Watch", description="desc")
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+        },
+        top_events=[],
+        period_start=datetime.now(tz=UTC) - timedelta(days=7),
+        period_end=datetime.now(tz=UTC),
+        prompt_template="prompt",
+        report_type="weekly",
+    )
+
+    assert "Signal Watch is currently at" in result.narrative
+    assert result.grounding_status == "fallback"
+
+
+def test_build_narrative_payload_content_truncates_large_payload(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    monkeypatch.setattr(generator, "_MAX_NARRATIVE_INPUT_TOKENS", 10)
+    payload_content = generator._build_narrative_payload_content(
+        {"text": "x " * 800},
+        report_type="weekly",
+    )
+
+    assert payload_content.startswith("<UNTRUSTED_REPORT_PAYLOAD>")
+    assert payload_content.endswith("</UNTRUSTED_REPORT_PAYLOAD>")
+    assert "[TRUNCATED]" in payload_content
+
+
+@pytest.mark.asyncio
+async def test_generate_weekly_reports_persists_grounding_metadata(mock_db_session) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    trend_id = uuid4()
+    trend = SimpleNamespace(id=trend_id, name="Signal Watch", description="desc")
+
+    generator._load_active_trends = AsyncMock(return_value=[trend])
+    generator._build_weekly_statistics = AsyncMock(
+        return_value={
+            "current_probability": 0.42,
+            "weekly_change": 0.05,
+            "direction": "rising",
+            "evidence_count_weekly": 4,
+        }
+    )
+    generator._load_top_events = AsyncMock(return_value=[])
+    generator._build_narrative = AsyncMock(
+        return_value=NarrativeResult(
+            narrative="Grounded narrative",
+            grounding_status="grounded",
+            grounding_violation_count=0,
+            grounding_references=None,
+        )
+    )
+    generator._find_existing_report = AsyncMock(return_value=None)
+
+    run = await generator.generate_weekly_reports()
+
+    assert run.created == 1
+    persisted = mock_db_session.add.call_args.args[0]
+    assert persisted.narrative == "Grounded narrative"
+    assert persisted.grounding_status == "grounded"
+    assert persisted.grounding_violation_count == 0
+    assert persisted.grounding_references is None

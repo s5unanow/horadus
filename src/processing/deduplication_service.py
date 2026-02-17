@@ -51,6 +51,7 @@ class DeduplicationService:
         url: str | None = None,
         content_hash: str | None = None,
         embedding: list[float] | None = None,
+        embedding_model: str | None = None,
         dedup_window_days: int = 7,
         exclude_item_id: UUID | None = None,
     ) -> DeduplicationResult:
@@ -63,6 +64,7 @@ class DeduplicationService:
 
         window_start = datetime.now(tz=UTC) - timedelta(days=dedup_window_days)
         normalized_url = self.normalize_url(url) if url is not None else None
+        normalized_embedding_model = embedding_model.strip() if embedding_model else None
 
         match_id = await self._find_exact_match(
             RawItem.external_id,
@@ -103,9 +105,10 @@ class DeduplicationService:
                 match_reason="content_hash",
             )
 
-        if embedding is not None:
+        if embedding is not None and normalized_embedding_model:
             embedding_match = await self._find_embedding_match(
                 embedding=embedding,
+                embedding_model=normalized_embedding_model,
                 window_start=window_start,
                 similarity_threshold=self.similarity_threshold,
                 exclude_item_id=exclude_item_id,
@@ -128,6 +131,7 @@ class DeduplicationService:
         url: str | None = None,
         content_hash: str | None = None,
         embedding: list[float] | None = None,
+        embedding_model: str | None = None,
         dedup_window_days: int = 7,
         exclude_item_id: UUID | None = None,
     ) -> bool:
@@ -138,6 +142,7 @@ class DeduplicationService:
                 url=url,
                 content_hash=content_hash,
                 embedding=embedding,
+                embedding_model=embedding_model,
                 dedup_window_days=dedup_window_days,
                 exclude_item_id=exclude_item_id,
             )
@@ -165,6 +170,7 @@ class DeduplicationService:
         self,
         *,
         embedding: list[float],
+        embedding_model: str,
         window_start: datetime,
         similarity_threshold: float,
         exclude_item_id: UUID | None = None,
@@ -180,6 +186,7 @@ class DeduplicationService:
             select(RawItem.id, distance_expr.label("distance"))
             .where(RawItem.fetched_at >= window_start)
             .where(RawItem.embedding.is_not(None))
+            .where(RawItem.embedding_model == embedding_model)
             .where(distance_expr <= max_distance)
         )
         if exclude_item_id is not None:

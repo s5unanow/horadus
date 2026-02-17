@@ -69,13 +69,30 @@ async def test_find_duplicate_matches_embedding_similarity(mock_db_session) -> N
     matched_id = uuid4()
     mock_db_session.execute.return_value = SimpleNamespace(first=lambda: (matched_id, 0.07))
 
-    result = await service.find_duplicate(embedding=[0.1, 0.2, 0.3])
+    result = await service.find_duplicate(
+        embedding=[0.1, 0.2, 0.3],
+        embedding_model="text-embedding-3-small",
+    )
 
     assert result.is_duplicate is True
     assert result.matched_item_id == matched_id
     assert result.match_reason == "embedding"
     assert result.similarity == pytest.approx(0.93)
     assert mock_db_session.execute.await_count == 1
+    query = mock_db_session.execute.await_args.args[0]
+    assert "raw_items.embedding_model =" in str(query)
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_skips_embedding_similarity_without_model(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session, similarity_threshold=0.92)
+    mock_db_session.scalar.side_effect = [None, None, None]
+
+    result = await service.find_duplicate(embedding=[0.1, 0.2, 0.3])
+
+    assert result.is_duplicate is False
+    assert result.match_reason is None
+    assert mock_db_session.execute.await_count == 0
 
 
 @pytest.mark.asyncio

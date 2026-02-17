@@ -25,6 +25,7 @@ from src.api.routes import auth, budget, events, feedback, health, metrics, repo
 from src.core.config import settings
 from src.core.logging_setup import configure_logging
 from src.core.migration_parity import check_migration_parity
+from src.core.tracing import configure_tracing
 from src.storage.database import async_session_maker, engine
 
 logger = structlog.get_logger(__name__)
@@ -184,6 +185,7 @@ def create_app() -> FastAPI:
 
     # Register routes
     register_routes(app)
+    configure_tracing(fastapi_app=app)
 
     return app
 

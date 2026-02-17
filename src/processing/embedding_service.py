@@ -8,6 +8,7 @@ import hashlib
 import math
 from collections import OrderedDict
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any
 
 import structlog
@@ -132,9 +133,12 @@ class EmbeddingService:
 
         item_texts = [item.raw_content for item in items]
         vectors, cache_hits, api_calls = await self.embed_texts(item_texts)
+        generated_at = datetime.now(tz=UTC)
 
         for item, vector in zip(items, vectors, strict=True):
             item.embedding = vector
+            item.embedding_model = self.model
+            item.embedding_generated_at = generated_at
 
         await self.session.flush()
         logger.info(
@@ -166,9 +170,12 @@ class EmbeddingService:
 
         event_texts = [event.canonical_summary for event in events]
         vectors, cache_hits, api_calls = await self.embed_texts(event_texts)
+        generated_at = datetime.now(tz=UTC)
 
         for event, vector in zip(events, vectors, strict=True):
             event.embedding = vector
+            event.embedding_model = self.model
+            event.embedding_generated_at = generated_at
 
         await self.session.flush()
         logger.info(

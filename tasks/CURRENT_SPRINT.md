@@ -15,12 +15,27 @@
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
-- `TASK-115` Finish Partial Recovery for Tracing/Lineage/Grounding — Ready for implementation
 - `TASK-117` Enforce Task Sequencing Guards End-to-End — Ready for implementation
 
 ---
 
 ## Completed This Sprint
+
+### TASK-115: Finish Partial Recovery for Tracing/Lineage/Grounding
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Completed deferred recovery for tracing bootstrap parity, embedding-lineage
+safety checks, and grounding metadata parity in report/retrospective APIs.
+
+**Completed**:
+- [x] Added tracing runtime dependency parity and FastAPI bootstrap instrumentation
+- [x] Completed embedding-lineage safety checks in deduplication/embedding flows and docs/runbook
+- [x] Exposed grounding metadata fields on report and retrospective API response contracts
+- [x] Ran targeted unit test suites for tracing-adjacent, lineage, grounding, and affected API routes
+
+---
 
 ### TASK-114: Complete Deferred Docs Freshness Gate Recovery
 **Status**: DONE ✓  

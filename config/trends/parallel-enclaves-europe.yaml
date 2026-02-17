@@ -1,0 +1,87 @@
+id: "parallel-enclaves-europe"
+name: "Parallel Governance Zones in Europe"
+description: |
+  Tracks emergence of urban or regional zones with reduced state authority and
+  parallel informal governance structures, including informal justice systems,
+  clan-based arbitration, and extremist network activity.
+
+baseline_probability: 0.12
+decay_half_life_days: 365
+
+disqualifiers:
+  - signal: "state_authority_restored"
+    effect: "reset_to_baseline"
+    description: "Sustained restoration of legal monopoly by state institutions"
+  - signal: "integration_framework_success"
+    effect: "reassess"
+    description: "Verified multi-year integration and security gains"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Decline in enclave-related security incidents across major cities"
+    - "Improved trust in police and courts in high-risk districts"
+  increase_confidence:
+    - "Growth in governance-deficit zones and extremist network activity"
+    - "Cross-border recruitment and financing patterns"
+  would_invalidate_model:
+    - "European states formally devolving governance authority to non-state community structures"
+
+indicators:
+  informal_justice_prevalence:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["sharia court", "clan mediation", "informal arbitration", "parallel justice", "unofficial court"]
+
+  state_authority_challenged:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["parallel policing", "state authority challenged", "governance-deficit zone", "police access restricted", "vulnerable area"]
+
+  radicalization_case_growth:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["radicalization cases", "extremist recruitment", "violent extremism"]
+
+  institutional_trust_collapse:
+    weight: 0.04
+    direction: escalatory
+    type: lagging
+    keywords: ["trust in police fell", "judicial trust decline", "community distrust authorities"]
+
+  segregation_index_change:
+    weight: 0.03
+    direction: escalatory
+    type: lagging
+    keywords: ["residential segregation increase", "ethnic concentration index", "spatial segregation"]
+
+  counter_radicalization_success:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["deradicalization outcomes", "disruption of extremist cells"]
+
+  integration_policy_gains:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["integration outcomes improved", "community policing success", "language integration gains"]
+
+  education_integration_metrics:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["school integration improvement", "educational attainment convergence", "language proficiency gains"]
+
+regions:
+  - Western Europe
+  - Scandinavia
+
+actors:
+  - France
+  - Sweden
+  - Belgium
+  - Germany
+  - Netherlands

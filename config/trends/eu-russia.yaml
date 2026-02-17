@@ -52,6 +52,12 @@ indicators:
     type: leading
     keywords: ["nuclear posture", "strategic deterrence", "nuclear readiness"]
 
+  cyber_infrastructure_attack:
+    weight: 0.03
+    direction: escalatory
+    type: leading
+    keywords: ["critical infrastructure attack", "power grid disruption", "undersea cable sabotage", "GPS jamming"]
+
   diplomatic_breakdown:
     weight: 0.03
     direction: escalatory
@@ -65,7 +71,7 @@ indicators:
     keywords: ["ceasefire", "truce", "cessation of hostilities"]
 
   diplomatic_talks:
-    weight: 0.03
+    weight: 0.04
     direction: de_escalatory
     type: leading
     keywords: ["peace talks", "summit", "negotiation", "deconfliction"]
@@ -75,6 +81,7 @@ regions:
   - Baltic region
   - Black Sea
   - Arctic
+  - Scandinavia
 
 actors:
   - Russia
@@ -83,3 +90,5 @@ actors:
   - United States
   - Poland
   - Baltic States
+  - Finland
+  - Germany

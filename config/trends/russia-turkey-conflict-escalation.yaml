@@ -1,0 +1,83 @@
+id: "russia-turkey"
+name: "Russia-Turkey Direct Conflict Escalation"
+description: |
+  Tracks escalation risk toward direct military confrontation between Russia and
+  Turkey across the Black Sea, Syria, Libya, and Caucasus theaters.
+
+baseline_probability: 0.05
+decay_half_life_days: 30
+
+disqualifiers:
+  - signal: "theater_deconfliction_protocol"
+    effect: "reset_to_baseline"
+    description: "Verified bilateral deconfliction in key theaters"
+  - signal: "joint_crisis_mechanism"
+    effect: "reassess"
+    description: "Standing crisis-management mechanism with incident resolution"
+
+falsification_criteria:
+  decrease_confidence:
+    - "No severe bilateral military incidents over 12 months"
+    - "Sustained diplomatic and military hotline engagement"
+  increase_confidence:
+    - "Serial military incidents in Black Sea or Syria"
+    - "Proxy escalation causing direct military casualties"
+  would_invalidate_model:
+    - "Geopolitical realignment eliminating conflict theaters"
+
+indicators:
+  black_sea_naval_incident:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["naval incident", "black sea intercept", "warship encounter"]
+
+  syria_proxy_clash:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["syria strike", "proxy clash", "deconfliction failure"]
+
+  caucasus_theater_escalation:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["caucasus escalation", "border fighting", "security corridor clash"]
+
+  straits_restriction:
+    weight: 0.03
+    direction: escalatory
+    type: lagging
+    keywords: ["straits restrictions", "montreux", "navigation limits"]
+
+  energy_trade_weaponization:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["TurkStream disruption", "energy trade weaponized", "Akkuyu dispute", "energy leverage"]
+
+  hotline_restoration:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["hotline restored", "military talks resumed"]
+
+  bilateral_security_agreement:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["security memorandum", "incident prevention agreement"]
+
+regions:
+  - Black Sea
+  - Syria
+  - Caucasus
+  - Libya
+  - Eastern Mediterranean
+
+actors:
+  - Russia
+  - Turkey
+  - Syria
+  - Azerbaijan
+  - Armenia

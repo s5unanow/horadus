@@ -1,0 +1,68 @@
+id: "elite-mass-polarization"
+name: "Elite-Mass Polarization and Agency Erosion"
+description: |
+  Tracks structural separation between high-control elite groups and the broader
+  population, including declining social mobility and agency.
+
+baseline_probability: 0.38
+decay_half_life_days: 270
+
+disqualifiers:
+  - signal: "mobility_recovery"
+    effect: "reassess"
+    description: "Sustained multi-year improvement in social mobility"
+  - signal: "inclusive_institutional_reform"
+    effect: "reset_to_baseline"
+    description: "Demonstrable widening of participation and representation"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Wealth concentration stabilizes while mobility rises"
+    - "Improved trust and participation in institutions"
+  increase_confidence:
+    - "Concentrated wealth and decision control intensify"
+    - "Falling public influence over policy and resource allocation"
+  would_invalidate_model:
+    - "Fundamental paradigm shift in economic organization rendering inequality metrics inapplicable"
+
+indicators:
+  wealth_concentration_increase:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["wealth concentration", "top percentile gains", "asset concentration", "billionaire wealth surge"]
+
+  social_mobility_decline:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["social mobility decline", "intergenerational mobility drop", "class rigidity"]
+
+  governance_capture_signals:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["regulatory capture", "policy capture", "elite influence", "lobbying dominance"]
+
+  media_ownership_concentration:
+    weight: 0.03
+    direction: escalatory
+    type: leading
+    keywords: ["media consolidation", "media acquisition", "press ownership concentration", "media monopoly"]
+
+  redistributive_reform:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["tax reform", "inclusive growth policy", "broad ownership program", "wealth tax enacted"]
+
+  civic_participation_rebound:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["voter participation rise", "institutional trust rebound", "civic engagement increase"]
+
+regions:
+  - North America
+  - Europe
+  - East Asia

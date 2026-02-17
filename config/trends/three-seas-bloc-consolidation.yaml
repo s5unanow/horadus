@@ -1,0 +1,82 @@
+id: "three-seas-bloc-consolidation"
+name: "Three Seas Bloc Consolidation"
+description: |
+  Tracks institutional consolidation of the Three Seas area into a coordinated
+  security, logistics, and energy bloc.
+
+baseline_probability: 0.14
+decay_half_life_days: 150
+
+disqualifiers:
+  - signal: "formal_bloc_fragmentation"
+    effect: "reset_to_baseline"
+    description: "Member exits or formal collapse of coordination mechanisms"
+  - signal: "major_funding_withdrawal"
+    effect: "reassess"
+    description: "Material loss of long-horizon financing"
+
+falsification_criteria:
+  decrease_confidence:
+    - "No progress on joint command or procurement for 18 months"
+    - "Repeated vetoes blocking strategic infrastructure"
+  increase_confidence:
+    - "Binding defense cooperation frameworks"
+    - "Shared budget or procurement pipelines"
+  would_invalidate_model:
+    - "Institutional redesign that removes bloc comparability"
+
+indicators:
+  defense_pact_signed:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["defense pact", "mutual defense", "security treaty"]
+
+  joint_procurement_pipeline:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["joint procurement", "shared defense acquisition"]
+
+  corridor_infrastructure_buildout:
+    weight: 0.04
+    direction: escalatory
+    type: lagging
+    keywords: ["north-south corridor", "energy interconnector", "strategic rail"]
+
+  us_strategic_investment:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["Three Seas Fund", "US investment Three Seas", "DFC Three Seas"]
+
+  energy_security_driver:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["energy independence", "LNG terminal", "energy diversification Three Seas"]
+
+  coalition_veto_gridlock:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["veto", "deadlock", "coordination failure"]
+
+  funding_cutbacks:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["budget cut", "project suspension", "financing shortfall"]
+
+regions:
+  - Central-Eastern Europe
+  - Adriatic-Baltic-Black Sea corridor
+
+actors:
+  - Poland
+  - Romania
+  - Croatia
+  - Baltic States
+  - Bulgaria
+  - Austria
+  - United States

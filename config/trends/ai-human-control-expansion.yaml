@@ -1,0 +1,89 @@
+id: "ai-control"
+name: "AI-Mediated Human Control Expansion"
+description: |
+  Tracks expansion of AI-driven control over human decision space in identity,
+  finance, mobility, services access, and public discourse.
+
+baseline_probability: 0.25
+decay_half_life_days: 120
+
+disqualifiers:
+  - signal: "binding_algorithmic_rights_framework"
+    effect: "reassess"
+    description: "Strong legal framework enforcing rights and due process in 3+ major jurisdictions"
+  - signal: "mandatory_human_override"
+    effect: "reassess"
+    description: "Cross-sector mandatory human override and appeal rights"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Wider legal limits on high-stakes automation in 3+ major jurisdictions"
+    - "Transparent audit and appeal mechanisms enforced"
+  increase_confidence:
+    - "Mandatory digital identity tied to service eligibility"
+    - "Expanded behavioral scoring in critical systems"
+  would_invalidate_model:
+    - "Prohibition of algorithmic high-stakes decisioning"
+    - "Major AI systems voluntarily withdrawn from high-stakes use due to reliability concerns"
+
+indicators:
+  mandatory_digital_identity:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["mandatory digital id", "identity gateway", "service-linked identity"]
+
+  social_scoring_deployment:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["social score", "behavior score", "risk score", "social credit"]
+
+  biometric_surveillance_expansion:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["facial recognition deployment", "biometric database", "real-time biometric surveillance", "gait recognition"]
+
+  algorithmic_denial_of_services:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["automated denial", "algorithmic suspension", "access restricted by model"]
+
+  llm_gatekeeping_deployment:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["AI content moderation", "automated content removal", "LLM-based eligibility", "AI-generated compliance"]
+
+  financial_algorithmic_control:
+    weight: 0.04
+    direction: escalatory
+    type: lagging
+    keywords: ["algorithmic debanking", "financial deplatforming", "automated account closure", "sanctions compliance automation"]
+
+  algorithmic_transparency_law:
+    weight: 0.05
+    direction: de_escalatory
+    type: leading
+    keywords: ["transparency law", "explainability mandate", "audit trail requirement", "AI Act enforcement"]
+
+  right_to_human_review:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["human review right", "appeal right", "manual override"]
+
+  judicial_algorithmic_review:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["algorithmic impact assessment", "judicial review of AI", "AI audit order", "algorithmic accountability ruling"]
+
+regions:
+  - China
+  - European Union
+  - United States
+  - India
+  - Global

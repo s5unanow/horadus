@@ -1,0 +1,84 @@
+id: "us-china"
+name: "US-China Direct War Escalation"
+description: |
+  Tracks escalation from strategic competition into direct military conflict,
+  especially around Taiwan and contested maritime zones.
+
+baseline_probability: 0.09
+decay_half_life_days: 30
+
+disqualifiers:
+  - signal: "binding_crisis_stabilization_framework"
+    effect: "reset_to_baseline"
+    description: "Verified bilateral military crisis-stabilization agreement"
+  - signal: "long_horizon_deterrence_compact"
+    effect: "reassess"
+    description: "Durable deterrence and communication compact"
+
+falsification_criteria:
+  decrease_confidence:
+    - "No major military incidents in Taiwan theater for 12 months"
+    - "Regular high-level military dialogue and confidence mechanisms"
+  increase_confidence:
+    - "Maritime or air incident with casualties"
+    - "Sustained partial blockade behavior around Taiwan"
+  would_invalidate_model:
+    - "Formal political settlement redefining Taiwan status"
+
+indicators:
+  taiwan_blockade_activity:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["blockade", "inspection zone", "shipping disruption around taiwan", "quarantine"]
+
+  military_incident:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["collision", "fired upon", "close encounter", "casualties"]
+
+  pla_exercise_escalation:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["military exercises", "live fire drill", "joint exercise around taiwan", "encirclement drill", "PLA exercise surge"]
+
+  alliance_force_posture_upgrade:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["force posture", "forward deployment", "deterrence mission"]
+
+  export_control_spiral:
+    weight: 0.03
+    direction: escalatory
+    type: lagging
+    keywords: ["chip restrictions", "export control expansion", "rare earth controls"]
+
+  high_level_military_talks:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["defense talks", "military hotline", "confidence building"]
+
+  maritime_rules_of_engagement:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["rules of engagement", "incident prevention at sea"]
+
+regions:
+  - Taiwan Strait
+  - South China Sea
+  - East China Sea
+  - Western Pacific
+
+actors:
+  - United States
+  - China
+  - Taiwan
+  - Japan
+  - Philippines
+  - Australia
+  - AUKUS

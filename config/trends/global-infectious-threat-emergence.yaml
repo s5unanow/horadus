@@ -1,0 +1,93 @@
+id: "global-infectious-threat"
+name: "Emergence of Globally Significant Infectious Threats"
+description: |
+  Tracks emergence and international spread of novel or materially changed
+  pathogens with system-level health and economic impact. Covers PHEIC-grade
+  events and above, encompassing both natural and engineered origins.
+
+baseline_probability: 0.12
+decay_half_life_days: 45
+
+disqualifiers:
+  - signal: "pathogen_contained"
+    effect: "reassess"
+    description: "Verified containment with no sustained cross-border spread"
+  - signal: "pathogen_eradicated_or_fully_controlled"
+    effect: "reset_to_baseline"
+    description: "Pathogen eradicated or controlled with verified sustained zero transmission globally for 60+ days"
+  - signal: "false_alarm_reclassification"
+    effect: "reassess"
+    description: "Event reclassified as non-systemic threat"
+
+falsification_criteria:
+  decrease_confidence:
+    - "R_t below 1 across major clusters sustained for 14+ days"
+    - "No sustained transmission in multiple regions for 30+ days"
+  increase_confidence:
+    - "Sustained transmission across 3+ continents"
+    - "Rapid increase in severe outcomes and excess mortality"
+    - "Novel pathogen with pandemic-potential characteristics identified in multiple countries"
+  would_invalidate_model:
+    - "Fundamental change in surveillance comparability"
+    - "Emergence of threat class requiring fundamentally different tracking methodology"
+
+indicators:
+  novel_pathogen_identification:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["novel virus", "uncharacterized pathogen", "unknown pneumonia", "new variant of concern"]
+
+  sustained_cross_continent_transmission:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["community transmission", "multi-country spread", "cross-continent"]
+
+  unusual_pathogen_characteristics:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["furin cleavage site", "unusual adaptation", "gain of function markers", "atypical genome", "enhanced transmissibility"]
+
+  hospitalization_surge:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["hospital surge", "icu occupancy", "health system strain"]
+
+  who_pheic_declaration:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["pheic", "public health emergency", "who emergency"]
+
+  lab_biosafety_incident:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["lab leak", "containment breach", "BSL incident", "research accident", "lab exposure"]
+
+  anomalous_mortality_cluster:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["unexplained deaths", "excess mortality cluster", "unusual death pattern", "pneumonia of unknown origin"]
+
+  international_travel_restriction:
+    weight: 0.03
+    direction: escalatory
+    type: lagging
+    keywords: ["travel ban", "border closure", "flight suspension", "quarantine requirement"]
+
+  transmission_reversal:
+    weight: 0.05
+    direction: de_escalatory
+    type: lagging
+    keywords: ["R_t below one", "declining case curve", "outbreak controlled"]
+
+  vaccine_or_therapeutic_breakthrough:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["effective vaccine", "high-efficacy therapeutic", "rapid deployment"]

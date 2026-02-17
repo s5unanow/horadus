@@ -1,0 +1,84 @@
+id: "ukraine-security-frontier-model"
+name: "Ukraine as a Long-Horizon Militarized Frontier"
+description: |
+  Tracks whether Ukraine evolves into a sustained, externally backed, highly
+  militarized security frontier analogous to a permanent forward deterrence model.
+
+baseline_probability: 0.40
+decay_half_life_days: 365
+
+disqualifiers:
+  - signal: "comprehensive_peace_settlement"
+    effect: "reset_to_baseline"
+    description: "Comprehensive settlement with durable demilitarization terms"
+  - signal: "security_guarantee_collapse"
+    effect: "reassess"
+    description: "Failure or rollback of long-term external security guarantees"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Defense burden declines with durable ceasefire architecture"
+    - "External military assistance shifts to civilian reconstruction only"
+  increase_confidence:
+    - "Multi-year military aid packages and defense integration deepen"
+    - "Persistent high defense spending and force modernization"
+  would_invalidate_model:
+    - "Settlement structure that removes frontline deterrence role"
+
+indicators:
+  multi_year_security_guarantees:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["long-term security guarantee", "10-year defense agreement", "bilateral security pact"]
+
+  nato_integration_pathway:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["NATO accession", "MAP invitation", "membership action plan", "Article 5 extension", "NATO membership timeline"]
+
+  defense_spending_entrenchment:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["defense spending above", "military budget expansion", "wartime spending sustained"]
+
+  defense_industrial_integration:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["joint production", "defense supply chain integration", "co-production", "drone co-manufacturing"]
+
+  frozen_conflict_formalization:
+    weight: 0.04
+    direction: escalatory
+    type: lagging
+    keywords: ["line of control formalized", "frozen conflict", "contact line stabilization", "de facto partition"]
+
+  broad_demilitarization_path:
+    weight: 0.05
+    direction: de_escalatory
+    type: leading
+    keywords: ["demilitarization roadmap", "verified force reduction", "arms reduction framework"]
+
+  aid_reorientation_to_civilian:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["civilian reconstruction focus", "non-military assistance dominance", "economic aid priority"]
+
+regions:
+  - Ukraine
+  - Eastern Europe
+  - Black Sea
+
+actors:
+  - Ukraine
+  - Russia
+  - NATO
+  - United States
+  - European Union
+  - United Kingdom
+  - Poland
+  - Germany

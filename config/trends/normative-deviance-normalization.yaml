@@ -1,0 +1,97 @@
+id: "normative-deviance-normalization"
+name: "Normalization of Extreme Taboo Violations in Public Discourse"
+description: |
+  Tracks attempts to move specific extreme taboo behaviors from fringe discourse
+  into mainstream legal, media, or academic normalization. Scoped to:
+  (1) sexualization or exploitation of minors (e.g., Balenciaga-style normalization,
+      MAP advocacy, age-of-consent reduction proposals);
+  (2) cannibalism and extreme body-violation presented positively in mainstream media
+      or academic literature;
+  (3) normalization of political violence as legitimate discourse;
+  (4) normalization of non-consensual human experimentation.
+  Excludes ongoing cultural debates about adult lifestyle choices, drug policy,
+  or end-of-life care, which are tracked elsewhere or out of scope.
+
+baseline_probability: 0.10
+decay_half_life_days: 270
+
+disqualifiers:
+  - signal: "explicit_legal_prohibition_expansion"
+    effect: "reset_to_baseline"
+    description: "New criminal prohibitions and enforcement expansion across multiple jurisdictions"
+  - signal: "major_platform_policy_reversal"
+    effect: "reassess"
+    description: "Major platforms tighten enforcement and remove amplification of scoped content"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Sustained decline in mainstream positive framing of scoped behaviors over 24 months"
+    - "No legislative, academic, or media normalization proposals for scoped domains over 24 months"
+    - "Increased criminal enforcement and public rejection of normalization attempts"
+  increase_confidence:
+    - "Repeated legislative or institutional proposals to decriminalize or normalize scoped behaviors"
+    - "Platform rule changes reducing moderation for content normalizing scoped behaviors"
+    - "Academic or media publications framing scoped taboo violations positively in mainstream outlets"
+  would_invalidate_model:
+    - "Jurisdictional classification changes that make the scoped categories legally undefinable"
+
+indicators:
+  legislative_normalization_attempt:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["age of consent reduction", "decriminalize minor attraction", "MAP rights", "legalize cannibalism", "normalize political violence"]
+
+  platform_policy_relaxation:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["content policy relaxed", "moderation rollback for extreme content", "minor attraction content allowed", "enforcement reduced"]
+
+  mainstream_positive_framing:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["cannibalism positive framing", "minor attraction destigmatize", "eating human flesh benefits", "pedophilia reframed", "political violence justified"]
+
+  academic_legitimation:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["peer reviewed normalization", "academic defense of taboo", "scientific case for cannibalism", "research reframing minor attraction"]
+
+  commercial_normalization:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["brand campaign sexualizing minors", "advertising normalizing violence", "fashion industry child exploitation", "commercial exploitation taboo"]
+
+  legal_enforcement_crackdown:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["criminal prosecution", "enforcement operation", "ban enacted", "child protection law strengthened"]
+
+  coordinated_public_backlash:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["mass petition", "public backlash", "boycott campaign", "policy reversal demand", "advertiser withdrawal"]
+
+  institutional_safeguard_strengthening:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["child safeguarding expanded", "ethics review tightened", "content classification strengthened"]
+
+regions:
+  - North America
+  - Europe
+  - Global (media/academic)
+
+actors:
+  - Major social media platforms
+  - Academic publishers
+  - Fashion and advertising industry
+  - Legislative bodies
+  - Child protection organizations

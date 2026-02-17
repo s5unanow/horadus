@@ -1,0 +1,75 @@
+id: "fertility-decline"
+name: "Fertility Decline Acceleration"
+description: |
+  Tracks whether fertility decline accelerates beyond long-run demographic
+  expectations, with labor-force and social stability implications.
+  Composite trend across Europe, North America, and East Asia.
+
+baseline_probability: 0.35
+decay_half_life_days: 365
+
+disqualifiers:
+  - signal: "sustained_fertility_recovery"
+    effect: "reset_to_baseline"
+    description: "TFR recovery sustained for multiple years across tracked regions"
+  - signal: "major_data_revision"
+    effect: "reassess"
+    description: "National statistical revisions materially change trend"
+
+falsification_criteria:
+  decrease_confidence:
+    - "TFR stabilization for 8+ quarters across multiple tracked regions"
+    - "Birth counts return to pre-shock trajectory"
+  increase_confidence:
+    - "Broad multi-country declines in births and first-birth rates"
+    - "Persistent affordability shock in family-forming cohorts"
+  would_invalidate_model:
+    - "Structural demographic measurement discontinuity"
+
+indicators:
+  tfr_decline:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["total fertility rate fell", "fertility decline", "below replacement", "record low TFR"]
+
+  births_yoy_decline:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["births down year over year", "birth count fell", "record low births"]
+
+  marriage_partnership_decline:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["marriage rate fell", "partnership formation decline", "delayed family formation", "marriage rate record low"]
+
+  family_cost_pressure:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["housing affordability", "childcare cost", "family budget pressure"]
+
+  pro_family_policy_expansion:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["child benefit expansion", "parental leave reform", "family subsidy"]
+
+  childcare_affordability_gain:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["childcare price decline", "public childcare capacity"]
+
+  immigration_fertility_offset:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["immigrant fertility", "migration-driven birth rate", "demographic offset immigration"]
+
+regions:
+  - Europe
+  - North America
+  - East Asia

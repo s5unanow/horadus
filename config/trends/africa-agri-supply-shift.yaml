@@ -1,0 +1,92 @@
+id: "africa-agri-supply-shift"
+name: "Africa as an Emerging Global Food Basket"
+description: |
+  Tracks whether African producers materially increase their share in global food
+  export markets through productivity and logistics gains.
+
+baseline_probability: 0.11
+decay_half_life_days: 365
+
+disqualifiers:
+  - signal: "multi_year_crop_collapse"
+    effect: "reassess"
+    description: "Sustained multi-country crop failures across 2+ consecutive seasons in 3+ major producing countries"
+  - signal: "export_corridor_breakdown"
+    effect: "reset_to_baseline"
+    description: "Strategic export infrastructure disruption"
+  - signal: "widespread_governance_failure"
+    effect: "reset_to_baseline"
+    description: "Simultaneous severe institutional disruption in key producing regions"
+
+falsification_criteria:
+  decrease_confidence:
+    - "No sustained export share gains over 5 years"
+    - "Logistics costs remain structurally uncompetitive"
+  increase_confidence:
+    - "Persistent export growth across major crop categories"
+    - "Large-scale agri-infrastructure completion"
+  would_invalidate_model:
+    - "Global reporting break in trade flow baselines"
+
+indicators:
+  export_share_growth:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["african food exports", "AfCFTA agricultural", "african grain exports", "export share increased", "market share gain"]
+
+  agri_infrastructure_investment:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["port expansion", "rail corridor", "storage capacity", "cold chain", "african agri corridor"]
+
+  yield_productivity_jump:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["yield increase", "crop productivity", "irrigation gains", "irrigation expansion"]
+
+  land_tenure_governance_reform:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["land reform", "tenure security", "agricultural land registration", "land governance"]
+
+  seed_input_modernization:
+    weight: 0.03
+    direction: escalatory
+    type: leading
+    keywords: ["seed system", "fertilizer subsidy", "input access", "seed certification", "improved varieties"]
+
+  climate_shock_losses:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["drought losses", "flood damage", "crop failure", "climate disruption"]
+
+  conflict_instability_disruption:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["coup", "conflict displacement", "agricultural disruption", "farmer displacement", "Sahel crisis"]
+
+  export_restrictions:
+    weight: 0.03
+    direction: de_escalatory
+    type: leading
+    keywords: ["export ban", "quota", "trade restriction", "food sovereignty restriction"]
+
+regions:
+  - West Africa
+  - East Africa
+  - Southern Africa
+
+actors:
+  - African Union
+  - AfCFTA Secretariat
+  - AfDB
+  - Nigeria
+  - Ethiopia
+  - Kenya
+  - Tanzania

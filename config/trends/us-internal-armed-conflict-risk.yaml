@@ -1,0 +1,73 @@
+id: "us-internal"
+name: "US Internal Armed Conflict Risk"
+description: |
+  Tracks risk that severe political polarization in the United States evolves
+  into sustained organized political violence or armed confrontation, including
+  coordinated militia activity, state-federal standoffs, and mass-casualty
+  politically motivated attacks.
+
+baseline_probability: 0.05
+decay_half_life_days: 60
+
+disqualifiers:
+  - signal: "cross_party_stabilization_compact"
+    effect: "reset_to_baseline"
+    description: "Institutional de-escalation compact with bipartisan enforcement"
+  - signal: "sustained_decline_political_violence"
+    effect: "reassess"
+    description: "Multi-year decline in politically motivated violence"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Sharp fall in armed political incidents"
+    - "Improving institutional trust and election legitimacy"
+  increase_confidence:
+    - "Coordinated armed incidents across multiple states"
+    - "Rapid militia mobilization and copycat attacks"
+  would_invalidate_model:
+    - "Fundamental constitutional restructuring that removes structural conditions driving polarization"
+
+indicators:
+  political_violence_incident_spike:
+    weight: 0.06
+    direction: escalatory
+    type: leading
+    keywords: ["politically motivated attack", "armed standoff", "extremist violence"]
+
+  militia_mobilization:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["armed group mobilization", "militia activity", "paramilitary organizing"]
+
+  state_federal_confrontation:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["state defiance of federal", "national guard standoff", "nullification", "secession"]
+
+  election_legitimacy_crisis:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["election legitimacy disputed", "constitutional crisis", "contested results"]
+
+  bipartisan_deescalation_framework:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["bipartisan accord", "de-escalation pact", "joint institutional statement"]
+
+  political_violence_conviction_wave:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["extremist prosecutions", "disruption of armed cells"]
+
+regions:
+  - United States
+
+actors:
+  - United States federal government
+  - US state governments
+  - Domestic extremist organizations

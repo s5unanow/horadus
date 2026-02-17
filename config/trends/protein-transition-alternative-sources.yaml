@@ -1,0 +1,82 @@
+id: "protein-transition"
+name: "Protein Transition from Traditional Meat to Alternatives"
+description: |
+  Tracks structural substitution from conventional meat consumption toward
+  alternative proteins, including plant-based, cultivated meat, precision
+  fermentation, and insect-based products.
+
+baseline_probability: 0.14
+decay_half_life_days: 330
+
+disqualifiers:
+  - signal: "alternative_protein_rejection"
+    effect: "reset_to_baseline"
+    description: "Sustained consumer rejection with market share decline across major markets for 3+ years"
+  - signal: "livestock_competitiveness_rebound"
+    effect: "reassess"
+    description: "Traditional meat regains durable price and policy advantage"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Alternative protein share stagnates below threshold for 5+ years"
+    - "No policy or procurement shift over multiple cycles"
+  increase_confidence:
+    - "Fast market-share growth in urban retail and public procurement"
+    - "Tighter livestock regulation and subsidy shift"
+  would_invalidate_model:
+    - "Regulatory ban on key alternative protein categories across major markets"
+
+indicators:
+  alternative_protein_market_share_growth:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["alternative protein market share", "plant-based meat sales", "cultivated meat adoption", "precision fermentation", "mycoprotein growth", "insect protein adoption"]
+
+  production_cost_price_parity:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve"]
+
+  livestock_regulation_tightening:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["livestock emissions limits", "animal farming restrictions", "methane regulation"]
+
+  public_procurement_shift:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["school menu reform", "public procurement standards", "institutional menu change", "plant-forward procurement"]
+
+  cultivated_meat_regulatory_approval:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["cultivated meat approval", "cell-based meat regulation", "novel food authorization"]
+
+  consumer_reversion_to_meat:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["meat demand rebound", "alternative protein slowdown", "plant-based sales decline"]
+
+  affordability_gap_widens:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["alternative proteins expensive", "price premium expansion", "cost gap widens"]
+
+  conventional_meat_adaptation:
+    weight: 0.03
+    direction: de_escalatory
+    type: lagging
+    keywords: ["livestock methane reduction", "sustainable meat", "meat industry decarbonization"]
+
+regions:
+  - Europe
+  - North America
+  - East Asia
+  - Singapore

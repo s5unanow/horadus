@@ -1,0 +1,63 @@
+id: "dollar-hegemony-erosion"
+name: "Dollar Hegemony Erosion and Alternative Settlement Blocs"
+description: |
+  Tracks structural decline of USD centrality in reserves, trade settlement, and
+  strategic commodity contracts.
+
+baseline_probability: 0.25
+decay_half_life_days: 270
+
+disqualifiers:
+  - signal: "usd_share_rebound"
+    effect: "reassess"
+    description: "Sustained recovery of USD share in reserves and settlements"
+  - signal: "alternative_payment_failure"
+    effect: "reset_to_baseline"
+    description: "Large-scale failure of non-USD payment rails across multiple bilateral corridors"
+
+falsification_criteria:
+  decrease_confidence:
+    - "USD reserve share stabilizes or rises for 3+ years"
+    - "No growth in national-currency commodity settlement"
+  increase_confidence:
+    - "Rapid increase in bilateral non-USD settlement agreements"
+    - "Persistent reserve diversification away from USD"
+  would_invalidate_model:
+    - "Measurement break in reserve currency datasets"
+
+indicators:
+  dedollarization_agreements:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["local currency settlement", "bilateral settlement", "dedollarization"]
+
+  reserve_reallocation:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["reserve diversification", "reduced dollar reserves", "gold accumulation", "central bank gold purchases", "gold reserves increase"]
+
+  commodity_pricing_currency_shift:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["oil priced in yuan", "non-dollar commodity contract", "gold settlement", "petroyuan", "LNG non-dollar"]
+
+  alternative_payment_rail_adoption:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["new payment rail", "cross-border settlement network", "non-swift", "CBDC cross-border", "mBridge", "digital currency bridge", "CIPS volume"]
+
+  eurodollar_stress_reinforcement:
+    weight: 0.04
+    direction: de_escalatory
+    type: lagging
+    keywords: ["dollar funding stress", "swap line activation", "basis blowout", "dollar shortage", "eurodollar squeeze", "safe-haven dollar demand"]
+
+  sanctions_deescalation:
+    weight: 0.03
+    direction: de_escalatory
+    type: leading
+    keywords: ["sanctions relief", "financial normalization"]

@@ -1,0 +1,82 @@
+id: "south-america-agri-supply-shift"
+name: "South America Strengthening Global Food Supply Leadership"
+description: |
+  Tracks whether South America strengthens its existing global food supply
+  leadership through sustained export growth, logistics expansion, and
+  new market access.
+
+baseline_probability: 0.33
+decay_half_life_days: 345
+
+disqualifiers:
+  - signal: "structural_export_decline"
+    effect: "reassess"
+    description: "Persistent decline in aggregate food exports"
+  - signal: "major_export_market_closure"
+    effect: "reset_to_baseline"
+    description: "Simultaneous loss of access to major import markets (e.g., EU + China restrictions)"
+
+falsification_criteria:
+  decrease_confidence:
+    - "Declining export CAGR below global food trade growth"
+    - "No improvement in port throughput and inland logistics"
+  increase_confidence:
+    - "Broad-based growth in protein and grain exports"
+    - "Long-term supply contracts with major importing blocs"
+  would_invalidate_model:
+    - "Trade statistics reclassification removes comparability"
+    - "Cerrado water table depletion causing structural land-use collapse"
+
+indicators:
+  export_volume_cagr_growth:
+    weight: 0.05
+    direction: escalatory
+    type: lagging
+    keywords: ["export volume growth", "cagr", "record harvest exports", "record soybean harvest", "cerrado expansion"]
+
+  logistics_capacity_expansion:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["port capacity", "freight corridor", "river logistics", "Ferrograo", "Arco Norte", "BR-163", "Miritituba"]
+
+  china_demand_signal:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["china soy imports", "chinese feed demand", "brazil-china agricultural trade", "china protein imports"]
+
+  trade_agreement_expansion:
+    weight: 0.03
+    direction: escalatory
+    type: leading
+    keywords: ["trade agreement", "market access", "tariff reduction", "EU-Mercosur"]
+
+  deforestation_regulation_risk:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["deforestation regulation", "EUDR", "zero deforestation", "soy moratorium", "forest code enforcement"]
+
+  climate_disruption_losses:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["climate losses", "drought", "extreme weather impact", "La Nina", "El Nino"]
+
+  export_tax_or_quota_tightening:
+    weight: 0.03
+    direction: de_escalatory
+    type: leading
+    keywords: ["export tax", "quota tightening", "shipment controls", "retenciones"]
+
+regions:
+  - Brazil
+  - Argentina
+  - Paraguay
+  - Uruguay
+
+actors:
+  - Mercosur
+  - China (primary importer)
+  - European Union (market + regulatory)

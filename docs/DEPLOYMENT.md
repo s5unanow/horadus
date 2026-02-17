@@ -18,6 +18,8 @@ cp .env.example .env
 
 Required minimum settings:
 
+- `ENVIRONMENT=production`
+- `SECRET_KEY_FILE`
 - `API_AUTH_ENABLED=true`
 - `API_KEYS_FILE`
 - `API_ADMIN_KEY_FILE`
@@ -87,6 +89,7 @@ docker compose -f docker-compose.prod.yml up -d api worker beat postgres redis
 
 ```bash
 curl -sSf http://localhost:8000/health
+curl -sSf http://localhost:8000/health/ready
 curl -sSf http://localhost:8000/metrics | head
 ```
 

@@ -157,3 +157,20 @@ def test_admin_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -> Non
     last_log = audit_logger.info.call_args_list[-1]
     assert last_log.kwargs["action"] == "list_keys"
     assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_key_management_requires_explicit_admin_key_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", None)
+    client = TestClient(_build_app(manager))
+
+    response = client.get(
+        "/api/v1/auth/keys",
+        headers={"X-API-Key": credential},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin API key is not configured"

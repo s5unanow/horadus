@@ -157,10 +157,31 @@ async def readiness_check(
     Kubernetes readiness probe.
 
     Checks if the application is ready to receive traffic.
-    Includes database connectivity check.
+    Readiness requires all critical dependencies to report healthy.
     """
     try:
-        await session.execute(text("SELECT 1"))
+        checks: dict[str, Any] = {}
+        db_check = await check_database(session)
+        checks["database"] = db_check
+
+        redis_check = await check_redis()
+        checks["redis"] = redis_check
+
+        worker_check = await check_worker_activity()
+        checks["worker"] = worker_check
+
+        if settings.MIGRATION_PARITY_CHECK_ENABLED:
+            checks["migrations"] = await check_migration_parity(session)
+
+        failing_checks = {
+            name: payload for name, payload in checks.items() if payload.get("status") != "healthy"
+        }
+        if failing_checks:
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content={"status": "not_ready", "checks": failing_checks},
+            )
+
         return {"status": "ready"}
     except Exception as e:
         logger.warning("Readiness check failed", error=str(e))

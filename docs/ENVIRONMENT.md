@@ -21,21 +21,29 @@ This document lists environment variables used by the Horadus backend.
 | `API_PORT` | `8000` | API bind port. |
 | `API_RELOAD` | `true` | Set `false` in production. |
 | `ENVIRONMENT` | `development` | Use `production` in deployed environments. |
-| `API_AUTH_ENABLED` | `false` | Enables API key auth middleware. |
+| `API_AUTH_ENABLED` | `false` | Enables API key auth middleware. Must be `true` when `ENVIRONMENT=production` (startup fails otherwise). |
 | `API_KEYS` | empty | Comma-separated accepted API keys. |
-| `API_ADMIN_KEY` | empty | Required for key-management endpoints. |
+| `API_ADMIN_KEY` | empty | Required for key-management endpoints. In production it must be explicitly set or startup fails. |
 | `API_RATE_LIMIT_PER_MINUTE` | `120` | Per-key request budget. |
 | `API_RATE_LIMIT_WINDOW_SECONDS` | `60` | Distributed rate-limit window size. |
 | `API_RATE_LIMIT_STRATEGY` | `fixed_window` | Rate-limit algorithm (`fixed_window` or `sliding_window`). |
 | `API_RATE_LIMIT_REDIS_PREFIX` | `horadus:api_rate_limit` | Redis key prefix for per-key rate-limit buckets. |
 | `API_KEYS_PERSIST_PATH` | empty | Optional file path for persisted runtime API key metadata. |
 | `CORS_ORIGINS` | local origins | Comma-separated origin list. |
-| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret; set a high-entropy value in production. |
+| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret. In production this must be explicitly set (dev default is rejected at startup). |
 
 Rate-limit strategy guidance:
 - `fixed_window` (default): lowest Redis/memory overhead and easiest operator reasoning, but allows boundary bursts near window rollover.
 - `sliding_window`: smoother request pacing and stronger burst suppression across minute boundaries, with slightly higher Redis CPU/memory cost.
 - Recommended production default remains `fixed_window` unless boundary-burst behavior materially impacts your workload.
+
+Production auth/secret guardrails:
+- `ENVIRONMENT=production` now enforces fail-fast startup checks:
+  - `SECRET_KEY` must not use the development default value.
+  - `API_AUTH_ENABLED` must be `true`.
+  - `API_ADMIN_KEY` must be configured.
+  - At least one bootstrap access path must exist: `API_KEY`, `API_KEYS`, or `API_KEYS_PERSIST_PATH`.
+- Key-management endpoints (`/api/v1/auth/keys*`) always require `X-Admin-API-Key`; authenticated user keys are not an admin fallback.
 
 ## Model and Processing Controls
 

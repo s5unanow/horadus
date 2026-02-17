@@ -1983,11 +1983,11 @@ Close immediate launch-risk gaps in auth/secret defaults and readiness
 semantics so public deployment fails safe by default.
 
 **Acceptance Criteria**:
-- [ ] Enforce production-safe secret handling (`SECRET_KEY` must be explicit in production or startup fails)
-- [ ] Enforce explicit admin-key requirement for key-management endpoints (no permissive fallback)
-- [ ] Tighten auth default posture for production mode and document safe rollout controls
-- [ ] Return non-2xx readiness status when dependencies are unavailable
-- [ ] Add/update unit tests and deployment/environment docs for all guardrail behaviors
+- [x] Enforce production-safe secret handling (`SECRET_KEY` must be explicit in production or startup fails)
+- [x] Enforce explicit admin-key requirement for key-management endpoints (no permissive fallback)
+- [x] Tighten auth default posture for production mode and document safe rollout controls
+- [x] Return non-2xx readiness status when dependencies are unavailable
+- [x] Add/update unit tests and deployment/environment docs for all guardrail behaviors
 
 ---
 

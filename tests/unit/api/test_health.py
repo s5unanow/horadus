@@ -99,23 +99,65 @@ async def test_health_check_degrades_when_migrations_drift(mock_db_session, monk
 
 
 @pytest.mark.asyncio
-async def test_readiness_check_returns_ready_payload_on_success(mock_db_session) -> None:
+async def test_readiness_check_returns_ready_payload_on_success(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    async def fake_db(_session):
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_redis():
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_worker():
+        return {"status": "healthy", "age_seconds": 1.0}
+
+    async def fake_migration(_session):
+        return {"status": "healthy"}
+
+    monkeypatch.setattr(health_module, "check_database", fake_db)
+    monkeypatch.setattr(health_module, "check_redis", fake_redis)
+    monkeypatch.setattr(health_module, "check_worker_activity", fake_worker)
+    monkeypatch.setattr(health_module, "check_migration_parity", fake_migration)
+    monkeypatch.setattr(health_module.settings, "MIGRATION_PARITY_CHECK_ENABLED", True)
+
     result = await health_module.readiness_check(session=mock_db_session)
 
     assert result == {"status": "ready"}
 
 
 @pytest.mark.asyncio
-async def test_readiness_check_returns_503_payload_on_failure(mock_db_session, monkeypatch) -> None:
-    async def fail_execute(*_args, **_kwargs):
-        raise RuntimeError("database unavailable")
+async def test_readiness_check_returns_503_payload_on_dependency_failure(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    async def fake_db(_session):
+        return {"status": "healthy", "latency_ms": 1.0}
 
-    monkeypatch.setattr(mock_db_session, "execute", fail_execute)
+    async def fake_redis():
+        return {"status": "unhealthy", "message": "redis unavailable"}
+
+    async def fake_worker():
+        return {"status": "healthy", "age_seconds": 1.0}
+
+    async def fake_migration(_session):
+        return {"status": "healthy"}
+
+    monkeypatch.setattr(health_module, "check_database", fake_db)
+    monkeypatch.setattr(health_module, "check_redis", fake_redis)
+    monkeypatch.setattr(health_module, "check_worker_activity", fake_worker)
+    monkeypatch.setattr(health_module, "check_migration_parity", fake_migration)
+    monkeypatch.setattr(health_module.settings, "MIGRATION_PARITY_CHECK_ENABLED", True)
 
     result = await health_module.readiness_check(session=mock_db_session)
 
     assert result.status_code == 503
     assert json.loads(result.body.decode("utf-8")) == {
         "status": "not_ready",
-        "reason": "database unavailable",
+        "checks": {
+            "redis": {
+                "status": "unhealthy",
+                "message": "redis unavailable",
+            }
+        },
     }

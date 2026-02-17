@@ -83,21 +83,19 @@ def _to_summary(record: APIKeyRecord) -> APIKeySummary:
 
 def _ensure_admin_access(request: Request) -> None:
     configured_admin_key = (settings.API_ADMIN_KEY or "").strip()
-    if configured_admin_key:
-        header_value = request.headers.get("X-Admin-API-Key", "").strip()
-        if header_value == configured_admin_key:
-            return
+    if not configured_admin_key:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin API key required",
+            detail="Admin API key is not configured",
         )
 
-    if getattr(request.state, "api_key_id", None) is not None:
+    header_value = request.headers.get("X-Admin-API-Key", "").strip()
+    if header_value == configured_admin_key:
         return
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
-        detail="Authenticated API key required",
+        detail="Admin API key required",
     )
 
 

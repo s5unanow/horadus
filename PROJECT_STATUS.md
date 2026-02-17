@@ -184,6 +184,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Stranded `TASK-086..TASK-107` recovery from `task-061` applied on `main` lineage with deterministic recovery matrix (`tasks/assessments/TASK-112-recovery-matrix.md`)
 - [x] Reconstructed missing adapter/tracing/lineage/grounding modules and migrations required for recovered runtime paths
 - [x] Status-ledger reconciliation across `CURRENT_SPRINT`, `COMPLETED`, and `PROJECT_STATUS` for active vs done task parity
+- [x] Delivery workflow guidance now explicitly requires full lifecycle closure (commit/push/PR/merge/local-sync) with blocker reporting, and PR scope guard handles escaped-newline PR bodies
 
 ## In Progress
 

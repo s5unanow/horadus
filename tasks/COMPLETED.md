@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-125: Delivery Lifecycle Clarification and PR Scope Guard Hardening ✅
 - TASK-123: Current Sprint File Right-Sizing and Sprint Archive Split ✅
 - TASK-124: Status Ledger Reconciliation and Active Queue Cleanup ✅
 - TASK-119: Guidance Hierarchy and AGENTS Router Tightening ✅

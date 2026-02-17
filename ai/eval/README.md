@@ -112,6 +112,47 @@ Notes:
 - CI and `make audit-eval` currently run taxonomy validation in transitional mode
   (`subset`/`warn`) until human-gated taxonomy/gold-set harmonization is complete.
 
+## TASK-044 Labeling Rubric (Human Review)
+
+Use this rubric when curating/updating `ai/eval/gold_set.jsonl`.
+
+Provenance and sourcing:
+- Source candidate rows from real ingested items/events (not synthetic prompt-generated text).
+- Keep `label_verification` as `llm_seeded` until manual review is complete.
+- Set `label_verification=human_verified` only after reviewer approval.
+- Recommended reviewer metadata (optional but strongly encouraged): reviewer name,
+  review date, and short rationale in adjacent task artifacts under
+  `tasks/assessments/`.
+
+Tier-1 labeling:
+- `expected.tier1.max_relevance` should reflect strongest trend relevance:
+  `0-3` low/noise, `4-6` ambiguous/contextual, `7-10` clear queue candidate.
+- `expected.tier1.trend_scores` keys must map to configured trend IDs, and scores
+  should be internally consistent with `max_relevance`.
+- Include explicit noise/low-relevance rows to keep queue-precision evaluation
+  realistic.
+
+Tier-2 labeling:
+- Set `expected.tier2=null` for non-queued/noise rows.
+- For queued rows, `expected.tier2.trend_id` must be a configured trend ID.
+- `expected.tier2.signal_type` must exist in the selected trend's indicators.
+- `direction` must match signal semantics (`escalatory` vs `de_escalatory`).
+- Severity/confidence anchors:
+  - severity: `0.0-0.3` weak/indirect, `0.4-0.7` material but bounded, `0.8-1.0`
+    strong/high-impact
+  - confidence: reviewer certainty in correctness of extracted signal and mapping
+
+Coverage and diversity:
+- Maintain representative coverage across active trends and noise cases.
+- Avoid template-heavy duplicates; include varied regions, actors, and source types.
+- Include edge cases: contradictory signals, weak relevance, borderline Tier-1
+  items, and ambiguous signal mapping candidates.
+
+Release gate expectation:
+- `TASK-044` is complete only when curation review is documented and the dataset
+  contains meaningful `human_verified` coverage with reviewer sign-off in sprint
+  notes.
+
 Baseline update procedure:
 1. Run `horadus eval audit` (and fail on warnings for release gates).
 2. Run `horadus eval benchmark` with the candidate prompt/model config.

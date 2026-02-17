@@ -61,8 +61,9 @@ class _FakeTier1Classifier:
         model,
         batch_size,
         cost_tracker,
+        request_overrides=None,
     ) -> None:
-        _ = (session, client, model, batch_size, cost_tracker)
+        _ = (session, client, model, batch_size, cost_tracker, request_overrides)
 
     async def classify_items(self, items, trends):
         trend_ids = [trend.definition["id"] for trend in trends]
@@ -104,8 +105,9 @@ class _FakeTier2Classifier:
         client,
         model,
         cost_tracker,
+        request_overrides=None,
     ) -> None:
-        _ = (session, client, model, cost_tracker)
+        _ = (session, client, model, cost_tracker, request_overrides)
 
     async def classify_event(self, *, event, trends, context_chunks):
         _ = context_chunks
@@ -321,3 +323,94 @@ async def test_run_gold_set_benchmark_records_tier2_failures(
     assert tier2_metrics["items_total"] == 1
     assert tier2_metrics["failures"] == 1
     assert usage["tier2_api_calls"] == 0
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_gold_set(gold_set_path)
+    captured: dict[str, object] = {}
+
+    class _CapturingTier1Classifier(_FakeTier1Classifier):
+        def __init__(
+            self,
+            *,
+            session,
+            client,
+            model,
+            batch_size,
+            cost_tracker,
+            request_overrides=None,
+        ) -> None:
+            captured["tier1_batch_size"] = batch_size
+            captured["tier1_request_overrides"] = request_overrides
+            super().__init__(
+                session=session,
+                client=client,
+                model=model,
+                batch_size=batch_size,
+                cost_tracker=cost_tracker,
+                request_overrides=request_overrides,
+            )
+
+    class _CapturingTier2Classifier(_FakeTier2Classifier):
+        def __init__(
+            self,
+            *,
+            session,
+            client,
+            model,
+            cost_tracker,
+            request_overrides=None,
+        ) -> None:
+            captured["tier2_request_overrides"] = request_overrides
+            super().__init__(
+                session=session,
+                client=client,
+                model=model,
+                cost_tracker=cost_tracker,
+                request_overrides=request_overrides,
+            )
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _CapturingTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _CapturingTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        max_items=2,
+        config_names=["baseline"],
+        dispatch_mode="batch",
+        request_priority="flex",
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["execution_mode"] == {"dispatch_mode": "batch", "request_priority": "flex"}
+    assert captured["tier1_batch_size"] == 10
+    assert captured["tier1_request_overrides"] == {"service_tier": "flex"}
+    assert captured["tier2_request_overrides"] == {"service_tier": "flex"}
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_rejects_invalid_dispatch_mode(tmp_path: Path) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_gold_set(gold_set_path)
+
+    with pytest.raises(ValueError, match="Unsupported dispatch mode"):
+        await benchmark_module.run_gold_set_benchmark(
+            gold_set_path=str(gold_set_path),
+            output_dir=str(output_dir),
+            api_key="dummy",  # pragma: allowlist secret
+            dispatch_mode="invalid",
+        )

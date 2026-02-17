@@ -1831,10 +1831,10 @@ Complete deferred recovery gaps for TASK-091 and TASK-093 where task-061 only
 landed partial plumbing without full benchmark/runtime integration artifacts.
 
 **Acceptance Criteria**:
-- [ ] Implement benchmark runtime support for `dispatch_mode` and `request_priority` flags
-- [ ] Restore vector revalidation artifacts (runbook + summary persistence + tests)
-- [ ] Validate eval docs/examples match actual CLI/runtime behavior
-- [ ] Add/update unit tests for deferred paths and pass targeted eval tests
+- [x] Implement benchmark runtime support for `dispatch_mode` and `request_priority` flags
+- [x] Restore vector revalidation artifacts (runbook + summary persistence + tests)
+- [x] Validate eval docs/examples match actual CLI/runtime behavior
+- [x] Add/update unit tests for deferred paths and pass targeted eval tests
 
 ---
 

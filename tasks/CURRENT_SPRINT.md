@@ -15,7 +15,6 @@
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
-- `TASK-113` Complete Deferred Eval Mode and Vector Revalidation Recovery — Ready for implementation
 - `TASK-114` Complete Deferred Docs Freshness Gate Recovery — Ready for implementation
 - `TASK-115` Finish Partial Recovery for Tracing/Lineage/Grounding — Ready for implementation
 - `TASK-117` Enforce Task Sequencing Guards End-to-End — Ready for implementation
@@ -23,6 +22,22 @@
 ---
 
 ## Completed This Sprint
+
+### TASK-113: Complete Deferred Eval Mode and Vector Revalidation Recovery
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Completed deferred recovery gaps for benchmark execution modes and vector
+revalidation artifacts from partial `task-061` lineage.
+
+**Completed**:
+- [x] Added benchmark runtime support for `dispatch_mode` and `request_priority`
+- [x] Restored vector revalidation runbook + summary persistence artifact support
+- [x] Aligned eval docs/examples with implemented runtime behavior
+- [x] Added/updated eval unit tests and passed targeted suites
+
+---
 
 ### TASK-108: Working Tree Hygiene Audit and Disposition Plan
 **Status**: DONE ✓  

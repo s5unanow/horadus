@@ -18,6 +18,8 @@ from src.core.config import settings
 from src.processing.vector_similarity import max_distance_for_similarity
 
 BENCHMARK_TABLE_NAME = "eval_vector_benchmark"
+SUMMARY_FILENAME = "vector-benchmark-summary.json"
+_MAX_SUMMARY_HISTORY = 50
 
 
 @dataclass(slots=True, frozen=True)
@@ -316,7 +318,7 @@ async def run_vector_retrieval_benchmark(
             await conn.close()
 
     generated_at = datetime.now(tz=UTC)
-    payload = {
+    payload: dict[str, object] = {
         "generated_at": generated_at.isoformat(),
         "dataset": {
             "size": dataset_size,
@@ -335,6 +337,15 @@ async def run_vector_retrieval_benchmark(
             "selected_default": recommendation,
             "selection_rule": "fastest strategy with recall_at_k >= 0.95 and >=5% lower avg latency than exact",
         },
+        "revalidation_policy": {
+            "cadence_days": settings.VECTOR_REVALIDATION_CADENCE_DAYS,
+            "dataset_growth_trigger_pct": settings.VECTOR_REVALIDATION_DATASET_GROWTH_PCT,
+            "promotion_criteria": [
+                "candidate recall_at_k >= 0.95",
+                "candidate avg_latency_ms <= 95% of exact avg latency",
+                "compare against latest historical summary before index/profile changes",
+            ],
+        },
     }
 
     output_path = Path(output_dir)
@@ -344,4 +355,62 @@ async def run_vector_retrieval_benchmark(
     timestamp = generated_at.strftime("%Y%m%dT%H%M%SZ")
     artifact_path = output_path / f"vector-benchmark-{timestamp}-{digest}.json"
     artifact_path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    _update_revalidation_summary(
+        output_dir=output_path,
+        payload=payload,
+        artifact_path=artifact_path,
+    )
     return artifact_path
+
+
+def _summary_entry(*, payload: dict[str, object], artifact_path: Path) -> dict[str, object]:
+    dataset = payload.get("dataset")
+    recommendation = payload.get("recommendation")
+    dataset_payload = dataset if isinstance(dataset, dict) else {}
+    recommendation_payload = recommendation if isinstance(recommendation, dict) else {}
+    return {
+        "generated_at": payload.get("generated_at"),
+        "artifact": artifact_path.name,
+        "dataset_size": dataset_payload.get("size"),
+        "dimensions": dataset_payload.get("dimensions"),
+        "query_count": dataset_payload.get("query_count"),
+        "vector_fingerprint_sha256": dataset_payload.get("vector_fingerprint_sha256"),
+        "selected_default": recommendation_payload.get("selected_default"),
+        "selection_rule": recommendation_payload.get("selection_rule"),
+    }
+
+
+def _update_revalidation_summary(
+    *,
+    output_dir: Path,
+    payload: dict[str, object],
+    artifact_path: Path,
+) -> Path:
+    summary_path = output_dir / SUMMARY_FILENAME
+    current: dict[str, object] = {}
+    if summary_path.exists():
+        try:
+            loaded = json.loads(summary_path.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                current = loaded
+        except json.JSONDecodeError:
+            current = {}
+
+    new_entry = _summary_entry(payload=payload, artifact_path=artifact_path)
+    history_raw = current.get("history")
+    history: list[dict[str, object]] = []
+    if isinstance(history_raw, list):
+        for row in history_raw:
+            if isinstance(row, dict):
+                history.append(row)
+
+    history = [row for row in history if row.get("artifact") != artifact_path.name]
+    history.append(new_entry)
+    history = history[-_MAX_SUMMARY_HISTORY:]
+    summary_payload = {
+        "updated_at": datetime.now(tz=UTC).isoformat(),
+        "latest": new_entry,
+        "history": history,
+    }
+    summary_path.write_text(json.dumps(summary_payload, indent=2) + "\n", encoding="utf-8")
+    return summary_path

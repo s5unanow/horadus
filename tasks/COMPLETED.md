@@ -131,6 +131,7 @@ Tasks that have been completed and verified.
 - TASK-123: Current Sprint File Right-Sizing and Sprint Archive Split ✅
 - TASK-119: Guidance Hierarchy and AGENTS Router Tightening ✅
 - TASK-120: Documentation Drift Fixes (ADR References + Data Model Coverage) ✅
+- TASK-121: Docs Freshness Gate Expansion (Integrity + Coverage Rules) ✅
 
 ---
 

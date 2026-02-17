@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-118`.
+- Next available task IDs start at `TASK-124`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -1903,6 +1903,108 @@ task work outside the required sequence.
 - [x] Add a post-merge guard that blocks next task start until local `main` is synced to remote `main`
 - [x] Harden PR scope policy to use one canonical metadata field (`Primary-Task: TASK-XXX`) instead of parsing arbitrary PR text
 - [x] Update runbook/docs and local hook instructions with the enforced sequencing workflow
+
+---
+
+### TASK-118: Launch Readiness and Guidance Drift Assessment [REQUIRES_HUMAN]
+**Priority**: P0 (Critical)
+**Estimate**: 2-3 hours
+
+Produce a current-state assessment that reconciles runtime behavior, status docs,
+and operating guidance, then capture prioritized remediation tasks with explicit
+human sign-off on sequencing and launch gates.
+
+**Acceptance Criteria**:
+- [ ] Publish assessment artifact under `tasks/assessments/` with concrete file/line references for each finding
+- [ ] Classify findings by relevance and launch impact (`public launch blocker`, `pre-launch high`, `non-blocking`)
+- [ ] Define authoritative source-of-truth order for execution/status guidance (code/tests vs sprint/status docs)
+- [ ] Capture accepted remediation sequence and dependencies in backlog tasks
+- [ ] Obtain explicit human approval for remediation order and launch-go/no-go criteria
+
+---
+
+### TASK-119: Guidance Hierarchy and AGENTS Router Tightening
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Depends On**: TASK-118
+
+Reduce guidance ambiguity by keeping `AGENTS.md` strictly map-oriented and
+making source-of-truth precedence explicit across task/status docs.
+
+**Acceptance Criteria**:
+- [ ] Add a concise source-of-truth hierarchy section in `AGENTS.md` (execution + status precedence)
+- [ ] Remove or relocate non-critical procedural prose from `AGENTS.md` into task/runbook docs
+- [ ] Ensure `AGENTS.md` "Where to look first" ordering is consistent with current workflow
+- [ ] Add cross-links from `PROJECT_STATUS.md` and `tasks/CURRENT_SPRINT.md` to the hierarchy policy
+- [ ] Add/update unit-level docs checks if needed to enforce the hierarchy marker presence
+
+---
+
+### TASK-120: Documentation Drift Fixes (ADR References + Data Model Coverage)
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+**Depends On**: TASK-118
+
+Resolve high-impact documentation drift that can mislead implementation and
+operational decisions.
+
+**Acceptance Criteria**:
+- [ ] Resolve `ADR-006` mismatch in architecture docs (either add ADR file or update references)
+- [ ] Expand `docs/DATA_MODEL.md` with implemented schema sections for `reports`, `api_usage`, `trend_outcomes`, and `human_feedback`
+- [ ] Validate updated docs against SQLAlchemy model reality (`src/storage/models.py`) with explicit line-referenced verification notes
+- [ ] Keep archived-risk language in `docs/POTENTIAL_ISSUES.md` clearly superseded and non-authoritative
+- [ ] Run docs freshness gate and ensure no new drift errors are introduced
+
+---
+
+### TASK-121: Docs Freshness Gate Expansion (Integrity + Coverage Rules)
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+**Depends On**: TASK-114, TASK-120
+
+Extend the existing docs freshness checker so drift classes identified in the
+assessment fail early in CI/local quality paths.
+
+**Acceptance Criteria**:
+- [ ] Add checker rule for ADR reference integrity (referenced ADR IDs must resolve to existing files)
+- [ ] Add checker rule for required `DATA_MODEL.md` table coverage for runtime-critical models
+- [ ] Add checker rule for archived-doc banners and authoritative-pointer presence
+- [ ] Preserve override/expiry workflow for intentional temporary drift with explicit rationale
+- [ ] Wire new checks into existing CI/local docs freshness command paths with tests
+
+---
+
+### TASK-122: Launch-Critical Production Guardrails Hardening
+**Priority**: P0 (Critical)
+**Estimate**: 4-6 hours
+**Depends On**: TASK-118
+
+Close immediate launch-risk gaps in auth/secret defaults and readiness
+semantics so public deployment fails safe by default.
+
+**Acceptance Criteria**:
+- [ ] Enforce production-safe secret handling (`SECRET_KEY` must be explicit in production or startup fails)
+- [ ] Enforce explicit admin-key requirement for key-management endpoints (no permissive fallback)
+- [ ] Tighten auth default posture for production mode and document safe rollout controls
+- [ ] Return non-2xx readiness status when dependencies are unavailable
+- [ ] Add/update unit tests and deployment/environment docs for all guardrail behaviors
+
+---
+
+### TASK-123: Current Sprint File Right-Sizing and Sprint Archive Split
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Reduce execution-context noise by splitting historical sprint detail into
+versioned sprint archive files and keeping `tasks/CURRENT_SPRINT.md` focused on
+active execution state.
+
+**Acceptance Criteria**:
+- [ ] Archive current `tasks/CURRENT_SPRINT.md` detailed history into `tasks/sprints/SPRINT_001.md`
+- [ ] Replace `tasks/CURRENT_SPRINT.md` with a concise active-sprint view (goal, active tasks, immediate done)
+- [ ] Preserve traceability via explicit links between `CURRENT_SPRINT.md` and archived sprint files
+- [ ] Update `tasks/COMPLETED.md` with `TASK-123` completion record
+- [ ] Keep backlog task-ID policy aligned after reserving `TASK-123`
 
 ---
 

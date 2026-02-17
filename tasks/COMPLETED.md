@@ -126,6 +126,12 @@ Tasks that have been completed and verified.
 
 ---
 
+## Sprint 2
+
+- TASK-123: Current Sprint File Right-Sizing and Sprint Archive Split ✅
+
+---
+
 ## Archive
 
 (Older sprints will be archived here)

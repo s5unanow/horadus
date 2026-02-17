@@ -114,6 +114,7 @@ Tasks that have been completed and verified.
 - TASK-113: Complete Deferred Eval Mode and Vector Revalidation Recovery ✅
 - TASK-114: Complete Deferred Docs Freshness Gate Recovery ✅
 - TASK-115: Finish Partial Recovery for Tracing/Lineage/Grounding ✅
+- TASK-117: Enforce Task Sequencing Guards End-to-End ✅
 - TASK-116: Backlog Continuity Restoration for TASK-086..TASK-108 ✅
 - TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
 - TASK-025 Follow-up: Auth Key Persistence & Rotation ✅

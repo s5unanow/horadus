@@ -34,7 +34,6 @@ jobs:
       - name: Validate task branch and PR scope
         env:
           PR_BRANCH: ${{ github.head_ref }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: ./scripts/check_pr_task_scope.sh
 

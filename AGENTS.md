@@ -65,7 +65,11 @@ After completing work:
 
 - Every engineering task must run on its own dedicated git branch created from `main`.
 - Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
+- Before creating a task branch, run sequencing preflight: `make task-preflight`.
+- Start task branches via guarded command: `make task-start TASK=XXX NAME=short-name`.
+- Task start is blocked unless `main` is clean/synced and there is no open non-merged task PR for the current operator.
 - Open one PR per task branch and merge only after required checks are green.
+- Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX` matching the branch task ID.
 - After merge, delete the task branch to avoid stale branch drift.
 - Task start sequence is mandatory: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.

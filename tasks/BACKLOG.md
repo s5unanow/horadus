@@ -22,7 +22,10 @@ Tasks are organized by phase and priority.
 
 - Every implementation task must be executed on a dedicated task branch created from `main`.
 - Each task branch must contain changes for one `TASK-XXX` only.
+- Starting a task branch must pass sequencing preflight (`make task-preflight`) and use guarded branch creation (`make task-start TASK=XXX NAME=short-name`).
+- Task start is blocked unless `main` is clean + synced and there are no open non-merged task PRs for the current operator.
 - Open one PR per task branch; merge only after required checks are green.
+- Every task PR body must include a single canonical metadata line: `Primary-Task: TASK-XXX` (must match branch task ID).
 - Delete merged task branches to reduce stale branch drift.
 - Mandatory start sequence per task: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Mandatory completion sequence per task: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify merge commit is present locally.
@@ -1895,11 +1898,11 @@ Add hard workflow enforcement so autonomous/local agents cannot start or advance
 task work outside the required sequence.
 
 **Acceptance Criteria**:
-- [ ] Add a preflight guard that blocks task-branch start unless `main` is clean and synced (`git switch main && git pull --ff-only`)
-- [ ] Add a single-active-task guard that blocks starting a new task when there is an open, non-merged task PR
-- [ ] Add a post-merge guard that blocks next task start until local `main` is synced to remote `main`
-- [ ] Harden PR scope policy to use one canonical metadata field (`Primary-Task: TASK-XXX`) instead of parsing arbitrary PR text
-- [ ] Update runbook/docs and local hook instructions with the enforced sequencing workflow
+- [x] Add a preflight guard that blocks task-branch start unless `main` is clean and synced (`git switch main && git pull --ff-only`)
+- [x] Add a single-active-task guard that blocks starting a new task when there is an open, non-merged task PR
+- [x] Add a post-merge guard that blocks next task start until local `main` is synced to remote `main`
+- [x] Harden PR scope policy to use one canonical metadata field (`Primary-Task: TASK-XXX`) instead of parsing arbitrary PR text
+- [x] Update runbook/docs and local hook instructions with the enforced sequencing workflow
 
 ---
 

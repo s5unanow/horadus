@@ -24,6 +24,22 @@
 
 ## Completed This Sprint
 
+### TASK-108: Working Tree Hygiene Audit and Disposition Plan
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Completed full working-tree hygiene audit and disposition plan, then isolated
+non-task work into deferred stash for task-scoped extraction.
+
+**Completed**:
+- [x] Produced grouped inventory and root-cause analysis (`tasks/assessments/TASK-108-working-tree-hygiene.md`)
+- [x] Assigned per-group disposition (`defer`, `drop`, `archive`) with risk flags and cleanup order
+- [x] Removed local generated eval artifacts from repo working tree and archived copies under `/tmp/horadus-task108-eval-results`
+- [x] Added guardrail ignore for local eval result JSON artifacts (`ai/eval/results/*.json`)
+
+---
+
 ### TASK-116: Backlog Continuity Restoration for TASK-086..TASK-108
 **Status**: DONE ✓  
 **Priority**: P1 (High)  

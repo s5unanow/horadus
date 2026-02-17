@@ -1744,11 +1744,11 @@ Assess why local unstaged/untracked files accumulated, determine whether each
 file group is required, and provide a concrete cleanup/commit disposition plan.
 
 **Acceptance Criteria**:
-- [ ] Produce an inventory of current unstaged/untracked files grouped by purpose (runtime code, docs, generated artifacts, scratch)
-- [ ] Identify root causes for accumulation (task-scoped commits, generated outputs, abandoned local drafts)
-- [ ] Mark each file group with recommended action (`commit now`, `drop`, `archive`, `defer`)
-- [ ] Flag risky mismatches between task status docs and uncommitted implementation files
-- [ ] Document next-step cleanup sequence to return to a controlled/clean working tree
+- [x] Produce an inventory of current unstaged/untracked files grouped by purpose (runtime code, docs, generated artifacts, scratch)
+- [x] Identify root causes for accumulation (task-scoped commits, generated outputs, abandoned local drafts)
+- [x] Mark each file group with recommended action (`commit now`, `drop`, `archive`, `defer`)
+- [x] Flag risky mismatches between task status docs and uncommitted implementation files
+- [x] Document next-step cleanup sequence to return to a controlled/clean working tree
 
 ---
 

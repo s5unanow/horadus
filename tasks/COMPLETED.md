@@ -106,6 +106,7 @@ Tasks that have been completed and verified.
 - TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch ✅
 - TASK-106: Collector Retry and Timeout Hardening for Low-Frequency Mode ✅
 - TASK-107: Task Dependency Governance and Execution Policy ✅
+- TASK-108: Working Tree Hygiene Audit and Disposition Plan ✅
 - TASK-109: Enforce Branch-Per-Task Delivery Policy ✅
 - TASK-110: Task Delivery Workflow Guardrails and Enforcement ✅
 - TASK-111: Main Branch Merge-Completeness Audit ✅

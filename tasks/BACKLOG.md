@@ -1966,11 +1966,11 @@ Extend the existing docs freshness checker so drift classes identified in the
 assessment fail early in CI/local quality paths.
 
 **Acceptance Criteria**:
-- [ ] Add checker rule for ADR reference integrity (referenced ADR IDs must resolve to existing files)
-- [ ] Add checker rule for required `DATA_MODEL.md` table coverage for runtime-critical models
-- [ ] Add checker rule for archived-doc banners and authoritative-pointer presence
-- [ ] Preserve override/expiry workflow for intentional temporary drift with explicit rationale
-- [ ] Wire new checks into existing CI/local docs freshness command paths with tests
+- [x] Add checker rule for ADR reference integrity (referenced ADR IDs must resolve to existing files)
+- [x] Add checker rule for required `DATA_MODEL.md` table coverage for runtime-critical models
+- [x] Add checker rule for archived-doc banners and authoritative-pointer presence
+- [x] Preserve override/expiry workflow for intentional temporary drift with explicit rationale
+- [x] Wire new checks into existing CI/local docs freshness command paths with tests
 
 ---
 

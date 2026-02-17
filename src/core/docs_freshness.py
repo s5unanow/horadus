@@ -78,6 +78,20 @@ _HIERARCHY_POLICY_REFERENCE_FILES: tuple[str, ...] = (
     "tasks/CURRENT_SPRINT.md",
 )
 _HIERARCHY_POLICY_REFERENCE_TEXT = "Canonical Source-of-Truth Hierarchy"
+_ADR_REFERENCE_PATTERN = re.compile(r"\bADR-(\d{3})\b")
+_DATA_MODEL_REQUIRED_TABLES: tuple[str, ...] = (
+    "reports",
+    "api_usage",
+    "trend_outcomes",
+    "human_feedback",
+)
+_ARCHIVED_DOC_PATH = "docs/POTENTIAL_ISSUES.md"
+_ARCHIVED_DOC_STATUS_LINE = "**Status**: Archived historical snapshot (superseded)"
+_ARCHIVED_DOC_REQUIRED_POINTERS: tuple[str, ...] = (
+    "tasks/CURRENT_SPRINT.md",
+    "tasks/BACKLOG.md",
+    "PROJECT_STATUS.md",
+)
 
 
 def _load_overrides(override_path: Path) -> tuple[_Override, ...]:
@@ -118,6 +132,40 @@ def _parse_marker_date(content: str, label: str) -> date | None:
     if match is None:
         return None
     return date.fromisoformat(match.group(1))
+
+
+def _record_issue(
+    *,
+    errors: list[DocsFreshnessIssue],
+    warnings: list[DocsFreshnessIssue],
+    active_override_map: dict[tuple[str, str], _Override],
+    rule_id: str,
+    message: str,
+    path: str,
+) -> None:
+    override = active_override_map.get((rule_id, path))
+    if override is not None:
+        warnings.append(
+            DocsFreshnessIssue(
+                level="warning",
+                rule_id="docs_freshness_override_applied",
+                message=(
+                    f"Override active for {rule_id} in {path}: "
+                    f"{override.reason} (expires {override.expires_on.isoformat()})"
+                ),
+                path=path,
+            )
+        )
+        return
+
+    errors.append(
+        DocsFreshnessIssue(
+            level="error",
+            rule_id=rule_id,
+            message=message,
+            path=path,
+        )
+    )
 
 
 def run_docs_freshness_check(
@@ -202,27 +250,13 @@ def run_docs_freshness_check(
             if rule.pattern not in content:
                 continue
             relative_path = str(doc_path.relative_to(repo_root))
-            override = active_override_map.get((rule.rule_id, relative_path))
-            if override is not None:
-                warnings.append(
-                    DocsFreshnessIssue(
-                        level="warning",
-                        rule_id="docs_freshness_override_applied",
-                        message=(
-                            f"Override active for {rule.rule_id} in {relative_path}: "
-                            f"{override.reason} (expires {override.expires_on.isoformat()})"
-                        ),
-                        path=relative_path,
-                    )
-                )
-                continue
-            errors.append(
-                DocsFreshnessIssue(
-                    level="error",
-                    rule_id=rule.rule_id,
-                    message=f"{rule.description} Found in {relative_path}",
-                    path=relative_path,
-                )
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id=rule.rule_id,
+                message=f"{rule.description} Found in {relative_path}",
+                path=relative_path,
             )
 
     hierarchy_policy_path = repo_root / _HIERARCHY_POLICY_PATH
@@ -277,6 +311,104 @@ def run_docs_freshness_check(
                 path=reference_path,
             )
         )
+
+    adr_dir = repo_root / "docs" / "adr"
+    available_adr_ids: set[str] = set()
+    if adr_dir.exists():
+        for adr_file in adr_dir.glob("[0-9][0-9][0-9]-*.md"):
+            available_adr_ids.add(adr_file.name[:3])
+
+    seen_missing_adr_refs: set[tuple[str, str]] = set()
+    for doc_path in docs_files:
+        relative_path = str(doc_path.relative_to(repo_root))
+        content = doc_path.read_text(encoding="utf-8")
+        for match in _ADR_REFERENCE_PATTERN.finditer(content):
+            adr_id = match.group(1)
+            if adr_id in available_adr_ids:
+                continue
+            key = (relative_path, adr_id)
+            if key in seen_missing_adr_refs:
+                continue
+            seen_missing_adr_refs.add(key)
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="adr_reference_target_missing",
+                message=(
+                    f"{relative_path} references ADR-{adr_id} but docs/adr/{adr_id}-*.md "
+                    "does not exist."
+                ),
+                path=relative_path,
+            )
+
+    data_model_path = repo_root / "docs" / "DATA_MODEL.md"
+    if not data_model_path.exists():
+        errors.append(
+            DocsFreshnessIssue(
+                level="error",
+                rule_id="data_model_doc_missing",
+                message="Missing docs/DATA_MODEL.md required for schema coverage checks.",
+                path="docs/DATA_MODEL.md",
+            )
+        )
+    else:
+        data_model = data_model_path.read_text(encoding="utf-8")
+        for table_name in _DATA_MODEL_REQUIRED_TABLES:
+            heading_pattern = re.compile(rf"^###\s+{re.escape(table_name)}\s*$", re.MULTILINE)
+            if heading_pattern.search(data_model):
+                continue
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="data_model_table_coverage_missing",
+                message=(
+                    f"docs/DATA_MODEL.md missing required runtime table section: '{table_name}'."
+                ),
+                path="docs/DATA_MODEL.md",
+            )
+
+    archived_doc_path = repo_root / _ARCHIVED_DOC_PATH
+    if not archived_doc_path.exists():
+        errors.append(
+            DocsFreshnessIssue(
+                level="error",
+                rule_id="archived_doc_missing",
+                message=f"Missing archived document: {_ARCHIVED_DOC_PATH}",
+                path=_ARCHIVED_DOC_PATH,
+            )
+        )
+    else:
+        archived_doc = archived_doc_path.read_text(encoding="utf-8")
+        if _ARCHIVED_DOC_STATUS_LINE not in archived_doc:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="archived_doc_status_banner_missing",
+                message=(
+                    f"{_ARCHIVED_DOC_PATH} missing archived/superseded status banner "
+                    f"('{_ARCHIVED_DOC_STATUS_LINE}')."
+                ),
+                path=_ARCHIVED_DOC_PATH,
+            )
+
+        missing_pointers = [
+            pointer for pointer in _ARCHIVED_DOC_REQUIRED_POINTERS if pointer not in archived_doc
+        ]
+        if missing_pointers:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="archived_doc_authoritative_pointer_missing",
+                message=(
+                    f"{_ARCHIVED_DOC_PATH} missing authoritative pointers: "
+                    + ", ".join(missing_pointers)
+                ),
+                path=_ARCHIVED_DOC_PATH,
+            )
 
     api_main_path = repo_root / "src" / "api" / "main.py"
     api_docs_path = repo_root / "docs" / "API.md"

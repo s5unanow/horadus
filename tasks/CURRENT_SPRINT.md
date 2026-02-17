@@ -23,6 +23,7 @@
 ## Completed This Sprint
 
 - `TASK-123` Current Sprint File Right-Sizing and Sprint Archive Split — DONE ✓
+- `TASK-124` Status Ledger Reconciliation and Active Queue Cleanup — DONE ✓
 - `TASK-119` Guidance Hierarchy and AGENTS Router Tightening — DONE ✓
 - `TASK-120` Documentation Drift Fixes (ADR References + Data Model Coverage) — DONE ✓
 - `TASK-121` Docs Freshness Gate Expansion (Integrity + Coverage Rules) — DONE ✓

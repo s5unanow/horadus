@@ -22,6 +22,7 @@
 
 ## Completed This Sprint
 
+- `TASK-125` Delivery Lifecycle Clarification and PR Scope Guard Hardening — DONE ✓
 - `TASK-123` Current Sprint File Right-Sizing and Sprint Archive Split — DONE ✓
 - `TASK-124` Status Ledger Reconciliation and Active Queue Cleanup — DONE ✓
 - `TASK-119` Guidance Hierarchy and AGENTS Router Tightening — DONE ✓

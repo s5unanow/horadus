@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-125`.
+- Next available task IDs start at `TASK-126`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -29,6 +29,8 @@ Tasks are organized by phase and priority.
 - Delete merged task branches to reduce stale branch drift.
 - Mandatory start sequence per task: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Mandatory completion sequence per task: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify merge commit is present locally.
+- Autonomous engineering-task completion is defined as full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync).
+- If any lifecycle step is blocked (permissions/CI/platform), stop at the furthest completed step and capture exact blocker + required manual action.
 - If unrelated work appears, create a new task immediately but do not switch branches by default; continue current task unless the new work blocks current acceptance criteria or is urgent.
 - Never mix two tasks in one commit/PR; blockers must be done on a separate task branch after a safe checkpoint.
 
@@ -2021,6 +2023,25 @@ with source-of-truth precedence and current sprint execution reality.
 - [x] Remove already completed non-human tasks from active/in-progress status narratives
 - [x] Ensure open `[REQUIRES_HUMAN]` launch-readiness task (`TASK-118`) is consistently visible in active/blocked priorities
 - [x] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) to record `TASK-124` completion and next available task ID
+
+---
+
+### TASK-125: Delivery Lifecycle Clarification and PR Scope Guard Hardening
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+**Depends On**: TASK-124
+
+Clarify that autonomous engineering work is complete only after full branch/PR
+lifecycle closure, and harden PR scope guard parsing so canonical
+`Primary-Task` metadata is recognized for multiline and escaped-newline PR
+bodies.
+
+**Acceptance Criteria**:
+- [x] Add explicit full-lifecycle completion expectation to canonical task workflow guidance
+- [x] Add explicit blocker-handling guidance requiring exact step + manual action reporting
+- [x] Harden `scripts/check_pr_task_scope.sh` to normalize escaped newline payloads from PR body contexts
+- [x] Add/extend automated tests covering multiline and escaped-newline PR body parsing behavior
+- [x] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) to record `TASK-125` completion and next available task ID
 
 ---
 

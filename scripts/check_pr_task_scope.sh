@@ -22,8 +22,25 @@ fi
 
 branch_task_id="TASK-${BASH_REMATCH[1]}"
 
+normalize_pr_body() {
+  local body="$1"
+  local escaped_crlf='\\r\\n'
+  local escaped_lf='\\n'
+
+  # GitHub contexts can provide PR body with escaped newlines (`\n`) as a
+  # single-line string. Normalize both escaped and literal newlines so the
+  # canonical metadata line matcher behaves consistently.
+  body="${body//${escaped_crlf}/$'\n'}"
+  body="${body//${escaped_lf}/$'\n'}"
+  body="${body//$'\r'/$'\n'}"
+
+  printf '%s' "${body}"
+}
+
+pr_body_normalized="$(normalize_pr_body "${pr_body}")"
+
 primary_task_ids="$(
-  printf '%s\n' "${pr_body}" \
+  printf '%s\n' "${pr_body_normalized}" \
     | grep -Eoi '^[[:space:]]*Primary-Task:[[:space:]]*TASK-[0-9]{3}[[:space:]]*$' \
     | sed -E 's/^[[:space:]]*Primary-Task:[[:space:]]*(TASK-[0-9]{3})[[:space:]]*$/\1/i' \
     | sort -u || true

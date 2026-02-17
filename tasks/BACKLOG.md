@@ -1949,11 +1949,11 @@ Resolve high-impact documentation drift that can mislead implementation and
 operational decisions.
 
 **Acceptance Criteria**:
-- [ ] Resolve `ADR-006` mismatch in architecture docs (either add ADR file or update references)
-- [ ] Expand `docs/DATA_MODEL.md` with implemented schema sections for `reports`, `api_usage`, `trend_outcomes`, and `human_feedback`
-- [ ] Validate updated docs against SQLAlchemy model reality (`src/storage/models.py`) with explicit line-referenced verification notes
-- [ ] Keep archived-risk language in `docs/POTENTIAL_ISSUES.md` clearly superseded and non-authoritative
-- [ ] Run docs freshness gate and ensure no new drift errors are introduced
+- [x] Resolve `ADR-006` mismatch in architecture docs (either add ADR file or update references)
+- [x] Expand `docs/DATA_MODEL.md` with implemented schema sections for `reports`, `api_usage`, `trend_outcomes`, and `human_feedback`
+- [x] Validate updated docs against SQLAlchemy model reality (`src/storage/models.py`) with explicit line-referenced verification notes
+- [x] Keep archived-risk language in `docs/POTENTIAL_ISSUES.md` clearly superseded and non-authoritative
+- [x] Run docs freshness gate and ensure no new drift errors are introduced
 
 ---
 

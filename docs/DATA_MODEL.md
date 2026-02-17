@@ -343,6 +343,118 @@ ORDER BY day;
 
 ---
 
+### reports
+
+Generated intelligence reports (weekly/monthly/retrospective).
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| report_type | VARCHAR(50) | No | | Report type (`weekly`, `monthly`, `retrospective`) |
+| period_start | TIMESTAMPTZ | No | | Report period start |
+| period_end | TIMESTAMPTZ | No | | Report period end |
+| trend_id | UUID | Yes | | Optional FK to `trends` (trend-specific reports) |
+| statistics | JSONB | No | | Deterministic report stats payload |
+| narrative | TEXT | Yes | | Generated narrative |
+| grounding_status | VARCHAR(20) | No | `not_checked` | Grounding validation status |
+| grounding_violation_count | INTEGER | No | `0` | Number of grounding violations |
+| grounding_references | JSONB | Yes | | Grounding evidence metadata |
+| top_events | JSONB | Yes | | Top contributing events |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+
+**Indexes:**
+- Primary key: `id`
+- Index: `(report_type, period_end)`
+- Index: `trend_id`
+
+---
+
+### api_usage
+
+Daily usage counters for budget enforcement.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| date | DATE | No | | Usage day (mapped from `usage_date` in SQLAlchemy model) |
+| tier | VARCHAR(20) | No | | LLM tier (`embedding`, `tier1`, `tier2`, `reporting`) |
+| call_count | INTEGER | No | `0` | API calls for the day/tier |
+| input_tokens | INTEGER | No | `0` | Input token count |
+| output_tokens | INTEGER | No | `0` | Output token count |
+| estimated_cost_usd | DECIMAL(10,4) | No | `0` | Estimated USD spend |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+| updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
+
+**Indexes/Constraints:**
+- Primary key: `id`
+- Unique: `(date, tier)`
+- Index: `date`
+
+---
+
+### trend_outcomes
+
+Resolved outcomes for calibration scoring (prediction vs reality).
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| trend_id | UUID | No | | FK to `trends` |
+| prediction_date | TIMESTAMPTZ | No | | Timestamp of recorded prediction |
+| predicted_probability | DECIMAL(5,4) | No | | Probability at prediction time |
+| predicted_risk_level | VARCHAR(20) | No | | Risk label at prediction time |
+| probability_band_low | DECIMAL(5,4) | No | | Lower confidence band |
+| probability_band_high | DECIMAL(5,4) | No | | Upper confidence band |
+| outcome_date | TIMESTAMPTZ | Yes | | Resolution timestamp |
+| outcome | VARCHAR(20) | Yes | | Outcome classification |
+| outcome_notes | TEXT | Yes | | Analyst notes |
+| outcome_evidence | JSONB | Yes | | Supporting resolution evidence |
+| brier_score | DECIMAL(10,6) | Yes | | Calibration error value |
+| recorded_by | VARCHAR(100) | Yes | | Operator identifier |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+| updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
+
+**Indexes:**
+- Primary key: `id`
+- Index: `(trend_id, prediction_date)`
+- Index: `outcome`
+
+---
+
+### human_feedback
+
+Manual corrections/annotations used for governance and evaluation.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| target_type | VARCHAR(50) | No | | Annotation target type (`event`, `trend_evidence`, `classification`) |
+| target_id | UUID | No | | Target entity ID |
+| action | VARCHAR(50) | No | | Feedback action (`pin`, `mark_noise`, `override_delta`, `correct_category`) |
+| original_value | JSONB | Yes | | Original value snapshot |
+| corrected_value | JSONB | Yes | | Corrected value payload |
+| notes | TEXT | Yes | | Analyst explanation |
+| created_by | VARCHAR(100) | Yes | | Reviewer/analyst identifier |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+
+**Indexes:**
+- Primary key: `id`
+- Index: `(target_type, target_id)`
+- Index: `action`
+
+---
+
+## Model Verification Notes (2026-02-17)
+
+The sections above were cross-checked against SQLAlchemy runtime model declarations:
+
+- `reports` table: `src/storage/models.py:660`
+- `api_usage` table: `src/storage/models.py:719`
+- `trend_outcomes` table: `src/storage/models.py:791`
+- `human_feedback` table: `src/storage/models.py:866`
+
+---
+
 ## Common Queries
 
 ### Get all trends with current probability

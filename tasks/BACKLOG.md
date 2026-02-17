@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-126`.
+- Next available task IDs start at `TASK-135`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -1297,6 +1297,7 @@ Wire existing Telegram harvester into worker task and scheduler paths.
 - [ ] Add Celery routing and beat scheduling for Telegram collection
 - [ ] Gate execution via `ENABLE_TELEGRAM_INGESTION`
 - [ ] Add configurable Telegram collection interval setting
+- [ ] Include Telegram in source-freshness monitoring/reporting and catch-up eligibility when enabled
 - [ ] Add tests for scheduling/task wiring and disabled-mode behavior
 
 ---
@@ -2042,6 +2043,147 @@ bodies.
 - [x] Harden `scripts/check_pr_task_scope.sh` to normalize escaped newline payloads from PR body contexts
 - [x] Add/extend automated tests covering multiline and escaped-newline PR body parsing behavior
 - [x] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) to record `TASK-125` completion and next available task ID
+
+---
+
+### TASK-126: Taxonomy Drift Guardrails (Runtime Gap Queue + Benchmark Alignment)
+**Priority**: P1 (High)
+**Estimate**: 4-7 hours
+**Depends On**: TASK-066
+
+Prevent silent taxonomy drift from reducing signal quality by making unknown
+trend/signal mismatches visible and actionable in runtime, and by enforcing the
+same taxonomy source-of-truth in benchmark workflows.
+
+**Acceptance Criteria**:
+- [ ] Capture non-scoring taxonomy-gap records whenever trend impacts are skipped for unknown `trend_id` or unknown `signal_type`/indicator mapping
+- [ ] Keep current probability safety behavior: unknown taxonomy impacts never apply trend deltas
+- [ ] Add observability for taxonomy-gap volume/rate (including top unknown signal keys by trend) suitable for operator review
+- [ ] Provide an analyst-facing review path (API/CLI/report artifact) for taxonomy-gap triage and resolution tracking
+- [ ] Update benchmark trend loading to use `config/trends/*.yaml` (`TrendConfig`) instead of hardcoded fixture taxonomy
+- [ ] Add benchmark/taxonomy preflight that fails fast on dataset taxonomy mismatch (no silent score degradation via implicit zero fill)
+- [ ] Add/adjust tests for runtime gap capture, benchmark taxonomy loading, and fail-fast mismatch behavior
+- [ ] Document operator workflow for resolving taxonomy gaps (map to existing indicator, add indicator, or reject as out-of-scope)
+
+---
+
+### TASK-127: Cross-Ledger Drift Reconciliation and Dependency Hygiene
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Resolve recurring inconsistencies across `PROJECT_STATUS.md`,
+`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, and backlog dependency
+metadata so status views remain coherent after rapid task execution.
+
+**Acceptance Criteria**:
+- [ ] Reconcile any mismatch where tasks are listed as both in-progress and completed (starting with `TASK-113`, `TASK-114`, `TASK-115`)
+- [ ] Ensure active `[REQUIRES_HUMAN]` tasks in `tasks/CURRENT_SPRINT.md` are represented consistently in `PROJECT_STATUS.md` in-progress/blocked sections (including `TASK-118`)
+- [ ] Normalize backlog dependency metadata for already-completed tasks that depended on still-open human-gated tasks (document explicit exception/rationale or adjust dependency notes)
+- [ ] Add a lightweight consistency check (script/test/docs-freshness rule) that flags: (a) in-progress+completed dual-listing, and (b) active sprint tasks missing from project-status in-progress list
+- [ ] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) when this task is executed
+
+---
+
+### TASK-128: Corroboration Row-Parsing Runtime Fix
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Restore independence-aware corroboration weighting in runtime by fixing SQLAlchemy
+row-shape parsing in pipeline evidence aggregation.
+
+**Acceptance Criteria**:
+- [ ] Replace tuple-only row filtering in corroboration aggregation with SQLAlchemy `Row`/mapping-safe extraction
+- [ ] Ensure cluster-aware corroboration path is used when source-cluster fields are present; fallback path is used only when fields are truly absent
+- [ ] Add unit/integration tests that cover SQLAlchemy `Row` results and verify expected corroboration factors
+- [ ] Add instrumentation/logging to surface fallback-corroboration usage rate for operator visibility
+
+---
+
+### TASK-129: Atomic Trend Delta Updates Under Concurrency
+**Priority**: P0 (Critical)
+**Estimate**: 3-5 hours
+
+Prevent lost trend probability updates by making evidence/decay/manual
+adjustments atomic and concurrency-safe.
+
+**Acceptance Criteria**:
+- [ ] Replace read-modify-write update path for `trend.current_log_odds` with a concurrency-safe atomic update strategy
+- [ ] Preserve deterministic trend-snapshot/audit behavior while applying atomic updates
+- [ ] Add concurrency-focused tests (parallel workers/updates) proving no dropped deltas under contention
+- [ ] Document expected locking/serialization behavior for trend updates in architecture or operations docs
+
+---
+
+### TASK-130: Suppression-First Event Lifecycle Guard
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Ensure suppressed/invalidated events are blocked before clustering merge/lifecycle
+touches so they cannot be unintentionally reactivated.
+
+**Acceptance Criteria**:
+- [ ] Move suppression/invalidated checks ahead of clustering merge and event lifecycle mention hooks
+- [ ] Ensure invalidated/suppressed events are never revived by mention-side effects during processing
+- [ ] Add tests for invalidated-event, suppressed-event, and normal-event paths across orchestrator + lifecycle interactions
+- [ ] Preserve explicit audit logs/metrics for skipped suppressed items
+
+---
+
+### TASK-131: Forward-Only GDELT Watermark Semantics
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Align GDELT ingestion checkpoint behavior with forward-progress semantics to avoid
+cursor regression and silent coverage gaps.
+
+**Acceptance Criteria**:
+- [ ] Separate pagination/query cursor movement from persisted ingestion high-water watermark semantics
+- [ ] Persist forward-only watermark based on max successfully processed publication timestamp/window bound
+- [ ] Add tests for multi-page windows and partial-page edge cases to ensure watermark monotonicity
+- [ ] Update ingestion docs to clarify RSS vs GDELT checkpoint rules and failure/retry behavior
+
+---
+
+### TASK-132: Trend-Filtered Events API De-duplication
+**Priority**: P2 (Medium)
+**Estimate**: 1-3 hours
+
+Prevent duplicate event rows in `GET /events` when `trend_id` filters are used.
+
+**Acceptance Criteria**:
+- [ ] Update trend-filter query to avoid duplicate `Event` rows (for example via `EXISTS`, `DISTINCT`, or grouping on `events.id`)
+- [ ] Preserve stable sorting + pagination semantics after query change
+- [ ] Add API tests covering multi-evidence-per-event scenarios to verify no duplicate rows are returned
+
+---
+
+### TASK-133: Preserve Evidence Lineage on Event Invalidation
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Retain explainability/audit provenance when events are invalidated by feedback,
+without leaving stale trend deltas applied.
+
+**Acceptance Criteria**:
+- [ ] Replace hard deletion of `TrendEvidence` on invalidation with reversible lineage-preserving state/marker
+- [ ] Keep reversal of previously applied deltas correct and auditable after invalidation
+- [ ] Expose invalidated-evidence lineage in audit/reporting paths needed for replay/calibration investigations
+- [ ] Add migration/tests validating invalidate + reverse + audit/replay behavior
+
+---
+
+### TASK-134: External Assessment Backlog Intake Preservation
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Preserve externally sourced backlog improvements in a dedicated task branch/PR so
+planning deltas are not lost while other delivery tasks are in flight.
+
+**Acceptance Criteria**:
+- [ ] Capture relevant assessment-derived planning updates in `tasks/BACKLOG.md` with clear, non-duplicate task boundaries
+- [ ] Keep explicit mapping to already-open human-gated tasks where overlap exists (no duplicate implementation tasks)
+- [ ] Preserve and publish backlog-only changes through a dedicated `TASK-134` branch/PR
+- [ ] Keep task-ID policy synchronized after reserving `TASK-134`
 
 ---
 

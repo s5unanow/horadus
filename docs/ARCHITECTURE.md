@@ -272,6 +272,7 @@ Benefit: Significant cost reduction vs. running Tier 2 on all items.
 Why: LLM outputs are non-deterministic and unexplainable.
 How: LLM extracts signals → Code computes deltas.
 Benefit: Every probability change has an auditable paper trail.
+Reference: `docs/adr/006-deterministic-scoring.md`
 
 ## Component Details
 

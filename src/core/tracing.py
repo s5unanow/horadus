@@ -18,57 +18,73 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger(__name__)
 
+_otel_context: Any = None
+_otel_propagate: Any = None
+_otel_trace: Any = None
+_OTLPSpanExporter: Any = None
+_CeleryInstrumentor: Any = None
+_FastAPIInstrumentor: Any = None
+_HTTPXClientInstrumentor: Any = None
+_RedisInstrumentor: Any = None
+_SQLAlchemyInstrumentor: Any = None
+_Resource: Any = None
+_TracerProvider: Any = None
+_BatchSpanProcessor: Any = None
+_ConsoleSpanExporter: Any = None
+_ParentBased: Any = None
+_TraceIdRatioBased: Any = None
+
 try:
-    from opentelemetry import context as _otel_context
-    from opentelemetry import propagate as _otel_propagate
-    from opentelemetry import trace as _otel_trace
+    from opentelemetry import context as otel_context
+    from opentelemetry import propagate as otel_propagate
+    from opentelemetry import trace as otel_trace
     from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
-        OTLPSpanExporter as _OTLPSpanExporter,
+        OTLPSpanExporter as OTLPSpanExporter,
     )
-    from opentelemetry.instrumentation.celery import CeleryInstrumentor as _CeleryInstrumentor
-    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor as _FastAPIInstrumentor
+    from opentelemetry.instrumentation.celery import CeleryInstrumentor as CeleryInstrumentor
+    from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor as FastAPIInstrumentor
     from opentelemetry.instrumentation.httpx import (
-        HTTPXClientInstrumentor as _HTTPXClientInstrumentor,
+        HTTPXClientInstrumentor as HTTPXClientInstrumentor,
     )
-    from opentelemetry.instrumentation.redis import RedisInstrumentor as _RedisInstrumentor
+    from opentelemetry.instrumentation.redis import RedisInstrumentor as RedisInstrumentor
     from opentelemetry.instrumentation.sqlalchemy import (
-        SQLAlchemyInstrumentor as _SQLAlchemyInstrumentor,
+        SQLAlchemyInstrumentor as SQLAlchemyInstrumentor,
     )
-    from opentelemetry.sdk.resources import Resource as _Resource
-    from opentelemetry.sdk.trace import TracerProvider as _TracerProvider
+    from opentelemetry.sdk.resources import Resource as Resource
+    from opentelemetry.sdk.trace import TracerProvider as TracerProvider
     from opentelemetry.sdk.trace.export import (
-        BatchSpanProcessor as _BatchSpanProcessor,
+        BatchSpanProcessor as BatchSpanProcessor,
     )
     from opentelemetry.sdk.trace.export import (
-        ConsoleSpanExporter as _ConsoleSpanExporter,
+        ConsoleSpanExporter as ConsoleSpanExporter,
     )
     from opentelemetry.sdk.trace.sampling import (
-        ParentBased as _ParentBased,
+        ParentBased as ParentBased,
     )
     from opentelemetry.sdk.trace.sampling import (
-        TraceIdRatioBased as _TraceIdRatioBased,
+        TraceIdRatioBased as TraceIdRatioBased,
     )
 
+    _otel_context = otel_context
+    _otel_propagate = otel_propagate
+    _otel_trace = otel_trace
+    _OTLPSpanExporter = OTLPSpanExporter
+    _CeleryInstrumentor = CeleryInstrumentor
+    _FastAPIInstrumentor = FastAPIInstrumentor
+    _HTTPXClientInstrumentor = HTTPXClientInstrumentor
+    _RedisInstrumentor = RedisInstrumentor
+    _SQLAlchemyInstrumentor = SQLAlchemyInstrumentor
+    _Resource = Resource
+    _TracerProvider = TracerProvider
+    _BatchSpanProcessor = BatchSpanProcessor
+    _ConsoleSpanExporter = ConsoleSpanExporter
+    _ParentBased = ParentBased
+    _TraceIdRatioBased = TraceIdRatioBased
     _OTEL_AVAILABLE = True
     _OTEL_IMPORT_ERROR: Exception | None = None
 except Exception as exc:  # pragma: no cover - dependency optional in local dev
     _OTEL_AVAILABLE = False
     _OTEL_IMPORT_ERROR = exc
-    _otel_context = None
-    _otel_propagate = None
-    _otel_trace = None
-    _OTLPSpanExporter = None
-    _CeleryInstrumentor = None
-    _FastAPIInstrumentor = None
-    _HTTPXClientInstrumentor = None
-    _RedisInstrumentor = None
-    _SQLAlchemyInstrumentor = None
-    _Resource = None
-    _TracerProvider = None
-    _BatchSpanProcessor = None
-    _ConsoleSpanExporter = None
-    _ParentBased = None
-    _TraceIdRatioBased = None
 
 
 _provider_initialized = False
@@ -130,6 +146,7 @@ def _initialize_tracer_provider() -> None:
         sampler=_ParentBased(_TraceIdRatioBased(settings.OTEL_TRACES_SAMPLER_RATIO)),
     )
 
+    exporter: Any
     if settings.OTEL_EXPORTER_OTLP_ENDPOINT and _OTLPSpanExporter is not None:
         exporter = _OTLPSpanExporter(
             endpoint=settings.OTEL_EXPORTER_OTLP_ENDPOINT,
@@ -206,7 +223,7 @@ def detach_trace_context(token: object | None) -> None:
     if token is None or not (settings.OTEL_ENABLED and _OTEL_AVAILABLE):
         return
     assert _otel_context is not None  # nosec B101
-    _otel_context.detach(token)
+    _otel_context.detach(cast("Any", token))
 
 
 def _before_task_publish_trace(*, headers: dict[str, Any] | None = None, **_: Any) -> None:

@@ -70,6 +70,7 @@ Stores configuration for data sources (RSS feeds, Telegram channels, etc.)
 | config | JSONB | No | {} | Source-specific configuration |
 | is_active | BOOLEAN | No | true | Whether to collect from this source |
 | last_fetched_at | TIMESTAMPTZ | Yes | | Last successful fetch time |
+| ingestion_window_end_at | TIMESTAMPTZ | Yes | | Per-source ingestion high-water timestamp for overlap-aware next windows |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 | updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
 
@@ -105,6 +106,8 @@ Individual articles/posts collected from sources.
 | fetched_at | TIMESTAMPTZ | No | NOW() | When we fetched it |
 | raw_content | TEXT | No | | Extracted text content |
 | embedding | vector(1536) | Yes | | Text embedding for similarity and clustering |
+| embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
+| embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |
 | content_hash | VARCHAR(64) | No | | SHA256 hash for dedup |
 | language | VARCHAR(10) | Yes | | Detected language (ISO 639-1) |
 | processing_status | VARCHAR(20) | No | 'pending' | Status: pending, processing, classified, noise, error |
@@ -124,6 +127,8 @@ Individual articles/posts collected from sources.
 Strategy note:
 - Default ANN profile is IVFFlat (`lists=64`) for current small-table regime.
 - Re-run strategy selection with `horadus eval vector-benchmark` before changing index type/params.
+- Follow `docs/VECTOR_REVALIDATION.md` for cadence triggers, promotion criteria, and operator checklist.
+- Similarity comparisons are performed only for matching `embedding_model` values.
 
 **Processing status flow:**
 ```
@@ -144,6 +149,8 @@ Clustered news events (multiple raw_items about the same story).
 | id | UUID | No | gen_random_uuid() | Primary key |
 | canonical_summary | TEXT | No | | Representative summary |
 | embedding | vector(1536) | Yes | | Text embedding for similarity |
+| embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
+| embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |
 | extracted_who | TEXT[] | Yes | | Entities: people/organizations |
 | extracted_what | TEXT | Yes | | What happened |
 | extracted_where | TEXT | Yes | | Location |
@@ -173,6 +180,10 @@ WHERE first_seen_at > NOW() - INTERVAL '48 hours'
 ORDER BY embedding <=> $1
 LIMIT 5;
 ```
+
+Operational note:
+- Use `uv run horadus eval embedding-lineage` to detect mixed model populations and estimate re-embed scope.
+- Follow `docs/EMBEDDING_MODEL_UPGRADE.md` for cutover/backfill/rollback workflow.
 
 ---
 

@@ -43,6 +43,9 @@ def _build_report(*, trend_id: object | None = None, report_type: str = "weekly"
             "evidence_count_weekly": 5,
         },
         narrative="Trend rose this week due to repeated corroborated signals.",
+        grounding_status="grounded",
+        grounding_violation_count=0,
+        grounding_references=None,
         top_events={"events": [{"event_id": str(uuid4()), "impact_score": 0.12}]},
         created_at=now,
     )
@@ -89,6 +92,8 @@ async def test_get_report_returns_report_payload(mock_db_session) -> None:
     assert result.id == report.id
     assert result.trend_id == trend_id
     assert result.trend_name == "EU-Russia"
+    assert result.grounding_status == "grounded"
+    assert result.grounding_violation_count == 0
     assert result.top_events is not None
     assert len(result.top_events) == 1
 

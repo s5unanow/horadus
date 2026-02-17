@@ -464,6 +464,9 @@ class TrendRetrospectiveResponse(BaseModel):
                     "resolved_rate": 0.5,
                 },
                 "narrative": "Military movement signals were most predictive in this window.",
+                "grounding_status": "grounded",
+                "grounding_violation_count": 0,
+                "grounding_references": None,
             }
         }
     )
@@ -477,6 +480,9 @@ class TrendRetrospectiveResponse(BaseModel):
     predictive_signals: list[RetrospectiveSignal]
     accuracy_assessment: dict[str, int | float | None]
     narrative: str
+    grounding_status: str
+    grounding_violation_count: int
+    grounding_references: dict[str, Any] | None
 
 
 # =============================================================================

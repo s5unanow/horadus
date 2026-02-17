@@ -90,6 +90,7 @@ git status --short
 ```bash
 make check
 make test
+make docs-freshness
 ```
 
 3. Database migration sanity:
@@ -125,9 +126,27 @@ uv run --no-sync alembic upgrade head
 DATABASE_URL="<target-db-url>" ./scripts/check_migration_drift.sh
 uv run --no-sync pytest tests/integration/ -v -m integration
 uv run --no-sync bandit -c pyproject.toml -r src/
+uv run --no-sync python scripts/check_docs_freshness.py
 ```
 3. Fix the underlying issue, then rerun quality gates.
 4. If a finding is an accepted exception, document rationale in config/docs and keep CI explicit.
+
+### Docs freshness gate remediation
+
+When `scripts/check_docs_freshness.py` fails:
+
+1. Update stale `Last Verified` / `Last Updated` markers and conflicting docs statements.
+2. If drift is intentional and temporary, add a scoped override entry in
+   `docs/DOCS_FRESHNESS_OVERRIDES.json` with:
+   - `rule_id`
+   - exact `path`
+   - explicit `reason`
+   - short-lived `expires_on` date
+3. Rerun:
+```bash
+uv run --no-sync python scripts/check_docs_freshness.py
+```
+4. Remove overrides once the underlying docs drift is resolved.
 
 ## Versioning and Tagging
 

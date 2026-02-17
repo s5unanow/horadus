@@ -9,7 +9,7 @@
         format lint typecheck test test-unit test-integration test-cov \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
-        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval pre-commit check all \
+        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
         db-migration-gate branch-guard protect-main
 
 # Default target
@@ -210,6 +210,9 @@ validate-taxonomy-eval: deps ## Validate trend taxonomy contract against eval go
 
 audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and provenance
 	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
+
+docs-freshness: deps ## Validate docs freshness and runtime consistency invariants
+	$(UV_RUN) python scripts/check_docs_freshness.py
 
 # =============================================================================
 # Security

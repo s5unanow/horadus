@@ -1847,10 +1847,10 @@ Recover TASK-095 artifacts that were missing from committed task-061 history
 (docs freshness checker, override policy, and CI/local gate wiring).
 
 **Acceptance Criteria**:
-- [ ] Add docs freshness checker module and command entrypoint
-- [ ] Add override policy file with expiry/rationale schema checks
-- [ ] Wire docs freshness gate into CI and local quality targets
-- [ ] Add/restore unit tests for conflict detection and override behavior
+- [x] Add docs freshness checker module and command entrypoint
+- [x] Add override policy file with expiry/rationale schema checks
+- [x] Wire docs freshness gate into CI and local quality targets
+- [x] Add/restore unit tests for conflict detection and override behavior
 
 ---
 

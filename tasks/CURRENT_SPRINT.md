@@ -15,13 +15,28 @@
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
-- `TASK-114` Complete Deferred Docs Freshness Gate Recovery — Ready for implementation
 - `TASK-115` Finish Partial Recovery for Tracing/Lineage/Grounding — Ready for implementation
 - `TASK-117` Enforce Task Sequencing Guards End-to-End — Ready for implementation
 
 ---
 
 ## Completed This Sprint
+
+### TASK-114: Complete Deferred Docs Freshness Gate Recovery
+**Status**: DONE ✓  
+**Priority**: P1 (High)  
+**Spec**: `tasks/BACKLOG.md`
+
+Recovered docs-freshness quality gate artifacts and wired them into local/CI
+quality workflows with override policy and unit coverage.
+
+**Completed**:
+- [x] Added docs freshness checker module and CLI entrypoint script
+- [x] Added override policy file with schema/expiry expectations
+- [x] Wired docs freshness gate into CI and Makefile quality targets
+- [x] Added unit tests for conflict detection and override behavior
+
+---
 
 ### TASK-113: Complete Deferred Eval Mode and Vector Revalidation Recovery
 **Status**: DONE ✓  

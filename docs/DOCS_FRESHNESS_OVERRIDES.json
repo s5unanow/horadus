@@ -1,0 +1,16 @@
+{
+  "overrides": [
+    {
+      "rule_id": "stale_auth_unenforced_claim",
+      "path": "docs/POTENTIAL_ISSUES.md",
+      "reason": "Archived historical snapshot kept for audit trail context.",
+      "expires_on": "2027-12-31"
+    },
+    {
+      "rule_id": "stale_api_key_not_enforced_claim",
+      "path": "docs/POTENTIAL_ISSUES.md",
+      "reason": "Archived historical snapshot kept for audit trail context.",
+      "expires_on": "2027-12-31"
+    }
+  ]
+}

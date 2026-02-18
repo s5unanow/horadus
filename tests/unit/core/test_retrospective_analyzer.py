@@ -127,11 +127,23 @@ async def test_build_narrative_fails_over_to_secondary_route(
     assert result.grounding_status == "grounded"
     assert len(primary_calls) == 2
     assert len(secondary_calls) == 1
-    cost_tracker.ensure_within_budget.assert_awaited_once()
+    assert cost_tracker.ensure_within_budget.await_count == 2
+    assert cost_tracker.ensure_within_budget.await_args_list[0].args == (TIER2,)
+    assert cost_tracker.ensure_within_budget.await_args_list[0].kwargs == {
+        "provider": "openai",
+        "model": "gpt-4.1-mini",
+    }
+    assert cost_tracker.ensure_within_budget.await_args_list[1].args == (TIER2,)
+    assert cost_tracker.ensure_within_budget.await_args_list[1].kwargs == {
+        "provider": "openai-secondary",
+        "model": "gpt-4.1-nano",
+    }
     cost_tracker.record_usage.assert_awaited_once_with(
         tier=TIER2,
         input_tokens=18,
         output_tokens=7,
+        provider="openai-secondary",
+        model="gpt-4.1-nano",
     )
 
 

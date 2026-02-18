@@ -123,7 +123,11 @@ class FakeTier2Completions:
 
 
 @pytest.mark.asyncio
-async def test_processing_pipeline_runs_end_to_end() -> None:
+async def test_processing_pipeline_runs_end_to_end(monkeypatch: pytest.MonkeyPatch) -> None:
+    pricing = dict(settings.LLM_TOKEN_PRICING_USD_PER_1M)
+    pricing["openai:test-embedding-model"] = (0.02, 0.0)
+    monkeypatch.setattr(settings, "LLM_TOKEN_PRICING_USD_PER_1M", pricing)
+
     source_name = f"Pipeline Source {uuid4()}"
     trend_name = f"Pipeline Trend {uuid4()}"
     external_id = f"https://integration.local/{uuid4()}/article"
@@ -243,6 +247,9 @@ async def test_processing_pipeline_runs_end_to_end() -> None:
 @pytest.mark.asyncio
 async def test_processing_pipeline_keeps_item_pending_when_budget_exceeded(monkeypatch) -> None:
     monkeypatch.setattr(settings, "TIER1_MAX_DAILY_CALLS", 1)
+    pricing = dict(settings.LLM_TOKEN_PRICING_USD_PER_1M)
+    pricing["openai:test-embedding-model"] = (0.02, 0.0)
+    monkeypatch.setattr(settings, "LLM_TOKEN_PRICING_USD_PER_1M", pricing)
 
     source_name = f"Budget Source {uuid4()}"
     trend_name = f"Budget Trend {uuid4()}"

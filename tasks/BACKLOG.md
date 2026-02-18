@@ -2367,11 +2367,11 @@ concurrent workers this can lose updates (last write wins).
 **Files**: `src/core/trend_engine.py`, `src/storage/models.py`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Apply evidence delta with an atomic SQL update (`current_log_odds = current_log_odds + :delta`) or equivalent row-locking transaction
-- [ ] Preserve idempotency guarantees for `(trend_id, event_id, signal_type)` evidence inserts (no double-apply)
-- [ ] Return correct `previous_probability` and `new_probability` even under concurrency
-- [ ] Add a concurrency-focused test that would fail under the current read-modify-write implementation (lost update) and passes after the fix
-- [ ] Add structured logging for evidence apply showing whether the update path used atomic update / row lock (operator-debuggable)
+- [x] Apply evidence delta with an atomic SQL update (`current_log_odds = current_log_odds + :delta`) or equivalent row-locking transaction
+- [x] Preserve idempotency guarantees for `(trend_id, event_id, signal_type)` evidence inserts (no double-apply)
+- [x] Return correct `previous_probability` and `new_probability` even under concurrency
+- [x] Add a concurrency-focused test that would fail under the current read-modify-write implementation (lost update) and passes after the fix
+- [x] Add structured logging for evidence apply showing whether the update path used atomic update / row lock (operator-debuggable)
 
 ---
 

@@ -4,6 +4,8 @@ description: |
   Tracks whether South America strengthens its existing global food supply
   leadership through sustained export growth, logistics expansion, and
   new market access.
+  Baseline probability represents the probability that South America increases
+  its share of global food exports over a rolling 10-year window.
 
 baseline_probability: 0.33
 decay_half_life_days: 345

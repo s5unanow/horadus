@@ -4,6 +4,9 @@ description: |
   Tracks whether fertility decline accelerates beyond long-run demographic
   expectations, with labor-force and social stability implications.
   Composite trend across Europe, North America, and East Asia.
+  Baseline probability represents the probability that fertility decline remains
+  structurally accelerated below replacement across tracked regions over a
+  rolling 10-year window.
 
 baseline_probability: 0.35
 decay_half_life_days: 365

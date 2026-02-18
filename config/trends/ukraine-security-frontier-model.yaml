@@ -3,6 +3,8 @@ name: "Ukraine as a Long-Horizon Militarized Frontier"
 description: |
   Tracks whether Ukraine evolves into a sustained, externally backed, highly
   militarized security frontier analogous to a permanent forward deterrence model.
+  Baseline probability represents the probability that Ukraine remains a
+  sustained militarized forward-deterrence frontier over the next 10 years.
 
 baseline_probability: 0.40
 decay_half_life_days: 365

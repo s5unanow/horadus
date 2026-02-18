@@ -136,6 +136,14 @@ Production auth/secret guardrails:
 | `PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT` | `10` | Low-headroom threshold (%) where ingestion-triggered dispatch becomes less aggressive. |
 | `PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT` | `50` | Maximum ingestion-triggered dispatch `limit` while low-headroom throttling is active. |
 | `PROCESSING_REAPER_INTERVAL_MINUTES` | `15` | Cadence for stale-processing recovery task. |
+| `RETENTION_CLEANUP_ENABLED` | `false` | Enables scheduled `workers.run_data_retention_cleanup` execution. |
+| `RETENTION_CLEANUP_INTERVAL_HOURS` | `24` | Cadence (hours) for the retention cleanup scheduler when enabled. |
+| `RETENTION_CLEANUP_DRY_RUN` | `true` | When `true`, retention cleanup logs/counts eligible rows but does not delete. |
+| `RETENTION_CLEANUP_BATCH_SIZE` | `500` | Maximum eligible rows selected per table in one cleanup run. |
+| `RETENTION_RAW_ITEM_NOISE_DAYS` | `30` | Retention for unlinked `raw_items` in `noise`/`error` status. |
+| `RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS` | `90` | Retention for `raw_items` linked to archived events. |
+| `RETENTION_EVENT_ARCHIVED_DAYS` | `180` | Minimum archived-event age before event deletion is considered. |
+| `RETENTION_TREND_EVIDENCE_DAYS` | `365` | Retention for archived-event `trend_evidence` rows (must be >= raw archived-item window). |
 | `WEEKLY_REPORT_DAY_OF_WEEK` | `1` | UTC day (`0=Sun..6=Sat`). |
 | `WEEKLY_REPORT_HOUR_UTC` | `7` | UTC hour. |
 | `MONTHLY_REPORT_DAY_OF_MONTH` | `1` | UTC day of month (`1..28`). |

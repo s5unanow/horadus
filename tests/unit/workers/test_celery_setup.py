@@ -12,7 +12,7 @@ from celery.schedules import crontab
 
 import src.workers.tasks as tasks_module
 from src.core.source_freshness import SourceFreshnessReport, SourceFreshnessRow
-from src.storage.models import ProcessingStatus, RawItem
+from src.storage.models import EventLifecycle, ProcessingStatus, RawItem
 
 celery_app_module = importlib.import_module("src.workers.celery_app")
 
@@ -34,6 +34,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "GDELT_COLLECTION_INTERVAL", 45)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 120)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 20)
+    monkeypatch.setattr(celery_app_module.settings, "RETENTION_CLEANUP_ENABLED", True)
+    monkeypatch.setattr(celery_app_module.settings, "RETENTION_CLEANUP_INTERVAL_HOURS", 6)
     monkeypatch.setattr(celery_app_module.settings, "PROCESS_PENDING_INTERVAL_MINUTES", 7)
     monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
@@ -57,6 +59,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
     assert schedule["reap-stale-processing-items"]["task"] == "workers.reap_stale_processing_items"
     assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=20)
+    assert schedule["run-data-retention-cleanup"]["task"] == "workers.run_data_retention_cleanup"
+    assert schedule["run-data-retention-cleanup"]["schedule"] == timedelta(hours=6)
     assert schedule["process-pending-items"]["task"] == "workers.process_pending_items"
     assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=7)
     assert schedule["check-source-freshness"]["task"] == "workers.check_source_freshness"
@@ -81,6 +85,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", False)
+    monkeypatch.setattr(celery_app_module.settings, "RETENTION_CLEANUP_ENABLED", False)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 10)
     monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
@@ -153,6 +158,7 @@ def test_celery_routes_include_processing_queue() -> None:
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
     assert routes["workers.check_event_lifecycles"]["queue"] == "processing"
     assert routes["workers.reap_stale_processing_items"]["queue"] == "processing"
+    assert routes["workers.run_data_retention_cleanup"]["queue"] == "processing"
     assert routes["workers.generate_weekly_reports"]["queue"] == "processing"
     assert routes["workers.generate_monthly_reports"]["queue"] == "processing"
 
@@ -723,6 +729,176 @@ def test_reap_stale_processing_items_task_uses_async_worker(
     assert result["task"] == "reap_stale_processing_items"
     assert result["reset"] == 2
     assert captured == [2]
+
+
+def test_run_data_retention_cleanup_task_uses_async_worker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_cleanup(*, dry_run: bool | None = None) -> dict[str, object]:
+        assert dry_run is True
+        return {
+            "status": "ok",
+            "task": "run_data_retention_cleanup",
+            "dry_run": True,
+            "batch_size": 100,
+            "cutoffs": {
+                "raw_item_noise_before": "2026-01-01T00:00:00+00:00",
+                "raw_item_archived_event_before": "2025-11-01T00:00:00+00:00",
+                "archived_event_before": "2025-08-01T00:00:00+00:00",
+                "trend_evidence_before": "2025-02-01T00:00:00+00:00",
+            },
+            "eligible": {
+                "raw_items_noise": 2,
+                "raw_items_archived_event": 1,
+                "raw_items_total": 3,
+                "trend_evidence": 4,
+                "events": 1,
+            },
+            "deleted": {
+                "raw_items": 0,
+                "trend_evidence": 0,
+                "events": 0,
+            },
+        }
+
+    row_metrics: list[tuple[str, str, bool, int]] = []
+    run_metrics: list[tuple[bool, str]] = []
+
+    monkeypatch.setattr(tasks_module, "_run_data_retention_cleanup_async", fake_cleanup)
+    monkeypatch.setattr(
+        tasks_module,
+        "record_retention_cleanup_rows",
+        lambda *, table, action, dry_run, count: row_metrics.append(
+            (table, action, dry_run, count)
+        ),
+    )
+    monkeypatch.setattr(
+        tasks_module,
+        "record_retention_cleanup_run",
+        lambda *, dry_run, status: run_metrics.append((dry_run, status)),
+    )
+
+    result = tasks_module.run_data_retention_cleanup.run(dry_run=True)
+
+    assert result["status"] == "ok"
+    assert result["task"] == "run_data_retention_cleanup"
+    assert row_metrics == [
+        ("raw_items", "eligible", True, 3),
+        ("trend_evidence", "eligible", True, 4),
+        ("events", "eligible", True, 1),
+        ("raw_items", "deleted", True, 0),
+        ("trend_evidence", "deleted", True, 0),
+        ("events", "deleted", True, 0),
+    ]
+    assert run_metrics == [(True, "ok")]
+
+
+def test_raw_item_noise_retention_eligibility() -> None:
+    now = datetime(2026, 2, 18, 12, 0, tzinfo=UTC)
+    cutoffs = tasks_module.RetentionCutoffs(
+        now=now,
+        raw_item_noise_before=now - timedelta(days=30),
+        raw_item_archived_event_before=now - timedelta(days=90),
+        archived_event_before=now - timedelta(days=180),
+        trend_evidence_before=now - timedelta(days=365),
+        batch_size=100,
+        dry_run=True,
+    )
+
+    assert tasks_module._is_raw_item_noise_retention_eligible(
+        processing_status=ProcessingStatus.NOISE,
+        fetched_at=now - timedelta(days=31),
+        has_event_link=False,
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_raw_item_noise_retention_eligible(
+        processing_status=ProcessingStatus.PENDING,
+        fetched_at=now - timedelta(days=31),
+        has_event_link=False,
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_raw_item_noise_retention_eligible(
+        processing_status=ProcessingStatus.ERROR,
+        fetched_at=now - timedelta(days=31),
+        has_event_link=True,
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_raw_item_noise_retention_eligible(
+        processing_status=ProcessingStatus.NOISE,
+        fetched_at=now - timedelta(days=5),
+        has_event_link=False,
+        cutoffs=cutoffs,
+    )
+
+
+def test_raw_item_archived_event_retention_eligibility() -> None:
+    now = datetime(2026, 2, 18, 12, 0, tzinfo=UTC)
+    cutoffs = tasks_module.RetentionCutoffs(
+        now=now,
+        raw_item_noise_before=now - timedelta(days=30),
+        raw_item_archived_event_before=now - timedelta(days=90),
+        archived_event_before=now - timedelta(days=180),
+        trend_evidence_before=now - timedelta(days=365),
+        batch_size=100,
+        dry_run=True,
+    )
+
+    assert tasks_module._is_raw_item_archived_event_retention_eligible(
+        fetched_at=now - timedelta(days=91),
+        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_last_mention_at=now - timedelta(days=91),
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_raw_item_archived_event_retention_eligible(
+        fetched_at=now - timedelta(days=91),
+        event_lifecycle_status=EventLifecycle.CONFIRMED.value,
+        event_last_mention_at=now - timedelta(days=91),
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_raw_item_archived_event_retention_eligible(
+        fetched_at=now - timedelta(days=10),
+        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_last_mention_at=now - timedelta(days=91),
+        cutoffs=cutoffs,
+    )
+
+
+def test_trend_evidence_and_event_retention_eligibility() -> None:
+    now = datetime(2026, 2, 18, 12, 0, tzinfo=UTC)
+    cutoffs = tasks_module.RetentionCutoffs(
+        now=now,
+        raw_item_noise_before=now - timedelta(days=30),
+        raw_item_archived_event_before=now - timedelta(days=90),
+        archived_event_before=now - timedelta(days=180),
+        trend_evidence_before=now - timedelta(days=365),
+        batch_size=100,
+        dry_run=True,
+    )
+
+    assert tasks_module._is_trend_evidence_retention_eligible(
+        created_at=now - timedelta(days=366),
+        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_last_mention_at=now - timedelta(days=200),
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_trend_evidence_retention_eligible(
+        created_at=now - timedelta(days=20),
+        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_last_mention_at=now - timedelta(days=200),
+        cutoffs=cutoffs,
+    )
+    assert tasks_module._is_archived_event_retention_eligible(
+        lifecycle_status=EventLifecycle.ARCHIVED.value,
+        last_mention_at=now - timedelta(days=200),
+        has_remaining_evidence=False,
+        cutoffs=cutoffs,
+    )
+    assert not tasks_module._is_archived_event_retention_eligible(
+        lifecycle_status=EventLifecycle.ARCHIVED.value,
+        last_mention_at=now - timedelta(days=200),
+        has_remaining_evidence=True,
+        cutoffs=cutoffs,
+    )
 
 
 @pytest.mark.asyncio

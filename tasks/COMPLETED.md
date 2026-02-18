@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-149: Add retention/archival policy for raw_items, events, and trend_evidence ✅
 - TASK-148: Align event canonical_summary semantics with primary_item_id ✅
 - TASK-147: Enforce RawItem belongs-to-one-Event invariant at the DB layer ✅
 - TASK-146: Fix event unique-source counting and lifecycle ordering on merge ✅

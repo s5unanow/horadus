@@ -204,6 +204,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-133` event invalidation now preserves trend-evidence lineage via invalidation markers/feedback linkage while reversing only active deltas and excluding invalidated evidence from operational reporting paths
 - [x] `TASK-134` external assessment intake governance is now preserved in backlog docs with explicit overlap mapping to human-gated `TASK-080` and no duplicate implementation tasks
 - [x] `TASK-135` four external-review trend descriptions now explicitly define what baseline probability measures, with `elite-mass-polarization` reframed to acceleration semantics
+- [x] `TASK-136` `ai-control` trend now includes `ai_safety_incident` as a leading escalatory indicator, with taxonomy validation passing in subset mode
 
 ## In Progress
 
@@ -216,7 +217,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-136` add `ai_safety_incident` indicator to ai-control trend
+2. Execute `TASK-137` sharpen vague falsification criteria
 
 ## Expert Feedback Integration ✅
 

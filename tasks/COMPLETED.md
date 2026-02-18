@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-136: Add ai_safety_incident indicator to ai-control trend ✅
 - TASK-135: Clarify baseline_probability referent in trend descriptions ✅
 - TASK-134: External Assessment Backlog Intake Preservation ✅
 - TASK-133: Preserve Evidence Lineage on Event Invalidation ✅

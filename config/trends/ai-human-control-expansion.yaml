@@ -63,6 +63,12 @@ indicators:
     type: lagging
     keywords: ["algorithmic debanking", "financial deplatforming", "automated account closure", "sanctions compliance automation"]
 
+  ai_safety_incident:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+    keywords: ["AI safety incident", "autonomous vehicle fatality", "model jailbreak", "AI-generated CSAM", "algorithmic harm", "AI system failure"]
+
   algorithmic_transparency_law:
     weight: 0.05
     direction: de_escalatory

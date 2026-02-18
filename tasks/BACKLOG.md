@@ -2230,10 +2230,10 @@ ai-control trend that is currently not captured by any indicator.
 **Files**: `config/trends/ai-human-control-expansion.yaml`
 
 **Acceptance Criteria**:
-- [ ] New indicator `ai_safety_incident` added: weight 0.04, escalatory, leading
-- [ ] Keywords: `["AI safety incident", "autonomous vehicle fatality", "model jailbreak", "AI-generated CSAM", "algorithmic harm", "AI system failure"]`
-- [ ] Config passes Pydantic validation
-- [ ] Gold set taxonomy validation still passes (`--tier1-trend-mode subset`)
+- [x] New indicator `ai_safety_incident` added: weight 0.04, escalatory, leading
+- [x] Keywords: `["AI safety incident", "autonomous vehicle fatality", "model jailbreak", "AI-generated CSAM", "algorithmic harm", "AI system failure"]`
+- [x] Config passes Pydantic validation
+- [x] Gold set taxonomy validation still passes (`--tier1-trend-mode subset`)
 
 ---
 

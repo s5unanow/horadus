@@ -94,6 +94,11 @@ PROCESSING_CORROBORATION_PATH_TOTAL = Counter(
     "Corroboration scoring path usage by mode and reason.",
     ["mode", "reason"],
 )
+PROCESSING_EVENT_SUPPRESSIONS_TOTAL = Counter(
+    "processing_event_suppressions_total",
+    "Event suppressions applied during processing by action and stage.",
+    ["action", "stage"],
+)
 
 
 def record_collector_metrics(
@@ -203,4 +208,13 @@ def record_processing_corroboration_path(*, mode: str, reason: str) -> None:
     PROCESSING_CORROBORATION_PATH_TOTAL.labels(
         mode=normalized_mode,
         reason=normalized_reason,
+    ).inc()
+
+
+def record_processing_event_suppression(*, action: str, stage: str) -> None:
+    normalized_action = action.strip() or "unknown"
+    normalized_stage = stage.strip() or "unknown"
+    PROCESSING_EVENT_SUPPRESSIONS_TOTAL.labels(
+        action=normalized_action,
+        stage=normalized_stage,
     ).inc()

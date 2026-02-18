@@ -186,6 +186,7 @@ Language-segmented operational metrics are emitted for:
 - intake (`processing_ingested_language_total`)
 - Tier-1 routing outcomes (`processing_tier1_language_outcome_total`)
 - Tier-2 usage (`processing_tier2_language_usage_total`)
+- suppression skips (`processing_event_suppressions_total`)
 - taxonomy-gap volume (`taxonomy_gaps_total`)
 - unknown signal keys by trend (`taxonomy_gap_signal_keys_total`)
 

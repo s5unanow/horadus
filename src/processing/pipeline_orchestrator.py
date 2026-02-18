@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.core.observability import (
     record_processing_corroboration_path,
+    record_processing_event_suppression,
     record_processing_ingested_language,
     record_processing_tier1_language_outcome,
     record_processing_tier2_language_usage,
@@ -543,6 +544,10 @@ class ProcessingPipeline:
                 item.processing_status = ProcessingStatus.NOISE
                 item.processing_started_at = None
                 await self.session.flush()
+                record_processing_event_suppression(
+                    action=suppression_action,
+                    stage="pipeline_post_cluster",
+                )
                 logger.info(
                     "Skipping event due to human feedback suppression",
                     item_id=str(prepared.item_id),
@@ -705,7 +710,12 @@ class ProcessingPipeline:
             .limit(1)
         )
         action: str | None = await self.session.scalar(query)
-        return action
+        if not isinstance(action, str):
+            return None
+        normalized_action = action.strip()
+        if normalized_action not in {"mark_noise", "invalidate"}:
+            return None
+        return normalized_action
 
     async def _apply_trend_impacts(
         self,

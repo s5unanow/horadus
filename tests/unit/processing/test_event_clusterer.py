@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 
+import src.processing.event_clusterer as event_clusterer_module
 from src.processing.event_clusterer import EventClusterer
 from src.storage.models import Event, EventLifecycle, RawItem
 
@@ -230,3 +231,45 @@ async def test_find_matching_event_filters_by_embedding_model(mock_db_session) -
     assert result is None
     query = mock_db_session.execute.await_args.args[0]
     assert "events.embedding_model =" in str(query)
+
+
+@pytest.mark.asyncio
+async def test_cluster_item_skips_merge_for_suppressed_event(mock_db_session, monkeypatch) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.1, 0.2, 0.3], title="Suppressed merge attempt")
+    item.embedding_model = "text-embedding-3-small"
+    event = Event(
+        canonical_summary="Suppressed event",
+        source_count=5,
+        unique_source_count=3,
+        lifecycle_status=EventLifecycle.ARCHIVED.value,
+        primary_item_id=uuid4(),
+    )
+    merge_into_event = AsyncMock()
+    add_event_link = AsyncMock()
+    suppression_metric_calls: list[tuple[str, str]] = []
+
+    def _record_suppression(*, action: str, stage: str) -> None:
+        suppression_metric_calls.append((action, stage))
+
+    clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
+    clusterer._find_matching_event = AsyncMock(return_value=(event, 0.91))
+    clusterer._merge_into_event = merge_into_event
+    clusterer._add_event_link = add_event_link
+    clusterer._event_suppression_action = AsyncMock(return_value="invalidate")
+    monkeypatch.setattr(
+        event_clusterer_module,
+        "record_processing_event_suppression",
+        _record_suppression,
+    )
+
+    result = await clusterer.cluster_item(item)
+
+    assert result.created is False
+    assert result.merged is False
+    assert result.event_id == event.id
+    assert result.similarity == pytest.approx(0.91)
+    assert event.lifecycle_status == EventLifecycle.ARCHIVED.value
+    merge_into_event.assert_not_called()
+    add_event_link.assert_not_called()
+    assert suppression_metric_calls == [("invalidate", "clusterer_pre_merge")]

@@ -9,18 +9,22 @@ from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
 
+import structlog
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.observability import record_processing_event_suppression
 from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
-from src.storage.models import Event, EventItem, RawItem, Source
+from src.storage.models import Event, EventItem, HumanFeedback, RawItem, Source
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass(slots=True)
@@ -79,6 +83,25 @@ class EventClusterer:
             return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
 
         event, similarity = matched
+        suppression_action = await self._event_suppression_action(event_id=event.id)
+        if suppression_action is not None:
+            record_processing_event_suppression(
+                action=suppression_action,
+                stage="clusterer_pre_merge",
+            )
+            logger.info(
+                "Skipping suppressed event before merge",
+                event_id=str(event.id),
+                item_id=str(item_id),
+                action=suppression_action,
+            )
+            return ClusterResult(
+                item_id=item_id,
+                event_id=event.id,
+                created=False,
+                merged=False,
+                similarity=similarity,
+            )
         await self._merge_into_event(event, item)
         await self._add_event_link(event.id, item_id)
         return ClusterResult(
@@ -169,6 +192,23 @@ class EventClusterer:
         query = select(EventItem.event_id).where(EventItem.item_id == item_id).limit(1)
         event_id: UUID | None = await self.session.scalar(query)
         return event_id
+
+    async def _event_suppression_action(self, *, event_id: UUID) -> str | None:
+        query = (
+            select(HumanFeedback.action)
+            .where(HumanFeedback.target_type == "event")
+            .where(HumanFeedback.target_id == event_id)
+            .where(HumanFeedback.action.in_(("mark_noise", "invalidate")))
+            .order_by(HumanFeedback.created_at.desc())
+            .limit(1)
+        )
+        action: str | None = await self.session.scalar(query)
+        if not isinstance(action, str):
+            return None
+        normalized_action = action.strip()
+        if normalized_action not in {"mark_noise", "invalidate"}:
+            return None
+        return normalized_action
 
     async def _add_event_link(self, event_id: UUID, item_id: UUID) -> None:
         link = EventItem(event_id=event_id, item_id=item_id)

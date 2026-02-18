@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-130` Suppression-First Event Lifecycle Guard — DONE ✓
 - `TASK-129` Atomic Trend Delta Updates Under Concurrency — DONE ✓
 - `TASK-128` Corroboration Row-Parsing Runtime Fix — DONE ✓
 - `TASK-126` Taxonomy Drift Guardrails (Runtime Gap Queue + Benchmark Alignment) — DONE ✓
@@ -62,6 +63,7 @@
 - `TASK-140` completion note: `AGENTS.md` now codifies human-gated sequence and in-branch backlog-capture rule with exception criteria.
 - `TASK-127` completion note: docs-freshness checks now enforce cross-ledger parity for active sprint tasks vs `PROJECT_STATUS` (in-progress + blocked for `[REQUIRES_HUMAN]`) and detect in-progress/completed dual-listing.
 - `TASK-129` completion note: trend log-odds delta paths now use atomic SQL increments, decay uses row-lock serialization, and feedback invalidation/override routes share the same concurrency-safe update path with new integration race tests.
+- `TASK-130` completion note: clusterer now checks suppression before merge/lifecycle updates, suppressed-event merges are skipped, and suppression metrics/logging now emit from both clusterer and pipeline stages.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

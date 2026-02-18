@@ -2122,10 +2122,10 @@ Ensure suppressed/invalidated events are blocked before clustering merge/lifecyc
 touches so they cannot be unintentionally reactivated.
 
 **Acceptance Criteria**:
-- [ ] Move suppression/invalidated checks ahead of clustering merge and event lifecycle mention hooks
-- [ ] Ensure invalidated/suppressed events are never revived by mention-side effects during processing
-- [ ] Add tests for invalidated-event, suppressed-event, and normal-event paths across orchestrator + lifecycle interactions
-- [ ] Preserve explicit audit logs/metrics for skipped suppressed items
+- [x] Move suppression/invalidated checks ahead of clustering merge and event lifecycle mention hooks
+- [x] Ensure invalidated/suppressed events are never revived by mention-side effects during processing
+- [x] Add tests for invalidated-event, suppressed-event, and normal-event paths across orchestrator + lifecycle interactions
+- [x] Preserve explicit audit logs/metrics for skipped suppressed items
 
 ---
 

@@ -30,6 +30,10 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`\n",
         encoding="utf-8",
     )
+    (repo_root / "tasks" / "COMPLETED.md").write_text(
+        "# Completed Tasks\n",
+        encoding="utf-8",
+    )
     (repo_root / "AGENTS.md").write_text(
         "## Canonical Source-of-Truth Hierarchy\n",
         encoding="utf-8",
@@ -271,3 +275,128 @@ def test_docs_freshness_allows_override_for_new_rules(tmp_path: Path) -> None:
 
     assert not any(issue.rule_id == "adr_reference_target_missing" for issue in result.errors)
     assert any(issue.rule_id == "docs_freshness_override_applied" for issue in result.warnings)
+
+
+def test_docs_freshness_flags_dual_listed_in_progress_and_completed_task(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-113` Recovery follow-up",
+                "## Completed This Sprint",
+                "- `TASK-112` Prior work",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-113` Recovery follow-up",
+                "## Blocked",
+                "- none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "COMPLETED.md").write_text(
+        "- TASK-113: Complete Deferred Eval Mode and Vector Revalidation Recovery ✅\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "task_status_dual_listing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_active_sprint_task_missing_from_project_status_in_progress(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-126` Taxonomy Drift Guardrails",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(
+        issue.rule_id == "project_status_missing_active_sprint_task" for issue in result.errors
+    )
+
+
+def test_docs_freshness_flags_human_gated_sprint_task_missing_from_project_status_blocked(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(
+        issue.rule_id == "project_status_missing_blocked_human_task" for issue in result.errors
+    )

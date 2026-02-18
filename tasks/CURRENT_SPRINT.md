@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-127` Cross-Ledger Drift Reconciliation and Dependency Hygiene — DONE ✓
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-140` In-Branch Backlog Capture Rule and Guard — DONE ✓
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
@@ -56,5 +57,6 @@
 - `TASK-084` reviewer checklist: `tasks/assessments/TASK-084-production-security-guardrails-checklist-2026-02-18.md`.
 - `TASK-084` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Production startup now rejects weak/short SECRET_KEY values; auth guardrails preserved; core unit/lint/type checks passed.`
 - `TASK-140` completion note: `AGENTS.md` now codifies human-gated sequence and in-branch backlog-capture rule with exception criteria.
+- `TASK-127` completion note: docs-freshness checks now enforce cross-ledger parity for active sprint tasks vs `PROJECT_STATUS` (in-progress + blocked for `[REQUIRES_HUMAN]`) and detect in-progress/completed dual-listing.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.
 - `TASK-085` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Explicit admin key requirement verified; no authenticated-key fallback remains for key-management endpoints.`

@@ -311,6 +311,33 @@ async def test_classify_event_supports_launch_languages(
     assert result.trend_impacts_count == 1
 
 
+def test_build_claim_graph_detects_ukrainian_contradictions(mock_db_session) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    claim_graph = classifier._build_claim_graph(
+        [
+            "Підрозділи перетнули кордон сьогодні вночі.",
+            "Підрозділи не перетнули кордон сьогодні вночі.",
+        ]
+    )
+
+    assert len(claim_graph["links"]) == 1
+    assert claim_graph["links"][0]["relation"] == "contradict"
+
+
+def test_build_claim_graph_disables_unsupported_language_heuristics(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    claim_graph = classifier._build_claim_graph(
+        [
+            "Las fuerzas cruzaron la frontera hoy.",
+            "Las fuerzas no cruzarón la frontera hoy.",
+        ]
+    )
+
+    assert claim_graph["links"] == []
+
+
 @pytest.mark.asyncio
 async def test_build_payload_wraps_and_truncates_untrusted_context(mock_db_session) -> None:
     classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)

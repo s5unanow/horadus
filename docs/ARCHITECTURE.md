@@ -134,6 +134,11 @@ Launch language policy:
   - `skip`: mark item as `noise`
   - `defer`: leave item `pending` for later/manual handling
 - Missing/unknown language metadata is currently processed as `unknown` (not auto-dropped)
+- Claim-graph contradiction heuristics are language-aware for `en`/`uk`/`ru` using
+  per-language stopwords and negation markers.
+- Contradiction links are only created for same-language claim pairs within supported
+  heuristic languages; mixed/unsupported-language claim pairs are left unlinked by
+  deterministic heuristics.
 
 ```
 ┌─────────────┐

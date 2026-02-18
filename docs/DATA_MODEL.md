@@ -151,7 +151,7 @@ Clustered news events (multiple raw_items about the same story).
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | id | UUID | No | gen_random_uuid() | Primary key |
-| canonical_summary | TEXT | No | | Representative summary |
+| canonical_summary | TEXT | No | | Canonical summary of the current `primary_item_id` (most credible item), not simply the latest mention |
 | embedding | vector(1536) | Yes | | Text embedding for similarity |
 | embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
 | embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |

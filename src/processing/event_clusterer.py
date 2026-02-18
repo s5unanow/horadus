@@ -175,7 +175,6 @@ class EventClusterer:
 
     async def _merge_into_event(self, event: Event, item: RawItem) -> None:
         event.source_count += 1
-        event.canonical_summary = self._build_canonical_summary(item)
         mention_time = self._item_timestamp(item)
         event.last_mention_at = mention_time
         if event.embedding is None and item.embedding is not None:
@@ -183,7 +182,11 @@ class EventClusterer:
             event.embedding_model = item.embedding_model
             event.embedding_generated_at = item.embedding_generated_at
 
-        await self._update_primary_item(event, item.id)
+        primary_changed = await self._update_primary_item(event, item.id)
+        if primary_changed:
+            # Canonical summary intentionally tracks the primary (most credible) item.
+            event.canonical_summary = self._build_canonical_summary(item)
+
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
         self.lifecycle_manager.on_event_mention(event, mentioned_at=mention_time)
         await self.session.flush()
@@ -259,17 +262,19 @@ class EventClusterer:
             return 1 if fallback_source_id else 0
         return int(count)
 
-    async def _update_primary_item(self, event: Event, candidate_item_id: UUID) -> None:
+    async def _update_primary_item(self, event: Event, candidate_item_id: UUID) -> bool:
         current_primary_item_id = event.primary_item_id
         if current_primary_item_id is None:
             event.primary_item_id = candidate_item_id
-            return
+            return True
 
         candidate_credibility = await self._source_credibility_for_item(candidate_item_id)
         current_credibility = await self._source_credibility_for_item(current_primary_item_id)
 
         if candidate_credibility > current_credibility:
             event.primary_item_id = candidate_item_id
+            return True
+        return False
 
     async def _source_credibility_for_item(self, item_id: UUID) -> float:
         query = (

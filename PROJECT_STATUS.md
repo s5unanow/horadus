@@ -186,6 +186,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Status-ledger reconciliation across `CURRENT_SPRINT`, `COMPLETED`, and `PROJECT_STATUS` for active vs done task parity
 - [x] Docs freshness consistency gate now enforces cross-ledger task parity (in-progress vs completed dual-listing, active sprint task coverage in `PROJECT_STATUS` in-progress, and blocked coverage for active `[REQUIRES_HUMAN]` tasks)
 - [x] Delivery workflow guidance now explicitly requires full lifecycle closure (commit/push/PR/merge/local-sync) with blocker reporting, and PR scope guard handles escaped-newline PR bodies
+- [x] Runtime taxonomy-gap guardrails added: unknown trend/signal impacts are captured into triage queue (`taxonomy_gaps`) with observability + analyst resolution tracking, while scoring safety remains fail-closed
+- [x] Benchmark taxonomy source-of-truth aligned to `config/trends/*.yaml` (`TrendConfig`) with strict fail-fast preflight on gold-set mismatch
 - [x] `TASK-066` multi-trend baseline expansion completed with human reviewer sign-off captured in sprint assessment/checklist records
 - [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings
 - [x] `TASK-118` launch-readiness assessment completed with explicit human sign-off (`Approved`) and launch decision recorded as `No-Go` pending remaining backlog hardening
@@ -206,7 +208,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
+2. Execute `TASK-128` corroboration row-parsing runtime fix
 
 ## Expert Feedback Integration ✅
 

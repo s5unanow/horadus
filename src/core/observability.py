@@ -79,6 +79,16 @@ LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL = Counter(
     "LLM semantic cache lookups by stage and result.",
     ["stage", "result"],
 )
+TAXONOMY_GAPS_TOTAL = Counter(
+    "taxonomy_gaps_total",
+    "Captured taxonomy-gap records by reason.",
+    ["reason"],
+)
+TAXONOMY_GAP_SIGNAL_KEYS_TOTAL = Counter(
+    "taxonomy_gap_signal_keys_total",
+    "Unknown signal-type taxonomy gaps by trend_id and signal_type.",
+    ["trend_id", "signal_type"],
+)
 
 
 def record_collector_metrics(
@@ -170,3 +180,13 @@ def record_processing_tier1_language_outcome(*, language: str, outcome: str) -> 
 
 def record_processing_tier2_language_usage(*, language: str) -> None:
     PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL.labels(language=language).inc()
+
+
+def record_taxonomy_gap(*, reason: str, trend_id: str, signal_type: str) -> None:
+    normalized_reason = reason.strip() or "unknown"
+    TAXONOMY_GAPS_TOTAL.labels(reason=normalized_reason).inc()
+    if normalized_reason == "unknown_signal_type":
+        TAXONOMY_GAP_SIGNAL_KEYS_TOTAL.labels(
+            trend_id=trend_id.strip() or "unknown",
+            signal_type=signal_type.strip() or "unknown",
+        ).inc()

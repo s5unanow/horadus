@@ -59,6 +59,8 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
             "ai/eval/gold_set.jsonl",
             "--output-dir",
             "ai/eval/results",
+            "--trend-config-dir",
+            "config/trends",
             "--max-items",
             "100",
             "--config",
@@ -75,6 +77,7 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
     assert args.eval_command == "benchmark"
     assert args.gold_set == "ai/eval/gold_set.jsonl"
     assert args.output_dir == "ai/eval/results"
+    assert args.trend_config_dir == "config/trends"
     assert args.max_items == 100
     assert args.config == ["baseline"]
     assert args.require_human_verified is True

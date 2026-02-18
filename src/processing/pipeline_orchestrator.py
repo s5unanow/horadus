@@ -18,6 +18,7 @@ from src.core.observability import (
     record_processing_ingested_language,
     record_processing_tier1_language_outcome,
     record_processing_tier2_language_usage,
+    record_taxonomy_gap,
 )
 from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
@@ -37,6 +38,8 @@ from src.storage.models import (
     ProcessingStatus,
     RawItem,
     Source,
+    TaxonomyGap,
+    TaxonomyGapReason,
     Trend,
     TrendEvidence,
 )
@@ -731,6 +734,18 @@ class ProcessingPipeline:
             impacts_seen += 1
             trend = trend_by_id.get(impact["trend_id"])
             if trend is None:
+                await self._capture_taxonomy_gap(
+                    event_id=event.id,
+                    trend_id=impact["trend_id"],
+                    signal_type=impact["signal_type"],
+                    reason=TaxonomyGapReason.UNKNOWN_TREND_ID,
+                    details={
+                        "direction": impact["direction"],
+                        "severity": impact["severity"],
+                        "confidence": impact["confidence"],
+                        "rationale": impact["rationale"],
+                    },
+                )
                 logger.warning(
                     "Skipping unknown trend impact",
                     event_id=str(event.id),
@@ -741,6 +756,19 @@ class ProcessingPipeline:
             signal_type = impact["signal_type"]
             indicator_weight = self._resolve_indicator_weight(trend=trend, signal_type=signal_type)
             if indicator_weight is None:
+                await self._capture_taxonomy_gap(
+                    event_id=event.id,
+                    trend_id=self._trend_identifier(trend),
+                    signal_type=signal_type,
+                    reason=TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE,
+                    details={
+                        "trend_uuid": str(trend.id),
+                        "direction": impact["direction"],
+                        "severity": impact["severity"],
+                        "confidence": impact["confidence"],
+                        "rationale": impact["rationale"],
+                    },
+                )
                 logger.warning(
                     "Skipping trend impact with unknown indicator weight",
                     event_id=str(event.id),
@@ -792,6 +820,41 @@ class ProcessingPipeline:
                 updates_applied += 1
 
         return (impacts_seen, updates_applied)
+
+    async def _capture_taxonomy_gap(
+        self,
+        *,
+        event_id: UUID,
+        trend_id: str,
+        signal_type: str,
+        reason: TaxonomyGapReason,
+        details: dict[str, Any],
+    ) -> None:
+        try:
+            self.session.add(
+                TaxonomyGap(
+                    event_id=event_id,
+                    trend_id=trend_id,
+                    signal_type=signal_type,
+                    reason=reason,
+                    source="pipeline",
+                    details=details,
+                )
+            )
+            await self.session.flush()
+            record_taxonomy_gap(
+                reason=reason.value,
+                trend_id=trend_id,
+                signal_type=signal_type,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to capture taxonomy gap",
+                event_id=str(event_id),
+                trend_id=trend_id,
+                signal_type=signal_type,
+                reason=reason.value,
+            )
 
     async def _load_event_source_credibility(self, event: Event) -> float:
         if event.primary_item_id is None:

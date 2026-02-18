@@ -13,11 +13,20 @@ from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
-from src.storage.models import Event, EventLifecycle, HumanFeedback, Trend, TrendEvidence
+from src.storage.models import (
+    Event,
+    EventLifecycle,
+    HumanFeedback,
+    TaxonomyGap,
+    TaxonomyGapReason,
+    TaxonomyGapStatus,
+    Trend,
+    TrendEvidence,
+)
 
 router = APIRouter()
 
@@ -106,6 +115,54 @@ class ReviewQueueItem(BaseModel):
     trend_impacts: list[ReviewQueueTrendImpact]
 
 
+class TaxonomyGapResponse(BaseModel):
+    """Serialized taxonomy-gap record."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    event_id: UUID | None
+    trend_id: str
+    signal_type: str
+    reason: str
+    source: str
+    details: dict[str, Any]
+    status: str
+    resolution_notes: str | None
+    resolved_by: str | None
+    resolved_at: datetime | None
+    observed_at: datetime
+
+
+class TaxonomyGapSummaryRow(BaseModel):
+    """Grouped unknown signal-type count by trend+signal."""
+
+    trend_id: str
+    signal_type: str
+    count: int
+
+
+class TaxonomyGapListResponse(BaseModel):
+    """Taxonomy-gap list and summary payload."""
+
+    total_count: int
+    open_count: int
+    resolved_count: int
+    rejected_count: int
+    unknown_trend_count: int
+    unknown_signal_count: int
+    top_unknown_signal_keys_by_trend: list[TaxonomyGapSummaryRow]
+    items: list[TaxonomyGapResponse]
+
+
+class TaxonomyGapUpdateRequest(BaseModel):
+    """Analyst update payload for taxonomy-gap triage."""
+
+    status: Literal["open", "resolved", "rejected"]
+    resolution_notes: str | None = None
+    resolved_by: str | None = None
+
+
 def _to_feedback_response(feedback: HumanFeedback) -> FeedbackResponse:
     feedback_id = feedback.id if feedback.id is not None else uuid4()
     created_at = feedback.created_at if feedback.created_at is not None else datetime.now(tz=UTC)
@@ -119,6 +176,25 @@ def _to_feedback_response(feedback: HumanFeedback) -> FeedbackResponse:
         notes=feedback.notes,
         created_by=feedback.created_by,
         created_at=created_at,
+    )
+
+
+def _to_taxonomy_gap_response(gap: TaxonomyGap) -> TaxonomyGapResponse:
+    gap_id = gap.id if gap.id is not None else uuid4()
+    observed_at = gap.observed_at if gap.observed_at is not None else datetime.now(tz=UTC)
+    return TaxonomyGapResponse(
+        id=gap_id,
+        event_id=gap.event_id,
+        trend_id=gap.trend_id,
+        signal_type=gap.signal_type,
+        reason=str(gap.reason),
+        source=gap.source or "pipeline",
+        details=gap.details if isinstance(gap.details, dict) else {},
+        status=str(gap.status),
+        resolution_notes=gap.resolution_notes,
+        resolved_by=gap.resolved_by,
+        resolved_at=gap.resolved_at,
+        observed_at=observed_at,
     )
 
 
@@ -142,6 +218,117 @@ async def list_feedback(
 
     records = list((await session.scalars(query)).all())
     return [_to_feedback_response(record) for record in records]
+
+
+@router.get("/taxonomy-gaps", response_model=TaxonomyGapListResponse)
+async def list_taxonomy_gaps(
+    days: int = Query(default=7, ge=1, le=30),
+    limit: int = Query(default=100, ge=1, le=500),
+    status_filter: Literal["open", "resolved", "rejected"] | None = Query(
+        default=None,
+        alias="status",
+    ),
+    session: AsyncSession = Depends(get_session),
+) -> TaxonomyGapListResponse:
+    """
+    List and summarize taxonomy-gap records for analyst triage.
+    """
+    since = datetime.now(tz=UTC) - timedelta(days=days)
+    filters = [TaxonomyGap.observed_at >= since]
+    normalized_status_filter = status_filter if isinstance(status_filter, str) else None
+    if normalized_status_filter is not None:
+        filters.append(TaxonomyGap.status == TaxonomyGapStatus(normalized_status_filter))
+
+    records_query = select(TaxonomyGap).order_by(TaxonomyGap.observed_at.desc()).limit(limit)
+    for condition in filters:
+        records_query = records_query.where(condition)
+    records = list((await session.scalars(records_query)).all())
+
+    grouped_counts_query = select(
+        TaxonomyGap.status,
+        TaxonomyGap.reason,
+        func.count(TaxonomyGap.id),
+    ).group_by(TaxonomyGap.status, TaxonomyGap.reason)
+    for condition in filters:
+        grouped_counts_query = grouped_counts_query.where(condition)
+    grouped_counts_rows = (await session.execute(grouped_counts_query)).all()
+
+    status_counts = {"open": 0, "resolved": 0, "rejected": 0}
+    reason_counts = {"unknown_trend_id": 0, "unknown_signal_type": 0}
+    total_count = 0
+    for row_status, row_reason, row_count in grouped_counts_rows:
+        status_key = str(row_status)
+        reason_key = str(row_reason)
+        count_value = int(row_count)
+        total_count += count_value
+        if status_key in status_counts:
+            status_counts[status_key] += count_value
+        if reason_key in reason_counts:
+            reason_counts[reason_key] += count_value
+
+    top_unknown_query = (
+        select(
+            TaxonomyGap.trend_id,
+            TaxonomyGap.signal_type,
+            func.count(TaxonomyGap.id).label("gap_count"),
+        )
+        .where(TaxonomyGap.reason == TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE)
+        .group_by(TaxonomyGap.trend_id, TaxonomyGap.signal_type)
+        .order_by(func.count(TaxonomyGap.id).desc(), TaxonomyGap.trend_id, TaxonomyGap.signal_type)
+        .limit(20)
+    )
+    for condition in filters:
+        top_unknown_query = top_unknown_query.where(condition)
+    top_unknown_rows = (await session.execute(top_unknown_query)).all()
+
+    return TaxonomyGapListResponse(
+        total_count=total_count,
+        open_count=status_counts["open"],
+        resolved_count=status_counts["resolved"],
+        rejected_count=status_counts["rejected"],
+        unknown_trend_count=reason_counts["unknown_trend_id"],
+        unknown_signal_count=reason_counts["unknown_signal_type"],
+        top_unknown_signal_keys_by_trend=[
+            TaxonomyGapSummaryRow(
+                trend_id=str(trend_id),
+                signal_type=str(signal_type),
+                count=int(count),
+            )
+            for trend_id, signal_type, count in top_unknown_rows
+        ],
+        items=[_to_taxonomy_gap_response(record) for record in records],
+    )
+
+
+@router.patch("/taxonomy-gaps/{gap_id}", response_model=TaxonomyGapResponse)
+async def update_taxonomy_gap(
+    gap_id: UUID,
+    payload: TaxonomyGapUpdateRequest,
+    session: AsyncSession = Depends(get_session),
+) -> TaxonomyGapResponse:
+    """
+    Update taxonomy-gap triage status and optional resolution metadata.
+    """
+    gap = await session.get(TaxonomyGap, gap_id)
+    if gap is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Taxonomy gap '{gap_id}' not found",
+        )
+
+    next_status = TaxonomyGapStatus(payload.status)
+    gap.status = next_status
+    if next_status == TaxonomyGapStatus.OPEN:
+        gap.resolution_notes = None
+        gap.resolved_by = None
+        gap.resolved_at = None
+    else:
+        gap.resolution_notes = payload.resolution_notes
+        gap.resolved_by = payload.resolved_by
+        gap.resolved_at = datetime.now(tz=UTC)
+
+    await session.flush()
+    return _to_taxonomy_gap_response(gap)
 
 
 @router.post("/events/{event_id}/feedback", response_model=FeedbackResponse)

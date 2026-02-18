@@ -19,8 +19,12 @@ Each JSONL row supports:
 Run benchmark:
 
 ```bash
-uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 50
+uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 50
 ```
+
+Benchmark preflight now fails fast on taxonomy mismatch between
+`config/trends/*.yaml` and gold-set labels (`tier1.trend_scores`,
+`tier2.trend_id`, `tier2.signal_type`) before scoring starts.
 
 Offline cost-oriented modes:
 
@@ -62,13 +66,13 @@ uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-d
 Run benchmark on only human-reviewed rows:
 
 ```bash
-uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --require-human-verified
+uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --require-human-verified
 ```
 
 Run full 200-item benchmark:
 
 ```bash
-uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
+uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200
 ```
 
 Run ANN vector strategy benchmark:

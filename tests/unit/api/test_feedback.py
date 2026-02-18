@@ -8,13 +8,24 @@ from fastapi import HTTPException
 
 from src.api.routes.feedback import (
     EventFeedbackRequest,
+    TaxonomyGapUpdateRequest,
     TrendOverrideRequest,
     create_event_feedback,
     create_trend_override,
     list_feedback,
     list_review_queue,
+    list_taxonomy_gaps,
+    update_taxonomy_gap,
 )
-from src.storage.models import Event, HumanFeedback, Trend, TrendEvidence
+from src.storage.models import (
+    Event,
+    HumanFeedback,
+    TaxonomyGap,
+    TaxonomyGapReason,
+    TaxonomyGapStatus,
+    Trend,
+    TrendEvidence,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -316,3 +327,93 @@ async def test_list_review_queue_filters_unreviewed_and_trend(mock_db_session) -
     assert len(unreviewed) == 1
     assert unreviewed[0].event_id == candidate_event.id
     assert unreviewed[0].feedback_count == 0
+
+
+@pytest.mark.asyncio
+async def test_list_taxonomy_gaps_returns_summary_and_top_unknown_signals(
+    mock_db_session,
+) -> None:
+    first_gap = TaxonomyGap(
+        id=uuid4(),
+        event_id=uuid4(),
+        trend_id="eu-russia",
+        signal_type="unknown_signal",
+        reason=TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE,
+        status=TaxonomyGapStatus.OPEN,
+        details={"direction": "escalatory"},
+    )
+    second_gap = TaxonomyGap(
+        id=uuid4(),
+        event_id=uuid4(),
+        trend_id="unknown-trend",
+        signal_type="military_movement",
+        reason=TaxonomyGapReason.UNKNOWN_TREND_ID,
+        status=TaxonomyGapStatus.RESOLVED,
+        details={"direction": "escalatory"},
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_gap, second_gap])
+    mock_db_session.execute.side_effect = [
+        SimpleNamespace(
+            all=lambda: [
+                (TaxonomyGapStatus.OPEN, TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE, 3),
+                (TaxonomyGapStatus.RESOLVED, TaxonomyGapReason.UNKNOWN_TREND_ID, 2),
+            ]
+        ),
+        SimpleNamespace(all=lambda: [("eu-russia", "unknown_signal", 3)]),
+    ]
+
+    result = await list_taxonomy_gaps(days=7, limit=20, session=mock_db_session)
+
+    assert result.total_count == 5
+    assert result.open_count == 3
+    assert result.resolved_count == 2
+    assert result.rejected_count == 0
+    assert result.unknown_signal_count == 3
+    assert result.unknown_trend_count == 2
+    assert result.top_unknown_signal_keys_by_trend[0].trend_id == "eu-russia"
+    assert result.top_unknown_signal_keys_by_trend[0].signal_type == "unknown_signal"
+    assert len(result.items) == 2
+
+
+@pytest.mark.asyncio
+async def test_update_taxonomy_gap_sets_resolution_fields(mock_db_session) -> None:
+    gap = TaxonomyGap(
+        id=uuid4(),
+        event_id=uuid4(),
+        trend_id="eu-russia",
+        signal_type="unknown_signal",
+        reason=TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE,
+        status=TaxonomyGapStatus.OPEN,
+        details={},
+    )
+    mock_db_session.get.return_value = gap
+
+    result = await update_taxonomy_gap(
+        gap_id=gap.id,
+        payload=TaxonomyGapUpdateRequest(
+            status="resolved",
+            resolution_notes="Added indicator mapping in trend config.",
+            resolved_by="analyst@horadus",
+        ),
+        session=mock_db_session,
+    )
+
+    assert gap.status == TaxonomyGapStatus.RESOLVED
+    assert gap.resolution_notes == "Added indicator mapping in trend config."
+    assert gap.resolved_by == "analyst@horadus"
+    assert gap.resolved_at is not None
+    assert result.status == "resolved"
+
+
+@pytest.mark.asyncio
+async def test_update_taxonomy_gap_returns_404_when_missing(mock_db_session) -> None:
+    mock_db_session.get.return_value = None
+
+    with pytest.raises(HTTPException, match="not found") as exc:
+        await update_taxonomy_gap(
+            gap_id=uuid4(),
+            payload=TaxonomyGapUpdateRequest(status="resolved"),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 404

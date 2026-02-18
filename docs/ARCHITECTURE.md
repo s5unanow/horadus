@@ -177,10 +177,17 @@ Launch language policy:
 └─────────────────────────────┘
 ```
 
+Taxonomy drift safety:
+- If Tier-2 emits an unknown `trend_id` or unknown `signal_type` mapping, the impact is skipped.
+- Skipped impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`).
+- This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
+
 Language-segmented operational metrics are emitted for:
 - intake (`processing_ingested_language_total`)
 - Tier-1 routing outcomes (`processing_tier1_language_outcome_total`)
 - Tier-2 usage (`processing_tier2_language_usage_total`)
+- taxonomy-gap volume (`taxonomy_gaps_total`)
+- unknown signal keys by trend (`taxonomy_gap_signal_keys_total`)
 
 ### 3. Probability Update (Detail)
 

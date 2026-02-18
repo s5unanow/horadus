@@ -103,6 +103,7 @@ async def _run_eval_benchmark(
     *,
     gold_set: str,
     output_dir: str,
+    trend_config_dir: str,
     max_items: int,
     config_names: list[str] | None,
     require_human_verified: bool,
@@ -113,6 +114,7 @@ async def _run_eval_benchmark(
         gold_set_path=gold_set,
         output_dir=output_dir,
         api_key=settings.OPENAI_API_KEY,
+        trend_config_dir=trend_config_dir,
         max_items=max(1, max_items),
         config_names=config_names,
         require_human_verified=require_human_verified,
@@ -351,6 +353,11 @@ def _build_parser() -> argparse.ArgumentParser:
         "--output-dir",
         default="ai/eval/results",
         help="Directory for benchmark result artifacts.",
+    )
+    eval_benchmark_parser.add_argument(
+        "--trend-config-dir",
+        default="config/trends",
+        help="Directory containing trend config YAML files used for benchmark taxonomy.",
     )
     eval_benchmark_parser.add_argument(
         "--max-items",
@@ -603,6 +610,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             _run_eval_benchmark(
                 gold_set=args.gold_set,
                 output_dir=args.output_dir,
+                trend_config_dir=args.trend_config_dir,
                 max_items=args.max_items,
                 config_names=args.config,
                 require_human_verified=args.require_human_verified,

@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-126: Taxonomy Drift Guardrails (Runtime Gap Queue + Benchmark Alignment) ✅
 - TASK-127: Cross-Ledger Drift Reconciliation and Dependency Hygiene ✅
 - TASK-085: Require Explicit Admin Key for Key Management ✅ (Approved)
 - TASK-140: In-Branch Backlog Capture Rule and Guard ✅

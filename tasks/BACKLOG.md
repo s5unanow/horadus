@@ -2056,14 +2056,14 @@ trend/signal mismatches visible and actionable in runtime, and by enforcing the
 same taxonomy source-of-truth in benchmark workflows.
 
 **Acceptance Criteria**:
-- [ ] Capture non-scoring taxonomy-gap records whenever trend impacts are skipped for unknown `trend_id` or unknown `signal_type`/indicator mapping
-- [ ] Keep current probability safety behavior: unknown taxonomy impacts never apply trend deltas
-- [ ] Add observability for taxonomy-gap volume/rate (including top unknown signal keys by trend) suitable for operator review
-- [ ] Provide an analyst-facing review path (API/CLI/report artifact) for taxonomy-gap triage and resolution tracking
-- [ ] Update benchmark trend loading to use `config/trends/*.yaml` (`TrendConfig`) instead of hardcoded fixture taxonomy
-- [ ] Add benchmark/taxonomy preflight that fails fast on dataset taxonomy mismatch (no silent score degradation via implicit zero fill)
-- [ ] Add/adjust tests for runtime gap capture, benchmark taxonomy loading, and fail-fast mismatch behavior
-- [ ] Document operator workflow for resolving taxonomy gaps (map to existing indicator, add indicator, or reject as out-of-scope)
+- [x] Capture non-scoring taxonomy-gap records whenever trend impacts are skipped for unknown `trend_id` or unknown `signal_type`/indicator mapping
+- [x] Keep current probability safety behavior: unknown taxonomy impacts never apply trend deltas
+- [x] Add observability for taxonomy-gap volume/rate (including top unknown signal keys by trend) suitable for operator review
+- [x] Provide an analyst-facing review path (API/CLI/report artifact) for taxonomy-gap triage and resolution tracking
+- [x] Update benchmark trend loading to use `config/trends/*.yaml` (`TrendConfig`) instead of hardcoded fixture taxonomy
+- [x] Add benchmark/taxonomy preflight that fails fast on dataset taxonomy mismatch (no silent score degradation via implicit zero fill)
+- [x] Add/adjust tests for runtime gap capture, benchmark taxonomy loading, and fail-fast mismatch behavior
+- [x] Document operator workflow for resolving taxonomy gaps (map to existing indicator, add indicator, or reject as out-of-scope)
 
 ---
 

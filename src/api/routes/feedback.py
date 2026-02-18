@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.trend_engine import TrendEngine
 from src.storage.database import get_session
 from src.storage.models import (
     Event,
@@ -373,7 +374,9 @@ async def create_event_feedback(
                 evidence.delta_log_odds
             )
 
+        trend_adjustments: dict[str, dict[str, float]] = {}
         if trend_deltas:
+            trend_engine = TrendEngine(session=session)
             trends = list(
                 (
                     await session.scalars(
@@ -381,11 +384,26 @@ async def create_event_feedback(
                     )
                 ).all()
             )
-            for trend in trends:
-                trend_delta = trend_deltas.get(trend.id)
-                if trend_delta is None:
-                    continue
-                trend.current_log_odds = float(trend.current_log_odds) - trend_delta
+            trend_by_id = {trend.id: trend for trend in trends}
+            for trend_id, trend_delta in trend_deltas.items():
+                trend = trend_by_id.get(trend_id)
+                trend_name = trend.name if trend is not None else None
+                fallback_current = float(trend.current_log_odds) if trend is not None else None
+                previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
+                    trend_id=trend_id,
+                    trend_name=trend_name,
+                    delta=-trend_delta,
+                    reason="event_invalidation",
+                    fallback_current_log_odds=fallback_current,
+                )
+                if trend is not None:
+                    trend.current_log_odds = new_lo
+                    trend.updated_at = datetime.now(tz=UTC)
+                trend_adjustments[str(trend_id)] = {
+                    "previous_log_odds": previous_lo,
+                    "new_log_odds": new_lo,
+                    "delta_applied": -trend_delta,
+                }
 
         for evidence in evidences:
             await session.delete(evidence)
@@ -397,6 +415,7 @@ async def create_event_feedback(
         corrected_value = {
             "reverted_event_id": str(event_id),
             "affected_trend_count": len(trend_deltas),
+            "trend_adjustments": trend_adjustments,
         }
 
     feedback = HumanFeedback(
@@ -610,7 +629,14 @@ async def create_trend_override(
         )
 
     previous_log_odds = float(trend.current_log_odds)
-    new_log_odds = previous_log_odds + float(payload.delta_log_odds)
+    trend_engine = TrendEngine(session=session)
+    previous_log_odds, new_log_odds = await trend_engine.apply_log_odds_delta(
+        trend_id=trend.id,
+        trend_name=trend.name,
+        delta=float(payload.delta_log_odds),
+        reason="manual_override",
+        fallback_current_log_odds=previous_log_odds,
+    )
     trend.current_log_odds = new_log_odds
     trend.updated_at = datetime.now(tz=UTC)
 

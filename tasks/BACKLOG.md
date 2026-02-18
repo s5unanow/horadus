@@ -2107,10 +2107,10 @@ Prevent lost trend probability updates by making evidence/decay/manual
 adjustments atomic and concurrency-safe.
 
 **Acceptance Criteria**:
-- [ ] Replace read-modify-write update path for `trend.current_log_odds` with a concurrency-safe atomic update strategy
-- [ ] Preserve deterministic trend-snapshot/audit behavior while applying atomic updates
-- [ ] Add concurrency-focused tests (parallel workers/updates) proving no dropped deltas under contention
-- [ ] Document expected locking/serialization behavior for trend updates in architecture or operations docs
+- [x] Replace read-modify-write update path for `trend.current_log_odds` with a concurrency-safe atomic update strategy
+- [x] Preserve deterministic trend-snapshot/audit behavior while applying atomic updates
+- [x] Add concurrency-focused tests (parallel workers/updates) proving no dropped deltas under contention
+- [x] Document expected locking/serialization behavior for trend updates in architecture or operations docs
 
 ---
 

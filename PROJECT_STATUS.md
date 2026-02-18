@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-17
+**Last Updated**: 2026-02-18
 **Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
 **Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
@@ -14,7 +14,7 @@ Phase 3: Trend Engine        [████████████████�
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
 Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
-Phase 8: Hardening (NEW)     [██████████████████░░]  90%  🚧 IN PROGRESS
+Phase 8: Hardening (NEW)     [██████████████████░░]  92%  🚧 IN PROGRESS
 ```
 
 ## What's Working
@@ -52,7 +52,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Tier 1 routing updates (`noise` vs Tier 2-ready `processing`) and usage metrics
 - [x] Tier 2 classifier baseline (structured extraction + per-trend impacts)
 - [x] Tier 2 strict output validation (including trend id safeguards) and usage metrics
-- [x] Processing pipeline orchestrator (dedup → embed → cluster → tier1 → tier2)
+- [x] Processing pipeline orchestrator (dedup → tier1 → embed → cluster → tier2)
 - [x] Celery processing task auto-triggered by new ingested items
 - [x] Pipeline run metrics and end-to-end integration coverage
 - [x] Trend management API CRUD endpoints (`/api/v1/trends`)
@@ -189,21 +189,21 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings
 - [x] `TASK-118` launch-readiness assessment completed with explicit human sign-off (`Approved`) and launch decision recorded as `No-Go` pending remaining backlog hardening
 - [x] `TASK-070` baseline prior review/sign-off completed with human approval for all active trends
+- [x] `TASK-077` cost-first ordering completed with human sign-off (`Approved`); Tier-1 now gates embedding/clustering
 
 ## In Progress
 
-- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` (checklist prepared; manual implementation/approval pending)
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)
 
 ## Blocked
 
-- `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
+- `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
 
 ## Next Up (Priority Order)
 
-1. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+1. Resolve remaining human-gated hardening tasks (`TASK-080`, `TASK-084`, `TASK-085`)
 2. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
 
 ## Expert Feedback Integration ✅
@@ -246,7 +246,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`) remain the main completion bottleneck, and launch stays `No-Go` until they are resolved.
+- Human-gated hardening tasks (`TASK-080`, `TASK-084`, `TASK-085`) remain the main completion bottleneck, and launch stays `No-Go` until they are resolved.
 
 ## Architecture Validated ✅
 

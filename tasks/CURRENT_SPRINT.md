@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` — Checklist prepared; awaiting manual analyst baseline validation
 - `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
@@ -19,6 +18,7 @@
 
 ## Completed This Sprint
 
+- `TASK-070` Trend Baseline Prior Review and Sign-Off — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-118` Launch Readiness and Guidance Drift Assessment — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`; Launch=`No-Go`)
 - `TASK-044` Curated Human-Verified Gold Dataset — DONE ✓ (human sign-off recorded 2026-02-18; `human_verified=325`)
 - `TASK-066` Expand Trend Catalog to Multi-Trend Baseline — DONE ✓ (human sign-off recorded 2026-02-17)
@@ -49,4 +49,4 @@
 - `TASK-118` assessment artifact: `tasks/assessments/TASK-118-launch-readiness-assessment-2026-02-18.md`.
 - `TASK-118` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Launch=`No-Go`; Notes=`Open launch-readiness backlog must be completed before go-live.`
 - `TASK-070` reviewer checklist: `tasks/assessments/TASK-070-baseline-prior-signoff-checklist-2026-02-18.md`.
-- `TASK-070` sign-off record (fill before marking DONE): Reviewer=`TBD`; Date=`TBD`; Decision=`Pending`; Notes=`TBD`.
+- `TASK-070` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`All active trend baseline priors approved in human review; local DB parity command failed with postgres auth mismatch and was accepted as local-environment verification waiver.`

@@ -57,8 +57,8 @@ uv run --no-sync mypy src/
 
 ## Final Task-Level Sign-Off
 
-- Reviewer name: `TBD`
-- Review date: `TBD`
-- Decision: `Pending` (`Approved` / `Blocked`)
-- Blocking issues (if any): `TBD`
-- Notes for sprint record: `TBD`
+- Reviewer name: `s5una`
+- Review date: `2026-02-18`
+- Decision: `Approved` (`Approved` / `Blocked`)
+- Blocking issues (if any): `None`
+- Notes for sprint record: `Explicit admin key requirement verified; no authenticated-key fallback remains for key-management endpoints.`

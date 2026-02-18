@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-140: In-Branch Backlog Capture Rule and Guard ✅
 - TASK-084: Production Security Default Guardrails ✅ (Approved)
 - TASK-077: Cost-First Pipeline Ordering ✅ (Approved)
 - TASK-070: Trend Baseline Prior Review and Sign-Off ✅ (Approved)

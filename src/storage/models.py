@@ -130,6 +130,21 @@ class OutcomeType(enum.StrEnum):
     ONGOING = "ongoing"
 
 
+class TaxonomyGapReason(enum.StrEnum):
+    """Reason a trend impact was ignored due to taxonomy mismatch."""
+
+    UNKNOWN_TREND_ID = "unknown_trend_id"
+    UNKNOWN_SIGNAL_TYPE = "unknown_signal_type"
+
+
+class TaxonomyGapStatus(enum.StrEnum):
+    """Analyst triage lifecycle for recorded taxonomy gaps."""
+
+    OPEN = "open"
+    RESOLVED = "resolved"
+    REJECTED = "rejected"
+
+
 def enum_values(enum_class: type[enum.Enum]) -> list[str]:
     """Persist enum values (not member names) in PostgreSQL enums."""
     return [str(member.value) for member in enum_class]
@@ -420,6 +435,7 @@ class Event(Base):
     # Relationships
     item_links: Mapped[list[EventItem]] = relationship(back_populates="event")
     evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="event")
+    taxonomy_gaps: Mapped[list[TaxonomyGap]] = relationship(back_populates="event")
 
     # Indexes
     __table_args__ = (
@@ -609,6 +625,69 @@ class TrendEvidence(Base):
         UniqueConstraint("trend_id", "event_id", "signal_type", name="uq_trend_event_signal"),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
+    )
+
+
+class TaxonomyGap(Base):
+    """
+    Runtime taxonomy mismatch record for analyst triage.
+
+    Rows are created when Tier-2 impacts are skipped because:
+    - trend_id is unknown to active trend taxonomy, or
+    - signal_type is not configured for a known trend.
+    """
+
+    __tablename__ = "taxonomy_gaps"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    event_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="SET NULL"),
+    )
+    trend_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    signal_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    reason: Mapped[TaxonomyGapReason] = mapped_column(
+        Enum(TaxonomyGapReason, name="taxonomy_gap_reason", values_callable=enum_values),
+        nullable=False,
+    )
+    source: Mapped[str] = mapped_column(
+        String(50),
+        default="pipeline",
+        server_default=text("'pipeline'"),
+        nullable=False,
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
+    status: Mapped[TaxonomyGapStatus] = mapped_column(
+        Enum(TaxonomyGapStatus, name="taxonomy_gap_status", values_callable=enum_values),
+        default=TaxonomyGapStatus.OPEN,
+        server_default=text("'open'"),
+        nullable=False,
+    )
+    resolution_notes: Mapped[str | None] = mapped_column(Text)
+    resolved_by: Mapped[str | None] = mapped_column(String(255))
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    event: Mapped[Event | None] = relationship(back_populates="taxonomy_gaps")
+
+    __table_args__ = (
+        Index("idx_taxonomy_gaps_observed_at", "observed_at"),
+        Index("idx_taxonomy_gaps_status_observed", "status", "observed_at"),
+        Index("idx_taxonomy_gaps_reason", "reason"),
+        Index("idx_taxonomy_gaps_trend_signal", "trend_id", "signal_type"),
     )
 
 

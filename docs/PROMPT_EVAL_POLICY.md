@@ -59,8 +59,9 @@ Required handling:
 - If audit fails, do not promote prompt changes.
 
 3. Run benchmark
-- Preferred (true gold): `uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --require-human-verified`
+- Preferred (true gold): `uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --require-human-verified`
 - Temporary fallback (until TASK-044): run without `--require-human-verified`, and mark run as provisional.
+ - Benchmark now fails fast if gold-set taxonomy mismatches configured trends/indicators.
 
 4. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.

@@ -304,6 +304,39 @@ where:
 
 ---
 
+### taxonomy_gaps
+
+Runtime triage queue for skipped Tier-2 trend impacts caused by taxonomy mismatch.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| event_id | UUID | Yes | | Optional FK to `events` (`SET NULL` on delete) |
+| trend_id | VARCHAR(255) | No | | Trend identifier emitted by Tier-2 payload |
+| signal_type | VARCHAR(255) | No | | Indicator key emitted by Tier-2 payload |
+| reason | ENUM | No | | `unknown_trend_id` or `unknown_signal_type` |
+| source | VARCHAR(50) | No | `pipeline` | Runtime source that recorded the gap |
+| details | JSONB | No | `{}` | Structured context (`direction`, `severity`, `confidence`, etc.) |
+| status | ENUM | No | `open` | Analyst triage status (`open`, `resolved`, `rejected`) |
+| resolution_notes | TEXT | Yes | | Analyst notes for resolution decision |
+| resolved_by | VARCHAR(255) | Yes | | Reviewer identity |
+| resolved_at | TIMESTAMPTZ | Yes | | Resolution timestamp |
+| observed_at | TIMESTAMPTZ | No | NOW() | First capture timestamp |
+
+**Indexes:**
+- Primary key: `id`
+- Index: `observed_at DESC`
+- Index: `(status, observed_at DESC)`
+- Index: `reason`
+- Index: `(trend_id, signal_type)`
+
+**Operational intent:**
+- Unknown taxonomy impacts are never scored into trend deltas.
+- Every skipped impact is persisted here for analyst triage and closure tracking.
+- API triage path: `GET /api/v1/taxonomy-gaps`, `PATCH /api/v1/taxonomy-gaps/{id}`.
+
+---
+
 ### trend_snapshots
 
 Time-series of trend probabilities (TimescaleDB hypertable).

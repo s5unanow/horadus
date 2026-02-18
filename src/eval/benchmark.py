@@ -13,9 +13,12 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
+import yaml
 from openai import AsyncOpenAI
+from pydantic import ValidationError
 
 from src.core.config import settings
+from src.core.trend_config import TrendConfig
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import (
     Tier2Classifier,
@@ -393,54 +396,132 @@ def _resolve_configs(config_names: list[str] | None) -> list[EvalConfig]:
     return selected
 
 
-def _build_trends() -> list[Any]:
-    return [
-        SimpleNamespace(
-            id=uuid5(NAMESPACE_URL, "trend/eu-russia"),
-            name="EU-Russia",
-            definition={"id": "eu-russia"},
-            indicators={
-                "military_movement": {
-                    "direction": "escalatory",
-                    "keywords": ["troops", "deployment", "border", "artillery"],
+def _format_group_summary(grouped_items: dict[str, list[str]], *, limit: int = 8) -> str:
+    ordered = sorted(grouped_items.items(), key=lambda entry: (-len(entry[1]), entry[0]))
+    parts: list[str] = []
+    for key, item_ids in ordered[:limit]:
+        sample = ", ".join(sorted(item_ids)[:3])
+        suffix = f", +{len(item_ids) - 3} more" if len(item_ids) > 3 else ""
+        parts.append(f"{key}({len(item_ids)}; sample={sample}{suffix})")
+    if len(ordered) > limit:
+        parts.append(f"+{len(ordered) - limit} more")
+    return ", ".join(parts)
+
+
+def _load_trends_from_config(*, config_dir: Path) -> list[Any]:
+    if not config_dir.exists() or not config_dir.is_dir():
+        msg = f"Trend config directory not found: {config_dir}"
+        raise ValueError(msg)
+
+    files = sorted([*config_dir.glob("*.yaml"), *config_dir.glob("*.yml")])
+    if not files:
+        msg = f"No trend config YAML files found in: {config_dir}"
+        raise ValueError(msg)
+
+    trends: list[Any] = []
+    seen_ids: set[str] = set()
+    for file_path in files:
+        try:
+            raw_config = yaml.safe_load(file_path.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            msg = f"Failed to load trend config {file_path.name}: {exc}"
+            raise ValueError(msg) from exc
+
+        if not isinstance(raw_config, dict):
+            msg = f"Trend config {file_path.name} must be a mapping"
+            raise ValueError(msg)
+
+        try:
+            parsed = TrendConfig.model_validate(raw_config)
+        except ValidationError as exc:
+            msg = f"TrendConfig validation failed for {file_path.name}: {exc}"
+            raise ValueError(msg) from exc
+
+        trend_id = (parsed.id or "").strip()
+        if not trend_id:
+            msg = f"Trend config {file_path.name} missing required trend id"
+            raise ValueError(msg)
+        if trend_id in seen_ids:
+            msg = f"Duplicate trend id in config dir: {trend_id}"
+            raise ValueError(msg)
+        seen_ids.add(trend_id)
+
+        trends.append(
+            SimpleNamespace(
+                id=uuid5(NAMESPACE_URL, f"trend/{trend_id}"),
+                name=parsed.name,
+                definition={"id": trend_id},
+                indicators={
+                    signal_type: {
+                        "weight": config.weight,
+                        "direction": config.direction,
+                        "keywords": list(config.keywords),
+                    }
+                    for signal_type, config in parsed.indicators.items()
                 },
-                "diplomatic_breakdown": {
-                    "direction": "escalatory",
-                    "keywords": ["talks", "sanctions", "ultimatum"],
-                },
-            },
-        ),
-        SimpleNamespace(
-            id=uuid5(NAMESPACE_URL, "trend/us-china"),
-            name="US-China",
-            definition={"id": "us-china"},
-            indicators={
-                "diplomatic_engagement": {
-                    "direction": "de_escalatory",
-                    "keywords": ["summit", "dialogue", "talks", "agreement"],
-                },
-                "trade_restriction": {
-                    "direction": "escalatory",
-                    "keywords": ["tariff", "export controls", "restrictions"],
-                },
-            },
-        ),
-        SimpleNamespace(
-            id=uuid5(NAMESPACE_URL, "trend/middle-east"),
-            name="Middle East",
-            definition={"id": "middle-east"},
-            indicators={
-                "energy_disruption": {
-                    "direction": "escalatory",
-                    "keywords": ["pipeline", "oil", "shipping", "strait"],
-                },
-                "ceasefire": {
-                    "direction": "de_escalatory",
-                    "keywords": ["ceasefire", "mediation", "truce"],
-                },
-            },
-        ),
-    ]
+            )
+        )
+
+    trends.sort(key=lambda trend: str(trend.definition.get("id", "")))
+    return trends
+
+
+def _assert_gold_set_taxonomy_alignment(*, items: list[GoldSetItem], trends: list[Any]) -> None:
+    indicators_by_trend: dict[str, set[str]] = {}
+    for trend in trends:
+        trend_id = str(trend.definition.get("id", "")).strip()
+        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
+        indicators_by_trend[trend_id] = set(indicators.keys())
+
+    configured_trend_ids = set(indicators_by_trend.keys())
+    tier1_unknown_keys: dict[str, list[str]] = {}
+    tier1_missing_keys: dict[str, list[str]] = {}
+    tier2_unknown_trend_ids: dict[str, list[str]] = {}
+    tier2_unknown_signal_types: dict[str, list[str]] = {}
+
+    for item in items:
+        row_trend_keys = set(item.tier1.trend_scores.keys())
+        for unknown_key in sorted(row_trend_keys - configured_trend_ids):
+            tier1_unknown_keys.setdefault(unknown_key, []).append(item.item_id)
+        for missing_key in sorted(configured_trend_ids - row_trend_keys):
+            tier1_missing_keys.setdefault(missing_key, []).append(item.item_id)
+
+        if item.tier2 is None:
+            continue
+        if item.tier2.trend_id not in configured_trend_ids:
+            tier2_unknown_trend_ids.setdefault(item.tier2.trend_id, []).append(item.item_id)
+            continue
+
+        expected_signal_types = indicators_by_trend[item.tier2.trend_id]
+        if item.tier2.signal_type not in expected_signal_types:
+            mismatch_key = f"{item.tier2.trend_id}:{item.tier2.signal_type}"
+            tier2_unknown_signal_types.setdefault(mismatch_key, []).append(item.item_id)
+
+    failures: list[str] = []
+    if tier1_unknown_keys:
+        failures.append(
+            "Tier-1 trend_scores contains unknown trend_id values: "
+            + _format_group_summary(tier1_unknown_keys)
+        )
+    if tier1_missing_keys:
+        failures.append(
+            "Tier-1 benchmark preflight requires exact configured trend_ids; missing keys: "
+            + _format_group_summary(tier1_missing_keys)
+        )
+    if tier2_unknown_trend_ids:
+        failures.append(
+            "Tier-2 labels contain unknown trend_id values: "
+            + _format_group_summary(tier2_unknown_trend_ids)
+        )
+    if tier2_unknown_signal_types:
+        failures.append(
+            "Tier-2 labels contain unknown signal_type values for configured trends: "
+            + _format_group_summary(tier2_unknown_signal_types)
+        )
+
+    if failures:
+        msg = "Benchmark taxonomy preflight failed:\n- " + "\n- ".join(failures)
+        raise ValueError(msg)
 
 
 def _item_uuid(item_id: str) -> UUID:
@@ -527,6 +608,7 @@ async def run_gold_set_benchmark(
     gold_set_path: str,
     output_dir: str,
     api_key: str,
+    trend_config_dir: str = "config/trends",
     max_items: int = 200,
     config_names: list[str] | None = None,
     require_human_verified: bool = False,
@@ -545,7 +627,8 @@ async def run_gold_set_benchmark(
     normalized_request_priority = _normalize_request_priority(request_priority)
     request_overrides = _request_overrides_for_priority(normalized_request_priority)
     configs = _resolve_configs(config_names)
-    trends = _build_trends()
+    trends = _load_trends_from_config(config_dir=Path(trend_config_dir))
+    _assert_gold_set_taxonomy_alignment(items=gold_items, trends=trends)
     raw_items = [_build_raw_item(item) for item in gold_items]
     label_verification_counts = _count_label_verification(gold_items)
 
@@ -553,6 +636,7 @@ async def run_gold_set_benchmark(
     run_payload: dict[str, Any] = {
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "gold_set_path": str(Path(gold_set_path)),
+        "trend_config_dir": str(Path(trend_config_dir)),
         "items_evaluated": len(gold_items),
         "require_human_verified": require_human_verified,
         "dispatch_mode": dispatch_mode,

@@ -52,6 +52,41 @@ def _write_gold_set(path: Path) -> None:
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
 
+def _write_trend_configs(config_dir: Path) -> None:
+    config_dir.mkdir(parents=True, exist_ok=True)
+    configs = {
+        "eu-russia.yaml": {
+            "id": "eu-russia",
+            "name": "EU-Russia",
+            "baseline_probability": 0.2,
+            "indicators": {
+                "military_movement": {"weight": 0.04, "direction": "escalatory"},
+                "diplomatic_breakdown": {"weight": 0.03, "direction": "escalatory"},
+            },
+        },
+        "us-china.yaml": {
+            "id": "us-china",
+            "name": "US-China",
+            "baseline_probability": 0.2,
+            "indicators": {
+                "diplomatic_engagement": {"weight": 0.03, "direction": "de_escalatory"},
+                "trade_restriction": {"weight": 0.03, "direction": "escalatory"},
+            },
+        },
+        "middle-east.yaml": {
+            "id": "middle-east",
+            "name": "Middle East",
+            "baseline_probability": 0.2,
+            "indicators": {
+                "energy_disruption": {"weight": 0.03, "direction": "escalatory"},
+                "ceasefire": {"weight": 0.02, "direction": "de_escalatory"},
+            },
+        },
+    }
+    for file_name, payload in configs.items():
+        (config_dir / file_name).write_text(json.dumps(payload), encoding="utf-8")
+
+
 class _FakeTier1Classifier:
     def __init__(
         self,
@@ -160,7 +195,9 @@ async def test_run_gold_set_benchmark_writes_results(
 ) -> None:
     gold_set_path = tmp_path / "gold_set.jsonl"
     output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
     _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
     monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
@@ -174,6 +211,7 @@ async def test_run_gold_set_benchmark_writes_results(
         gold_set_path=str(gold_set_path),
         output_dir=str(output_dir),
         api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
         max_items=2,
         config_names=["baseline"],
     )
@@ -181,6 +219,7 @@ async def test_run_gold_set_benchmark_writes_results(
     assert result_path.exists()
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     assert payload["items_evaluated"] == 2
+    assert payload["trend_config_dir"] == str(trend_config_dir)
     assert payload["require_human_verified"] is False
     assert payload["label_verification_counts"] == {"human_verified": 1, "llm_seeded": 1}
     assert payload["dataset_scope"] == {"max_items": 2, "require_human_verified": False}
@@ -209,7 +248,9 @@ async def test_run_gold_set_benchmark_filters_human_verified(
 ) -> None:
     gold_set_path = tmp_path / "gold_set.jsonl"
     output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
     _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
     monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
@@ -223,6 +264,7 @@ async def test_run_gold_set_benchmark_filters_human_verified(
         gold_set_path=str(gold_set_path),
         output_dir=str(output_dir),
         api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
         max_items=10,
         config_names=["baseline"],
         require_human_verified=True,
@@ -268,7 +310,9 @@ async def test_run_gold_set_benchmark_records_tier1_failures(
 ) -> None:
     gold_set_path = tmp_path / "gold_set.jsonl"
     output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
     _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FailingTier1Classifier)
     monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
@@ -282,6 +326,7 @@ async def test_run_gold_set_benchmark_records_tier1_failures(
         gold_set_path=str(gold_set_path),
         output_dir=str(output_dir),
         api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
         max_items=2,
         config_names=["baseline"],
     )
@@ -299,7 +344,9 @@ async def test_run_gold_set_benchmark_records_tier2_failures(
 ) -> None:
     gold_set_path = tmp_path / "gold_set.jsonl"
     output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
     _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
     monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FailingTier2Classifier)
@@ -313,6 +360,7 @@ async def test_run_gold_set_benchmark_records_tier2_failures(
         gold_set_path=str(gold_set_path),
         output_dir=str(output_dir),
         api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
         max_items=2,
         config_names=["baseline"],
     )
@@ -332,7 +380,9 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
 ) -> None:
     gold_set_path = tmp_path / "gold_set.jsonl"
     output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
     _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
     captured: dict[str, object] = {}
 
     class _CapturingTier1Classifier(_FakeTier1Classifier):
@@ -388,6 +438,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
         gold_set_path=str(gold_set_path),
         output_dir=str(output_dir),
         api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
         max_items=2,
         config_names=["baseline"],
         dispatch_mode="batch",
@@ -406,11 +457,38 @@ async def test_run_gold_set_benchmark_rejects_invalid_dispatch_mode(tmp_path: Pa
     gold_set_path = tmp_path / "gold_set.jsonl"
     output_dir = tmp_path / "results"
     _write_gold_set(gold_set_path)
+    _write_trend_configs(tmp_path / "trends")
 
     with pytest.raises(ValueError, match="Unsupported dispatch mode"):
         await benchmark_module.run_gold_set_benchmark(
             gold_set_path=str(gold_set_path),
             output_dir=str(output_dir),
             api_key="dummy",  # pragma: allowlist secret
+            trend_config_dir=str(tmp_path / "trends"),
             dispatch_mode="invalid",
+        )
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_fails_fast_on_taxonomy_mismatch(tmp_path: Path) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+
+    payload = json.loads(gold_set_path.read_text(encoding="utf-8").splitlines()[0])
+    payload["expected"]["tier1"]["trend_scores"]["nonexistent-trend"] = 4
+    lines = gold_set_path.read_text(encoding="utf-8").splitlines()
+    lines[0] = json.dumps(payload)
+    gold_set_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Benchmark taxonomy preflight failed"):
+        await benchmark_module.run_gold_set_benchmark(
+            gold_set_path=str(gold_set_path),
+            output_dir=str(output_dir),
+            api_key="dummy",  # pragma: allowlist secret
+            trend_config_dir=str(trend_config_dir),
+            max_items=2,
+            config_names=["baseline"],
         )

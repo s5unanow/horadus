@@ -19,7 +19,7 @@ from src.processing.pipeline_orchestrator import (
 )
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2EventResult, Tier2Usage
-from src.storage.models import Event, ProcessingStatus, RawItem
+from src.storage.models import Event, ProcessingStatus, RawItem, TaxonomyGap, TaxonomyGapReason
 
 pytestmark = pytest.mark.unit
 
@@ -694,6 +694,91 @@ async def test_process_items_skips_unknown_signal_weight(mock_db_session) -> Non
     assert result.errors == 0
     assert result.trend_impacts_seen == 1
     assert result.trend_updates == 0
+    gap_record = mock_db_session.add.call_args.args[0]
+    assert isinstance(gap_record, TaxonomyGap)
+    assert gap_record.reason == TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE
+    assert gap_record.trend_id == "eu-russia"
+    assert gap_record.signal_type == "unknown_signal"
+
+
+@pytest.mark.asyncio
+async def test_process_items_records_taxonomy_gap_for_unknown_trend_id(mock_db_session) -> None:
+    item = _build_item()
+    trend = _build_trend()
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Seed summary",
+        extracted_claims={
+            "trend_impacts": [
+                {
+                    "trend_id": "unknown-trend",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.7,
+                    "confidence": 0.8,
+                }
+            ]
+        },
+    )
+
+    dedup = SimpleNamespace(find_duplicate=AsyncMock(return_value=DeduplicationResult(False)))
+    embedding = SimpleNamespace(embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)))
+    clusterer = SimpleNamespace(
+        cluster_item=AsyncMock(
+            return_value=ClusterResult(
+                item_id=item.id,
+                event_id=event.id,
+                created=True,
+                merged=False,
+            )
+        )
+    )
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True)],
+                Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
+    tier2 = SimpleNamespace(
+        classify_event=AsyncMock(
+            return_value=(
+                Tier2EventResult(
+                    event_id=event.id,
+                    categories_count=1,
+                    trend_impacts_count=1,
+                ),
+                Tier2Usage(prompt_tokens=20, completion_tokens=6, api_calls=1),
+            )
+        )
+    )
+    mock_trend_engine = SimpleNamespace(apply_evidence=AsyncMock())
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=dedup,
+        embedding_service=embedding,
+        event_clusterer=clusterer,
+        tier1_classifier=tier1,
+        tier2_classifier=tier2,
+        trend_engine=mock_trend_engine,
+    )
+
+    result = await pipeline.process_items([item], trends=[trend])
+
+    assert result.scanned == 1
+    assert result.processed == 1
+    assert result.classified == 1
+    assert result.errors == 0
+    assert result.trend_impacts_seen == 1
+    assert result.trend_updates == 0
+    gap_record = mock_db_session.add.call_args.args[0]
+    assert isinstance(gap_record, TaxonomyGap)
+    assert gap_record.reason == TaxonomyGapReason.UNKNOWN_TREND_ID
+    assert gap_record.trend_id == "unknown-trend"
+    assert gap_record.signal_type == "military_movement"
 
 
 @pytest.mark.asyncio

@@ -2459,10 +2459,10 @@ type/length definition (e.g., `raw_items.external_id`).
 **Files**: `docs/DATA_MODEL.md`, `src/storage/models.py`
 
 **Acceptance Criteria**:
-- [ ] Update `sources` table docs to include `source_tier`, `reporting_type`, `error_count`, `last_error`
-- [ ] Update `raw_items` table docs to include `author` and correct `external_id` length (runtime is `String(2048)`)
-- [ ] Update `events` table docs to include `unique_source_count`, `lifecycle_status`, `last_mention_at`, `confirmed_at`, contradiction fields, and any other runtime columns
-- [ ] Ensure ERD is either updated to include key runtime entities or explicitly labeled as “core tables only” to avoid misleading reviewers
+- [x] Update `sources` table docs to include `source_tier`, `reporting_type`, `error_count`, `last_error`
+- [x] Update `raw_items` table docs to include `author` and correct `external_id` length (runtime is `String(2048)`)
+- [x] Update `events` table docs to include `unique_source_count`, `lifecycle_status`, `last_mention_at`, `confirmed_at`, contradiction fields, and any other runtime columns
+- [x] Ensure ERD is either updated to include key runtime entities or explicitly labeled as “core tables only” to avoid misleading reviewers
 
 ---
 

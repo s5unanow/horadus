@@ -2,6 +2,9 @@
 
 ## Entity Relationship Diagram
 
+This ERD is a core-table orientation view, not an exhaustive per-column schema reference.
+Use the table definitions below as the runtime-authoritative column inventory.
+
 ```
 ┌─────────────────┐          ┌─────────────────┐          ┌─────────────────┐
 │     sources     │          │    raw_items    │          │     events      │
@@ -67,15 +70,23 @@ Stores configuration for data sources (RSS feeds, Telegram channels, etc.)
 | name | VARCHAR(255) | No | | Human-readable name |
 | url | TEXT | Yes | | Source URL (for RSS/API) |
 | credibility_score | DECIMAL(3,2) | No | 0.50 | Reliability score (0.00-1.00) |
+| source_tier | VARCHAR(20) | No | 'regional' | Source tier: primary, wire, major, regional, aggregator |
+| reporting_type | VARCHAR(20) | No | 'secondary' | Reporting type: firsthand, secondary, aggregator |
 | config | JSONB | No | {} | Source-specific configuration |
 | is_active | BOOLEAN | No | true | Whether to collect from this source |
 | last_fetched_at | TIMESTAMPTZ | Yes | | Last successful fetch time |
 | ingestion_window_end_at | TIMESTAMPTZ | Yes | | Per-source ingestion high-water timestamp for overlap-aware next windows |
+| error_count | INTEGER | No | 0 | Consecutive collection error count |
+| last_error | TEXT | Yes | | Most recent collection error message |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 | updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
 
 **Indexes:**
 - Primary key: `id`
+- Index: `is_active`
+- Index: `type`
+- Index: `source_tier`
+- Index: `ingestion_window_end_at`
 
 **Example config values:**
 ```json
@@ -99,9 +110,10 @@ Individual articles/posts collected from sources.
 |--------|------|----------|---------|-------------|
 | id | UUID | No | gen_random_uuid() | Primary key |
 | source_id | UUID | No | | Foreign key to sources |
-| external_id | VARCHAR(512) | No | | Original ID (URL for RSS, message_id for Telegram) |
+| external_id | VARCHAR(2048) | No | | Original ID (URL for RSS, message_id for Telegram) |
 | url | TEXT | Yes | | Full article URL |
 | title | TEXT | Yes | | Article title |
+| author | VARCHAR(255) | Yes | | Source author/byline when available |
 | published_at | TIMESTAMPTZ | Yes | | Original publication time |
 | fetched_at | TIMESTAMPTZ | No | NOW() | When we fetched it |
 | raw_content | TEXT | No | | Extracted text content |
@@ -166,9 +178,15 @@ Clustered news events (multiple raw_items about the same story).
 | extracted_claims | JSONB | Yes | | Structured claims + normalized claim graph (`nodes`/`links`) |
 | categories | TEXT[] | Yes | | Classification categories |
 | source_count | INTEGER | No | 1 | Number of sources reporting this |
+| unique_source_count | INTEGER | No | 1 | Number of distinct sources represented in the event |
+| lifecycle_status | VARCHAR(20) | No | 'emerging' | Event lifecycle state: emerging, confirmed, fading, archived |
 | first_seen_at | TIMESTAMPTZ | No | NOW() | First time we saw this event |
+| last_mention_at | TIMESTAMPTZ | No | NOW() | Most recent mention timestamp used for lifecycle transitions |
 | last_updated_at | TIMESTAMPTZ | No | NOW() | Last time event was updated |
+| confirmed_at | TIMESTAMPTZ | Yes | | Timestamp when event reached confirmed lifecycle threshold |
 | primary_item_id | UUID | Yes | | Most credible source item |
+| has_contradictions | BOOLEAN | No | false | Whether contradictory claims were detected across linked items |
+| contradiction_notes | TEXT | Yes | | Optional contradiction analysis notes |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 
 **Indexes:**
@@ -176,6 +194,7 @@ Clustered news events (multiple raw_items about the same story).
 - IVFFlat: `embedding` (vector_cosine_ops, lists=64)
 - GIN: `categories`
 - Index: `first_seen_at DESC`
+- Index: `(lifecycle_status, last_mention_at)`
 
 **Vector search example:**
 ```sql

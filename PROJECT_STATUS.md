@@ -207,6 +207,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-136` `ai-control` trend now includes `ai_safety_incident` as a leading escalatory indicator, with taxonomy validation passing in subset mode
 - [x] `TASK-137` vague falsification criteria were tightened into measurable thresholds for `elite-mass-polarization` and `fertility-decline-acceleration`
 - [x] `TASK-138` keyword specificity was improved for three vague indicators (`governance_capture_signals`, `mainstream_positive_framing`, `institutional_trust_collapse`) with measurement/media/survey-specific terms
+- [x] `TASK-139` embedding inputs now enforce deterministic pre-check token guardrails (`truncate`/`chunk`) with structured cut-input logs, truncation metrics, persisted embedding audit metadata, and weekly ops-query/alert guidance
 
 ## In Progress
 
@@ -219,7 +220,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-139` embedding input truncation telemetry and guardrails
+2. Execute `TASK-141` production HTTPS termination and secure ingress
+3. Execute `TASK-142` production network exposure hardening
 
 ## Expert Feedback Integration ✅
 

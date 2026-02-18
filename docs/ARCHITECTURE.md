@@ -315,6 +315,65 @@ Reference: `docs/adr/006-deterministic-scoring.md`
 | EventClusterer | Group similar items | pgvector cosine |
 | Deduplicator | Prevent duplicates | URL + hash + embedding |
 
+### Embedding Guardrail Operations
+
+Embedding inputs are pre-counted with a deterministic token heuristic before API submission.
+When an input exceeds `EMBEDDING_MAX_INPUT_TOKENS`, policy is applied via
+`EMBEDDING_INPUT_POLICY`:
+
+- `truncate`: trim input and append marker, dropping tail tokens
+- `chunk`: split input into bounded chunks, embed each, average chunk vectors
+
+Runtime emits:
+
+- structured logs when input is cut (`entity_type`, `entity_id`, original/retained tokens, strategy)
+- metrics:
+  - `embedding_inputs_total`
+  - `embedding_inputs_truncated_total`
+  - `embedding_input_truncation_ratio`
+  - `embedding_tail_tokens_dropped_total`
+
+Weekly review SQL:
+
+```sql
+WITH raw AS (
+  SELECT DATE_TRUNC('week', COALESCE(embedding_generated_at, created_at)) AS week_start,
+         COUNT(*) AS total_inputs,
+         SUM(CASE WHEN embedding_was_truncated THEN 1 ELSE 0 END) AS truncated_inputs,
+         SUM(GREATEST(COALESCE(embedding_input_tokens, 0) - COALESCE(embedding_retained_tokens, 0), 0)) AS dropped_tokens
+  FROM raw_items
+  WHERE embedding_generated_at >= NOW() - INTERVAL '8 weeks'
+  GROUP BY 1
+),
+evt AS (
+  SELECT DATE_TRUNC('week', COALESCE(embedding_generated_at, created_at)) AS week_start,
+         COUNT(*) AS total_inputs,
+         SUM(CASE WHEN embedding_was_truncated THEN 1 ELSE 0 END) AS truncated_inputs,
+         SUM(GREATEST(COALESCE(embedding_input_tokens, 0) - COALESCE(embedding_retained_tokens, 0), 0)) AS dropped_tokens
+  FROM events
+  WHERE embedding_generated_at >= NOW() - INTERVAL '8 weeks'
+  GROUP BY 1
+)
+SELECT week_start,
+       SUM(total_inputs) AS total_inputs,
+       SUM(truncated_inputs) AS truncated_inputs,
+       ROUND(SUM(truncated_inputs)::numeric / NULLIF(SUM(total_inputs), 0), 4) AS truncation_ratio,
+       SUM(dropped_tokens) AS dropped_tokens
+FROM (
+  SELECT * FROM raw
+  UNION ALL
+  SELECT * FROM evt
+) combined
+GROUP BY week_start
+ORDER BY week_start DESC;
+```
+
+Suggested alert thresholds (initial defaults, tune by workload):
+
+- warn when weekly truncation ratio > 5%
+- critical when weekly truncation ratio > 15%
+- warn when dropped tail tokens increase week-over-week for 2+ consecutive weeks
+
 ### Core Domain
 
 | Component | Purpose | Algorithm |

@@ -516,11 +516,28 @@ class ProcessingPipeline:
                 )
 
             if item.embedding is None:
-                (
-                    vectors,
-                    _cache_hits,
-                    embedding_api_calls,
-                ) = await self.embedding_service.embed_texts([prepared.raw_content])
+                embedding_audit = None
+                embed_with_contexts = getattr(
+                    self.embedding_service, "embed_texts_with_contexts", None
+                )
+                if callable(embed_with_contexts):
+                    (
+                        vectors,
+                        audits,
+                        _cache_hits,
+                        embedding_api_calls,
+                    ) = await embed_with_contexts(
+                        [prepared.raw_content],
+                        entity_type="raw_item",
+                        entity_ids=[prepared.item_id],
+                    )
+                    embedding_audit = audits[0] if audits else None
+                else:
+                    (
+                        vectors,
+                        _cache_hits,
+                        embedding_api_calls,
+                    ) = await self.embedding_service.embed_texts([prepared.raw_content])
                 item.embedding = vectors[0]
                 item.embedding_model = getattr(
                     self.embedding_service,
@@ -528,6 +545,13 @@ class ProcessingPipeline:
                     settings.EMBEDDING_MODEL,
                 )
                 item.embedding_generated_at = datetime.now(tz=UTC)
+                if embedding_audit is not None:
+                    item.embedding_input_tokens = embedding_audit.original_tokens
+                    item.embedding_retained_tokens = embedding_audit.retained_tokens
+                    item.embedding_was_truncated = embedding_audit.was_truncated
+                    item.embedding_truncation_strategy = (
+                        embedding_audit.strategy if embedding_audit.was_cut else None
+                    )
                 embedded = True
                 usage.embedding_api_calls += embedding_api_calls
 

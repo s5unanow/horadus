@@ -67,6 +67,9 @@ Production auth/secret guardrails:
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding generation model. |
 | `EMBEDDING_BATCH_SIZE` | `32` | Max texts per embedding request. |
 | `EMBEDDING_CACHE_MAX_SIZE` | `2048` | Max in-memory embedding cache entries (LRU-evicted). |
+| `EMBEDDING_MAX_INPUT_TOKENS` | `8191` | Approximate per-input embedding token budget (deterministic pre-check). |
+| `EMBEDDING_INPUT_POLICY` | `truncate` | Over-limit handling policy (`truncate` drops tail tokens, `chunk` embeds chunked text and averages vectors). |
+| `EMBEDDING_TOKEN_ESTIMATE_CHARS_PER_TOKEN` | `4` | Chars-per-token heuristic used for deterministic embedding token estimation. |
 | `VECTOR_REVALIDATION_CADENCE_DAYS` | `30` | Target days-between ANN strategy revalidation benchmark runs. |
 | `VECTOR_REVALIDATION_DATASET_GROWTH_PCT` | `20` | Trigger revalidation when benchmark dataset/profile grows by this percent. |
 | `LLM_TIER1_BATCH_SIZE` | `10` | Max items per tier-1 call. |

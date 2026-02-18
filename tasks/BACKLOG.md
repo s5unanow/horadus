@@ -2281,12 +2281,12 @@ Make embedding input length handling explicit and observable so operators can
 measure when article text is truncated/chunked and verify impact on quality/cost.
 
 **Acceptance Criteria**:
-- [ ] Add deterministic pre-embedding token counting for each embedding input and enforce a configurable max-input policy (`truncate` or `chunk`)
-- [ ] Emit structured logs whenever input is cut, including item/event id, original token count, retained token count, and strategy used
-- [ ] Add metrics/counters for total embedding inputs, truncated inputs, truncation ratio, and optionally dropped tail tokens
-- [ ] Persist per-item metadata needed for auditability (e.g., `embedding_input_tokens`, `embedding_was_truncated`, `embedding_truncation_strategy`) or equivalent reproducible evidence
-- [ ] Add tests covering under-limit, exact-limit, and over-limit paths with both policy modes
-- [ ] Document operational query/check commands to review truncation rates weekly and set alert thresholds
+- [x] Add deterministic pre-embedding token counting for each embedding input and enforce a configurable max-input policy (`truncate` or `chunk`)
+- [x] Emit structured logs whenever input is cut, including item/event id, original token count, retained token count, and strategy used
+- [x] Add metrics/counters for total embedding inputs, truncated inputs, truncation ratio, and optionally dropped tail tokens
+- [x] Persist per-item metadata needed for auditability (e.g., `embedding_input_tokens`, `embedding_was_truncated`, `embedding_truncation_strategy`) or equivalent reproducible evidence
+- [x] Add tests covering under-limit, exact-limit, and over-limit paths with both policy modes
+- [x] Document operational query/check commands to review truncation rates weekly and set alert thresholds
 
 ---
 

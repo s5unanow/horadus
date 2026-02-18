@@ -2569,10 +2569,10 @@ dirty dimensions and invalidate analytics/metrics.
 **Files**: `src/storage/models.py`, `alembic/`, `src/api/`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Enforce allowed values at the DB layer (Postgres enums or CHECK constraints) for source tier/reporting type and event lifecycle status
-- [ ] Add a migration that validates/backfills existing rows to legal values (or fails fast with a diagnostic query if invalids exist)
-- [ ] Preserve API schemas and behavior (requests/filters continue to work)
-- [ ] Add tests covering constraint enforcement and common query/filter behavior
+- [x] Enforce allowed values at the DB layer (Postgres enums or CHECK constraints) for source tier/reporting type and event lifecycle status
+- [x] Add a migration that validates/backfills existing rows to legal values (or fails fast with a diagnostic query if invalids exist)
+- [x] Preserve API schemas and behavior (requests/filters continue to work)
+- [x] Add tests covering constraint enforcement and common query/filter behavior
 
 ---
 

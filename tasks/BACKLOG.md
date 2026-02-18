@@ -2587,11 +2587,11 @@ changes later, audits/replays cannot fully reconstruct the factorization inputs.
 **Files**: `src/storage/models.py`, `alembic/`, `src/processing/pipeline_orchestrator.py`, `src/core/trend_engine.py`, `docs/DATA_MODEL.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Persist `base_weight` (indicator weight) and `direction` (or `direction_multiplier`) on `trend_evidence` rows
-- [ ] Optionally persist a stable config reference (e.g., trend definition hash/version) used at scoring time for reproducibility
-- [ ] Backfill behavior is defined for existing rows (nullable fields or deterministic backfill strategy)
-- [ ] Update docs so operators understand which evidence fields are “scoring-time” vs “derived later”
-- [ ] Add tests verifying evidence rows retain enough info to reconstruct delta inputs even after config changes
+- [x] Persist `base_weight` (indicator weight) and `direction` (or `direction_multiplier`) on `trend_evidence` rows
+- [x] Optionally persist a stable config reference (e.g., trend definition hash/version) used at scoring time for reproducibility
+- [x] Backfill behavior is defined for existing rows (nullable fields or deterministic backfill strategy)
+- [x] Update docs so operators understand which evidence fields are “scoring-time” vs “derived later”
+- [x] Add tests verifying evidence rows retain enough info to reconstruct delta inputs even after config changes
 
 ---
 

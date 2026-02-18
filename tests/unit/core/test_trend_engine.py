@@ -528,10 +528,41 @@ class TestTrendEngine:
         # Should have called session.add with an evidence record
         mock_session.add.assert_called_once()
         evidence_record = mock_session.add.call_args.args[0]
+        expected_definition_hash = engine._definition_hash(mock_trend.definition)
+        assert evidence_record.base_weight == pytest.approx(sample_factors.base_weight)
+        assert evidence_record.direction_multiplier == pytest.approx(
+            sample_factors.direction_multiplier
+        )
+        assert evidence_record.trend_definition_hash == expected_definition_hash
         assert evidence_record.evidence_age_days == pytest.approx(sample_factors.evidence_age_days)
         assert evidence_record.temporal_decay_factor == pytest.approx(
             sample_factors.temporal_decay_multiplier
         )
+
+    @pytest.mark.asyncio
+    async def test_apply_evidence_keeps_scoring_time_hash_after_definition_changes(
+        self,
+        mock_session,
+        mock_trend,
+        sample_factors,
+    ):
+        """Evidence hash should stay tied to scoring-time definition snapshot."""
+        engine = TrendEngine(mock_session)
+        original_hash = engine._definition_hash(mock_trend.definition)
+
+        await engine.apply_evidence(
+            trend=mock_trend,
+            delta=0.1,
+            event_id=uuid4(),
+            signal_type="test",
+            factors=sample_factors,
+            reasoning="Test reasoning",
+        )
+        evidence_record = mock_session.add.call_args.args[0]
+
+        mock_trend.definition = {"baseline_probability": 0.2, "new_flag": True}
+
+        assert evidence_record.trend_definition_hash == original_hash
 
     @pytest.mark.asyncio
     async def test_apply_evidence_duplicate_is_noop(self, mock_session, mock_trend, sample_factors):

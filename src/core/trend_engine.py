@@ -24,6 +24,8 @@ Example Usage:
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -421,6 +423,17 @@ class TrendEngine:
         """
         self.session = session
 
+    @staticmethod
+    def _definition_hash(definition: Mapping[str, Any] | Any) -> str:
+        normalized_definition = definition if isinstance(definition, Mapping) else {}
+        serialized = json.dumps(
+            normalized_definition,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
     async def apply_log_odds_delta(
         self,
         *,
@@ -547,6 +560,9 @@ class TrendEngine:
             trend_id=trend.id,
             event_id=event_id,
             signal_type=signal_type,
+            base_weight=factors.base_weight,
+            direction_multiplier=factors.direction_multiplier,
+            trend_definition_hash=self._definition_hash(trend.definition),
             credibility_score=factors.credibility,
             corroboration_factor=factors.corroboration,
             novelty_score=factors.novelty,

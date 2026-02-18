@@ -27,7 +27,7 @@ falsification_criteria:
     - "Broad multi-country declines in births and first-birth rates"
     - "Persistent affordability shock in family-forming cohorts"
   would_invalidate_model:
-    - "Structural demographic measurement discontinuity"
+    - "Major revision to TFR methodology by 3+ national statistics agencies rendering cross-country time-series incomparable"
 
 indicators:
   tfr_decline:

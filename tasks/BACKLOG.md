@@ -2248,9 +2248,9 @@ operationalize. Replace with measurable thresholds.
 `config/trends/fertility-decline-acceleration.yaml`
 
 **Acceptance Criteria**:
-- [ ] `elite-mass-polarization` criterion replaced: "Fundamental constitutional restructuring that removes structural conditions" → "Top-decile wealth share declines 5+ percentage points across 3+ major economies for 3+ consecutive years"
-- [ ] `fertility-decline` criterion replaced: "Structural demographic measurement discontinuity" → "Major revision to TFR methodology by 3+ national statistics agencies rendering cross-country time-series incomparable"
-- [ ] Both configs pass Pydantic validation
+- [x] `elite-mass-polarization` criterion replaced: "Fundamental constitutional restructuring that removes structural conditions" → "Top-decile wealth share declines 5+ percentage points across 3+ major economies for 3+ consecutive years"
+- [x] `fertility-decline` criterion replaced: "Structural demographic measurement discontinuity" → "Major revision to TFR methodology by 3+ national statistics agencies rendering cross-country time-series incomparable"
+- [x] Both configs pass Pydantic validation
 
 ---
 

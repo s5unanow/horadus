@@ -205,6 +205,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-134` external assessment intake governance is now preserved in backlog docs with explicit overlap mapping to human-gated `TASK-080` and no duplicate implementation tasks
 - [x] `TASK-135` four external-review trend descriptions now explicitly define what baseline probability measures, with `elite-mass-polarization` reframed to acceleration semantics
 - [x] `TASK-136` `ai-control` trend now includes `ai_safety_incident` as a leading escalatory indicator, with taxonomy validation passing in subset mode
+- [x] `TASK-137` vague falsification criteria were tightened into measurable thresholds for `elite-mass-polarization` and `fertility-decline-acceleration`
 
 ## In Progress
 
@@ -217,7 +218,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-137` sharpen vague falsification criteria
+2. Execute `TASK-138` improve keyword specificity for 3 vague indicators
 
 ## Expert Feedback Integration ✅
 

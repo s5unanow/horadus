@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-137` Sharpen vague falsification criteria — DONE ✓
 - `TASK-136` Add ai_safety_incident indicator to ai-control trend — DONE ✓
 - `TASK-135` Clarify baseline_probability referent in trend descriptions — DONE ✓
 - `TASK-134` External Assessment Backlog Intake Preservation — DONE ✓
@@ -76,6 +77,7 @@
 - `TASK-134` completion note: external assessment planning intake is now explicitly preserved in `tasks/BACKLOG.md` with checked governance criteria and overlap mapping to human-gated `TASK-080` (no duplicate implementation tasks created).
 - `TASK-135` completion note: baseline referent sentences were standardized across the four targeted trend descriptions, with `elite-mass-polarization` reframed to acceleration/delta semantics and baseline probability values preserved.
 - `TASK-136` completion note: `ai-human-control-expansion` now includes `ai_safety_incident` as an escalatory leading indicator (`weight=0.04`) with specified keywords, and taxonomy validation remains green in subset mode.
+- `TASK-137` completion note: vague `would_invalidate_model` criteria were replaced with measurable thresholds in `elite-mass-polarization` and `fertility-decline-acceleration`, with both configs validated via `TrendConfig`.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

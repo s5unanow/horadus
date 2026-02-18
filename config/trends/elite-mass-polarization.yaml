@@ -26,7 +26,7 @@ falsification_criteria:
     - "Concentrated wealth and decision control intensify"
     - "Falling public influence over policy and resource allocation"
   would_invalidate_model:
-    - "Fundamental paradigm shift in economic organization rendering inequality metrics inapplicable"
+    - "Top-decile wealth share declines 5+ percentage points across 3+ major economies for 3+ consecutive years"
 
 indicators:
   wealth_concentration_increase:

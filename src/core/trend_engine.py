@@ -30,7 +30,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from inspect import isawaitable
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
@@ -434,15 +434,17 @@ class TrendEngine:
         """Apply a log-odds delta atomically and return (previous_lo, new_lo)."""
         from src.storage.models import Trend
 
+        delta_value = Decimal(str(delta))
         applied_at = _as_utc(updated_at) if updated_at is not None else datetime.now(UTC)
         stmt = (
             update(Trend)
             .where(Trend.id == trend_id)
             .values(
-                current_log_odds=Trend.current_log_odds + float(delta),
+                current_log_odds=Trend.current_log_odds + delta_value,
                 updated_at=applied_at,
             )
             .returning(Trend.current_log_odds)
+            .execution_options(synchronize_session=False)
         )
         result = await self.session.execute(stmt)
         raw_new_log_odds = result.scalar_one_or_none()
@@ -458,24 +460,24 @@ class TrendEngine:
                 msg = f"Trend '{trend_id}' not found for atomic log-odds update"
                 raise ValueError(msg)
             previous_lo = float(fallback_current_log_odds)
-            new_lo = previous_lo + float(delta)
+            new_lo = previous_lo + float(delta_value)
             logger.warning(
                 "Atomic trend delta update returned no row; using in-memory fallback",
                 trend_id=str(trend_id),
                 trend_name=trend_name,
-                delta=float(delta),
+                delta=float(delta_value),
                 reason=reason,
                 update_strategy="fallback_in_memory",
             )
             return previous_lo, new_lo
 
         new_lo = parsed_new_log_odds
-        previous_lo = new_lo - float(delta)
+        previous_lo = new_lo - float(delta_value)
         logger.debug(
             "Applied atomic trend log-odds delta",
             trend_id=str(trend_id),
             trend_name=trend_name,
-            delta=float(delta),
+            delta=float(delta_value),
             reason=reason,
             update_strategy="atomic_sql_add",
             previous_log_odds=previous_lo,
@@ -656,22 +658,25 @@ class TrendEngine:
             .where(TrendModel.id == trend.id)
             .with_for_update()
         )
-        locked_row = locked_row_result.one_or_none()
-        if isawaitable(locked_row):
-            locked_row = await locked_row
+        raw_locked_row: Any = locked_row_result.one_or_none()
+        if isawaitable(raw_locked_row):
+            raw_locked_row = await raw_locked_row
 
-        row_mapping = getattr(locked_row, "_mapping", None)
-        has_locked_state = (
-            isinstance(row_mapping, Mapping)
-            and row_mapping.get("current_log_odds") is not None
-            and row_mapping.get("baseline_log_odds") is not None
-            and isinstance(row_mapping.get("updated_at"), datetime)
+        row_mapping = getattr(raw_locked_row, "_mapping", None)
+        typed_mapping: Mapping[str, Any] | None = (
+            row_mapping if isinstance(row_mapping, Mapping) else None
         )
-        if has_locked_state:
-            current_lo = float(row_mapping["current_log_odds"])
-            baseline_lo = float(row_mapping["baseline_log_odds"])
-            last_updated_at = _as_utc(row_mapping["updated_at"])
-            half_life = row_mapping["decay_half_life_days"] or DEFAULT_DECAY_HALF_LIFE_DAYS
+        has_locked_state = (
+            typed_mapping is not None
+            and typed_mapping.get("current_log_odds") is not None
+            and typed_mapping.get("baseline_log_odds") is not None
+            and isinstance(typed_mapping.get("updated_at"), datetime)
+        )
+        if has_locked_state and typed_mapping is not None:
+            current_lo = float(typed_mapping["current_log_odds"])
+            baseline_lo = float(typed_mapping["baseline_log_odds"])
+            last_updated_at = _as_utc(typed_mapping["updated_at"])
+            half_life = typed_mapping["decay_half_life_days"] or DEFAULT_DECAY_HALF_LIFE_DAYS
         else:
             current_lo = float(trend.current_log_odds)
             baseline_lo = float(trend.baseline_log_odds)
@@ -693,6 +698,7 @@ class TrendEngine:
                 update(TrendModel)
                 .where(TrendModel.id == trend.id)
                 .values(current_log_odds=new_lo, updated_at=as_of)
+                .execution_options(synchronize_session=False)
             )
         trend.current_log_odds = new_lo
         trend.updated_at = as_of

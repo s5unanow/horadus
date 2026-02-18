@@ -2551,10 +2551,10 @@ event loop when enabled.
 **Files**: `src/processing/semantic_cache.py`, `src/processing/tier1_classifier.py`, `src/processing/tier2_classifier.py`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Use an async Redis client (`redis.asyncio`) or run sync Redis calls in a threadpool so async code paths do not block
-- [ ] Preserve current cache key semantics and eviction behavior
-- [ ] Add tests (or a micro-benchmark-style unit test) validating cache calls are awaitable/non-blocking when enabled
-- [ ] Ensure cache remains default-disabled and safe to enable with predictable latency
+- [x] Use an async Redis client (`redis.asyncio`) or run sync Redis calls in a threadpool so async code paths do not block
+- [x] Preserve current cache key semantics and eviction behavior
+- [x] Add tests (or a micro-benchmark-style unit test) validating cache calls are awaitable/non-blocking when enabled
+- [x] Ensure cache remains default-disabled and safe to enable with predictable latency
 
 ---
 

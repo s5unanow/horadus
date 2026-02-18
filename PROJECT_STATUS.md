@@ -219,6 +219,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-151` trend definition writes now produce append-only version history (`trend_definition_versions`) with deterministic hashes, material-change-only inserts across API/config-sync paths, and read access via `GET /api/v1/trends/{trend_id}/definition-history`
 - [x] `TASK-153` integration DB reset safety now enforces test-scoped target/localhost defaults with explicit override flags and actionable refusal messages, reducing accidental non-test truncation risk in integration fixtures
 - [x] `TASK-154` Tier-2 response validation now allows multiple impacts for one trend when `signal_type` differs, rejects duplicate `(trend_id, signal_type)` pairs, and includes prompt/test coverage for multi-signal-per-trend extraction
+- [x] `TASK-155` Tier-1/Tier-2 async paths now offload semantic-cache I/O via threadpool (`asyncio.to_thread`) to prevent event-loop blocking while preserving cache key/eviction behavior, with thread-offload regression coverage
 
 ## In Progress
 
@@ -231,8 +232,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-155` make semantic cache non-blocking in async paths
-3. Execute `TASK-156` constrain categorical dimension fields at DB level
+2. Execute `TASK-156` constrain categorical dimension fields at DB level
+3. Execute `TASK-157` persist full evidence factorization inputs
 
 ## Expert Feedback Integration ✅
 

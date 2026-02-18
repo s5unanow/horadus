@@ -56,3 +56,5 @@
 - `TASK-084` reviewer checklist: `tasks/assessments/TASK-084-production-security-guardrails-checklist-2026-02-18.md`.
 - `TASK-084` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Production startup now rejects weak/short SECRET_KEY values; auth guardrails preserved; core unit/lint/type checks passed.`
 - `TASK-140` completion note: `AGENTS.md` now codifies human-gated sequence and in-branch backlog-capture rule with exception criteria.
+- `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.
+- `TASK-085` sign-off record (fill before marking DONE): Reviewer=`TBD`; Date=`TBD`; Decision=`Pending`; Notes=`TBD`.

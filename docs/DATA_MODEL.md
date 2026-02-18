@@ -290,6 +290,38 @@ baseline_log_odds = prob_to_logodds(0.08)  # -2.44
 
 ---
 
+### trend_definition_versions
+
+Append-only history of trend definition payloads for auditability.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| trend_id | UUID | No | | FK to `trends` (`CASCADE` on delete) |
+| definition_hash | VARCHAR(64) | No | | SHA256 hash of canonicalized definition JSON |
+| definition | JSONB | No | | Full definition payload captured at write time |
+| actor | VARCHAR(255) | Yes | | Actor identity or channel (`api`, `system`, etc.) |
+| context | VARCHAR(255) | Yes | | Write context (`create_trend`, `update_trend`, `config_sync:<file>`) |
+| recorded_at | TIMESTAMPTZ | No | NOW() | Timestamp version row was recorded |
+
+**Indexes:**
+- Primary key: `id`
+- Index: `(trend_id, recorded_at DESC)`
+- Index: `definition_hash`
+
+**Inspection paths:**
+- API: `GET /api/v1/trends/{trend_id}/definition-history?limit=100`
+- SQL:
+  ```sql
+  SELECT recorded_at, actor, context, definition_hash
+  FROM trend_definition_versions
+  WHERE trend_id = $1
+  ORDER BY recorded_at DESC
+  LIMIT 100;
+  ```
+
+---
+
 ### trend_evidence
 
 Audit trail of all probability updates.
@@ -519,6 +551,7 @@ Manual corrections/annotations used for governance and evaluation.
 
 The sections above were cross-checked against SQLAlchemy runtime model declarations:
 
+- `trend_definition_versions` table: `src/storage/models.py:593`
 - `reports` table: `src/storage/models.py:660`
 - `api_usage` table: `src/storage/models.py:719`
 - `trend_outcomes` table: `src/storage/models.py:791`

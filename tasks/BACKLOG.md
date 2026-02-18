@@ -2477,10 +2477,10 @@ audit trail for “what changed” beyond probability snapshots.
 **Files**: `src/storage/models.py`, `alembic/`, `src/api/routes/trends.py`, `docs/`
 
 **Acceptance Criteria**:
-- [ ] Add a minimal append-only trend-definition version table (trend id, timestamp, definition payload, actor/context)
-- [ ] Ensure API/config sync paths record a version row on material change (with deterministic diff or hash)
-- [ ] Add a read endpoint or admin query guidance for inspecting definition history
-- [ ] Add tests for “no-op update does not create a new version” and “material change creates a version”
+- [x] Add a minimal append-only trend-definition version table (trend id, timestamp, definition payload, actor/context)
+- [x] Ensure API/config sync paths record a version row on material change (with deterministic diff or hash)
+- [x] Add a read endpoint or admin query guidance for inspecting definition history
+- [x] Add tests for “no-op update does not create a new version” and “material change creates a version”
 
 ---
 

@@ -86,6 +86,7 @@ Freshness response includes:
 - `POST /api/v1/trends`
 - `POST /api/v1/trends/sync-config`
 - `GET /api/v1/trends/{trend_id}`
+- `GET /api/v1/trends/{trend_id}/definition-history`
 - `PATCH /api/v1/trends/{trend_id}`
 - `DELETE /api/v1/trends/{trend_id}`
 - `GET /api/v1/trends/{trend_id}/evidence`

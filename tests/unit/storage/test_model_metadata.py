@@ -3,7 +3,15 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from src.storage.models import ApiUsage, Event, EventItem, RawItem, Report, Source
+from src.storage.models import (
+    ApiUsage,
+    Event,
+    EventItem,
+    RawItem,
+    Report,
+    Source,
+    TrendDefinitionVersion,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -83,3 +91,9 @@ def test_event_items_item_uniqueness_constraint_present_in_model_metadata() -> N
         if getattr(constraint, "name", None)
     }
     assert "uq_event_items_item_id" in unique_constraint_names
+
+
+def test_trend_definition_version_indexes_present_in_model_metadata() -> None:
+    index_names = {index.name for index in TrendDefinitionVersion.__table__.indexes}
+    assert "idx_trend_definition_versions_trend_recorded" in index_names
+    assert "idx_trend_definition_versions_hash" in index_names

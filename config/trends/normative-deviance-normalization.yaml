@@ -52,7 +52,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["cannibalism positive framing", "minor attraction destigmatize", "eating human flesh benefits", "pedophilia reframed", "political violence justified"]
+    keywords: ["cannibalism positive framing", "minor attraction destigmatize", "eating human flesh benefits", "pedophilia reframed", "political violence justified", "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"]
 
   academic_legitimation:
     weight: 0.04

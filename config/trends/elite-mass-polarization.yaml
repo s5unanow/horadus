@@ -45,7 +45,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["regulatory capture", "policy capture", "elite influence", "lobbying dominance"]
+    keywords: ["regulatory capture", "policy capture", "elite influence", "lobbying dominance", "lobbying spending record", "corporate political donations", "PAC expenditure", "regulatory revolving door appointment"]
 
   media_ownership_concentration:
     weight: 0.03

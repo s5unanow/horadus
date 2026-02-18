@@ -1,0 +1,16 @@
+{
+	email {$CADDY_ACME_EMAIL:admin@localhost}
+	acme_ca {$CADDY_ACME_CA:https://acme-v02.api.letsencrypt.org/directory}
+}
+
+{$HORADUS_PUBLIC_DOMAIN:localhost} {
+	encode gzip zstd
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+	}
+
+	reverse_proxy api:8000
+}

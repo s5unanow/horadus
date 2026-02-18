@@ -6,6 +6,7 @@ This guide covers a single-host Docker Compose deployment using:
 
 - `docker/api/Dockerfile`
 - `docker/worker/Dockerfile`
+- `docker/caddy/Caddyfile`
 - `docker-compose.prod.yml`
 
 ## 1) Prepare environment and secret files
@@ -24,6 +25,8 @@ Required minimum settings:
 - `API_KEYS_FILE`
 - `API_ADMIN_KEY_FILE`
 - `OPENAI_API_KEY_FILE`
+- `HORADUS_PUBLIC_DOMAIN` (for TLS certificate issuance/ingress host routing)
+- `CADDY_ACME_EMAIL` (recommended for ACME expiration/renewal notices)
 
 Production secret policy:
 
@@ -83,15 +86,26 @@ make db-migration-gate MIGRATION_GATE_DATABASE_URL="<production-db-url>" MIGRATI
 ## 4) Start services
 
 ```bash
-docker compose -f docker-compose.prod.yml up -d api worker beat postgres redis
+docker compose -f docker-compose.prod.yml up -d ingress api worker beat postgres redis
 ```
 
 ## 5) Verify health and metrics
 
 ```bash
-curl -sSf http://localhost:8000/health
-curl -sSf http://localhost:8000/health/ready
-curl -sSf http://localhost:8000/metrics | head
+export HORADUS_BASE_URL="https://${HORADUS_PUBLIC_DOMAIN}"
+
+curl -sSf "${HORADUS_BASE_URL}/health"
+curl -sSf "${HORADUS_BASE_URL}/health/ready"
+curl -sSf "${HORADUS_BASE_URL}/metrics" | head
+
+# HTTP must not serve plaintext content externally (redirect to HTTPS is allowed).
+curl -sSI "http://${HORADUS_PUBLIC_DOMAIN}/health" | sed -n '1,5p'
+
+# Security headers must be present at the edge.
+curl -sSI "${HORADUS_BASE_URL}/health" | grep -Ei "strict-transport-security|x-content-type-options|x-frame-options"
+
+# API container should not publish host port 8000 directly.
+docker compose -f docker-compose.prod.yml port api 8000 || echo "api:8000 not published (expected)"
 ```
 
 ## 6) Export and host dashboard artifacts
@@ -122,7 +136,7 @@ Deploy a new revision:
 git pull
 docker compose -f docker-compose.prod.yml build api worker
 docker compose -f docker-compose.prod.yml --profile ops run --rm migrate
-docker compose -f docker-compose.prod.yml up -d api worker beat
+docker compose -f docker-compose.prod.yml up -d ingress api worker beat
 ```
 
 Rollback:
@@ -131,14 +145,41 @@ Rollback:
 2. Rebuild images with that revision.
 3. Restart `api`, `worker`, and `beat`.
 
-## 8) TLS termination
+## 8) TLS termination and ingress workflow
 
-Run TLS at an edge reverse proxy (Caddy, Nginx, Traefik) and keep Horadus internal.
+Horadus production defaults now include a dedicated Caddy ingress service:
 
-- Terminate HTTPS at the proxy.
-- Forward traffic to `api:8000` on the private Docker network.
-- Disable public direct exposure of the API container where possible.
-- Enforce modern TLS settings and HTTP security headers at the proxy layer.
+- Public ports: `80` and `443` on `ingress`
+- Internal upstream: `api:8000` on `horadus-network`
+- HTTP behavior: automatic redirect to HTTPS
+- Security headers at edge:
+  - `Strict-Transport-Security`
+  - `X-Content-Type-Options`
+  - `X-Frame-Options`
+
+Certificate provisioning and renewal:
+
+1. Set `HORADUS_PUBLIC_DOMAIN` to the resolvable public hostname.
+2. Set `CADDY_ACME_EMAIL` for ACME account registration.
+3. Start `ingress`; Caddy automatically requests and renews certificates.
+4. Check certificate lifecycle and renewal logs:
+   ```bash
+   docker compose -f docker-compose.prod.yml logs -f ingress
+   ```
+
+Failure fallback steps (ACME/cert issuance):
+
+1. Validate DNS and public reachability on ports `80` and `443`.
+2. Temporarily set `CADDY_ACME_CA=https://acme-staging-v02.api.letsencrypt.org/directory` and
+   retry to verify challenge flow without rate-limit pressure.
+3. If ACME remains unavailable, provision managed certificates externally and
+   switch to explicit cert files in `docker/caddy/Caddyfile`:
+   - mount cert/key into `./docker/caddy/certs/`
+   - replace site TLS stanza with:
+     ```caddyfile
+     tls /certs/fullchain.pem /certs/privkey.pem
+     ```
+4. Keep API host-port exposure disabled while recovering certificate flow.
 
 ## 9) Backups and restore
 

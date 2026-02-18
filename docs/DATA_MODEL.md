@@ -332,6 +332,9 @@ Audit trail of all probability updates.
 | trend_id | UUID | No | | Foreign key to trends |
 | event_id | UUID | No | | Foreign key to events |
 | signal_type | VARCHAR(100) | No | | Type of signal detected |
+| base_weight | DECIMAL(10,6) | Yes | | Indicator weight used at scoring time (nullable for pre-`TASK-157` rows) |
+| direction_multiplier | DECIMAL(3,1) | Yes | | Direction factor used at scoring time (`+1.0` escalatory, `-1.0` de-escalatory; nullable for legacy rows) |
+| trend_definition_hash | VARCHAR(64) | Yes | | Deterministic hash of trend definition used at scoring time (nullable for legacy rows) |
 | credibility_score | DECIMAL(3,2) | Yes | | Source credibility (0.00-1.00) |
 | corroboration_factor | DECIMAL(5,2) | Yes | | sqrt(effective_independent_corroboration)/3 |
 | novelty_score | DECIMAL(3,2) | Yes | | Continuous recency-aware novelty (0.30-1.00) |
@@ -371,6 +374,10 @@ where:
   temporal_decay = 0.5^(evidence_age_days / decay_half_life_days)
   direction = +1 (escalatory) or -1 (de_escalatory)
 ```
+
+Scoring-time provenance:
+- `base_weight`, `direction_multiplier`, and `trend_definition_hash` are persisted to preserve factorization inputs even if trend YAML/definitions change later.
+- Legacy rows (created before `TASK-157`) may have these fields as `NULL`.
 
 ---
 

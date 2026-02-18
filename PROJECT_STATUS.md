@@ -221,6 +221,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-154` Tier-2 response validation now allows multiple impacts for one trend when `signal_type` differs, rejects duplicate `(trend_id, signal_type)` pairs, and includes prompt/test coverage for multi-signal-per-trend extraction
 - [x] `TASK-155` Tier-1/Tier-2 async paths now offload semantic-cache I/O via threadpool (`asyncio.to_thread`) to prevent event-loop blocking while preserving cache key/eviction behavior, with thread-offload regression coverage
 - [x] `TASK-156` source/event categorical dimensions now have DB-enforced allowed-value constraints (`source_tier`, `reporting_type`, `lifecycle_status`) with migration preflight diagnostics for invalid legacy values and added constraint/filter regression coverage
+- [x] `TASK-157` trend evidence now stores scoring-time `base_weight`, `direction_multiplier`, and `trend_definition_hash` with migration-defined legacy backfill/nullability behavior, plus reconstruction-focused test coverage and data-model documentation updates
 
 ## In Progress
 
@@ -233,8 +234,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-157` persist full evidence factorization inputs
-3. Execute `TASK-158` make contradiction heuristics language-aware
+2. Execute `TASK-158` make contradiction heuristics language-aware
+3. Execute `TASK-159` externalize token pricing config
 
 ## Expert Feedback Integration ✅
 

@@ -689,6 +689,9 @@ class TrendEvidence(Base):
 
     # Signal classification
     signal_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    base_weight: Mapped[float | None] = mapped_column(Numeric(10, 6))
+    direction_multiplier: Mapped[float | None] = mapped_column(Numeric(3, 1))
+    trend_definition_hash: Mapped[str | None] = mapped_column(String(64))
 
     # Scoring factors
     credibility_score: Mapped[float | None] = mapped_column(Numeric(3, 2))

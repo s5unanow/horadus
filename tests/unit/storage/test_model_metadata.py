@@ -11,6 +11,7 @@ from src.storage.models import (
     Report,
     Source,
     TrendDefinitionVersion,
+    TrendEvidence,
 )
 
 pytestmark = pytest.mark.unit
@@ -114,3 +115,9 @@ def test_dimension_check_constraints_present_in_model_metadata() -> None:
     assert "check_sources_source_tier_allowed" in source_constraint_names
     assert "check_sources_reporting_type_allowed" in source_constraint_names
     assert "check_events_lifecycle_status_allowed" in event_constraint_names
+
+
+def test_trend_evidence_factorization_columns_present_in_model_metadata() -> None:
+    assert "base_weight" in TrendEvidence.__table__.c
+    assert "direction_multiplier" in TrendEvidence.__table__.c
+    assert "trend_definition_hash" in TrendEvidence.__table__.c

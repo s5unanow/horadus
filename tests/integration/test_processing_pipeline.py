@@ -234,6 +234,10 @@ async def test_processing_pipeline_runs_end_to_end() -> None:
         assert float(saved_trend.current_log_odds) > float(saved_trend.baseline_log_odds)
         assert len(evidence_records) == 1
         assert evidence_records[0].signal_type == "military_movement"
+        assert float(evidence_records[0].base_weight) == pytest.approx(0.04, rel=0.001)
+        assert float(evidence_records[0].direction_multiplier) == pytest.approx(1.0)
+        assert isinstance(evidence_records[0].trend_definition_hash, str)
+        assert len(evidence_records[0].trend_definition_hash) == 64
 
 
 @pytest.mark.asyncio

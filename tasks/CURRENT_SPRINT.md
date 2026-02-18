@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-157` Persist full evidence factorization inputs for long-horizon auditability — DONE ✓
 - `TASK-156` Constrain categorical “dimension” fields to prevent drift (DB-level) — DONE ✓
 - `TASK-155` Make semantic cache non-blocking in async pipeline paths — DONE ✓
 - `TASK-154` Allow multiple Tier-2 impacts per trend per event (trend_id + signal_type) — DONE ✓
@@ -108,6 +109,7 @@
 - `TASK-154` completion note: Tier-2 output validation now allows multiple impacts for one trend when `signal_type` differs, rejects duplicate `(trend_id, signal_type)` pairs, and prompt/test coverage now codifies multi-signal-per-trend response behavior.
 - `TASK-155` completion note: Tier-1/Tier-2 async paths now offload semantic-cache `get/set` calls to a threadpool (`asyncio.to_thread`) so Redis/cache I/O cannot block the event loop, while preserving existing cache key/TTL/eviction semantics and default-disabled behavior.
 - `TASK-156` completion note: added DB-level CHECK constraints for `sources.source_tier`, `sources.reporting_type`, and `events.lifecycle_status` in model metadata + migration (`0018`) with fail-fast invalid-value diagnostics before constraint creation; added metadata and integration coverage for constraint enforcement and lifecycle filter behavior.
+- `TASK-157` completion note: `trend_evidence` now persists scoring-time `base_weight`, `direction_multiplier`, and `trend_definition_hash` (migration `0019` with legacy-row-safe nullability + deterministic `direction_multiplier` backfill); docs now distinguish scoring-time provenance fields and tests cover reconstruction resilience under later trend-definition changes.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

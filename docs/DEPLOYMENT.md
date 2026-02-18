@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Verified**: 2026-02-16
+**Last Verified**: 2026-02-18
 
 This guide covers a single-host Docker Compose deployment using:
 
@@ -30,6 +30,7 @@ Production secret policy:
 - Keep raw secret values out of `.env`.
 - Mount read-only secret files into containers and wire via `*_FILE`.
 - Follow `docs/SECRETS_RUNBOOK.md` for provisioning, rotation, and rollback.
+- If you set `SECRET_KEY` directly (instead of `SECRET_KEY_FILE`), use at least 32 characters and avoid weak/default values.
 
 For a full variable reference, see `docs/ENVIRONMENT.md`.
 For release and rollback governance, see `docs/RELEASING.md`.

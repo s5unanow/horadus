@@ -16,6 +16,19 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 DEV_SECRET_KEY_DEFAULT = (
     "dev-secret-key-change-in-production"  # pragma: allowlist secret # nosec B105
 )
+MIN_PRODUCTION_SECRET_KEY_LENGTH = 32
+_PRODUCTION_WEAK_SECRET_KEY_VALUES = frozenset(
+    {
+        "changeme",
+        "change-me",
+        "secret",
+        "default",
+        "password",
+        "admin",
+        "test",
+        "dev",
+    }
+)
 
 
 def _read_secret_file(path: str) -> str:
@@ -147,10 +160,19 @@ class Settings(BaseSettings):
             return self
 
         validation_errors: list[str] = []
+        secret_key = self.SECRET_KEY.strip()
 
-        if self.SECRET_KEY.strip() == DEV_SECRET_KEY_DEFAULT:
+        if secret_key == DEV_SECRET_KEY_DEFAULT:
             validation_errors.append(
                 "SECRET_KEY must be explicitly configured in production; dev default is not allowed"
+            )
+        elif secret_key.lower() in _PRODUCTION_WEAK_SECRET_KEY_VALUES:
+            validation_errors.append(
+                "SECRET_KEY uses a known weak value and is not allowed in production"
+            )
+        elif len(secret_key) < MIN_PRODUCTION_SECRET_KEY_LENGTH:
+            validation_errors.append(
+                "SECRET_KEY is too short for production; use at least 32 characters"
             )
 
         if not self.API_AUTH_ENABLED:

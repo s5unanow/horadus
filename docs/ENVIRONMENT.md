@@ -1,6 +1,6 @@
 # Environment Variables
 
-**Last Verified**: 2026-02-16
+**Last Verified**: 2026-02-18
 
 This document lists environment variables used by the Horadus backend.
 
@@ -30,7 +30,7 @@ This document lists environment variables used by the Horadus backend.
 | `API_RATE_LIMIT_REDIS_PREFIX` | `horadus:api_rate_limit` | Redis key prefix for per-key rate-limit buckets. |
 | `API_KEYS_PERSIST_PATH` | empty | Optional file path for persisted runtime API key metadata. |
 | `CORS_ORIGINS` | local origins | Comma-separated origin list. |
-| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret. In production this must be explicitly set (dev default is rejected at startup). |
+| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret. In production this must be explicitly set, be at least 32 characters, and must not use known weak values (for example `changeme`, `password`, `secret`). |
 
 Rate-limit strategy guidance:
 - `fixed_window` (default): lowest Redis/memory overhead and easiest operator reasoning, but allows boundary bursts near window rollover.
@@ -40,6 +40,7 @@ Rate-limit strategy guidance:
 Production auth/secret guardrails:
 - `ENVIRONMENT=production` now enforces fail-fast startup checks:
   - `SECRET_KEY` must not use the development default value.
+  - `SECRET_KEY` must be at least 32 characters and cannot be a known weak value.
   - `API_AUTH_ENABLED` must be `true`.
   - `API_ADMIN_KEY` must be configured.
   - At least one bootstrap access path must exist: `API_KEY`, `API_KEYS`, or `API_KEYS_PERSIST_PATH`.

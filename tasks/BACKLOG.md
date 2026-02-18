@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-141`.
+- Next available task IDs start at `TASK-143`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2298,6 +2298,38 @@ tasks are discovered during active implementation.
 - [x] Define explicit exception criteria for when backlog edits must be split to a separate branch (unrelated scope, already-merged task, or urgent blocker)
 - [x] Add a lightweight guard/checklist item in task completion docs or scripts to verify backlog updates were either included in-branch or explicitly split with rationale
 - [x] Add unit/script test coverage if automation/scripts are changed (not applicable: no script automation changes in this task)
+
+---
+
+### TASK-141: Production HTTPS Termination and Secure Ingress
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Ensure deployed API traffic is encrypted end-to-end at the edge and that
+plaintext HTTP is not exposed publicly by default.
+
+**Acceptance Criteria**:
+- [ ] Add a production ingress path (reverse proxy) that terminates TLS for Horadus API traffic
+- [ ] Document certificate provisioning/renewal workflow (managed certs or ACME automation) with failure fallback steps
+- [ ] Enforce HTTPS-only external access (redirect HTTP to HTTPS or disable external plain-HTTP exposure)
+- [ ] Add/verify security response headers at the edge (`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options` or equivalent policy)
+- [ ] Update deployment runbook with validation commands proving HTTPS is active and HTTP exposure is closed
+
+---
+
+### TASK-142: Production Network Exposure Hardening
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Reduce attack surface by restricting service exposure and tightening access
+paths for admin operations.
+
+**Acceptance Criteria**:
+- [ ] Remove or gate direct public host-port exposure of internal services in production defaults (API, DB, Redis)
+- [ ] Define and document network boundary policy (public ingress -> proxy only, app/data services on private network)
+- [ ] Add operator guidance for host/network allowlisting and firewall controls for admin/API access
+- [ ] Add deployment verification checks to confirm only intended ports are reachable from outside the host
+- [ ] Update deployment/security docs with explicit "public vs private" port mapping expectations
 
 ---
 

@@ -14,7 +14,7 @@ Phase 3: Trend Engine        [████████████████�
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
 Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
-Phase 8: Hardening (NEW)     [███████████████████░]  94%  🚧 IN PROGRESS
+Phase 8: Hardening (NEW)     [███████████████████░]  96%  🚧 IN PROGRESS
 ```
 
 ## What's Working
@@ -192,19 +192,19 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-077` cost-first ordering completed with human sign-off (`Approved`); Tier-1 now gates embedding/clustering
 - [x] `TASK-084` production security guardrails completed with human sign-off (`Approved`); production now rejects weak/short secret-key values
 - [x] `TASK-140` codified human-gated sequencing and in-branch backlog-capture exceptions in `AGENTS.md` to reduce process drift
+- [x] `TASK-085` explicit admin-key requirement completed with human sign-off (`Approved`); key-management endpoints reject missing/invalid admin credentials
 
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)
 
 ## Blocked
 
-- `TASK-080` and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
+- `TASK-080` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 
 ## Next Up (Priority Order)
 
-1. Resolve remaining human-gated hardening tasks (`TASK-080`, `TASK-085`)
+1. Resolve remaining human-gated hardening tasks (`TASK-080`)
 2. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
 
 ## Expert Feedback Integration ✅
@@ -247,7 +247,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Human-gated hardening tasks (`TASK-080`, `TASK-085`) remain the main completion bottleneck, and launch stays `No-Go` until they are resolved.
+- Human-gated hardening task (`TASK-080`) remains the main completion bottleneck, and launch stays `No-Go` until it is resolved.
 
 ## Architecture Validated ✅
 

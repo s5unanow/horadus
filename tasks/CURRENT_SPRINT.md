@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-154` Allow multiple Tier-2 impacts per trend per event (trend_id + signal_type) — DONE ✓
 - `TASK-153` Guard integration-test DB truncation (operator safety) — DONE ✓
 - `TASK-151` Version trend definition changes for auditability — DONE ✓
 - `TASK-150` Close `docs/DATA_MODEL.md` drift vs runtime schema (sources/raw_items/events) — DONE ✓
@@ -102,6 +103,7 @@
 - `TASK-150` completion note: `docs/DATA_MODEL.md` now matches runtime schema for `sources`/`raw_items`/`events` (including source tier/reporting/error fields, raw-item `author`, `external_id` length `2048`, event lifecycle/contradiction columns), and ERD scope is explicitly labeled as core-table oriented to prevent misleading completeness assumptions.
 - `TASK-151` completion note: added append-only `trend_definition_versions` audit table + migration with deterministic definition hashing, wired create/update/config-sync paths to append rows only on material definition changes, exposed `GET /api/v1/trends/{trend_id}/definition-history`, and added no-op/material-change regression tests.
 - `TASK-153` completion note: integration fixture truncation now hard-fails unsafe DB targets unless explicitly test-scoped (or override-enabled), enforces localhost-only truncation by default with explicit remote override, emits actionable refusal messages with resolved target details, and includes unit tests for safe/unsafe target permutations.
+- `TASK-154` completion note: Tier-2 output validation now allows multiple impacts for one trend when `signal_type` differs, rejects duplicate `(trend_id, signal_type)` pairs, and prompt/test coverage now codifies multi-signal-per-trend response behavior.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

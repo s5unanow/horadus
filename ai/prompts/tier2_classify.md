@@ -40,6 +40,8 @@ Return JSON only, with this exact shape:
 
 Rules:
 - Use only provided `trend_id` values.
+- Multiple impacts for the same `trend_id` are allowed when they reference different `signal_type` values.
+- Do not emit duplicate `(trend_id, signal_type)` pairs.
 - `direction` must be `escalatory` or `de_escalatory`.
 - `severity` and `confidence` must be floats in `0.0..1.0`.
 - Set `has_contradictions=true` when sources materially disagree on key factual claims.

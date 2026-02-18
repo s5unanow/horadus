@@ -2533,10 +2533,10 @@ signals per `(trend_id, event_id)` (unique is `(trend_id, event_id, signal_type)
 **Files**: `src/processing/tier2_classifier.py`, `ai/prompts/tier2_classify.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Update Tier-2 output validation to allow repeated `trend_id` when `signal_type` differs
-- [ ] Enforce uniqueness of `(trend_id, signal_type)` pairs within one Tier-2 response to prevent true duplicates
-- [ ] Update prompt guidance if needed so Tier-2 can emit multiple impacts for one trend/event
-- [ ] Add tests demonstrating one event can produce multiple impacts for the same trend with different signal types
+- [x] Update Tier-2 output validation to allow repeated `trend_id` when `signal_type` differs
+- [x] Enforce uniqueness of `(trend_id, signal_type)` pairs within one Tier-2 response to prevent true duplicates
+- [x] Update prompt guidance if needed so Tier-2 can emit multiple impacts for one trend/event
+- [x] Add tests demonstrating one event can produce multiple impacts for the same trend with different signal types
 
 ---
 

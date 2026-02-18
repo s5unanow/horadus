@@ -2,6 +2,8 @@
 Tier 2 LLM classifier for detailed event extraction and trend impacts.
 """
 
+# ruff: noqa: RUF001
+
 from __future__ import annotations
 
 import asyncio
@@ -131,6 +133,104 @@ class Tier2Classifier:
         },
     }
     _JSON_OBJECT_RESPONSE_FORMAT: ClassVar[dict[str, str]] = {"type": "json_object"}
+    _SUPPORTED_CLAIM_HEURISTIC_LANGUAGES: ClassVar[set[str]] = {"en", "uk", "ru"}
+    _CLAIM_STOP_WORDS: ClassVar[dict[str, set[str]]] = {
+        "en": {
+            "a",
+            "an",
+            "and",
+            "are",
+            "as",
+            "at",
+            "by",
+            "for",
+            "from",
+            "in",
+            "is",
+            "of",
+            "on",
+            "or",
+            "that",
+            "the",
+            "to",
+            "was",
+            "were",
+            "with",
+        },
+        "uk": {
+            "а",
+            "або",
+            "але",
+            "в",
+            "від",
+            "до",
+            "для",
+            "з",
+            "за",
+            "і",
+            "й",
+            "на",
+            "по",
+            "про",
+            "та",
+            "у",
+            "це",
+            "що",
+            "як",
+        },
+        "ru": {
+            "а",
+            "без",
+            "в",
+            "для",
+            "до",
+            "за",
+            "и",
+            "или",
+            "на",
+            "не",
+            "о",
+            "по",
+            "с",
+            "также",
+            "то",
+            "что",
+            "это",
+        },
+    }
+    _CLAIM_NEGATIVE_MARKERS: ClassVar[dict[str, tuple[str, ...]]] = {
+        "en": (
+            " not ",
+            " no ",
+            " never ",
+            " deny",
+            " denied",
+            " denies",
+            " refute",
+            " refuted",
+            " refutes",
+            " false",
+            " without ",
+            "did not",
+            "didn't",
+        ),
+        "uk": (
+            " не ",
+            " ніколи ",
+            " запереч",
+            " спрост",
+            " хибн",
+            " без ",
+        ),
+        "ru": (
+            " не ",
+            " никогда ",
+            " отрица",
+            " опроверг",
+            " ложн",
+            " без ",
+        ),
+    }
 
     def __init__(
         self,
@@ -596,41 +696,29 @@ class Tier2Classifier:
         return " ".join("".join(chars).split())
 
     def _claim_relation(self, first: str, second: str) -> str | None:
-        first_tokens = self._claim_tokens(first)
-        second_tokens = self._claim_tokens(second)
+        first_language = self._claim_language(first)
+        second_language = self._claim_language(second)
+        if (
+            first_language not in self._SUPPORTED_CLAIM_HEURISTIC_LANGUAGES
+            or second_language not in self._SUPPORTED_CLAIM_HEURISTIC_LANGUAGES
+            or first_language != second_language
+        ):
+            return None
+
+        first_tokens = self._claim_tokens(first, language=first_language)
+        second_tokens = self._claim_tokens(second, language=second_language)
         overlap = first_tokens.intersection(second_tokens)
         if len(overlap) < 2:
             return None
 
-        first_polarity = self._claim_polarity(first)
-        second_polarity = self._claim_polarity(second)
+        first_polarity = self._claim_polarity(first, language=first_language)
+        second_polarity = self._claim_polarity(second, language=second_language)
         if first_polarity != second_polarity:
             return "contradict"
         return "support"
 
-    def _claim_tokens(self, value: str) -> set[str]:
-        stop_words = {
-            "a",
-            "an",
-            "and",
-            "are",
-            "as",
-            "at",
-            "by",
-            "for",
-            "from",
-            "in",
-            "is",
-            "of",
-            "on",
-            "or",
-            "that",
-            "the",
-            "to",
-            "was",
-            "were",
-            "with",
-        }
+    def _claim_tokens(self, value: str, *, language: str) -> set[str]:
+        stop_words = self._CLAIM_STOP_WORDS.get(language, set())
         normalized = self._normalize_claim_text(value)
         return {
             token
@@ -638,28 +726,32 @@ class Tier2Classifier:
             if token and len(token) > 2 and token not in stop_words
         }
 
-    @staticmethod
-    def _claim_polarity(value: str) -> str:
+    def _claim_polarity(self, value: str, *, language: str) -> str:
         lowered = value.lower()
-        negative_markers = (
-            " not ",
-            " no ",
-            " never ",
-            " deny",
-            " denied",
-            " denies",
-            " refute",
-            " refuted",
-            " refutes",
-            " false",
-            " without ",
-            "did not",
-            "didn't",
-        )
+        negative_markers = self._CLAIM_NEGATIVE_MARKERS.get(language, ())
         for marker in negative_markers:
             if marker in f" {lowered} ":
                 return "negative"
         return "positive"
+
+    @staticmethod
+    def _claim_language(value: str) -> str:
+        lowered = value.lower()
+        has_cyrillic = any("а" <= ch <= "я" or ch == "ё" for ch in lowered)
+        if has_cyrillic:
+            ukrainian_specific = {"і", "ї", "є", "ґ"}
+            russian_specific = {"ы", "э", "ъ", "ё"}
+            if any(ch in ukrainian_specific for ch in lowered):
+                return "uk"
+            if any(ch in russian_specific for ch in lowered):
+                return "ru"
+            return "ru"
+
+        has_ascii_letters = any("a" <= ch <= "z" for ch in lowered)
+        has_non_ascii_letters = any(ch.isalpha() and not ch.isascii() for ch in lowered)
+        if has_ascii_letters and not has_non_ascii_letters:
+            return "en"
+        return "unknown"
 
     @staticmethod
     def _parse_datetime(raw_value: str | None) -> datetime | None:

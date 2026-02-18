@@ -2606,10 +2606,10 @@ misleading contradiction links and downstream corroboration penalties.
 **Files**: `src/processing/tier2_classifier.py`, `ai/prompts/tier2_classify.md`, `docs/ARCHITECTURE.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Define a language policy for claims used in contradiction detection (e.g., force claims to English, or implement per-language stopwords/polarity markers)
-- [ ] Ensure contradiction link creation is either accurate per language or safely disabled outside supported heuristics
-- [ ] Add tests demonstrating correct/expected behavior for at least one non-English example (uk/ru)
-- [ ] Document the policy and its limitations for operators
+- [x] Define a language policy for claims used in contradiction detection (e.g., force claims to English, or implement per-language stopwords/polarity markers)
+- [x] Ensure contradiction link creation is either accurate per language or safely disabled outside supported heuristics
+- [x] Add tests demonstrating correct/expected behavior for at least one non-English example (uk/ru)
+- [x] Document the policy and its limitations for operators
 
 ---
 

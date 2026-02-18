@@ -198,6 +198,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-085` explicit admin-key requirement completed with human sign-off (`Approved`); key-management endpoints reject missing/invalid admin credentials
 - [x] `TASK-128` corroboration scoring now supports SQLAlchemy `Row` mappings with fallback-path observability (`processing_corroboration_path_total`) and regression tests
 - [x] `TASK-129` trend updates now use atomic SQL delta applies (evidence + manual paths) with decay row-lock serialization and concurrency race-test coverage
+- [x] `TASK-130` suppression checks now run before merge/lifecycle touches, preventing suppressed-event reactivation while preserving suppression logs/metrics (`processing_event_suppressions_total`)
 
 ## In Progress
 
@@ -210,7 +211,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-130` suppression-first event lifecycle guard
+2. Execute `TASK-131` forward-only GDELT watermark semantics
 
 ## Expert Feedback Integration ✅
 

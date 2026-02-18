@@ -1064,7 +1064,12 @@ async def test_process_items_keeps_item_pending_when_tier2_budget_exceeded(mock_
 
 
 @pytest.mark.asyncio
-async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_session) -> None:
+@pytest.mark.parametrize("suppression_action", ["mark_noise", "invalidate"])
+async def test_process_items_skips_suppressed_event_feedback(
+    mock_db_session,
+    suppression_action: str,
+    monkeypatch,
+) -> None:
     item = _build_item()
     event = Event(id=uuid4(), canonical_summary="Suppressed event")
 
@@ -1089,7 +1094,17 @@ async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_sessio
         )
     )
     tier2 = SimpleNamespace(classify_event=AsyncMock())
-    mock_db_session.scalar = AsyncMock(side_effect=[event, "mark_noise"])
+    mock_db_session.scalar = AsyncMock(side_effect=[event, suppression_action])
+    suppression_metric_calls: list[tuple[str, str]] = []
+
+    def _record_suppression(*, action: str, stage: str) -> None:
+        suppression_metric_calls.append((action, stage))
+
+    monkeypatch.setattr(
+        orchestrator_module,
+        "record_processing_event_suppression",
+        _record_suppression,
+    )
 
     pipeline = ProcessingPipeline(
         session=mock_db_session,
@@ -1110,6 +1125,7 @@ async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_sessio
     assert item.processing_status == ProcessingStatus.NOISE
     tier1.classify_items.assert_awaited_once()
     tier2.classify_event.assert_not_called()
+    assert suppression_metric_calls == [(suppression_action, "pipeline_post_cluster")]
 
 
 def test_processing_pipeline_legacy_process_item_path_removed() -> None:

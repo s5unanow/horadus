@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-130: Suppression-First Event Lifecycle Guard ✅
 - TASK-129: Atomic Trend Delta Updates Under Concurrency ✅
 - TASK-128: Corroboration Row-Parsing Runtime Fix ✅
 - TASK-126: Taxonomy Drift Guardrails (Runtime Gap Queue + Benchmark Alignment) ✅

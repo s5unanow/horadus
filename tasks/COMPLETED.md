@@ -146,6 +146,7 @@ Tasks that have been completed and verified.
 - TASK-121: Docs Freshness Gate Expansion (Integrity + Coverage Rules) ✅
 - TASK-122: Launch-Critical Production Guardrails Hardening ✅
 - TASK-144: Runtime Review Findings Backlog Intake Preservation ✅
+- TASK-152: Highest-Risk Review Backlog Intake Preservation ✅
 
 ---
 

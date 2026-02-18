@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-152`.
+- Next available task IDs start at `TASK-161`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2477,6 +2477,170 @@ audit trail for “what changed” beyond probability snapshots.
 - [ ] Ensure API/config sync paths record a version row on material change (with deterministic diff or hash)
 - [ ] Add a read endpoint or admin query guidance for inspecting definition history
 - [ ] Add tests for “no-op update does not create a new version” and “material change creates a version”
+
+---
+
+## Phase 11: Operator Safety + Output Fidelity Hardening (2026-02)
+
+Backlog items derived from review of highest-risk operator foot-guns, Tier-2
+evidence capture correctness, async throughput hazards, and analytics-quality
+constraints for categorical dimensions.
+
+### TASK-152: Highest-risk review backlog intake preservation
+**Priority**: P1 (High)
+**Estimate**: 30-60 minutes
+
+Capture review-identified hardening items in `tasks/BACKLOG.md` with clear task
+boundaries so they can be executed as one-task-per-branch follow-ups.
+
+**Acceptance Criteria**:
+- [x] Add dedicated tasks for the identified issues (integration DB safety, Tier-2 multi-impact alignment, async semantic cache, categorical constraints, evidence factorization, language-aware contradiction heuristics, cost pricing config, URL normalization policy)
+- [x] Avoid duplicating already-open tasks (e.g., corroboration undercount already tracked in `TASK-146`)
+- [x] Keep Task ID policy synchronized after reserving IDs
+
+---
+
+### TASK-153: Guard integration-test DB truncation (operator safety)
+**Priority**: P1 (Critical)
+**Estimate**: 1-2 hours
+
+Integration tests currently truncate all `public` tables for whatever
+`DATABASE_URL` points at. This is a serious foot-gun if a developer/operator
+misconfigures `DATABASE_URL` (staging/prod wipe risk).
+
+**Files**: `tests/integration/conftest.py`, `src/core/config.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Add a hard fail/guard so truncation can only run against an explicitly marked test database (opt-in env var and/or DB name suffix like `_test`)
+- [ ] Add a “local-only” guard (e.g., require host is localhost/127.0.0.1 unless explicit override) to reduce remote wipe risk
+- [ ] Make the failure mode loud and actionable (clear error message showing the resolved DB target)
+- [ ] Add unit/integration tests covering guard behavior (refuse unsafe targets, allow safe test targets)
+
+---
+
+### TASK-154: Allow multiple Tier-2 impacts per trend per event (trend_id + signal_type)
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Tier-2 output validation currently rejects duplicate `trend_id` entries even if
+the `signal_type` differs. The DB schema and evidence recording allow multiple
+signals per `(trend_id, event_id)` (unique is `(trend_id, event_id, signal_type)`).
+
+**Files**: `src/processing/tier2_classifier.py`, `ai/prompts/tier2_classify.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Update Tier-2 output validation to allow repeated `trend_id` when `signal_type` differs
+- [ ] Enforce uniqueness of `(trend_id, signal_type)` pairs within one Tier-2 response to prevent true duplicates
+- [ ] Update prompt guidance if needed so Tier-2 can emit multiple impacts for one trend/event
+- [ ] Add tests demonstrating one event can produce multiple impacts for the same trend with different signal types
+
+---
+
+### TASK-155: Make semantic cache non-blocking in async pipeline paths
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+The Redis-backed semantic cache uses the synchronous `redis` client and is
+invoked from async Tier-1/Tier-2 classification code paths, which can block the
+event loop when enabled.
+
+**Files**: `src/processing/semantic_cache.py`, `src/processing/tier1_classifier.py`, `src/processing/tier2_classifier.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Use an async Redis client (`redis.asyncio`) or run sync Redis calls in a threadpool so async code paths do not block
+- [ ] Preserve current cache key semantics and eviction behavior
+- [ ] Add tests (or a micro-benchmark-style unit test) validating cache calls are awaitable/non-blocking when enabled
+- [ ] Ensure cache remains default-disabled and safe to enable with predictable latency
+
+---
+
+### TASK-156: Constrain categorical “dimension” fields to prevent drift (DB-level)
+**Priority**: P2 (Medium)
+**Estimate**: 3-6 hours
+
+Several categorical fields are stored as plain strings (e.g., `sources.source_tier`,
+`sources.reporting_type`, `events.lifecycle_status`). Over time this can create
+dirty dimensions and invalidate analytics/metrics.
+
+**Files**: `src/storage/models.py`, `alembic/`, `src/api/`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Enforce allowed values at the DB layer (Postgres enums or CHECK constraints) for source tier/reporting type and event lifecycle status
+- [ ] Add a migration that validates/backfills existing rows to legal values (or fails fast with a diagnostic query if invalids exist)
+- [ ] Preserve API schemas and behavior (requests/filters continue to work)
+- [ ] Add tests covering constraint enforcement and common query/filter behavior
+
+---
+
+### TASK-157: Persist full evidence factorization inputs for long-horizon auditability
+**Priority**: P2 (Medium)
+**Estimate**: 3-6 hours
+
+`TrendEvidence` stores many factor fields but does not persist the indicator/base
+weight and explicit direction (or multiplier) used at scoring time. If trend YAML
+changes later, audits/replays cannot fully reconstruct the factorization inputs.
+
+**Files**: `src/storage/models.py`, `alembic/`, `src/processing/pipeline_orchestrator.py`, `src/core/trend_engine.py`, `docs/DATA_MODEL.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Persist `base_weight` (indicator weight) and `direction` (or `direction_multiplier`) on `trend_evidence` rows
+- [ ] Optionally persist a stable config reference (e.g., trend definition hash/version) used at scoring time for reproducibility
+- [ ] Backfill behavior is defined for existing rows (nullable fields or deterministic backfill strategy)
+- [ ] Update docs so operators understand which evidence fields are “scoring-time” vs “derived later”
+- [ ] Add tests verifying evidence rows retain enough info to reconstruct delta inputs even after config changes
+
+---
+
+### TASK-158: Make claim-graph contradiction heuristics language-aware (en/uk/ru)
+**Priority**: P2 (Medium)
+**Estimate**: 2-5 hours
+
+Claim-graph contradiction heuristics (stopwords/polarity markers) are currently
+English-centric, but the system supports `en`, `uk`, and `ru`. This can create
+misleading contradiction links and downstream corroboration penalties.
+
+**Files**: `src/processing/tier2_classifier.py`, `ai/prompts/tier2_classify.md`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define a language policy for claims used in contradiction detection (e.g., force claims to English, or implement per-language stopwords/polarity markers)
+- [ ] Ensure contradiction link creation is either accurate per language or safely disabled outside supported heuristics
+- [ ] Add tests demonstrating correct/expected behavior for at least one non-English example (uk/ru)
+- [ ] Document the policy and its limitations for operators
+
+---
+
+### TASK-159: Externalize token pricing to config and model/version mapping
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+LLM token pricing is currently hard-coded in code and tier-based. Provider
+pricing and model versions drift; cost/budget estimates should be configurable
+and mapped to (provider, model).
+
+**Files**: `src/processing/cost_tracker.py`, `src/core/config.py`, `docs/ENVIRONMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Move pricing table to configuration (env/YAML) with safe defaults
+- [ ] Support per-model/per-provider rates, not just per tier
+- [ ] Add validation and tests for pricing config parsing and cost calculation
+- [ ] Keep budget enforcement behavior deterministic and fail-closed on invalid pricing config
+
+---
+
+### TASK-160: Improve URL normalization to avoid false-duplicate matches
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Dedup URL normalization currently drops all query parameters. Some sites encode
+content identity in query strings, so this can cause false duplicates.
+
+**Files**: `src/processing/deduplication_service.py`, `src/core/config.py`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Preserve content-identifying query parameters while stripping known tracking params (e.g., `utm_*`, `fbclid`, etc.)
+- [ ] Ensure normalization is deterministic (e.g., stable sorting of remaining query params)
+- [ ] Add tests covering URLs where query params must be preserved and where tracking params should be removed
+- [ ] Document the normalization policy and provide an operator override knob for strictness if needed
 
 ---
 

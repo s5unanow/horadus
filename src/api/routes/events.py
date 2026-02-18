@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy import func, select
+from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
@@ -131,8 +131,13 @@ async def list_events(
     if category is not None:
         query = query.where(func.array_position(Event.categories, category).is_not(None))
     if trend_id is not None:
-        query = query.join(TrendEvidence, TrendEvidence.event_id == Event.id).where(
-            TrendEvidence.trend_id == trend_id
+        query = query.where(
+            exists(
+                select(TrendEvidence.id).where(
+                    TrendEvidence.event_id == Event.id,
+                    TrendEvidence.trend_id == trend_id,
+                )
+            )
         )
 
     events = list((await session.scalars(query)).all())

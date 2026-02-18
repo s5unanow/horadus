@@ -2151,9 +2151,9 @@ cursor regression and silent coverage gaps.
 Prevent duplicate event rows in `GET /events` when `trend_id` filters are used.
 
 **Acceptance Criteria**:
-- [ ] Update trend-filter query to avoid duplicate `Event` rows (for example via `EXISTS`, `DISTINCT`, or grouping on `events.id`)
-- [ ] Preserve stable sorting + pagination semantics after query change
-- [ ] Add API tests covering multi-evidence-per-event scenarios to verify no duplicate rows are returned
+- [x] Update trend-filter query to avoid duplicate `Event` rows (for example via `EXISTS`, `DISTINCT`, or grouping on `events.id`)
+- [x] Preserve stable sorting + pagination semantics after query change
+- [x] Add API tests covering multi-evidence-per-event scenarios to verify no duplicate rows are returned
 
 ---
 

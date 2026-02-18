@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-132: Trend-Filtered Events API De-duplication ✅
 - TASK-131: Forward-Only GDELT Watermark Semantics ✅
 - TASK-130: Suppression-First Event Lifecycle Guard ✅
 - TASK-129: Atomic Trend Delta Updates Under Concurrency ✅

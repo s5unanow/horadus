@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.dialects import postgresql
 
-from src.storage.models import ApiUsage, Event, RawItem, Report, Source
+from src.storage.models import ApiUsage, Event, EventItem, RawItem, Report, Source
 
 pytestmark = pytest.mark.unit
 
@@ -74,3 +74,12 @@ def test_source_ingestion_watermark_column_present_in_model_metadata() -> None:
     assert any(
         index.name == "idx_sources_ingestion_window_end_at" for index in Source.__table__.indexes
     )
+
+
+def test_event_items_item_uniqueness_constraint_present_in_model_metadata() -> None:
+    unique_constraint_names = {
+        constraint.name
+        for constraint in EventItem.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+    assert "uq_event_items_item_id" in unique_constraint_names

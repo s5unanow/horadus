@@ -212,6 +212,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-142` production network exposure is now hardened with explicit edge/private network segmentation, no default host-published API/DB/Redis ports, and documented allowlisting/firewall plus outside-host reachability verification policy
 - [x] `TASK-145` concurrency-safe trend log-odds update hardening is now reconciled as complete via existing `TASK-129` implementation coverage (atomic SQL delta apply, idempotency, concurrency tests, and update-strategy logging)
 - [x] `TASK-146` merge ordering now links `event_items` before unique-source recount/lifecycle transition to prevent confirmation off-by-one drift, with regression coverage for threshold-order and duplicate-link race handling
+- [x] `TASK-147` now enforces one-event-per-item at the DB layer (`event_items.item_id` unique) with migration duplicate-preflight and deterministic clusterer handling for uniqueness conflicts
 
 ## In Progress
 
@@ -224,8 +225,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-147` enforce RawItem belongs-to-one-Event DB invariant
-3. Execute `TASK-148` align event `canonical_summary` semantics with `primary_item_id`
+2. Execute `TASK-148` align event `canonical_summary` semantics with `primary_item_id`
+3. Execute `TASK-149` add retention/archival policy for high-churn tables
 
 ## Expert Feedback Integration ✅
 

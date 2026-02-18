@@ -2405,10 +2405,10 @@ events despite the invariant “belongs to exactly one event.”
 **Files**: `src/storage/models.py`, `alembic/`, `src/processing/event_clusterer.py`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Add a DB-level uniqueness constraint/index enforcing one-to-one mapping: `event_items.item_id` is unique
-- [ ] Add an Alembic migration that applies the constraint safely (including a defensive preflight/query for existing duplicates)
-- [ ] Update clustering/linking code to treat a uniqueness violation as “already linked” and return the existing `event_id` deterministically
-- [ ] Add test coverage for the uniqueness invariant (attempting to link the same item to a second event fails and is handled cleanly)
+- [x] Add a DB-level uniqueness constraint/index enforcing one-to-one mapping: `event_items.item_id` is unique
+- [x] Add an Alembic migration that applies the constraint safely (including a defensive preflight/query for existing duplicates)
+- [x] Update clustering/linking code to treat a uniqueness violation as “already linked” and return the existing `event_id` deterministically
+- [x] Add test coverage for the uniqueness invariant (attempting to link the same item to a second event fails and is handled cleanly)
 
 ---
 

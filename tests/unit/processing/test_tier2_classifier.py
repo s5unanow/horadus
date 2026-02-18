@@ -647,7 +647,17 @@ async def test_classify_event_fails_over_to_secondary_on_timeout(
     assert usage.estimated_cost_usd == pytest.approx(0.000044, rel=0.001)
     assert len(primary_calls) == 2
     assert len(secondary_chat.calls) == 1
-    cost_tracker.ensure_within_budget.assert_awaited_once()
+    assert cost_tracker.ensure_within_budget.await_count == 2
+    assert cost_tracker.ensure_within_budget.await_args_list[0].args == ("tier2",)
+    assert cost_tracker.ensure_within_budget.await_args_list[0].kwargs == {
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+    }
+    assert cost_tracker.ensure_within_budget.await_args_list[1].args == ("tier2",)
+    assert cost_tracker.ensure_within_budget.await_args_list[1].kwargs == {
+        "provider": "openai-secondary",
+        "model": "gpt-4.1-nano",
+    }
     cost_tracker.record_usage.assert_awaited_once()
 
 

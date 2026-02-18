@@ -223,6 +223,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-156` source/event categorical dimensions now have DB-enforced allowed-value constraints (`source_tier`, `reporting_type`, `lifecycle_status`) with migration preflight diagnostics for invalid legacy values and added constraint/filter regression coverage
 - [x] `TASK-157` trend evidence now stores scoring-time `base_weight`, `direction_multiplier`, and `trend_definition_hash` with migration-defined legacy backfill/nullability behavior, plus reconstruction-focused test coverage and data-model documentation updates
 - [x] `TASK-158` claim-graph contradiction heuristics are now language-aware for `en`/`uk`/`ru` with per-language stopwords/polarity markers and safe no-link behavior for mixed/unsupported languages, with prompt/policy docs and non-English regression tests
+- [x] `TASK-159` token pricing is now configurable via `LLM_TOKEN_PRICING_USD_PER_1M` (`provider:model` keyed rates with prefix matching), budget checks validate active route pricing pre-call, and usage accounting applies model/provider-aware pricing with fail-closed behavior on missing/invalid pricing configuration
 
 ## In Progress
 
@@ -235,8 +236,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-159` externalize token pricing config
-3. Execute `TASK-160` improve URL normalization policy
+2. Execute `TASK-160` improve URL normalization policy
 
 ## Expert Feedback Integration ✅
 

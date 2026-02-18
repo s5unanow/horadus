@@ -6,6 +6,8 @@ Loads configuration from environment variables and .env files.
 
 from __future__ import annotations
 
+import json
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -29,6 +31,104 @@ _PRODUCTION_WEAK_SECRET_KEY_VALUES = frozenset(
         "dev",
     }
 )
+
+_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M = {
+    "openai:gpt-4.1-nano": (0.10, 0.40),
+    "openai:gpt-4.1-mini": (0.40, 1.60),
+    "openai:gpt-4o-mini": (0.15, 0.60),
+    "openai:text-embedding-3-small": (0.02, 0.00),
+    "openai:text-embedding-3-large": (0.13, 0.00),
+}
+
+_DEFAULT_DEDUP_URL_TRACKING_PARAM_PREFIXES = ("utm_",)
+_DEFAULT_DEDUP_URL_TRACKING_PARAMS = (
+    "fbclid",
+    "gclid",
+    "dclid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "mkt_tok",
+    "igshid",
+)
+
+
+def _normalize_pricing_key(raw_key: str) -> tuple[str, str]:
+    provider, separator, model = raw_key.partition(":")
+    normalized_provider = provider.strip().lower()
+    normalized_model = model.strip().lower()
+    if separator != ":" or not normalized_provider or not normalized_model:
+        msg = (
+            "LLM_TOKEN_PRICING_USD_PER_1M keys must use "
+            "'provider:model' format, e.g. 'openai:gpt-4.1-mini'"
+        )
+        raise ValueError(msg)
+    return (normalized_provider, normalized_model)
+
+
+def _coerce_pricing_rate_pair(
+    raw_value: Any,
+    *,
+    key: str,
+) -> tuple[float, float]:
+    input_rate: Any
+    output_rate: Any
+    if isinstance(raw_value, dict):
+        input_rate = raw_value.get("input")
+        output_rate = raw_value.get("output")
+    elif isinstance(raw_value, list | tuple) and len(raw_value) == 2:
+        input_rate, output_rate = raw_value
+    else:
+        msg = (
+            f"LLM_TOKEN_PRICING_USD_PER_1M value for '{key}' must be "
+            "an object with input/output or a [input, output] pair"
+        )
+        raise ValueError(msg)
+
+    try:
+        normalized_input = float(input_rate)
+        normalized_output = float(output_rate)
+    except (TypeError, ValueError) as exc:
+        msg = f"LLM_TOKEN_PRICING_USD_PER_1M rates for '{key}' must be numeric"
+        raise ValueError(msg) from exc
+
+    if normalized_input < 0 or normalized_output < 0:
+        msg = f"LLM_TOKEN_PRICING_USD_PER_1M rates for '{key}' must be >= 0"
+        raise ValueError(msg)
+    if not math.isfinite(normalized_input) or not math.isfinite(normalized_output):
+        msg = f"LLM_TOKEN_PRICING_USD_PER_1M rates for '{key}' must be finite"
+        raise ValueError(msg)
+
+    return (normalized_input, normalized_output)
+
+
+def resolve_llm_token_pricing(
+    *,
+    pricing_table: dict[str, tuple[float, float]],
+    provider: str,
+    model: str,
+) -> tuple[float, float] | None:
+    normalized_provider = provider.strip().lower()
+    normalized_model = model.strip().lower()
+    if not normalized_provider or not normalized_model:
+        return None
+
+    exact_key = f"{normalized_provider}:{normalized_model}"
+    exact_match = pricing_table.get(exact_key)
+    if exact_match is not None:
+        return exact_match
+
+    prefix_matches: list[tuple[str, tuple[float, float]]] = []
+    for key, rates in pricing_table.items():
+        key_provider, _, key_model = key.partition(":")
+        if key_provider != normalized_provider:
+            continue
+        if normalized_model.startswith(key_model):
+            prefix_matches.append((key_model, rates))
+    if not prefix_matches:
+        return None
+    prefix_matches.sort(key=lambda entry: len(entry[0]), reverse=True)
+    return prefix_matches[0][1]
 
 
 def _read_secret_file(path: str) -> str:
@@ -167,6 +267,27 @@ class Settings(BaseSettings):
         if self.RETENTION_TREND_EVIDENCE_DAYS < self.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS:
             msg = "RETENTION_TREND_EVIDENCE_DAYS must be >= RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS"
             raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_default_pricing_coverage(self) -> Settings:
+        required_pairs = (
+            ("tier1", self.LLM_PRIMARY_PROVIDER, self.LLM_TIER1_MODEL),
+            ("tier2", self.LLM_PRIMARY_PROVIDER, self.LLM_TIER2_MODEL),
+            ("embedding", self.LLM_PRIMARY_PROVIDER, self.EMBEDDING_MODEL),
+        )
+        for tier, provider, model in required_pairs:
+            resolved = resolve_llm_token_pricing(
+                pricing_table=self.LLM_TOKEN_PRICING_USD_PER_1M,
+                provider=provider,
+                model=model,
+            )
+            if resolved is None:
+                msg = (
+                    "LLM_TOKEN_PRICING_USD_PER_1M must include a price for "
+                    f"{tier} route '{provider}:{model}'"
+                )
+                raise ValueError(msg)
         return self
 
     @model_validator(mode="after")
@@ -324,6 +445,75 @@ class Settings(BaseSettings):
         if normalized not in allowed:
             msg = "API_RATE_LIMIT_STRATEGY must be one of: fixed_window, sliding_window"
             raise ValueError(msg)
+        return normalized
+
+    @field_validator("LLM_TOKEN_PRICING_USD_PER_1M", mode="before")
+    @classmethod
+    def parse_llm_token_pricing_table(cls, value: Any) -> dict[str, tuple[float, float]]:
+        """Parse provider/model token-pricing table from mapping or JSON."""
+        if value is None:
+            return dict(_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M)
+
+        raw_table: Any = value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return dict(_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M)
+            try:
+                raw_table = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                msg = "LLM_TOKEN_PRICING_USD_PER_1M must be valid JSON when provided as a string"
+                raise ValueError(msg) from exc
+
+        if not isinstance(raw_table, dict):
+            msg = "LLM_TOKEN_PRICING_USD_PER_1M must decode to an object"
+            raise ValueError(msg)
+
+        normalized: dict[str, tuple[float, float]] = {}
+        for raw_key, raw_rates in raw_table.items():
+            provider, model = _normalize_pricing_key(str(raw_key))
+            normalized_key = f"{provider}:{model}"
+            normalized[normalized_key] = _coerce_pricing_rate_pair(
+                raw_rates,
+                key=normalized_key,
+            )
+
+        if not normalized:
+            msg = "LLM_TOKEN_PRICING_USD_PER_1M must define at least one provider:model entry"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("DEDUP_URL_QUERY_MODE", mode="before")
+    @classmethod
+    def parse_dedup_url_query_mode(cls, value: Any) -> str:
+        """Normalize URL query normalization strictness policy."""
+        normalized = str(value or "keep_non_tracking").strip().lower()
+        allowed = {"keep_non_tracking", "strip_all"}
+        if normalized not in allowed:
+            msg = "DEDUP_URL_QUERY_MODE must be one of: keep_non_tracking, strip_all"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator(
+        "DEDUP_URL_TRACKING_PARAM_PREFIXES", "DEDUP_URL_TRACKING_PARAMS", mode="before"
+    )
+    @classmethod
+    def parse_dedup_url_param_sets(cls, value: Any) -> list[str]:
+        """Parse and normalize dedup URL query param config lists."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw_values = [chunk.strip() for chunk in value.split(",")]
+        elif isinstance(value, list | tuple):
+            raw_values = [str(chunk).strip() for chunk in value]
+        else:
+            raw_values = [str(value).strip()]
+
+        normalized: list[str] = []
+        for raw in raw_values:
+            normalized_value = raw.lower()
+            if normalized_value and normalized_value not in normalized:
+                normalized.append(normalized_value)
         return normalized
 
     @field_validator("LANGUAGE_POLICY_SUPPORTED_LANGUAGES", mode="before")
@@ -488,6 +678,12 @@ class Settings(BaseSettings):
     LLM_RETROSPECTIVE_MODEL: str = Field(
         default="gpt-4.1-mini",
         description="Model for retrospective analysis narrative generation",
+    )
+    LLM_TOKEN_PRICING_USD_PER_1M: dict[str, tuple[float, float]] = Field(
+        default_factory=lambda: dict(_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M),
+        description=(
+            "Token pricing table keyed by 'provider:model' with (input, output) USD per 1M tokens"
+        ),
     )
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
@@ -672,6 +868,18 @@ class Settings(BaseSettings):
         ge=0,
         le=1,
         description="Cosine similarity threshold for deduplication",
+    )
+    DEDUP_URL_QUERY_MODE: str = Field(
+        default="keep_non_tracking",
+        description="URL query normalization mode (`keep_non_tracking` or `strip_all`)",
+    )
+    DEDUP_URL_TRACKING_PARAM_PREFIXES: list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_DEDUP_URL_TRACKING_PARAM_PREFIXES),
+        description="Query param prefixes removed during URL dedup normalization",
+    )
+    DEDUP_URL_TRACKING_PARAMS: list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_DEDUP_URL_TRACKING_PARAMS),
+        description="Exact query params removed during URL dedup normalization",
     )
     CLUSTER_SIMILARITY_THRESHOLD: float = Field(
         default=0.88,

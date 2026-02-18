@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-159: Externalize token pricing to config and model/version mapping ✅
 - TASK-158: Make claim-graph contradiction heuristics language-aware (en/uk/ru) ✅
 - TASK-157: Persist full evidence factorization inputs for long-horizon auditability ✅
 - TASK-156: Constrain categorical “dimension” fields to prevent drift (DB-level) ✅

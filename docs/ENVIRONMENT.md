@@ -67,6 +67,7 @@ Production auth/secret guardrails:
 | `NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS` | `0` | Maximum unsupported deterministic narrative claims allowed before fallback. |
 | `NARRATIVE_GROUNDING_NUMERIC_TOLERANCE` | `0.05` | Absolute tolerance used by numeric grounding checks against structured evidence payloads. |
 | `LLM_RETROSPECTIVE_MODEL` | `gpt-4.1-mini` | Retrospective narrative model. |
+| `LLM_TOKEN_PRICING_USD_PER_1M` | built-in defaults | Optional JSON object keyed by `provider:model` with `[input, output]` USD-per-1M-token rates. |
 | `EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding generation model. |
 | `EMBEDDING_BATCH_SIZE` | `32` | Max texts per embedding request. |
 | `EMBEDDING_CACHE_MAX_SIZE` | `2048` | Max in-memory embedding cache entries (LRU-evicted). |
@@ -86,6 +87,11 @@ Production auth/secret guardrails:
 | `PROCESSING_STALE_TIMEOUT_MINUTES` | `30` | Age threshold before stale `processing` items are reset to `pending`. |
 | `LANGUAGE_POLICY_SUPPORTED_LANGUAGES` | `en,uk,ru` | Launch language support targets enforced by processing policy. |
 | `LANGUAGE_POLICY_UNSUPPORTED_MODE` | `skip` | Unsupported-language handling (`skip` marks noise, `defer` leaves pending). |
+
+`LLM_TOKEN_PRICING_USD_PER_1M` notes:
+- Supports exact `provider:model` entries and model-prefix matching for versioned model IDs.
+- Startup fails if pricing does not cover active Tier-1/Tier-2/Embedding routes.
+- Runtime budget checks fail-closed for any invocation route without a configured price.
 
 ## Cost and Safety Controls
 

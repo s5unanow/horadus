@@ -25,13 +25,16 @@ Example Usage:
 from __future__ import annotations
 
 import math
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING
+from decimal import Decimal
+from inspect import isawaitable
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
 if TYPE_CHECKING:
@@ -418,6 +421,70 @@ class TrendEngine:
         """
         self.session = session
 
+    async def apply_log_odds_delta(
+        self,
+        *,
+        trend_id: UUID,
+        delta: float,
+        reason: str,
+        trend_name: str | None = None,
+        updated_at: datetime | None = None,
+        fallback_current_log_odds: float | None = None,
+    ) -> tuple[float, float]:
+        """Apply a log-odds delta atomically and return (previous_lo, new_lo)."""
+        from src.storage.models import Trend
+
+        delta_value = Decimal(str(delta))
+        applied_at = _as_utc(updated_at) if updated_at is not None else datetime.now(UTC)
+        stmt = (
+            update(Trend)
+            .where(Trend.id == trend_id)
+            .values(
+                current_log_odds=Trend.current_log_odds + delta_value,
+                updated_at=applied_at,
+            )
+            .returning(Trend.current_log_odds)
+            .execution_options(synchronize_session=False)
+        )
+        result = await self.session.execute(stmt)
+        raw_new_log_odds = result.scalar_one_or_none()
+        if isawaitable(raw_new_log_odds):
+            raw_new_log_odds = await raw_new_log_odds
+
+        parsed_new_log_odds: float | None = None
+        if isinstance(raw_new_log_odds, int | float | Decimal):
+            parsed_new_log_odds = float(raw_new_log_odds)
+
+        if parsed_new_log_odds is None:
+            if fallback_current_log_odds is None:
+                msg = f"Trend '{trend_id}' not found for atomic log-odds update"
+                raise ValueError(msg)
+            previous_lo = float(fallback_current_log_odds)
+            new_lo = previous_lo + float(delta_value)
+            logger.warning(
+                "Atomic trend delta update returned no row; using in-memory fallback",
+                trend_id=str(trend_id),
+                trend_name=trend_name,
+                delta=float(delta_value),
+                reason=reason,
+                update_strategy="fallback_in_memory",
+            )
+            return previous_lo, new_lo
+
+        new_lo = parsed_new_log_odds
+        previous_lo = new_lo - float(delta_value)
+        logger.debug(
+            "Applied atomic trend log-odds delta",
+            trend_id=str(trend_id),
+            trend_name=trend_name,
+            delta=float(delta_value),
+            reason=reason,
+            update_strategy="atomic_sql_add",
+            previous_log_odds=previous_lo,
+            new_log_odds=new_lo,
+        )
+        return previous_lo, new_lo
+
     async def apply_evidence(
         self,
         trend: Trend,
@@ -447,7 +514,8 @@ class TrendEngine:
         """
         from src.storage.models import TrendEvidence
 
-        previous_prob = logodds_to_prob(float(trend.current_log_odds))
+        prior_log_odds = float(trend.current_log_odds)
+        previous_prob = logodds_to_prob(prior_log_odds)
 
         existing = await self.session.execute(
             # Ensure idempotency: never apply the same (trend, event, signal) twice.
@@ -511,11 +579,20 @@ class TrendEngine:
             )
 
         # Apply delta only after evidence record is guaranteed unique/persistable.
-        trend.current_log_odds = float(trend.current_log_odds) + delta
-        trend.updated_at = datetime.now(UTC)
+        applied_at = datetime.now(UTC)
+        previous_lo, new_lo = await self.apply_log_odds_delta(
+            trend_id=trend.id,
+            trend_name=trend.name,
+            delta=delta,
+            reason="evidence",
+            updated_at=applied_at,
+            fallback_current_log_odds=prior_log_odds,
+        )
+        trend.current_log_odds = new_lo
+        trend.updated_at = applied_at
 
-        # Get new probability
-        new_prob = logodds_to_prob(float(trend.current_log_odds))
+        previous_prob = logodds_to_prob(previous_lo)
+        new_prob = logodds_to_prob(new_lo)
 
         # Determine direction
         if delta > 0.001:
@@ -569,30 +646,60 @@ class TrendEngine:
         """
         as_of = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
 
-        # Canonical baseline source of truth lives in the DB baseline log-odds field.
-        baseline_lo = float(trend.baseline_log_odds)
+        from src.storage.models import Trend as TrendModel
 
-        # Get half-life
-        half_life = trend.decay_half_life_days or DEFAULT_DECAY_HALF_LIFE_DAYS
+        locked_row_result = await self.session.execute(
+            select(
+                TrendModel.current_log_odds.label("current_log_odds"),
+                TrendModel.baseline_log_odds.label("baseline_log_odds"),
+                TrendModel.updated_at.label("updated_at"),
+                TrendModel.decay_half_life_days.label("decay_half_life_days"),
+            )
+            .where(TrendModel.id == trend.id)
+            .with_for_update()
+        )
+        raw_locked_row: Any = locked_row_result.one_or_none()
+        if isawaitable(raw_locked_row):
+            raw_locked_row = await raw_locked_row
 
-        # Calculate days since last update
-        days_elapsed = (as_of - trend.updated_at).total_seconds() / 86400.0
+        row_mapping = getattr(raw_locked_row, "_mapping", None)
+        typed_mapping: Mapping[str, Any] | None = (
+            row_mapping if isinstance(row_mapping, Mapping) else None
+        )
+        has_locked_state = (
+            typed_mapping is not None
+            and typed_mapping.get("current_log_odds") is not None
+            and typed_mapping.get("baseline_log_odds") is not None
+            and isinstance(typed_mapping.get("updated_at"), datetime)
+        )
+        if has_locked_state and typed_mapping is not None:
+            current_lo = float(typed_mapping["current_log_odds"])
+            baseline_lo = float(typed_mapping["baseline_log_odds"])
+            last_updated_at = _as_utc(typed_mapping["updated_at"])
+            half_life = typed_mapping["decay_half_life_days"] or DEFAULT_DECAY_HALF_LIFE_DAYS
+        else:
+            current_lo = float(trend.current_log_odds)
+            baseline_lo = float(trend.baseline_log_odds)
+            last_updated_at = _as_utc(trend.updated_at)
+            half_life = trend.decay_half_life_days or DEFAULT_DECAY_HALF_LIFE_DAYS
 
+        days_elapsed = (as_of - last_updated_at).total_seconds() / 86400.0
         if days_elapsed <= 0:
-            return logodds_to_prob(float(trend.current_log_odds))
+            trend.current_log_odds = current_lo
+            trend.updated_at = last_updated_at
+            return logodds_to_prob(current_lo)
 
-        # Exponential decay factor
         decay_factor = math.pow(0.5, days_elapsed / half_life)
-
-        # Current log-odds
-        current_lo = float(trend.current_log_odds)
-
-        # Apply decay toward baseline
         deviation = current_lo - baseline_lo
         new_lo = baseline_lo + (deviation * decay_factor)
 
-        # Update trend
-        previous_lo = trend.current_log_odds
+        if has_locked_state:
+            await self.session.execute(
+                update(TrendModel)
+                .where(TrendModel.id == trend.id)
+                .values(current_log_odds=new_lo, updated_at=as_of)
+                .execution_options(synchronize_session=False)
+            )
         trend.current_log_odds = new_lo
         trend.updated_at = as_of
 
@@ -604,9 +711,10 @@ class TrendEngine:
             trend_name=trend.name,
             days_elapsed=days_elapsed,
             decay_factor=decay_factor,
-            previous_lo=previous_lo,
+            previous_lo=current_lo,
             new_lo=new_lo,
             new_prob=new_prob,
+            update_strategy=("row_lock_serialized" if has_locked_state else "fallback_in_memory"),
         )
 
         return new_prob

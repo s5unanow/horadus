@@ -215,10 +215,15 @@ Language-segmented operational metrics are emitted for:
 │                                                                 │
 │   delta = 0.04 × 0.95 × 0.58 × 1.0 × 0.9 × 0.95 × 1 = 0.0188    │
 │                                                                 │
-│   trend.current_log_odds += 0.0188                              │
+│   SQL: current_log_odds = current_log_odds + 0.0188             │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
+
+Concurrency/serialization rules for trend updates:
+- Evidence and manual override/invalidation deltas use an atomic SQL increment (`current_log_odds = current_log_odds + :delta`) so concurrent workers cannot drop updates.
+- Decay acquires a row lock (`SELECT ... FOR UPDATE`) before computing and writing the decayed value, so decay and evidence/manual deltas serialize safely.
+- Trend evidence idempotency (`trend_id`, `event_id`, `signal_type`) remains enforced by unique constraint, so duplicate evidence never double-applies a delta.
 
 ### 4. Reporting Flow
 

@@ -367,6 +367,7 @@ class ReportGenerator:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
         )
         contradiction_analytics = await self._load_contradiction_analytics(
             trend_id=trend_id,
@@ -415,6 +416,7 @@ class ReportGenerator:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
         )
         category_breakdown = await self._load_category_breakdown(
             trend_id=trend_id,
@@ -524,6 +526,7 @@ class ReportGenerator:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(Event.id, Event.categories)
         )
         rows = (await self.session.execute(query)).all()
@@ -558,6 +561,7 @@ class ReportGenerator:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .where(Event.has_contradictions.is_(True))
             .group_by(TrendEvidence.event_id)
         )
@@ -667,6 +671,7 @@ class ReportGenerator:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(Source.type)
             .order_by(func.count(func.distinct(RawItem.id)).desc())
         )
@@ -699,6 +704,7 @@ class ReportGenerator:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(
                 TrendEvidence.event_id,
                 Event.canonical_summary,

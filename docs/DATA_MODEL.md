@@ -282,12 +282,22 @@ Audit trail of all probability updates.
 | delta_log_odds | DECIMAL(10,6) | No | | Probability change |
 | reasoning | TEXT | Yes | | LLM explanation |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+| is_invalidated | BOOLEAN | No | FALSE | Whether this evidence row was invalidated by human feedback |
+| invalidated_at | TIMESTAMPTZ | Yes | | Timestamp when invalidation was recorded |
+| invalidation_feedback_id | UUID | Yes | | Optional FK to `human_feedback.id` that performed invalidation |
 
 **Indexes:**
 - Primary key: `id`
 - Unique: `(trend_id, event_id, signal_type)`
 - Index: `(trend_id, created_at DESC)`
 - Index: `event_id`
+- Index: `(event_id, is_invalidated)`
+
+**Invalidation lineage semantics:**
+- Event invalidation no longer deletes evidence rows.
+- Instead, evidence is marked `is_invalidated=true` and linked to the originating `human_feedback` record.
+- Operational analytics/reporting queries use only active (`is_invalidated=false`) evidence by default.
+- Audit/replay paths can include invalidated lineage explicitly when needed.
 
 **Delta calculation:**
 ```

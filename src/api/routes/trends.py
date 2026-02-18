@@ -165,6 +165,9 @@ class TrendEvidenceResponse(BaseModel):
                 "confidence_score": 0.95,
                 "delta_log_odds": 0.021,
                 "reasoning": "Multiple corroborated force-movement reports.",
+                "is_invalidated": False,
+                "invalidated_at": None,
+                "invalidation_feedback_id": None,
                 "created_at": "2026-02-07T18:00:00Z",
             }
         },
@@ -183,6 +186,9 @@ class TrendEvidenceResponse(BaseModel):
     confidence_score: float | None
     delta_log_odds: float
     reasoning: str | None
+    is_invalidated: bool
+    invalidated_at: datetime | None
+    invalidation_feedback_id: UUID | None
     created_at: datetime
 
 
@@ -532,6 +538,7 @@ async def _get_evidence_stats(
     ).where(
         TrendEvidence.trend_id == trend_id,
         TrendEvidence.created_at >= since_30d,
+        TrendEvidence.is_invalidated.is_(False),
     )
     count_row = (await session.execute(count_stmt)).one()
     evidence_count = int(count_row[0] or 0)
@@ -559,6 +566,7 @@ async def _get_top_movers_7d(
         select(TrendEvidence)
         .where(TrendEvidence.trend_id == trend_id)
         .where(TrendEvidence.created_at >= since_7d)
+        .where(TrendEvidence.is_invalidated.is_(False))
         .order_by(func.abs(TrendEvidence.delta_log_odds).desc())
         .limit(limit)
     )
@@ -641,6 +649,9 @@ def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
         ),
         delta_log_odds=float(evidence.delta_log_odds),
         reasoning=evidence.reasoning,
+        is_invalidated=bool(evidence.is_invalidated),
+        invalidated_at=evidence.invalidated_at,
+        invalidation_feedback_id=evidence.invalidation_feedback_id,
         created_at=evidence.created_at,
     )
 
@@ -868,6 +879,7 @@ async def list_trend_evidence(
     trend_id: UUID,
     start_at: Annotated[datetime | None, Query()] = None,
     end_at: Annotated[datetime | None, Query()] = None,
+    include_invalidated: Annotated[bool, Query()] = False,
     limit: Annotated[int, Query(ge=1, le=1000)] = 100,
     session: AsyncSession = Depends(get_session),
 ) -> list[TrendEvidenceResponse]:
@@ -890,6 +902,8 @@ async def list_trend_evidence(
         query = query.where(TrendEvidence.created_at >= start_at)
     if end_at is not None:
         query = query.where(TrendEvidence.created_at <= end_at)
+    if not include_invalidated:
+        query = query.where(TrendEvidence.is_invalidated.is_(False))
 
     evidence_records = (await session.scalars(query)).all()
     return [_to_evidence_response(record) for record in evidence_records]
@@ -946,6 +960,7 @@ async def simulate_trend(
         query = select(TrendEvidence).where(
             TrendEvidence.trend_id == trend_id,
             TrendEvidence.event_id == payload.event_id,
+            TrendEvidence.is_invalidated.is_(False),
         )
         if payload.signal_type is not None:
             query = query.where(TrendEvidence.signal_type == payload.signal_type)

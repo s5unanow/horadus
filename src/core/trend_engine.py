@@ -863,6 +863,7 @@ class TrendEngine:
             select(TrendEvidence)
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= cutoff)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .order_by(func.abs(TrendEvidence.delta_log_odds).desc())
             .limit(limit)
         )

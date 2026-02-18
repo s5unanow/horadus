@@ -905,6 +905,7 @@ class ProcessingPipeline:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.signal_type == signal_type)
             .where(TrendEvidence.event_id != event_id)
+            .where(TrendEvidence.is_invalidated.is_(False))
         )
         last_seen_at: datetime | None = await self.session.scalar(query)
         return calculate_recency_novelty(last_seen_at=last_seen_at)

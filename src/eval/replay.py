@@ -357,6 +357,7 @@ async def _load_dataset_counts(
                     .join(EventItem, EventItem.item_id == RawItem.id)
                     .join(TrendEvidence, TrendEvidence.event_id == EventItem.event_id)
                     .where(TrendEvidence.trend_id == trend_id)
+                    .where(TrendEvidence.is_invalidated.is_(False))
                     .where(RawItem.fetched_at >= period_start)
                     .where(RawItem.fetched_at <= period_end)
                 )
@@ -368,6 +369,7 @@ async def _load_dataset_counts(
                     .select_from(Event)
                     .join(TrendEvidence, TrendEvidence.event_id == Event.id)
                     .where(TrendEvidence.trend_id == trend_id)
+                    .where(TrendEvidence.is_invalidated.is_(False))
                     .where(Event.last_updated_at >= period_start)
                     .where(Event.last_updated_at <= period_end)
                 )
@@ -379,6 +381,7 @@ async def _load_dataset_counts(
             .select_from(TrendEvidence)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
         )
         snapshot_query = (
             select(func.count())

@@ -341,8 +341,8 @@ async def create_event_feedback(
     """
     Record event-level feedback (pin, mark_noise, invalidate).
 
-    `invalidate` removes the event's trend-evidence contributions and
-    adjusts affected trend log-odds accordingly.
+    `invalidate` reverses active trend-evidence contributions and marks
+    evidence rows invalidated for lineage/audit replay.
     """
     event = await session.get(Event, event_id)
     if event is None:
@@ -353,6 +353,8 @@ async def create_event_feedback(
 
     original_value: dict[str, Any] | None = None
     corrected_value: dict[str, Any] | None = None
+    evidences_to_invalidate: list[TrendEvidence] = []
+    invalidation_timestamp: datetime | None = None
 
     if payload.action == "mark_noise":
         original_value = {"lifecycle_status": event.lifecycle_status}
@@ -364,10 +366,12 @@ async def create_event_feedback(
                 await session.scalars(
                     select(TrendEvidence)
                     .where(TrendEvidence.event_id == event_id)
+                    .where(TrendEvidence.is_invalidated.is_(False))
                     .order_by(TrendEvidence.created_at.asc())
                 )
             ).all()
         )
+        evidences_to_invalidate = evidences
         trend_deltas: dict[UUID, float] = {}
         for evidence in evidences:
             trend_deltas[evidence.trend_id] = trend_deltas.get(evidence.trend_id, 0.0) + float(
@@ -405,17 +409,21 @@ async def create_event_feedback(
                     "delta_applied": -trend_delta,
                 }
 
-        for evidence in evidences:
-            await session.delete(evidence)
+        invalidation_timestamp = datetime.now(tz=UTC)
+        evidence_ids = [str(evidence.id) for evidence in evidences if evidence.id is not None]
 
         original_value = {
             "evidence_count": len(evidences),
+            "active_evidence_ids": evidence_ids,
             "trend_deltas": {str(trend_id): delta for trend_id, delta in trend_deltas.items()},
         }
         corrected_value = {
             "reverted_event_id": str(event_id),
             "affected_trend_count": len(trend_deltas),
             "trend_adjustments": trend_adjustments,
+            "invalidated_evidence_count": len(evidence_ids),
+            "invalidated_evidence_ids": evidence_ids,
+            "invalidated_at": invalidation_timestamp.isoformat(),
         }
 
     feedback = HumanFeedback(
@@ -429,6 +437,13 @@ async def create_event_feedback(
     )
     session.add(feedback)
     await session.flush()
+
+    if payload.action == "invalidate" and evidences_to_invalidate:
+        for evidence in evidences_to_invalidate:
+            evidence.is_invalidated = True
+            evidence.invalidated_at = invalidation_timestamp
+            evidence.invalidation_feedback_id = feedback.id
+
     return _to_feedback_response(feedback)
 
 
@@ -518,6 +533,7 @@ async def list_review_queue(
         )
         .join(Trend, Trend.id == TrendEvidence.trend_id)
         .where(TrendEvidence.event_id.in_(tuple(event_ids)))
+        .where(TrendEvidence.is_invalidated.is_(False))
     )
     if trend_id is not None:
         evidence_query = evidence_query.where(TrendEvidence.trend_id == trend_id)

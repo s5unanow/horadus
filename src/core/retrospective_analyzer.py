@@ -193,6 +193,7 @@ class RetrospectiveAnalyzer:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(
                 TrendEvidence.event_id,
                 Event.canonical_summary,
@@ -258,6 +259,7 @@ class RetrospectiveAnalyzer:
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(TrendEvidence.signal_type)
             .order_by(func.sum(func.abs(TrendEvidence.delta_log_odds)).desc())
             .limit(max(1, limit))

@@ -206,6 +206,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-135` four external-review trend descriptions now explicitly define what baseline probability measures, with `elite-mass-polarization` reframed to acceleration semantics
 - [x] `TASK-136` `ai-control` trend now includes `ai_safety_incident` as a leading escalatory indicator, with taxonomy validation passing in subset mode
 - [x] `TASK-137` vague falsification criteria were tightened into measurable thresholds for `elite-mass-polarization` and `fertility-decline-acceleration`
+- [x] `TASK-138` keyword specificity was improved for three vague indicators (`governance_capture_signals`, `mainstream_positive_framing`, `institutional_trust_collapse`) with measurement/media/survey-specific terms
 
 ## In Progress
 
@@ -218,7 +219,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-138` improve keyword specificity for 3 vague indicators
+2. Execute `TASK-139` embedding input truncation telemetry and guardrails
 
 ## Expert Feedback Integration ✅
 

@@ -2266,10 +2266,10 @@ Three indicators have keywords that are too generic for reliable classification:
 `config/trends/parallel-enclaves-europe.yaml`
 
 **Acceptance Criteria**:
-- [ ] `governance_capture_signals`: add keywords like "lobbying spending record", "corporate political donations", "PAC expenditure", "regulatory revolving door appointment"
-- [ ] `mainstream_positive_framing`: add keywords like "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"
-- [ ] `institutional_trust_collapse`: add keywords like "Eurobarometer trust", "Gallup institutional confidence", "trust in government survey", "democratic satisfaction index"
-- [ ] All 3 configs pass Pydantic validation
+- [x] `governance_capture_signals`: add keywords like "lobbying spending record", "corporate political donations", "PAC expenditure", "regulatory revolving door appointment"
+- [x] `mainstream_positive_framing`: add keywords like "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"
+- [x] `institutional_trust_collapse`: add keywords like "Eurobarometer trust", "Gallup institutional confidence", "trust in government survey", "democratic satisfaction index"
+- [x] All 3 configs pass Pydantic validation
 
 ---
 

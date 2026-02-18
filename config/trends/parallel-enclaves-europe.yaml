@@ -49,7 +49,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: lagging
-    keywords: ["trust in police fell", "judicial trust decline", "community distrust authorities"]
+    keywords: ["trust in police fell", "judicial trust decline", "community distrust authorities", "Eurobarometer trust", "Gallup institutional confidence", "trust in government survey", "democratic satisfaction index"]
 
   segregation_index_change:
     weight: 0.03

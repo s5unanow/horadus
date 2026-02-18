@@ -2294,10 +2294,10 @@ Reduce task-tracking drift by enforcing a consistent workflow when new backlog
 tasks are discovered during active implementation.
 
 **Acceptance Criteria**:
-- [ ] Update `AGENTS.md` workflow guidance to explicitly require that newly discovered backlog tasks relevant to the active task are added/committed in the same task branch/PR (as a separate docs commit if needed)
-- [ ] Define explicit exception criteria for when backlog edits must be split to a separate branch (unrelated scope, already-merged task, or urgent blocker)
-- [ ] Add a lightweight guard/checklist item in task completion docs or scripts to verify backlog updates were either included in-branch or explicitly split with rationale
-- [ ] Add unit/script test coverage if automation/scripts are changed
+- [x] Update `AGENTS.md` workflow guidance to explicitly require that newly discovered backlog tasks relevant to the active task are added/committed in the same task branch/PR (as a separate docs commit if needed)
+- [x] Define explicit exception criteria for when backlog edits must be split to a separate branch (unrelated scope, already-merged task, or urgent blocker)
+- [x] Add a lightweight guard/checklist item in task completion docs or scripts to verify backlog updates were either included in-branch or explicitly split with rationale
+- [x] Add unit/script test coverage if automation/scripts are changed (not applicable: no script automation changes in this task)
 
 ---
 

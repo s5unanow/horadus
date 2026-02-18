@@ -191,6 +191,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-070` baseline prior review/sign-off completed with human approval for all active trends
 - [x] `TASK-077` cost-first ordering completed with human sign-off (`Approved`); Tier-1 now gates embedding/clustering
 - [x] `TASK-084` production security guardrails completed with human sign-off (`Approved`); production now rejects weak/short secret-key values
+- [x] `TASK-140` codified human-gated sequencing and in-branch backlog-capture exceptions in `AGENTS.md` to reduce process drift
 
 ## In Progress
 

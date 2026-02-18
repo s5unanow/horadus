@@ -78,6 +78,14 @@ After completing work:
 - Any task marked `[REQUIRES_HUMAN]` is blocked for autonomous execution.
 - Agents must not implement, close, or mark those tasks DONE until a human explicitly confirms manual completion.
 - Agents may prepare scaffolding/checklists for `[REQUIRES_HUMAN]` tasks, but must stop before the manual step and report that human action is required.
+- Required `[REQUIRES_HUMAN]` delivery sequence:
+  1. Create/switch to the task branch.
+  2. Scaffold checklist/context files first, then run back-and-forth review with the human.
+  3. Finalize implementation only after that review.
+  4. Open/update PR for the finalized task scope.
+  5. Merge only after explicit human sign-off in-thread (for example: `Approved`, `Go`, `Sign off`).
+  6. After merge, switch to `main` and sync (`git pull --ff-only`).
+- Do not merge a `[REQUIRES_HUMAN]` task PR before explicit human sign-off, even if CI is green.
 
 ## Task Branching and PR Rules (Hard Rule)
 
@@ -95,6 +103,10 @@ After completing work:
 - If any lifecycle step is blocked (permissions/CI/platform), stop at the furthest completed step and report the exact blocker and required manual action.
 - If unrelated work is discovered mid-task, create a new task immediately but do not switch branches by default; continue current task unless the new work is a blocker/urgent.
 - Never mix two tasks in one commit/PR; blockers must be handled via a separate task branch after a safe checkpoint.
+- Backlog capture rule for discovered follow-ups:
+  - If new backlog tasks are discovered during `TASK-XXX` and are relevant to that task scope, add them in the same `TASK-XXX` branch/PR (prefer a separate docs commit in that branch).
+  - Split backlog edits to a separate task branch only when: scope is unrelated, the original task is already merged/closed, or an urgent blocker requires immediate isolation.
+  - Before merge, verify backlog updates were either included in-branch or explicitly split with rationale in PR/task notes.
 
 ## Implementation Pointers (Keep It Lean)
 

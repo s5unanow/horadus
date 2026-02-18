@@ -16,6 +16,7 @@
 
 ## Completed This Sprint
 
+- `TASK-140` In-Branch Backlog Capture Rule and Guard — DONE ✓
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-070` Trend Baseline Prior Review and Sign-Off — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
@@ -54,3 +55,4 @@
 - `TASK-077` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Tier-1 now runs before embedding/clustering; unit/lint/type checks passed; integration test execution blocked locally by postgres auth mismatch.`
 - `TASK-084` reviewer checklist: `tasks/assessments/TASK-084-production-security-guardrails-checklist-2026-02-18.md`.
 - `TASK-084` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Production startup now rejects weak/short SECRET_KEY values; auth guardrails preserved; core unit/lint/type checks passed.`
+- `TASK-140` completion note: `AGENTS.md` now codifies human-gated sequence and in-branch backlog-capture rule with exception criteria.

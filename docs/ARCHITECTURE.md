@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Verified**: 2026-02-16
+**Last Verified**: 2026-02-18
 
 Operational tracing setup and validation steps are documented in `docs/TRACING.md`.
 
@@ -143,6 +143,15 @@ Launch language policy:
        │
        ▼
 ┌─────────────┐
+│ Tier 1 LLM  │
+│ relevance   │
+│ score 0-10  │
+└──────┬──────┘
+       │
+       ├──────── score < threshold ───▶ mark as noise
+       │
+       ▼
+┌─────────────┐
 │  Compute    │
 │  embedding  │
 └──────┬──────┘
@@ -152,15 +161,6 @@ Launch language policy:
 │ Cluster to  │
 │ event       │
 └──────┬──────┘
-       │
-       ▼
-┌─────────────┐
-│ Tier 1 LLM  │
-│ relevance   │
-│ score 0-10  │
-└──────┬──────┘
-       │
-       ├──────── score < threshold ───▶ mark as noise
        │
        ▼
 ┌─────────────┐

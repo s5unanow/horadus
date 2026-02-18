@@ -151,12 +151,23 @@ async def test_process_items_sets_item_embedding_lineage_when_embedding_created(
     tier1 = SimpleNamespace(
         classify_items=AsyncMock(
             return_value=(
-                [Tier1ItemResult(item_id=item.id, max_relevance=1, should_queue_tier2=False)],
+                [Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True)],
                 Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
             )
         )
     )
-    tier2 = SimpleNamespace(classify_event=AsyncMock())
+    tier2 = SimpleNamespace(
+        classify_event=AsyncMock(
+            return_value=(
+                Tier2EventResult(
+                    event_id=event.id,
+                    categories_count=1,
+                    trend_impacts_count=1,
+                ),
+                Tier2Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
     mock_db_session.scalar = AsyncMock(side_effect=[event, None])
 
     pipeline = ProcessingPipeline(
@@ -189,7 +200,14 @@ async def test_process_items_marks_duplicates_as_noise(mock_db_session) -> None:
     )
     embedding = SimpleNamespace(embed_texts=AsyncMock())
     clusterer = SimpleNamespace(cluster_item=AsyncMock())
-    tier1 = SimpleNamespace(classify_items=AsyncMock())
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True)],
+                Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
     tier2 = SimpleNamespace(classify_event=AsyncMock())
 
     pipeline = ProcessingPipeline(
@@ -882,7 +900,14 @@ async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_sessio
             )
         )
     )
-    tier1 = SimpleNamespace(classify_items=AsyncMock())
+    tier1 = SimpleNamespace(
+        classify_items=AsyncMock(
+            return_value=(
+                [Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True)],
+                Tier1Usage(prompt_tokens=10, completion_tokens=4, api_calls=1),
+            )
+        )
+    )
     tier2 = SimpleNamespace(classify_event=AsyncMock())
     mock_db_session.scalar = AsyncMock(side_effect=[event, "mark_noise"])
 
@@ -903,7 +928,7 @@ async def test_process_items_skips_event_marked_as_noise_feedback(mock_db_sessio
     assert result.classified == 0
     assert result.errors == 0
     assert item.processing_status == ProcessingStatus.NOISE
-    tier1.classify_items.assert_not_called()
+    tier1.classify_items.assert_awaited_once()
     tier2.classify_event.assert_not_called()
 
 

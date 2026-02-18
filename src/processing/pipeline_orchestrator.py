@@ -110,9 +110,7 @@ class _PreparedItem:
 
     item: RawItem
     item_id: UUID
-    cluster_result: ClusterResult
-    event: Event
-    embedded: bool
+    raw_content: str
 
 
 class ProcessingPipeline:
@@ -297,8 +295,6 @@ class ProcessingPipeline:
         item.error_message = None
         await self.session.flush()
 
-        embedded = False
-        cluster_result: ClusterResult | None = None
         try:
             duplicate_result = await self.deduplication_service.find_duplicate(
                 external_id=item.external_id,
@@ -344,58 +340,10 @@ class ProcessingPipeline:
                         result=self._build_item_result(
                             item_id=item_id,
                             status=item.processing_status,
-                            cluster_result=cluster_result,
+                            cluster_result=None,
                             embedded=False,
                             error_message=item.error_message,
                         )
-                    ),
-                )
-
-            embedding_api_calls = 0
-            if item.embedding is None:
-                (
-                    vectors,
-                    _cache_hits,
-                    embedding_api_calls,
-                ) = await self.embedding_service.embed_texts([raw_content])
-                item.embedding = vectors[0]
-                item.embedding_model = getattr(
-                    self.embedding_service,
-                    "model",
-                    settings.EMBEDDING_MODEL,
-                )
-                item.embedding_generated_at = datetime.now(tz=UTC)
-                embedded = True
-
-            cluster_result = await self.event_clusterer.cluster_item(item)
-            event = await self._load_event(cluster_result.event_id)
-            if event is None:
-                msg = f"Event {cluster_result.event_id} not found after clustering"
-                raise ValueError(msg)
-
-            suppression_action = await self._event_suppression_action(
-                event_id=cluster_result.event_id
-            )
-            if suppression_action is not None:
-                item.processing_status = ProcessingStatus.NOISE
-                item.processing_started_at = None
-                await self.session.flush()
-                logger.info(
-                    "Skipping event due to human feedback suppression",
-                    item_id=str(item_id),
-                    event_id=str(cluster_result.event_id),
-                    action=suppression_action,
-                )
-                return (
-                    None,
-                    _ItemExecution(
-                        result=self._build_item_result(
-                            item_id=item_id,
-                            status=item.processing_status,
-                            cluster_result=cluster_result,
-                            embedded=embedded,
-                        ),
-                        usage=PipelineUsage(embedding_api_calls=embedding_api_calls),
                     ),
                 )
 
@@ -403,17 +351,9 @@ class ProcessingPipeline:
                 _PreparedItem(
                     item=item,
                     item_id=item_id,
-                    cluster_result=cluster_result,
-                    event=event,
-                    embedded=embedded,
+                    raw_content=raw_content,
                 ),
-                _ItemExecution(
-                    result=PipelineItemResult(
-                        item_id=item_id,
-                        final_status=ProcessingStatus.PROCESSING,
-                    ),
-                    usage=PipelineUsage(embedding_api_calls=embedding_api_calls),
-                ),
+                None,
             )
         except BudgetExceededError as exc:
             item.processing_status = ProcessingStatus.PENDING
@@ -431,8 +371,8 @@ class ProcessingPipeline:
                     result=self._build_item_result(
                         item_id=item_id,
                         status=item.processing_status,
-                        cluster_result=cluster_result,
-                        embedded=embedded,
+                        cluster_result=None,
+                        embedded=False,
                         error_message=str(exc),
                     )
                 ),
@@ -488,8 +428,8 @@ class ProcessingPipeline:
                     result=self._build_item_result(
                         item_id=prepared.item_id,
                         status=prepared.item.processing_status,
-                        cluster_result=prepared.cluster_result,
-                        embedded=prepared.embedded,
+                        cluster_result=None,
+                        embedded=False,
                         error_message=str(exc),
                     )
                 )
@@ -522,8 +462,8 @@ class ProcessingPipeline:
                     result=self._build_item_result(
                         item_id=prepared.item_id,
                         status=prepared.item.processing_status,
-                        cluster_result=prepared.cluster_result,
-                        embedded=prepared.embedded,
+                        cluster_result=None,
+                        embedded=False,
                         error_message=str(exc),
                     )
                 )
@@ -551,6 +491,8 @@ class ProcessingPipeline:
     ) -> _ItemExecution:
         usage = PipelineUsage()
         item = prepared.item
+        cluster_result: ClusterResult | None = None
+        embedded = False
         try:
             if not tier1_result.should_queue_tier2:
                 item.processing_status = ProcessingStatus.NOISE
@@ -560,14 +502,59 @@ class ProcessingPipeline:
                     result=self._build_item_result(
                         item_id=prepared.item_id,
                         status=item.processing_status,
-                        cluster_result=prepared.cluster_result,
-                        embedded=prepared.embedded,
+                        cluster_result=None,
+                        embedded=False,
+                    ),
+                    usage=usage,
+                )
+
+            if item.embedding is None:
+                (
+                    vectors,
+                    _cache_hits,
+                    embedding_api_calls,
+                ) = await self.embedding_service.embed_texts([prepared.raw_content])
+                item.embedding = vectors[0]
+                item.embedding_model = getattr(
+                    self.embedding_service,
+                    "model",
+                    settings.EMBEDDING_MODEL,
+                )
+                item.embedding_generated_at = datetime.now(tz=UTC)
+                embedded = True
+                usage.embedding_api_calls += embedding_api_calls
+
+            cluster_result = await self.event_clusterer.cluster_item(item)
+            event = await self._load_event(cluster_result.event_id)
+            if event is None:
+                msg = f"Event {cluster_result.event_id} not found after clustering"
+                raise ValueError(msg)
+
+            suppression_action = await self._event_suppression_action(
+                event_id=cluster_result.event_id
+            )
+            if suppression_action is not None:
+                item.processing_status = ProcessingStatus.NOISE
+                item.processing_started_at = None
+                await self.session.flush()
+                logger.info(
+                    "Skipping event due to human feedback suppression",
+                    item_id=str(prepared.item_id),
+                    event_id=str(cluster_result.event_id),
+                    action=suppression_action,
+                )
+                return _ItemExecution(
+                    result=self._build_item_result(
+                        item_id=prepared.item_id,
+                        status=item.processing_status,
+                        cluster_result=cluster_result,
+                        embedded=embedded,
                     ),
                     usage=usage,
                 )
 
             _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
-                event=prepared.event,
+                event=event,
                 trends=trends,
             )
             record_processing_tier2_language_usage(
@@ -578,7 +565,7 @@ class ProcessingPipeline:
             usage.tier2_api_calls += tier2_usage.api_calls
             usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
             trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
-                event=prepared.event,
+                event=event,
                 trends=trends,
             )
 
@@ -589,8 +576,8 @@ class ProcessingPipeline:
                 result=self._build_item_result(
                     item_id=prepared.item_id,
                     status=item.processing_status,
-                    cluster_result=prepared.cluster_result,
-                    embedded=prepared.embedded,
+                    cluster_result=cluster_result,
+                    embedded=embedded,
                     tier2_applied=True,
                     trend_impacts_seen=trend_impacts_seen,
                     trend_updates=trend_updates,
@@ -611,8 +598,8 @@ class ProcessingPipeline:
                 result=self._build_item_result(
                     item_id=prepared.item_id,
                     status=item.processing_status,
-                    cluster_result=prepared.cluster_result,
-                    embedded=prepared.embedded,
+                    cluster_result=cluster_result,
+                    embedded=embedded,
                     error_message=str(exc),
                 ),
                 usage=usage,

@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-077: Cost-First Pipeline Ordering ✅ (Approved)
 - TASK-070: Trend Baseline Prior Review and Sign-Off ✅ (Approved)
 - TASK-118: Launch Readiness and Guidance Drift Assessment ✅ (Approved, Launch = No-Go)
 - TASK-044: Curated Human-Verified Gold Dataset ✅

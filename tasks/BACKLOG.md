@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-135`.
+- Next available task IDs start at `TASK-139`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2184,6 +2184,88 @@ planning deltas are not lost while other delivery tasks are in flight.
 - [ ] Keep explicit mapping to already-open human-gated tasks where overlap exists (no duplicate implementation tasks)
 - [ ] Preserve and publish backlog-only changes through a dedicated `TASK-134` branch/PR
 - [ ] Keep task-ID policy synchronized after reserving `TASK-134`
+
+---
+
+## Phase 9: External Review Feedback (2026-02)
+
+Backlog items derived from external review of trend config quality (baselines,
+indicators, weights, falsification criteria). Review assessed all 16 configs and
+found ~60% of recommendations actionable. Items below capture the valid subset.
+
+### TASK-135: Clarify baseline_probability referent in trend descriptions
+**Priority**: P1 (High)
+**Estimate**: 1 hour
+
+Four trend descriptions don't explicitly state what `baseline_probability` measures.
+The system mixes event-risk trends, transition trends, and process trends — the
+baseline is a decay attractor in log-odds space, but descriptions should make the
+conceptual referent clear for operators.
+
+**Files**: `config/trends/fertility-decline-acceleration.yaml`,
+`config/trends/ukraine-security-frontier-model.yaml`,
+`config/trends/south-america-agri-supply-shift.yaml`,
+`config/trends/elite-mass-polarization.yaml`
+
+**Acceptance Criteria**:
+- [ ] Each of the 4 descriptions includes a standardized sentence: "Baseline probability represents the probability that [specific measurable outcome] [by time horizon / over rolling N-year window]."
+- [ ] `elite-mass-polarization` reframed from state description to delta/acceleration framing
+- [ ] All 4 configs pass Pydantic validation
+- [ ] No baseline probability values changed (numbers are correct)
+
+---
+
+### TASK-136: Add ai_safety_incident indicator to ai-control trend
+**Priority**: P2 (Medium)
+**Estimate**: 30 minutes
+
+A major AI safety incident (autonomous vehicle fatality cluster, model jailbreak
+enabling mass harm, AI-generated CSAM wave) is a strong escalatory signal for the
+ai-control trend that is currently not captured by any indicator.
+
+**Files**: `config/trends/ai-human-control-expansion.yaml`
+
+**Acceptance Criteria**:
+- [ ] New indicator `ai_safety_incident` added: weight 0.04, escalatory, leading
+- [ ] Keywords: `["AI safety incident", "autonomous vehicle fatality", "model jailbreak", "AI-generated CSAM", "algorithmic harm", "AI system failure"]`
+- [ ] Config passes Pydantic validation
+- [ ] Gold set taxonomy validation still passes (`--tier1-trend-mode subset`)
+
+---
+
+### TASK-137: Sharpen vague falsification criteria
+**Priority**: P2 (Medium)
+**Estimate**: 30 minutes
+
+Two trends have `would_invalidate_model` criteria that are too vague to
+operationalize. Replace with measurable thresholds.
+
+**Files**: `config/trends/elite-mass-polarization.yaml`,
+`config/trends/fertility-decline-acceleration.yaml`
+
+**Acceptance Criteria**:
+- [ ] `elite-mass-polarization` criterion replaced: "Fundamental constitutional restructuring that removes structural conditions" → "Top-decile wealth share declines 5+ percentage points across 3+ major economies for 3+ consecutive years"
+- [ ] `fertility-decline` criterion replaced: "Structural demographic measurement discontinuity" → "Major revision to TFR methodology by 3+ national statistics agencies rendering cross-country time-series incomparable"
+- [ ] Both configs pass Pydantic validation
+
+---
+
+### TASK-138: Improve keyword specificity for 3 vague indicators
+**Priority**: P3 (Low)
+**Estimate**: 30 minutes
+
+Three indicators have keywords that are too generic for reliable classification:
+`governance_capture_signals`, `mainstream_positive_framing`, `institutional_trust_collapse`.
+
+**Files**: `config/trends/elite-mass-polarization.yaml`,
+`config/trends/normative-deviance-normalization.yaml`,
+`config/trends/parallel-enclaves-europe.yaml`
+
+**Acceptance Criteria**:
+- [ ] `governance_capture_signals`: add keywords like "lobbying spending record", "corporate political donations", "PAC expenditure", "regulatory revolving door appointment"
+- [ ] `mainstream_positive_framing`: add keywords like "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"
+- [ ] `institutional_trust_collapse`: add keywords like "Eurobarometer trust", "Gallup institutional confidence", "trust in government survey", "democratic satisfaction index"
+- [ ] All 3 configs pass Pydantic validation
 
 ---
 

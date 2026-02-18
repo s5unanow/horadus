@@ -188,10 +188,10 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-066` multi-trend baseline expansion completed with human reviewer sign-off captured in sprint assessment/checklist records
 - [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings
 - [x] `TASK-118` launch-readiness assessment completed with explicit human sign-off (`Approved`) and launch decision recorded as `No-Go` pending remaining backlog hardening
+- [x] `TASK-070` baseline prior review/sign-off completed with human approval for all active trends
 
 ## In Progress
 
-- `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` (manual baseline validation pending)
 - `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
@@ -199,13 +199,12 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Blocked
 
-- `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
+- `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-070` baseline prior review/sign-off for active trends
-2. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
-3. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
+1. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+2. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
 
 ## Expert Feedback Integration ✅
 
@@ -247,7 +246,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Human-gated sign-off/hardening tasks (`TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`) remain the main completion bottleneck, and launch stays `No-Go` until they are resolved.
+- Human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`) remain the main completion bottleneck, and launch stays `No-Go` until they are resolved.
 
 ## Architecture Validated ✅
 

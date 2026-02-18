@@ -2329,11 +2329,11 @@ Reduce attack surface by restricting service exposure and tightening access
 paths for admin operations.
 
 **Acceptance Criteria**:
-- [ ] Remove or gate direct public host-port exposure of internal services in production defaults (API, DB, Redis)
-- [ ] Define and document network boundary policy (public ingress -> proxy only, app/data services on private network)
-- [ ] Add operator guidance for host/network allowlisting and firewall controls for admin/API access
-- [ ] Add deployment verification checks to confirm only intended ports are reachable from outside the host
-- [ ] Update deployment/security docs with explicit "public vs private" port mapping expectations
+- [x] Remove or gate direct public host-port exposure of internal services in production defaults (API, DB, Redis)
+- [x] Define and document network boundary policy (public ingress -> proxy only, app/data services on private network)
+- [x] Add operator guidance for host/network allowlisting and firewall controls for admin/API access
+- [x] Add deployment verification checks to confirm only intended ports are reachable from outside the host
+- [x] Update deployment/security docs with explicit "public vs private" port mapping expectations
 
 ---
 

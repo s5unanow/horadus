@@ -346,6 +346,121 @@ async def test_classify_event_rejects_unknown_trend_ids(mock_db_session) -> None
 
 
 @pytest.mark.asyncio
+async def test_classify_event_allows_multiple_signals_for_same_trend(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class MultiImpactCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "S1. S2.",
+                "extracted_who": ["A"],
+                "extracted_what": "W",
+                "extracted_where": None,
+                "extracted_when": None,
+                "claims": [],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+                "trend_impacts": [
+                    {
+                        "trend_id": "eu-russia",
+                        "signal_type": "military_movement",
+                        "direction": "escalatory",
+                        "severity": 0.7,
+                        "confidence": 0.8,
+                        "rationale": "Signal one",
+                    },
+                    {
+                        "trend_id": "eu-russia",
+                        "signal_type": "diplomatic_breakdown",
+                        "direction": "escalatory",
+                        "severity": 0.6,
+                        "confidence": 0.7,
+                        "rationale": "Signal two",
+                    },
+                ],
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=MultiImpactCompletions()))
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 2
+    assert isinstance(event.extracted_claims, dict)
+    assert len(event.extracted_claims["trend_impacts"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_classify_event_rejects_duplicate_trend_signal_pairs(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class DuplicatePairCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "S1. S2.",
+                "extracted_who": ["A"],
+                "extracted_what": "W",
+                "extracted_where": None,
+                "extracted_when": None,
+                "claims": [],
+                "categories": [],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+                "trend_impacts": [
+                    {
+                        "trend_id": "eu-russia",
+                        "signal_type": "military_movement",
+                        "direction": "escalatory",
+                        "severity": 0.5,
+                        "confidence": 0.8,
+                        "rationale": None,
+                    },
+                    {
+                        "trend_id": "eu-russia",
+                        "signal_type": "military_movement",
+                        "direction": "escalatory",
+                        "severity": 0.6,
+                        "confidence": 0.7,
+                        "rationale": None,
+                    },
+                ],
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=DuplicatePairCompletions())
+    )
+
+    with pytest.raises(ValueError, match="duplicated trend/signal pair"):
+        await classifier.classify_event(
+            event=event,
+            trends=trends,
+            context_chunks=["Context"],
+        )
+
+
+@pytest.mark.asyncio
 async def test_classify_event_raises_when_budget_exceeded(mock_db_session) -> None:
     classifier, _chat, cost_tracker = _build_classifier(mock_db_session)
     cost_tracker.ensure_within_budget = AsyncMock(

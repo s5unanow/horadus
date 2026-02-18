@@ -498,15 +498,19 @@ class Tier2Classifier:
     @staticmethod
     def _validate_output_alignment(output: _Tier2Output, *, trends: list[Trend]) -> None:
         expected_trend_ids = {Tier2Classifier._trend_identifier(trend) for trend in trends}
-        seen_trend_ids: set[str] = set()
+        seen_pairs: set[tuple[str, str]] = set()
         for impact in output.trend_impacts:
             if impact.trend_id not in expected_trend_ids:
                 msg = f"Tier 2 response returned unknown trend id {impact.trend_id}"
                 raise ValueError(msg)
-            if impact.trend_id in seen_trend_ids:
-                msg = f"Tier 2 response duplicated trend id {impact.trend_id}"
+            pair = (impact.trend_id, impact.signal_type)
+            if pair in seen_pairs:
+                msg = (
+                    "Tier 2 response duplicated trend/signal pair "
+                    f"{impact.trend_id}/{impact.signal_type}"
+                )
                 raise ValueError(msg)
-            seen_trend_ids.add(impact.trend_id)
+            seen_pairs.add(pair)
 
     def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
         event.canonical_summary = output.summary.strip()

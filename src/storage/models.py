@@ -150,6 +150,20 @@ def enum_values(enum_class: type[enum.Enum]) -> list[str]:
     return [str(member.value) for member in enum_class]
 
 
+def sql_string_literals(values: tuple[str, ...]) -> str:
+    """Render a tuple of string values as SQL literals for CHECK constraints."""
+    return ", ".join(f"'{value}'" for value in values)
+
+
+SOURCE_TIER_VALUES = tuple(enum_values(SourceTier))
+REPORTING_TYPE_VALUES = tuple(enum_values(ReportingType))
+EVENT_LIFECYCLE_VALUES = tuple(enum_values(EventLifecycle))
+
+SOURCE_TIER_SQL_VALUES = sql_string_literals(SOURCE_TIER_VALUES)
+REPORTING_TYPE_SQL_VALUES = sql_string_literals(REPORTING_TYPE_VALUES)
+EVENT_LIFECYCLE_SQL_VALUES = sql_string_literals(EVENT_LIFECYCLE_VALUES)
+
+
 # =============================================================================
 # Source Models
 # =============================================================================
@@ -231,6 +245,14 @@ class Source(Base):
         CheckConstraint(
             "credibility_score >= 0 AND credibility_score <= 1",
             name="check_credibility_range",
+        ),
+        CheckConstraint(
+            f"source_tier IN ({SOURCE_TIER_SQL_VALUES})",
+            name="check_sources_source_tier_allowed",
+        ),
+        CheckConstraint(
+            f"reporting_type IN ({REPORTING_TYPE_SQL_VALUES})",
+            name="check_sources_reporting_type_allowed",
         ),
         Index("idx_sources_active", "is_active"),
         Index("idx_sources_type", "type"),
@@ -465,6 +487,10 @@ class Event(Base):
 
     # Indexes
     __table_args__ = (
+        CheckConstraint(
+            f"lifecycle_status IN ({EVENT_LIFECYCLE_SQL_VALUES})",
+            name="check_events_lifecycle_status_allowed",
+        ),
         Index("idx_events_first_seen", "first_seen_at"),
         Index("idx_events_categories", "categories", postgresql_using="gin"),
         Index("idx_events_lifecycle", "lifecycle_status", "last_mention_at"),

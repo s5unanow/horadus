@@ -97,3 +97,20 @@ def test_trend_definition_version_indexes_present_in_model_metadata() -> None:
     index_names = {index.name for index in TrendDefinitionVersion.__table__.indexes}
     assert "idx_trend_definition_versions_trend_recorded" in index_names
     assert "idx_trend_definition_versions_hash" in index_names
+
+
+def test_dimension_check_constraints_present_in_model_metadata() -> None:
+    source_constraint_names = {
+        constraint.name
+        for constraint in Source.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+    event_constraint_names = {
+        constraint.name
+        for constraint in Event.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+
+    assert "check_sources_source_tier_allowed" in source_constraint_names
+    assert "check_sources_reporting_type_allowed" in source_constraint_names
+    assert "check_events_lifecycle_status_allowed" in event_constraint_names

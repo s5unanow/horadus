@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-156: Constrain categorical “dimension” fields to prevent drift (DB-level) ✅
 - TASK-155: Make semantic cache non-blocking in async pipeline paths ✅
 - TASK-154: Allow multiple Tier-2 impacts per trend per event (trend_id + signal_type) ✅
 - TASK-153: Guard integration-test DB truncation (operator safety) ✅

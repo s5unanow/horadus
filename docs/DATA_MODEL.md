@@ -207,6 +207,7 @@ Junction table linking events to their source items.
 
 **Indexes:**
 - Primary key: `(event_id, item_id)`
+- Unique: `item_id` (enforces one RawItem belongs to exactly one Event)
 - Foreign keys cascade on delete
 
 ---

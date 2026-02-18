@@ -104,6 +104,21 @@ class EventClusterer:
             )
         link_added = await self._add_event_link(event.id, item_id)
         if not link_added:
+            resolved_event_id = await self._find_existing_event_id_for_item(item_id)
+            if resolved_event_id is not None and resolved_event_id != event.id:
+                logger.info(
+                    "Item already linked to a different event; using existing linkage",
+                    item_id=str(item_id),
+                    requested_event_id=str(event.id),
+                    existing_event_id=str(resolved_event_id),
+                )
+                return ClusterResult(
+                    item_id=item_id,
+                    event_id=resolved_event_id,
+                    created=False,
+                    merged=True,
+                    similarity=similarity,
+                )
             logger.info(
                 "Skipping merge metadata update because item was already linked",
                 event_id=str(event.id),

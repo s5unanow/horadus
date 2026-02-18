@@ -209,6 +209,36 @@ async def test_cluster_item_skips_merge_when_link_already_exists(mock_db_session
 
 
 @pytest.mark.asyncio
+async def test_cluster_item_returns_existing_event_id_when_link_conflicts(
+    mock_db_session,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.1, 0.2, 0.3], title="Concurrent link conflict")
+    item.embedding_model = "text-embedding-3-small"
+    matched_event = Event(
+        canonical_summary="Candidate event",
+        source_count=2,
+        unique_source_count=2,
+        lifecycle_status=EventLifecycle.EMERGING.value,
+        primary_item_id=uuid4(),
+    )
+    existing_event_id = uuid4()
+    merge_into_event = AsyncMock()
+
+    clusterer._find_existing_event_id_for_item = AsyncMock(side_effect=[None, existing_event_id])
+    clusterer._find_matching_event = AsyncMock(return_value=(matched_event, 0.88))
+    clusterer._add_event_link = AsyncMock(return_value=False)
+    clusterer._merge_into_event = merge_into_event
+
+    result = await clusterer.cluster_item(item)
+
+    assert result.created is False
+    assert result.merged is True
+    assert result.event_id == existing_event_id
+    merge_into_event.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_cluster_item_returns_existing_link_without_reclustering(mock_db_session) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=[0.1, 0.2, 0.3])

@@ -509,6 +509,8 @@ class EventItem(Base):
     event: Mapped[Event] = relationship(back_populates="item_links")
     item: Mapped[RawItem] = relationship(back_populates="event_links")
 
+    __table_args__ = (UniqueConstraint("item_id", name="uq_event_items_item_id"),)
+
 
 # =============================================================================
 # Trend Models

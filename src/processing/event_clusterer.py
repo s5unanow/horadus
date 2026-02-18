@@ -102,8 +102,21 @@ class EventClusterer:
                 merged=False,
                 similarity=similarity,
             )
+        link_added = await self._add_event_link(event.id, item_id)
+        if not link_added:
+            logger.info(
+                "Skipping merge metadata update because item was already linked",
+                event_id=str(event.id),
+                item_id=str(item_id),
+            )
+            return ClusterResult(
+                item_id=item_id,
+                event_id=event.id,
+                created=False,
+                merged=True,
+                similarity=similarity,
+            )
         await self._merge_into_event(event, item)
-        await self._add_event_link(event.id, item_id)
         return ClusterResult(
             item_id=item_id,
             event_id=event.id,
@@ -210,14 +223,15 @@ class EventClusterer:
             return None
         return normalized_action
 
-    async def _add_event_link(self, event_id: UUID, item_id: UUID) -> None:
+    async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool:
         link = EventItem(event_id=event_id, item_id=item_id)
         try:
             async with self.session.begin_nested():
                 self.session.add(link)
                 await self.session.flush()
+            return True
         except IntegrityError:
-            return
+            return False
 
     async def _count_unique_sources(self, event_id: UUID, fallback_source_id: UUID) -> int:
         count_query = (

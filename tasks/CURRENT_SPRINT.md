@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-146` Fix event unique-source counting and lifecycle ordering on merge — DONE ✓
 - `TASK-145` Concurrency-safe trend log-odds updates (atomic delta apply) — DONE ✓
 - `TASK-142` Production Network Exposure Hardening — DONE ✓
 - `TASK-141` Production HTTPS Termination and Secure Ingress — DONE ✓
@@ -88,6 +89,7 @@
 - `TASK-141` completion note: production compose defaults now route public `80/443` through Caddy TLS ingress (`docker/caddy/Caddyfile`) with HTTP→HTTPS redirect, required edge security headers, API host-port unexposed by default, and deployment runbook certificate lifecycle/fallback + HTTPS validation commands.
 - `TASK-142` completion note: production compose networking now enforces `horadus-edge` vs internal-only `horadus-private` segmentation, keeps API/DB/Redis host-port exposure disabled by default, and updates deployment runbook with explicit public/private port policy plus firewall/allowlisting and outside-host reachability checks.
 - `TASK-145` completion note: audit confirmed existing `TASK-129` runtime coverage already satisfies atomic SQL log-odds updates, idempotent evidence insertion, concurrency regression tests, and structured update-strategy logging; backlog/ledger state was reconciled accordingly.
+- `TASK-146` completion note: merge path now inserts `event_items` link before metadata/lifecycle recalculation, preventing off-by-one unique-source confirmation drift; regression tests cover threshold confirmation ordering and link-race skip behavior while preserving no-embedding create-path behavior.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

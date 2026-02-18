@@ -156,6 +156,26 @@ def test_settings_rejects_invalid_embedding_input_policy() -> None:
         )
 
 
+def test_settings_rejects_retention_policy_where_evidence_window_is_too_short() -> None:
+    with pytest.raises(ValidationError, match="RETENTION_TREND_EVIDENCE_DAYS"):
+        Settings(
+            _env_file=None,
+            RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS=120,
+            RETENTION_TREND_EVIDENCE_DAYS=90,
+        )
+
+
+def test_settings_accepts_retention_policy_where_evidence_window_is_longer() -> None:
+    settings = Settings(
+        _env_file=None,
+        RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS=90,
+        RETENTION_TREND_EVIDENCE_DAYS=365,
+    )
+
+    assert settings.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS == 90
+    assert settings.RETENTION_TREND_EVIDENCE_DAYS == 365
+
+
 def test_settings_rejects_production_default_secret_key() -> None:
     with pytest.raises(ValidationError, match="SECRET_KEY must be explicitly configured"):
         Settings(

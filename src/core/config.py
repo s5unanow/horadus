@@ -155,6 +155,13 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_retention_policy_thresholds(self) -> Settings:
+        if self.RETENTION_TREND_EVIDENCE_DAYS < self.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS:
+            msg = "RETENTION_TREND_EVIDENCE_DAYS must be >= RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
     def _validate_production_security_guardrails(self) -> Settings:
         if not self.is_production:
             return self
@@ -683,6 +690,44 @@ class Settings(BaseSettings):
         default=15,
         ge=1,
         description="Interval in minutes for stale-processing reaper task schedule",
+    )
+    RETENTION_CLEANUP_ENABLED: bool = Field(
+        default=False,
+        description="Enable periodic retention cleanup for high-churn operational tables",
+    )
+    RETENTION_CLEANUP_INTERVAL_HOURS: int = Field(
+        default=24,
+        ge=1,
+        description="Interval in hours for periodic retention cleanup task schedule",
+    )
+    RETENTION_CLEANUP_DRY_RUN: bool = Field(
+        default=True,
+        description="When true, retention cleanup reports eligible rows without deleting them",
+    )
+    RETENTION_CLEANUP_BATCH_SIZE: int = Field(
+        default=500,
+        ge=1,
+        description="Maximum rows selected per table per retention cleanup run",
+    )
+    RETENTION_RAW_ITEM_NOISE_DAYS: int = Field(
+        default=30,
+        ge=1,
+        description="Retention window in days for unlinked raw_items in noise/error status",
+    )
+    RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS: int = Field(
+        default=90,
+        ge=1,
+        description="Retention window in days for raw_items linked to archived events",
+    )
+    RETENTION_EVENT_ARCHIVED_DAYS: int = Field(
+        default=180,
+        ge=1,
+        description="Retention window in days for archived events with no retained evidence",
+    )
+    RETENTION_TREND_EVIDENCE_DAYS: int = Field(
+        default=365,
+        ge=1,
+        description="Retention window in days for trend_evidence rows on archived events",
     )
     PROCESS_PENDING_INTERVAL_MINUTES: int = Field(
         default=15,

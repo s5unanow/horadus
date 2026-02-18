@@ -121,6 +121,16 @@ EMBEDDING_INPUT_TRUNCATION_RATIO = Gauge(
     "Rolling in-process ratio of embedding inputs that required truncation/chunking.",
     ["entity_type"],
 )
+RETENTION_CLEANUP_ROWS_TOTAL = Counter(
+    "retention_cleanup_rows_total",
+    "Retention cleanup row counts by table/action/mode.",
+    ["table", "action", "mode"],
+)
+RETENTION_CLEANUP_RUNS_TOTAL = Counter(
+    "retention_cleanup_runs_total",
+    "Retention cleanup run outcomes by mode and status.",
+    ["mode", "status"],
+)
 
 _EMBEDDING_TOTAL_BY_ENTITY: dict[str, int] = defaultdict(int)
 _EMBEDDING_TRUNCATED_BY_ENTITY: dict[str, int] = defaultdict(int)
@@ -275,3 +285,18 @@ def record_embedding_input_guardrail(
     EMBEDDING_INPUT_TRUNCATION_RATIO.labels(entity_type=normalized_entity).set(
         (truncated / total) if total else 0.0
     )
+
+
+def record_retention_cleanup_rows(*, table: str, action: str, dry_run: bool, count: int) -> None:
+    RETENTION_CLEANUP_ROWS_TOTAL.labels(
+        table=table.strip() or "unknown",
+        action=action.strip() or "unknown",
+        mode="dry_run" if dry_run else "delete",
+    ).inc(max(0, int(count)))
+
+
+def record_retention_cleanup_run(*, dry_run: bool, status: str) -> None:
+    RETENTION_CLEANUP_RUNS_TOTAL.labels(
+        mode="dry_run" if dry_run else "delete",
+        status=status.strip() or "unknown",
+    ).inc()

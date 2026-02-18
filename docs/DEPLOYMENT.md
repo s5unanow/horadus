@@ -219,7 +219,56 @@ nc -zv "${HORADUS_PUBLIC_DOMAIN}" 5432
 nc -zv "${HORADUS_PUBLIC_DOMAIN}" 6379
 ```
 
-## 10) Backups and restore
+## 10) Data retention cleanup operations
+
+Retention cleanup is disabled by default and should be rolled out in stages:
+
+1. Enable scheduler in dry-run mode first:
+   ```dotenv
+   RETENTION_CLEANUP_ENABLED=true
+   RETENTION_CLEANUP_DRY_RUN=true
+   RETENTION_CLEANUP_INTERVAL_HOURS=24
+   RETENTION_CLEANUP_BATCH_SIZE=500
+   RETENTION_RAW_ITEM_NOISE_DAYS=30
+   RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS=90
+   RETENTION_EVENT_ARCHIVED_DAYS=180
+   RETENTION_TREND_EVIDENCE_DAYS=365
+   ```
+2. Apply and restart `worker` + `beat`:
+   ```bash
+   docker compose -f docker-compose.prod.yml up -d worker beat
+   ```
+3. Verify dry-run output in logs:
+   ```bash
+   docker compose -f docker-compose.prod.yml logs --since=24h beat worker | grep run_data_retention_cleanup
+   ```
+4. After reviewing eligible counts, switch to destructive mode:
+   ```dotenv
+   RETENTION_CLEANUP_DRY_RUN=false
+   ```
+
+Manual one-off run (without waiting for beat):
+
+```bash
+docker compose -f docker-compose.prod.yml exec worker \
+  celery -A src.workers.celery_app.celery_app call workers.run_data_retention_cleanup --kwargs='{"dry_run": true}'
+```
+
+DB size trend verification (run weekly/monthly):
+
+```sql
+SELECT
+  now() AS checked_at,
+  relname AS table_name,
+  pg_size_pretty(pg_total_relation_size(relid)) AS total_size
+FROM pg_catalog.pg_statio_user_tables
+WHERE relname IN ('raw_items', 'event_items', 'events', 'trend_evidence')
+ORDER BY pg_total_relation_size(relid) DESC;
+```
+
+Alert if growth remains monotonic after cleanup windows and no matching ingestion-rate increase.
+
+## 11) Backups and restore
 
 Create PostgreSQL backups:
 

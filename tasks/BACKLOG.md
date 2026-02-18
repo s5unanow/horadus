@@ -2441,11 +2441,11 @@ no retention/cleanup path, risking unbounded growth in continuous ingestion.
 **Files**: `src/workers/celery_app.py`, `src/workers/tasks.py`, `src/storage/models.py`, `alembic/`, `docs/DEPLOYMENT.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Define a safe retention policy (defaults + config knobs) that preserves auditability where required (e.g., keep evidence longer than raw text)
-- [ ] Add a scheduled cleanup worker task with dry-run/logging mode and metrics (deleted rows, bytes/age buckets if feasible)
-- [ ] Ensure cleanup respects foreign keys and event lifecycle (e.g., only prune `raw_items` for `noise/error` or for events in `archived` status beyond a threshold)
-- [ ] Add tests for retention selection logic (what is eligible vs protected)
-- [ ] Document operator workflow: how to tune retention, verify it ran, and validate DB size trends
+- [x] Define a safe retention policy (defaults + config knobs) that preserves auditability where required (e.g., keep evidence longer than raw text)
+- [x] Add a scheduled cleanup worker task with dry-run/logging mode and metrics (deleted rows, bytes/age buckets if feasible)
+- [x] Ensure cleanup respects foreign keys and event lifecycle (e.g., only prune `raw_items` for `noise/error` or for events in `archived` status beyond a threshold)
+- [x] Add tests for retention selection logic (what is eligible vs protected)
+- [x] Document operator workflow: how to tune retention, verify it ran, and validate DB size trends
 
 ---
 

@@ -16,7 +16,7 @@ import redis
 import structlog
 from celery import shared_task
 from celery.signals import task_failure
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from src.core.config import settings
 from src.core.observability import (
@@ -25,6 +25,8 @@ from src.core.observability import (
     record_processing_backlog_depth,
     record_processing_dispatch_decision,
     record_processing_reaper_resets,
+    record_retention_cleanup_rows,
+    record_retention_cleanup_run,
     record_source_catchup_dispatch,
     record_source_freshness_stale,
     record_worker_error,
@@ -38,7 +40,16 @@ from src.processing.cost_tracker import CostTracker
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
-from src.storage.models import ProcessingStatus, RawItem, Trend, TrendSnapshot
+from src.storage.models import (
+    Event,
+    EventItem,
+    EventLifecycle,
+    ProcessingStatus,
+    RawItem,
+    Trend,
+    TrendEvidence,
+    TrendSnapshot,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -63,6 +74,92 @@ class ProcessingDispatchPlan:
     in_flight: int
     budget_status: str
     budget_remaining_usd: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class RetentionCutoffs:
+    now: datetime
+    raw_item_noise_before: datetime
+    raw_item_archived_event_before: datetime
+    archived_event_before: datetime
+    trend_evidence_before: datetime
+    batch_size: int
+    dry_run: bool
+
+
+def _build_retention_cutoffs(*, dry_run: bool | None = None) -> RetentionCutoffs:
+    now = datetime.now(tz=UTC)
+    effective_dry_run = settings.RETENTION_CLEANUP_DRY_RUN if dry_run is None else dry_run
+    return RetentionCutoffs(
+        now=now,
+        raw_item_noise_before=now - timedelta(days=settings.RETENTION_RAW_ITEM_NOISE_DAYS),
+        raw_item_archived_event_before=now
+        - timedelta(days=settings.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS),
+        archived_event_before=now - timedelta(days=settings.RETENTION_EVENT_ARCHIVED_DAYS),
+        trend_evidence_before=now - timedelta(days=settings.RETENTION_TREND_EVIDENCE_DAYS),
+        batch_size=max(1, settings.RETENTION_CLEANUP_BATCH_SIZE),
+        dry_run=effective_dry_run,
+    )
+
+
+def _is_raw_item_noise_retention_eligible(
+    *,
+    processing_status: ProcessingStatus,
+    fetched_at: datetime,
+    has_event_link: bool,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    return (
+        processing_status in {ProcessingStatus.NOISE, ProcessingStatus.ERROR}
+        and fetched_at <= cutoffs.raw_item_noise_before
+        and not has_event_link
+    )
+
+
+def _is_raw_item_archived_event_retention_eligible(
+    *,
+    fetched_at: datetime,
+    event_lifecycle_status: str,
+    event_last_mention_at: datetime | None,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    if event_last_mention_at is None:
+        return False
+    return (
+        event_lifecycle_status == EventLifecycle.ARCHIVED.value
+        and event_last_mention_at <= cutoffs.raw_item_archived_event_before
+        and fetched_at <= cutoffs.raw_item_archived_event_before
+    )
+
+
+def _is_trend_evidence_retention_eligible(
+    *,
+    created_at: datetime,
+    event_lifecycle_status: str,
+    event_last_mention_at: datetime | None,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    if event_last_mention_at is None:
+        return False
+    return (
+        event_lifecycle_status == EventLifecycle.ARCHIVED.value
+        and event_last_mention_at <= cutoffs.archived_event_before
+        and created_at <= cutoffs.trend_evidence_before
+    )
+
+
+def _is_archived_event_retention_eligible(
+    *,
+    lifecycle_status: str,
+    last_mention_at: datetime,
+    has_remaining_evidence: bool,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    return (
+        lifecycle_status == EventLifecycle.ARCHIVED.value
+        and last_mention_at <= cutoffs.archived_event_before
+        and not has_remaining_evidence
+    )
 
 
 def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[TaskFunc], TaskFunc]:
@@ -682,6 +779,163 @@ async def _check_event_lifecycles_async() -> dict[str, Any]:
     }
 
 
+async def _select_noise_raw_item_ids(*, batch_size: int, cutoff: datetime) -> list[Any]:
+    async with async_session_maker() as session:
+        linked_event_exists = (
+            select(EventItem.item_id).where(EventItem.item_id == RawItem.id).exists()
+        )
+        return list(
+            (
+                await session.scalars(
+                    select(RawItem.id)
+                    .where(
+                        RawItem.processing_status.in_(
+                            [ProcessingStatus.NOISE, ProcessingStatus.ERROR]
+                        )
+                    )
+                    .where(RawItem.fetched_at <= cutoff)
+                    .where(~linked_event_exists)
+                    .order_by(RawItem.fetched_at.asc())
+                    .limit(max(1, batch_size))
+                )
+            ).all()
+        )
+
+
+async def _select_archived_event_raw_item_ids(
+    *,
+    batch_size: int,
+    cutoff: datetime,
+) -> list[Any]:
+    async with async_session_maker() as session:
+        return list(
+            (
+                await session.scalars(
+                    select(RawItem.id)
+                    .join(EventItem, EventItem.item_id == RawItem.id)
+                    .join(Event, Event.id == EventItem.event_id)
+                    .where(Event.lifecycle_status == EventLifecycle.ARCHIVED.value)
+                    .where(Event.last_mention_at <= cutoff)
+                    .where(RawItem.fetched_at <= cutoff)
+                    .order_by(RawItem.fetched_at.asc())
+                    .limit(max(1, batch_size))
+                )
+            ).all()
+        )
+
+
+async def _select_trend_evidence_ids(
+    *,
+    batch_size: int,
+    evidence_cutoff: datetime,
+    archived_event_cutoff: datetime,
+) -> list[Any]:
+    async with async_session_maker() as session:
+        return list(
+            (
+                await session.scalars(
+                    select(TrendEvidence.id)
+                    .join(Event, Event.id == TrendEvidence.event_id)
+                    .where(TrendEvidence.created_at <= evidence_cutoff)
+                    .where(Event.lifecycle_status == EventLifecycle.ARCHIVED.value)
+                    .where(Event.last_mention_at <= archived_event_cutoff)
+                    .order_by(TrendEvidence.created_at.asc())
+                    .limit(max(1, batch_size))
+                )
+            ).all()
+        )
+
+
+async def _run_data_retention_cleanup_async(*, dry_run: bool | None = None) -> dict[str, Any]:
+    cutoffs = _build_retention_cutoffs(dry_run=dry_run)
+
+    noise_ids = await _select_noise_raw_item_ids(
+        batch_size=cutoffs.batch_size,
+        cutoff=cutoffs.raw_item_noise_before,
+    )
+    archived_event_raw_ids = await _select_archived_event_raw_item_ids(
+        batch_size=cutoffs.batch_size,
+        cutoff=cutoffs.raw_item_archived_event_before,
+    )
+    evidence_ids = await _select_trend_evidence_ids(
+        batch_size=cutoffs.batch_size,
+        evidence_cutoff=cutoffs.trend_evidence_before,
+        archived_event_cutoff=cutoffs.archived_event_before,
+    )
+
+    raw_ids = list(dict.fromkeys([*noise_ids, *archived_event_raw_ids]))
+    deleted_raw = 0
+    deleted_evidence = 0
+    deleted_events = 0
+    event_ids: list[Any] = []
+
+    async with async_session_maker() as session:
+        if not cutoffs.dry_run:
+            if raw_ids:
+                deleted_raw_result = await session.execute(
+                    delete(RawItem).where(RawItem.id.in_(raw_ids))
+                )
+                deleted_raw = int(getattr(deleted_raw_result, "rowcount", 0) or 0)
+
+            if evidence_ids:
+                deleted_evidence_result = await session.execute(
+                    delete(TrendEvidence).where(TrendEvidence.id.in_(evidence_ids))
+                )
+                deleted_evidence = int(getattr(deleted_evidence_result, "rowcount", 0) or 0)
+
+            await session.flush()
+
+        has_evidence = select(TrendEvidence.id).where(TrendEvidence.event_id == Event.id).exists()
+        event_ids = list(
+            (
+                await session.scalars(
+                    select(Event.id)
+                    .where(Event.lifecycle_status == EventLifecycle.ARCHIVED.value)
+                    .where(Event.last_mention_at <= cutoffs.archived_event_before)
+                    .where(~has_evidence)
+                    .order_by(Event.last_mention_at.asc())
+                    .limit(cutoffs.batch_size)
+                )
+            ).all()
+        )
+
+        if not cutoffs.dry_run and event_ids:
+            deleted_events_result = await session.execute(
+                delete(Event).where(Event.id.in_(event_ids))
+            )
+            deleted_events = int(getattr(deleted_events_result, "rowcount", 0) or 0)
+
+        if cutoffs.dry_run:
+            await session.rollback()
+        else:
+            await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "run_data_retention_cleanup",
+        "dry_run": cutoffs.dry_run,
+        "batch_size": cutoffs.batch_size,
+        "cutoffs": {
+            "raw_item_noise_before": cutoffs.raw_item_noise_before.isoformat(),
+            "raw_item_archived_event_before": cutoffs.raw_item_archived_event_before.isoformat(),
+            "archived_event_before": cutoffs.archived_event_before.isoformat(),
+            "trend_evidence_before": cutoffs.trend_evidence_before.isoformat(),
+        },
+        "eligible": {
+            "raw_items_noise": len(noise_ids),
+            "raw_items_archived_event": len(archived_event_raw_ids),
+            "raw_items_total": len(raw_ids),
+            "trend_evidence": len(evidence_ids),
+            "events": len(event_ids),
+        },
+        "deleted": {
+            "raw_items": deleted_raw,
+            "trend_evidence": deleted_evidence,
+            "events": deleted_events,
+        },
+    }
+
+
 async def _generate_weekly_reports_async() -> dict[str, Any]:
     async with async_session_maker() as session:
         generator = ReportGenerator(session=session)
@@ -779,6 +1033,70 @@ def reap_stale_processing_items() -> dict[str, Any]:
 
     return _run_task_with_heartbeat(
         task_name="workers.reap_stale_processing_items",
+        runner=_runner,
+    )
+
+
+@typed_shared_task(name="workers.run_data_retention_cleanup")
+def run_data_retention_cleanup(dry_run: bool | None = None) -> dict[str, Any]:
+    """Run retention cleanup for high-churn operational tables."""
+
+    def _runner() -> dict[str, Any]:
+        cutoffs = _build_retention_cutoffs(dry_run=dry_run)
+        logger.info(
+            "Starting data retention cleanup task",
+            dry_run=cutoffs.dry_run,
+            batch_size=cutoffs.batch_size,
+            raw_item_noise_days=settings.RETENTION_RAW_ITEM_NOISE_DAYS,
+            raw_item_archived_event_days=settings.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS,
+            archived_event_days=settings.RETENTION_EVENT_ARCHIVED_DAYS,
+            trend_evidence_days=settings.RETENTION_TREND_EVIDENCE_DAYS,
+        )
+        result = _run_async(_run_data_retention_cleanup_async(dry_run=dry_run))
+
+        eligible_counts = result["eligible"]
+        deleted_counts = result["deleted"]
+        effective_dry_run = bool(result["dry_run"])
+
+        for table_name, eligible_value in (
+            ("raw_items", eligible_counts["raw_items_total"]),
+            ("trend_evidence", eligible_counts["trend_evidence"]),
+            ("events", eligible_counts["events"]),
+        ):
+            record_retention_cleanup_rows(
+                table=table_name,
+                action="eligible",
+                dry_run=effective_dry_run,
+                count=int(eligible_value),
+            )
+
+        for table_name, deleted_value in (
+            ("raw_items", deleted_counts["raw_items"]),
+            ("trend_evidence", deleted_counts["trend_evidence"]),
+            ("events", deleted_counts["events"]),
+        ):
+            record_retention_cleanup_rows(
+                table=table_name,
+                action="deleted",
+                dry_run=effective_dry_run,
+                count=int(deleted_value),
+            )
+
+        record_retention_cleanup_run(dry_run=effective_dry_run, status="ok")
+        logger.info(
+            "Finished data retention cleanup task",
+            dry_run=effective_dry_run,
+            eligible_raw_items=eligible_counts["raw_items_total"],
+            eligible_trend_evidence=eligible_counts["trend_evidence"],
+            eligible_events=eligible_counts["events"],
+            deleted_raw_items=deleted_counts["raw_items"],
+            deleted_trend_evidence=deleted_counts["trend_evidence"],
+            deleted_events=deleted_counts["events"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.run_data_retention_cleanup",
         runner=_runner,
     )
 

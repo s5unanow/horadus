@@ -2313,11 +2313,11 @@ Ensure deployed API traffic is encrypted end-to-end at the edge and that
 plaintext HTTP is not exposed publicly by default.
 
 **Acceptance Criteria**:
-- [ ] Add a production ingress path (reverse proxy) that terminates TLS for Horadus API traffic
-- [ ] Document certificate provisioning/renewal workflow (managed certs or ACME automation) with failure fallback steps
-- [ ] Enforce HTTPS-only external access (redirect HTTP to HTTPS or disable external plain-HTTP exposure)
-- [ ] Add/verify security response headers at the edge (`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options` or equivalent policy)
-- [ ] Update deployment runbook with validation commands proving HTTPS is active and HTTP exposure is closed
+- [x] Add a production ingress path (reverse proxy) that terminates TLS for Horadus API traffic
+- [x] Document certificate provisioning/renewal workflow (managed certs or ACME automation) with failure fallback steps
+- [x] Enforce HTTPS-only external access (redirect HTTP to HTTPS or disable external plain-HTTP exposure)
+- [x] Add/verify security response headers at the edge (`Strict-Transport-Security`, `X-Content-Type-Options`, `X-Frame-Options` or equivalent policy)
+- [x] Update deployment runbook with validation commands proving HTTPS is active and HTTP exposure is closed
 
 ---
 

@@ -208,6 +208,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-137` vague falsification criteria were tightened into measurable thresholds for `elite-mass-polarization` and `fertility-decline-acceleration`
 - [x] `TASK-138` keyword specificity was improved for three vague indicators (`governance_capture_signals`, `mainstream_positive_framing`, `institutional_trust_collapse`) with measurement/media/survey-specific terms
 - [x] `TASK-139` embedding inputs now enforce deterministic pre-check token guardrails (`truncate`/`chunk`) with structured cut-input logs, truncation metrics, persisted embedding audit metadata, and weekly ops-query/alert guidance
+- [x] `TASK-141` production defaults now run API traffic through Caddy TLS ingress with HTTP→HTTPS redirect, edge security headers, and deployment runbook validation/fallback workflow while removing default direct API host-port exposure
 
 ## In Progress
 
@@ -220,8 +221,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-141` production HTTPS termination and secure ingress
-3. Execute `TASK-142` production network exposure hardening
+2. Execute `TASK-142` production network exposure hardening
+3. Execute `TASK-145` concurrency-safe trend log-odds updates (atomic delta apply)
 
 ## Expert Feedback Integration ✅
 

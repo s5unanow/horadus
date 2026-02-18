@@ -30,6 +30,9 @@ This document lists environment variables used by the Horadus backend.
 | `API_RATE_LIMIT_REDIS_PREFIX` | `horadus:api_rate_limit` | Redis key prefix for per-key rate-limit buckets. |
 | `API_KEYS_PERSIST_PATH` | empty | Optional file path for persisted runtime API key metadata. |
 | `CORS_ORIGINS` | local origins | Comma-separated origin list. |
+| `HORADUS_PUBLIC_DOMAIN` | `localhost` | Public hostname served by production HTTPS ingress (Caddy). |
+| `CADDY_ACME_EMAIL` | `admin@localhost` | Email identity used for ACME certificate registration/renewal. |
+| `CADDY_ACME_CA` | Let's Encrypt production directory | Optional ACME endpoint override (for example staging CA during certificate troubleshooting). |
 | `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret. In production this must be explicitly set, be at least 32 characters, and must not use known weak values (for example `changeme`, `password`, `secret`). |
 
 Rate-limit strategy guidance:

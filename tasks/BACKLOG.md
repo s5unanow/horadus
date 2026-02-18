@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-139`.
+- Next available task IDs start at `TASK-140`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2266,6 +2266,23 @@ Three indicators have keywords that are too generic for reliable classification:
 - [ ] `mainstream_positive_framing`: add keywords like "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"
 - [ ] `institutional_trust_collapse`: add keywords like "Eurobarometer trust", "Gallup institutional confidence", "trust in government survey", "democratic satisfaction index"
 - [ ] All 3 configs pass Pydantic validation
+
+---
+
+### TASK-139: Embedding Input Truncation Telemetry and Guardrails
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Make embedding input length handling explicit and observable so operators can
+measure when article text is truncated/chunked and verify impact on quality/cost.
+
+**Acceptance Criteria**:
+- [ ] Add deterministic pre-embedding token counting for each embedding input and enforce a configurable max-input policy (`truncate` or `chunk`)
+- [ ] Emit structured logs whenever input is cut, including item/event id, original token count, retained token count, and strategy used
+- [ ] Add metrics/counters for total embedding inputs, truncated inputs, truncation ratio, and optionally dropped tail tokens
+- [ ] Persist per-item metadata needed for auditability (e.g., `embedding_input_tokens`, `embedding_was_truncated`, `embedding_truncation_strategy`) or equivalent reproducible evidence
+- [ ] Add tests covering under-limit, exact-limit, and over-limit paths with both policy modes
+- [ ] Document operational query/check commands to review truncation rates weekly and set alert thresholds
 
 ---
 

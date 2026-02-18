@@ -150,6 +150,30 @@ def test_settings_rejects_production_default_secret_key() -> None:
         )
 
 
+def test_settings_rejects_production_short_secret_key() -> None:
+    with pytest.raises(ValidationError, match="SECRET_KEY is too short for production"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            SECRET_KEY="short-secret",  # pragma: allowlist secret
+            API_AUTH_ENABLED=True,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+        )
+
+
+def test_settings_rejects_production_known_weak_secret_key() -> None:
+    with pytest.raises(ValidationError, match="SECRET_KEY uses a known weak value"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            SECRET_KEY="changeme",  # pragma: allowlist secret
+            API_AUTH_ENABLED=True,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+        )
+
+
 def test_settings_rejects_production_without_auth_enabled() -> None:
     with pytest.raises(ValidationError, match="API_AUTH_ENABLED must be true in production"):
         Settings(
@@ -202,6 +226,22 @@ def test_settings_accepts_production_guardrail_compliant_config() -> None:
         API_AUTH_ENABLED=True,
         API_KEY=TEST_BOOTSTRAP_KEY,
         API_ADMIN_KEY=TEST_ADMIN_KEY,
+    )
+
+    assert settings.is_production is True
+    assert settings.API_AUTH_ENABLED is True
+
+
+def test_settings_accepts_production_with_persisted_key_store_bootstrap() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="production",
+        SECRET_KEY="x" * 48,
+        API_AUTH_ENABLED=True,
+        API_ADMIN_KEY=TEST_ADMIN_KEY,
+        API_KEY=None,
+        API_KEYS=[],
+        API_KEYS_PERSIST_PATH="/var/lib/horadus/api_keys.json",
     )
 
     assert settings.is_production is True

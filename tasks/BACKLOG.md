@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-140`.
+- Next available task IDs start at `TASK-141`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2283,6 +2283,21 @@ measure when article text is truncated/chunked and verify impact on quality/cost
 - [ ] Persist per-item metadata needed for auditability (e.g., `embedding_input_tokens`, `embedding_was_truncated`, `embedding_truncation_strategy`) or equivalent reproducible evidence
 - [ ] Add tests covering under-limit, exact-limit, and over-limit paths with both policy modes
 - [ ] Document operational query/check commands to review truncation rates weekly and set alert thresholds
+
+---
+
+### TASK-140: In-Branch Backlog Capture Rule and Guard
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Reduce task-tracking drift by enforcing a consistent workflow when new backlog
+tasks are discovered during active implementation.
+
+**Acceptance Criteria**:
+- [ ] Update `AGENTS.md` workflow guidance to explicitly require that newly discovered backlog tasks relevant to the active task are added/committed in the same task branch/PR (as a separate docs commit if needed)
+- [ ] Define explicit exception criteria for when backlog edits must be split to a separate branch (unrelated scope, already-merged task, or urgent blocker)
+- [ ] Add a lightweight guard/checklist item in task completion docs or scripts to verify backlog updates were either included in-branch or explicitly split with rationale
+- [ ] Add unit/script test coverage if automation/scripts are changed
 
 ---
 

@@ -10,13 +10,13 @@
 ## Active Tasks
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
-- `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 
 ---
 
 ## Completed This Sprint
 
+- `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-070` Trend Baseline Prior Review and Sign-Off — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`)
 - `TASK-118` Launch Readiness and Guidance Drift Assessment — DONE ✓ (human sign-off recorded 2026-02-18; Decision=`Approved`; Launch=`No-Go`)
@@ -52,3 +52,5 @@
 - `TASK-070` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`All active trend baseline priors approved in human review; local DB parity command failed with postgres auth mismatch and was accepted as local-environment verification waiver.`
 - `TASK-077` reviewer checklist: `tasks/assessments/TASK-077-cost-first-pipeline-checklist-2026-02-18.md`.
 - `TASK-077` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Tier-1 now runs before embedding/clustering; unit/lint/type checks passed; integration test execution blocked locally by postgres auth mismatch.`
+- `TASK-084` reviewer checklist: `tasks/assessments/TASK-084-production-security-guardrails-checklist-2026-02-18.md`.
+- `TASK-084` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`Production startup now rejects weak/short SECRET_KEY values; auth guardrails preserved; core unit/lint/type checks passed.`

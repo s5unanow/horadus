@@ -199,6 +199,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-128` corroboration scoring now supports SQLAlchemy `Row` mappings with fallback-path observability (`processing_corroboration_path_total`) and regression tests
 - [x] `TASK-129` trend updates now use atomic SQL delta applies (evidence + manual paths) with decay row-lock serialization and concurrency race-test coverage
 - [x] `TASK-130` suppression checks now run before merge/lifecycle touches, preventing suppressed-event reactivation while preserving suppression logs/metrics (`processing_event_suppressions_total`)
+- [x] `TASK-131` GDELT now uses forward-only persisted watermarks independent of backward page cursors, with monotonic multi-page/partial-page checkpoint tests and clarified ingestion checkpoint docs
 
 ## In Progress
 
@@ -211,7 +212,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-131` forward-only GDELT watermark semantics
+2. Execute `TASK-132` trend-filtered events API de-duplication
 
 ## Expert Feedback Integration ✅
 

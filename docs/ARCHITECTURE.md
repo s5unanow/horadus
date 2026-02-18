@@ -111,6 +111,14 @@ Operational tracing setup and validation steps are documented in `docs/TRACING.m
 
 Ingestion tracks per-source high-water coverage timestamps and applies overlap-aware
 next-window starts to avoid silent gaps on delayed runs/restarts.
+Checkpoint semantics:
+- RSS persists `ingestion_window_end_at` from the latest successfully observed publish timestamp
+  (or run window end fallback) after a successful run.
+- GDELT uses backward pagination cursors only for in-run paging; persisted
+  `ingestion_window_end_at` is forward-only and based on the max successfully processed
+  publication timestamp (with no-regression against prior watermark).
+- On collector failure, watermark persistence is skipped so retries resume from the prior
+  checkpoint instead of advancing on partial failure.
 Periodic freshness checks (`workers.check_source_freshness`) alert on stale sources
 and trigger bounded collector catch-up dispatch before gap risk accumulates.
 

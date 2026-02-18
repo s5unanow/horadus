@@ -204,6 +204,116 @@ async def test_collect_query_counts_stored_and_skipped(
 
 
 @pytest.mark.asyncio
+async def test_collect_query_persists_forward_watermark_across_pages(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    query = GDELTQueryConfig(
+        name="Window Query",
+        query="ukraine",
+        max_records_per_page=2,
+        max_pages=2,
+    )
+    source = SimpleNamespace(
+        error_count=0,
+        ingestion_window_end_at=datetime(2026, 2, 16, 8, 0, tzinfo=UTC),
+    )
+    pages = [
+        [
+            {"url": "https://example.com/1", "seendate": "20260216T120000Z"},
+            {"url": "https://example.com/2", "seendate": "20260216T113000Z"},
+        ],
+        [
+            {"url": "https://example.com/3", "seendate": "20260216T103000Z"},
+            {"url": "https://example.com/4", "seendate": "20260216T093000Z"},
+        ],
+    ]
+    recorded_window_end: list[datetime] = []
+
+    async def fake_get_or_create_source(_query: GDELTQueryConfig) -> SimpleNamespace:
+        return source
+
+    async def fake_fetch_articles(**_kwargs) -> list[dict[str, str]]:
+        return pages.pop(0) if pages else []
+
+    async def fake_store_article(*, source, article, published_at):
+        _ = source
+        _ = article
+        _ = published_at
+        return SimpleNamespace(id=uuid4())
+
+    async def fake_record_success(_source, *, window_end: datetime) -> None:
+        recorded_window_end.append(window_end)
+
+    async def fake_record_failure(_source, _error: str) -> None:
+        return None
+
+    monkeypatch.setattr(client, "_get_or_create_source", fake_get_or_create_source)
+    monkeypatch.setattr(client, "_fetch_articles", fake_fetch_articles)
+    monkeypatch.setattr(client, "_store_article", fake_store_article)
+    monkeypatch.setattr(client, "_record_source_success", fake_record_success)
+    monkeypatch.setattr(client, "_record_source_failure", fake_record_failure)
+
+    result = await client.collect_query(query)
+
+    assert result.pages_fetched == 2
+    assert recorded_window_end == [datetime(2026, 2, 16, 12, 0, tzinfo=UTC)]
+
+
+@pytest.mark.asyncio
+async def test_collect_query_partial_page_does_not_regress_watermark(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    query = GDELTQueryConfig(
+        name="Partial Page Query",
+        query="ukraine",
+        max_records_per_page=2,
+        max_pages=2,
+    )
+    prior_watermark = datetime(2026, 2, 16, 13, 0, tzinfo=UTC)
+    source = SimpleNamespace(
+        error_count=0,
+        ingestion_window_end_at=prior_watermark,
+    )
+    pages = [[{"url": "https://example.com/1", "seendate": "20260216T120000Z"}]]
+    recorded_window_end: list[datetime] = []
+
+    async def fake_get_or_create_source(_query: GDELTQueryConfig) -> SimpleNamespace:
+        return source
+
+    async def fake_fetch_articles(**_kwargs) -> list[dict[str, str]]:
+        return pages.pop(0) if pages else []
+
+    async def fake_store_article(*, source, article, published_at):
+        _ = source
+        _ = article
+        _ = published_at
+        return SimpleNamespace(id=uuid4())
+
+    async def fake_record_success(_source, *, window_end: datetime) -> None:
+        recorded_window_end.append(window_end)
+
+    async def fake_record_failure(_source, _error: str) -> None:
+        return None
+
+    monkeypatch.setattr(client, "_get_or_create_source", fake_get_or_create_source)
+    monkeypatch.setattr(client, "_fetch_articles", fake_fetch_articles)
+    monkeypatch.setattr(client, "_store_article", fake_store_article)
+    monkeypatch.setattr(client, "_record_source_success", fake_record_success)
+    monkeypatch.setattr(client, "_record_source_failure", fake_record_failure)
+
+    result = await client.collect_query(query)
+
+    assert result.pages_fetched == 1
+    assert recorded_window_end == [prior_watermark]
+
+
+@pytest.mark.asyncio
 async def test_collect_query_classifies_transient_failure(
     mock_db_session,
     mock_http_client,

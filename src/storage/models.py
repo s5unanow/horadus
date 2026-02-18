@@ -263,6 +263,10 @@ class RawItem(Base):
         embedding: Vector embedding for similarity and clustering
         embedding_model: Embedding model identifier used for current vector
         embedding_generated_at: Timestamp when current vector was generated
+        embedding_input_tokens: Approximate token count before embedding guardrails
+        embedding_retained_tokens: Approximate retained token count after guardrails
+        embedding_was_truncated: Whether truncate policy dropped tail tokens
+        embedding_truncation_strategy: Guardrail strategy used when input exceeded limit
         content_hash: SHA256 hash for deduplication
         language: Detected language code (e.g., 'en', 'ru')
         processing_status: Current pipeline status
@@ -295,6 +299,15 @@ class RawItem(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
     embedding_model: Mapped[str | None] = mapped_column(String(255))
     embedding_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    embedding_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    embedding_retained_tokens: Mapped[int | None] = mapped_column(Integer)
+    embedding_was_truncated: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+    )
+    embedding_truncation_strategy: Mapped[str | None] = mapped_column(String(20))
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA256
     language: Mapped[str | None] = mapped_column(String(10))
     processing_status: Mapped[ProcessingStatus] = mapped_column(
@@ -351,6 +364,10 @@ class Event(Base):
         embedding: Vector embedding for similarity search
         embedding_model: Embedding model identifier used for current vector
         embedding_generated_at: Timestamp when current vector was generated
+        embedding_input_tokens: Approximate token count before embedding guardrails
+        embedding_retained_tokens: Approximate retained token count after guardrails
+        embedding_was_truncated: Whether truncate policy dropped tail tokens
+        embedding_truncation_strategy: Guardrail strategy used when input exceeded limit
         extracted_who: Entities involved (people, organizations)
         extracted_what: What happened
         extracted_where: Location
@@ -377,6 +394,15 @@ class Event(Base):
     embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
     embedding_model: Mapped[str | None] = mapped_column(String(255))
     embedding_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    embedding_input_tokens: Mapped[int | None] = mapped_column(Integer)
+    embedding_retained_tokens: Mapped[int | None] = mapped_column(Integer)
+    embedding_was_truncated: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+    )
+    embedding_truncation_strategy: Mapped[str | None] = mapped_column(String(20))
 
     # LLM-extracted structured data
     extracted_who: Mapped[list[str] | None] = mapped_column(ARRAY(String))

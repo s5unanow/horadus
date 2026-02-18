@@ -12,6 +12,7 @@ import src.processing.pipeline_orchestrator as orchestrator_module
 from src.core.trend_engine import TrendUpdate
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationResult
+from src.processing.embedding_service import EmbeddingInputAudit
 from src.processing.event_clusterer import ClusterResult
 from src.processing.pipeline_orchestrator import (
     PipelineRunResult,
@@ -138,6 +139,23 @@ async def test_process_items_sets_item_embedding_lineage_when_embedding_created(
     embedding = SimpleNamespace(
         model="test-embedding-model",
         embed_texts=AsyncMock(return_value=([[0.1, 0.2, 0.3]], 0, 1)),
+        embed_texts_with_contexts=AsyncMock(
+            return_value=(
+                [[0.1, 0.2, 0.3]],
+                [
+                    EmbeddingInputAudit(
+                        original_tokens=140,
+                        retained_tokens=100,
+                        strategy="truncate",
+                        was_truncated=True,
+                        dropped_tail_tokens=40,
+                        chunk_count=1,
+                    )
+                ],
+                0,
+                1,
+            )
+        ),
     )
     clusterer = SimpleNamespace(
         cluster_item=AsyncMock(
@@ -185,6 +203,10 @@ async def test_process_items_sets_item_embedding_lineage_when_embedding_created(
     assert item.embedding == [0.1, 0.2, 0.3]
     assert item.embedding_model == "test-embedding-model"
     assert item.embedding_generated_at is not None
+    assert item.embedding_input_tokens == 140
+    assert item.embedding_retained_tokens == 100
+    assert item.embedding_was_truncated is True
+    assert item.embedding_truncation_strategy == "truncate"
 
 
 @pytest.mark.asyncio

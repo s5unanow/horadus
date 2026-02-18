@@ -344,6 +344,17 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return normalized
 
+    @field_validator("EMBEDDING_INPUT_POLICY", mode="before")
+    @classmethod
+    def parse_embedding_input_policy(cls, value: Any) -> str:
+        """Normalize embedding input overflow handling policy."""
+        normalized = str(value or "truncate").strip().lower()
+        allowed = {"truncate", "chunk"}
+        if normalized not in allowed:
+            msg = "EMBEDDING_INPUT_POLICY must be one of: truncate, chunk"
+            raise ValueError(msg)
+        return normalized
+
     @field_validator("CALIBRATION_DRIFT_WEBHOOK_URL", mode="before")
     @classmethod
     def parse_optional_webhook_url(cls, value: Any) -> str | None:
@@ -520,6 +531,21 @@ class Settings(BaseSettings):
         default=2048,
         ge=1,
         description="Maximum in-memory embedding cache entries before LRU eviction",
+    )
+    EMBEDDING_MAX_INPUT_TOKENS: int = Field(
+        default=8191,
+        ge=1,
+        description="Approximate per-input token guardrail for embedding requests",
+    )
+    EMBEDDING_INPUT_POLICY: str = Field(
+        default="truncate",
+        description="Embedding over-limit handling policy (`truncate` or `chunk`)",
+    )
+    EMBEDDING_TOKEN_ESTIMATE_CHARS_PER_TOKEN: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="Chars-per-token heuristic used for deterministic embedding token estimation",
     )
     VECTOR_REVALIDATION_CADENCE_DAYS: int = Field(
         default=30,

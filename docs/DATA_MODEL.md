@@ -108,6 +108,10 @@ Individual articles/posts collected from sources.
 | embedding | vector(1536) | Yes | | Text embedding for similarity and clustering |
 | embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
 | embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |
+| embedding_input_tokens | INTEGER | Yes | | Approximate token count before embedding input guardrail policy |
+| embedding_retained_tokens | INTEGER | Yes | | Approximate token count retained after guardrail handling |
+| embedding_was_truncated | BOOLEAN | No | false | True when truncate policy dropped tail tokens for this embedding |
+| embedding_truncation_strategy | VARCHAR(20) | Yes | | Guardrail strategy used when input exceeded limit (`truncate`/`chunk`) |
 | content_hash | VARCHAR(64) | No | | SHA256 hash for dedup |
 | language | VARCHAR(10) | Yes | | Detected language (ISO 639-1) |
 | processing_status | VARCHAR(20) | No | 'pending' | Status: pending, processing, classified, noise, error |
@@ -151,6 +155,10 @@ Clustered news events (multiple raw_items about the same story).
 | embedding | vector(1536) | Yes | | Text embedding for similarity |
 | embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
 | embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |
+| embedding_input_tokens | INTEGER | Yes | | Approximate token count before embedding input guardrail policy |
+| embedding_retained_tokens | INTEGER | Yes | | Approximate token count retained after guardrail handling |
+| embedding_was_truncated | BOOLEAN | No | false | True when truncate policy dropped tail tokens for this embedding |
+| embedding_truncation_strategy | VARCHAR(20) | Yes | | Guardrail strategy used when input exceeded limit (`truncate`/`chunk`) |
 | extracted_who | TEXT[] | Yes | | Entities: people/organizations |
 | extracted_what | TEXT | Yes | | What happened |
 | extracted_where | TEXT | Yes | | Location |

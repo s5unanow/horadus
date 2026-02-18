@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-139: Embedding Input Truncation Telemetry and Guardrails ✅
 - TASK-138: Improve keyword specificity for 3 vague indicators ✅
 - TASK-137: Sharpen vague falsification criteria ✅
 - TASK-136: Add ai_safety_incident indicator to ai-control trend ✅

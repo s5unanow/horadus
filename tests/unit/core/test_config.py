@@ -139,6 +139,23 @@ def test_settings_rejects_invalid_unsupported_language_mode() -> None:
         )
 
 
+def test_settings_normalizes_embedding_input_policy() -> None:
+    settings = Settings(
+        _env_file=None,
+        EMBEDDING_INPUT_POLICY=" Chunk ",
+    )
+
+    assert settings.EMBEDDING_INPUT_POLICY == "chunk"
+
+
+def test_settings_rejects_invalid_embedding_input_policy() -> None:
+    with pytest.raises(ValidationError, match="EMBEDDING_INPUT_POLICY"):
+        Settings(
+            _env_file=None,
+            EMBEDDING_INPUT_POLICY="drop",
+        )
+
+
 def test_settings_rejects_production_default_secret_key() -> None:
     with pytest.raises(ValidationError, match="SECRET_KEY must be explicitly configured"):
         Settings(

@@ -4,6 +4,8 @@ Prometheus metrics registry and helper recorders.
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from prometheus_client import Counter, Gauge
 
 INGESTION_ITEMS_TOTAL = Counter(
@@ -99,6 +101,29 @@ PROCESSING_EVENT_SUPPRESSIONS_TOTAL = Counter(
     "Event suppressions applied during processing by action and stage.",
     ["action", "stage"],
 )
+EMBEDDING_INPUTS_TOTAL = Counter(
+    "embedding_inputs_total",
+    "Total embedding inputs observed before provider submission.",
+    ["entity_type"],
+)
+EMBEDDING_INPUTS_TRUNCATED_TOTAL = Counter(
+    "embedding_inputs_truncated_total",
+    "Embedding inputs that exceeded token budget and required truncation/chunking.",
+    ["entity_type", "strategy"],
+)
+EMBEDDING_TAIL_TOKENS_DROPPED_TOTAL = Counter(
+    "embedding_tail_tokens_dropped_total",
+    "Approximate embedding tail tokens dropped by truncation policy.",
+    ["entity_type", "strategy"],
+)
+EMBEDDING_INPUT_TRUNCATION_RATIO = Gauge(
+    "embedding_input_truncation_ratio",
+    "Rolling in-process ratio of embedding inputs that required truncation/chunking.",
+    ["entity_type"],
+)
+
+_EMBEDDING_TOTAL_BY_ENTITY: dict[str, int] = defaultdict(int)
+_EMBEDDING_TRUNCATED_BY_ENTITY: dict[str, int] = defaultdict(int)
 
 
 def record_collector_metrics(
@@ -218,3 +243,35 @@ def record_processing_event_suppression(*, action: str, stage: str) -> None:
         action=normalized_action,
         stage=normalized_stage,
     ).inc()
+
+
+def record_embedding_input_guardrail(
+    *,
+    entity_type: str,
+    strategy: str,
+    was_cut: bool,
+    dropped_tail_tokens: int,
+) -> None:
+    normalized_entity = entity_type.strip() or "unknown"
+    normalized_strategy = strategy.strip() or "none"
+
+    EMBEDDING_INPUTS_TOTAL.labels(entity_type=normalized_entity).inc()
+    _EMBEDDING_TOTAL_BY_ENTITY[normalized_entity] += 1
+
+    if was_cut:
+        EMBEDDING_INPUTS_TRUNCATED_TOTAL.labels(
+            entity_type=normalized_entity,
+            strategy=normalized_strategy,
+        ).inc()
+        _EMBEDDING_TRUNCATED_BY_ENTITY[normalized_entity] += 1
+
+        EMBEDDING_TAIL_TOKENS_DROPPED_TOTAL.labels(
+            entity_type=normalized_entity,
+            strategy=normalized_strategy,
+        ).inc(max(0, int(dropped_tail_tokens)))
+
+    total = _EMBEDDING_TOTAL_BY_ENTITY[normalized_entity]
+    truncated = _EMBEDDING_TRUNCATED_BY_ENTITY[normalized_entity]
+    EMBEDDING_INPUT_TRUNCATION_RATIO.labels(entity_type=normalized_entity).set(
+        (truncated / total) if total else 0.0
+    )

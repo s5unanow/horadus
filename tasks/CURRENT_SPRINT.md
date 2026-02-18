@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-139` Embedding Input Truncation Telemetry and Guardrails — DONE ✓
 - `TASK-138` Improve keyword specificity for 3 vague indicators — DONE ✓
 - `TASK-137` Sharpen vague falsification criteria — DONE ✓
 - `TASK-136` Add ai_safety_incident indicator to ai-control trend — DONE ✓
@@ -80,6 +81,7 @@
 - `TASK-136` completion note: `ai-human-control-expansion` now includes `ai_safety_incident` as an escalatory leading indicator (`weight=0.04`) with specified keywords, and taxonomy validation remains green in subset mode.
 - `TASK-137` completion note: vague `would_invalidate_model` criteria were replaced with measurable thresholds in `elite-mass-polarization` and `fertility-decline-acceleration`, with both configs validated via `TrendConfig`.
 - `TASK-138` completion note: keyword specificity was improved for `governance_capture_signals`, `mainstream_positive_framing`, and `institutional_trust_collapse` with targeted measurement/media/survey terms, and all updated configs pass `TrendConfig` validation.
+- `TASK-139` completion note: embedding guardrails now enforce deterministic pre-counted token limits with configurable `truncate`/`chunk` policy, emit structured cut-input logs and truncation metrics, persist embedding input audit metadata on `raw_items`/`events`, and include unit coverage plus weekly ops query guidance for truncation-rate alerting.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

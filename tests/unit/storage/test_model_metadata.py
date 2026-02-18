@@ -51,8 +51,16 @@ def test_pgvector_indexes_match_migration_profile_lists_setting() -> None:
 def test_embedding_lineage_columns_present_in_model_metadata() -> None:
     assert "embedding_model" in RawItem.__table__.c
     assert "embedding_generated_at" in RawItem.__table__.c
+    assert "embedding_input_tokens" in RawItem.__table__.c
+    assert "embedding_retained_tokens" in RawItem.__table__.c
+    assert "embedding_was_truncated" in RawItem.__table__.c
+    assert "embedding_truncation_strategy" in RawItem.__table__.c
     assert "embedding_model" in Event.__table__.c
     assert "embedding_generated_at" in Event.__table__.c
+    assert "embedding_input_tokens" in Event.__table__.c
+    assert "embedding_retained_tokens" in Event.__table__.c
+    assert "embedding_was_truncated" in Event.__table__.c
+    assert "embedding_truncation_strategy" in Event.__table__.c
 
 
 def test_report_grounding_columns_present_in_model_metadata() -> None:

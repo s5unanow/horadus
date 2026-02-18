@@ -202,6 +202,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-131` GDELT now uses forward-only persisted watermarks independent of backward page cursors, with monotonic multi-page/partial-page checkpoint tests and clarified ingestion checkpoint docs
 - [x] `TASK-132` `/events` trend filters now use correlated `EXISTS` semantics to eliminate duplicate event rows under multi-evidence matches while preserving order/limit behavior
 - [x] `TASK-133` event invalidation now preserves trend-evidence lineage via invalidation markers/feedback linkage while reversing only active deltas and excluding invalidated evidence from operational reporting paths
+- [x] `TASK-134` external assessment intake governance is now preserved in backlog docs with explicit overlap mapping to human-gated `TASK-080` and no duplicate implementation tasks
 
 ## In Progress
 
@@ -214,7 +215,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-134` external assessment backlog intake preservation
+2. Execute `TASK-135` clarify baseline_probability referent in trend descriptions
 
 ## Expert Feedback Integration ✅
 

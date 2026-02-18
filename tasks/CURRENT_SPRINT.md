@@ -9,7 +9,7 @@
 
 ## Active Tasks
 
-- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
+- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — Checklist prepared; awaiting manual human implementation/approval
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
@@ -50,3 +50,5 @@
 - `TASK-118` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Launch=`No-Go`; Notes=`Open launch-readiness backlog must be completed before go-live.`
 - `TASK-070` reviewer checklist: `tasks/assessments/TASK-070-baseline-prior-signoff-checklist-2026-02-18.md`.
 - `TASK-070` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Notes=`All active trend baseline priors approved in human review; local DB parity command failed with postgres auth mismatch and was accepted as local-environment verification waiver.`
+- `TASK-077` reviewer checklist: `tasks/assessments/TASK-077-cost-first-pipeline-checklist-2026-02-18.md`.
+- `TASK-077` sign-off record (fill before marking DONE): Reviewer=`TBD`; Date=`TBD`; Decision=`Pending`; Notes=`TBD`.

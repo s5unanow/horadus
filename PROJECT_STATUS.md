@@ -192,7 +192,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## In Progress
 
-- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` (manual execution/approval pending)
+- `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` (checklist prepared; manual implementation/approval pending)
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)

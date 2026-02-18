@@ -320,6 +320,12 @@ Reference: `docs/adr/006-deterministic-scoring.md`
 | EventClusterer | Group similar items | pgvector cosine |
 | Deduplicator | Prevent duplicates | URL + hash + embedding |
 
+Dedup URL normalization policy:
+- Default mode keeps non-tracking query params (to avoid collapsing distinct content IDs).
+- Known tracking params are stripped (`utm_*`, `fbclid`, etc.).
+- Remaining params are sorted deterministically before persistence/matching.
+- Operator strictness knob: `DEDUP_URL_QUERY_MODE=strip_all` restores legacy query-stripping behavior.
+
 ### Embedding Guardrail Operations
 
 Embedding inputs are pre-counted with a deterministic token heuristic before API submission.

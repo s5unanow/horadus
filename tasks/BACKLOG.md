@@ -2641,10 +2641,10 @@ content identity in query strings, so this can cause false duplicates.
 **Files**: `src/processing/deduplication_service.py`, `src/core/config.py`, `docs/ARCHITECTURE.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Preserve content-identifying query parameters while stripping known tracking params (e.g., `utm_*`, `fbclid`, etc.)
-- [ ] Ensure normalization is deterministic (e.g., stable sorting of remaining query params)
-- [ ] Add tests covering URLs where query params must be preserved and where tracking params should be removed
-- [ ] Document the normalization policy and provide an operator override knob for strictness if needed
+- [x] Preserve content-identifying query parameters while stripping known tracking params (e.g., `utm_*`, `fbclid`, etc.)
+- [x] Ensure normalization is deterministic (e.g., stable sorting of remaining query params)
+- [x] Add tests covering URLs where query params must be preserved and where tracking params should be removed
+- [x] Document the normalization policy and provide an operator override knob for strictness if needed
 
 ---
 

@@ -263,6 +263,20 @@ def test_normalize_url_removes_tracking_parts() -> None:
     assert normalized == "https://example.com/path"
 
 
+def test_normalize_url_preserves_non_tracking_query_params(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "DEDUP_URL_QUERY_MODE", "keep_non_tracking")
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAM_PREFIXES", ["utm_"])
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAMS", ["fbclid"])
+
+    normalized = RSSCollector._normalize_url(
+        "https://www.Example.com/path/?b=2&utm_medium=social&a=1&fbclid=xyz"
+    )
+
+    assert normalized == "https://example.com/path?a=1&b=2"
+
+
 def test_extract_summary_uses_description_then_content() -> None:
     with_summary = {"description": "from-description"}
     from_content = {"content": [{"value": "from-content"}]}

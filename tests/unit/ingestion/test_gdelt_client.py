@@ -106,6 +106,20 @@ def test_build_query_string_includes_filters() -> None:
     assert "(sourcecountry:UA)" in built
 
 
+def test_normalize_url_preserves_non_tracking_query_params(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "DEDUP_URL_QUERY_MODE", "keep_non_tracking")
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAM_PREFIXES", ["utm_"])
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAMS", ["fbclid"])
+
+    normalized = GDELTClient._normalize_url(
+        "https://www.Example.com/path/?b=2&utm_campaign=x&a=1&fbclid=y"
+    )
+
+    assert normalized == "https://example.com/path?a=1&b=2"
+
+
 def test_matches_filters_theme_actor_language_country() -> None:
     article = {
         "themes": "MILITARY;ECONOMY",

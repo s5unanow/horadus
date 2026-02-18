@@ -2092,10 +2092,10 @@ Restore independence-aware corroboration weighting in runtime by fixing SQLAlche
 row-shape parsing in pipeline evidence aggregation.
 
 **Acceptance Criteria**:
-- [ ] Replace tuple-only row filtering in corroboration aggregation with SQLAlchemy `Row`/mapping-safe extraction
-- [ ] Ensure cluster-aware corroboration path is used when source-cluster fields are present; fallback path is used only when fields are truly absent
-- [ ] Add unit/integration tests that cover SQLAlchemy `Row` results and verify expected corroboration factors
-- [ ] Add instrumentation/logging to surface fallback-corroboration usage rate for operator visibility
+- [x] Replace tuple-only row filtering in corroboration aggregation with SQLAlchemy `Row`/mapping-safe extraction
+- [x] Ensure cluster-aware corroboration path is used when source-cluster fields are present; fallback path is used only when fields are truly absent
+- [x] Add unit/integration tests that cover SQLAlchemy `Row` results and verify expected corroboration factors
+- [x] Add instrumentation/logging to surface fallback-corroboration usage rate for operator visibility
 
 ---
 

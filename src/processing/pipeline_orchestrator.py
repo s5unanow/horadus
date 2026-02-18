@@ -4,8 +4,10 @@ Processing pipeline orchestration for pending raw items.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from inspect import isawaitable
 from typing import Any
 from uuid import UUID
 
@@ -15,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.core.observability import (
+    record_processing_corroboration_path,
     record_processing_ingested_language,
     record_processing_tier1_language_outcome,
     record_processing_tier2_language_usage,
@@ -899,14 +902,19 @@ class ProcessingPipeline:
     async def _corroboration_score(self, event: Event) -> float:
         base_score = self._fallback_corroboration_score(event)
         if event.id is None:
+            self._record_corroboration_path(
+                event=event,
+                mode="fallback",
+                reason="missing_event_id",
+            )
             return max(0.1, base_score * self._contradiction_penalty(event))
 
         try:
             query = (
                 select(
-                    Source.id,
-                    Source.source_tier,
-                    Source.reporting_type,
+                    Source.id.label("source_id"),
+                    Source.source_tier.label("source_tier"),
+                    Source.reporting_type.label("reporting_type"),
                 )
                 .join(RawItem, RawItem.source_id == Source.id)
                 .join(EventItem, EventItem.item_id == RawItem.id)
@@ -914,19 +922,43 @@ class ProcessingPipeline:
             )
             result = await self.session.execute(query)
             rows_raw = result.all()
-            if hasattr(rows_raw, "__await__"):
+            if isawaitable(rows_raw):
                 rows_raw = await rows_raw
+            rows_raw = list(rows_raw)
         except Exception:
+            self._record_corroboration_path(
+                event=event,
+                mode="fallback",
+                reason="query_error",
+            )
             return max(0.1, base_score * self._contradiction_penalty(event))
 
-        if not isinstance(rows_raw, list):
+        if not rows_raw:
+            self._record_corroboration_path(
+                event=event,
+                mode="fallback",
+                reason="no_rows",
+            )
             return max(0.1, base_score * self._contradiction_penalty(event))
-        rows = [row for row in rows_raw if isinstance(row, tuple) and len(row) >= 3]
-        if not rows:
+
+        parsed_rows: list[tuple[UUID | str, str | None, str | None]] = []
+        for row in rows_raw:
+            parsed = self._parse_corroboration_row(row)
+            if parsed is not None:
+                parsed_rows.append(parsed)
+
+        if not parsed_rows:
+            self._record_corroboration_path(
+                event=event,
+                mode="fallback",
+                reason="missing_source_cluster_fields",
+                rows_total=len(rows_raw),
+                rows_parsed=0,
+            )
             return max(0.1, base_score * self._contradiction_penalty(event))
 
         cluster_weights: dict[str, float] = {}
-        for source_id, source_tier, reporting_type in rows:
+        for source_id, source_tier, reporting_type in parsed_rows:
             cluster_key = self._source_cluster_key(
                 source_id=source_id,
                 source_tier=source_tier,
@@ -937,6 +969,13 @@ class ProcessingPipeline:
 
         independent_score = sum(cluster_weights.values())
         contradiction_penalty = self._contradiction_penalty(event)
+        self._record_corroboration_path(
+            event=event,
+            mode="cluster_aware",
+            reason="source_cluster_fields_present",
+            rows_total=len(rows_raw),
+            rows_parsed=len(parsed_rows),
+        )
         return max(0.1, independent_score * contradiction_penalty)
 
     @staticmethod
@@ -950,7 +989,7 @@ class ProcessingPipeline:
     @staticmethod
     def _source_cluster_key(
         *,
-        source_id: UUID,
+        source_id: UUID | str,
         source_tier: str | None,
         reporting_type: str | None,
     ) -> str:
@@ -959,6 +998,60 @@ class ProcessingPipeline:
         if reporting == "firsthand":
             return f"firsthand:{source_id}"
         return f"{tier}:{reporting}"
+
+    @staticmethod
+    def _parse_corroboration_row(
+        row: Any,
+    ) -> tuple[UUID | str, str | None, str | None] | None:
+        if isinstance(row, tuple) and len(row) >= 3:
+            source_id = row[0]
+            if source_id is None:
+                return None
+            source_tier = row[1] if isinstance(row[1], str) or row[1] is None else str(row[1])
+            reporting_type = row[2] if isinstance(row[2], str) or row[2] is None else str(row[2])
+            return source_id, source_tier, reporting_type
+
+        mapping = getattr(row, "_mapping", None)
+        if isinstance(mapping, Mapping):
+            source_id = mapping.get("source_id")
+            if source_id is None:
+                source_id = mapping.get("id")
+            if source_id is None:
+                return None
+            source_tier_raw = mapping.get("source_tier")
+            reporting_type_raw = mapping.get("reporting_type")
+            source_tier = (
+                source_tier_raw
+                if isinstance(source_tier_raw, str) or source_tier_raw is None
+                else str(source_tier_raw)
+            )
+            reporting_type = (
+                reporting_type_raw
+                if isinstance(reporting_type_raw, str) or reporting_type_raw is None
+                else str(reporting_type_raw)
+            )
+            return source_id, source_tier, reporting_type
+
+        return None
+
+    @staticmethod
+    def _record_corroboration_path(
+        *,
+        event: Event,
+        mode: str,
+        reason: str,
+        rows_total: int | None = None,
+        rows_parsed: int | None = None,
+    ) -> None:
+        record_processing_corroboration_path(mode=mode, reason=reason)
+        if mode == "fallback":
+            logger.info(
+                "Corroboration scoring used fallback path",
+                event_id=str(event.id) if event.id is not None else None,
+                reason=reason,
+                rows_total=rows_total,
+                rows_parsed=rows_parsed,
+            )
 
     @staticmethod
     def _reporting_type_weight(reporting_type: str | None) -> float:

@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import create_engine, literal, select
 
 import src.processing.pipeline_orchestrator as orchestrator_module
 from src.core.trend_engine import TrendUpdate
@@ -578,6 +579,100 @@ async def test_corroboration_score_prevents_derivative_overcount(mock_db_session
 
     assert score == pytest.approx(1.35, rel=0.01)
     assert score < 5.0
+
+
+@pytest.mark.asyncio
+async def test_corroboration_score_parses_sqlalchemy_rows(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Corroboration row parsing test",
+        source_count=2,
+        unique_source_count=2,
+    )
+    with create_engine("sqlite+pysqlite:///:memory:").connect() as connection:
+        row_aggregator = connection.execute(
+            select(
+                literal(str(uuid4())).label("source_id"),
+                literal("wire").label("source_tier"),
+                literal("aggregator").label("reporting_type"),
+            )
+        ).one()
+        row_firsthand = connection.execute(
+            select(
+                literal(str(uuid4())).label("source_id"),
+                literal("wire").label("source_tier"),
+                literal("firsthand").label("reporting_type"),
+            )
+        ).one()
+    mock_db_session.execute = AsyncMock(
+        return_value=SimpleNamespace(all=lambda: [row_aggregator, row_firsthand])
+    )
+    corroboration_path_calls: list[tuple[str, str]] = []
+
+    def _record_path(*, mode: str, reason: str) -> None:
+        corroboration_path_calls.append((mode, reason))
+
+    monkeypatch.setattr(orchestrator_module, "record_processing_corroboration_path", _record_path)
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=SimpleNamespace(),
+        embedding_service=SimpleNamespace(),
+        event_clusterer=SimpleNamespace(),
+        tier1_classifier=SimpleNamespace(),
+        tier2_classifier=SimpleNamespace(),
+        trend_engine=SimpleNamespace(),
+    )
+
+    score = await pipeline._corroboration_score(event)
+
+    assert score == pytest.approx(1.35, rel=0.01)
+    assert corroboration_path_calls == [("cluster_aware", "source_cluster_fields_present")]
+
+
+@pytest.mark.asyncio
+async def test_corroboration_score_falls_back_when_source_id_absent(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Fallback corroboration test",
+        source_count=4,
+        unique_source_count=4,
+    )
+    with create_engine("sqlite+pysqlite:///:memory:").connect() as connection:
+        malformed_row = connection.execute(
+            select(
+                literal("wire").label("source_tier"),
+                literal("aggregator").label("reporting_type"),
+            )
+        ).one()
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [malformed_row]))
+    corroboration_path_calls: list[tuple[str, str]] = []
+
+    def _record_path(*, mode: str, reason: str) -> None:
+        corroboration_path_calls.append((mode, reason))
+
+    monkeypatch.setattr(orchestrator_module, "record_processing_corroboration_path", _record_path)
+
+    pipeline = ProcessingPipeline(
+        session=mock_db_session,
+        deduplication_service=SimpleNamespace(),
+        embedding_service=SimpleNamespace(),
+        event_clusterer=SimpleNamespace(),
+        tier1_classifier=SimpleNamespace(),
+        tier2_classifier=SimpleNamespace(),
+        trend_engine=SimpleNamespace(),
+    )
+
+    score = await pipeline._corroboration_score(event)
+
+    assert score == pytest.approx(4.0, rel=0.01)
+    assert corroboration_path_calls == [("fallback", "missing_source_cluster_fields")]
 
 
 @pytest.mark.asyncio

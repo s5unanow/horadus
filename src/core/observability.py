@@ -89,6 +89,11 @@ TAXONOMY_GAP_SIGNAL_KEYS_TOTAL = Counter(
     "Unknown signal-type taxonomy gaps by trend_id and signal_type.",
     ["trend_id", "signal_type"],
 )
+PROCESSING_CORROBORATION_PATH_TOTAL = Counter(
+    "processing_corroboration_path_total",
+    "Corroboration scoring path usage by mode and reason.",
+    ["mode", "reason"],
+)
 
 
 def record_collector_metrics(
@@ -190,3 +195,12 @@ def record_taxonomy_gap(*, reason: str, trend_id: str, signal_type: str) -> None
             trend_id=trend_id.strip() or "unknown",
             signal_type=signal_type.strip() or "unknown",
         ).inc()
+
+
+def record_processing_corroboration_path(*, mode: str, reason: str) -> None:
+    normalized_mode = mode.strip() or "unknown"
+    normalized_reason = reason.strip() or "unspecified"
+    PROCESSING_CORROBORATION_PATH_TOTAL.labels(
+        mode=normalized_mode,
+        reason=normalized_reason,
+    ).inc()

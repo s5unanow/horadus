@@ -196,6 +196,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-084` production security guardrails completed with human sign-off (`Approved`); production now rejects weak/short secret-key values
 - [x] `TASK-140` codified human-gated sequencing and in-branch backlog-capture exceptions in `AGENTS.md` to reduce process drift
 - [x] `TASK-085` explicit admin-key requirement completed with human sign-off (`Approved`); key-management endpoints reject missing/invalid admin credentials
+- [x] `TASK-128` corroboration scoring now supports SQLAlchemy `Row` mappings with fallback-path observability (`processing_corroboration_path_total`) and regression tests
 
 ## In Progress
 
@@ -208,7 +209,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-128` corroboration row-parsing runtime fix
+2. Execute `TASK-129` atomic trend delta updates under concurrency
 
 ## Expert Feedback Integration ✅
 

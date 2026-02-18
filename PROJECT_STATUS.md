@@ -186,10 +186,10 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Status-ledger reconciliation across `CURRENT_SPRINT`, `COMPLETED`, and `PROJECT_STATUS` for active vs done task parity
 - [x] Delivery workflow guidance now explicitly requires full lifecycle closure (commit/push/PR/merge/local-sync) with blocker reporting, and PR scope guard handles escaped-newline PR bodies
 - [x] `TASK-066` multi-trend baseline expansion completed with human reviewer sign-off captured in sprint assessment/checklist records
+- [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings
 
 ## In Progress
 
-- `TASK-044` Curated Human-Verified Gold Dataset `[REQUIRES_HUMAN]` (manual labeling/review pending)
 - `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` (manual baseline validation pending)
 - `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
@@ -199,17 +199,15 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Blocked
 
-- `TASK-044` requires manual human curation/review before benchmark can be treated as true gold-set quality.
 - `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
 - `TASK-118` requires explicit human approval for remediation ordering and launch go/no-go criteria.
 
 ## Next Up (Priority Order)
 
 1. Complete `TASK-118` human sign-off on remediation order and launch criteria
-2. Complete `TASK-044` human curation and reviewer sign-off for a true gold set
-3. Complete `TASK-070` baseline prior review/sign-off for active trends
-4. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
-5. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
+2. Complete `TASK-070` baseline prior review/sign-off for active trends
+3. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+4. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
 
 ## Expert Feedback Integration ✅
 
@@ -251,7 +249,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Human-gated sign-off and curation tasks (`TASK-118`, `TASK-044`, `TASK-070`) remain the main completion bottleneck.
+- Human-gated sign-off tasks (`TASK-118`, `TASK-070`) remain the main completion bottleneck.
 
 ## Architecture Validated ✅
 

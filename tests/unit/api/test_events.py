@@ -62,7 +62,9 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
     query_text = str(query)
     assert "events.lifecycle_status" in query_text
     assert "events.has_contradictions" in query_text
+    assert "exists" in query_text.lower()
     assert "trend_evidence.trend_id" in query_text
+    assert "join trend_evidence" not in query_text.lower()
 
 
 @pytest.mark.asyncio

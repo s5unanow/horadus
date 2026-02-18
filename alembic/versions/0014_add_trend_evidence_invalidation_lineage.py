@@ -1,6 +1,6 @@
 """Add trend-evidence invalidation lineage columns.
 
-Revision ID: 0014_evidence_invalidation_lineage
+Revision ID: 0014_evidence_invalidation
 Revises: 0013_taxonomy_gap_queue
 Create Date: 2026-02-18
 """
@@ -13,7 +13,7 @@ from sqlalchemy.dialects import postgresql
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0014_evidence_invalidation_lineage"
+revision = "0014_evidence_invalidation"
 down_revision = "0013_taxonomy_gap_queue"
 branch_labels = None
 depends_on = None

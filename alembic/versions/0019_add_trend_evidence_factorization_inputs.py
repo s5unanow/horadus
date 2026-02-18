@@ -1,6 +1,6 @@
 """Persist trend-evidence factorization inputs for auditability.
 
-Revision ID: 0019_trend_evidence_factorization
+Revision ID: 0019_trend_evidence_factors
 Revises: 0018_dimension_check_constraints
 Create Date: 2026-02-18
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from alembic import op
 
 # revision identifiers, used by Alembic.
-revision = "0019_trend_evidence_factorization"
+revision = "0019_trend_evidence_factors"
 down_revision = "0018_dimension_check_constraints"
 branch_labels = None
 depends_on = None

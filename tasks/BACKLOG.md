@@ -2137,10 +2137,10 @@ Align GDELT ingestion checkpoint behavior with forward-progress semantics to avo
 cursor regression and silent coverage gaps.
 
 **Acceptance Criteria**:
-- [ ] Separate pagination/query cursor movement from persisted ingestion high-water watermark semantics
-- [ ] Persist forward-only watermark based on max successfully processed publication timestamp/window bound
-- [ ] Add tests for multi-page windows and partial-page edge cases to ensure watermark monotonicity
-- [ ] Update ingestion docs to clarify RSS vs GDELT checkpoint rules and failure/retry behavior
+- [x] Separate pagination/query cursor movement from persisted ingestion high-water watermark semantics
+- [x] Persist forward-only watermark based on max successfully processed publication timestamp/window bound
+- [x] Add tests for multi-page windows and partial-page edge cases to ensure watermark monotonicity
+- [x] Update ingestion docs to clarify RSS vs GDELT checkpoint rules and failure/retry behavior
 
 ---
 

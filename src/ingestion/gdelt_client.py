@@ -176,7 +176,8 @@ class GDELTClient:
         result.actual_start = window_start
         result.gap_seconds = gap_seconds
         result.overlap_seconds = overlap_seconds
-        window_end = now_utc
+        query_window_end = now_utc
+        max_processed_published_at: datetime | None = None
 
         logger.info(
             "GDELT collection window",
@@ -193,7 +194,7 @@ class GDELTClient:
                     articles = await self._fetch_articles(
                         query=query,
                         start_datetime=window_start,
-                        end_datetime=window_end,
+                        end_datetime=query_window_end,
                         max_records=query.max_records_per_page,
                     )
                     if not articles:
@@ -205,11 +206,17 @@ class GDELTClient:
                     oldest_published = self._oldest_published_at(articles)
 
                     for article in articles:
+                        published_at = self._parse_article_datetime(article)
+                        if published_at is not None and (
+                            max_processed_published_at is None
+                            or published_at > max_processed_published_at
+                        ):
+                            max_processed_published_at = published_at
+
                         if not self._matches_filters(article, query):
                             result.items_skipped += 1
                             continue
 
-                        published_at = self._parse_article_datetime(article)
                         stored_item = await self._store_article(
                             source=source,
                             article=article,
@@ -226,9 +233,9 @@ class GDELTClient:
                         break
 
                     next_window_end = oldest_published - timedelta(seconds=1)
-                    if next_window_end >= window_end:
+                    if next_window_end >= query_window_end:
                         break
-                    window_end = next_window_end
+                    query_window_end = next_window_end
         except Exception as exc:
             failure_class = "transient" if self._is_transient_failure(exc) else "terminal"
             failure_reason = self._failure_reason(exc)
@@ -250,7 +257,12 @@ class GDELTClient:
             result.errors.append(error_message)
             await self._record_source_failure(source, error_message)
         else:
-            await self._record_source_success(source, window_end=window_end)
+            persisted_window_end = self._resolve_success_window_end(
+                source=source,
+                fallback_window_end=now_utc,
+                max_processed_published_at=max_processed_published_at,
+            )
+            await self._record_source_success(source, window_end=persisted_window_end)
 
         result.duration_seconds = round(time.monotonic() - started, 3)
         logger.info(
@@ -471,6 +483,27 @@ class GDELTClient:
         source.error_count = 0
         source.last_error = None
         await self.session.flush()
+
+    def _resolve_success_window_end(
+        self,
+        *,
+        source: Source,
+        fallback_window_end: datetime,
+        max_processed_published_at: datetime | None,
+    ) -> datetime:
+        candidate = (
+            self._as_utc(max_processed_published_at)
+            if max_processed_published_at is not None
+            else self._as_utc(fallback_window_end)
+        )
+        previous_window_end_at = getattr(source, "ingestion_window_end_at", None)
+        if previous_window_end_at is None:
+            return candidate
+
+        previous = self._as_utc(previous_window_end_at)
+        if candidate < previous:
+            return previous
+        return candidate
 
     async def _record_source_failure(self, source: Source, error: str) -> None:
         source.error_count = source.error_count + 1

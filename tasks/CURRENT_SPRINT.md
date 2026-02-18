@@ -9,7 +9,7 @@
 
 ## Active Tasks
 
-- `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` — Awaiting manual analyst baseline validation
+- `TASK-070` Trend Baseline Prior Review and Sign-Off `[REQUIRES_HUMAN]` — Checklist prepared; awaiting manual analyst baseline validation
 - `TASK-077` Cost-First Pipeline Ordering `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
@@ -48,3 +48,5 @@
 - `TASK-066` sign-off record: Reviewer=`s5una`; Date=`2026-02-17`; Decision=`Approved`; Notes=`All 15 added trends approved via human review; taxonomy validation passes with non-blocking legacy gold-set warnings.`
 - `TASK-118` assessment artifact: `tasks/assessments/TASK-118-launch-readiness-assessment-2026-02-18.md`.
 - `TASK-118` sign-off record: Reviewer=`s5una`; Date=`2026-02-18`; Decision=`Approved`; Launch=`No-Go`; Notes=`Open launch-readiness backlog must be completed before go-live.`
+- `TASK-070` reviewer checklist: `tasks/assessments/TASK-070-baseline-prior-signoff-checklist-2026-02-18.md`.
+- `TASK-070` sign-off record (fill before marking DONE): Reviewer=`TBD`; Date=`TBD`; Decision=`Pending`; Notes=`TBD`.

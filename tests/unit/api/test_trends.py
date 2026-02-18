@@ -347,6 +347,9 @@ async def test_list_trend_evidence_returns_records(mock_db_session) -> None:
     assert result[0].confidence_score == pytest.approx(0.95)
     assert result[0].delta_log_odds == pytest.approx(0.02)
     assert result[0].reasoning == "Multiple sources corroborate force buildup"
+    assert result[0].is_invalidated is False
+    assert result[0].invalidated_at is None
+    assert result[0].invalidation_feedback_id is None
     assert result[0].created_at == created_at
     assert mock_db_session.scalars.await_count == 1
 
@@ -367,9 +370,29 @@ async def test_list_trend_evidence_filters_by_date_range(mock_db_session) -> Non
     )
 
     query = mock_db_session.scalars.await_args.args[0]
-    query_text = str(query)
+    query_text = str(query).lower()
     assert "trend_evidence.created_at >=" in query_text
     assert "trend_evidence.created_at <=" in query_text
+    assert "trend_evidence.is_invalidated is false" in query_text
+
+
+@pytest.mark.asyncio
+async def test_list_trend_evidence_include_invalidated_omits_active_filter(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+
+    await list_trend_evidence(
+        trend_id=trend.id,
+        include_invalidated=True,
+        session=mock_db_session,
+    )
+
+    query = mock_db_session.scalars.await_args.args[0]
+    query_text = str(query).lower()
+    assert "trend_evidence.is_invalidated is false" not in query_text
 
 
 @pytest.mark.asyncio

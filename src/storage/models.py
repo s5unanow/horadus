@@ -615,6 +615,17 @@ class TrendEvidence(Base):
         server_default=func.now(),
         nullable=False,
     )
+    is_invalidated: Mapped[bool] = mapped_column(
+        Boolean,
+        default=False,
+        server_default=text("false"),
+        nullable=False,
+    )
+    invalidated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    invalidation_feedback_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("human_feedback.id", ondelete="SET NULL"),
+    )
 
     # Relationships
     trend: Mapped[Trend] = relationship(back_populates="evidence_records")
@@ -625,6 +636,7 @@ class TrendEvidence(Base):
         UniqueConstraint("trend_id", "event_id", "signal_type", name="uq_trend_event_signal"),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
+        Index("idx_evidence_event_invalidated", "event_id", "is_invalidated"),
     )
 
 

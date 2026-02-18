@@ -136,6 +136,7 @@ async def list_events(
                 select(TrendEvidence.id).where(
                     TrendEvidence.event_id == Event.id,
                     TrendEvidence.trend_id == trend_id,
+                    TrendEvidence.is_invalidated.is_(False),
                 )
             )
         )
@@ -201,6 +202,7 @@ async def get_event(
                 TrendEvidence.delta_log_odds,
             )
             .where(TrendEvidence.event_id == event_id)
+            .where(TrendEvidence.is_invalidated.is_(False))
             .order_by(TrendEvidence.created_at.desc())
         )
     ).all()

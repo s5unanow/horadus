@@ -117,10 +117,16 @@ async def test_create_event_feedback_invalidates_evidence_and_reverts_trends(
     )
 
     assert float(trend.current_log_odds) == pytest.approx(-1.3)
-    assert mock_db_session.delete.await_count == 2
+    assert evidence_one.is_invalidated is True
+    assert evidence_two.is_invalidated is True
+    assert evidence_one.invalidated_at is not None
+    assert evidence_two.invalidated_at is not None
+    assert mock_db_session.delete.await_count == 0
     assert result.action == "invalidate"
     assert result.original_value is not None
     assert result.original_value["evidence_count"] == 2
+    assert result.corrected_value is not None
+    assert result.corrected_value["invalidated_evidence_count"] == 2
 
 
 @pytest.mark.asyncio

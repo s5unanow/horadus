@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-133` Preserve Evidence Lineage on Event Invalidation — DONE ✓
 - `TASK-132` Trend-Filtered Events API De-duplication — DONE ✓
 - `TASK-131` Forward-Only GDELT Watermark Semantics — DONE ✓
 - `TASK-130` Suppression-First Event Lifecycle Guard — DONE ✓
@@ -68,6 +69,7 @@
 - `TASK-130` completion note: clusterer now checks suppression before merge/lifecycle updates, suppressed-event merges are skipped, and suppression metrics/logging now emit from both clusterer and pipeline stages.
 - `TASK-131` completion note: GDELT collection now separates backward pagination cursors from a forward-only persisted source watermark, with monotonic multi-page/partial-page regression coverage and clarified checkpoint docs.
 - `TASK-132` completion note: `/events` trend filtering now uses a correlated `EXISTS` predicate to avoid `trend_evidence` join fan-out duplicates, with unit + integration coverage for multi-evidence event de-duplication and order/limit stability.
+- `TASK-133` completion note: event invalidation now marks `trend_evidence` lineage (`is_invalidated`, `invalidated_at`, `invalidation_feedback_id`) instead of deleting rows, reverses only active evidence deltas, and exposes invalidated lineage through trend evidence API while operational analytics filter to active evidence by default.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

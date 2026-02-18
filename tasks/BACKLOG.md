@@ -2165,10 +2165,10 @@ Retain explainability/audit provenance when events are invalidated by feedback,
 without leaving stale trend deltas applied.
 
 **Acceptance Criteria**:
-- [ ] Replace hard deletion of `TrendEvidence` on invalidation with reversible lineage-preserving state/marker
-- [ ] Keep reversal of previously applied deltas correct and auditable after invalidation
-- [ ] Expose invalidated-evidence lineage in audit/reporting paths needed for replay/calibration investigations
-- [ ] Add migration/tests validating invalidate + reverse + audit/replay behavior
+- [x] Replace hard deletion of `TrendEvidence` on invalidation with reversible lineage-preserving state/marker
+- [x] Keep reversal of previously applied deltas correct and auditable after invalidation
+- [x] Expose invalidated-evidence lineage in audit/reporting paths needed for replay/calibration investigations
+- [x] Add migration/tests validating invalidate + reverse + audit/replay behavior
 
 ---
 

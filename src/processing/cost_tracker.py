@@ -13,7 +13,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.config import settings
+from src.core.config import resolve_llm_token_pricing, settings
 from src.core.observability import record_budget_denial
 from src.storage.models import ApiUsage
 
@@ -24,12 +24,6 @@ TIER2 = "tier2"
 EMBEDDING = "embedding"
 
 KNOWN_TIERS = (TIER1, TIER2, EMBEDDING)
-
-COST_PER_1M_TOKENS: dict[str, tuple[Decimal, Decimal]] = {
-    TIER1: (Decimal("0.10"), Decimal("0.40")),
-    TIER2: (Decimal("0.40"), Decimal("1.60")),
-    EMBEDDING: (Decimal("0.10"), Decimal("0.00")),
-}
 
 
 class BudgetExceededError(RuntimeError):
@@ -42,9 +36,30 @@ class CostTracker:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def ensure_within_budget(self, tier: str) -> None:
+    async def ensure_within_budget(
+        self,
+        tier: str,
+        *,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> None:
         """Raise BudgetExceededError if the requested tier budget is exhausted."""
         normalized_tier = self._normalize_tier(tier)
+        try:
+            self._resolve_token_rates(
+                tier=normalized_tier,
+                provider=provider,
+                model=model,
+            )
+        except ValueError as exc:
+            pricing_reason = str(exc)
+            self._log_budget_denial(
+                tier=normalized_tier,
+                reason_code="invalid_pricing_config",
+                reason_detail=pricing_reason,
+            )
+            raise BudgetExceededError(pricing_reason) from exc
+
         allowed, reason = await self.check_budget(normalized_tier)
         if allowed:
             return
@@ -86,15 +101,18 @@ class CostTracker:
         tier: str,
         input_tokens: int,
         output_tokens: int,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> None:
         """Atomically enforce limits and persist usage for one API call."""
         normalized_tier = self._normalize_tier(tier)
         today = datetime.now(tz=UTC).date()
         safe_input_tokens = max(0, int(input_tokens))
         safe_output_tokens = max(0, int(output_tokens))
-        input_rate, output_rate = COST_PER_1M_TOKENS.get(
-            normalized_tier,
-            (Decimal("0"), Decimal("0")),
+        input_rate, output_rate = self._resolve_token_rates(
+            tier=normalized_tier,
+            provider=provider,
+            model=model,
         )
         estimated_cost = (Decimal(safe_input_tokens) / Decimal(1_000_000)) * input_rate + (
             Decimal(safe_output_tokens) / Decimal(1_000_000)
@@ -281,7 +299,46 @@ class CostTracker:
             return "daily_call_limit"
         if "daily cost limit" in normalized:
             return "daily_cost_limit"
+        if "pricing" in normalized:
+            return "invalid_pricing_config"
         return "budget_denied"
+
+    @staticmethod
+    def _default_provider_model_for_tier(tier: str) -> tuple[str, str]:
+        defaults = {
+            TIER1: (settings.LLM_PRIMARY_PROVIDER, settings.LLM_TIER1_MODEL),
+            TIER2: (settings.LLM_PRIMARY_PROVIDER, settings.LLM_TIER2_MODEL),
+            EMBEDDING: (settings.LLM_PRIMARY_PROVIDER, settings.EMBEDDING_MODEL),
+        }
+        default_pair = defaults.get(tier)
+        if default_pair is None:
+            msg = f"Unsupported cost tracker tier '{tier}'"
+            raise ValueError(msg)
+        return default_pair
+
+    def _resolve_token_rates(
+        self,
+        *,
+        tier: str,
+        provider: str | None,
+        model: str | None,
+    ) -> tuple[Decimal, Decimal]:
+        default_provider, default_model = self._default_provider_model_for_tier(tier)
+        resolved_provider = (provider or default_provider).strip().lower()
+        resolved_model = (model or default_model).strip()
+        pricing = resolve_llm_token_pricing(
+            pricing_table=settings.LLM_TOKEN_PRICING_USD_PER_1M,
+            provider=resolved_provider,
+            model=resolved_model,
+        )
+        if pricing is None:
+            msg = (
+                "No token pricing configured for route "
+                f"'{resolved_provider}:{resolved_model}' in LLM_TOKEN_PRICING_USD_PER_1M"
+            )
+            raise ValueError(msg)
+        input_rate, output_rate = pricing
+        return (Decimal(str(input_rate)), Decimal(str(output_rate)))
 
     def _log_budget_denial(
         self,

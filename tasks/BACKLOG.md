@@ -2624,10 +2624,10 @@ and mapped to (provider, model).
 **Files**: `src/processing/cost_tracker.py`, `src/core/config.py`, `docs/ENVIRONMENT.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Move pricing table to configuration (env/YAML) with safe defaults
-- [ ] Support per-model/per-provider rates, not just per tier
-- [ ] Add validation and tests for pricing config parsing and cost calculation
-- [ ] Keep budget enforcement behavior deterministic and fail-closed on invalid pricing config
+- [x] Move pricing table to configuration (env/YAML) with safe defaults
+- [x] Support per-model/per-provider rates, not just per tier
+- [x] Add validation and tests for pricing config parsing and cost calculation
+- [x] Keep budget enforcement behavior deterministic and fail-closed on invalid pricing config
 
 ---
 

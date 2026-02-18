@@ -73,11 +73,17 @@ async def test_invoke_with_policy_records_budget_and_cost() -> None:
     assert result.prompt_tokens == 10
     assert result.completion_tokens == 5
     assert result.estimated_cost_usd == pytest.approx(0.000012, rel=0.001)
-    cost_tracker.ensure_within_budget.assert_awaited_once_with("tier2")
+    cost_tracker.ensure_within_budget.assert_awaited_once_with(
+        "tier2",
+        provider="openai",
+        model="gpt-4.1-mini",
+    )
     cost_tracker.record_usage.assert_awaited_once_with(
         tier="tier2",
         input_tokens=10,
         output_tokens=5,
+        provider="openai",
+        model="gpt-4.1-mini",
     )
 
 
@@ -113,7 +119,11 @@ async def test_invoke_with_policy_falls_back_when_strict_schema_unsupported() ->
 
     assert result.prompt_tokens == 7
     assert result.completion_tokens == 3
-    cost_tracker.ensure_within_budget.assert_awaited_once_with("tier1")
+    cost_tracker.ensure_within_budget.assert_awaited_once_with(
+        "tier1",
+        provider="openai",
+        model="gpt-4.1-nano",
+    )
     cost_tracker.record_usage.assert_awaited_once()
 
 

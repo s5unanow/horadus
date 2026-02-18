@@ -309,7 +309,11 @@ class EmbeddingService:
         if not inputs:
             return []
 
-        await self.cost_tracker.ensure_within_budget(EMBEDDING)
+        await self.cost_tracker.ensure_within_budget(
+            EMBEDDING,
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            model=self.model,
+        )
         response = await self.client.embeddings.create(
             model=self.model,
             input=inputs,
@@ -322,6 +326,8 @@ class EmbeddingService:
             tier=EMBEDDING,
             input_tokens=prompt_tokens,
             output_tokens=0,
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            model=self.model,
         )
 
         raw_data = getattr(response, "data", None)

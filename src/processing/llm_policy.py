@@ -94,7 +94,17 @@ async def invoke_with_policy(
     retry_policy: LLMChatRetryPolicy | None = None,
 ) -> LLMInvocationResult:
     if cost_tracker is not None and budget_tier is not None:
-        await cost_tracker.ensure_within_budget(budget_tier)
+        await cost_tracker.ensure_within_budget(
+            budget_tier,
+            provider=primary_route.provider,
+            model=primary_route.model,
+        )
+        if secondary_route is not None:
+            await cost_tracker.ensure_within_budget(
+                budget_tier,
+                provider=secondary_route.provider,
+                model=secondary_route.model,
+            )
 
     invoker = LLMChatFailoverInvoker(
         stage=stage,
@@ -135,11 +145,16 @@ async def invoke_with_policy(
         )
 
     prompt_tokens, completion_tokens = extract_usage_tokens(response)
+    active_provider = primary_route.provider
+    if secondary_route is not None and active_model == secondary_route.model:
+        active_provider = secondary_route.provider
     if cost_tracker is not None and budget_tier is not None:
         await cost_tracker.record_usage(
             tier=budget_tier,
             input_tokens=prompt_tokens,
             output_tokens=completion_tokens,
+            provider=active_provider,
+            model=active_model,
         )
 
     estimated_cost = estimate_model_cost_usd(

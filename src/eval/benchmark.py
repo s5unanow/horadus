@@ -185,8 +185,15 @@ class _NoopSession:
 
 @dataclass(slots=True)
 class _NoopCostTracker:
-    async def ensure_within_budget(self, _tier: str) -> None:
-        return None
+    async def ensure_within_budget(
+        self,
+        _tier: str,
+        *,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> None:
+        _ = (provider, model)
+        return
 
     async def record_usage(
         self,
@@ -194,8 +201,10 @@ class _NoopCostTracker:
         tier: str,
         input_tokens: int,
         output_tokens: int,
+        provider: str | None = None,
+        model: str | None = None,
     ) -> None:
-        _ = (tier, input_tokens, output_tokens)
+        _ = (tier, input_tokens, output_tokens, provider, model)
         return
 
 

@@ -122,6 +122,39 @@ def test_settings_rejects_invalid_rate_limit_strategy() -> None:
         )
 
 
+def test_settings_parses_llm_token_pricing_json() -> None:
+    settings = Settings(
+        _env_file=None,
+        LLM_TOKEN_PRICING_USD_PER_1M=(
+            '{"openai:gpt-4.1-nano":{"input":0.11,"output":0.44},'
+            '"openai:gpt-4.1-mini":[0.4,1.6],'
+            '"openai:text-embedding-3-small":[0.02,0.0]}'
+        ),
+        LLM_TIER2_MODEL="gpt-4.1-mini",
+        EMBEDDING_MODEL="text-embedding-3-small",
+    )
+
+    assert settings.LLM_TOKEN_PRICING_USD_PER_1M["openai:gpt-4.1-nano"] == (0.11, 0.44)
+
+
+def test_settings_rejects_invalid_llm_token_pricing_key() -> None:
+    with pytest.raises(ValidationError, match="provider:model"):
+        Settings(
+            _env_file=None,
+            LLM_TOKEN_PRICING_USD_PER_1M='{"gpt-4.1-mini":[0.4,1.6]}',
+        )
+
+
+def test_settings_rejects_missing_default_tier_pricing_coverage() -> None:
+    with pytest.raises(ValidationError, match="must include a price for tier2 route"):
+        Settings(
+            _env_file=None,
+            LLM_TOKEN_PRICING_USD_PER_1M='{"openai:gpt-4.1-nano":[0.1,0.4]}',
+            LLM_TIER2_MODEL="gpt-4.1-mini",
+            EMBEDDING_MODEL="text-embedding-3-small",
+        )
+
+
 def test_settings_normalizes_supported_languages() -> None:
     settings = Settings(
         _env_file=None,
@@ -153,6 +186,23 @@ def test_settings_rejects_invalid_embedding_input_policy() -> None:
         Settings(
             _env_file=None,
             EMBEDDING_INPUT_POLICY="drop",
+        )
+
+
+def test_settings_normalizes_dedup_url_query_mode() -> None:
+    settings = Settings(
+        _env_file=None,
+        DEDUP_URL_QUERY_MODE=" Strip_All ",
+    )
+
+    assert settings.DEDUP_URL_QUERY_MODE == "strip_all"
+
+
+def test_settings_rejects_invalid_dedup_url_query_mode() -> None:
+    with pytest.raises(ValidationError, match="DEDUP_URL_QUERY_MODE"):
+        Settings(
+            _env_file=None,
+            DEDUP_URL_QUERY_MODE="keep_all",
         )
 
 

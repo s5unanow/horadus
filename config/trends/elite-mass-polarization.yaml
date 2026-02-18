@@ -1,8 +1,11 @@
 id: "elite-mass-polarization"
 name: "Elite-Mass Polarization and Agency Erosion"
 description: |
-  Tracks structural separation between high-control elite groups and the broader
-  population, including declining social mobility and agency.
+  Tracks whether structural separation between high-control elite groups and the
+  broader population is accelerating, including declines in social mobility and
+  civic/economic agency.
+  Baseline probability represents the probability that elite-mass polarization
+  and agency erosion continue accelerating over a rolling 10-year window.
 
 baseline_probability: 0.38
 decay_half_life_days: 270

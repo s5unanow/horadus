@@ -2212,10 +2212,10 @@ conceptual referent clear for operators.
 `config/trends/elite-mass-polarization.yaml`
 
 **Acceptance Criteria**:
-- [ ] Each of the 4 descriptions includes a standardized sentence: "Baseline probability represents the probability that [specific measurable outcome] [by time horizon / over rolling N-year window]."
-- [ ] `elite-mass-polarization` reframed from state description to delta/acceleration framing
-- [ ] All 4 configs pass Pydantic validation
-- [ ] No baseline probability values changed (numbers are correct)
+- [x] Each of the 4 descriptions includes a standardized sentence: "Baseline probability represents the probability that [specific measurable outcome] [by time horizon / over rolling N-year window]."
+- [x] `elite-mass-polarization` reframed from state description to delta/acceleration framing
+- [x] All 4 configs pass Pydantic validation
+- [x] No baseline probability values changed (numbers are correct)
 
 ---
 

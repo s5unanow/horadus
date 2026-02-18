@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-135` Clarify baseline_probability referent in trend descriptions — DONE ✓
 - `TASK-134` External Assessment Backlog Intake Preservation — DONE ✓
 - `TASK-133` Preserve Evidence Lineage on Event Invalidation — DONE ✓
 - `TASK-132` Trend-Filtered Events API De-duplication — DONE ✓
@@ -72,6 +73,7 @@
 - `TASK-132` completion note: `/events` trend filtering now uses a correlated `EXISTS` predicate to avoid `trend_evidence` join fan-out duplicates, with unit + integration coverage for multi-evidence event de-duplication and order/limit stability.
 - `TASK-133` completion note: event invalidation now marks `trend_evidence` lineage (`is_invalidated`, `invalidated_at`, `invalidation_feedback_id`) instead of deleting rows, reverses only active evidence deltas, and exposes invalidated lineage through trend evidence API while operational analytics filter to active evidence by default.
 - `TASK-134` completion note: external assessment planning intake is now explicitly preserved in `tasks/BACKLOG.md` with checked governance criteria and overlap mapping to human-gated `TASK-080` (no duplicate implementation tasks created).
+- `TASK-135` completion note: baseline referent sentences were standardized across the four targeted trend descriptions, with `elite-mass-polarization` reframed to acceleration/delta semantics and baseline probability values preserved.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

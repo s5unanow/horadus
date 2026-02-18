@@ -85,6 +85,7 @@ async def test_list_events_trend_filter_deduplicates_multi_evidence_rows() -> No
 
         first_page = await list_events(
             trend_id=trend.id,
+            contradicted=None,
             days=7,
             limit=1,
             session=session,
@@ -94,6 +95,7 @@ async def test_list_events_trend_filter_deduplicates_multi_evidence_rows() -> No
 
         full_page = await list_events(
             trend_id=trend.id,
+            contradicted=None,
             days=7,
             limit=10,
             session=session,

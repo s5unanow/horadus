@@ -184,6 +184,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Stranded `TASK-086..TASK-107` recovery from `task-061` applied on `main` lineage with deterministic recovery matrix (`tasks/assessments/TASK-112-recovery-matrix.md`)
 - [x] Reconstructed missing adapter/tracing/lineage/grounding modules and migrations required for recovered runtime paths
 - [x] Status-ledger reconciliation across `CURRENT_SPRINT`, `COMPLETED`, and `PROJECT_STATUS` for active vs done task parity
+- [x] Docs freshness consistency gate now enforces cross-ledger task parity (in-progress vs completed dual-listing, active sprint task coverage in `PROJECT_STATUS` in-progress, and blocked coverage for active `[REQUIRES_HUMAN]` tasks)
 - [x] Delivery workflow guidance now explicitly requires full lifecycle closure (commit/push/PR/merge/local-sync) with blocker reporting, and PR scope guard handles escaped-newline PR bodies
 - [x] `TASK-066` multi-trend baseline expansion completed with human reviewer sign-off captured in sprint assessment/checklist records
 - [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings

@@ -2076,11 +2076,11 @@ Resolve recurring inconsistencies across `PROJECT_STATUS.md`,
 metadata so status views remain coherent after rapid task execution.
 
 **Acceptance Criteria**:
-- [ ] Reconcile any mismatch where tasks are listed as both in-progress and completed (starting with `TASK-113`, `TASK-114`, `TASK-115`)
-- [ ] Ensure active `[REQUIRES_HUMAN]` tasks in `tasks/CURRENT_SPRINT.md` are represented consistently in `PROJECT_STATUS.md` in-progress/blocked sections (including `TASK-118`)
-- [ ] Normalize backlog dependency metadata for already-completed tasks that depended on still-open human-gated tasks (document explicit exception/rationale or adjust dependency notes)
-- [ ] Add a lightweight consistency check (script/test/docs-freshness rule) that flags: (a) in-progress+completed dual-listing, and (b) active sprint tasks missing from project-status in-progress list
-- [ ] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) when this task is executed
+- [x] Reconcile any mismatch where tasks are listed as both in-progress and completed (starting with `TASK-113`, `TASK-114`, `TASK-115`)
+- [x] Ensure active `[REQUIRES_HUMAN]` tasks in `tasks/CURRENT_SPRINT.md` are represented consistently in `PROJECT_STATUS.md` in-progress/blocked sections (including `TASK-118`)
+- [x] Normalize backlog dependency metadata for already-completed tasks that depended on still-open human-gated tasks (audit result 2026-02-18: no remaining completed tasks depend on currently open `[REQUIRES_HUMAN]` tasks)
+- [x] Add a lightweight consistency check (script/test/docs-freshness rule) that flags: (a) in-progress+completed dual-listing, and (b) active sprint tasks missing from project-status in-progress list
+- [x] Update task ledgers (`tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `tasks/BACKLOG.md`) when this task is executed
 
 ---
 

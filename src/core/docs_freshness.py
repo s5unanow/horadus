@@ -92,6 +92,11 @@ _ARCHIVED_DOC_REQUIRED_POINTERS: tuple[str, ...] = (
     "tasks/BACKLOG.md",
     "PROJECT_STATUS.md",
 )
+_TASK_ID_PATTERN = re.compile(r"\bTASK-(\d{3})\b")
+_CURRENT_SPRINT_ACTIVE_HEADING = "Active Tasks"
+_CURRENT_SPRINT_COMPLETED_HEADING = "Completed This Sprint"
+_PROJECT_STATUS_IN_PROGRESS_HEADING = "In Progress"
+_PROJECT_STATUS_BLOCKED_HEADING = "Blocked"
 
 
 def _load_overrides(override_path: Path) -> tuple[_Override, ...]:
@@ -132,6 +137,60 @@ def _parse_marker_date(content: str, label: str) -> date | None:
     if match is None:
         return None
     return date.fromisoformat(match.group(1))
+
+
+def _extract_h2_section(content: str, heading: str) -> str | None:
+    heading_pattern = re.compile(rf"^##\s+{re.escape(heading)}\s*$", re.MULTILINE)
+    match = heading_pattern.search(content)
+    if match is None:
+        return None
+
+    section_start = match.end()
+    remainder = content[section_start:]
+    next_heading_match = re.search(r"^##\s+.+$", remainder, re.MULTILINE)
+    if next_heading_match is None:
+        return remainder
+
+    section_end = section_start + next_heading_match.start()
+    return content[section_start:section_end]
+
+
+def _extract_task_ids(content: str) -> set[str]:
+    return {f"TASK-{match.group(1)}" for match in _TASK_ID_PATTERN.finditer(content)}
+
+
+def _extract_section_task_ids(content: str, heading: str) -> set[str]:
+    section = _extract_h2_section(content, heading)
+    if section is None:
+        return set()
+    return _extract_task_ids(section)
+
+
+def _extract_current_sprint_active_tasks(content: str) -> tuple[set[str], set[str]]:
+    section = _extract_h2_section(content, _CURRENT_SPRINT_ACTIVE_HEADING)
+    if section is None:
+        return set(), set()
+
+    active_tasks: set[str] = set()
+    active_requires_human_tasks: set[str] = set()
+    for line in section.splitlines():
+        line_task_ids = _extract_task_ids(line)
+        if not line_task_ids:
+            continue
+        active_tasks.update(line_task_ids)
+        if "[REQUIRES_HUMAN]" in line:
+            active_requires_human_tasks.update(line_task_ids)
+
+    return active_tasks, active_requires_human_tasks
+
+
+def _extract_completed_task_ids(content: str) -> set[str]:
+    completed: set[str] = set()
+    for line in content.splitlines():
+        if not line.lstrip().startswith("-"):
+            continue
+        completed.update(_extract_task_ids(line))
+    return completed
 
 
 def _record_issue(
@@ -311,6 +370,79 @@ def run_docs_freshness_check(
                 path=reference_path,
             )
         )
+
+    current_sprint_path = repo_root / "tasks" / "CURRENT_SPRINT.md"
+    project_status_path = repo_root / "PROJECT_STATUS.md"
+    completed_ledger_path = repo_root / "tasks" / "COMPLETED.md"
+    if current_sprint_path.exists() and project_status_path.exists():
+        current_sprint = current_sprint_path.read_text(encoding="utf-8")
+        project_status_text = project_status_path.read_text(encoding="utf-8")
+
+        active_sprint_tasks, active_requires_human_tasks = _extract_current_sprint_active_tasks(
+            current_sprint
+        )
+        project_status_in_progress_tasks = _extract_section_task_ids(
+            project_status_text,
+            _PROJECT_STATUS_IN_PROGRESS_HEADING,
+        )
+        project_status_blocked_tasks = _extract_section_task_ids(
+            project_status_text,
+            _PROJECT_STATUS_BLOCKED_HEADING,
+        )
+
+        completed_tasks = _extract_section_task_ids(
+            current_sprint, _CURRENT_SPRINT_COMPLETED_HEADING
+        )
+        if completed_ledger_path.exists():
+            completed_tasks.update(
+                _extract_completed_task_ids(completed_ledger_path.read_text(encoding="utf-8"))
+            )
+
+        dual_listed_tasks = sorted(
+            (active_sprint_tasks | project_status_in_progress_tasks) & completed_tasks
+        )
+        if dual_listed_tasks:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="task_status_dual_listing",
+                message=(
+                    "Tasks listed as both in-progress and completed across ledgers: "
+                    + ", ".join(dual_listed_tasks)
+                ),
+                path="PROJECT_STATUS.md",
+            )
+
+        missing_in_progress_tasks = sorted(active_sprint_tasks - project_status_in_progress_tasks)
+        if missing_in_progress_tasks:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_missing_active_sprint_task",
+                message=(
+                    "Active sprint tasks missing from PROJECT_STATUS In Progress: "
+                    + ", ".join(missing_in_progress_tasks)
+                ),
+                path="PROJECT_STATUS.md",
+            )
+
+        missing_blocked_human_tasks = sorted(
+            active_requires_human_tasks - project_status_blocked_tasks
+        )
+        if missing_blocked_human_tasks:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_missing_blocked_human_task",
+                message=(
+                    "Active [REQUIRES_HUMAN] sprint tasks missing from PROJECT_STATUS Blocked: "
+                    + ", ".join(missing_blocked_human_tasks)
+                ),
+                path="PROJECT_STATUS.md",
+            )
 
     adr_dir = repo_root / "docs" / "adr"
     available_adr_ids: set[str] = set()

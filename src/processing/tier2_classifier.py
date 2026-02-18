@@ -4,6 +4,7 @@ Tier 2 LLM classifier for detailed event extraction and trend impacts.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -254,7 +255,8 @@ class Tier2Classifier:
             else await self._load_event_context(event.id)
         )
         payload = self._build_payload(event=event, trends=trends, context_chunks=chunks)
-        cached_content = self.semantic_cache.get(
+        cached_content = await asyncio.to_thread(
+            self.semantic_cache.get,
             stage=TIER2,
             model=self.model,
             prompt_template=self.prompt_template,
@@ -329,7 +331,8 @@ class Tier2Classifier:
             message = getattr(response_choices[0], "message", None)
             raw_content = getattr(message, "content", None)
             if isinstance(raw_content, str) and raw_content.strip():
-                self.semantic_cache.set(
+                await asyncio.to_thread(
+                    self.semantic_cache.set,
                     stage=TIER2,
                     model=self.model,
                     prompt_template=self.prompt_template,

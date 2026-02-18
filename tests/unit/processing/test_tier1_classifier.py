@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import json
-from dataclasses import dataclass
+import threading
+from dataclasses import dataclass, field
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -115,6 +116,48 @@ class InMemorySemanticCache:
         ] = value
 
 
+@dataclass(slots=True)
+class ThreadTrackingSemanticCache(InMemorySemanticCache):
+    get_thread_ids: list[int] = field(default_factory=list)
+    set_thread_ids: list[int] = field(default_factory=list)
+
+    def get(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+    ) -> str | None:
+        self.get_thread_ids.append(threading.get_ident())
+        return InMemorySemanticCache.get(
+            self,
+            stage=stage,
+            model=model,
+            prompt_template=prompt_template,
+            payload=payload,
+        )
+
+    def set(
+        self,
+        *,
+        stage: str,
+        model: str,
+        prompt_template: str,
+        payload: object,
+        value: str,
+    ) -> None:
+        self.set_thread_ids.append(threading.get_ident())
+        InMemorySemanticCache.set(
+            self,
+            stage=stage,
+            model=model,
+            prompt_template=prompt_template,
+            payload=payload,
+            value=value,
+        )
+
+
 def _build_classifier(
     mock_db_session,
     *,
@@ -210,6 +253,30 @@ async def test_classify_items_uses_semantic_cache_hits(mock_db_session) -> None:
     assert second_usage.api_calls == 0
     assert len(chat.calls) == 1
     assert cost_tracker.ensure_within_budget.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_classify_items_offloads_semantic_cache_calls_to_threadpool(
+    mock_db_session,
+) -> None:
+    semantic_cache = ThreadTrackingSemanticCache(entries={})
+    classifier, _chat, _cost_tracker = _build_classifier(
+        mock_db_session,
+        batch_size=2,
+        semantic_cache=semantic_cache,
+    )
+    items = [_build_item("eu-russia update")]
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+    loop_thread_id = threading.get_ident()
+
+    await classifier.classify_items(items, trends)
+
+    assert semantic_cache.get_thread_ids
+    assert semantic_cache.set_thread_ids
+    assert all(
+        thread_id != loop_thread_id
+        for thread_id in [*semantic_cache.get_thread_ids, *semantic_cache.set_thread_ids]
+    )
 
 
 @pytest.mark.asyncio

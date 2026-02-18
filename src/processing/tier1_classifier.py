@@ -4,6 +4,7 @@ Tier 1 LLM classifier for fast relevance filtering.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -263,7 +264,8 @@ class Tier1Classifier:
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
-        cached_content = self.semantic_cache.get(
+        cached_content = await asyncio.to_thread(
+            self.semantic_cache.get,
             stage=TIER1,
             model=self.model,
             prompt_template=self.prompt_template,
@@ -340,7 +342,8 @@ class Tier1Classifier:
             message = getattr(response_choices[0], "message", None)
             raw_content = getattr(message, "content", None)
             if isinstance(raw_content, str) and raw_content.strip():
-                self.semantic_cache.set(
+                await asyncio.to_thread(
+                    self.semantic_cache.set,
                     stage=TIER1,
                     model=self.model,
                     prompt_template=self.prompt_template,

@@ -14,7 +14,7 @@ Phase 3: Trend Engine        [████████████████�
 Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
 Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
 Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
-Phase 8: Hardening (NEW)     [███████████████████░]  97%  🚧 IN PROGRESS
+Phase 8: Hardening (NEW)     [███████████████████░]  98%  🚧 IN PROGRESS
 ```
 
 ## What's Working
@@ -215,6 +215,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-147` now enforces one-event-per-item at the DB layer (`event_items.item_id` unique) with migration duplicate-preflight and deterministic clusterer handling for uniqueness conflicts
 - [x] `TASK-148` canonical summary semantics now align with `primary_item_id`: merge updates only rewrite `canonical_summary` when the primary item changes, preserving primary-aligned summaries over merely newest mentions
 - [x] `TASK-149` retention cleanup policy now covers `raw_items`/`trend_evidence`/`events` with configurable windows, scheduled dry-run-first worker task and metrics, FK-safe lifecycle gating, and deployment workflow for tuning + DB-size trend validation
+- [x] `TASK-150` `docs/DATA_MODEL.md` is now reconciled with runtime schema for `sources`/`raw_items`/`events` and ERD scope is explicitly marked core-table-only to prevent misleading completeness assumptions
 
 ## In Progress
 
@@ -227,8 +228,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-150` close DATA_MODEL drift vs runtime schema
-3. Execute `TASK-151` version trend definition changes for auditability
+2. Execute `TASK-151` version trend definition changes for auditability
+3. Execute `TASK-153` guard integration-test DB truncation safety
 
 ## Expert Feedback Integration ✅
 

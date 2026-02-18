@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-143`.
+- Next available task IDs start at `TASK-152`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2330,6 +2330,153 @@ paths for admin operations.
 - [ ] Add operator guidance for host/network allowlisting and firewall controls for admin/API access
 - [ ] Add deployment verification checks to confirm only intended ports are reachable from outside the host
 - [ ] Update deployment/security docs with explicit "public vs private" port mapping expectations
+
+---
+
+## Phase 10: Runtime Concurrency + Data Integrity Hardening (2026-02)
+
+Backlog items derived from internal review of runtime concurrency correctness,
+event lifecycle accounting, and schema-level invariants.
+
+### TASK-144: Runtime review findings backlog intake preservation
+**Priority**: P1 (High)
+**Estimate**: 30-60 minutes
+
+Capture review-identified hardening items in `tasks/BACKLOG.md` with clear task
+boundaries so they can be executed as one-task-per-branch follow-ups.
+
+**Acceptance Criteria**:
+- [x] Add dedicated tasks for the identified runtime issues (concurrency safety, event lifecycle accounting, schema invariants, retention, docs drift)
+- [x] Avoid duplicating already-open tasks (e.g., Telegram wiring remains `TASK-080` `[REQUIRES_HUMAN]`)
+- [x] Keep Task ID policy synchronized after reserving IDs
+
+---
+
+### TASK-145: Concurrency-safe trend log-odds updates (atomic delta apply)
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+`TrendEngine.apply_evidence` currently updates `Trend.current_log_odds` by
+reading the value into memory and writing back `current + delta`. Under
+concurrent workers this can lose updates (last write wins).
+
+**Files**: `src/core/trend_engine.py`, `src/storage/models.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Apply evidence delta with an atomic SQL update (`current_log_odds = current_log_odds + :delta`) or equivalent row-locking transaction
+- [ ] Preserve idempotency guarantees for `(trend_id, event_id, signal_type)` evidence inserts (no double-apply)
+- [ ] Return correct `previous_probability` and `new_probability` even under concurrency
+- [ ] Add a concurrency-focused test that would fail under the current read-modify-write implementation (lost update) and passes after the fix
+- [ ] Add structured logging for evidence apply showing whether the update path used atomic update / row lock (operator-debuggable)
+
+---
+
+### TASK-146: Fix event unique-source counting and lifecycle ordering on merge
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+`EventClusterer._merge_into_event` updates `unique_source_count` and lifecycle
+before inserting the `EventItem` link for the merged item, so the just-added
+source may be undercounted and lifecycle confirmation delayed.
+
+**Files**: `src/processing/event_clusterer.py`, `src/processing/event_lifecycle.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Ensure the merged item is linked (`event_items`) before recomputing `unique_source_count`
+- [ ] Ensure lifecycle transitions (emerging → confirmed) observe the updated `unique_source_count`
+- [ ] Add a unit/integration test showing the confirmation threshold is reached on the correct mention (no off-by-one merge)
+- [ ] Keep behavior correct for the “no embedding” path where events are created without similarity matching
+
+---
+
+### TASK-147: Enforce RawItem belongs-to-one-Event invariant at the DB layer
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+The schema currently allows a `RawItem` to be linked to multiple `Event`s
+because `event_items` only has a composite PK `(event_id, item_id)` and no
+uniqueness on `item_id`. Concurrent clustering can attach one item to multiple
+events despite the invariant “belongs to exactly one event.”
+
+**Files**: `src/storage/models.py`, `alembic/`, `src/processing/event_clusterer.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Add a DB-level uniqueness constraint/index enforcing one-to-one mapping: `event_items.item_id` is unique
+- [ ] Add an Alembic migration that applies the constraint safely (including a defensive preflight/query for existing duplicates)
+- [ ] Update clustering/linking code to treat a uniqueness violation as “already linked” and return the existing `event_id` deterministically
+- [ ] Add test coverage for the uniqueness invariant (attempting to link the same item to a second event fails and is handled cleanly)
+
+---
+
+### TASK-148: Align event `canonical_summary` semantics with `primary_item_id`
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Today `canonical_summary` is overwritten by the newest item on every merge,
+even when `primary_item_id` points to a more credible item. This makes “primary”
+designation misleading and can degrade summary quality.
+
+**Files**: `src/processing/event_clusterer.py`, `src/storage/models.py`, `docs/DATA_MODEL.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define and document canonical summary semantics (e.g., “summary of primary item” vs “latest mention summary”)
+- [ ] Implement the chosen semantics (update summary only when `primary_item_id` changes, or add a separate `latest_summary` field)
+- [ ] Add tests that cover both “newest mention” and “higher-credibility primary” update cases
+- [ ] Update `docs/DATA_MODEL.md` so operators understand what `canonical_summary` represents
+
+---
+
+### TASK-149: Add retention/archival policy for raw_items, events, and trend_evidence
+**Priority**: P2 (Medium)
+**Estimate**: 3-6 hours
+
+Only `trend_snapshots` has explicit Timescale retention policies. The rest of the
+high-churn tables (`raw_items`, `events`, `event_items`, `trend_evidence`) have
+no retention/cleanup path, risking unbounded growth in continuous ingestion.
+
+**Files**: `src/workers/celery_app.py`, `src/workers/tasks.py`, `src/storage/models.py`, `alembic/`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define a safe retention policy (defaults + config knobs) that preserves auditability where required (e.g., keep evidence longer than raw text)
+- [ ] Add a scheduled cleanup worker task with dry-run/logging mode and metrics (deleted rows, bytes/age buckets if feasible)
+- [ ] Ensure cleanup respects foreign keys and event lifecycle (e.g., only prune `raw_items` for `noise/error` or for events in `archived` status beyond a threshold)
+- [ ] Add tests for retention selection logic (what is eligible vs protected)
+- [ ] Document operator workflow: how to tune retention, verify it ran, and validate DB size trends
+
+---
+
+### TASK-150: Close `docs/DATA_MODEL.md` drift vs runtime schema (sources/raw_items/events)
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+`docs/DATA_MODEL.md` omits several runtime columns and has at least one stale
+type/length definition (e.g., `raw_items.external_id`).
+
+**Files**: `docs/DATA_MODEL.md`, `src/storage/models.py`
+
+**Acceptance Criteria**:
+- [ ] Update `sources` table docs to include `source_tier`, `reporting_type`, `error_count`, `last_error`
+- [ ] Update `raw_items` table docs to include `author` and correct `external_id` length (runtime is `String(2048)`)
+- [ ] Update `events` table docs to include `unique_source_count`, `lifecycle_status`, `last_mention_at`, `confirmed_at`, contradiction fields, and any other runtime columns
+- [ ] Ensure ERD is either updated to include key runtime entities or explicitly labeled as “core tables only” to avoid misleading reviewers
+
+---
+
+### TASK-151: Version trend definition changes for auditability
+**Priority**: P3 (Low)
+**Estimate**: 3-6 hours
+
+Trend definitions are stored as a single JSON blob (`trends.definition`) without
+history. If trend configs can change outside Git-managed YAML, operators lack an
+audit trail for “what changed” beyond probability snapshots.
+
+**Files**: `src/storage/models.py`, `alembic/`, `src/api/routes/trends.py`, `docs/`
+
+**Acceptance Criteria**:
+- [ ] Add a minimal append-only trend-definition version table (trend id, timestamp, definition payload, actor/context)
+- [ ] Ensure API/config sync paths record a version row on material change (with deterministic diff or hash)
+- [ ] Add a read endpoint or admin query guidance for inspecting definition history
+- [ ] Add tests for “no-op update does not create a new version” and “material change creates a version”
 
 ---
 

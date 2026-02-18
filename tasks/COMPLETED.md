@@ -145,6 +145,7 @@ Tasks that have been completed and verified.
 - TASK-120: Documentation Drift Fixes (ADR References + Data Model Coverage) ✅
 - TASK-121: Docs Freshness Gate Expansion (Integrity + Coverage Rules) ✅
 - TASK-122: Launch-Critical Production Guardrails Hardening ✅
+- TASK-144: Runtime Review Findings Backlog Intake Preservation ✅
 
 ---
 

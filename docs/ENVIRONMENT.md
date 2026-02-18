@@ -218,6 +218,8 @@ See `docs/TRACING.md` for local collector/viewer quickstart and context-propagat
 | `MIGRATION_PARITY_CHECK_ENABLED` | `true` | Enables runtime migration parity checks in startup and `/health`. |
 | `MIGRATION_PARITY_STRICT_STARTUP` | `false` | Fails API startup when migration parity check is unhealthy. |
 | `MIGRATION_GATE_VALIDATE_AUTOGEN` | `true` | Release/integration migration-gate strictness. `true` runs `alembic check`; set `false` only for documented emergency bypass. |
+| `INTEGRATION_DB_TRUNCATE_ALLOWED` | `false` | Integration-test safety override: allows truncation even when DB name is not explicitly test-scoped. |
+| `INTEGRATION_DB_TRUNCATE_ALLOW_REMOTE` | `false` | Integration-test safety override: allows truncation on non-local DB hosts (use only for isolated ephemeral environments). |
 | `REDIS_URL` | `redis://localhost:6379/0` | General Redis connection URL. |
 
 ## File-Based Secrets (`*_FILE`)

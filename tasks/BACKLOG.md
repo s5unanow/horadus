@@ -2515,10 +2515,10 @@ misconfigures `DATABASE_URL` (staging/prod wipe risk).
 **Files**: `tests/integration/conftest.py`, `src/core/config.py`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Add a hard fail/guard so truncation can only run against an explicitly marked test database (opt-in env var and/or DB name suffix like `_test`)
-- [ ] Add a “local-only” guard (e.g., require host is localhost/127.0.0.1 unless explicit override) to reduce remote wipe risk
-- [ ] Make the failure mode loud and actionable (clear error message showing the resolved DB target)
-- [ ] Add unit/integration tests covering guard behavior (refuse unsafe targets, allow safe test targets)
+- [x] Add a hard fail/guard so truncation can only run against an explicitly marked test database (opt-in env var and/or DB name suffix like `_test`)
+- [x] Add a “local-only” guard (e.g., require host is localhost/127.0.0.1 unless explicit override) to reduce remote wipe risk
+- [x] Make the failure mode loud and actionable (clear error message showing the resolved DB target)
+- [x] Add unit/integration tests covering guard behavior (refuse unsafe targets, allow safe test targets)
 
 ---
 

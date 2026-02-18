@@ -176,6 +176,22 @@ def test_settings_accepts_retention_policy_where_evidence_window_is_longer() -> 
     assert settings.RETENTION_TREND_EVIDENCE_DAYS == 365
 
 
+def test_settings_defaults_integration_truncate_guard_flags_to_safe_values() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.INTEGRATION_DB_TRUNCATE_ALLOWED is False
+    assert settings.INTEGRATION_DB_TRUNCATE_ALLOW_REMOTE is False
+
+
+def test_settings_accepts_integration_truncate_override_flags() -> None:
+    settings = Settings(
+        _env_file=None,
+        INTEGRATION_DB_TRUNCATE_ALLOWED=True,
+        INTEGRATION_DB_TRUNCATE_ALLOW_REMOTE=True,
+    )
+    assert settings.INTEGRATION_DB_TRUNCATE_ALLOWED is True
+    assert settings.INTEGRATION_DB_TRUNCATE_ALLOW_REMOTE is True
+
+
 def test_settings_rejects_production_default_secret_key() -> None:
     with pytest.raises(ValidationError, match="SECRET_KEY must be explicitly configured"):
         Settings(

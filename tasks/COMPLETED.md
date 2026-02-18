@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-153: Guard integration-test DB truncation (operator safety) ✅
 - TASK-151: Version trend definition changes for auditability ✅
 - TASK-150: Close `docs/DATA_MODEL.md` drift vs runtime schema (sources/raw_items/events) ✅
 - TASK-149: Add retention/archival policy for raw_items, events, and trend_evidence ✅

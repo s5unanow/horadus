@@ -2386,10 +2386,10 @@ source may be undercounted and lifecycle confirmation delayed.
 **Files**: `src/processing/event_clusterer.py`, `src/processing/event_lifecycle.py`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Ensure the merged item is linked (`event_items`) before recomputing `unique_source_count`
-- [ ] Ensure lifecycle transitions (emerging → confirmed) observe the updated `unique_source_count`
-- [ ] Add a unit/integration test showing the confirmation threshold is reached on the correct mention (no off-by-one merge)
-- [ ] Keep behavior correct for the “no embedding” path where events are created without similarity matching
+- [x] Ensure the merged item is linked (`event_items`) before recomputing `unique_source_count`
+- [x] Ensure lifecycle transitions (emerging → confirmed) observe the updated `unique_source_count`
+- [x] Add a unit/integration test showing the confirmation threshold is reached on the correct mention (no off-by-one merge)
+- [x] Keep behavior correct for the “no embedding” path where events are created without similarity matching
 
 ---
 

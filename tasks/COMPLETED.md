@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-146: Fix event unique-source counting and lifecycle ordering on merge ✅
 - TASK-145: Concurrency-safe trend log-odds updates (atomic delta apply) ✅
 - TASK-142: Production Network Exposure Hardening ✅
 - TASK-141: Production HTTPS Termination and Secure Ingress ✅

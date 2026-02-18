@@ -585,9 +585,48 @@ class Trend(Base):
     evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="trend")
     snapshots: Mapped[list[TrendSnapshot]] = relationship(back_populates="trend")
     outcomes: Mapped[list[TrendOutcome]] = relationship(back_populates="trend")
+    definition_versions: Mapped[list[TrendDefinitionVersion]] = relationship(back_populates="trend")
 
     # Indexes
     __table_args__ = (Index("idx_trends_active", "is_active"),)
+
+
+class TrendDefinitionVersion(Base):
+    """
+    Append-only record of trend definition payload changes.
+
+    Captures trend-definition state at write time so operators can audit
+    historical definition changes independently from Git history.
+    """
+
+    __tablename__ = "trend_definition_versions"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    trend_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("trends.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    definition_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    actor: Mapped[str | None] = mapped_column(String(255))
+    context: Mapped[str | None] = mapped_column(String(255))
+    recorded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    trend: Mapped[Trend] = relationship(back_populates="definition_versions")
+
+    __table_args__ = (
+        Index("idx_trend_definition_versions_trend_recorded", "trend_id", "recorded_at"),
+        Index("idx_trend_definition_versions_hash", "definition_hash"),
+    )
 
 
 class TrendEvidence(Base):

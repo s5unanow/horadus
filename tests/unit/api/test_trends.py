@@ -15,6 +15,7 @@ from src.api.routes.trends import (
     delete_trend,
     get_trend,
     get_trend_calibration,
+    get_trend_definition_history,
     get_trend_history,
     get_trend_retrospective,
     list_trend_evidence,
@@ -26,7 +27,14 @@ from src.api.routes.trends import (
 )
 from src.core.calibration import CalibrationBucket, CalibrationReport
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
-from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
+from src.storage.models import (
+    OutcomeType,
+    Trend,
+    TrendDefinitionVersion,
+    TrendEvidence,
+    TrendOutcome,
+    TrendSnapshot,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -108,13 +116,18 @@ async def test_create_trend_persists_new_record(mock_db_session) -> None:
         session=mock_db_session,
     )
 
-    added = mock_db_session.add.call_args.args[0]
+    added_objects = [call.args[0] for call in mock_db_session.add.call_args_list]
+    added = next(obj for obj in added_objects if isinstance(obj, Trend))
+    added_versions = [obj for obj in added_objects if isinstance(obj, TrendDefinitionVersion)]
     assert result.id == created_id
     assert result.name == "EU-Russia Conflict"
     assert result.current_probability == pytest.approx(0.08, rel=0.01)
     assert added.definition["id"] == "eu-russia-conflict"
     assert added.definition["baseline_probability"] == pytest.approx(0.08, rel=0.001)
     assert float(added.baseline_log_odds) == pytest.approx(prob_to_logodds(0.08), rel=0.001)
+    assert len(added_versions) == 1
+    assert added_versions[0].trend_id == created_id
+    assert added_versions[0].context == "create_trend"
     assert mock_db_session.flush.await_count == 1
 
 
@@ -193,6 +206,55 @@ async def test_update_trend_syncs_definition_baseline_without_definition_payload
 
 
 @pytest.mark.asyncio
+async def test_update_trend_noop_definition_does_not_create_version_row(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+
+    await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(description="Updated only description"),
+        session=mock_db_session,
+    )
+
+    added_versions = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], TrendDefinitionVersion)
+    ]
+    assert added_versions == []
+
+
+@pytest.mark.asyncio
+async def test_update_trend_material_definition_change_creates_version_row(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+
+    await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(
+            definition={
+                "id": "test-trend",
+                "new_field": {"source": "api"},
+            }
+        ),
+        session=mock_db_session,
+    )
+
+    added_versions = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], TrendDefinitionVersion)
+    ]
+    assert len(added_versions) == 1
+    assert added_versions[0].trend_id == trend.id
+    assert added_versions[0].context == "update_trend"
+
+
+@pytest.mark.asyncio
 async def test_delete_trend_deactivates_record(mock_db_session) -> None:
     trend = _build_trend(is_active=True)
     mock_db_session.get.return_value = trend
@@ -229,11 +291,15 @@ indicators:
     assert result.created == 1
     assert result.updated == 0
     assert result.errors == []
-    added = mock_db_session.add.call_args.args[0]
+    added_objects = [call.args[0] for call in mock_db_session.add.call_args_list]
+    added = next(obj for obj in added_objects if isinstance(obj, Trend))
+    added_versions = [obj for obj in added_objects if isinstance(obj, TrendDefinitionVersion)]
     assert added.name == "Sample Trend"
     assert logodds_to_prob(float(added.baseline_log_odds)) == pytest.approx(0.15, rel=0.01)
     assert added.definition["baseline_probability"] == pytest.approx(0.15, rel=0.001)
-    assert mock_db_session.flush.await_count == 1
+    assert len(added_versions) == 1
+    assert added_versions[0].context == "config_sync:sample-trend.yaml"
+    assert mock_db_session.flush.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -271,7 +337,8 @@ indicators:
 
     assert result.created == 1
     assert result.errors == []
-    added = mock_db_session.add.call_args.args[0]
+    added_objects = [call.args[0] for call in mock_db_session.add.call_args_list]
+    added = next(obj for obj in added_objects if isinstance(obj, Trend))
     assert added.indicators["military_movement"]["type"] == "leading"
     assert added.indicators["military_movement"]["decay_half_life_days"] == 10
     assert added.definition["disqualifiers"][0]["effect"] == "reset_to_baseline"
@@ -352,6 +419,32 @@ async def test_list_trend_evidence_returns_records(mock_db_session) -> None:
     assert result[0].invalidation_feedback_id is None
     assert result[0].created_at == created_at
     assert mock_db_session.scalars.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_get_trend_definition_history_returns_rows(mock_db_session) -> None:
+    trend = _build_trend()
+    version = TrendDefinitionVersion(
+        id=uuid4(),
+        trend_id=trend.id,
+        definition_hash="a" * 64,
+        definition={"id": "test-trend", "baseline_probability": 0.2},
+        actor="api",
+        context="update_trend",
+        recorded_at=datetime.now(tz=UTC),
+    )
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [version])
+
+    result = await get_trend_definition_history(
+        trend_id=trend.id,
+        session=mock_db_session,
+    )
+
+    assert len(result) == 1
+    assert result[0].trend_id == trend.id
+    assert result[0].definition_hash == "a" * 64
+    assert result[0].context == "update_trend"
 
 
 @pytest.mark.asyncio

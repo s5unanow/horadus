@@ -6,10 +6,12 @@ CRUD operations for trend management plus config-file sync.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -28,7 +30,14 @@ from src.core.risk import (
 from src.core.trend_config import TrendConfig
 from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
-from src.storage.models import OutcomeType, Trend, TrendEvidence, TrendOutcome, TrendSnapshot
+from src.storage.models import (
+    OutcomeType,
+    Trend,
+    TrendDefinitionVersion,
+    TrendEvidence,
+    TrendOutcome,
+    TrendSnapshot,
+)
 
 router = APIRouter()
 
@@ -143,6 +152,20 @@ class TrendConfigLoadResponse(BaseModel):
     created: int = 0
     updated: int = 0
     errors: list[str] = Field(default_factory=list)
+
+
+class TrendDefinitionVersionResponse(BaseModel):
+    """Response body for one trend-definition history row."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    trend_id: UUID
+    definition_hash: str
+    definition: dict[str, Any]
+    actor: str | None
+    context: str | None
+    recorded_at: datetime
 
 
 class TrendEvidenceResponse(BaseModel):
@@ -523,6 +546,57 @@ def _sync_definition_baseline_probability(
     return updated_definition
 
 
+def _normalize_definition_payload(definition: Any) -> dict[str, Any]:
+    return dict(definition) if isinstance(definition, dict) else {}
+
+
+def _hash_definition_payload(definition: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        definition,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+async def _record_definition_version_if_material_change(
+    session: AsyncSession,
+    *,
+    trend: Trend,
+    previous_definition: dict[str, Any] | None,
+    actor: str | None,
+    context: str | None,
+    force: bool = False,
+) -> bool:
+    trend_id = trend.id
+    if trend_id is None:
+        trend_id = uuid4()
+        trend.id = trend_id
+
+    current_definition = _normalize_definition_payload(trend.definition)
+    current_hash = _hash_definition_payload(current_definition)
+
+    if not force:
+        if previous_definition is None:
+            msg = "previous_definition is required when force=False"
+            raise ValueError(msg)
+        previous_hash = _hash_definition_payload(_normalize_definition_payload(previous_definition))
+        if current_hash == previous_hash:
+            return False
+
+    session.add(
+        TrendDefinitionVersion(
+            trend_id=trend_id,
+            definition_hash=current_hash,
+            definition=current_definition,
+            actor=actor,
+            context=context,
+        )
+    )
+    return True
+
+
 async def _get_evidence_stats(
     session: AsyncSession,
     *,
@@ -774,14 +848,31 @@ async def load_trends_from_config(
                     is_active=True,
                 )
                 session.add(trend)
+                await session.flush()
+                await _record_definition_version_if_material_change(
+                    session,
+                    trend=trend,
+                    previous_definition=None,
+                    actor="system",
+                    context=f"config_sync:{file_path.name}",
+                    force=True,
+                )
                 result.created += 1
                 continue
 
+            previous_definition = _normalize_definition_payload(existing.definition)
             existing.description = parsed_config.description
             existing.definition = definition
             existing.baseline_log_odds = baseline_log_odds
             existing.indicators = indicators
             existing.decay_half_life_days = parsed_config.decay_half_life_days
+            await _record_definition_version_if_material_change(
+                session,
+                trend=existing,
+                previous_definition=previous_definition,
+                actor="system",
+                context=f"config_sync:{file_path.name}",
+            )
             result.updated += 1
         except Exception as exc:
             result.errors.append(f"{file_path.name}: {exc}")
@@ -851,6 +942,14 @@ async def create_trend(
     )
     session.add(trend_record)
     await session.flush()
+    await _record_definition_version_if_material_change(
+        session,
+        trend=trend_record,
+        previous_definition=None,
+        actor="api",
+        context="create_trend",
+        force=True,
+    )
 
     return await _to_response(trend_record, session=session)
 
@@ -872,6 +971,30 @@ async def get_trend(
     """Get one trend by id."""
     trend = await _get_trend_or_404(session, trend_id)
     return await _to_response(trend, session=session)
+
+
+@router.get(
+    "/{trend_id}/definition-history",
+    response_model=list[TrendDefinitionVersionResponse],
+)
+async def get_trend_definition_history(
+    trend_id: UUID,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+    session: AsyncSession = Depends(get_session),
+) -> list[TrendDefinitionVersionResponse]:
+    """List append-only definition versions for one trend (newest first)."""
+    await _get_trend_or_404(session, trend_id)
+    records = list(
+        (
+            await session.scalars(
+                select(TrendDefinitionVersion)
+                .where(TrendDefinitionVersion.trend_id == trend_id)
+                .order_by(TrendDefinitionVersion.recorded_at.desc())
+                .limit(limit)
+            )
+        ).all()
+    )
+    return [TrendDefinitionVersionResponse.model_validate(record) for record in records]
 
 
 @router.get("/{trend_id}/evidence", response_model=list[TrendEvidenceResponse])
@@ -1130,6 +1253,7 @@ async def update_trend(
 ) -> TrendResponse:
     """Update a trend."""
     trend_record = await _get_trend_or_404(session, trend_id)
+    previous_definition = _normalize_definition_payload(trend_record.definition)
     updates = trend.model_dump(exclude_unset=True)
 
     if "name" in updates and updates["name"] is not None and updates["name"] != trend_record.name:
@@ -1164,6 +1288,13 @@ async def update_trend(
     for field_name, field_value in updates.items():
         setattr(trend_record, field_name, field_value)
 
+    await _record_definition_version_if_material_change(
+        session,
+        trend=trend_record,
+        previous_definition=previous_definition,
+        actor="api",
+        context="update_trend",
+    )
     await session.flush()
     return await _to_response(trend_record, session=session)
 

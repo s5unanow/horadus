@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-148` Align event canonical_summary semantics with primary_item_id — DONE ✓
 - `TASK-147` Enforce RawItem belongs-to-one-Event invariant at the DB layer — DONE ✓
 - `TASK-146` Fix event unique-source counting and lifecycle ordering on merge — DONE ✓
 - `TASK-145` Concurrency-safe trend log-odds updates (atomic delta apply) — DONE ✓
@@ -92,6 +93,7 @@
 - `TASK-145` completion note: audit confirmed existing `TASK-129` runtime coverage already satisfies atomic SQL log-odds updates, idempotent evidence insertion, concurrency regression tests, and structured update-strategy logging; backlog/ledger state was reconciled accordingly.
 - `TASK-146` completion note: merge path now inserts `event_items` link before metadata/lifecycle recalculation, preventing off-by-one unique-source confirmation drift; regression tests cover threshold confirmation ordering and link-race skip behavior while preserving no-embedding create-path behavior.
 - `TASK-147` completion note: `event_items.item_id` is now uniqueness-constrained via migration preflight guard, and clusterer link-conflict handling now resolves to the already-linked `event_id` deterministically without applying conflicting merge metadata updates.
+- `TASK-148` completion note: canonical-summary semantics are now explicitly tied to `primary_item_id`; merge path updates `canonical_summary` only when primary changes, preserving primary-aligned summaries across non-primary newest mentions with targeted regression coverage.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

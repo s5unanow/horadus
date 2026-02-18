@@ -113,7 +113,7 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
         return (event, 0.95)
 
     add_link = AsyncMock()
-    update_primary = AsyncMock()
+    update_primary = AsyncMock(return_value=True)
 
     async def count_unique(_event_id, _fallback_source_id) -> int:
         return 3
@@ -171,7 +171,7 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
     clusterer._find_matching_event = match_event
     clusterer._add_event_link = add_link
     clusterer._count_unique_sources = count_unique
-    clusterer._update_primary_item = AsyncMock()
+    clusterer._update_primary_item = AsyncMock(return_value=True)
 
     result = await clusterer.cluster_item(item)
 
@@ -206,6 +206,33 @@ async def test_cluster_item_skips_merge_when_link_already_exists(mock_db_session
     assert event.source_count == 2
     assert event.unique_source_count == 2
     merge_into_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cluster_item_keeps_canonical_summary_when_primary_does_not_change(
+    mock_db_session,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.1, 0.2, 0.3], title="Newest mention")
+    item.embedding_model = "text-embedding-3-small"
+    event = Event(
+        canonical_summary="Primary summary",
+        source_count=2,
+        unique_source_count=2,
+        lifecycle_status=EventLifecycle.CONFIRMED.value,
+        primary_item_id=uuid4(),
+    )
+
+    clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
+    clusterer._find_matching_event = AsyncMock(return_value=(event, 0.89))
+    clusterer._add_event_link = AsyncMock(return_value=True)
+    clusterer._count_unique_sources = AsyncMock(return_value=3)
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+
+    result = await clusterer.cluster_item(item)
+
+    assert result.merged is True
+    assert event.canonical_summary == "Primary summary"
 
 
 @pytest.mark.asyncio
@@ -294,8 +321,9 @@ async def test_update_primary_item_prefers_higher_credibility(mock_db_session) -
 
     clusterer._source_credibility_for_item = credibility
 
-    await clusterer._update_primary_item(event, candidate)
+    changed = await clusterer._update_primary_item(event, candidate)
 
+    assert changed is True
     assert event.primary_item_id == candidate
 
 
@@ -311,8 +339,9 @@ async def test_update_primary_item_keeps_existing_when_candidate_lower(mock_db_s
 
     clusterer._source_credibility_for_item = credibility
 
-    await clusterer._update_primary_item(event, candidate)
+    changed = await clusterer._update_primary_item(event, candidate)
 
+    assert changed is False
     assert event.primary_item_id == current_primary
 
 

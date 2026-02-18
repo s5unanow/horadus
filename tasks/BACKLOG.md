@@ -2423,10 +2423,10 @@ designation misleading and can degrade summary quality.
 **Files**: `src/processing/event_clusterer.py`, `src/storage/models.py`, `docs/DATA_MODEL.md`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Define and document canonical summary semantics (e.g., “summary of primary item” vs “latest mention summary”)
-- [ ] Implement the chosen semantics (update summary only when `primary_item_id` changes, or add a separate `latest_summary` field)
-- [ ] Add tests that cover both “newest mention” and “higher-credibility primary” update cases
-- [ ] Update `docs/DATA_MODEL.md` so operators understand what `canonical_summary` represents
+- [x] Define and document canonical summary semantics (e.g., “summary of primary item” vs “latest mention summary”)
+- [x] Implement the chosen semantics (update summary only when `primary_item_id` changes, or add a separate `latest_summary` field)
+- [x] Add tests that cover both “newest mention” and “higher-credibility primary” update cases
+- [x] Update `docs/DATA_MODEL.md` so operators understand what `canonical_summary` represents
 
 ---
 

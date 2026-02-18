@@ -654,11 +654,22 @@ class TaxonomyGap(Base):
         Enum(TaxonomyGapReason, name="taxonomy_gap_reason", values_callable=enum_values),
         nullable=False,
     )
-    source: Mapped[str] = mapped_column(String(50), default="pipeline", nullable=False)
-    details: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    source: Mapped[str] = mapped_column(
+        String(50),
+        default="pipeline",
+        server_default=text("'pipeline'"),
+        nullable=False,
+    )
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
     status: Mapped[TaxonomyGapStatus] = mapped_column(
         Enum(TaxonomyGapStatus, name="taxonomy_gap_status", values_callable=enum_values),
         default=TaxonomyGapStatus.OPEN,
+        server_default=text("'open'"),
         nullable=False,
     )
     resolution_notes: Mapped[str | None] = mapped_column(Text)

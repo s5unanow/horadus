@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-153` Guard integration-test DB truncation (operator safety) — DONE ✓
 - `TASK-151` Version trend definition changes for auditability — DONE ✓
 - `TASK-150` Close `docs/DATA_MODEL.md` drift vs runtime schema (sources/raw_items/events) — DONE ✓
 - `TASK-149` Add retention/archival policy for raw_items, events, and trend_evidence — DONE ✓
@@ -100,6 +101,7 @@
 - `TASK-149` completion note: added retention cleanup policy/config knobs plus scheduled `workers.run_data_retention_cleanup` with dry-run defaults, per-table cleanup metrics, lifecycle/FK-safe selection rules (noise/error raw items, archived-event windows, evidence-before-event deletion), and deployment runbook workflow for tuning/verification/DB-size trend checks.
 - `TASK-150` completion note: `docs/DATA_MODEL.md` now matches runtime schema for `sources`/`raw_items`/`events` (including source tier/reporting/error fields, raw-item `author`, `external_id` length `2048`, event lifecycle/contradiction columns), and ERD scope is explicitly labeled as core-table oriented to prevent misleading completeness assumptions.
 - `TASK-151` completion note: added append-only `trend_definition_versions` audit table + migration with deterministic definition hashing, wired create/update/config-sync paths to append rows only on material definition changes, exposed `GET /api/v1/trends/{trend_id}/definition-history`, and added no-op/material-change regression tests.
+- `TASK-153` completion note: integration fixture truncation now hard-fails unsafe DB targets unless explicitly test-scoped (or override-enabled), enforces localhost-only truncation by default with explicit remote override, emits actionable refusal messages with resolved target details, and includes unit tests for safe/unsafe target permutations.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

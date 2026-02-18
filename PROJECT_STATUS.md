@@ -217,6 +217,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-149` retention cleanup policy now covers `raw_items`/`trend_evidence`/`events` with configurable windows, scheduled dry-run-first worker task and metrics, FK-safe lifecycle gating, and deployment workflow for tuning + DB-size trend validation
 - [x] `TASK-150` `docs/DATA_MODEL.md` is now reconciled with runtime schema for `sources`/`raw_items`/`events` and ERD scope is explicitly marked core-table-only to prevent misleading completeness assumptions
 - [x] `TASK-151` trend definition writes now produce append-only version history (`trend_definition_versions`) with deterministic hashes, material-change-only inserts across API/config-sync paths, and read access via `GET /api/v1/trends/{trend_id}/definition-history`
+- [x] `TASK-153` integration DB reset safety now enforces test-scoped target/localhost defaults with explicit override flags and actionable refusal messages, reducing accidental non-test truncation risk in integration fixtures
 
 ## In Progress
 
@@ -229,8 +230,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve remaining human-gated hardening tasks (`TASK-080`)
-2. Execute `TASK-153` guard integration-test DB truncation safety
-3. Execute `TASK-154` allow multiple Tier-2 impacts per trend/event
+2. Execute `TASK-154` allow multiple Tier-2 impacts per trend/event
+3. Execute `TASK-155` make semantic cache non-blocking in async paths
 
 ## Expert Feedback Integration ✅
 

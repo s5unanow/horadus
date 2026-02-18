@@ -93,6 +93,14 @@ class Settings(BaseSettings):
         default=False,
         description="Fail API startup when migration parity check is unhealthy",
     )
+    INTEGRATION_DB_TRUNCATE_ALLOWED: bool = Field(
+        default=False,
+        description="Allow integration-table truncation on databases without explicit test naming",
+    )
+    INTEGRATION_DB_TRUNCATE_ALLOW_REMOTE: bool = Field(
+        default=False,
+        description="Allow integration-table truncation for non-localhost database hosts",
+    )
 
     @model_validator(mode="after")
     def _load_secret_file_values(self) -> Settings:

@@ -187,6 +187,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Delivery workflow guidance now explicitly requires full lifecycle closure (commit/push/PR/merge/local-sync) with blocker reporting, and PR scope guard handles escaped-newline PR bodies
 - [x] `TASK-066` multi-trend baseline expansion completed with human reviewer sign-off captured in sprint assessment/checklist records
 - [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings
+- [x] `TASK-118` launch-readiness assessment completed with explicit human sign-off (`Approved`) and launch decision recorded as `No-Go` pending remaining backlog hardening
 
 ## In Progress
 
@@ -195,19 +196,16 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-084` Production Security Default Guardrails `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-085` Require Explicit Admin Key for Key Management `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-118` Launch Readiness and Guidance Drift Assessment `[REQUIRES_HUMAN]` (awaiting human remediation-order and launch criteria sign-off)
 
 ## Blocked
 
 - `TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, and `TASK-085` are explicitly marked `[REQUIRES_HUMAN]` and are blocked for autonomous completion.
-- `TASK-118` requires explicit human approval for remediation ordering and launch go/no-go criteria.
 
 ## Next Up (Priority Order)
 
-1. Complete `TASK-118` human sign-off on remediation order and launch criteria
-2. Complete `TASK-070` baseline prior review/sign-off for active trends
-3. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
-4. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
+1. Complete `TASK-070` baseline prior review/sign-off for active trends
+2. Resolve remaining human-gated hardening tasks (`TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`)
+3. Execute `TASK-126` taxonomy drift guardrails (runtime gap queue + benchmark taxonomy alignment) after `TASK-066` completion
 
 ## Expert Feedback Integration ✅
 
@@ -249,7 +247,7 @@ Based on expert review, added 9 new tasks:
 
 ## Known Issues
 
-- Human-gated sign-off tasks (`TASK-118`, `TASK-070`) remain the main completion bottleneck.
+- Human-gated sign-off/hardening tasks (`TASK-070`, `TASK-077`, `TASK-080`, `TASK-084`, `TASK-085`) remain the main completion bottleneck, and launch stays `No-Go` until they are resolved.
 
 ## Architecture Validated ✅
 

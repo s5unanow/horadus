@@ -2180,10 +2180,14 @@ Preserve externally sourced backlog improvements in a dedicated task branch/PR s
 planning deltas are not lost while other delivery tasks are in flight.
 
 **Acceptance Criteria**:
-- [ ] Capture relevant assessment-derived planning updates in `tasks/BACKLOG.md` with clear, non-duplicate task boundaries
-- [ ] Keep explicit mapping to already-open human-gated tasks where overlap exists (no duplicate implementation tasks)
-- [ ] Preserve and publish backlog-only changes through a dedicated `TASK-134` branch/PR
-- [ ] Keep task-ID policy synchronized after reserving `TASK-134`
+- [x] Capture relevant assessment-derived planning updates in `tasks/BACKLOG.md` with clear, non-duplicate task boundaries
+- [x] Keep explicit mapping to already-open human-gated tasks where overlap exists (no duplicate implementation tasks)
+- [x] Preserve and publish backlog-only changes through a dedicated `TASK-134` branch/PR
+- [x] Keep task-ID policy synchronized after reserving `TASK-134`
+
+**Overlap mapping note**:
+- External assessment intake produced planning tasks `TASK-135`–`TASK-142` only.
+- No duplicate implementation tasks were created for already-open human-gated work; manual collector wiring remains tracked under `TASK-080` `[REQUIRES_HUMAN]`.
 
 ---
 

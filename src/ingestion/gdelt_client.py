@@ -11,7 +11,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 import structlog
@@ -809,28 +808,7 @@ class GDELTClient:
 
     @staticmethod
     def _normalize_url(url: str) -> str | None:
-        try:
-            parsed = urlsplit(url.strip())
-        except ValueError:
-            return None
-
-        if not parsed.scheme or not parsed.netloc:
-            return None
-
-        hostname = parsed.hostname.lower() if parsed.hostname else ""
-        if hostname.startswith("www."):
-            hostname = hostname[4:]
-
-        netloc = hostname
-        if parsed.port is not None:
-            is_default_port = (parsed.scheme == "http" and parsed.port == 80) or (
-                parsed.scheme == "https" and parsed.port == 443
-            )
-            if not is_default_port:
-                netloc = f"{hostname}:{parsed.port}"
-
-        path = parsed.path.rstrip("/") or "/"
-        return urlunsplit((parsed.scheme.lower(), netloc, path, "", ""))
+        return DeduplicationService.normalize_url(url)
 
     @staticmethod
     def _split_terms(raw_value: Any) -> list[str]:

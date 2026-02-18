@@ -42,6 +42,7 @@ _DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M = {
 
 _DEFAULT_DEDUP_URL_TRACKING_PARAM_PREFIXES = ("utm_",)
 _DEFAULT_DEDUP_URL_TRACKING_PARAMS = (
+    "utm",
     "fbclid",
     "gclid",
     "dclid",

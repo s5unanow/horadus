@@ -85,6 +85,9 @@ Production auth/secret guardrails:
 | `LLM_SEMANTIC_CACHE_REDIS_PREFIX` | `horadus:llm_semantic_cache` | Redis key prefix for semantic cache data/indexes. |
 | `PROCESSING_PIPELINE_BATCH_SIZE` | `200` | Pending items handled per pipeline run. |
 | `PROCESSING_STALE_TIMEOUT_MINUTES` | `30` | Age threshold before stale `processing` items are reset to `pending`. |
+| `DEDUP_URL_QUERY_MODE` | `keep_non_tracking` | URL query handling mode for dedup normalization (`keep_non_tracking` or `strip_all`). |
+| `DEDUP_URL_TRACKING_PARAM_PREFIXES` | `utm_` | Comma-separated query-param prefixes stripped before dedup matching. |
+| `DEDUP_URL_TRACKING_PARAMS` | `utm,fbclid,gclid,dclid,msclkid,mc_cid,mc_eid,mkt_tok,igshid` | Comma-separated exact query params stripped before dedup matching. |
 | `LANGUAGE_POLICY_SUPPORTED_LANGUAGES` | `en,uk,ru` | Launch language support targets enforced by processing policy. |
 | `LANGUAGE_POLICY_UNSUPPORTED_MODE` | `skip` | Unsupported-language handling (`skip` marks noise, `defer` leaves pending). |
 

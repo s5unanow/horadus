@@ -8,7 +8,7 @@ import hashlib
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 from sqlalchemy import select
@@ -204,7 +204,7 @@ class DeduplicationService:
 
     @staticmethod
     def normalize_url(url: str | None) -> str | None:
-        """Normalize URL by stripping fragments, query params, and default ports."""
+        """Normalize URL for deterministic dedup matching."""
         if url is None:
             return None
         try:
@@ -228,7 +228,41 @@ class DeduplicationService:
                 netloc = f"{hostname}:{parsed.port}"
 
         path = parsed.path.rstrip("/") or "/"
-        return urlunsplit((parsed.scheme.lower(), netloc, path, "", ""))
+        query = DeduplicationService._normalize_query(parsed.query)
+        return urlunsplit((parsed.scheme.lower(), netloc, path, query, ""))
+
+    @staticmethod
+    def _normalize_query(raw_query: str) -> str:
+        mode = settings.DEDUP_URL_QUERY_MODE
+        if mode == "strip_all" or not raw_query:
+            return ""
+
+        tracking_prefixes = tuple(
+            prefix.strip().lower()
+            for prefix in settings.DEDUP_URL_TRACKING_PARAM_PREFIXES
+            if prefix.strip()
+        )
+        tracking_params = {
+            param.strip().lower() for param in settings.DEDUP_URL_TRACKING_PARAMS if param.strip()
+        }
+
+        retained_pairs: list[tuple[str, str]] = []
+        for key, value in parse_qsl(raw_query, keep_blank_values=True):
+            normalized_key = key.strip()
+            if not normalized_key:
+                continue
+            key_lookup = normalized_key.lower()
+            if key_lookup in tracking_params:
+                continue
+            if any(key_lookup.startswith(prefix) for prefix in tracking_prefixes):
+                continue
+            retained_pairs.append((normalized_key, value))
+
+        if not retained_pairs:
+            return ""
+
+        retained_pairs.sort(key=lambda pair: (pair[0].lower(), pair[1], pair[0]))
+        return urlencode(retained_pairs, doseq=True)
 
     @staticmethod
     def compute_content_hash(content: str) -> str:

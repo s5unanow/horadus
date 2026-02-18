@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+from src.core.config import settings
 from src.processing.deduplication_service import DeduplicationService
 
 pytestmark = pytest.mark.unit
@@ -124,6 +125,28 @@ async def test_find_duplicate_rejects_invalid_similarity_threshold(mock_db_sessi
 
 def test_normalize_url_removes_tracking_components() -> None:
     normalized = DeduplicationService.normalize_url("https://www.Example.com/path/?utm=1#frag")
+    assert normalized == "https://example.com/path"
+
+
+def test_normalize_url_preserves_non_tracking_query_params_sorted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "DEDUP_URL_QUERY_MODE", "keep_non_tracking")
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAM_PREFIXES", ["utm_"])
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAMS", ["fbclid"])
+
+    normalized = DeduplicationService.normalize_url(
+        "https://example.com/path?b=2&utm_source=x&a=1&fbclid=abc"
+    )
+
+    assert normalized == "https://example.com/path?a=1&b=2"
+
+
+def test_normalize_url_strip_all_mode_removes_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(settings, "DEDUP_URL_QUERY_MODE", "strip_all")
+
+    normalized = DeduplicationService.normalize_url("https://example.com/path?article=123&v=1")
+
     assert normalized == "https://example.com/path"
 
 

@@ -106,6 +106,13 @@ curl -sSI "${HORADUS_BASE_URL}/health" | grep -Ei "strict-transport-security|x-c
 
 # API container should not publish host port 8000 directly.
 docker compose -f docker-compose.prod.yml port api 8000 || echo "api:8000 not published (expected)"
+
+# Data services should never publish host ports in production defaults.
+docker compose -f docker-compose.prod.yml port postgres 5432 || echo "postgres:5432 not published (expected)"
+docker compose -f docker-compose.prod.yml port redis 6379 || echo "redis:6379 not published (expected)"
+
+# Optional host-level listener audit (expect only 80/443 externally).
+ss -tulpen | grep -E ':(80|443|8000|5432|6379)\b'
 ```
 
 ## 6) Export and host dashboard artifacts
@@ -150,7 +157,7 @@ Rollback:
 Horadus production defaults now include a dedicated Caddy ingress service:
 
 - Public ports: `80` and `443` on `ingress`
-- Internal upstream: `api:8000` on `horadus-network`
+- Internal upstream: `api:8000` on `horadus-edge`
 - HTTP behavior: automatic redirect to HTTPS
 - Security headers at edge:
   - `Strict-Transport-Security`
@@ -181,7 +188,38 @@ Failure fallback steps (ACME/cert issuance):
      ```
 4. Keep API host-port exposure disabled while recovering certificate flow.
 
-## 9) Backups and restore
+## 9) Network boundary and firewall policy
+
+Production compose defaults enforce a two-zone boundary:
+
+- `horadus-edge` (public-facing): `ingress` and `api` only
+- `horadus-private` (internal-only Docker network): `api`, `worker`, `beat`, `migrate`, `postgres`, `redis`
+
+Exposure policy:
+
+- Public inbound: only `80/tcp` and `443/tcp` to `ingress`
+- No direct public exposure for `api:8000`, `postgres:5432`, or `redis:6379`
+- Administrative access should be host-level (SSH/VPN) with source allowlisting
+
+Operator allowlisting guidance:
+
+1. Restrict SSH/admin entry points to trusted CIDRs only.
+2. Restrict `80/443` at perimeter firewall/WAF to intended client ranges when possible.
+3. Keep database/redis management access local-only (`docker exec`/SSH tunnel), not public firewall rules.
+
+External verification checks (run from a separate host/network):
+
+```bash
+nc -zv "${HORADUS_PUBLIC_DOMAIN}" 80
+nc -zv "${HORADUS_PUBLIC_DOMAIN}" 443
+
+# These should fail:
+nc -zv "${HORADUS_PUBLIC_DOMAIN}" 8000
+nc -zv "${HORADUS_PUBLIC_DOMAIN}" 5432
+nc -zv "${HORADUS_PUBLIC_DOMAIN}" 6379
+```
+
+## 10) Backups and restore
 
 Create PostgreSQL backups:
 

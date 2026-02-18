@@ -26,7 +26,6 @@ def upgrade() -> None:
             "id",
             postgresql.UUID(as_uuid=True),
             nullable=False,
-            server_default=sa.text("gen_random_uuid()"),
         ),
         sa.Column("trend_id", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("definition_hash", sa.String(length=64), nullable=False),

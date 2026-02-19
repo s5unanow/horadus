@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate branch-guard task-preflight task-start protect-main
+        db-migration-gate release-gate branch-guard task-preflight task-start protect-main
 
 # Default target
 .DEFAULT_GOAL := help
@@ -28,6 +28,8 @@ INTEGRATION_DATABASE_URL ?= postgresql+asyncpg://postgres:postgres@localhost:543
 INTEGRATION_REDIS_URL ?= redis://localhost:6379/0
 MIGRATION_GATE_DATABASE_URL ?= $(INTEGRATION_DATABASE_URL)
 MIGRATION_GATE_VALIDATE_AUTOGEN ?= true
+RELEASE_GATE_DATABASE_URL ?=
+RELEASE_GATE_INCLUDE_EVAL ?= false
 
 # Colors for terminal output
 BLUE := \033[34m
@@ -223,6 +225,23 @@ audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and prove
 
 docs-freshness: deps ## Validate docs freshness and runtime consistency invariants
 	$(UV_RUN) python scripts/check_docs_freshness.py
+
+release-gate: deps-dev ## Run release gates (check + test + docs + migration gate [+ optional eval audit])
+	@if [ -z "$(RELEASE_GATE_DATABASE_URL)" ]; then \
+		echo "$(RED)RELEASE_GATE_DATABASE_URL is required$(RESET)"; \
+		echo "Usage: make release-gate RELEASE_GATE_DATABASE_URL=<target-db-url> [RELEASE_GATE_INCLUDE_EVAL=true]"; \
+		exit 1; \
+	fi
+	@$(MAKE) check
+	@$(MAKE) test
+	@$(MAKE) docs-freshness
+	@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"
+	@if [ "$(RELEASE_GATE_INCLUDE_EVAL)" = "true" ]; then \
+		$(MAKE) audit-eval; \
+	else \
+		echo "$(BLUE)Skipping eval audit gate (set RELEASE_GATE_INCLUDE_EVAL=true to enable).$(RESET)"; \
+	fi
+	@echo "$(GREEN)Release gate passed.$(RESET)"
 
 # =============================================================================
 # Security

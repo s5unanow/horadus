@@ -1,6 +1,6 @@
 # Release Process Runbook
 
-**Last Verified**: 2026-02-16
+**Last Verified**: 2026-02-19
 
 This runbook defines the standard release workflow for Horadus.
 
@@ -8,6 +8,54 @@ Goals:
 - Keep releases reproducible and low-risk.
 - Ensure quality gates run before shipping.
 - Make rollback predictable when issues appear.
+
+## Promotion Workflow (Dev -> Staging -> Prod)
+
+Use the same commit SHA through each promotion step.
+
+1. **Dev**
+   - implement on task branch and merge to `main` with required CI green.
+   - keep `ENVIRONMENT=development` and fast local iteration defaults.
+2. **Staging**
+   - deploy merged `main` commit to isolated staging infra/data first.
+   - use production-like posture (`ENVIRONMENT=staging`, auth enabled, explicit
+     secrets, migration parity checks).
+   - run release gates and staging smoke checks before promotion.
+3. **Prod**
+   - deploy the same commit already validated in staging.
+   - run production post-deploy checks and monitor early runtime signals.
+
+Staging/prod must match on:
+- auth posture (`API_AUTH_ENABLED`, API/admin key handling, rate limits)
+- secret handling policy (`*_FILE`-first in deployed environments)
+- migration workflow (`db-migration-gate` strict by default)
+
+Staging/prod must differ on:
+- isolated DB/Redis/data (no shared state)
+- hostnames/TLS endpoints and compose project naming
+- external exposure policy (staging may be more restricted)
+
+## Canonical Gate Command
+
+Use one command path for release gating:
+
+```bash
+make release-gate RELEASE_GATE_DATABASE_URL="<target-db-url>"
+```
+
+What it runs (fail-closed, in order):
+- `make check`
+- `make test`
+- `make docs-freshness`
+- `make db-migration-gate MIGRATION_GATE_DATABASE_URL="<target-db-url>"`
+
+Optional prompt/model gate:
+
+```bash
+make release-gate RELEASE_GATE_DATABASE_URL="<target-db-url>" RELEASE_GATE_INCLUDE_EVAL=true
+```
+
+This additionally runs `make audit-eval`.
 
 ## Mandatory Task Delivery Workflow (Hard Rule)
 
@@ -101,29 +149,21 @@ git status --short
 
 2. Quality gates:
 ```bash
-make check
-make test
-make docs-freshness
+make release-gate RELEASE_GATE_DATABASE_URL="<target-db-url>"
 ```
 
-3. Database migration sanity:
-```bash
-make db-upgrade
-make db-migration-gate MIGRATION_GATE_DATABASE_URL="<target-db-url>"
-```
+`make db-migration-gate` inside `make release-gate` is strict by default and
+runs `alembic check`. Use `MIGRATION_GATE_VALIDATE_AUTOGEN=false` only as a
+temporary emergency bypass with explicit documentation in release notes.
 
-`make db-migration-gate` is strict by default and runs `alembic check`. Use
-`MIGRATION_GATE_VALIDATE_AUTOGEN=false` only as a temporary emergency bypass
-with explicit documentation in release notes.
-
-4. Evaluation policy gates (prompt/model changes only):
+3. Evaluation policy gates (prompt/model changes only):
 ```bash
 make audit-eval
 ```
 - If prompt/model changes are included, also run benchmark per `docs/PROMPT_EVAL_POLICY.md`.
 - Do not promote prompt/model changes if required evaluation gates fail.
 
-5. Release notes draft:
+4. Release notes draft:
 - Summarize user-visible behavior changes.
 - Include operational changes (env vars, migrations, rollout caveats).
 - Include risk/rollback notes.
@@ -234,6 +274,12 @@ docker compose -f docker-compose.prod.yml up -d api worker beat
 ```
 4. Re-run post-deploy verification.
 5. Document incident summary and corrective follow-up tasks.
+
+Staging vs production rollback expectations:
+- **Staging**: rollback can prioritize speed and diagnosis; data reset is acceptable
+  when isolated and documented.
+- **Production**: rollback must preserve data integrity and audit trail; use
+  only previously validated release revisions and record operator actions.
 
 ## Documentation Freshness
 

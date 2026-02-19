@@ -13,8 +13,10 @@ from src.core.config import settings
 
 def configure_logging() -> None:
     """Configure stdlib and structlog processors."""
+    level_name = settings.effective_log_level.upper()
+    level_value = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(
-        level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+        level=level_value,
         format="%(message)s",
     )
 
@@ -33,7 +35,7 @@ def configure_logging() -> None:
             renderer,
         ],
         wrapper_class=structlog.make_filtering_bound_logger(
-            getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
+            level_value,
         ),
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,

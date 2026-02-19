@@ -226,6 +226,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-159` token pricing is now configurable via `LLM_TOKEN_PRICING_USD_PER_1M` (`provider:model` keyed rates with prefix matching), budget checks validate active route pricing pre-call, and usage accounting applies model/provider-aware pricing with fail-closed behavior on missing/invalid pricing configuration
 - [x] `TASK-160` dedup URL normalization now keeps non-tracking query params by default (stable-sorted), strips configured tracking params/prefixes, supports strict `strip_all` override mode, and is shared across RSS/GDELT normalization paths with policy regression tests
 - [x] `TASK-161` environment semantics are now explicit and validated (`development|staging|production`), staging now shares production-like guardrails via `is_production_like`, runtime DB behavior remains NullPool-only in development, and environment/deployment guidance now includes `.env.staging.example` plus ADR `007`
+- [x] `TASK-162` introduces an independent agent runtime profile with production/loopback guardrails, request-limit and unhandled-error shutdown signaling, low-noise default log level behavior, and deterministic `horadus agent smoke` local endpoint checks
 
 ## In Progress
 

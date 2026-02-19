@@ -8,6 +8,8 @@ import argparse
 import asyncio
 from collections.abc import Sequence
 from datetime import datetime
+from urllib import error as urllib_error
+from urllib import request as urllib_request
 from uuid import UUID
 
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
@@ -300,6 +302,52 @@ def _run_eval_validate_taxonomy(
     return 0
 
 
+def _http_get(url: str, *, timeout_seconds: float, headers: dict[str, str] | None = None) -> int:
+    request = urllib_request.Request(url=url, method="GET", headers=headers or {})
+    try:
+        with urllib_request.urlopen(  # nosec B310
+            request, timeout=timeout_seconds
+        ) as response:
+            return int(response.status)
+    except urllib_error.HTTPError as exc:
+        return int(exc.code)
+    except urllib_error.URLError:
+        return 0
+
+
+def _run_agent_smoke(
+    *,
+    base_url: str,
+    timeout_seconds: float,
+    api_key: str | None,
+) -> int:
+    normalized_base_url = base_url.rstrip("/")
+    checks: list[tuple[str, dict[str, str] | None]] = [
+        ("/health", None),
+        ("/openapi.json", None),
+    ]
+    if settings.API_AUTH_ENABLED and api_key:
+        checks.append(("/api/v1/trends", {"X-API-Key": api_key}))
+
+    failures = 0
+    for path, headers in checks:
+        status_code = _http_get(
+            f"{normalized_base_url}{path}",
+            timeout_seconds=timeout_seconds,
+            headers=headers,
+        )
+        if 200 <= status_code < 300:
+            print(f"PASS {path} {status_code}")
+        else:
+            print(f"FAIL {path} {status_code or 'connection_error'}")
+            failures += 1
+
+    if settings.API_AUTH_ENABLED and not api_key:
+        print("SKIP /api/v1/trends auth_enabled=true but no API key provided")
+
+    return 0 if failures == 0 else 2
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="horadus")
     subparsers = parser.add_subparsers(dest="command")
@@ -589,6 +637,30 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Return non-zero exit code when any stale source is detected.",
     )
+
+    agent_parser = subparsers.add_parser("agent")
+    agent_subparsers = agent_parser.add_subparsers(dest="agent_command")
+
+    agent_smoke_parser = agent_subparsers.add_parser(
+        "smoke",
+        help="Run local agent-oriented smoke checks against a running Horadus API server.",
+    )
+    agent_smoke_parser.add_argument(
+        "--base-url",
+        default=f"http://{settings.API_HOST}:{settings.API_PORT}",
+        help="Base URL for local smoke checks.",
+    )
+    agent_smoke_parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=5.0,
+        help="Per-request timeout in seconds.",
+    )
+    agent_smoke_parser.add_argument(
+        "--api-key",
+        default=settings.API_KEY or "",
+        help="Optional API key used when auth-protected smoke endpoints are checked.",
+    )
     return parser
 
 
@@ -674,6 +746,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 stale_multiplier=args.stale_multiplier,
                 fail_on_stale=args.fail_on_stale,
             )
+        )
+    if args.command == "agent" and args.agent_command == "smoke":
+        return _run_agent_smoke(
+            base_url=args.base_url,
+            timeout_seconds=max(0.1, args.timeout_seconds),
+            api_key=(args.api_key or "").strip() or None,
         )
 
     parser.print_help()

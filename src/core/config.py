@@ -53,6 +53,8 @@ _DEFAULT_DEDUP_URL_TRACKING_PARAMS = (
     "igshid",
 )
 _ALLOWED_ENVIRONMENTS = ("development", "staging", "production")
+_ALLOWED_RUNTIME_PROFILES = ("default", "agent")
+_ALLOWED_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 
 def _normalize_pricing_key(raw_key: str) -> tuple[str, str]:
@@ -340,6 +342,29 @@ class Settings(BaseSettings):
 
         return self
 
+    @model_validator(mode="after")
+    def _validate_agent_runtime_profile_guardrails(self) -> Settings:
+        if not self.is_agent_profile:
+            return self
+
+        validation_errors: list[str] = []
+        if self.is_production:
+            validation_errors.append(
+                "Agent runtime profile is not allowed when ENVIRONMENT=production"
+            )
+
+        normalized_host = self.API_HOST.strip().lower()
+        if not self.AGENT_ALLOW_NON_LOOPBACK and normalized_host not in {"127.0.0.1", "localhost"}:
+            validation_errors.append(
+                "Agent runtime profile requires API_HOST to be loopback "
+                "(127.0.0.1/localhost) unless AGENT_ALLOW_NON_LOOPBACK=true"
+            )
+
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
+
+        return self
+
     # =========================================================================
     # Redis
     # =========================================================================
@@ -463,6 +488,32 @@ class Settings(BaseSettings):
         if normalized not in _ALLOWED_ENVIRONMENTS:
             allowed_values = ", ".join(_ALLOWED_ENVIRONMENTS)
             msg = f"ENVIRONMENT must be one of: {allowed_values}"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("RUNTIME_PROFILE", mode="before")
+    @classmethod
+    def parse_runtime_profile(cls, value: Any) -> str:
+        """Normalize and validate runtime profile."""
+        normalized = str(value or "default").strip().lower()
+        if normalized not in _ALLOWED_RUNTIME_PROFILES:
+            allowed_values = ", ".join(_ALLOWED_RUNTIME_PROFILES)
+            msg = f"RUNTIME_PROFILE must be one of: {allowed_values}"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("AGENT_DEFAULT_LOG_LEVEL", mode="before")
+    @classmethod
+    def parse_agent_default_log_level(cls, value: Any) -> str | None:
+        """Normalize optional agent-profile default log level."""
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        if not normalized:
+            return None
+        if normalized not in _ALLOWED_LOG_LEVELS:
+            allowed_values = ", ".join(_ALLOWED_LOG_LEVELS)
+            msg = f"AGENT_DEFAULT_LOG_LEVEL must be one of: {allowed_values}"
             raise ValueError(msg)
         return normalized
 
@@ -840,6 +891,32 @@ class Settings(BaseSettings):
         default="development",
         description="Environment: development, staging, production",
     )
+    RUNTIME_PROFILE: str = Field(
+        default="default",
+        description="Execution profile (`default` or `agent`), independent of ENVIRONMENT",
+    )
+    AGENT_MODE: bool = Field(
+        default=False,
+        description="Legacy boolean toggle for agent runtime profile",
+    )
+    AGENT_EXIT_AFTER_REQUESTS: int = Field(
+        default=1,
+        ge=1,
+        le=10000,
+        description="Request-count threshold before agent runtime requests shutdown",
+    )
+    AGENT_SHUTDOWN_ON_ERROR: bool = Field(
+        default=True,
+        description="Request shutdown when unhandled exceptions occur in agent runtime profile",
+    )
+    AGENT_DEFAULT_LOG_LEVEL: str | None = Field(
+        default=None,
+        description="Optional default LOG_LEVEL override when agent runtime profile is active",
+    )
+    AGENT_ALLOW_NON_LOOPBACK: bool = Field(
+        default=False,
+        description="Allow non-loopback API_HOST while agent runtime profile is active",
+    )
     SQL_ECHO: bool = Field(
         default=False,
         description="Log SQL statements from SQLAlchemy engine",
@@ -1201,6 +1278,20 @@ class Settings(BaseSettings):
     def is_production_like(self) -> bool:
         """Check if running in production-like mode (staging/production)."""
         return self.ENVIRONMENT in {"staging", "production"}
+
+    @property
+    def is_agent_profile(self) -> bool:
+        """Check if runtime profile is agent-oriented."""
+        return self.RUNTIME_PROFILE == "agent" or self.AGENT_MODE
+
+    @property
+    def effective_log_level(self) -> str:
+        """Resolve effective log level after runtime-profile overrides."""
+        if not self.is_agent_profile:
+            return self.LOG_LEVEL
+        if self.AGENT_DEFAULT_LOG_LEVEL:
+            return self.AGENT_DEFAULT_LOG_LEVEL
+        return "WARNING"
 
 
 @lru_cache

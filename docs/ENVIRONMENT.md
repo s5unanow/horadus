@@ -21,6 +21,12 @@ This document lists environment variables used by the Horadus backend.
 | `API_PORT` | `8000` | API bind port. |
 | `API_RELOAD` | `true` | Set `false` in production-like environments (`staging`/`production`). |
 | `ENVIRONMENT` | `development` | Allowed values are `development`, `staging`, `production`. Unknown values fail fast at startup. |
+| `RUNTIME_PROFILE` | `default` | Runtime execution profile (`default` or `agent`), independent of `ENVIRONMENT`. |
+| `AGENT_MODE` | `false` | Legacy alias for agent runtime profile. Prefer `RUNTIME_PROFILE=agent`. |
+| `AGENT_EXIT_AFTER_REQUESTS` | `1` | In agent profile, request count before graceful shutdown is requested. |
+| `AGENT_SHUTDOWN_ON_ERROR` | `true` | In agent profile, request shutdown when an unhandled exception occurs. |
+| `AGENT_DEFAULT_LOG_LEVEL` | empty | Optional log-level override for agent profile (`DEBUG|INFO|WARNING|ERROR|CRITICAL`). Defaults to `WARNING`. |
+| `AGENT_ALLOW_NON_LOOPBACK` | `false` | When `false`, agent profile requires `API_HOST` loopback (`127.0.0.1`/`localhost`). |
 | `API_AUTH_ENABLED` | `false` | Enables API key auth middleware. Must be `true` when `ENVIRONMENT` is `staging` or `production` (startup fails otherwise). |
 | `API_KEYS` | empty | Comma-separated accepted API keys. |
 | `API_ADMIN_KEY` | empty | Required for key-management endpoints. In production-like environments (`staging`/`production`) it must be explicitly set or startup fails. |
@@ -52,6 +58,33 @@ environments startup enforces:
 - at least one bootstrap key path (`API_KEY`, `API_KEYS`, or `API_KEYS_PERSIST_PATH`)
 
 Decision record: `docs/adr/007-environments-and-staging.md`.
+
+## Agent Runtime Profile
+
+Agent runtime profile is intended for deterministic local debugging/smoke flows
+(serve -> request -> exit), and is separate from deployment environment.
+
+Enable agent profile with either:
+
+- `RUNTIME_PROFILE=agent` (preferred)
+- `AGENT_MODE=true` (legacy alias)
+
+Guardrails:
+
+- forbidden when `ENVIRONMENT=production`
+- requires loopback `API_HOST` unless `AGENT_ALLOW_NON_LOOPBACK=true`
+
+Behavior:
+
+- low-noise logging by default (`WARNING` unless `AGENT_DEFAULT_LOG_LEVEL` set)
+- optional shutdown on unhandled exception (`AGENT_SHUTDOWN_ON_ERROR=true`)
+- graceful shutdown request after `AGENT_EXIT_AFTER_REQUESTS` requests
+
+Smoke helper:
+
+```bash
+uv run horadus agent smoke --base-url "http://127.0.0.1:8000"
+```
 
 Run examples:
 

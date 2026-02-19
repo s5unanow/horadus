@@ -2684,12 +2684,12 @@ enable deterministic “one-shot” runs (serve → curl → exit).
 **Files**: `src/core/config.py`, `src/api/main.py`, `src/api/middleware/`, `src/cli.py`, `docs/`, `tests/`
 
 **Acceptance Criteria**:
-- [ ] Add an explicit runtime profile flag (e.g., `RUNTIME_PROFILE=agent` or `AGENT_MODE=true`) that is independent of `ENVIRONMENT`
-- [ ] In agent profile: support “exit after N requests” (default `N=1`) and “shutdown on unhandled error” behaviors
-- [ ] In agent profile: reduce log verbosity by default (without breaking JSON logs for normal production runs)
-- [ ] Provide a CLI helper command that prints ready-to-run `curl` examples for common endpoints and exits non-zero on failures
-- [ ] Add hard guardrails to prevent unsafe use (e.g., refuse agent profile when `ENVIRONMENT=production`, and/or require loopback bind)
-- [ ] Add unit tests for middleware/profile behavior (no external network calls)
+- [x] Add an explicit runtime profile flag (e.g., `RUNTIME_PROFILE=agent` or `AGENT_MODE=true`) that is independent of `ENVIRONMENT`
+- [x] In agent profile: support “exit after N requests” (default `N=1`) and “shutdown on unhandled error” behaviors
+- [x] In agent profile: reduce log verbosity by default (without breaking JSON logs for normal production runs)
+- [x] Provide a CLI helper command that prints ready-to-run `curl` examples for common endpoints and exits non-zero on failures
+- [x] Add hard guardrails to prevent unsafe use (e.g., refuse agent profile when `ENVIRONMENT=production`, and/or require loopback bind)
+- [x] Add unit tests for middleware/profile behavior (no external network calls)
 
 ---
 

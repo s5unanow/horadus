@@ -4,6 +4,7 @@ from uuid import uuid4
 
 import pytest
 
+import src.cli as cli_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 
@@ -250,3 +251,77 @@ def test_build_parser_accepts_eval_source_freshness_command() -> None:
     assert args.eval_command == "source-freshness"
     assert args.stale_multiplier == pytest.approx(1.5)
     assert args.fail_on_stale is True
+
+
+def test_build_parser_accepts_agent_smoke_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "agent",
+            "smoke",
+            "--base-url",
+            "http://127.0.0.1:8000",
+            "--timeout-seconds",
+            "2.5",
+            "--api-key",
+            "test-key",
+        ]
+    )
+
+    assert args.command == "agent"
+    assert args.agent_command == "smoke"
+    assert args.base_url == "http://127.0.0.1:8000"
+    assert args.timeout_seconds == pytest.approx(2.5)
+    assert args.api_key == "test-key"  # pragma: allowlist secret
+
+
+def test_run_agent_smoke_returns_success_when_health_and_openapi_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requested_paths: list[str] = []
+
+    def fake_http_get(url: str, *, timeout_seconds: float, headers=None) -> int:
+        _ = timeout_seconds
+        _ = headers
+        requested_paths.append(url)
+        return 200
+
+    monkeypatch.setattr(cli_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(cli_module.settings, "API_AUTH_ENABLED", False)
+
+    result = cli_module._run_agent_smoke(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=5.0,
+        api_key=None,
+    )
+
+    assert result == 0
+    assert requested_paths == [
+        "http://127.0.0.1:8000/health",
+        "http://127.0.0.1:8000/openapi.json",
+    ]
+
+
+def test_run_agent_smoke_returns_failure_on_non_2xx(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statuses = {
+        "http://127.0.0.1:8000/health": 200,
+        "http://127.0.0.1:8000/openapi.json": 500,
+    }
+
+    def fake_http_get(url: str, *, timeout_seconds: float, headers=None) -> int:
+        _ = timeout_seconds
+        _ = headers
+        return statuses[url]
+
+    monkeypatch.setattr(cli_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(cli_module.settings, "API_AUTH_ENABLED", False)
+
+    result = cli_module._run_agent_smoke(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=5.0,
+        api_key=None,
+    )
+
+    assert result == 2

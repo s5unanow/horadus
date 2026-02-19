@@ -28,6 +28,9 @@ Required minimum settings:
 - `HORADUS_PUBLIC_DOMAIN` (for TLS certificate issuance/ingress host routing)
 - `CADDY_ACME_EMAIL` (recommended for ACME expiration/renewal notices)
 
+Do not use agent runtime profile in production deployments (`RUNTIME_PROFILE`
+must remain `default`).
+
 Production secret policy:
 
 - Keep raw secret values out of `.env`.

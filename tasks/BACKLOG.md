@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-161`.
+- Next available task IDs start at `TASK-164`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2645,6 +2645,71 @@ content identity in query strings, so this can cause false duplicates.
 - [x] Ensure normalization is deterministic (e.g., stable sorting of remaining query params)
 - [x] Add tests covering URLs where query params must be preserved and where tracking params should be removed
 - [x] Document the normalization policy and provide an operator override knob for strictness if needed
+
+---
+
+### TASK-161: Formalize environment semantics (dev/staging/prod) and defaults
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Spec**: `tasks/specs/161-environment-semantics.md`
+
+`ENVIRONMENT` exists today, but staging is not explicitly supported in docs and
+production-only guardrails are currently keyed only to `ENVIRONMENT=production`.
+This creates a foot-gun where `ENVIRONMENT=staging` unintentionally bypasses
+production-like safety policies.
+
+**Files**: `src/core/config.py`, `src/storage/database.py`, `docs/ENVIRONMENT.md`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [x] Restrict `ENVIRONMENT` to an explicit set (e.g., `development|staging|production`) with clear validation errors
+- [x] Define and use `is_production_like` (treat `staging` as production-like for guardrails and runtime safety defaults)
+- [x] Ensure DB engine pooling behavior matches environment intent (debug-friendly in `development`, pooled otherwise)
+- [x] Add ADR documenting `development|staging|production` intent and why staging exists (learning + promotion gates): `docs/adr/007-environments-and-staging.md`
+- [x] Document environment semantics/boundaries and provide concrete run instructions for each environment (local dev, local staging, prod compose)
+- [x] Provide a concrete staging example (`.env.staging.example` or equivalent)
+- [x] Add unit tests covering `development` vs `staging` vs `production` behavior for guardrails/defaults
+
+---
+
+### TASK-162: Agent debugging runtime profile (low-noise, fail-fast, single-request)
+**Priority**: P2 (Medium)
+**Estimate**: 3-6 hours
+**Spec**: `tasks/specs/162-agent-debug-profile.md`
+
+Add a dedicated runtime profile optimized for agentic self-check and debugging
+flows (Codex / Claude Code), without treating `agent` as a deployment
+environment. The goal is to minimize log/context noise, make failures loud, and
+enable deterministic “one-shot” runs (serve → curl → exit).
+
+**Files**: `src/core/config.py`, `src/api/main.py`, `src/api/middleware/`, `src/cli.py`, `docs/`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Add an explicit runtime profile flag (e.g., `RUNTIME_PROFILE=agent` or `AGENT_MODE=true`) that is independent of `ENVIRONMENT`
+- [ ] In agent profile: support “exit after N requests” (default `N=1`) and “shutdown on unhandled error” behaviors
+- [ ] In agent profile: reduce log verbosity by default (without breaking JSON logs for normal production runs)
+- [ ] Provide a CLI helper command that prints ready-to-run `curl` examples for common endpoints and exits non-zero on failures
+- [ ] Add hard guardrails to prevent unsafe use (e.g., refuse agent profile when `ENVIRONMENT=production`, and/or require loopback bind)
+- [ ] Add unit tests for middleware/profile behavior (no external network calls)
+
+---
+
+### TASK-163: Staging promotion workflow + release gates (dev → staging → prod)
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+**Spec**: `tasks/specs/163-staging-promotion-and-release-gates.md`
+
+Define a clear “promotion” workflow that uses staging as a safe rehearsal step
+before production. This is primarily a learning/practice feature, but it must
+be production-shaped and reduce operator error risk.
+
+**Files**: `docs/RELEASING.md`, `docs/DEPLOYMENT.md`, `docs/ENVIRONMENT.md`, `Makefile`, `scripts/`, `tests/` (if needed)
+
+**Acceptance Criteria**:
+- [ ] Add explicit dev → staging → prod promotion section to `docs/RELEASING.md` (what changes between envs, what must be identical)
+- [ ] Define a single “release gate” command path for operators (e.g., `make release-gate`) that runs the documented pre-release checks
+- [ ] Document staging rollout + post-deploy verification steps mirroring production (but clearly separated infrastructure/data)
+- [ ] Document rollback expectations for staging vs production and how to interpret gate failures
+- [ ] Ensure docs cross-link cleanly between `README.md`, `docs/ENVIRONMENT.md`, `docs/DEPLOYMENT.md`, and `docs/RELEASING.md`
 
 ---
 

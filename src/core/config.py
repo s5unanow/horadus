@@ -52,6 +52,7 @@ _DEFAULT_DEDUP_URL_TRACKING_PARAMS = (
     "mkt_tok",
     "igshid",
 )
+_ALLOWED_ENVIRONMENTS = ("development", "staging", "production")
 
 
 def _normalize_pricing_key(raw_key: str) -> tuple[str, str]:
@@ -293,7 +294,7 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_production_security_guardrails(self) -> Settings:
-        if not self.is_production:
+        if not self.is_production_like:
             return self
 
         validation_errors: list[str] = []
@@ -301,31 +302,37 @@ class Settings(BaseSettings):
 
         if secret_key == DEV_SECRET_KEY_DEFAULT:
             validation_errors.append(
-                "SECRET_KEY must be explicitly configured in production; dev default is not allowed"
+                "SECRET_KEY must be explicitly configured in production-like "
+                "environments (staging/production); dev default is not allowed"
             )
         elif secret_key.lower() in _PRODUCTION_WEAK_SECRET_KEY_VALUES:
             validation_errors.append(
-                "SECRET_KEY uses a known weak value and is not allowed in production"
+                "SECRET_KEY uses a known weak value and is not allowed in "
+                "production-like environments (staging/production)"
             )
         elif len(secret_key) < MIN_PRODUCTION_SECRET_KEY_LENGTH:
             validation_errors.append(
-                "SECRET_KEY is too short for production; use at least 32 characters"
+                "SECRET_KEY is too short for production-like environments "
+                "(staging/production); use at least 32 characters"
             )
 
         if not self.API_AUTH_ENABLED:
-            validation_errors.append("API_AUTH_ENABLED must be true in production")
+            validation_errors.append(
+                "API_AUTH_ENABLED must be true in production-like environments (staging/production)"
+            )
 
         has_bootstrap_api_key = bool((self.API_KEY or "").strip()) or bool(self.API_KEYS)
         has_persisted_key_store = bool((self.API_KEYS_PERSIST_PATH or "").strip())
         if not has_bootstrap_api_key and not has_persisted_key_store:
             validation_errors.append(
-                "Production auth requires at least one bootstrap key "
+                "Production-like auth requires at least one bootstrap key "
                 "(API_KEY/API_KEYS) or API_KEYS_PERSIST_PATH"
             )
 
         if not (self.API_ADMIN_KEY or "").strip():
             validation_errors.append(
-                "API_ADMIN_KEY must be configured in production for key-management endpoints"
+                "API_ADMIN_KEY must be configured in production-like environments "
+                "(staging/production) for key-management endpoints"
             )
 
         if validation_errors:
@@ -445,6 +452,17 @@ class Settings(BaseSettings):
         allowed = {"fixed_window", "sliding_window"}
         if normalized not in allowed:
             msg = "API_RATE_LIMIT_STRATEGY must be one of: fixed_window, sliding_window"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("ENVIRONMENT", mode="before")
+    @classmethod
+    def parse_environment(cls, value: Any) -> str:
+        """Normalize and validate deployment environment."""
+        normalized = str(value or "development").strip().lower()
+        if normalized not in _ALLOWED_ENVIRONMENTS:
+            allowed_values = ", ".join(_ALLOWED_ENVIRONMENTS)
+            msg = f"ENVIRONMENT must be one of: {allowed_values}"
             raise ValueError(msg)
         return normalized
 
@@ -1178,6 +1196,11 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         """Check if running in production mode."""
         return self.ENVIRONMENT == "production"
+
+    @property
+    def is_production_like(self) -> bool:
+        """Check if running in production-like mode (staging/production)."""
+        return self.ENVIRONMENT in {"staging", "production"}
 
 
 @lru_cache

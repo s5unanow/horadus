@@ -54,3 +54,30 @@ def test_create_engine_uses_nullpool_in_development(monkeypatch) -> None:
     assert isinstance(kwargs, dict)
     assert kwargs["poolclass"] is database_module.NullPool
     assert "pool_timeout" not in kwargs
+
+
+def test_create_engine_uses_pooling_in_staging(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_create_async_engine(url: str, **kwargs):
+        captured["url"] = url
+        captured["kwargs"] = kwargs
+        return "engine"
+
+    monkeypatch.setattr(database_module.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(database_module.settings, "DATABASE_URL", "postgresql+asyncpg://db")
+    monkeypatch.setattr(database_module.settings, "SQL_ECHO", False)
+    monkeypatch.setattr(database_module.settings, "DATABASE_POOL_SIZE", 9)
+    monkeypatch.setattr(database_module.settings, "DATABASE_MAX_OVERFLOW", 4)
+    monkeypatch.setattr(database_module.settings, "DATABASE_POOL_TIMEOUT_SECONDS", 25)
+    monkeypatch.setattr(database_module, "create_async_engine", fake_create_async_engine)
+
+    result = database_module.create_engine()
+
+    assert result == "engine"
+    kwargs = captured["kwargs"]
+    assert isinstance(kwargs, dict)
+    assert kwargs["pool_size"] == 9
+    assert kwargs["max_overflow"] == 4
+    assert kwargs["pool_timeout"] == 25
+    assert "poolclass" not in kwargs

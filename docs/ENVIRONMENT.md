@@ -1,6 +1,6 @@
 # Environment Variables
 
-**Last Verified**: 2026-02-18
+**Last Verified**: 2026-02-19
 
 This document lists environment variables used by the Horadus backend.
 
@@ -19,11 +19,11 @@ This document lists environment variables used by the Horadus backend.
 |----------|---------|-------|
 | `API_HOST` | `0.0.0.0` | API bind host. |
 | `API_PORT` | `8000` | API bind port. |
-| `API_RELOAD` | `true` | Set `false` in production. |
-| `ENVIRONMENT` | `development` | Use `production` in deployed environments. |
-| `API_AUTH_ENABLED` | `false` | Enables API key auth middleware. Must be `true` when `ENVIRONMENT=production` (startup fails otherwise). |
+| `API_RELOAD` | `true` | Set `false` in production-like environments (`staging`/`production`). |
+| `ENVIRONMENT` | `development` | Allowed values are `development`, `staging`, `production`. Unknown values fail fast at startup. |
+| `API_AUTH_ENABLED` | `false` | Enables API key auth middleware. Must be `true` when `ENVIRONMENT` is `staging` or `production` (startup fails otherwise). |
 | `API_KEYS` | empty | Comma-separated accepted API keys. |
-| `API_ADMIN_KEY` | empty | Required for key-management endpoints. In production it must be explicitly set or startup fails. |
+| `API_ADMIN_KEY` | empty | Required for key-management endpoints. In production-like environments (`staging`/`production`) it must be explicitly set or startup fails. |
 | `API_RATE_LIMIT_PER_MINUTE` | `120` | Per-key request budget. |
 | `API_RATE_LIMIT_WINDOW_SECONDS` | `60` | Distributed rate-limit window size. |
 | `API_RATE_LIMIT_STRATEGY` | `fixed_window` | Rate-limit algorithm (`fixed_window` or `sliding_window`). |
@@ -33,7 +33,39 @@ This document lists environment variables used by the Horadus backend.
 | `HORADUS_PUBLIC_DOMAIN` | `localhost` | Public hostname served by production HTTPS ingress (Caddy). |
 | `CADDY_ACME_EMAIL` | `admin@localhost` | Email identity used for ACME certificate registration/renewal. |
 | `CADDY_ACME_CA` | Let's Encrypt production directory | Optional ACME endpoint override (for example staging CA during certificate troubleshooting). |
-| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret. In production this must be explicitly set, be at least 32 characters, and must not use known weak values (for example `changeme`, `password`, `secret`). |
+| `SECRET_KEY` | `dev-secret-key-change-in-production` | Signing secret. In production-like environments (`staging`/`production`) this must be explicitly set, be at least 32 characters, and must not use known weak values (for example `changeme`, `password`, `secret`). |
+
+## Environment Semantics
+
+- `development`: local iteration mode. Debug-friendly defaults are allowed
+  (for example `API_RELOAD=true`, `NullPool` DB behavior, auth may be disabled).
+- `staging`: production-like rehearsal mode. Guardrails are identical to
+  production for auth/secret posture and deployed runtime defaults.
+- `production`: live deployment mode with full strict posture.
+
+Production-like means `ENVIRONMENT` is `staging` or `production`. In these
+environments startup enforces:
+
+- `SECRET_KEY` is explicitly configured, non-weak, and at least 32 chars
+- `API_AUTH_ENABLED=true`
+- `API_ADMIN_KEY` configured
+- at least one bootstrap key path (`API_KEY`, `API_KEYS`, or `API_KEYS_PERSIST_PATH`)
+
+Decision record: `docs/adr/007-environments-and-staging.md`.
+
+Run examples:
+
+```bash
+# Development (default local mode)
+ENVIRONMENT=development uvicorn src.api.main:app --reload
+
+# Staging rehearsal (production-like guardrails)
+cp .env.staging.example .env
+ENVIRONMENT=staging uvicorn src.api.main:app
+
+# Production compose deployment
+ENVIRONMENT=production docker compose -f docker-compose.prod.yml up -d
+```
 
 Rate-limit strategy guidance:
 - `fixed_window` (default): lowest Redis/memory overhead and easiest operator reasoning, but allows boundary bursts near window rollover.
@@ -41,7 +73,7 @@ Rate-limit strategy guidance:
 - Recommended production default remains `fixed_window` unless boundary-burst behavior materially impacts your workload.
 
 Production auth/secret guardrails:
-- `ENVIRONMENT=production` now enforces fail-fast startup checks:
+- `ENVIRONMENT=staging|production` now enforces fail-fast startup checks:
   - `SECRET_KEY` must not use the development default value.
   - `SECRET_KEY` must be at least 32 characters and cannot be a known weak value.
   - `API_AUTH_ENABLED` must be `true`.

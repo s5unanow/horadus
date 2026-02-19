@@ -122,6 +122,27 @@ def test_settings_rejects_invalid_rate_limit_strategy() -> None:
         )
 
 
+def test_settings_normalizes_environment_value() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT=" StAgInG ",
+        SECRET_KEY="x" * 48,
+        API_AUTH_ENABLED=True,
+        API_KEY=TEST_BOOTSTRAP_KEY,
+        API_ADMIN_KEY=TEST_ADMIN_KEY,
+    )
+
+    assert settings.ENVIRONMENT == "staging"
+
+
+def test_settings_rejects_unknown_environment_value() -> None:
+    with pytest.raises(ValidationError, match="ENVIRONMENT must be one of"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="qa",
+        )
+
+
 def test_settings_parses_llm_token_pricing_json() -> None:
     settings = Settings(
         _env_file=None,
@@ -307,7 +328,7 @@ def test_settings_rejects_production_without_admin_key() -> None:
 def test_settings_rejects_production_without_bootstrap_key_or_persist_store() -> None:
     with pytest.raises(
         ValidationError,
-        match="Production auth requires at least one bootstrap key",
+        match="Production-like auth requires at least one bootstrap key",
     ):
         Settings(
             _env_file=None,
@@ -332,7 +353,47 @@ def test_settings_accepts_production_guardrail_compliant_config() -> None:
     )
 
     assert settings.is_production is True
+    assert settings.is_production_like is True
     assert settings.API_AUTH_ENABLED is True
+
+
+def test_settings_rejects_staging_without_auth_enabled() -> None:
+    with pytest.raises(ValidationError, match="API_AUTH_ENABLED must be true in production-like"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="staging",
+            SECRET_KEY="x" * 48,
+            API_AUTH_ENABLED=False,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+        )
+
+
+def test_settings_accepts_staging_guardrail_compliant_config() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="staging",
+        SECRET_KEY="x" * 48,
+        API_AUTH_ENABLED=True,
+        API_KEY=TEST_BOOTSTRAP_KEY,
+        API_ADMIN_KEY=TEST_ADMIN_KEY,
+    )
+
+    assert settings.is_development is False
+    assert settings.is_production is False
+    assert settings.is_production_like is True
+
+
+def test_settings_development_allows_debug_friendly_defaults() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+    )
+
+    assert settings.is_development is True
+    assert settings.is_production is False
+    assert settings.is_production_like is False
+    assert settings.API_AUTH_ENABLED is False
 
 
 def test_settings_accepts_production_with_persisted_key_store_bootstrap() -> None:
@@ -348,4 +409,5 @@ def test_settings_accepts_production_with_persisted_key_store_bootstrap() -> Non
     )
 
     assert settings.is_production is True
+    assert settings.is_production_like is True
     assert settings.API_AUTH_ENABLED is True

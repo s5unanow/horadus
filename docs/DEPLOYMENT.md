@@ -72,7 +72,11 @@ deployment steps.
    cp .env.staging.example .env
    ```
 2. Ensure staging infra/data is isolated (separate DB name, separate Redis DBs,
-   separate compose project and hostnames).
+   separate compose project and hostnames). Example isolation knobs:
+   - `POSTGRES_DB=geoint_staging` (not `geoint`)
+   - Redis DB indices reserved for staging only
+   - `COMPOSE_PROJECT_NAME=horadus-staging`
+   - `HORADUS_PUBLIC_DOMAIN=staging.<your-domain>`
 3. Keep production-like posture in staging:
    - `ENVIRONMENT=staging`
    - `API_AUTH_ENABLED=true`
@@ -80,11 +84,9 @@ deployment steps.
    - migration parity checks enabled (`MIGRATION_PARITY_STRICT_STARTUP=true`)
 4. Run pre-release gates against staging before prod promotion:
    ```bash
-   make check
-   make test
-   make docs-freshness
-   make db-migration-gate MIGRATION_GATE_DATABASE_URL="<staging-db-url>"
+   make release-gate RELEASE_GATE_DATABASE_URL="<staging-db-url>"
    ```
+   - add `RELEASE_GATE_INCLUDE_EVAL=true` when prompt/model changes are included
 5. Perform post-deploy smoke checks in staging (`/health`, `/health/ready`,
    `/metrics`, auth-protected endpoints) and only then promote the same commit
    to production.

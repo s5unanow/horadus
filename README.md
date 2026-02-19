@@ -101,6 +101,12 @@ Detailed endpoint reference and curl examples:
 - Evaluation workflow details:
   - `ai/eval/README.md`
 
+Promotion quick path (dev -> staging -> prod):
+
+```bash
+make release-gate RELEASE_GATE_DATABASE_URL="<staging-db-url>"
+```
+
 Authentication header:
 - `X-API-Key: <key>`
 - Key-management admin header:

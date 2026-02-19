@@ -58,6 +58,7 @@ environments startup enforces:
 - at least one bootstrap key path (`API_KEY`, `API_KEYS`, or `API_KEYS_PERSIST_PATH`)
 
 Decision record: `docs/adr/007-environments-and-staging.md`.
+Promotion workflow and release gates: `docs/RELEASING.md`.
 
 ## Agent Runtime Profile
 

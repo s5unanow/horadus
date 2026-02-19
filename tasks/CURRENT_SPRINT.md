@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-163` Staging promotion workflow + release gates (dev → staging → prod) — DONE ✓
 - `TASK-162` Agent debugging runtime profile (low-noise, fail-fast, single-request) — DONE ✓
 - `TASK-161` Formalize environment semantics (dev/staging/prod) and defaults — DONE ✓
 - `TASK-160` Improve URL normalization to avoid false-duplicate matches — DONE ✓
@@ -120,6 +121,7 @@
 - `TASK-160` completion note: URL normalization now preserves non-tracking query params by default (deterministically sorted), strips configured tracking params/prefixes, exposes strictness/strip lists via `DEDUP_URL_QUERY_MODE` + tracking env knobs, and unifies RSS/GDELT normalization through `DeduplicationService` with new URL-policy regression coverage.
 - `TASK-161` completion note: `ENVIRONMENT` is now validated to `development|staging|production` with explicit fail-fast errors, production-like guardrails apply to both staging and production via `is_production_like`, staging DB runtime behavior is explicitly pooled, and docs now include environment boundary semantics, staging run guidance, `.env.staging.example`, and ADR `007`.
 - `TASK-162` completion note: added independent agent runtime profile controls (`RUNTIME_PROFILE`/`AGENT_MODE`) with production-refusal + loopback guardrails, request-count and unhandled-error shutdown signaling middleware, low-noise effective logging defaults, and deterministic `horadus agent smoke` checks with non-zero failure exits plus profile/middleware/CLI unit coverage.
+- `TASK-163` completion note: added fail-closed `make release-gate` command (check/test/docs-freshness/migration gate plus optional eval audit), documented explicit dev→staging→prod promotion workflow and staging/prod parity requirements in `docs/RELEASING.md`, expanded staging isolation and rollout verification guidance in `docs/DEPLOYMENT.md`, and added cross-links from `README.md` and `docs/ENVIRONMENT.md`.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

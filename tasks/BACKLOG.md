@@ -2705,11 +2705,11 @@ be production-shaped and reduce operator error risk.
 **Files**: `docs/RELEASING.md`, `docs/DEPLOYMENT.md`, `docs/ENVIRONMENT.md`, `Makefile`, `scripts/`, `tests/` (if needed)
 
 **Acceptance Criteria**:
-- [ ] Add explicit dev → staging → prod promotion section to `docs/RELEASING.md` (what changes between envs, what must be identical)
-- [ ] Define a single “release gate” command path for operators (e.g., `make release-gate`) that runs the documented pre-release checks
-- [ ] Document staging rollout + post-deploy verification steps mirroring production (but clearly separated infrastructure/data)
-- [ ] Document rollback expectations for staging vs production and how to interpret gate failures
-- [ ] Ensure docs cross-link cleanly between `README.md`, `docs/ENVIRONMENT.md`, `docs/DEPLOYMENT.md`, and `docs/RELEASING.md`
+- [x] Add explicit dev → staging → prod promotion section to `docs/RELEASING.md` (what changes between envs, what must be identical)
+- [x] Define a single “release gate” command path for operators (e.g., `make release-gate`) that runs the documented pre-release checks
+- [x] Document staging rollout + post-deploy verification steps mirroring production (but clearly separated infrastructure/data)
+- [x] Document rollback expectations for staging vs production and how to interpret gate failures
+- [x] Ensure docs cross-link cleanly between `README.md`, `docs/ENVIRONMENT.md`, `docs/DEPLOYMENT.md`, and `docs/RELEASING.md`
 
 ---
 

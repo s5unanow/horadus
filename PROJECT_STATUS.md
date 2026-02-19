@@ -227,6 +227,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-160` dedup URL normalization now keeps non-tracking query params by default (stable-sorted), strips configured tracking params/prefixes, supports strict `strip_all` override mode, and is shared across RSS/GDELT normalization paths with policy regression tests
 - [x] `TASK-161` environment semantics are now explicit and validated (`development|staging|production`), staging now shares production-like guardrails via `is_production_like`, runtime DB behavior remains NullPool-only in development, and environment/deployment guidance now includes `.env.staging.example` plus ADR `007`
 - [x] `TASK-162` introduces an independent agent runtime profile with production/loopback guardrails, request-limit and unhandled-error shutdown signaling, low-noise default log level behavior, and deterministic `horadus agent smoke` local endpoint checks
+- [x] `TASK-163` now standardizes promotion via staging with fail-closed `make release-gate`, explicit dev/staging/prod release semantics in `docs/RELEASING.md`, and aligned staging rollout/cross-link guidance across deployment/environment/readme docs
 
 ## In Progress
 

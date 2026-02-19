@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Verified**: 2026-02-18
+**Last Verified**: 2026-02-19
 
 This guide covers a single-host Docker Compose deployment using:
 
@@ -40,6 +40,7 @@ For release and rollback governance, see `docs/RELEASING.md`.
 For calibration alert triage and review operations, see `docs/CALIBRATION_RUNBOOK.md`.
 For managed backend options, see `docs/SECRETS_BACKENDS.md`.
 For 6-hour low-frequency defaults and outage catch-up steps, see `docs/LOW_FREQUENCY_MODE.md`.
+For environment semantics and staging defaults, see `docs/ENVIRONMENT.md`.
 
 6-hour baseline deployment profile:
 
@@ -57,6 +58,33 @@ Recommended production hardening:
 - Restrict `CORS_ORIGINS` to trusted frontend domains only.
 - Provide `POSTGRES_PASSWORD` via runtime environment (not committed files) when running bundled `postgres`.
 - Keep `API_RATE_LIMIT_STRATEGY=fixed_window` by default for low-overhead operation; switch to `sliding_window` only when boundary-burst smoothing is required.
+
+## 1b) Rehearse in staging before production (recommended)
+
+Use staging as a production-like promotion gate before running production
+deployment steps.
+
+1. Start from the staging template:
+   ```bash
+   cp .env.staging.example .env
+   ```
+2. Ensure staging infra/data is isolated (separate DB name, separate Redis DBs,
+   separate compose project and hostnames).
+3. Keep production-like posture in staging:
+   - `ENVIRONMENT=staging`
+   - `API_AUTH_ENABLED=true`
+   - explicit `SECRET_KEY`/`API_ADMIN_KEY`
+   - migration parity checks enabled (`MIGRATION_PARITY_STRICT_STARTUP=true`)
+4. Run pre-release gates against staging before prod promotion:
+   ```bash
+   make check
+   make test
+   make docs-freshness
+   make db-migration-gate MIGRATION_GATE_DATABASE_URL="<staging-db-url>"
+   ```
+5. Perform post-deploy smoke checks in staging (`/health`, `/health/ready`,
+   `/metrics`, auth-protected endpoints) and only then promote the same commit
+   to production.
 
 ## 2) Build production images
 

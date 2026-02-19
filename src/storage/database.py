@@ -34,8 +34,8 @@ def create_engine() -> AsyncEngine:
     """
     Create async SQLAlchemy engine.
 
-    Uses connection pooling in production, NullPool in development
-    for easier debugging.
+    Uses NullPool in development for easier debugging and pooled
+    connections in staging/production.
     """
     if settings.is_development:
         return create_async_engine(

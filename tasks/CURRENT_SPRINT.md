@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-161` Formalize environment semantics (dev/staging/prod) and defaults — DONE ✓
 - `TASK-160` Improve URL normalization to avoid false-duplicate matches — DONE ✓
 - `TASK-159` Externalize token pricing to config and model/version mapping — DONE ✓
 - `TASK-158` Make claim-graph contradiction heuristics language-aware (en/uk/ru) — DONE ✓
@@ -116,6 +117,7 @@
 - `TASK-158` completion note: Tier-2 claim-graph heuristics now apply per-language stopwords/negation markers for `en`/`uk`/`ru`, only link same-language supported claim pairs, safely skip mixed/unsupported language pairs, and document prompt/runtime policy limitations with new non-English regression coverage.
 - `TASK-159` completion note: token pricing is now configurable via `LLM_TOKEN_PRICING_USD_PER_1M` keyed by `provider:model` with defaults, Tier-1/Tier-2/Embedding budget checks now validate pricing coverage before calls (fail-closed), and usage accounting records model/provider-aware rates with config/cost-policy regression coverage.
 - `TASK-160` completion note: URL normalization now preserves non-tracking query params by default (deterministically sorted), strips configured tracking params/prefixes, exposes strictness/strip lists via `DEDUP_URL_QUERY_MODE` + tracking env knobs, and unifies RSS/GDELT normalization through `DeduplicationService` with new URL-policy regression coverage.
+- `TASK-161` completion note: `ENVIRONMENT` is now validated to `development|staging|production` with explicit fail-fast errors, production-like guardrails apply to both staging and production via `is_production_like`, staging DB runtime behavior is explicitly pooled, and docs now include environment boundary semantics, staging run guidance, `.env.staging.example`, and ADR `007`.
 - `TASK-128` completion note: corroboration scoring now handles SQLAlchemy `Row` mappings safely, emits fallback-path observability metric/log entries, and includes row-shape regression tests.
 - `TASK-126` completion note: runtime now records unknown trend/signal taxonomy gaps to `taxonomy_gaps` with triage API + observability metrics, and benchmark taxonomy now loads from `config/trends` with strict preflight fail-fast.
 - `TASK-085` reviewer checklist: `tasks/assessments/TASK-085-explicit-admin-key-checklist-2026-02-18.md`.

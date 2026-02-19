@@ -20,6 +20,11 @@ if TYPE_CHECKING:
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from src.api.middleware.agent_runtime import (
+    AGENT_UNHANDLED_EXCEPTION_FLAG,
+    AgentRuntimeMiddleware,
+    trigger_agent_runtime_shutdown,
+)
 from src.api.middleware.auth import APIKeyAuthMiddleware
 from src.api.routes import auth, budget, events, feedback, health, metrics, reports, sources, trends
 from src.core.config import settings
@@ -169,6 +174,15 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    if settings.is_agent_profile:
+        app.state.agent_runtime_exit_code = 0
+        app.state.agent_runtime_shutdown_triggered = False
+        app.add_middleware(
+            AgentRuntimeMiddleware,
+            exit_after_requests=settings.AGENT_EXIT_AFTER_REQUESTS,
+            shutdown_on_error=settings.AGENT_SHUTDOWN_ON_ERROR,
+        )
+
     app.add_middleware(APIKeyAuthMiddleware)
 
     # Add CORS middleware
@@ -206,6 +220,13 @@ def register_exception_handlers(app: FastAPI) -> None:
             error=str(exc),
             exc_info=True,
         )
+        if settings.is_agent_profile and settings.AGENT_SHUTDOWN_ON_ERROR:
+            setattr(request.state, AGENT_UNHANDLED_EXCEPTION_FLAG, True)
+            trigger_agent_runtime_shutdown(
+                request.app,
+                exit_code=1,
+                reason="unhandled_exception",
+            )
         return JSONResponse(
             status_code=500,
             content={
@@ -282,9 +303,35 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
 
+    if settings.is_agent_profile:
+        config = uvicorn.Config(
+            "src.api.main:app",
+            host=settings.API_HOST,
+            port=settings.API_PORT,
+            reload=settings.API_RELOAD,
+            log_level=settings.effective_log_level.lower(),
+            access_log=False,
+        )
+        server = uvicorn.Server(config)
+
+        def _agent_shutdown_callback(exit_code: int, reason: str) -> None:
+            existing_exit_code = int(getattr(app.state, "agent_runtime_exit_code", 0))
+            app.state.agent_runtime_exit_code = max(existing_exit_code, exit_code)
+            logger.warning(
+                "Agent runtime shutdown requested",
+                reason=reason,
+                exit_code=exit_code,
+            )
+            server.should_exit = True
+
+        app.state.agent_runtime_shutdown_callback = _agent_shutdown_callback
+        server.run()
+        raise SystemExit(int(getattr(app.state, "agent_runtime_exit_code", 0)))
+
     uvicorn.run(
         "src.api.main:app",
         host=settings.API_HOST,
         port=settings.API_PORT,
         reload=settings.API_RELOAD,
+        log_level=settings.effective_log_level.lower(),
     )

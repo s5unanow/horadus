@@ -143,6 +143,22 @@ def test_settings_rejects_unknown_environment_value() -> None:
         )
 
 
+def test_settings_rejects_unknown_runtime_profile() -> None:
+    with pytest.raises(ValidationError, match="RUNTIME_PROFILE must be one of"):
+        Settings(
+            _env_file=None,
+            RUNTIME_PROFILE="debugger",
+        )
+
+
+def test_settings_rejects_agent_default_log_level_outside_allowed_set() -> None:
+    with pytest.raises(ValidationError, match="AGENT_DEFAULT_LOG_LEVEL must be one of"):
+        Settings(
+            _env_file=None,
+            AGENT_DEFAULT_LOG_LEVEL="TRACE",
+        )
+
+
 def test_settings_parses_llm_token_pricing_json() -> None:
     settings = Settings(
         _env_file=None,
@@ -369,6 +385,42 @@ def test_settings_rejects_staging_without_auth_enabled() -> None:
         )
 
 
+def test_settings_rejects_agent_profile_in_production() -> None:
+    with pytest.raises(ValidationError, match="Agent runtime profile is not allowed"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="production",
+            RUNTIME_PROFILE="agent",
+            API_HOST="127.0.0.1",
+            SECRET_KEY="x" * 48,
+            API_AUTH_ENABLED=True,
+            API_KEY=TEST_BOOTSTRAP_KEY,
+            API_ADMIN_KEY=TEST_ADMIN_KEY,
+        )
+
+
+def test_settings_rejects_agent_profile_non_loopback_host_by_default() -> None:
+    with pytest.raises(ValidationError, match="requires API_HOST to be loopback"):
+        Settings(
+            _env_file=None,
+            ENVIRONMENT="development",
+            RUNTIME_PROFILE="agent",
+            API_HOST="0.0.0.0",
+        )
+
+
+def test_settings_accepts_agent_profile_non_loopback_with_explicit_override() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+        RUNTIME_PROFILE="agent",
+        API_HOST="0.0.0.0",
+        AGENT_ALLOW_NON_LOOPBACK=True,
+    )
+
+    assert settings.is_agent_profile is True
+
+
 def test_settings_accepts_staging_guardrail_compliant_config() -> None:
     settings = Settings(
         _env_file=None,
@@ -393,6 +445,7 @@ def test_settings_development_allows_debug_friendly_defaults() -> None:
     assert settings.is_development is True
     assert settings.is_production is False
     assert settings.is_production_like is False
+    assert settings.is_agent_profile is False
     assert settings.API_AUTH_ENABLED is False
 
 
@@ -411,3 +464,27 @@ def test_settings_accepts_production_with_persisted_key_store_bootstrap() -> Non
     assert settings.is_production is True
     assert settings.is_production_like is True
     assert settings.API_AUTH_ENABLED is True
+
+
+def test_settings_agent_profile_uses_warning_log_level_by_default() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+        RUNTIME_PROFILE="agent",
+        API_HOST="127.0.0.1",
+    )
+
+    assert settings.is_agent_profile is True
+    assert settings.effective_log_level == "WARNING"
+
+
+def test_settings_agent_profile_respects_explicit_agent_default_log_level() -> None:
+    settings = Settings(
+        _env_file=None,
+        ENVIRONMENT="development",
+        RUNTIME_PROFILE="agent",
+        API_HOST="127.0.0.1",
+        AGENT_DEFAULT_LOG_LEVEL="error",
+    )
+
+    assert settings.effective_log_level == "ERROR"

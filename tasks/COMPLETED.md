@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-162: Agent debugging runtime profile (low-noise, fail-fast, single-request) ✅
 - TASK-161: Formalize environment semantics (dev/staging/prod) and defaults ✅
 - TASK-160: Improve URL normalization to avoid false-duplicate matches ✅
 - TASK-159: Externalize token pricing to config and model/version mapping ✅

@@ -50,19 +50,21 @@ if [[ -n "$("${GIT_BIN}" status --porcelain)" ]]; then
   exit 1
 fi
 
-# Validate PR exists for current branch and its scope metadata matches.
-if ! pr_body="$("${GH_BIN}" pr view --json body --jq .body 2>/dev/null)"; then
+# Resolve PR identity once and use it for all gh operations. After merge,
+# gh may delete the local branch and switch to main (breaking branch-context
+# lookups).
+if ! pr_url="$("${GH_BIN}" pr view --json url --jq .url 2>/dev/null)"; then
   echo "task-finish failed: unable to locate PR for current branch (${current_branch})."
   echo "Ensure you have pushed the branch and opened a PR."
   exit 1
 fi
 
+pr_body="$("${GH_BIN}" pr view "${pr_url}" --json body --jq .body)"
 PR_BRANCH="${current_branch}" PR_BODY="${pr_body}" ./scripts/check_pr_task_scope.sh
 
-pr_url="$("${GH_BIN}" pr view --json url --jq .url)"
 echo "PR: ${pr_url}"
 
-if [[ "$("${GH_BIN}" pr view --json isDraft --jq .isDraft)" == "true" ]]; then
+if [[ "$("${GH_BIN}" pr view "${pr_url}" --json isDraft --jq .isDraft)" == "true" ]]; then
   echo "task-finish failed: PR is draft; refusing to merge."
   exit 1
 fi
@@ -70,25 +72,25 @@ fi
 echo "Waiting for PR checks to pass (timeout=${CHECKS_TIMEOUT_SECONDS}s)..."
 deadline="$(( $(date +%s) + CHECKS_TIMEOUT_SECONDS ))"
 while true; do
-  if "${GH_BIN}" pr checks --required >/dev/null 2>&1; then
+  if "${GH_BIN}" pr checks "${pr_url}" --required >/dev/null 2>&1; then
     break
   fi
   now="$(date +%s)"
   if (( now >= deadline )); then
     echo "task-finish failed: checks did not pass before timeout."
-    "${GH_BIN}" pr checks --required || true
+    "${GH_BIN}" pr checks "${pr_url}" --required || true
     exit 1
   fi
   sleep "${CHECKS_POLL_SECONDS}"
 done
 
 echo "Merging PR (squash, delete branch)..."
-if ! "${GH_BIN}" pr merge --squash --delete-branch; then
+if ! "${GH_BIN}" pr merge "${pr_url}" --squash --delete-branch; then
   echo "task-finish failed: merge failed."
   exit 1
 fi
 
-merge_commit="$("${GH_BIN}" pr view --json mergeCommit --jq .mergeCommit.oid)"
+merge_commit="$("${GH_BIN}" pr view "${pr_url}" --json mergeCommit --jq .mergeCommit.oid)"
 if [[ -z "${merge_commit}" || "${merge_commit}" == "null" ]]; then
   echo "task-finish failed: could not determine merge commit."
   exit 1

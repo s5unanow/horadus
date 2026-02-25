@@ -89,13 +89,13 @@ shift 2 || true
 case "$sub" in
   view)
     # Handle: gh pr view --json <field> --jq <expr>
+    if [[ "$*" == *"--json url"* ]]; then
+      echo "https://example.invalid/pr/175"
+      exit 0
+    fi
     if [[ "$*" == *"--json body"* ]]; then
       echo "## Primary Task"
       echo "Primary-Task: TASK-175"
-      exit 0
-    fi
-    if [[ "$*" == *"--json url"* ]]; then
-      echo "https://example.invalid/pr/175"
       exit 0
     fi
     if [[ "$*" == *"--json isDraft"* ]]; then
@@ -103,6 +103,12 @@ case "$sub" in
       exit 0
     fi
     if [[ "$*" == *"--json mergeCommit"* ]]; then
+      # Require an explicit PR identifier for mergeCommit lookups to avoid
+      # branch-context reliance after merge.
+      if [[ "$*" != *"https://example.invalid/pr/175"* ]]; then
+        echo "no pull requests found for branch \"main\"" >&2
+        exit 1
+      fi
       echo "{merge_commit}"
       exit 0
     fi
@@ -194,6 +200,10 @@ sub="${2:-}"
 shift 2 || true
 case "$sub" in
   view)
+    if [[ "$*" == *"--json url"* ]]; then
+      echo "https://example.invalid/pr/175"
+      exit 0
+    fi
     if [[ "$*" == *"--json body"* ]]; then
       echo "Primary-Task: TASK-174"
       exit 0
@@ -259,6 +269,10 @@ sub="${2:-}"
 shift 2 || true
 case "$sub" in
   view)
+    if [[ "$*" == *"--json url"* ]]; then
+      echo "https://example.invalid/pr/175"
+      exit 0
+    fi
     if [[ "$*" == *"--json body"* ]]; then
       echo "Primary-Task: TASK-175"
       exit 0

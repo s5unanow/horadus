@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-178: Fix `make task-finish` PR context after merge (avoid branch-based `gh pr view`) ✅
 - TASK-177: Fix `make task-finish` gh-CLI compatibility (remove unsupported flags) ✅
 - TASK-176: Add ExecPlan threshold + template (keep agent context small) ✅
 - TASK-175: Add `make task-finish` to enforce full PR lifecycle ✅

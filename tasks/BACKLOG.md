@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-178`.
+- Next available task IDs start at `TASK-179`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2978,6 +2978,23 @@ flags and tests should catch regressions.
 **Acceptance Criteria**:
 - [ ] Remove unsupported `gh pr merge` flags from `scripts/finish_task_pr.sh`
 - [ ] Update unit tests so gh shims fail if unsupported flags are used
+
+---
+
+### TASK-178: Fix `make task-finish` PR context after merge (avoid branch-based `gh pr view`)
+**Priority**: P2 (Medium)
+**Estimate**: 0.5-1 hour
+
+`gh pr merge --delete-branch` may delete the local branch and leave the working
+directory on `main`, which can break subsequent `gh pr view` calls if they rely
+on the current branch. Capture PR identity up front (URL/number) and use it for
+all later `gh pr *` operations.
+
+**Files**: `scripts/finish_task_pr.sh`, `tests/unit/scripts/test_finish_task_pr.py`
+
+**Acceptance Criteria**:
+- [ ] Capture PR URL/number once and use it for all `gh pr view/checks/merge` calls
+- [ ] Add/adjust unit test(s) to fail if merge-commit lookup relies on branch context after merge
 
 ---
 

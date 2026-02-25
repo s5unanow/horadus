@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-177`.
+- Next available task IDs start at `TASK-178`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2962,6 +2962,22 @@ tight during multi-hour changes.
 - [ ] Define an ExecPlan-required threshold (time/files/migrations/LLM/probability/ops)
 - [ ] Add a small ExecPlan template under `tasks/exec_plans/` and document the naming convention (`tasks/exec_plans/TASK-XXX.md`)
 - [ ] Update weekly triage instructions to flag whether a candidate likely requires an ExecPlan
+
+---
+
+### TASK-177: Fix `make task-finish` gh-CLI compatibility (remove unsupported flags)
+**Priority**: P2 (Medium)
+**Estimate**: 0.5-1 hour
+
+`make task-finish` should work with the installed `gh` CLI. Some versions do
+not support `gh pr merge --yes`; the finish script should avoid unsupported
+flags and tests should catch regressions.
+
+**Files**: `scripts/finish_task_pr.sh`, `tests/unit/scripts/test_finish_task_pr.py`
+
+**Acceptance Criteria**:
+- [ ] Remove unsupported `gh pr merge` flags from `scripts/finish_task_pr.sh`
+- [ ] Update unit tests so gh shims fail if unsupported flags are used
 
 ---
 

@@ -75,6 +75,12 @@ esac
         bin_dir / "gh",
         f"""#!/usr/bin/env bash
 set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == "--yes" ]]; then
+    echo "unsupported flag: --yes" >&2
+    exit 2
+  fi
+done
 if [[ "${{1:-}}" != "pr" ]]; then
   exit 1
 fi
@@ -177,6 +183,12 @@ esac
         bin_dir / "gh",
         """#!/usr/bin/env bash
 set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == "--yes" ]]; then
+    echo "unsupported flag: --yes" >&2
+    exit 2
+  fi
+done
 if [[ "${1:-}" != "pr" ]]; then exit 1; fi
 sub="${2:-}"
 shift 2 || true
@@ -236,6 +248,12 @@ esac
         bin_dir / "gh",
         """#!/usr/bin/env bash
 set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == "--yes" ]]; then
+    echo "unsupported flag: --yes" >&2
+    exit 2
+  fi
+done
 if [[ "${1:-}" != "pr" ]]; then exit 1; fi
 sub="${2:-}"
 shift 2 || true

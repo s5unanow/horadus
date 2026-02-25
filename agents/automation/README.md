@@ -9,3 +9,7 @@ here and follow it exactly.
 
 Related policy:
 - `docs/ASSESSMENTS.md`
+
+Related tooling:
+- `scripts/validate_assessment_artifacts.py`
+- `scripts/promote_assessment_proposal.sh`

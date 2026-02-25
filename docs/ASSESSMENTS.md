@@ -22,6 +22,12 @@ Directory convention for raw outputs:
 Roles are free-form but should stay stable (e.g. `security`, `sa`, `po`, `ba`,
 `agents`).
 
+## Validation
+
+To validate the most recent assessment artifacts locally:
+
+- `python scripts/validate_assessment_artifacts.py`
+
 ## Proposal Schema (Minimum Fields)
 
 Assessments must emit proposals/findings with a stable ID that is **not** a

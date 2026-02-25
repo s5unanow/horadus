@@ -13,6 +13,7 @@ this project.
 
 - Write final output to: `artifacts/assessments/agents/daily/YYYY-MM-DD.md`
 - Use real current date for `YYYY-MM-DD`.
+- Ensure the output directory exists (create it if needed): `mkdir -p artifacts/assessments/agents/daily`.
 - Do not allocate `TASK-###` IDs. Use proposal IDs like:
   - `PROPOSAL-YYYY-MM-DD-agents-<slug>`
 
@@ -24,5 +25,6 @@ For each proposal include the minimum fields from `docs/ASSESSMENTS.md`:
 
 ## Constraints
 
+- Do not edit tracked files in the repo; write the assessment artifact only.
 - Keep it additive and concrete: actionable steps, minimal speculation.
 - If nothing material to add, write a short "All clear" report.

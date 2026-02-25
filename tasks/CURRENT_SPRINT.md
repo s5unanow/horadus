@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-177` Fix `make task-finish` gh-CLI compatibility (remove unsupported flags) — DONE ✓
 - `TASK-176` Add ExecPlan threshold + template (keep agent context small) — DONE ✓
 - `TASK-175` Add `make task-finish` to enforce full PR lifecycle — DONE ✓
 - `TASK-174` Formalize assessment artifact intake (IDs, confidence schema, promotion rules) — DONE ✓

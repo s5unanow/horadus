@@ -83,7 +83,7 @@ while true; do
 done
 
 echo "Merging PR (squash, delete branch)..."
-if ! "${GH_BIN}" pr merge --squash --delete-branch --yes; then
+if ! "${GH_BIN}" pr merge --squash --delete-branch; then
   echo "task-finish failed: merge failed."
   exit 1
 fi

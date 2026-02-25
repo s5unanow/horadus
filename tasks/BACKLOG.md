@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-164`.
+- Next available task IDs start at `TASK-175`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2710,6 +2710,215 @@ be production-shaped and reduce operator error risk.
 - [x] Document staging rollout + post-deploy verification steps mirroring production (but clearly separated infrastructure/data)
 - [x] Document rollback expectations for staging vs production and how to interpret gate failures
 - [x] Ensure docs cross-link cleanly between `README.md`, `docs/ENVIRONMENT.md`, `docs/DEPLOYMENT.md`, and `docs/RELEASING.md`
+
+---
+
+### TASK-164: Add one-shot agent smoke run target (serve → smoke → exit)
+**Priority**: P3 (Low)
+**Estimate**: 1-2 hours
+
+Agents/operators should have a deterministic “one-shot” command that starts a
+local API server in agent profile, waits for readiness, runs smoke checks, and
+exits cleanly without leaving orphan processes.
+
+**Files**: `Makefile`, `scripts/`, `docs/` (if needed)
+
+**Acceptance Criteria**:
+- [ ] Add `make agent-smoke-run` (name can vary) that:
+- [ ] Starts uvicorn with `RUNTIME_PROFILE=agent` (or `AGENT_MODE=true`) and safe loopback bind
+- [ ] Waits for `/health` to return 2xx (bounded retries + clear failure)
+- [ ] Runs `uv run horadus agent smoke` against the started server
+- [ ] Exits with the smoke command’s exit code
+- [ ] Cleans up the server process on success/failure (no orphaned uvicorn)
+- [ ] Emits concise output suitable for agent contexts (avoid full uvicorn logs by default)
+
+---
+
+### TASK-165: Make `horadus agent smoke` robust across auth/environment settings
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+`horadus agent smoke` should behave predictably even when the client’s local
+settings differ from the running server (auth enabled/disabled, missing API key,
+etc.). The smoke tool should infer expected behavior from server responses (or
+OpenAPI) rather than relying on client config.
+
+**Files**: `src/cli.py`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Do not gate which endpoints to check based on local `settings.API_AUTH_ENABLED`
+- [ ] If `/api/v1/trends` returns `401/403` and no API key was provided, treat as PASS with a clear “auth enforced” message
+- [ ] If an API key is provided and `/api/v1/trends` returns `401/403`, treat as FAIL
+- [ ] Prefer deriving auth requirements from server behavior and/or `/openapi.json`
+- [ ] Add unit tests covering: auth enabled (no key), auth enabled (bad key), auth disabled, server unreachable
+
+---
+
+### TASK-166: Add fast agent gate target (`make agent-check`)
+**Priority**: P3 (Low)
+**Estimate**: 0.5-1 hour
+
+Add a single “fast gate” command optimized for agent iteration that runs only
+cheap deterministic checks (no integration services).
+
+**Files**: `Makefile`, `docs/` (optional)
+
+**Acceptance Criteria**:
+- [ ] Add `make agent-check` that runs (in order): `ruff check`, `mypy`, `pytest tests/unit/`
+- [ ] Avoid integration tests, Docker, DB migrations, and any network dependency
+- [ ] Ensure non-zero exit on any failure with minimal noise
+
+---
+
+### TASK-167: Add context-efficient backpressure wrappers for noisy commands
+**Priority**: P3 (Low)
+**Estimate**: 2-4 hours
+
+Long command outputs (pytest/lint/typecheck) are a common cause of agent context
+pollution and slow feedback loops. Provide “quiet by default” wrappers that tee
+full output to artifacts while printing a short summary to stdout.
+
+**Files**: `scripts/`, `Makefile`, `docs/` (optional)
+
+**Acceptance Criteria**:
+- [ ] Add wrapper(s) that run common checks and tee full output to `artifacts/agent/` logs
+- [ ] Stdout stays concise: pass/fail, key error lines, and “see log: …” pointers
+- [ ] Preserve correct exit codes (wrappers must fail when underlying command fails)
+- [ ] Bounded log growth (timestamped filenames and/or rotation guidance)
+
+---
+
+### TASK-168: Add `horadus doctor` (or `make doctor`) self-diagnostic command
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Provide a single command that surfaces common local misconfiguration quickly:
+profile/environment safety refusals, DB connectivity/migration head, Redis reachability,
+and effective runtime config.
+
+**Files**: `src/cli.py`, `src/core/config.py`, `scripts/` (optional), `docs/`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Add `uv run horadus doctor` (name can vary) that prints:
+- [ ] Effective `ENVIRONMENT` and `RUNTIME_PROFILE` + any safety refusals (prod/loopback guardrails)
+- [ ] DB connectivity status and whether alembic head is applied (bounded timeout, clear message)
+- [ ] Redis connectivity status (bounded timeout, clear message)
+- [ ] Does not make external network calls
+- [ ] Exits non-zero if any required dependency check fails (configurable severity is OK)
+- [ ] Unit tests cover refusal paths and “no DB/Redis configured” behavior
+
+---
+
+### TASK-169: Add offline fixtures and a dry-run pipeline path (no network, no LLM)
+**Priority**: P2 (Medium)
+**Estimate**: 6-12 hours
+
+Add a small local fixture dataset and a dry-run mode that exercises clustering
+and trend scoring deterministically without calling external sources or LLMs.
+This supports high-confidence regressions and agent debugging.
+
+**Files**: `src/processing/`, `src/cli.py`, `tests/`, `artifacts/` or `ai/eval/` (fixture location), `docs/`
+
+**Acceptance Criteria**:
+- [ ] Add a tiny fixture dataset representing RSS/GDELT-like items (non-sensitive, versioned)
+- [ ] Add a CLI entrypoint (e.g., `horadus pipeline dry-run --fixture …`) that:
+- [ ] Runs deterministic dedup + clustering + trend scoring on fixtures only
+- [ ] Avoids network calls and avoids LLM usage entirely
+- [ ] Produces a structured output artifact (JSON) suitable for diffing in CI
+- [ ] Add unit (and optionally small integration-style) tests asserting stable output on fixtures
+
+---
+
+### TASK-170: Enforce “no network in tests” mechanically
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Prevent accidental HTTP calls in tests by default. This makes tests more
+deterministic and avoids flaky agent investigations.
+
+**Files**: `tests/conftest.py`, `pyproject.toml` (if adding dependency), `tests/`
+
+**Acceptance Criteria**:
+- [ ] Default test runs fail-fast on any attempt to open network sockets
+- [ ] Provide an explicit escape hatch for the rare test that must use network (ideally none)
+- [ ] Ensure FastAPI test client usage remains unaffected (no real sockets)
+- [ ] Add a regression test that verifies network calls are blocked
+
+---
+
+### TASK-171: Align Claude Code permissions policy with repo workflow
+**Priority**: P3 (Low)
+**Estimate**: 1-2 hours
+
+`.claude/settings.local.json` is currently restrictive (ruff/mypy/eval) and may
+not match the minimal safe commands agents need (`pytest`, `make`, `git` basics).
+Decide whether this file is (a) a committed team policy, or (b) a local override
+that should not be tracked.
+
+**Files**: `.claude/`, `.gitignore`, `AGENTS.md` or `docs/` (policy note)
+
+**Acceptance Criteria**:
+- [ ] Choose one:
+- [ ] Expand allowlist to the minimal set needed for repo workflow (pytest/make/git as appropriate), or
+- [ ] Convert to a documented example policy file and keep local overrides untracked
+- [ ] Document the intent and recommended local setup for Claude Code / agent tools
+
+---
+
+### TASK-172: Add short “agent runbook index” doc (canonical commands)
+**Priority**: P3 (Low)
+**Estimate**: 1-2 hours
+
+Add a single concise page listing the canonical commands/flows for agents and
+operators (task start, fast gate, one-shot smoke, release gate), linking to deep
+docs only when needed.
+
+**Files**: `docs/`, `AGENTS.md` (link), `README.md` (optional)
+
+**Acceptance Criteria**:
+- [ ] Create `docs/AGENT_RUNBOOK.md` (name can vary) with 8-10 canonical commands and “when to use”
+- [ ] Link from `AGENTS.md` (and optionally `README.md`) in the “Where To Look First” section
+- [ ] Keep it short and action-oriented; avoid duplicating deeper runbooks
+
+---
+
+### TASK-173: Add “task context pack” helper (`scripts/task_context_pack.sh`)
+**Priority**: P3 (Low)
+**Estimate**: 1-2 hours
+
+Provide a helper that prints a focused context bundle for `TASK-XXX`: likely spec
+file, relevant modules, and best tests to run. This reduces broad repo searches
+and helps agents start faster with less context.
+
+**Files**: `scripts/`, `tasks/`, `docs/` (optional)
+
+**Acceptance Criteria**:
+- [ ] Add `scripts/task_context_pack.sh TASK-XXX` that prints:
+- [ ] Best matching `tasks/specs/` file (if present) and any linked docs
+- [ ] Likely touched code areas (heuristics OK: grep task id/title keywords, “Files” section, etc.)
+- [ ] Suggested validation commands (unit tests, lint/typecheck)
+- [ ] Output is deterministic and concise (suitable for agent copy/paste)
+
+---
+
+### TASK-174: Formalize assessment artifact intake (IDs, confidence schema, promotion rules)
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Automation-generated assessments (agents/BA/PO/SA/security) are useful inputs,
+but they are not source-of-truth. Today they can collide with real `TASK-###`
+IDs and can accumulate as untracked noise. Add a formal intake policy and a
+lightweight promotion workflow so assessments become actionable without creating
+drift.
+
+**Files**: `docs/`, `tasks/`, `.gitignore` (if needed), automation prompts (if needed)
+
+**Acceptance Criteria**:
+- [x] Define an assessment output schema (minimum fields): `proposal_id`, `area`, `priority`, `confidence`, `estimate`, `verification`, `blast_radius`, `recommended_gate` (`AUTO_OK|HUMAN_REVIEW|REQUIRES_HUMAN`)
+- [x] Enforce ID policy: assessment artifacts must not allocate `TASK-###` IDs (use `PROPOSAL-*` / `FINDING-*` only)
+- [x] Define “promotion” rules: how a proposal becomes a real backlog `TASK-###` (who/when, and required metadata like `Assessment-Ref:`)
+- [x] Decide whether raw assessment outputs live under `artifacts/assessments/` (ignored) vs `tasks/assessments/` (tracked summaries); document the choice
+- [x] Update the backlog-triage automation prompt to incorporate recent assessment artifacts and de-duplicate/prioritize proposals
 
 ---
 

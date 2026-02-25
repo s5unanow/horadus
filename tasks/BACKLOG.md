@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-179`.
+- Next available task IDs start at `TASK-180`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2995,6 +2995,30 @@ all later `gh pr *` operations.
 **Acceptance Criteria**:
 - [ ] Capture PR URL/number once and use it for all `gh pr view/checks/merge` calls
 - [ ] Add/adjust unit test(s) to fail if merge-commit lookup relies on branch context after merge
+
+---
+
+### TASK-179: Harden assessment artifact hygiene (schema validator + tooling)
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Assessment agents should write feedback as gitignored artifacts that do not
+dirty the repo, follow a minimal schema, and can be promoted into backlog tasks
+without manual reformatting mistakes.
+
+**Files**: `scripts/`, `tests/unit/scripts/`, `agents/automation/`, `.github/workflows/ci.yml` (optional)
+
+**Acceptance Criteria**:
+- [ ] Add a local validator script for assessment artifacts that checks:
+- [ ] proposals use `PROPOSAL-*`/`FINDING-*` IDs (no `### TASK-###` headings)
+- [ ] required fields exist (`area`, `priority`, `confidence`, `estimate`, `verification`, `blast_radius`, `recommended_gate`)
+- [ ] field values are well-formed (e.g., `confidence` in `[0,1]`, `priority` in `P0..P3`)
+- [ ] Update role-agent instruction files to:
+- [ ] `mkdir -p` the output directory before writing
+- [ ] explicitly forbid editing tracked files (write artifact only)
+- [ ] Add a helper script to scaffold backlog promotion entries from a proposal (no direct file edits required)
+- [ ] Add a small guard to prevent accidentally tracking `artifacts/` in git (CI or pre-commit)
+- [ ] Unit tests cover validator happy path + common violations
 
 ---
 

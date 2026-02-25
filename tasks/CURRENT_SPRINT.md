@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-179` Harden assessment artifact hygiene (schema validator + tooling) — DONE ✓
 - `TASK-178` Fix `make task-finish` PR context after merge (avoid branch-based `gh pr view`) — DONE ✓
 - `TASK-177` Fix `make task-finish` gh-CLI compatibility (remove unsupported flags) — DONE ✓
 - `TASK-176` Add ExecPlan threshold + template (keep agent context small) — DONE ✓

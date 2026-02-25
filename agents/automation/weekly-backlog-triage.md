@@ -19,6 +19,9 @@ Read and follow:
 
 ## Required Sections
 
+- Assessment hygiene:
+  - Run `python scripts/validate_assessment_artifacts.py` over the recent assessment artifacts.
+  - If violations are found, summarize the top issues and reference the violating files.
 - Current sprint summary (what is active, blockers, human-gated items)
 - Top candidates (5-10) for next sprint, each with:
   - objective

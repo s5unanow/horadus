@@ -46,6 +46,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Ensure no tracked artifacts
+        run: ./scripts/check_no_tracked_artifacts.sh
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:

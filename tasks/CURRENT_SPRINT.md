@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-176` Add ExecPlan threshold + template (keep agent context small) — DONE ✓
 - `TASK-175` Add `make task-finish` to enforce full PR lifecycle — DONE ✓
 - `TASK-174` Formalize assessment artifact intake (IDs, confidence schema, promotion rules) — DONE ✓
 - `TASK-163` Staging promotion workflow + release gates (dev → staging → prod) — DONE ✓

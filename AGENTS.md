@@ -11,7 +11,7 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 
 1. `tasks/CURRENT_SPRINT.md` — active execution queue (authoritative for in-progress work)
 2. `PROJECT_STATUS.md` — phase-level summary and milestone narrative
-3. `tasks/BACKLOG.md` — canonical task specifications and acceptance criteria
+3. `tasks/BACKLOG.md` — canonical task specifications and acceptance criteria (triage/planning; not required for most execution)
 4. `docs/ARCHITECTURE.md` — system design and runtime flow
 5. `docs/DATA_MODEL.md` — schema and entity definitions
 
@@ -59,6 +59,10 @@ Before starting work:
 - Read `tasks/CURRENT_SPRINT.md` and any relevant `tasks/specs/*.md`.
 - Skim `docs/ARCHITECTURE.md` and `docs/DATA_MODEL.md` for context.
 - Run tests relevant to your change (at minimum unit tests).
+
+Execution context policy (keep it small):
+- For implementation work, prefer `tasks/CURRENT_SPRINT.md` plus the specific task spec it references; avoid reading all of `tasks/BACKLOG.md` unless you are doing triage/planning.
+- For tasks with high complexity (estimate >2 hours, touches >5 files, involves migrations, LLM/pipeline changes, or probability math/ops guardrails), maintain a living execution plan at `tasks/exec_plans/TASK-XXX.md` using `tasks/exec_plans/TEMPLATE.md`.
 
 After completing work:
 - Update `tasks/CURRENT_SPRINT.md` (mark DONE) and move finished tasks to `tasks/COMPLETED.md`.

@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-176`.
+- Next available task IDs start at `TASK-177`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2943,6 +2943,25 @@ finish the lifecycle and reduce process drift for both humans and agents.
 - [ ] Switches to `main` and runs `git pull --ff-only`
 - [ ] Verifies the PR merge commit exists locally after sync
 - [ ] Add unit tests using `gh`/`git` shims to cover: success, main-branch refusal, Primary-Task mismatch refusal, checks-fail refusal
+
+---
+
+### TASK-176: Add ExecPlan threshold + template (keep agent context small)
+**Priority**: P3 (Low)
+**Estimate**: 1-2 hours
+
+Agents should not need to load the entire backlog for execution work. For larger
+tasks, require a small living execution plan to reduce drift and keep context
+tight during multi-hour changes.
+
+**Files**: `AGENTS.md`, `tasks/exec_plans/`, `agents/automation/weekly-backlog-triage.md`
+
+**Acceptance Criteria**:
+- [ ] Add a minimal “execution context policy” note to `AGENTS.md`:
+- [ ] Executors prefer `tasks/CURRENT_SPRINT.md` + relevant spec; avoid opening full `tasks/BACKLOG.md` unless doing triage/planning
+- [ ] Define an ExecPlan-required threshold (time/files/migrations/LLM/probability/ops)
+- [ ] Add a small ExecPlan template under `tasks/exec_plans/` and document the naming convention (`tasks/exec_plans/TASK-XXX.md`)
+- [ ] Update weekly triage instructions to flag whether a candidate likely requires an ExecPlan
 
 ---
 

@@ -28,6 +28,7 @@ Read and follow:
   - risks
   - validation commands
   - gating (`AUTO_OK|HUMAN_REVIEW|REQUIRES_HUMAN`)
+  - whether an exec plan is required (see `tasks/exec_plans/README.md`)
   - if assessment-driven: include `proposal_id` and `Assessment-Ref: <path>`
 
 ## Intake Rules

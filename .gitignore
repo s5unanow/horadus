@@ -126,6 +126,17 @@ Thumbs.db
 data/raw/
 data/downloads/
 
+# -----------------------------------------------------------------------------
+# Automation / Agent Artifacts (local, non-source-of-truth)
+# -----------------------------------------------------------------------------
+artifacts/backlog_triage/
+artifacts/sprint_health/
+artifacts/assessments/
+artifacts/agent_context/
+
+# Legacy/local-only assessment output path (prefer artifacts/assessments/)
+assessments/
+
 # Generated reports
 reports/generated/
 artifacts/dashboard/

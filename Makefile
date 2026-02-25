@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate branch-guard task-preflight task-start protect-main
+        db-migration-gate release-gate branch-guard task-preflight task-start task-finish protect-main
 
 # Default target
 .DEFAULT_GOAL := help
@@ -108,6 +108,9 @@ task-start: ## Start a new task branch with sequencing guards (TASK=117 NAME=sho
 		exit 1; \
 	fi
 	./scripts/start_task_branch.sh "$(TASK)" "$(NAME)"
+
+task-finish: ## Finish current task PR lifecycle (checks -> merge -> main sync)
+	./scripts/finish_task_pr.sh
 
 protect-main: ## Apply required main-branch protection + merge policy (requires gh auth)
 	./scripts/enforce_main_protection.sh

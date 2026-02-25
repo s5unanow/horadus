@@ -15,6 +15,7 @@
 
 ## Completed This Sprint
 
+- `TASK-175` Add `make task-finish` to enforce full PR lifecycle — DONE ✓
 - `TASK-174` Formalize assessment artifact intake (IDs, confidence schema, promotion rules) — DONE ✓
 - `TASK-163` Staging promotion workflow + release gates (dev → staging → prod) — DONE ✓
 - `TASK-162` Agent debugging runtime profile (low-noise, fail-fast, single-request) — DONE ✓

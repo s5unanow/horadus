@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-175`.
+- Next available task IDs start at `TASK-176`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -2919,6 +2919,30 @@ drift.
 - [x] Define “promotion” rules: how a proposal becomes a real backlog `TASK-###` (who/when, and required metadata like `Assessment-Ref:`)
 - [x] Decide whether raw assessment outputs live under `artifacts/assessments/` (ignored) vs `tasks/assessments/` (tracked summaries); document the choice
 - [x] Update the backlog-triage automation prompt to incorporate recent assessment artifacts and de-duplicate/prioritize proposals
+
+---
+
+### TASK-175: Add `make task-finish` to enforce full PR lifecycle
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+The repo workflow requires a full delivery lifecycle (branch → PR → green checks
+→ merge → delete branch → sync `main`). In practice this is easy to partially
+complete (e.g., open a PR and stop). Add a single deterministic command to
+finish the lifecycle and reduce process drift for both humans and agents.
+
+**Files**: `Makefile`, `scripts/`, `tests/unit/scripts/`, `AGENTS.md` (optional)
+
+**Acceptance Criteria**:
+- [ ] Add `make task-finish` that:
+- [ ] Refuses to run on `main` or detached HEAD
+- [ ] Refuses when working tree is dirty
+- [ ] Finds the PR for the current branch and validates scope via `scripts/check_pr_task_scope.sh`
+- [ ] Waits for required checks to pass (bounded wait is OK) and fails fast on any failure
+- [ ] Merges PR using the repo-allowed strategy (default `--squash`) and deletes the remote branch
+- [ ] Switches to `main` and runs `git pull --ff-only`
+- [ ] Verifies the PR merge commit exists locally after sync
+- [ ] Add unit tests using `gh`/`git` shims to cover: success, main-branch refusal, Primary-Task mismatch refusal, checks-fail refusal
 
 ---
 

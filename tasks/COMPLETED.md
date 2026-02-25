@@ -128,6 +128,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-175: Add `make task-finish` to enforce full PR lifecycle ✅
 - TASK-174: Formalize assessment artifact intake (IDs, confidence schema, promotion rules) ✅
 - TASK-163: Staging promotion workflow + release gates (dev → staging → prod) ✅
 - TASK-162: Agent debugging runtime profile (low-noise, fail-fast, single-request) ✅

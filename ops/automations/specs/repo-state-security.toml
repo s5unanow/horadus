@@ -1,0 +1,8 @@
+version = 1
+id = "repo-state-security"
+name = "Repo state Security"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/security-instructions.md\n\nIf the file is missing, fail with a clear error.\nWrite the final output to: /Users/s5una/projects/horadus/artifacts/assessments/security/daily/YYYY-MM-DD.md (real current date).\nEnsure the file exists at that exact path when done (copy it there if you generated it elsewhere)."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYHOUR=4;BYMINUTE=21;BYDAY=SU,MO,TU,WE,TH,FR,SA"
+execution_environment = "worktree"
+cwds = ["/Users/s5una/projects/horadus"]

@@ -1,0 +1,10 @@
+# Repo-relevant Codex automation IDs (one per line).
+# Keep this list tight; personal automations should stay out of git.
+
+agents-adoption
+daily-sprint-health
+repo-state-po
+repo-state-sa
+repo-state-security
+repos-state-ba
+weekly-backlog-triage

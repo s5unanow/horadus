@@ -10,6 +10,7 @@
 ## Active Tasks
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
+- `TASK-180` Version Codex automations “desired state” in git + sync tooling — IN PROGRESS
 
 ---
 

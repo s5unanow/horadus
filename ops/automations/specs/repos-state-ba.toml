@@ -1,0 +1,7 @@
+version = 1
+id = "repos-state-ba"
+name = "Repo state BA"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/ba-instructions.md\n\nIf the file is missing, fail with a clear error.\nWrite the final output to: /Users/s5una/projects/horadus/artifacts/assessments/ba/daily/YYYY-MM-DD.md (real current date).\nEnsure the file exists at that exact path when done (copy it there if you generated it elsewhere)."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYHOUR=1;BYMINUTE=20;BYDAY=SU,MO,TU,WE,TH,FR,SA"
+cwds = ["/Users/s5una/projects/horadus"]

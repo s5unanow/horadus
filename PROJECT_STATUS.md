@@ -233,6 +233,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-180` Version Codex automations “desired state” in git + sync tooling
+- `TASK-181` Make `make task-finish` idempotent for already-merged PRs
 
 ## Blocked
 

@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-182`.
+- Next available task IDs start at `TASK-183`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3063,6 +3063,24 @@ step robust and idempotent.
 - [ ] If PR state is already `MERGED`, `make task-finish` skips merge and proceeds to `main` sync + merge-commit verification
 - [ ] If `gh pr merge` returns non-zero but PR is `MERGED`, treat as success (continue)
 - [ ] Add unit test coverage for “already merged” behavior
+
+---
+
+### TASK-182: Reconcile sprint/task ledgers after TASK-180/TASK-181 merges
+**Priority**: P3 (Low)
+**Estimate**: 0.5-1 hour
+
+TASK-180 and TASK-181 were merged, but the sprint/task ledgers can drift (Active
+vs Completed) unless explicitly reconciled. Keep the operational ledgers
+accurate and consistent.
+
+**Files**: `tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `PROJECT_STATUS.md` (optional)
+
+**Acceptance Criteria**:
+- [ ] Remove completed tasks from `tasks/CURRENT_SPRINT.md` Active section
+- [ ] Add completed tasks to `tasks/CURRENT_SPRINT.md` Completed section
+- [ ] Add completed tasks to `tasks/COMPLETED.md`
+- [ ] Ensure docs freshness gate passes
 
 ---
 

@@ -128,6 +128,8 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-181: Make `make task-finish` idempotent for already-merged PRs ✅
+- TASK-180: Version Codex automations “desired state” in git + sync tooling ✅
 - TASK-179: Harden assessment artifact hygiene (schema validator + tooling) ✅
 - TASK-178: Fix `make task-finish` PR context after merge (avoid branch-based `gh pr view`) ✅
 - TASK-177: Fix `make task-finish` gh-CLI compatibility (remove unsupported flags) ✅

@@ -11,6 +11,7 @@
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — Awaiting manual human execution/approval
 - `TASK-180` Version Codex automations “desired state” in git + sync tooling — IN PROGRESS
+- `TASK-181` Make `make task-finish` idempotent for already-merged PRs — IN PROGRESS
 
 ---
 

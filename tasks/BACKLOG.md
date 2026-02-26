@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-181`.
+- Next available task IDs start at `TASK-182`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3044,6 +3044,25 @@ and a safe apply path to keep local automations in sync with tracked config.
 - [ ] Add unit tests using temp dirs (must not touch real `$CODEX_HOME`)
 - [ ] Add Make targets `automations-export` and `automations-apply`
 - [ ] Document the workflow minimally (readme under `ops/automations/` is enough)
+
+---
+
+### TASK-181: Make `make task-finish` idempotent for already-merged PRs
+**Priority**: P3 (Low)
+**Estimate**: 0.5-1 hour
+
+`scripts/finish_task_pr.sh` currently treats `gh pr merge` failures as fatal. In
+practice, rerunning `make task-finish` after a PR has already been merged can
+return a non-zero exit (for example, “already merged” or local branch deletion
+edge cases), even though the desired state is already achieved. Make the finish
+step robust and idempotent.
+
+**Files**: `scripts/finish_task_pr.sh`, `tests/unit/scripts/test_finish_task_pr.py`
+
+**Acceptance Criteria**:
+- [ ] If PR state is already `MERGED`, `make task-finish` skips merge and proceeds to `main` sync + merge-commit verification
+- [ ] If `gh pr merge` returns non-zero but PR is `MERGED`, treat as success (continue)
+- [ ] Add unit test coverage for “already merged” behavior
 
 ---
 

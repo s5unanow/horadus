@@ -1,0 +1,7 @@
+version = 1
+id = "agents-adoption"
+name = "Agents adoption"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/agents-instructions.md\n\nIf the file is missing, fail with a clear error.\nWrite the final output to: /Users/s5una/projects/horadus/artifacts/assessments/agents/daily/YYYY-MM-DD.md (real current date).\nEnsure the file exists at that exact path when done (copy it there if you generated it elsewhere)."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYHOUR=4;BYMINUTE=0;BYDAY=SU,MO,TU,WE,TH,FR,SA"
+cwds = ["/Users/s5una/projects/horadus"]

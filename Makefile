@@ -11,7 +11,7 @@
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
         db-migration-gate release-gate branch-guard task-preflight task-start task-finish protect-main \
-        check-tracked-artifacts validate-assessments
+        check-tracked-artifacts validate-assessments automations-export automations-apply
 
 # Default target
 .DEFAULT_GOAL := help
@@ -105,6 +105,12 @@ check-tracked-artifacts: ## Fail if artifacts/ is tracked in git
 
 validate-assessments: ## Validate artifacts/assessments/ against minimal schema
 	$(UV_RUN) python scripts/validate_assessment_artifacts.py
+
+automations-export: ## Export repo-relevant Codex automation TOMLs into ops/automations/specs/
+	$(UV_RUN) python scripts/sync_automations.py export
+
+automations-apply: ## Apply ops/automations/specs/ into local $CODEX_HOME/automations/
+	$(UV_RUN) python scripts/sync_automations.py apply
 
 task-preflight: ## Validate task-start sequencing preflight on main
 	./scripts/check_task_start_preflight.sh

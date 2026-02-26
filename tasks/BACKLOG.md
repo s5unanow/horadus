@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-180`.
+- Next available task IDs start at `TASK-181`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3019,6 +3019,31 @@ without manual reformatting mistakes.
 - [ ] Add a helper script to scaffold backlog promotion entries from a proposal (no direct file edits required)
 - [ ] Add a small guard to prevent accidentally tracking `artifacts/` in git (CI or pre-commit)
 - [ ] Unit tests cover validator happy path + common violations
+
+---
+
+### TASK-180: Version Codex automations “desired state” in git + sync tooling
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Codex automations live under `$CODEX_HOME/automations/<id>/automation.toml` and are
+not versioned with the repo. This makes automation prompts/instructions drift
+over time and is hard to audit/review. Add a repo-owned “desired state” export
+and a safe apply path to keep local automations in sync with tracked config.
+
+**Files**: `ops/automations/`, `scripts/`, `tests/unit/scripts/`, `Makefile`, `docs/` (optional)
+
+**Acceptance Criteria**:
+- [ ] Add `ops/automations/` with:
+- [ ] `ids.txt` allowlist for repo-relevant automations
+- [ ] tracked specs for each allowlisted automation (no volatile run-state fields)
+- [ ] Add `scripts/sync_automations.py` (or similar) with:
+- [ ] `export` (Codex home → repo specs) and `apply` (repo specs → Codex home)
+- [ ] Preserve/refresh timestamps only in `$CODEX_HOME` (avoid git churn)
+- [ ] Refuse to sync unknown/unsafe fields unless explicitly allowed
+- [ ] Add unit tests using temp dirs (must not touch real `$CODEX_HOME`)
+- [ ] Add Make targets `automations-export` and `automations-apply`
+- [ ] Document the workflow minimally (readme under `ops/automations/` is enough)
 
 ---
 

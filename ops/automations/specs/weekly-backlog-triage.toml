@@ -1,0 +1,8 @@
+version = 1
+id = "weekly-backlog-triage"
+name = "Weekly backlog triage"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/weekly-backlog-triage.md\n\nIf the file is missing, fail with a clear error.\nWrite the final output to: /Users/s5una/projects/horadus/artifacts/backlog_triage/triage-YYYY-MM-DD.md (real current date).\nEnsure the file exists at that exact path when done (copy it there if you generated it elsewhere)."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYDAY=SU;BYHOUR=18;BYMINUTE=0"
+execution_environment = "local"
+cwds = ["/Users/s5una/projects/horadus"]

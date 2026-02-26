@@ -1,0 +1,7 @@
+version = 1
+id = "repo-state-po"
+name = "Repo state PO"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/po-instructions.md\n\nIf the file is missing, fail with a clear error.\nWrite the final output to: /Users/s5una/projects/horadus/artifacts/assessments/po/daily/YYYY-MM-DD.md (real current date).\nEnsure the file exists at that exact path when done (copy it there if you generated it elsewhere)."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYHOUR=1;BYMINUTE=40;BYDAY=SU,MO,TU,WE,TH,FR,SA"
+cwds = ["/Users/s5una/projects/horadus"]

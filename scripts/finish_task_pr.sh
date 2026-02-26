@@ -84,10 +84,22 @@ while true; do
   sleep "${CHECKS_POLL_SECONDS}"
 done
 
-echo "Merging PR (squash, delete branch)..."
-if ! "${GH_BIN}" pr merge "${pr_url}" --squash --delete-branch; then
-  echo "task-finish failed: merge failed."
-  exit 1
+pr_state="$("${GH_BIN}" pr view "${pr_url}" --json state --jq .state)"
+if [[ "${pr_state}" == "MERGED" ]]; then
+  echo "PR already merged; skipping merge step."
+else
+  echo "Merging PR (squash, delete branch)..."
+  if ! "${GH_BIN}" pr merge "${pr_url}" --squash --delete-branch; then
+    # Be tolerant of idempotent reruns. gh may fail with non-zero exit if PR is
+    # already merged (or due to local branch deletion edge cases) even though
+    # the desired state is achieved.
+    pr_state_after="$("${GH_BIN}" pr view "${pr_url}" --json state --jq .state 2>/dev/null || true)"
+    if [[ "${pr_state_after}" != "MERGED" ]]; then
+      echo "task-finish failed: merge failed."
+      exit 1
+    fi
+    echo "Merge step reported failure, but PR is MERGED; continuing."
+  fi
 fi
 
 merge_commit="$("${GH_BIN}" pr view "${pr_url}" --json mergeCommit --jq .mergeCommit.oid)"

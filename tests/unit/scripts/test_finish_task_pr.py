@@ -98,6 +98,10 @@ case "$sub" in
       echo "Primary-Task: TASK-175"
       exit 0
     fi
+    if [[ "$*" == *"--json state"* ]]; then
+      echo "OPEN"
+      exit 0
+    fi
     if [[ "$*" == *"--json isDraft"* ]]; then
       echo "false"
       exit 0
@@ -138,6 +142,106 @@ esac
 
     assert result.returncode == 0
     assert "task-finish passed" in result.stdout
+
+
+def test_finish_task_pr_succeeds_when_already_merged(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+
+    merge_commit = "merge-commit-181"
+
+    _write_executable(
+        bin_dir / "git",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+cmd="${{1:-}}"
+shift || true
+case "$cmd" in
+  rev-parse)
+    echo "${{GIT_BRANCH:-codex/task-181-task-finish-idempotent}}"
+    ;;
+  status)
+    printf '%s' "${{GIT_STATUS_PORCELAIN:-}}"
+    ;;
+  switch)
+    exit 0
+    ;;
+  pull)
+    echo "Fast-forward."
+    ;;
+  cat-file)
+    if [[ "${{2:-}}" != "{merge_commit}" ]]; then
+      exit 1
+    fi
+    ;;
+  *)
+    exit 0
+    ;;
+esac
+""",
+    )
+
+    _write_executable(
+        bin_dir / "gh",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+for arg in "$@"; do
+  if [[ "$arg" == "--yes" ]]; then
+    echo "unsupported flag: --yes" >&2
+    exit 2
+  fi
+done
+if [[ "${{1:-}}" != "pr" ]]; then exit 1; fi
+sub="${{2:-}}"
+shift 2 || true
+case "$sub" in
+  view)
+    if [[ "$*" == *"--json url"* ]]; then
+      echo "https://example.invalid/pr/181"
+      exit 0
+    fi
+    if [[ "$*" == *"--json body"* ]]; then
+      echo "Primary-Task: TASK-181"
+      exit 0
+    fi
+    if [[ "$*" == *"--json isDraft"* ]]; then
+      echo "false"
+      exit 0
+    fi
+    if [[ "$*" == *"--json state"* ]]; then
+      echo "MERGED"
+      exit 0
+    fi
+    if [[ "$*" == *"--json mergeCommit"* ]]; then
+      if [[ "$*" != *"https://example.invalid/pr/181"* ]]; then
+        echo "no pull requests found for branch \"main\"" >&2
+        exit 1
+      fi
+      echo "{merge_commit}"
+      exit 0
+    fi
+    exit 1
+    ;;
+  checks) exit 0 ;;
+  merge)
+    echo "already merged" >&2
+    exit 1
+    ;;
+  *) exit 1 ;;
+esac
+""",
+    )
+
+    result = _run_finish(
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "GIT_BRANCH": "codex/task-181-task-finish-idempotent",
+            "GIT_STATUS_PORCELAIN": "",
+            "GH_CHECKS_EXIT_CODE": "0",
+        }
+    )
+    assert result.returncode == 0
+    assert "already merged" in result.stdout.lower()
 
 
 def test_finish_task_pr_refuses_main_branch(tmp_path: Path) -> None:
@@ -208,6 +312,10 @@ case "$sub" in
       echo "Primary-Task: TASK-174"
       exit 0
     fi
+    if [[ "$*" == *"--json state"* ]]; then
+      echo "OPEN"
+      exit 0
+    fi
     if [[ "$*" == *"--json url"* ]]; then
       echo "https://example.invalid/pr/175"
       exit 0
@@ -275,6 +383,10 @@ case "$sub" in
     fi
     if [[ "$*" == *"--json body"* ]]; then
       echo "Primary-Task: TASK-175"
+      exit 0
+    fi
+    if [[ "$*" == *"--json state"* ]]; then
+      echo "OPEN"
       exit 0
     fi
     if [[ "$*" == *"--json url"* ]]; then

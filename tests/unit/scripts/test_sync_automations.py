@@ -64,6 +64,7 @@ def test_apply_preserves_created_at_and_updates_fields(tmp_path: Path) -> None:
     codex_home = tmp_path / "codex"
     repo_dir = tmp_path / "repo"
 
+    repo_dir.mkdir(parents=True, exist_ok=True)
     (repo_dir / "ids.txt").write_text("daily-sprint-health\n", encoding="utf-8")
     (repo_dir / "specs").mkdir(parents=True, exist_ok=True)
     (repo_dir / "specs" / "daily-sprint-health.toml").write_text(

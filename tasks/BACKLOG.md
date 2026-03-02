@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-195`.
+- Next available task IDs start at `TASK-196`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3340,6 +3340,24 @@ agent context by requiring a minimum, repeatable search set per candidate.
 - [ ] 2-5 `blast_radius` file paths/modules against `tasks/BACKLOG.md`
 - [ ] `proposal_id`/`finding_id` across recent `artifacts/assessments/**/daily/*.md`
 - [ ] Require the triage report to record the searches performed (commands/terms) and state overlap disposition briefly
+
+---
+
+### TASK-195: Pull all open backlog tasks into current sprint
+**Priority**: P2 (Medium)
+**Estimate**: <1 hour
+
+For sprint planning, surface the full set of open backlog tasks in the active
+sprint queue and keep `PROJECT_STATUS.md` ledger parity so docs freshness checks
+remain valid.
+
+**Files**: `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`, `tasks/BACKLOG.md`, `tasks/COMPLETED.md`
+
+**Acceptance Criteria**:
+- [ ] `tasks/CURRENT_SPRINT.md` Active section contains every `TASK-###` present in `tasks/BACKLOG.md` that is not listed in `tasks/COMPLETED.md`
+- [ ] `PROJECT_STATUS.md` In Progress includes all active sprint task IDs
+- [ ] `PROJECT_STATUS.md` Blocked includes all active `[REQUIRES_HUMAN]` sprint task IDs
+- [ ] `make docs-freshness` passes
 
 ---
 

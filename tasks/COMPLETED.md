@@ -195,6 +195,7 @@ Tasks that have been completed and verified.
 ## Sprint 3
 
 - TASK-194: Weekly triage minimum search set enforcement ✅
+- TASK-195: Pull all open backlog tasks into current sprint ✅
 
 ## Archive
 

@@ -12,6 +12,19 @@ Read and follow:
 - Recent assessment artifacts:
   - `artifacts/assessments/**/daily/*.md` (last 14 days if present)
 
+## Backlog context policy (cost + hygiene)
+
+- Treat `tasks/BACKLOG.md` as a **search index**, not a document to copy or
+  summarize in full.
+- Do **not** paste or paraphrase the entire backlog into the report. Instead:
+  - Use targeted search (e.g., `rg`) for relevant keywords/areas.
+  - Only quote or summarize the specific `TASK-###` sections that are
+    potentially overlapping with the candidate proposals.
+- If you need a snapshot for de-duplication, include only:
+  - the matching task title(s)
+  - their `Priority`/`Estimate`
+  - and 1-2 sentences of why they overlap.
+
 ## Output
 
 - Write final output to: `artifacts/backlog_triage/triage-YYYY-MM-DD.md`

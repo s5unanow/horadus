@@ -128,6 +128,8 @@ Tasks that have been completed and verified.
 
 ## Sprint 2
 
+- TASK-183: Weekly backlog triage intake (2026-03-02) ✅
+- TASK-182: Reconcile sprint/task ledgers after TASK-180/TASK-181 merges ✅
 - TASK-181: Make `make task-finish` idempotent for already-merged PRs ✅
 - TASK-180: Version Codex automations “desired state” in git + sync tooling ✅
 - TASK-179: Harden assessment artifact hygiene (schema validator + tooling) ✅

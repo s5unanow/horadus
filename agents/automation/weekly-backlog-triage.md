@@ -25,6 +25,22 @@ Read and follow:
   - their `Priority`/`Estimate`
   - and 1-2 sentences of why they overlap.
 
+## Minimum search set (de-dupe coverage)
+
+For each candidate, run and record (in the triage report) at least:
+
+- Candidate keywords (2-4 nouns) across backlog + completed ledgers:
+  - `rg -n "<kw1>|<kw2>|<kw3>|<kw4>" tasks/BACKLOG.md tasks/COMPLETED.md`
+- Blast-radius file paths/modules against backlog (to catch same-work-different-title):
+  - `rg -n "<path-or-module>" tasks/BACKLOG.md`
+  - (repeat for 2-5 key paths/modules from `blast_radius`)
+- Proposal/finding ID across recent assessments (to de-dup across roles and days):
+  - `rg -n "<proposal_id>" artifacts/assessments/**/daily/*.md`
+
+If any search returns matches, briefly state whether it is a true overlap, and
+if so, reference the prior task/proposal and explain the overlap in 1-2
+sentences.
+
 ## Output
 
 - Write final output to: `artifacts/backlog_triage/triage-YYYY-MM-DD.md`

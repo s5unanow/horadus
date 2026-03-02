@@ -192,6 +192,10 @@ Tasks that have been completed and verified.
 
 ---
 
+## Sprint 3
+
+- TASK-194: Weekly triage minimum search set enforcement ✅
+
 ## Archive
 
 (Older sprints will be archived here)

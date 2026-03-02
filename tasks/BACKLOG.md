@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-194`.
+- Next available task IDs start at `TASK-195`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3322,6 +3322,24 @@ model quality.
 - [ ] Choose and enforce a conservative policy for auto-applied deltas in degraded mode (attenuate or hold for review)
 - [ ] Optionally queue high-impact items for replay on primary model after recovery (bounded and auditable)
 - [ ] Update ADR(s) for probability semantics change and require human sign-off before merge
+
+---
+
+### TASK-194: Weekly triage minimum search set enforcement
+**Priority**: P2 (Medium)
+**Estimate**: <1 hour
+
+Make weekly backlog triage more reliable without loading the full backlog into
+agent context by requiring a minimum, repeatable search set per candidate.
+
+**Files**: `agents/automation/weekly-backlog-triage.md`
+
+**Acceptance Criteria**:
+- [ ] Require per-candidate searches over:
+- [ ] 2-4 candidate keywords across `tasks/BACKLOG.md` + `tasks/COMPLETED.md`
+- [ ] 2-5 `blast_radius` file paths/modules against `tasks/BACKLOG.md`
+- [ ] `proposal_id`/`finding_id` across recent `artifacts/assessments/**/daily/*.md`
+- [ ] Require the triage report to record the searches performed (commands/terms) and state overlap disposition briefly
 
 ---
 

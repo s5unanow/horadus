@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-183`.
+- Next available task IDs start at `TASK-194`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3081,6 +3081,247 @@ accurate and consistent.
 - [ ] Add completed tasks to `tasks/CURRENT_SPRINT.md` Completed section
 - [ ] Add completed tasks to `tasks/COMPLETED.md`
 - [ ] Ensure docs freshness gate passes
+
+---
+
+### TASK-183: Weekly backlog triage intake (2026-03-02)
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Convert the latest weekly backlog triage candidates into actionable backlog
+stories and tighten triage automation guidance so backlog context stays small
+and cost-bounded (treat backlog as a search index, not an LLM input dump).
+
+**Assessment-Ref**:
+- `artifacts/backlog_triage/triage-2026-03-02.md`
+
+**Files**: `tasks/BACKLOG.md`, `agents/automation/weekly-backlog-triage.md`, `tasks/COMPLETED.md`
+
+**Acceptance Criteria**:
+- [ ] Add backlog tasks for each candidate in `triage-2026-03-02.md` (no missing candidates; no duplicates)
+- [ ] Update triage automation instructions with a “backlog context policy” (no full-backlog copy/paste)
+- [ ] Update `tasks/COMPLETED.md` once intake is merged
+- [ ] Ensure docs freshness gate passes
+
+---
+
+### TASK-184: Human-gated blocker aging SLA + explicit Telegram scope decision
+**Priority**: P0 (Critical)
+**Estimate**: 2-4 hours
+
+Prevent indefinite launch posture ambiguity by requiring explicit metadata and
+aging enforcement for active `[REQUIRES_HUMAN]` blockers, and by requiring an
+explicit “Telegram in launch scope vs excluded” decision when Telegram wiring
+remains open.
+
+**Assessment-Ref**:
+- `artifacts/assessments/po/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-po-human-gate-aging-sla`)
+- `artifacts/assessments/ba/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-ba-human-blocker-sla-metadata`)
+
+**Files**: `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`, `scripts/check_docs_freshness.py`, `docs/RELEASING.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define required metadata for active `[REQUIRES_HUMAN]` blockers (owner, next action date, last touched date, escalation threshold)
+- [ ] Enforce metadata presence via docs-freshness checks when such blockers exist
+- [ ] Add an explicit “Telegram launch scope” field/section (and enforce presence when Telegram wiring remains open)
+- [ ] Add tests covering: no human blockers (no requirement), human blockers missing metadata (fail), metadata present (pass)
+- [ ] Document operator workflow for keeping blocker metadata up to date
+
+---
+
+### TASK-185: PROJECT_STATUS freshness SLA tied to sprint deltas
+**Priority**: P1 (High)
+**Estimate**: <1 hour
+
+Ensure `PROJECT_STATUS.md` remains trustworthy by enforcing freshness whenever
+sprint/task ledgers change meaningfully.
+
+**Assessment-Ref**:
+- `artifacts/assessments/po/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-po-status-surface-freshness`)
+- `artifacts/assessments/ba/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-ba-project-status-freshness-sla`)
+
+**Files**: `PROJECT_STATUS.md`, `scripts/check_docs_freshness.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Add a docs-freshness rule that fails when `PROJECT_STATUS.md` is stale beyond a configured max-age in an active sprint window
+- [ ] Keep a stable, actionable failure message (“update PROJECT_STATUS.md Last Updated to today and reconcile changed sprint sets”)
+- [ ] Add tests for pass/fail boundary behavior
+
+---
+
+### TASK-186: Assessment date-integrity guard (filename vs content)
+**Priority**: P1 (High)
+**Estimate**: <1 hour
+
+Enforce assessment artifact date integrity to prevent copy-forward drift and to
+keep auditability for daily agent outputs.
+
+**Assessment-Ref**:
+- `artifacts/assessments/po/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-po-assessment-date-integrity-guard`)
+
+**Files**: `scripts/validate_assessment_artifacts.py`, `tests/unit/scripts/`, `docs/ASSESSMENTS.md`
+
+**Acceptance Criteria**:
+- [ ] Validator checks that daily artifact filename date matches the report title date
+- [ ] Validator checks that proposal IDs use the same `YYYY-MM-DD` prefix as the filename date
+- [ ] Violations include clear “expected vs found” diagnostics
+- [ ] Unit tests cover mismatch examples and a clean file case
+
+---
+
+### TASK-187: Agent task-eligibility preflight (prevent policy-violating starts)
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Add a deterministic preflight so agent implementation work cannot start unless
+the task is eligible (in sprint, not human-gated, and git sequencing guards are
+passing).
+
+**Assessment-Ref**:
+- `artifacts/assessments/agents/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-agents-task-eligibility-preflight`)
+
+**Files**: `scripts/`, `Makefile`, `AGENTS.md`, `agents/automation/`
+
+**Acceptance Criteria**:
+- [ ] Add `scripts/check_agent_task_eligibility.sh` with checks:
+- [ ] task appears in `tasks/CURRENT_SPRINT.md` Active section
+- [ ] task is not marked `[REQUIRES_HUMAN]`
+- [ ] current branch/worktree sequencing prerequisites are satisfied (clean/synced main preflight semantics)
+- [ ] Add `make agent-task-preflight TASK=XXX`
+- [ ] Update relevant automation instructions to require preflight before implementation
+- [ ] Add unit tests for refusal/pass cases
+
+---
+
+### TASK-188: Cross-role promotion de-duplication guard (assessment proposals)
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Reduce backlog churn by detecting semantically duplicate proposals across roles
+before promotion.
+
+**Assessment-Ref**:
+- `artifacts/assessments/agents/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe`)
+
+**Files**: `scripts/promote_assessment_proposal.sh`, `docs/ASSESSMENTS.md`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Extend promotion script to check for duplicates across recent role artifacts (configurable lookback window)
+- [ ] Default behavior is warn-only; strict mode fails promotion
+- [ ] Output includes a matched prior `(proposal_id, Assessment-Ref)` for operator review
+- [ ] Unit tests cover: unique proposal pass, duplicate warn, duplicate strict fail
+
+---
+
+### TASK-189: Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Reduce unauthenticated reconnaissance risk by restricting detailed health and
+metrics endpoints outside development environments, while preserving a minimal
+unauthenticated liveness endpoint.
+
+**Assessment-Ref**:
+- `artifacts/assessments/security/daily/2026-03-02.md` (`FINDING-2026-03-02-security-public-health-metrics`)
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/api/middleware/auth.py`, `src/api/routes/health.py`, `src/api/routes/metrics.py`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] `/health` and `/metrics` are not publicly accessible in non-development environments (policy: admin-auth or explicit private-network-only)
+- [ ] `/health/live` remains minimal and unauthenticated (coarse “up” only)
+- [ ] Externally reachable health responses do not include raw exception strings or dependency internals
+- [ ] Tests cover status codes and payload shapes for dev vs production-like profiles
+- [ ] Human sign-off recorded before merge
+
+---
+
+### TASK-190: Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN]
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Eliminate timing side-channel risk in admin-key checks and ensure persisted API
+key store files are written with restrictive permissions regardless of host
+umask.
+
+**Assessment-Ref**:
+- `artifacts/assessments/security/daily/2026-03-02.md` (`FINDING-2026-03-02-security-admin-key-compare`)
+- `artifacts/assessments/security/daily/2026-03-02.md` (`FINDING-2026-03-02-security-api-key-store-permissions`)
+
+**Files**: `src/api/routes/auth.py`, `src/core/api_key_manager.py`, `docs/OPERATIONS.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Replace direct string equality with `secrets.compare_digest(...)` for admin key comparisons
+- [ ] Enforce `0600` permissions on persisted key store temp + final files (best-effort cross-platform)
+- [ ] Validate parent directory permissions (`0700`) where feasible and fail closed (or emit a high-severity warning) when hardening cannot be applied
+- [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
+- [ ] Human sign-off recorded before merge
+
+---
+
+### TASK-191: Cross-stage SLO/error-budget release gate
+**Priority**: P1 (High)
+**Estimate**: 1 day
+
+Add an end-to-end SLO/error-budget view and a lightweight runtime release gate
+to reduce “green components, red system” risk.
+
+**Assessment-Ref**:
+- `artifacts/assessments/sa/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-sa-cross-stage-slo-budget`)
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/api/`, `src/workers/`, `scripts/`, `Makefile`, `docs/RELEASING.md`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define a minimal cross-stage SLO set and configurable thresholds/windows
+- [ ] Implement `make release-gate-runtime` that emits explicit PASS/FAIL per SLO and fails closed on out-of-policy windows
+- [ ] Keep defaults safe for staging/production-like; keep development ergonomic (warn-only allowed)
+- [ ] Add tests for deterministic evaluation over synthetic metrics inputs
+- [ ] Document how to tune thresholds and interpret failures
+
+---
+
+### TASK-192: Cluster drift sentinel (scheduled quality monitor)
+**Priority**: P1 (High)
+**Estimate**: 1-2 days
+
+Detect clustering quality drift over time (over-merge/under-merge) using proxy
+signals and surface the results for operators.
+
+**Assessment-Ref**:
+- `artifacts/assessments/sa/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-sa-cluster-drift-sentinel`)
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/processing/event_clusterer.py`, `src/workers/`, `src/storage/`, `docs/ARCHITECTURE.md`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Add a scheduled sentinel job that computes proxy drift signals (singleton rate, large-cluster tail, contradiction incidence, language-segmented distribution drift)
+- [ ] Persist a daily summary artifact/table and expose it via an ops endpoint or report artifact
+- [ ] Default behavior is warn-only (no hard release block) with configurable thresholds
+- [ ] Tests cover sentinel computation determinism and persistence/output shape
+
+---
+
+### TASK-193: Degraded-mode policy for sustained LLM failover [REQUIRES_HUMAN]
+**Priority**: P0 (Critical)
+**Estimate**: 1-2 days
+
+Introduce an explicit degraded-mode policy when sustained LLM failover occurs,
+so probability semantics remain explainable and conservative under degraded
+model quality.
+
+**Assessment-Ref**:
+- `artifacts/assessments/sa/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-sa-failover-degraded-mode`)
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/processing/`, `src/core/trend_engine.py`, `src/workers/`, `config/`, `docs/adr/`, `docs/ARCHITECTURE.md`, `docs/RELEASING.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define degraded-mode entry/exit criteria (rolling failover ratio thresholds)
+- [ ] Implement deterministic degraded-mode signaling (`degraded_llm`) in pipeline state + metrics/logs
+- [ ] Choose and enforce a conservative policy for auto-applied deltas in degraded mode (attenuate or hold for review)
+- [ ] Optionally queue high-impact items for replay on primary model after recovery (bounded and auditable)
+- [ ] Update ADR(s) for probability semantics change and require human sign-off before merge
 
 ---
 

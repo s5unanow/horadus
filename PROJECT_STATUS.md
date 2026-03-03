@@ -232,7 +232,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-171` Align Claude Code permissions policy with repo workflow
 - `TASK-172` Add short “agent runbook index” doc (canonical commands)
 - `TASK-173` Add “task context pack” helper (`scripts/task_context_pack.sh`)
 - `TASK-184` Human-gated blocker aging SLA + explicit Telegram scope decision

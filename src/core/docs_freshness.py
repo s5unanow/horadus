@@ -283,6 +283,7 @@ def run_docs_freshness_check(
     repo_root: Path,
     override_path: Path | None = None,
     max_age_days: int = 45,
+    project_status_max_age_days: int = 7,
 ) -> DocsFreshnessResult:
     now = datetime.now(tz=UTC).date()
     checked_override_path = (
@@ -494,6 +495,23 @@ def run_docs_freshness_check(
                 ),
                 path="PROJECT_STATUS.md",
             )
+
+        if active_sprint_tasks:
+            last_updated = _parse_marker_date(project_status_text, "Last Updated")
+            if last_updated is not None:
+                age_days = (now - last_updated).days
+                if age_days > max(1, project_status_max_age_days):
+                    _record_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        active_override_map=active_override_map,
+                        rule_id="project_status_freshness_sla",
+                        message=(
+                            "update PROJECT_STATUS.md Last Updated to today and reconcile "
+                            "changed sprint sets"
+                        ),
+                        path="PROJECT_STATUS.md",
+                    )
 
         if active_requires_human_tasks:
             blocker_metadata = _extract_human_blocker_metadata(current_sprint)

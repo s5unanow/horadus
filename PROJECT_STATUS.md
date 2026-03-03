@@ -232,7 +232,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-185` PROJECT_STATUS freshness SLA tied to sprint deltas
 - `TASK-186` Assessment date-integrity guard (filename vs content)
 - `TASK-187` Agent task-eligibility preflight (prevent policy-violating starts)
 - `TASK-188` Cross-role promotion de-duplication guard (assessment proposals)

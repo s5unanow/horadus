@@ -211,6 +211,7 @@ Tasks that have been completed and verified.
 - TASK-188: Cross-role promotion de-duplication guard (assessment proposals) ✅
 - TASK-191: Cross-stage SLO/error-budget release gate ✅
 - TASK-192: Cluster drift sentinel (scheduled quality monitor) ✅
+- TASK-196: Branch-policy hardening guardrails for autonomous execution ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 

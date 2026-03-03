@@ -235,7 +235,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
 - `TASK-193` Degraded-mode policy for sustained LLM failover `[REQUIRES_HUMAN]`
-- `TASK-196` Branch-policy hardening guardrails for autonomous execution
 
 ## Blocked
 

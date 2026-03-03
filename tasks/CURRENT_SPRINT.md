@@ -12,7 +12,6 @@
 - TASKs pulled in: all backlog tasks not listed in `tasks/COMPLETED.md`.
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
-- `TASK-188` Cross-role promotion de-duplication guard (assessment proposals)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
 - `TASK-191` Cross-stage SLO/error-budget release gate
@@ -51,3 +50,4 @@
 - `TASK-185` PROJECT_STATUS freshness SLA tied to sprint deltas ✅
 - `TASK-186` Assessment date-integrity guard (filename vs content) ✅
 - `TASK-187` Agent task-eligibility preflight (prevent policy-violating starts) ✅
+- `TASK-188` Cross-role promotion de-duplication guard (assessment proposals) ✅

@@ -208,6 +208,7 @@ Tasks that have been completed and verified.
 - TASK-185: PROJECT_STATUS freshness SLA tied to sprint deltas ✅
 - TASK-186: Assessment date-integrity guard (filename vs content) ✅
 - TASK-187: Agent task-eligibility preflight (prevent policy-violating starts) ✅
+- TASK-188: Cross-role promotion de-duplication guard (assessment proposals) ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 

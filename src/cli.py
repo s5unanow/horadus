@@ -31,6 +31,7 @@ from src.eval.taxonomy_validation import (
     run_trend_taxonomy_validation,
 )
 from src.eval.vector_benchmark import run_vector_retrieval_benchmark
+from src.processing.dry_run_pipeline import run_pipeline_dry_run
 from src.storage.database import async_session_maker
 
 
@@ -513,6 +514,21 @@ def _run_doctor(*, timeout_seconds: float) -> int:
     return 0
 
 
+def _run_pipeline_dry_run(
+    *,
+    fixture_path: str,
+    trend_config_dir: str,
+    output_path: str,
+) -> int:
+    artifact_path = run_pipeline_dry_run(
+        fixture_path=Path(fixture_path),
+        trend_config_dir=Path(trend_config_dir),
+        output_path=Path(output_path),
+    )
+    print(f"Dry-run artifact: {artifact_path}")
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="horadus")
     subparsers = parser.add_subparsers(dest="command")
@@ -803,6 +819,29 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Return non-zero exit code when any stale source is detected.",
     )
 
+    pipeline_parser = subparsers.add_parser("pipeline")
+    pipeline_subparsers = pipeline_parser.add_subparsers(dest="pipeline_command")
+
+    pipeline_dry_run_parser = pipeline_subparsers.add_parser(
+        "dry-run",
+        help="Run deterministic offline pipeline scoring on local fixtures.",
+    )
+    pipeline_dry_run_parser.add_argument(
+        "--fixture-path",
+        default="ai/eval/fixtures/pipeline_dry_run_items.jsonl",
+        help="Path to fixture JSONL file.",
+    )
+    pipeline_dry_run_parser.add_argument(
+        "--trend-config-dir",
+        default="config/trends",
+        help="Directory containing trend config YAML files.",
+    )
+    pipeline_dry_run_parser.add_argument(
+        "--output-path",
+        default="artifacts/agent/pipeline-dry-run-output.json",
+        help="Output JSON artifact path.",
+    )
+
     agent_parser = subparsers.add_parser("agent")
     agent_subparsers = agent_parser.add_subparsers(dest="agent_command")
 
@@ -922,6 +961,12 @@ def main(argv: Sequence[str] | None = None) -> int:
                 stale_multiplier=args.stale_multiplier,
                 fail_on_stale=args.fail_on_stale,
             )
+        )
+    if args.command == "pipeline" and args.pipeline_command == "dry-run":
+        return _run_pipeline_dry_run(
+            fixture_path=args.fixture_path,
+            trend_config_dir=args.trend_config_dir,
+            output_path=args.output_path,
         )
     if args.command == "agent" and args.agent_command == "smoke":
         return _run_agent_smoke(

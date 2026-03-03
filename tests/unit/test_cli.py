@@ -277,6 +277,28 @@ def test_build_parser_accepts_agent_smoke_command() -> None:
     assert args.api_key == "test-key"  # pragma: allowlist secret
 
 
+def test_build_parser_accepts_pipeline_dry_run_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "pipeline",
+            "dry-run",
+            "--fixture-path",
+            "ai/eval/fixtures/pipeline_dry_run_items.jsonl",
+            "--trend-config-dir",
+            "config/trends",
+            "--output-path",
+            "artifacts/agent/pipeline-dry-run-output.json",
+        ]
+    )
+
+    assert args.command == "pipeline"
+    assert args.pipeline_command == "dry-run"
+    assert args.fixture_path.endswith("pipeline_dry_run_items.jsonl")
+    assert args.trend_config_dir == "config/trends"
+    assert args.output_path.endswith("pipeline-dry-run-output.json")
+
+
 def test_build_parser_accepts_doctor_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(["doctor", "--timeout-seconds", "3.5"])

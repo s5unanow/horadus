@@ -199,6 +199,7 @@ Tasks that have been completed and verified.
 - TASK-166: Add fast agent gate target (`make agent-check`) ✅
 - TASK-167: Add context-efficient backpressure wrappers for noisy commands ✅
 - TASK-168: Add `horadus doctor` (or `make doctor`) self-diagnostic command ✅
+- TASK-169: Add offline fixtures and a dry-run pipeline path (no network, no LLM) ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 

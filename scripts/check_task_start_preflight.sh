@@ -15,6 +15,16 @@ EOF
   exit 1
 fi
 
+if ! ./scripts/check_required_hooks.sh >/dev/null; then
+  cat <<EOF
+Task sequencing guard failed.
+Required local git hooks are missing.
+Run:
+  make hooks
+EOF
+  exit 1
+fi
+
 current_branch="$(git rev-parse --abbrev-ref HEAD)"
 if [[ "${current_branch}" != "main" ]]; then
   cat <<EOF

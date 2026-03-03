@@ -8,6 +8,7 @@ import argparse
 import asyncio
 from collections.abc import Sequence
 from datetime import datetime
+from pathlib import Path
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import UUID
@@ -348,6 +349,31 @@ def _run_agent_smoke(
     return 0 if failures == 0 else 2
 
 
+def _doctor_check_required_hooks() -> tuple[str, str]:
+    hooks_dir = Path(".git") / "hooks"
+    required = ("pre-commit", "pre-push", "commit-msg")
+    missing: list[str] = []
+    for hook_name in required:
+        hook_path = hooks_dir / hook_name
+        if (
+            not hook_path.exists()
+            or not hook_path.is_file()
+            or not hook_path.stat().st_mode & 0o111
+        ):
+            missing.append(hook_name)
+    if missing:
+        return ("FAIL", f"missing executable hooks: {', '.join(missing)} (run: make hooks)")
+    return ("PASS", "required git hooks installed")
+
+
+def _run_doctor() -> int:
+    hook_status, hook_message = _doctor_check_required_hooks()
+    print(f"HOOKS: {hook_status} - {hook_message}")
+    if hook_status == "FAIL":
+        return 2
+    return 0
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="horadus")
     subparsers = parser.add_subparsers(dest="command")
@@ -661,6 +687,11 @@ def _build_parser() -> argparse.ArgumentParser:
         default=settings.API_KEY or "",
         help="Optional API key used when auth-protected smoke endpoints are checked.",
     )
+
+    subparsers.add_parser(
+        "doctor",
+        help="Run local workflow diagnostics (required git hooks, task-start readiness).",
+    )
     return parser
 
 
@@ -753,6 +784,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             timeout_seconds=max(0.1, args.timeout_seconds),
             api_key=(args.api_key or "").strip() or None,
         )
+    if args.command == "doctor":
+        return _run_doctor()
 
     parser.print_help()
     return 1

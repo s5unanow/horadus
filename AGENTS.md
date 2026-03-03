@@ -14,6 +14,7 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 3. `tasks/BACKLOG.md` — canonical task specifications and acceptance criteria (triage/planning; not required for most execution)
 4. `docs/ARCHITECTURE.md` — system design and runtime flow
 5. `docs/DATA_MODEL.md` — schema and entity definitions
+6. `docs/AGENT_RUNBOOK.md` — canonical command index for agent execution
 
 ## Canonical Source-of-Truth Hierarchy
 
@@ -97,6 +98,7 @@ After completing work:
 - Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
 - Before creating a task branch, run sequencing preflight: `make task-preflight`.
 - Start task branches via guarded command: `make task-start TASK=XXX NAME=short-name`.
+- Canonical agent start command is `make agent-safe-start TASK=XXX NAME=short-name` (enforces sprint eligibility + sequencing guard).
 - Task start is blocked unless `main` is clean/synced and there is no open non-merged task PR for the current operator.
 - Open one PR per task branch and merge only after required checks are green.
 - Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX` matching the branch task ID.

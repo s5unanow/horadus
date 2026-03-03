@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate branch-guard task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run \
+        db-migration-gate release-gate branch-guard task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
         check-tracked-artifacts validate-assessments automations-export automations-apply
 
 # Default target
@@ -94,6 +94,11 @@ typecheck: deps-dev ## Run type checker (mypy)
 
 check: format lint typecheck ## Run all code quality checks
 	@echo "$(GREEN)All checks passed!$(RESET)"
+
+agent-check: deps-dev ## Fast local gate for agent iteration (ruff, mypy, unit tests)
+	$(UV_RUN) ruff check src/ tests/
+	$(UV_RUN) mypy src/
+	$(UV_RUN) pytest tests/unit/ -v -m unit
 
 pre-commit: ## Run pre-commit on all files
 	$(UV_RUN) pre-commit run --all-files

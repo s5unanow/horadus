@@ -400,3 +400,123 @@ def test_docs_freshness_flags_human_gated_sprint_task_missing_from_project_statu
     assert any(
         issue.rule_id == "project_status_missing_blocked_human_task" for issue in result.errors
     )
+
+
+def test_docs_freshness_no_human_blockers_does_not_require_blocker_metadata(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-164` Agent smoke run",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-164` Agent smoke run",
+                "## Blocked",
+                "- none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert not any(issue.rule_id.startswith("human_blocker_metadata_") for issue in result.errors)
+    assert not any(issue.rule_id == "telegram_launch_scope_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_human_blocker_metadata(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "human_blocker_metadata_missing" for issue in result.errors)
+    assert any(issue.rule_id == "telegram_launch_scope_missing" for issue in result.errors)
+
+
+def test_docs_freshness_accepts_present_human_blocker_metadata(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-080 | owner=ops-lead | last_touched=2026-03-01 | next_action=2026-03-02 | escalate_after_days=7",
+                "",
+                "## Telegram Launch Scope",
+                "- launch_scope: excluded_until_task_080_done",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert not any(issue.rule_id.startswith("human_blocker_metadata_") for issue in result.errors)
+    assert not any(issue.rule_id == "telegram_launch_scope_missing" for issue in result.errors)

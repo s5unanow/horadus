@@ -9,6 +9,7 @@ import json
 from collections.abc import Callable, Coroutine
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any, TypeVar, cast
 
 import httpx
@@ -18,6 +19,13 @@ from celery import shared_task
 from celery.signals import task_failure
 from sqlalchemy import delete, func, select
 
+from src.core.cluster_drift import (
+    ClusterDriftThresholds,
+    ClusterEventSample,
+    compute_cluster_drift_summary,
+    load_latest_language_distribution,
+    write_cluster_drift_artifact,
+)
 from src.core.config import settings
 from src.core.observability import (
     record_collector_metrics,
@@ -554,6 +562,85 @@ async def _check_source_freshness_async() -> dict[str, Any]:
         "catchup_dispatch_budget": dispatch_budget,
         "catchup_dispatched": catchup_dispatched,
         "stale_sources": stale_source_rows,
+    }
+
+
+async def _monitor_cluster_drift_async() -> dict[str, Any]:
+    window_end = datetime.now(tz=UTC)
+    window_start = window_end - timedelta(days=settings.CLUSTER_DRIFT_SENTINEL_LOOKBACK_DAYS)
+
+    async with async_session_maker() as session:
+        rows = (
+            await session.execute(
+                select(
+                    Event.id,
+                    Event.has_contradictions,
+                    func.count(EventItem.item_id).label("item_count"),
+                    func.array_agg(func.coalesce(RawItem.language, "unknown")).label("languages"),
+                )
+                .outerjoin(EventItem, EventItem.event_id == Event.id)
+                .outerjoin(RawItem, RawItem.id == EventItem.item_id)
+                .where(Event.first_seen_at >= window_start)
+                .where(Event.first_seen_at < window_end)
+                .group_by(Event.id, Event.has_contradictions)
+            )
+        ).all()
+
+    event_samples: list[ClusterEventSample] = []
+    for row in rows:
+        item_count_raw = row[2]
+        languages_raw = row[3]
+        language_values: tuple[str, ...]
+        if isinstance(languages_raw, list):
+            language_values = tuple(
+                str(item or "unknown") for item in languages_raw if item is not None
+            )
+        else:
+            language_values = ()
+
+        event_samples.append(
+            ClusterEventSample(
+                item_count=max(0, int(item_count_raw or 0)),
+                has_contradictions=bool(row[1]),
+                languages=language_values,
+            )
+        )
+
+    artifact_dir = Path(settings.CLUSTER_DRIFT_ARTIFACT_DIR)
+    baseline_distribution = load_latest_language_distribution(artifact_dir)
+    thresholds = ClusterDriftThresholds(
+        singleton_rate_warn=settings.CLUSTER_DRIFT_SINGLETON_RATE_WARN_THRESHOLD,
+        large_cluster_rate_warn=settings.CLUSTER_DRIFT_LARGE_CLUSTER_RATE_WARN_THRESHOLD,
+        contradiction_rate_warn=settings.CLUSTER_DRIFT_CONTRADICTION_RATE_WARN_THRESHOLD,
+        language_drift_warn=settings.CLUSTER_DRIFT_LANGUAGE_DRIFT_WARN_THRESHOLD,
+        large_cluster_size=settings.CLUSTER_DRIFT_LARGE_CLUSTER_SIZE,
+    )
+    summary = compute_cluster_drift_summary(
+        event_samples=event_samples,
+        thresholds=thresholds,
+        baseline_language_distribution=baseline_distribution,
+        window_start=window_start,
+        window_end=window_end,
+    )
+    artifact_path = write_cluster_drift_artifact(
+        artifact_dir=artifact_dir,
+        summary=summary,
+    )
+    warning_keys = summary.get("warning_keys")
+    warnings = list(warning_keys) if isinstance(warning_keys, list) else []
+
+    return {
+        "status": "ok",
+        "task": "monitor_cluster_drift",
+        "artifact_path": str(artifact_path),
+        "window_start": summary["window_start"],
+        "window_end": summary["window_end"],
+        "event_count": summary["event_count"],
+        "warning_keys": warnings,
+        "singleton_rate": summary["singleton_rate"],
+        "large_cluster_rate": summary["large_cluster_rate"],
+        "contradiction_rate": summary["contradiction_rate"],
+        "language_drift_score": summary["language_drift_score"],
     }
 
 
@@ -1354,6 +1441,30 @@ def check_source_freshness() -> dict[str, Any]:
 
     return _run_task_with_heartbeat(
         task_name="workers.check_source_freshness",
+        runner=_runner,
+    )
+
+
+@typed_shared_task(name="workers.monitor_cluster_drift")
+def monitor_cluster_drift() -> dict[str, Any]:
+    """Compute warn-only clustering drift proxies and persist daily artifact."""
+
+    def _runner() -> dict[str, Any]:
+        logger.info(
+            "Starting cluster drift sentinel task",
+            lookback_days=settings.CLUSTER_DRIFT_SENTINEL_LOOKBACK_DAYS,
+        )
+        result = _run_async(_monitor_cluster_drift_async())
+        logger.info(
+            "Finished cluster drift sentinel task",
+            event_count=result["event_count"],
+            warning_keys=result["warning_keys"],
+            artifact_path=result["artifact_path"],
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.monitor_cluster_drift",
         runner=_runner,
     )
 

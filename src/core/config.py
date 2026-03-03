@@ -1198,6 +1198,56 @@ class Settings(BaseSettings):
         le=10,
         description="Maximum collector catch-up dispatches emitted per freshness-check run",
     )
+    CLUSTER_DRIFT_SENTINEL_ENABLED: bool = Field(
+        default=True,
+        description="Enable scheduled cluster drift sentinel worker task",
+    )
+    CLUSTER_DRIFT_SENTINEL_INTERVAL_HOURS: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Cadence in hours for cluster drift sentinel runs",
+    )
+    CLUSTER_DRIFT_SENTINEL_LOOKBACK_DAYS: int = Field(
+        default=1,
+        ge=1,
+        le=30,
+        description="Lookback window in days for each cluster drift sentinel run",
+    )
+    CLUSTER_DRIFT_LARGE_CLUSTER_SIZE: int = Field(
+        default=5,
+        ge=2,
+        le=100,
+        description="Minimum event item count considered a large-cluster tail event",
+    )
+    CLUSTER_DRIFT_SINGLETON_RATE_WARN_THRESHOLD: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Warn when singleton-event rate exceeds this threshold",
+    )
+    CLUSTER_DRIFT_LARGE_CLUSTER_RATE_WARN_THRESHOLD: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Warn when large-cluster tail rate exceeds this threshold",
+    )
+    CLUSTER_DRIFT_CONTRADICTION_RATE_WARN_THRESHOLD: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Warn when contradiction incidence exceeds this threshold",
+    )
+    CLUSTER_DRIFT_LANGUAGE_DRIFT_WARN_THRESHOLD: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="Warn when language distribution drift score exceeds this threshold",
+    )
+    CLUSTER_DRIFT_ARTIFACT_DIR: str = Field(
+        default="artifacts/cluster_drift",
+        description="Directory where cluster drift sentinel JSON artifacts are written",
+    )
     RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
         default=300,
         ge=30,

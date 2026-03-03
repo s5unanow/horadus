@@ -38,6 +38,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "RETENTION_CLEANUP_INTERVAL_HOURS", 6)
     monkeypatch.setattr(celery_app_module.settings, "PROCESS_PENDING_INTERVAL_MINUTES", 7)
     monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
+    monkeypatch.setattr(celery_app_module.settings, "CLUSTER_DRIFT_SENTINEL_ENABLED", True)
+    monkeypatch.setattr(celery_app_module.settings, "CLUSTER_DRIFT_SENTINEL_INTERVAL_HOURS", 24)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 2)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 6)
     monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 30)
@@ -65,6 +67,8 @@ def test_build_beat_schedule_includes_enabled_collectors(
     assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=7)
     assert schedule["check-source-freshness"]["task"] == "workers.check_source_freshness"
     assert schedule["check-source-freshness"]["schedule"] == timedelta(minutes=30)
+    assert schedule["monitor-cluster-drift"]["task"] == "workers.monitor_cluster_drift"
+    assert schedule["monitor-cluster-drift"]["schedule"] == timedelta(hours=24)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"
     assert schedule["generate-weekly-reports"]["schedule"] == crontab(
         day_of_week="2",
@@ -86,6 +90,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", False)
     monkeypatch.setattr(celery_app_module.settings, "RETENTION_CLEANUP_ENABLED", False)
+    monkeypatch.setattr(celery_app_module.settings, "CLUSTER_DRIFT_SENTINEL_ENABLED", False)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 10)
     monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
@@ -142,6 +147,7 @@ def test_build_beat_schedule_supports_six_hour_profile(
     monkeypatch.setattr(celery_app_module.settings, "PROCESS_PENDING_INTERVAL_MINUTES", 15)
     monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 60)
     monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 15)
+    monkeypatch.setattr(celery_app_module.settings, "CLUSTER_DRIFT_SENTINEL_ENABLED", False)
 
     schedule = celery_app_module._build_beat_schedule()
 
@@ -154,6 +160,7 @@ def test_celery_routes_include_processing_queue() -> None:
     routes = celery_app_module.celery_app.conf.task_routes
     assert routes["workers.process_pending_items"]["queue"] == "processing"
     assert routes["workers.check_source_freshness"]["queue"] == "processing"
+    assert routes["workers.monitor_cluster_drift"]["queue"] == "processing"
     assert routes["workers.snapshot_trends"]["queue"] == "processing"
     assert routes["workers.apply_trend_decay"]["queue"] == "processing"
     assert routes["workers.check_event_lifecycles"]["queue"] == "processing"
@@ -204,6 +211,34 @@ def test_run_task_with_heartbeat_records_failure(monkeypatch: pytest.MonkeyPatch
     assert calls[1][0] == "workers.sample"
     assert calls[1][1] == "failed"
     assert "boom" in str(calls[1][2])
+
+
+def test_monitor_cluster_drift_task_uses_async_runner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def fake_monitor() -> dict[str, object]:
+        return {
+            "status": "ok",
+            "task": "monitor_cluster_drift",
+            "artifact_path": "artifacts/cluster_drift/2026-03-02.json",
+            "window_start": "2026-03-01T00:00:00+00:00",
+            "window_end": "2026-03-02T00:00:00+00:00",
+            "event_count": 4,
+            "warning_keys": ["singleton_rate"],
+            "singleton_rate": 0.75,
+            "large_cluster_rate": 0.0,
+            "contradiction_rate": 0.25,
+            "language_drift_score": 0.1,
+        }
+
+    monkeypatch.setattr(tasks_module, "_monitor_cluster_drift_async", fake_monitor)
+    monkeypatch.setattr(tasks_module.settings, "CLUSTER_DRIFT_SENTINEL_LOOKBACK_DAYS", 1)
+
+    result = tasks_module.monitor_cluster_drift.run()
+
+    assert result["status"] == "ok"
+    assert result["task"] == "monitor_cluster_drift"
+    assert result["event_count"] == 4
 
 
 def test_collect_rss_task_uses_async_collector(

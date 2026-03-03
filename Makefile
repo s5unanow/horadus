@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate branch-guard task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
+        db-migration-gate release-gate branch-guard task-preflight agent-task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
         check-tracked-artifacts validate-assessments automations-export automations-apply
 
 # Default target
@@ -120,6 +120,13 @@ automations-apply: ## Apply ops/automations/specs/ into local $CODEX_HOME/automa
 
 task-preflight: ## Validate task-start sequencing preflight on main
 	./scripts/check_task_start_preflight.sh
+
+agent-task-preflight: ## Validate agent task eligibility guards (TASK=XXX)
+	@if [ -z "$(TASK)" ]; then \
+		echo "Usage: make agent-task-preflight TASK=XXX"; \
+		exit 1; \
+	fi
+	./scripts/check_agent_task_eligibility.sh "$(TASK)"
 
 task-start: ## Start a new task branch with sequencing guards (TASK=117 NAME=short-name)
 	@if [ -z "$(TASK)" ] || [ -z "$(NAME)" ]; then \

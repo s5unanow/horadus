@@ -14,10 +14,13 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import UUID
 
+from sqlalchemy import text
+
 from src.core.calibration_dashboard import CalibrationDashboardService, TrendMovement
 from src.core.config import settings
 from src.core.dashboard_export import export_calibration_dashboard
 from src.core.embedding_lineage import EmbeddingLineageSummary, build_embedding_lineage_report
+from src.core.migration_parity import check_migration_parity
 from src.core.source_freshness import build_source_freshness_report
 from src.eval.audit import run_gold_set_audit
 from src.eval.benchmark import available_configs, run_gold_set_benchmark
@@ -414,10 +417,98 @@ def _doctor_check_required_hooks() -> tuple[str, str]:
     return ("PASS", "required git hooks installed")
 
 
-def _run_doctor() -> int:
+def _is_loopback_host(host: str) -> bool:
+    normalized = host.strip().lower()
+    return normalized in {"127.0.0.1", "localhost"}
+
+
+def _doctor_safety_refusals() -> list[str]:
+    refusals: list[str] = []
+    if settings.is_production and settings.is_agent_profile:
+        refusals.append("agent profile is not allowed in production")
+    if (
+        settings.is_agent_profile
+        and not settings.AGENT_ALLOW_NON_LOOPBACK
+        and not _is_loopback_host(settings.API_HOST)
+    ):
+        refusals.append(
+            "agent profile requires loopback API_HOST unless AGENT_ALLOW_NON_LOOPBACK=true"
+        )
+    if settings.is_production_like and not settings.API_AUTH_ENABLED:
+        refusals.append("API_AUTH_ENABLED=false in production-like environment")
+    return refusals
+
+
+async def _doctor_check_database(timeout_seconds: float) -> tuple[str, str]:
+    database_url = settings.DATABASE_URL.strip()
+    if not database_url:
+        return ("SKIP", "DATABASE_URL not configured")
+
+    try:
+        async with async_session_maker() as session:
+            await asyncio.wait_for(
+                session.execute(text("SELECT 1")),
+                timeout=max(0.1, timeout_seconds),
+            )
+            migration = await asyncio.wait_for(
+                check_migration_parity(session),
+                timeout=max(0.1, timeout_seconds),
+            )
+    except Exception as exc:
+        return ("FAIL", f"database check failed: {exc}")
+
+    migration_status = str(migration.get("status", "unknown"))
+    if migration_status != "healthy":
+        message = str(migration.get("message", "migration parity mismatch"))
+        return ("FAIL", f"database ok; migrations {migration_status}: {message}")
+    return ("PASS", "database connectivity ok; migration parity healthy")
+
+
+async def _doctor_check_redis(timeout_seconds: float) -> tuple[str, str]:
+    redis_url = settings.REDIS_URL.strip()
+    if not redis_url:
+        return ("SKIP", "REDIS_URL not configured")
+
+    try:
+        import redis.asyncio as redis
+    except ImportError:
+        return ("FAIL", "redis client is not installed")
+
+    client = redis.from_url(redis_url)
+    try:
+        await asyncio.wait_for(client.ping(), timeout=max(0.1, timeout_seconds))
+    except Exception as exc:
+        return ("FAIL", f"redis check failed: {exc}")
+    finally:
+        await client.close()
+    return ("PASS", "redis connectivity ok")
+
+
+def _run_doctor(*, timeout_seconds: float) -> int:
+    print(f"ENVIRONMENT={settings.ENVIRONMENT}")
+    print(f"RUNTIME_PROFILE={settings.RUNTIME_PROFILE}")
+    print(f"API_HOST={settings.API_HOST}")
+
     hook_status, hook_message = _doctor_check_required_hooks()
     print(f"HOOKS: {hook_status} - {hook_message}")
-    if hook_status == "FAIL":
+
+    refusals = _doctor_safety_refusals()
+    if refusals:
+        print("SAFETY_REFUSALS:")
+        for refusal in refusals:
+            print(f"- {refusal}")
+    else:
+        print("SAFETY_REFUSALS: none")
+
+    db_status, db_message = asyncio.run(_doctor_check_database(timeout_seconds))
+    redis_status, redis_message = asyncio.run(_doctor_check_redis(timeout_seconds))
+    print(f"DATABASE: {db_status} - {db_message}")
+    print(f"REDIS: {redis_status} - {redis_message}")
+
+    failing_statuses = {hook_status, db_status, redis_status}
+    if "FAIL" in failing_statuses:
+        return 2
+    if refusals:
         return 2
     return 0
 
@@ -736,9 +827,15 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Optional API key used when auth-protected smoke endpoints are checked.",
     )
 
-    subparsers.add_parser(
+    doctor_parser = subparsers.add_parser(
         "doctor",
-        help="Run local workflow diagnostics (required git hooks, task-start readiness).",
+        help="Run local runtime diagnostics (hooks, config, DB, Redis, migration parity).",
+    )
+    doctor_parser.add_argument(
+        "--timeout-seconds",
+        type=float,
+        default=2.0,
+        help="Timeout per dependency check.",
     )
     return parser
 
@@ -833,7 +930,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             api_key=(args.api_key or "").strip() or None,
         )
     if args.command == "doctor":
-        return _run_doctor()
+        return _run_doctor(timeout_seconds=max(0.1, args.timeout_seconds))
 
     parser.print_help()
     return 1

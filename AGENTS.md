@@ -77,6 +77,12 @@ After completing work:
 - Keep probability updates explainable (store factors used for deltas).
 - Any LLM usage must be protected by budget/limits where possible.
 
+## Agent Tooling Policy
+
+- `.claude/settings.local.json` is a local override and must remain untracked.
+- Keep only `.claude/settings.example.json` versioned as the baseline policy.
+- Local setup instructions live in `.claude/README.md`.
+
 ## Human-Gated Tasks
 
 - Task entries may include the label `[REQUIRES_HUMAN]`.

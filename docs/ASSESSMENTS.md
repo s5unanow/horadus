@@ -100,3 +100,14 @@ Recommended gating:
 - `REQUIRES_HUMAN`: anything involving production secrets, network exposure,
   auth policy, data retention/destructive ops, probability math semantics, or
   migrations (unless already well-covered and explicitly delegated).
+
+## Promotion De-duplication Guard
+
+Use the helper to scaffold backlog entries from assessment proposals:
+
+- `./scripts/promote_assessment_proposal.sh --proposal-id ... --assessment-ref ... --title "..."`
+
+Cross-role duplicate checks are built in:
+- default mode: warn-only (prints prior `(proposal_id, Assessment-Ref)` matches)
+- strict mode: `--strict-dedupe` (exits non-zero on duplicate matches)
+- configurable lookback: `--lookback-days N` (default `14`)

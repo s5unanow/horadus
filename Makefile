@@ -164,7 +164,7 @@ agent-smoke-run: deps-dev ## One-shot agent profile smoke run (serve -> smoke ->
 # =============================================================================
 
 test: deps-dev ## Run all tests
-	$(UV_RUN) pytest tests/ -v
+	$(UV_RUN) pytest tests/ -v --allow-hosts=127.0.0.1,localhost
 
 test-unit: deps-dev ## Run unit tests only
 	$(UV_RUN) pytest tests/unit/ -v -m unit
@@ -172,10 +172,10 @@ test-unit: deps-dev ## Run unit tests only
 test-integration: deps-dev ## Run integration tests only
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" $(UV_RUN) alembic upgrade head
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)" ./scripts/check_migration_drift.sh
-	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" REDIS_URL="$(INTEGRATION_REDIS_URL)" $(UV_RUN) pytest tests/integration/ -v -m integration
+	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" REDIS_URL="$(INTEGRATION_REDIS_URL)" $(UV_RUN) pytest tests/integration/ -v -m integration --allow-hosts=127.0.0.1,localhost
 
 test-cov: deps-dev ## Run tests with coverage report
-	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html
+	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html --allow-hosts=127.0.0.1,localhost
 	@echo "$(GREEN)Coverage report: htmlcov/index.html$(RESET)"
 
 # =============================================================================
@@ -325,4 +325,4 @@ ci: ## CI pipeline (format check, lint, typecheck, test)
 	$(UV_RUN) ruff format src/ tests/ --check
 	$(UV_RUN) ruff check src/ tests/
 	$(UV_RUN) mypy src/
-	$(UV_RUN) pytest tests/ -v --cov=src
+	$(UV_RUN) pytest tests/ -v --cov=src --allow-hosts=127.0.0.1,localhost

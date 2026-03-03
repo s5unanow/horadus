@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate branch-guard task-preflight task-start agent-safe-start task-finish protect-main doctor \
+        db-migration-gate release-gate branch-guard task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run \
         check-tracked-artifacts validate-assessments automations-export automations-apply
 
 # Default target
@@ -150,6 +150,9 @@ protect-main: ## Apply required main-branch protection + merge policy (requires 
 
 doctor: deps-dev ## Run local workflow diagnostics (hooks + basic policy checks)
 	$(UV_RUN) horadus doctor
+
+agent-smoke-run: deps-dev ## One-shot agent profile smoke run (serve -> smoke -> exit)
+	./scripts/agent_smoke_run.sh
 
 # =============================================================================
 # Testing

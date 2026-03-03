@@ -194,6 +194,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 3
 
+- TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 

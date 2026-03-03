@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-02-19
+**Last Updated**: 2026-03-03
 **Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
 **Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
@@ -232,7 +232,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-164` Add one-shot agent smoke run target (serve → smoke → exit)
 - `TASK-165` Make `horadus agent smoke` robust across auth/environment settings
 - `TASK-166` Add fast agent gate target (`make agent-check`)
 - `TASK-167` Add context-efficient backpressure wrappers for noisy commands

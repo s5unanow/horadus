@@ -12,7 +12,6 @@
 - TASKs pulled in: all backlog tasks not listed in `tasks/COMPLETED.md`.
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
-- `TASK-170` Enforce “no network in tests” mechanically
 - `TASK-171` Align Claude Code permissions policy with repo workflow
 - `TASK-172` Add short “agent runbook index” doc (canonical commands)
 - `TASK-173` Add “task context pack” helper (`scripts/task_context_pack.sh`)
@@ -38,3 +37,4 @@
 - `TASK-167` Add context-efficient backpressure wrappers for noisy commands ✅
 - `TASK-168` Add `horadus doctor` (or `make doctor`) self-diagnostic command ✅
 - `TASK-169` Add offline fixtures and a dry-run pipeline path (no network, no LLM) ✅
+- `TASK-170` Enforce “no network in tests” mechanically ✅

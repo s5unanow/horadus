@@ -73,6 +73,7 @@ dev = [
     "pytest-asyncio>=0.23.0",
     "pytest-cov>=4.1.0",
     "pytest-mock>=3.12.0",
+    "pytest-socket>=0.7.0",
     "httpx>=0.26.0",  # For TestClient
 
     # Code Quality
@@ -114,6 +115,8 @@ addopts = [
     "-v",
     "--tb=short",
     "--strict-markers",
+    "--disable-socket",
+    "--allow-unix-socket",
 ]
 markers = [
     "unit: Unit tests (fast, no external dependencies)",

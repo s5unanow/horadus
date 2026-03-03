@@ -102,3 +102,80 @@ def test_validator_rejects_invalid_confidence(tmp_path: Path) -> None:
     result = _run(path)
     assert result.returncode == 2
     assert "invalid confidence" in result.stdout
+
+
+def test_validator_rejects_daily_title_date_mismatch(tmp_path: Path) -> None:
+    path = tmp_path / "2026-03-02.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-01",
+                "",
+                "### PROPOSAL-2026-03-02-po-example",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "verification: make test-unit",
+                "blast_radius: scripts/",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = _run(path)
+    assert result.returncode == 2
+    assert "title date mismatch" in result.stdout
+
+
+def test_validator_rejects_daily_proposal_id_date_mismatch(tmp_path: Path) -> None:
+    path = tmp_path / "2026-03-02.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-02",
+                "",
+                "### PROPOSAL-2026-03-01-po-example",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "verification: make test-unit",
+                "blast_radius: scripts/",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = _run(path)
+    assert result.returncode == 2
+    assert "proposal date mismatch" in result.stdout
+
+
+def test_validator_accepts_daily_date_integrity_match(tmp_path: Path) -> None:
+    path = tmp_path / "2026-03-02.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-02",
+                "",
+                "### PROPOSAL-2026-03-02-po-example",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "verification: make test-unit",
+                "blast_radius: scripts/",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = _run(path)
+    assert result.returncode == 0

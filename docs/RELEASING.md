@@ -57,6 +57,45 @@ make release-gate RELEASE_GATE_DATABASE_URL="<target-db-url>" RELEASE_GATE_INCLU
 
 This additionally runs `make audit-eval`.
 
+## Runtime SLO Gate (Cross-Stage)
+
+Use runtime gate after staging runtime metrics are collected:
+
+```bash
+make release-gate-runtime
+```
+
+Default input:
+- `artifacts/agent/runtime_slo_metrics.json`
+
+Expected JSON shape:
+
+```json
+{
+  "stages": {
+    "development": {"error_rate": 0.01, "p95_latency_ms": 180, "budget_denial_rate": 0.0, "window_minutes": 120},
+    "staging": {"error_rate": 0.02, "p95_latency_ms": 320, "budget_denial_rate": 0.01, "window_minutes": 120},
+    "production": {"error_rate": 0.03, "p95_latency_ms": 410, "budget_denial_rate": 0.01, "window_minutes": 120}
+  }
+}
+```
+
+Tune thresholds/windows explicitly when needed:
+
+```bash
+uv run --no-sync python scripts/release_gate_runtime.py \
+  --input artifacts/agent/runtime_slo_metrics.json \
+  --max-error-rate 0.04 \
+  --max-p95-latency-ms 1000 \
+  --max-budget-denial-rate 0.08 \
+  --max-production-error-rate-drift 0.015 \
+  --min-window-minutes 90
+```
+
+Behavior:
+- `staging`/`production` modes are fail-closed (non-zero on FAIL).
+- `development` mode is warn-only by default unless `--strict` is set.
+
 ## Mandatory Task Delivery Workflow (Hard Rule)
 
 For any engineering change (including docs/process changes):

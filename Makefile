@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate branch-guard task-preflight agent-task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
+        db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
         check-tracked-artifacts validate-assessments automations-export automations-apply
 
 # Default target
@@ -296,6 +296,9 @@ release-gate: deps-dev ## Run release gates (check + test + docs + migration gat
 		echo "$(BLUE)Skipping eval audit gate (set RELEASE_GATE_INCLUDE_EVAL=true to enable).$(RESET)"; \
 	fi
 	@echo "$(GREEN)Release gate passed.$(RESET)"
+
+release-gate-runtime: deps-dev ## Evaluate runtime SLO/error-budget gate from metrics JSON
+	$(UV_RUN) python scripts/release_gate_runtime.py
 
 # =============================================================================
 # Security

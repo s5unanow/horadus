@@ -232,7 +232,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-187` Agent task-eligibility preflight (prevent policy-violating starts)
 - `TASK-188` Cross-role promotion de-duplication guard (assessment proposals)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

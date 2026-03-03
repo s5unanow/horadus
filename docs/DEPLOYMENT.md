@@ -168,11 +168,28 @@ Recommended hosting path:
 - Keep `index.html` as the canonical dashboard URL.
 - Restrict dashboard exposure to trusted networks if it contains sensitive analysis.
 
-## 6b) Runtime gate metrics artifact
+## 6b) Runtime gate metrics + cluster drift sentinel artifacts
 
 Runtime SLO gate input (for `make release-gate-runtime`) should be written to:
 
 - `artifacts/agent/runtime_slo_metrics.json`
+
+Cluster drift sentinel output is generated daily by worker beat at:
+
+- `artifacts/cluster_drift/YYYY-MM-DD.json`
+
+Sentinel thresholds are warn-only by default and are configurable via:
+
+- `CLUSTER_DRIFT_SINGLETON_RATE_WARN_THRESHOLD`
+- `CLUSTER_DRIFT_LARGE_CLUSTER_RATE_WARN_THRESHOLD`
+- `CLUSTER_DRIFT_CONTRADICTION_RATE_WARN_THRESHOLD`
+- `CLUSTER_DRIFT_LANGUAGE_DRIFT_WARN_THRESHOLD`
+
+Operational check:
+
+```bash
+ls -1 artifacts/cluster_drift/ | tail -n 5
+```
 
 ## 7) Operate and update
 

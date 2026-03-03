@@ -121,6 +121,9 @@ Checkpoint semantics:
   checkpoint instead of advancing on partial failure.
 Periodic freshness checks (`workers.check_source_freshness`) alert on stale sources
 and trigger bounded collector catch-up dispatch before gap risk accumulates.
+Daily cluster quality checks (`workers.monitor_cluster_drift`) compute warn-only proxy
+signals (singleton rate, large-cluster tail, contradiction incidence, language
+distribution drift) and persist JSON artifacts under `artifacts/cluster_drift/`.
 
 ### 2. Processing Flow
 
@@ -494,6 +497,7 @@ feeds:
 | API latency p95 | FastAPI | > 500ms |
 | Queue depth | Redis | > 1000 |
 | Error rate | Logs | > 1% |
+| Cluster drift warnings/day | Sentinel artifact (`warning_keys`) | > 0 (investigate) |
 
 ### Health Checks
 

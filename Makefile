@@ -96,9 +96,9 @@ check: format lint typecheck ## Run all code quality checks
 	@echo "$(GREEN)All checks passed!$(RESET)"
 
 agent-check: deps-dev ## Fast local gate for agent iteration (ruff, mypy, unit tests)
-	$(UV_RUN) ruff check src/ tests/
-	$(UV_RUN) mypy src/
-	$(UV_RUN) pytest tests/unit/ -v -m unit
+	./scripts/run_with_backpressure.sh ruff-check $(UV_RUN) ruff check src/ tests/
+	./scripts/run_with_backpressure.sh mypy $(UV_RUN) mypy src/
+	./scripts/run_with_backpressure.sh pytest-unit $(UV_RUN) pytest tests/unit/ -v -m unit
 
 pre-commit: ## Run pre-commit on all files
 	$(UV_RUN) pre-commit run --all-files

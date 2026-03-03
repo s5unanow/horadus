@@ -133,6 +133,7 @@ artifacts/backlog_triage/
 artifacts/sprint_health/
 artifacts/assessments/
 artifacts/agent_context/
+artifacts/agent/
 
 # Legacy/local-only assessment output path (prefer artifacts/assessments/)
 assessments/

@@ -28,6 +28,11 @@ To validate the most recent assessment artifacts locally:
 
 - `python scripts/validate_assessment_artifacts.py`
 
+Daily artifact integrity enforced by validator:
+- Filename date (`artifacts/assessments/<role>/daily/YYYY-MM-DD.md`) must match the top report
+  heading date.
+- Proposal/Finding IDs in that file must use the same `YYYY-MM-DD` date segment.
+
 ## Proposal Schema (Minimum Fields)
 
 Assessments must emit proposals/findings with a stable ID that is **not** a

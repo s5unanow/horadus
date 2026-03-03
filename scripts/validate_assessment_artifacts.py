@@ -31,6 +31,9 @@ ALLOWED_GATES = {"AUTO_OK", "HUMAN_REVIEW", "REQUIRES_HUMAN"}
 RE_PROPOSAL_HEADING = re.compile(r"^###\s+((?:PROPOSAL|FINDING)-[A-Za-z0-9._:-]+)\s*$")
 RE_FORBIDDEN_TASK_HEADING = re.compile(r"^###\s+TASK-\d{3}\b")
 RE_KV = re.compile(r"^\s*([a-z_]+)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+RE_DAILY_FILENAME_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\.md$")
+RE_TITLE_DATE = re.compile(r"^#\s+.+?(\d{4}-\d{2}-\d{2})\s*$")
+RE_PROPOSAL_DATE = re.compile(r"^(?:PROPOSAL|FINDING)-(\d{4}-\d{2}-\d{2})-")
 
 RE_PRIORITY = re.compile(r"^P[0-3]$")
 
@@ -80,6 +83,38 @@ def validate_file(path: Path) -> list[Finding]:
 
     findings: list[Finding] = []
 
+    filename_date_match = RE_DAILY_FILENAME_DATE.search(path.name)
+    filename_date = filename_date_match.group(1) if filename_date_match else None
+    title_date: str | None = None
+    if filename_date is not None:
+        for idx, line in enumerate(lines, start=1):
+            title_match = RE_TITLE_DATE.match(line.strip())
+            if title_match:
+                title_date = title_match.group(1)
+                if title_date != filename_date:
+                    findings.append(
+                        Finding(
+                            path=path,
+                            line_no=idx,
+                            message=(
+                                "daily report title date mismatch: "
+                                f"expected {filename_date}, found {title_date}"
+                            ),
+                        )
+                    )
+                break
+        if title_date is None:
+            findings.append(
+                Finding(
+                    path=path,
+                    line_no=1,
+                    message=(
+                        "daily report title missing date: "
+                        f"expected {filename_date} in top heading"
+                    ),
+                )
+            )
+
     for idx, line in enumerate(lines, start=1):
         if RE_FORBIDDEN_TASK_HEADING.match(line):
             findings.append(
@@ -95,6 +130,31 @@ def validate_file(path: Path) -> list[Finding]:
         match = RE_PROPOSAL_HEADING.match(line)
         if match:
             proposal_starts.append((idx, match.group(1)))
+            if filename_date is not None:
+                proposal_id = match.group(1)
+                date_match = RE_PROPOSAL_DATE.match(proposal_id)
+                if date_match is None:
+                    findings.append(
+                        Finding(
+                            path=path,
+                            line_no=idx,
+                            message=(
+                                f"{proposal_id}: missing YYYY-MM-DD segment matching "
+                                f"filename date {filename_date}"
+                            ),
+                        )
+                    )
+                elif date_match.group(1) != filename_date:
+                    findings.append(
+                        Finding(
+                            path=path,
+                            line_no=idx,
+                            message=(
+                                f"{proposal_id}: proposal date mismatch "
+                                f"(expected {filename_date}, found {date_match.group(1)})"
+                            ),
+                        )
+                    )
 
     if not proposal_starts:
         # Allow a deliberate "no findings" report.

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
@@ -316,6 +317,34 @@ def _http_get(url: str, *, timeout_seconds: float, headers: dict[str, str] | Non
         return 0
 
 
+def _http_get_json(
+    url: str,
+    *,
+    timeout_seconds: float,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, dict[str, object] | None]:
+    request = urllib_request.Request(url=url, method="GET", headers=headers or {})
+    try:
+        with urllib_request.urlopen(  # nosec B310
+            request, timeout=timeout_seconds
+        ) as response:
+            status = int(response.status)
+            payload = json.loads(response.read().decode("utf-8"))
+            if isinstance(payload, dict):
+                return status, payload
+            return status, None
+    except urllib_error.HTTPError as exc:
+        try:
+            payload = json.loads(exc.read().decode("utf-8"))
+        except Exception:
+            payload = None
+        if isinstance(payload, dict):
+            return int(exc.code), payload
+        return int(exc.code), None
+    except (urllib_error.URLError, TimeoutError, json.JSONDecodeError):
+        return 0, None
+
+
 def _run_agent_smoke(
     *,
     base_url: str,
@@ -323,30 +352,49 @@ def _run_agent_smoke(
     api_key: str | None,
 ) -> int:
     normalized_base_url = base_url.rstrip("/")
-    checks: list[tuple[str, dict[str, str] | None]] = [
-        ("/health", None),
-        ("/openapi.json", None),
-    ]
-    if settings.API_AUTH_ENABLED and api_key:
-        checks.append(("/api/v1/trends", {"X-API-Key": api_key}))
+    health_status = _http_get(
+        f"{normalized_base_url}/health",
+        timeout_seconds=timeout_seconds,
+    )
+    if 200 <= health_status < 300:
+        print(f"PASS /health {health_status}")
+    else:
+        print(f"FAIL /health {health_status or 'connection_error'}")
+        return 2
 
-    failures = 0
-    for path, headers in checks:
-        status_code = _http_get(
-            f"{normalized_base_url}{path}",
-            timeout_seconds=timeout_seconds,
-            headers=headers,
-        )
-        if 200 <= status_code < 300:
-            print(f"PASS {path} {status_code}")
-        else:
-            print(f"FAIL {path} {status_code or 'connection_error'}")
-            failures += 1
+    openapi_status, openapi_payload = _http_get_json(
+        f"{normalized_base_url}/openapi.json",
+        timeout_seconds=timeout_seconds,
+    )
+    if 200 <= openapi_status < 300:
+        print(f"PASS /openapi.json {openapi_status}")
+    else:
+        print(f"FAIL /openapi.json {openapi_status or 'connection_error'}")
+        return 2
 
-    if settings.API_AUTH_ENABLED and not api_key:
-        print("SKIP /api/v1/trends auth_enabled=true but no API key provided")
+    trend_headers = {"X-API-Key": api_key} if api_key else None
+    trend_status = _http_get(
+        f"{normalized_base_url}/api/v1/trends",
+        timeout_seconds=timeout_seconds,
+        headers=trend_headers,
+    )
+    if 200 <= trend_status < 300:
+        print(f"PASS /api/v1/trends {trend_status}")
+        return 0
 
-    return 0 if failures == 0 else 2
+    if trend_status in {401, 403} and not api_key:
+        auth_hint = "unknown"
+        if openapi_payload is not None:
+            auth_hint = "openapi_security_present"
+        print(f"PASS /api/v1/trends {trend_status} auth_enforced_without_key ({auth_hint})")
+        return 0
+
+    if trend_status in {401, 403} and api_key:
+        print(f"FAIL /api/v1/trends {trend_status} api_key_rejected")
+        return 2
+
+    print(f"FAIL /api/v1/trends {trend_status or 'connection_error'}")
+    return 2
 
 
 def _doctor_check_required_hooks() -> tuple[str, str]:

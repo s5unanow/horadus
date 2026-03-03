@@ -232,7 +232,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-165` Make `horadus agent smoke` robust across auth/environment settings
 - `TASK-166` Add fast agent gate target (`make agent-check`)
 - `TASK-167` Add context-efficient backpressure wrappers for noisy commands
 - `TASK-168` Add `horadus doctor` (or `make doctor`) self-diagnostic command

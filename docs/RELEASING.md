@@ -288,3 +288,19 @@ Staging vs production rollback expectations:
   - `README.md`
   - `docs/DEPLOYMENT.md`
   - `docs/PROMPT_EVAL_POLICY.md` (if eval gates change)
+
+### Human-Blocked Launch Metadata Workflow
+
+When active sprint items include `[REQUIRES_HUMAN]` blockers, keep this metadata
+updated in `tasks/CURRENT_SPRINT.md` under `## Human Blocker Metadata`:
+
+- `owner`
+- `last_touched` (`YYYY-MM-DD`)
+- `next_action` (`YYYY-MM-DD`)
+- `escalate_after_days` (integer)
+
+If `TASK-080` (Telegram wiring) remains open, keep an explicit `## Telegram Launch Scope`
+decision in `tasks/CURRENT_SPRINT.md` (`launch_scope: ...`).
+
+`make docs-freshness` fails closed when required blocker metadata or Telegram scope
+declaration is missing.

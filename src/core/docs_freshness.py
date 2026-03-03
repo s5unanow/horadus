@@ -97,6 +97,14 @@ _CURRENT_SPRINT_ACTIVE_HEADING = "Active Tasks"
 _CURRENT_SPRINT_COMPLETED_HEADING = "Completed This Sprint"
 _PROJECT_STATUS_IN_PROGRESS_HEADING = "In Progress"
 _PROJECT_STATUS_BLOCKED_HEADING = "Blocked"
+_HUMAN_BLOCKER_METADATA_HEADING = "Human Blocker Metadata"
+_TELEGRAM_SCOPE_HEADING = "Telegram Launch Scope"
+_REQUIRED_HUMAN_BLOCKER_METADATA_FIELDS: tuple[str, ...] = (
+    "owner",
+    "last_touched",
+    "next_action",
+    "escalate_after_days",
+)
 
 
 def _load_overrides(override_path: Path) -> tuple[_Override, ...]:
@@ -182,6 +190,49 @@ def _extract_current_sprint_active_tasks(content: str) -> tuple[set[str], set[st
             active_requires_human_tasks.update(line_task_ids)
 
     return active_tasks, active_requires_human_tasks
+
+
+def _extract_human_blocker_metadata(content: str) -> dict[str, dict[str, str]]:
+    section = _extract_h2_section(content, _HUMAN_BLOCKER_METADATA_HEADING)
+    if section is None:
+        return {}
+
+    metadata: dict[str, dict[str, str]] = {}
+    for raw_line in section.splitlines():
+        line = raw_line.strip()
+        if not line.startswith("-"):
+            continue
+        task_ids = _extract_task_ids(line)
+        if not task_ids:
+            continue
+        fields: dict[str, str] = {}
+        for segment in line.split("|"):
+            key, separator, value = segment.partition("=")
+            if separator != "=":
+                continue
+            normalized_key = key.strip().lstrip("-").strip().lower()
+            if not normalized_key:
+                continue
+            fields[normalized_key] = value.strip()
+        for task_id in task_ids:
+            metadata[task_id] = fields
+    return metadata
+
+
+def _extract_telegram_launch_scope(content: str) -> str | None:
+    section = _extract_h2_section(content, _TELEGRAM_SCOPE_HEADING)
+    if section is None:
+        return None
+
+    for raw_line in section.splitlines():
+        line = raw_line.strip()
+        if "launch_scope" not in line:
+            continue
+        _, _, value = line.partition(":")
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return None
 
 
 def _extract_completed_task_ids(content: str) -> set[str]:
@@ -443,6 +494,137 @@ def run_docs_freshness_check(
                 ),
                 path="PROJECT_STATUS.md",
             )
+
+        if active_requires_human_tasks:
+            blocker_metadata = _extract_human_blocker_metadata(current_sprint)
+            for task_id in sorted(active_requires_human_tasks):
+                task_metadata = blocker_metadata.get(task_id)
+                if task_metadata is None:
+                    _record_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        active_override_map=active_override_map,
+                        rule_id="human_blocker_metadata_missing",
+                        message=(
+                            f"{task_id} missing metadata in CURRENT_SPRINT "
+                            f"'{_HUMAN_BLOCKER_METADATA_HEADING}' section"
+                        ),
+                        path="tasks/CURRENT_SPRINT.md",
+                    )
+                    continue
+
+                missing_fields = [
+                    field
+                    for field in _REQUIRED_HUMAN_BLOCKER_METADATA_FIELDS
+                    if not task_metadata.get(field, "").strip()
+                ]
+                if missing_fields:
+                    _record_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        active_override_map=active_override_map,
+                        rule_id="human_blocker_metadata_missing_fields",
+                        message=(
+                            f"{task_id} metadata missing required fields: "
+                            + ", ".join(missing_fields)
+                        ),
+                        path="tasks/CURRENT_SPRINT.md",
+                    )
+
+                parsed_metadata_dates: dict[str, date] = {}
+                for date_field in ("last_touched", "next_action"):
+                    raw_value = task_metadata.get(date_field, "").strip()
+                    if not raw_value:
+                        continue
+                    try:
+                        parsed_date = date.fromisoformat(raw_value)
+                    except ValueError:
+                        _record_issue(
+                            errors=errors,
+                            warnings=warnings,
+                            active_override_map=active_override_map,
+                            rule_id="human_blocker_metadata_invalid_date",
+                            message=(
+                                f"{task_id} metadata field '{date_field}' must use YYYY-MM-DD "
+                                f"(found '{raw_value}')"
+                            ),
+                            path="tasks/CURRENT_SPRINT.md",
+                        )
+                        continue
+                    parsed_metadata_dates[date_field] = parsed_date
+                    if date_field == "last_touched" and parsed_date > now:
+                        _record_issue(
+                            errors=errors,
+                            warnings=warnings,
+                            active_override_map=active_override_map,
+                            rule_id="human_blocker_metadata_future_date",
+                            message=(
+                                f"{task_id} metadata field '{date_field}' is in the future "
+                                f"({parsed_date.isoformat()})"
+                            ),
+                            path="tasks/CURRENT_SPRINT.md",
+                        )
+                if (
+                    "last_touched" in parsed_metadata_dates
+                    and "next_action" in parsed_metadata_dates
+                    and parsed_metadata_dates["next_action"] < parsed_metadata_dates["last_touched"]
+                ):
+                    _record_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        active_override_map=active_override_map,
+                        rule_id="human_blocker_metadata_invalid_date_order",
+                        message=(
+                            f"{task_id} metadata field 'next_action' must be on/after "
+                            "'last_touched'"
+                        ),
+                        path="tasks/CURRENT_SPRINT.md",
+                    )
+
+                escalate_raw = task_metadata.get("escalate_after_days", "").strip()
+                if escalate_raw:
+                    try:
+                        escalate_days = int(escalate_raw)
+                    except ValueError:
+                        _record_issue(
+                            errors=errors,
+                            warnings=warnings,
+                            active_override_map=active_override_map,
+                            rule_id="human_blocker_metadata_invalid_escalation_threshold",
+                            message=(
+                                f"{task_id} metadata field 'escalate_after_days' must be an "
+                                f"integer (found '{escalate_raw}')"
+                            ),
+                            path="tasks/CURRENT_SPRINT.md",
+                        )
+                    else:
+                        if escalate_days <= 0:
+                            _record_issue(
+                                errors=errors,
+                                warnings=warnings,
+                                active_override_map=active_override_map,
+                                rule_id="human_blocker_metadata_invalid_escalation_threshold",
+                                message=(
+                                    f"{task_id} metadata field 'escalate_after_days' must be > 0 "
+                                    f"(found '{escalate_days}')"
+                                ),
+                                path="tasks/CURRENT_SPRINT.md",
+                            )
+
+            if "TASK-080" in active_sprint_tasks:
+                telegram_scope = _extract_telegram_launch_scope(current_sprint)
+                if telegram_scope is None:
+                    _record_issue(
+                        errors=errors,
+                        warnings=warnings,
+                        active_override_map=active_override_map,
+                        rule_id="telegram_launch_scope_missing",
+                        message=(
+                            "TASK-080 is active: CURRENT_SPRINT must define "
+                            f"'{_TELEGRAM_SCOPE_HEADING}' with a launch_scope field"
+                        ),
+                        path="tasks/CURRENT_SPRINT.md",
+                    )
 
     adr_dir = repo_root / "docs" / "adr"
     available_adr_ids: set[str] = set()

@@ -12,7 +12,6 @@
 - TASKs pulled in: all backlog tasks not listed in `tasks/COMPLETED.md`.
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
-- `TASK-184` Human-gated blocker aging SLA + explicit Telegram scope decision
 - `TASK-185` PROJECT_STATUS freshness SLA tied to sprint deltas
 - `TASK-186` Assessment date-integrity guard (filename vs content)
 - `TASK-187` Agent task-eligibility preflight (prevent policy-violating starts)
@@ -23,6 +22,19 @@
 - `TASK-192` Cluster drift sentinel (scheduled quality monitor)
 - `TASK-193` Degraded-mode policy for sustained LLM failover `[REQUIRES_HUMAN]`
 - `TASK-196` Branch-policy hardening guardrails for autonomous execution
+
+## Human Blocker Metadata
+
+- TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-189 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-190 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-193 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+
+## Telegram Launch Scope
+
+- launch_scope: excluded_until_task_080_done
+- decision_date: 2026-03-03
+- rationale: Telegram ingestion remains explicitly out of launch scope until the human-gated wiring/sign-off task closes.
 
 ---
 
@@ -38,3 +50,4 @@
 - `TASK-171` Align Claude Code permissions policy with repo workflow ✅
 - `TASK-172` Add short “agent runbook index” doc (canonical commands) ✅
 - `TASK-173` Add “task context pack” helper (`scripts/task_context_pack.sh`) ✅
+- `TASK-184` Human-gated blocker aging SLA + explicit Telegram scope decision ✅

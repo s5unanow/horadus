@@ -232,7 +232,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## In Progress
 
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
-- `TASK-184` Human-gated blocker aging SLA + explicit Telegram scope decision
 - `TASK-185` PROJECT_STATUS freshness SLA tied to sprint deltas
 - `TASK-186` Assessment date-integrity guard (filename vs content)
 - `TASK-187` Agent task-eligibility preflight (prevent policy-violating starts)
@@ -250,6 +249,22 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-189` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 - `TASK-190` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 - `TASK-193` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
+
+## Human Blocker SLA
+
+- Required metadata for each active `[REQUIRES_HUMAN]` task (source in `tasks/CURRENT_SPRINT.md`):
+  - `owner`
+  - `last_touched` (`YYYY-MM-DD`)
+  - `next_action` (`YYYY-MM-DD`)
+  - `escalate_after_days` (integer)
+- Docs freshness gate fails when metadata is missing or malformed.
+- Operational expectation: update blocker metadata every touch and at least once per escalation window.
+
+## Telegram Launch Scope
+
+- launch_scope: excluded_until_task_080_done
+- decision_date: 2026-03-03
+- rationale: Telegram collector wiring remains human-gated and is explicitly excluded from launch scope until `TASK-080` is closed.
 
 ## Next Up (Priority Order)
 

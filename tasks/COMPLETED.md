@@ -197,6 +197,7 @@ Tasks that have been completed and verified.
 - TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅
 - TASK-165: Make `horadus agent smoke` robust across auth/environment settings ✅
 - TASK-166: Add fast agent gate target (`make agent-check`) ✅
+- TASK-167: Add context-efficient backpressure wrappers for noisy commands ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 

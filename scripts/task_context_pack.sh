@@ -24,7 +24,27 @@ backlog_path="${repo_root}/tasks/BACKLOG.md"
 sprint_path="${repo_root}/tasks/CURRENT_SPRINT.md"
 spec_path="${repo_root}/tasks/specs/${task_id#TASK-}-"*
 
-if ! rg -q "^### ${task_id}:" "${backlog_path}"; then
+line_exists() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -q -- "${pattern}" "${file}"
+  else
+    grep -Eq -- "${pattern}" "${file}"
+  fi
+}
+
+print_matching_lines() {
+  local pattern="$1"
+  local file="$2"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n -- "${pattern}" "${file}" || true
+  else
+    grep -En -- "${pattern}" "${file}" || true
+  fi
+}
+
+if ! line_exists "^### ${task_id}:" "${backlog_path}"; then
   echo "${task_id} not found in tasks/BACKLOG.md"
   exit 1
 fi
@@ -41,7 +61,7 @@ awk -v task="${task_id}" '
 echo
 
 echo "## Sprint Status"
-rg -n "${task_id}" "${sprint_path}" || true
+print_matching_lines "${task_id}" "${sprint_path}"
 echo
 
 echo "## Matching Spec"

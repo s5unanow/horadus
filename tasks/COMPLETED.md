@@ -202,6 +202,7 @@ Tasks that have been completed and verified.
 - TASK-169: Add offline fixtures and a dry-run pipeline path (no network, no LLM) ✅
 - TASK-170: Enforce “no network in tests” mechanically ✅
 - TASK-171: Align Claude Code permissions policy with repo workflow ✅
+- TASK-172: Add short “agent runbook index” doc (canonical commands) ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 

@@ -252,6 +252,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-191` Cross-stage SLO/error-budget release gate
 - `TASK-192` Cluster drift sentinel (scheduled quality monitor)
 - `TASK-193` Degraded-mode policy for sustained LLM failover `[REQUIRES_HUMAN]`
+- `TASK-196` Branch-policy hardening guardrails for autonomous execution
 
 ## Blocked
 

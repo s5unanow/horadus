@@ -10,7 +10,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate branch-guard task-preflight task-start task-finish protect-main \
+        db-migration-gate release-gate branch-guard task-preflight task-start agent-safe-start task-finish protect-main doctor \
         check-tracked-artifacts validate-assessments automations-export automations-apply
 
 # Default target
@@ -64,10 +64,11 @@ deps: venv ## Install production dependencies (prefers uv)
 deps-dev: venv ## Install development dependencies (prefers uv)
 	$(UV) sync --extra dev --python $(VENV_PY)
 
-hooks: deps-dev ## Install git hooks (pre-commit + commit-msg)
+hooks: deps-dev ## Install git hooks (pre-commit + pre-push + commit-msg)
 	$(UV_RUN) pre-commit install
 	$(UV_RUN) pre-commit install --hook-type pre-push
 	$(UV_RUN) pre-commit install --hook-type commit-msg
+	./scripts/check_required_hooks.sh
 
 install: deps ## Back-compat alias for deps
 
@@ -122,11 +123,33 @@ task-start: ## Start a new task branch with sequencing guards (TASK=117 NAME=sho
 	fi
 	./scripts/start_task_branch.sh "$(TASK)" "$(NAME)"
 
+agent-safe-start: ## Start a task branch with sprint-eligibility + sequencing guard (TASK=117 NAME=short-name)
+	@if [ -z "$(TASK)" ] || [ -z "$(NAME)" ]; then \
+		echo "Usage: make agent-safe-start TASK=117 NAME=short-name"; \
+		exit 1; \
+	fi
+	@if ! rg -q "^## Active Tasks" tasks/CURRENT_SPRINT.md; then \
+		echo "Active Tasks section missing in tasks/CURRENT_SPRINT.md"; \
+		exit 1; \
+	fi
+	@if ! awk '/^## Active Tasks/{f=1;next}/^## /{f=0}f' tasks/CURRENT_SPRINT.md | rg -q "TASK-$(TASK)"; then \
+		echo "TASK-$(TASK) is not listed in Active Tasks"; \
+		exit 1; \
+	fi
+	@if awk '/^## Active Tasks/{f=1;next}/^## /{f=0}f' tasks/CURRENT_SPRINT.md | rg -q "TASK-$(TASK).*\\[REQUIRES_HUMAN\\]"; then \
+		echo "TASK-$(TASK) is marked [REQUIRES_HUMAN] and cannot be started autonomously"; \
+		exit 1; \
+	fi
+	./scripts/start_task_branch.sh "$(TASK)" "$(NAME)"
+
 task-finish: ## Finish current task PR lifecycle (checks -> merge -> main sync)
 	./scripts/finish_task_pr.sh
 
 protect-main: ## Apply required main-branch protection + merge policy (requires gh auth)
 	./scripts/enforce_main_protection.sh
+
+doctor: deps-dev ## Run local workflow diagnostics (hooks + basic policy checks)
+	$(UV_RUN) horadus doctor
 
 # =============================================================================
 # Testing

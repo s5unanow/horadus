@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from uuid import uuid4
 
 import pytest
@@ -275,6 +276,13 @@ def test_build_parser_accepts_agent_smoke_command() -> None:
     assert args.api_key == "test-key"  # pragma: allowlist secret
 
 
+def test_build_parser_accepts_doctor_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["doctor"])
+
+    assert args.command == "doctor"
+
+
 def test_run_agent_smoke_returns_success_when_health_and_openapi_pass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -325,3 +333,36 @@ def test_run_agent_smoke_returns_failure_on_non_2xx(
     )
 
     assert result == 2
+
+
+def test_run_doctor_fails_when_required_hooks_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    hooks_dir = tmp_path / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    (hooks_dir / "pre-commit").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+    os.chmod(hooks_dir / "pre-commit", 0o755)
+
+    result = cli_module._run_doctor()
+
+    assert result == 2
+
+
+def test_run_doctor_passes_when_required_hooks_exist(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    hooks_dir = tmp_path / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+
+    for hook_name in ("pre-commit", "pre-push", "commit-msg"):
+        path = hooks_dir / hook_name
+        path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
+        os.chmod(path, 0o755)
+
+    result = cli_module._run_doctor()
+
+    assert result == 0

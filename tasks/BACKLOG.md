@@ -3361,6 +3361,25 @@ remain valid.
 
 ---
 
+### TASK-196: Branch-policy hardening guardrails for autonomous execution
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Prevent recurrence of mixed work on `main` by tightening local start checks,
+canonical task-start command routing, and protected-branch enforcement defaults.
+
+**Files**: `Makefile`, `scripts/`, `src/cli.py`, `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Add canonical start command `make agent-safe-start TASK=XXX NAME=short-name` with eligibility + sequencing checks
+- [ ] `make hooks` verifies required local hooks are installed/executable (`pre-commit`, `pre-push`, `commit-msg`)
+- [ ] `scripts/check_task_start_preflight.sh` fails when required hooks are missing
+- [ ] `make doctor` reports required-hook status and exits non-zero on missing hooks
+- [ ] `scripts/enforce_main_protection.sh` enforces PR-only protected workflow defaults for `main`
+- [ ] Task tracking/docs updated in sprint/status/agent instructions
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] WebSocket for real-time trend updates

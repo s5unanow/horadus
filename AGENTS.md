@@ -14,7 +14,7 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 3. `tasks/BACKLOG.md` — canonical task specifications and acceptance criteria (triage/planning; not required for most execution)
 4. `docs/ARCHITECTURE.md` — system design and runtime flow
 5. `docs/DATA_MODEL.md` — schema and entity definitions
-6. `docs/AGENT_RUNBOOK.md` — canonical command index for agent execution
+6. `docs/AGENT_RUNBOOK.md` — canonical day-to-day command index
 
 ## Canonical Source-of-Truth Hierarchy
 

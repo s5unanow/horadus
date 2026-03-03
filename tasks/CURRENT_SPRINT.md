@@ -15,7 +15,6 @@
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
 - `TASK-193` Degraded-mode policy for sustained LLM failover `[REQUIRES_HUMAN]`
-- `TASK-196` Branch-policy hardening guardrails for autonomous execution
 
 ## Human Blocker Metadata
 
@@ -51,3 +50,4 @@
 - `TASK-188` Cross-role promotion de-duplication guard (assessment proposals) ✅
 - `TASK-191` Cross-stage SLO/error-budget release gate ✅
 - `TASK-192` Cluster drift sentinel (scheduled quality monitor) ✅
+- `TASK-196` Branch-policy hardening guardrails for autonomous execution ✅

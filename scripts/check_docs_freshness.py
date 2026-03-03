@@ -30,6 +30,12 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Maximum allowed age for Last Verified/Last Updated markers.",
     )
     parser.add_argument(
+        "--project-status-max-age-days",
+        type=int,
+        default=7,
+        help="Maximum allowed PROJECT_STATUS.md age when active sprint tasks exist.",
+    )
+    parser.add_argument(
         "--fail-on-warnings",
         action="store_true",
         help="Treat warnings (e.g., active overrides) as CI failures.",
@@ -45,6 +51,7 @@ def main() -> int:
         repo_root=repo_root,
         override_path=override_path,
         max_age_days=max(1, args.max_age_days),
+        project_status_max_age_days=max(1, args.project_status_max_age_days),
     )
 
     if result.warnings:

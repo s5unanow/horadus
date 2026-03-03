@@ -520,3 +520,79 @@ def test_docs_freshness_accepts_present_human_blocker_metadata(tmp_path: Path) -
 
     assert not any(issue.rule_id.startswith("human_blocker_metadata_") for issue in result.errors)
     assert not any(issue.rule_id == "telegram_launch_scope_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_stale_project_status_during_active_sprint(tmp_path: Path) -> None:
+    marker_date = (datetime.now(tz=UTC) - timedelta(days=9)).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-164` Agent smoke run",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-164` Agent smoke run",
+                "## Blocked",
+                "- none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+        project_status_max_age_days=7,
+    )
+
+    assert any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)
+
+
+def test_docs_freshness_allows_project_status_at_sla_boundary(tmp_path: Path) -> None:
+    marker_date = (datetime.now(tz=UTC) - timedelta(days=7)).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-164` Agent smoke run",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-164` Agent smoke run",
+                "## Blocked",
+                "- none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+        project_status_max_age_days=7,
+    )
+
+    assert not any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)

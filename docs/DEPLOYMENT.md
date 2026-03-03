@@ -168,6 +168,12 @@ Recommended hosting path:
 - Keep `index.html` as the canonical dashboard URL.
 - Restrict dashboard exposure to trusted networks if it contains sensitive analysis.
 
+## 6b) Runtime gate metrics artifact
+
+Runtime SLO gate input (for `make release-gate-runtime`) should be written to:
+
+- `artifacts/agent/runtime_slo_metrics.json`
+
 ## 7) Operate and update
 
 Deploy a new revision:

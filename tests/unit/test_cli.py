@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import os
 from uuid import uuid4
 
@@ -278,9 +279,10 @@ def test_build_parser_accepts_agent_smoke_command() -> None:
 
 def test_build_parser_accepts_doctor_command() -> None:
     parser = _build_parser()
-    args = parser.parse_args(["doctor"])
+    args = parser.parse_args(["doctor", "--timeout-seconds", "3.5"])
 
     assert args.command == "doctor"
+    assert args.timeout_seconds == pytest.approx(3.5)
 
 
 def test_run_agent_smoke_passes_when_server_enforces_auth_and_no_key(
@@ -433,7 +435,7 @@ def test_run_doctor_fails_when_required_hooks_missing(
     (hooks_dir / "pre-commit").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
     os.chmod(hooks_dir / "pre-commit", 0o755)
 
-    result = cli_module._run_doctor()
+    result = cli_module._run_doctor(timeout_seconds=0.2)
 
     assert result == 2
 
@@ -443,6 +445,8 @@ def test_run_doctor_passes_when_required_hooks_exist(
     tmp_path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cli_module.settings, "DATABASE_URL", "")
+    monkeypatch.setattr(cli_module.settings, "REDIS_URL", "")
     hooks_dir = tmp_path / ".git" / "hooks"
     hooks_dir.mkdir(parents=True)
 
@@ -451,6 +455,47 @@ def test_run_doctor_passes_when_required_hooks_exist(
         path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
         os.chmod(path, 0o755)
 
-    result = cli_module._run_doctor()
+    result = cli_module._run_doctor(timeout_seconds=0.2)
 
     assert result == 0
+
+
+def test_doctor_check_database_skips_when_database_url_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_module.settings, "DATABASE_URL", "")
+    status, message = asyncio.run(cli_module._doctor_check_database(0.2))
+    assert status == "SKIP"
+    assert "DATABASE_URL" in message
+
+
+def test_doctor_check_redis_skips_when_redis_url_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_module.settings, "REDIS_URL", "")
+    status, message = asyncio.run(cli_module._doctor_check_redis(0.2))
+    assert status == "SKIP"
+    assert "REDIS_URL" in message
+
+
+def test_run_doctor_returns_failure_on_safety_refusal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(cli_module.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(cli_module.settings, "RUNTIME_PROFILE", "agent")
+    monkeypatch.setattr(cli_module.settings, "AGENT_MODE", False)
+    monkeypatch.setattr(cli_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
+    monkeypatch.setattr(cli_module.settings, "API_HOST", "0.0.0.0")
+    monkeypatch.setattr(cli_module.settings, "API_AUTH_ENABLED", True)
+
+    async def fake_doctor_check_database(_timeout_seconds: float) -> tuple[str, str]:
+        return ("PASS", "ok")
+
+    async def fake_doctor_check_redis(_timeout_seconds: float) -> tuple[str, str]:
+        return ("PASS", "ok")
+
+    monkeypatch.setattr(cli_module, "_doctor_check_database", fake_doctor_check_database)
+    monkeypatch.setattr(cli_module, "_doctor_check_redis", fake_doctor_check_redis)
+
+    result = cli_module._run_doctor(timeout_seconds=0.2)
+    assert result == 2

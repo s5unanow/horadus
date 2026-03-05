@@ -234,6 +234,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
+- `TASK-197` Enforce local integration test gate before push/PR
 
 ## Blocked
 
@@ -260,6 +261,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 ## Next Up (Priority Order)
 
 1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
+2. Enforce local integration test gate before push/PR (`TASK-197`)
 
 ## Expert Feedback Integration ✅
 

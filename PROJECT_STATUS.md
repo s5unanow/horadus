@@ -234,14 +234,12 @@ Phase 8: Hardening (NEW)     [████████████████�
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
-- `TASK-193` Degraded-mode policy for sustained LLM failover `[REQUIRES_HUMAN]`
 
 ## Blocked
 
 - `TASK-080` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 - `TASK-189` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 - `TASK-190` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
-- `TASK-193` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 
 ## Human Blocker SLA
 
@@ -261,7 +259,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`, `TASK-193`)
+1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
 
 ## Expert Feedback Integration ✅
 

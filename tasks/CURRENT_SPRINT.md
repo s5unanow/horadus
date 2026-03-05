@@ -51,3 +51,4 @@
 - `TASK-196` Branch-policy hardening guardrails for autonomous execution ✅
 - `TASK-193` Degraded-mode policy for sustained LLM failover ✅
 - `TASK-197` Enforce local integration test gate before push/PR ✅
+- `TASK-198` External review backlog intake preservation (2026-03-05) ✅

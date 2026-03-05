@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-196`.
+- Next available task IDs start at `TASK-210`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3402,6 +3402,273 @@ benefits from early failure feedback.
 - [ ] Provide a documented escape hatch (env var) for exceptional cases
 - [ ] Add unit tests for the `pre-push` gate script behavior (at least skip-path)
 - [ ] Document the new workflow in `docs/AGENT_RUNBOOK.md` (and/or a short README note)
+
+---
+
+## Phase 12: External Review Intake (2026-03)
+
+Backlog items derived from repo review intake on 2026-03-05 against current
+`main`. Duplicate findings were merged into one task when they described the
+same runtime risk.
+
+### TASK-198: External review backlog intake preservation (2026-03-05)
+**Priority**: P1 (High)
+**Estimate**: 30-60 minutes
+
+Capture valid review findings in `tasks/BACKLOG.md` with clear task boundaries
+and explicit overlap mapping so follow-up implementation stays one-task-per-branch.
+
+**Assessment-Ref**:
+- User-provided repo review intake on 2026-03-05 (Reviewer 1, Reviewer 2, Reviewer 3)
+
+**Acceptance Criteria**:
+- [x] Add dedicated tasks for each still-valid, non-duplicate finding set
+- [x] Preserve overlap mapping to already-open tasks (`TASK-189`, `TASK-190`, `TASK-193`) instead of duplicating them
+- [x] Call out regressions against previously completed work where applicable (for example `TASK-148`)
+- [x] Keep Task ID policy synchronized after reserving IDs
+
+**Overlap mapping note**:
+- `TASK-189` still covers only `/health` and `/metrics`; public `/docs`, `/redoc`, and `/openapi.json` remain separate follow-up scope here.
+- `TASK-190` still covers admin-key comparison and API-key store permissions only; broader route authorization is separate follow-up scope here.
+- `TASK-193` covers degraded-mode policy/sign-off, but replay-queue retryability remains separate follow-up scope here.
+
+---
+
+### TASK-199: Harden trend config sync against write-on-read and arbitrary path access
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`GET /api/v1/trends?sync_from_config=true` still performs writes from a read
+route, and `POST /api/v1/trends/sync-config` still accepts arbitrary
+server-local directories. Any authenticated client can currently trigger config
+reloads and point the server at unexpected YAML paths.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 1 finding 1
+
+**Files**: `src/api/routes/trends.py`, `src/core/trend_config.py`, `docs/API.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Remove write side effects from `GET /api/v1/trends` (`sync_from_config` is removed, rejected, or made read-only)
+- [ ] Restrict config sync to an explicit allowlisted repo-owned trend-config root and reject path traversal / symlink escape cases
+- [ ] Gate config-sync execution behind privileged authorization rather than any valid client key
+- [ ] Add tests covering rejected arbitrary paths and no-write behavior on GET
+
+---
+
+### TASK-200: Add authorization boundaries for privileged API mutations
+**Priority**: P0 (Critical)
+**Estimate**: 1-2 days
+
+The runtime auth layer currently distinguishes only “valid API key” vs
+“invalid API key”. Most write/control routes remain effectively admin-capable
+for any authenticated client, which violates least privilege.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 1 finding 1
+- User review intake 2026-03-05, Reviewer 2 finding 1
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/api/middleware/auth.py`, `src/api/routes/sources.py`, `src/api/routes/trends.py`, `src/api/routes/feedback.py`, `docs/API.md`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define an explicit authorization model for privileged routes (for example admin-scoped keys, role-bearing keys, or equivalent fail-closed policy)
+- [ ] Apply the policy to mutation/control endpoints including source CRUD, trend create/update/delete/sync, and feedback/invalidation/override routes
+- [ ] Return deterministic authorization failures (`401`/`403`) with audit logs that identify denied privileged actions
+- [ ] Add tests covering least-privilege behavior for valid non-admin keys vs privileged credentials
+
+---
+
+### TASK-201: Preserve audited, atomic manual trend overrides
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`PATCH /api/v1/trends/{id}` still accepts `current_probability` and writes
+`current_log_odds` directly, bypassing the atomic delta path and the
+`HumanFeedback` audit trail used by the dedicated override endpoint.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 1 finding 2
+- User review intake 2026-03-05, Reviewer 2 finding 3
+
+**Files**: `src/api/routes/trends.py`, `src/api/routes/feedback.py`, `src/core/trend_engine.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] `PATCH /api/v1/trends/{id}` can no longer mutate live probability state outside the audited override flow
+- [ ] All manual probability changes use the atomic delta path and emit `HumanFeedback` lineage, or the generic patch route rejects such writes explicitly
+- [ ] Add tests covering unauthorized direct probability rewrites and preserved audit/atomicity behavior
+
+---
+
+### TASK-202: Make degraded replay queue retryable instead of fail-once terminal
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Degraded-mode replay currently drains only `pending` rows, increments attempts,
+and converts any exception into terminal `error` with no retry/backoff path.
+Transient model/provider/DB failures can strand held deltas permanently.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 1 finding 3
+
+**Files**: `src/workers/tasks.py`, `src/storage/models.py`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Replay queue distinguishes retryable failures from terminal/manual-review failures
+- [ ] Retryable replay failures re-enter a bounded retry/backoff path automatically instead of becoming unrecoverable `error` rows on first failure
+- [ ] Exhausted or non-retryable failures remain auditable with clear terminal status and last-error context
+- [ ] Add tests covering transient replay failure -> retry -> success and exhausted retry behavior
+
+---
+
+### TASK-203: Enforce validated, unique runtime trend identifiers across config and API
+**Priority**: P0 (Critical)
+**Estimate**: 1 day
+
+Runtime trend routing still keys on `definition.id`, but API create/update
+paths do not fully validate the taxonomy contract and the database still does
+not enforce uniqueness for that runtime identifier. One bad write can silently
+shadow another active trend in Tier-2 routing.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 1 finding 4
+- User review intake 2026-03-05, Reviewer 2 finding 4
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/core/trend_config.py`, `src/api/routes/trends.py`, `src/processing/pipeline_orchestrator.py`, `src/storage/models.py`, `alembic/`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] API create/update paths validate trend payloads against the same contract used by config sync (or an explicitly shared schema)
+- [ ] Enforce uniqueness for the runtime trend identifier used by Tier-2 matching (`definition.id` or a dedicated normalized column), with migration-time duplicate detection
+- [ ] Fail closed on duplicate/ambiguous runtime identifiers instead of silently overwriting dict entries in orchestration
+- [ ] Add tests covering duplicate identifier rejection and config/API validation parity
+
+---
+
+### TASK-204: Recompute applied trend evidence when Tier-2 impacts change
+**Priority**: P0 (Critical)
+**Estimate**: 1-2 days
+
+Tier-2 reclassification still overwrites `event.extracted_claims["trend_impacts"]`
+without reconciling already-applied `TrendEvidence`. When severity, direction,
+or impacted trends change, the stored delta remains stale.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 2 finding 2
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/core/trend_engine.py`, `src/storage/models.py`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Detect differences between previously applied impacts and newly classified impacts for the same event
+- [ ] Reverse, replace, or otherwise reconcile stale `TrendEvidence` rows and trend deltas when impact payloads change
+- [ ] Preserve an auditable lineage showing which evidence was superseded by reclassification
+- [ ] Add tests covering severity/direction changes and event merges that alter impact application
+
+---
+
+### TASK-205: Requeue retryable pipeline failures instead of permanently erroring items
+**Priority**: P0 (Critical)
+**Estimate**: 1 day
+
+The processing pipeline still catches broad exceptions inside per-item stages and
+marks items `ERROR`, which prevents Celery-level retries from handling transient
+LLM/provider/network failures. Retryable failures can therefore become permanent
+item failures after partial side effects.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 3 finding 1
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Files**: `src/processing/pipeline_orchestrator.py`, `src/workers/tasks.py`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Classify retryable exceptions distinctly from terminal data/validation failures across prepare, Tier-1, embedding, clustering, and Tier-2 stages
+- [ ] Retryable failures leave items in a safe retryable state and allow task-level retry/backoff to execute
+- [ ] Partial side effects remain idempotent or are explicitly rolled back so reprocessing is safe
+- [ ] Add tests covering transient provider failures that eventually succeed without leaving items stranded in `ERROR`
+
+---
+
+### TASK-206: Keep event recency monotonic under late and backfilled mentions
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+`last_mention_at` is still overwritten with the incoming item timestamp during
+merge and lifecycle handling. Late or backfilled items can therefore move event
+recency backwards and distort clustering/lifecycle behavior.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 3 finding 2
+
+**Files**: `src/processing/event_clusterer.py`, `src/processing/event_lifecycle.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Update recency with `max(existing_last_mention_at, incoming_mention_time)` semantics
+- [ ] Keep lifecycle transitions and clustering windows based on monotonic recency
+- [ ] Add tests covering older backfill arriving after newer mentions
+
+---
+
+### TASK-207: Use stable source identity keys for GDELT and Telegram watermarks
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+GDELT and Telegram source lookup still keys on mutable display names. Renaming a
+configured source can create a new `sources` row and reset watermarks, fetch
+history, and failure tracking.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 3 finding 3
+
+**Files**: `src/ingestion/gdelt_client.py`, `src/ingestion/telegram_harvester.py`, `src/storage/models.py`, `alembic/`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Look up or persist GDELT/Telegram sources by stable provider identifier (for example query id / query fingerprint and channel handle) instead of mutable display name
+- [ ] Preserve existing watermarks, error counters, and fetch history across harmless config renames
+- [ ] Add tests covering rename/no-reset behavior for both collectors
+
+---
+
+### TASK-208: Restrict API docs and schema exposure outside development
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+`/docs`, `/redoc`, and `/openapi.json` are still exempt from auth even when API
+auth is enabled. That leaves the full route inventory and request schema visible
+to unauthenticated clients in non-development environments.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 3 finding 4
+
+**Files**: `src/api/middleware/auth.py`, `src/api/main.py`, `src/cli.py`, `docs/DEPLOYMENT.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Restrict or disable `/docs`, `/redoc`, and `/openapi.json` outside development by explicit environment policy
+- [ ] Preserve a documented development/test workflow for local schema/docs access
+- [ ] Update smoke/doctor tooling if they currently assume unauthenticated `/openapi.json`
+- [ ] Add tests covering docs/schema visibility across development vs non-development profiles
+
+---
+
+### TASK-209: Restore `canonical_summary` alignment with `primary_item_id` after Tier-2
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`TASK-148` aligned `canonical_summary` with `primary_item_id`, but Tier-2 still
+overwrites `canonical_summary` with a synthesized event summary on every
+classification. That reintroduces the semantic drift the earlier task removed.
+
+**Assessment-Ref**:
+- User review intake 2026-03-05, Reviewer 1 finding 5
+
+**Files**: `src/processing/event_clusterer.py`, `src/processing/tier2_classifier.py`, `docs/DATA_MODEL.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Preserve `canonical_summary` as the summary of the current `primary_item_id`, or explicitly rename/split fields if event-level synthesized summary is still required
+- [ ] Ensure Tier-2 writes do not silently violate the documented `primary_item_id` semantics
+- [ ] Add regression tests covering cluster merge plus Tier-2 classification on the same event
+- [ ] Update docs to reflect the final semantics unambiguously
 
 ---
 

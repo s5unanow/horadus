@@ -198,6 +198,12 @@ Taxonomy drift safety:
 - Skipped impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`).
 - This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
 
+Degraded-mode safety (sustained Tier-2 failover / quality drift):
+- The system tracks Tier-2 failover ratios over rolling windows and runs a small Tier-2 gold-set canary before bulk pipeline runs.
+- When degraded mode (`degraded_llm`) is active, Tier-2 extraction still runs to populate event fields, but **trend deltas are held** (no `trend_evidence` writes).
+- High-impact events are queued in `llm_replay_queue` for post-recovery replay on a primary-only Tier-2 route; replay applies deltas once primary-quality behavior is restored.
+- If the primary Tier-2 model fails canary but an optional emergency Tier-2 model passes, the pipeline runs using the emergency model and applies deltas normally for that run.
+
 Language-segmented operational metrics are emitted for:
 - intake (`processing_ingested_language_total`)
 - Tier-1 routing outcomes (`processing_tier1_language_outcome_total`)

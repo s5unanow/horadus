@@ -81,7 +81,7 @@ class LLMChatFailoverInvoker:
         messages: list[dict[str, str]],
         temperature: float,
         response_format: dict[str, Any] | None = None,
-    ) -> tuple[Any, str]:
+    ) -> tuple[Any, LLMChatRoute]:
         response, primary_attempts, primary_error = await self._create_with_route_retries(
             route=self.primary,
             messages=messages,
@@ -89,7 +89,7 @@ class LLMChatFailoverInvoker:
             response_format=response_format,
         )
         if primary_error is None:
-            return (response, self.primary.model)
+            return (response, self.primary)
         if self.secondary is None or not self.is_retryable_error(primary_error):
             raise primary_error
 
@@ -115,7 +115,7 @@ class LLMChatFailoverInvoker:
             response_format=response_format,
         )
         if secondary_error is None:
-            return (secondary_response, self.secondary.model)
+            return (secondary_response, self.secondary)
 
         logger.warning(
             "LLM failover route failed",

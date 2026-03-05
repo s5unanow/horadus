@@ -67,6 +67,9 @@ class Tier2Usage:
     completion_tokens: int = 0
     api_calls: int = 0
     estimated_cost_usd: float = 0.0
+    active_provider: str | None = None
+    active_model: str | None = None
+    used_secondary_route: bool = False
 
 
 @dataclass(slots=True)
@@ -421,6 +424,9 @@ class Tier2Classifier:
             completion_tokens=invocation.completion_tokens,
             api_calls=1,
             estimated_cost_usd=invocation.estimated_cost_usd,
+            active_provider=invocation.active_provider,
+            active_model=invocation.active_model,
+            used_secondary_route=invocation.used_secondary_route,
         )
 
         output = self._parse_output(invocation.response)

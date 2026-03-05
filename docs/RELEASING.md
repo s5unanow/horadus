@@ -297,6 +297,7 @@ Rollback if any of the following persist after brief triage:
 - Migrations break critical API/worker paths.
 - Error rate spikes or processing stalls.
 - Budget guardrails/failover behavior regresses materially.
+- Degraded-mode policy misbehaves (stuck degraded latch or replay storm risk).
 - Critical security/reliability findings discovered post-release.
 
 ## Rollback Procedure

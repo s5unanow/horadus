@@ -128,6 +128,7 @@ Production auth/secret guardrails:
 | `LLM_TIER1_SECONDARY_MODEL` | empty | Optional Tier-1 failover model used on 429/5xx/timeout. |
 | `LLM_TIER2_MODEL` | `gpt-4.1-mini` | Tier-2 extraction/classification model. |
 | `LLM_TIER2_SECONDARY_MODEL` | empty | Optional Tier-2 failover model used on 429/5xx/timeout. |
+| `LLM_TIER2_EMERGENCY_MODEL` | empty | Optional emergency Tier-2 model used when the primary Tier-2 model fails the gold-set canary gate. |
 | `LLM_REPORT_MODEL` | `gpt-4.1-mini` | Weekly/monthly report narrative model. |
 | `LLM_REPORT_API_MODE` | `chat_completions` | Report narrative API mode (`chat_completions` or pilot `responses`). |
 | `NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS` | `0` | Maximum unsupported deterministic narrative claims allowed before fallback. |
@@ -149,6 +150,31 @@ Production auth/secret guardrails:
 | `LLM_SEMANTIC_CACHE_TTL_SECONDS` | `21600` | TTL for semantic cache entries (seconds). |
 | `LLM_SEMANTIC_CACHE_MAX_ENTRIES` | `10000` | Best-effort max entries per stage before oldest eviction. |
 | `LLM_SEMANTIC_CACHE_REDIS_PREFIX` | `horadus:llm_semantic_cache` | Redis key prefix for semantic cache data/indexes. |
+| `LLM_DEGRADED_MODE_ENABLED` | `true` | Enable degraded-mode policy for sustained Tier-2 failover/quality drift. |
+| `LLM_DEGRADED_REDIS_PREFIX` | `horadus:llm_degraded` | Redis prefix for degraded-mode rolling-window accounting. |
+| `LLM_DEGRADED_BUCKET_SECONDS` | `600` | Bucket size (seconds) for degraded-mode rolling window. |
+| `LLM_DEGRADED_WINDOW_SECONDS` | `43200` | Rolling window size (seconds) used for degraded-mode evaluation. |
+| `LLM_DEGRADED_ENTER_MIN_FAILOVERS` | `3` | Enter degraded mode when this many Tier-2 failovers occur within the window. |
+| `LLM_DEGRADED_ENTER_RATIO` | `0.25` | Enter degraded mode when failover ratio exceeds this threshold (with min calls). |
+| `LLM_DEGRADED_ENTER_MIN_CALLS` | `6` | Min Tier-2 calls before ratio-based entry can trigger. |
+| `LLM_DEGRADED_EXIT_RATIO` | `0.0` | Exit degraded mode when failover ratio is at or below this threshold (with min calls). |
+| `LLM_DEGRADED_EXIT_MIN_CALLS` | `6` | Min Tier-2 calls before ratio-based exit can trigger. |
+| `LLM_DEGRADED_MIN_ACTIVE_SECONDS` | `3600` | Minimum time to remain degraded before allowing exit. |
+| `LLM_DEGRADED_CANARY_ENABLED` | `true` | Run Tier-2 gold-set canary before processing pipeline runs (best-effort). |
+| `LLM_DEGRADED_CANARY_GOLD_SET_PATH` | `ai/eval/gold_set.jsonl` | Gold-set JSONL path used by canary. |
+| `LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS` | `12` | Max Tier-2-labeled gold items evaluated by canary. |
+| `LLM_DEGRADED_CANARY_MAX_FAILURE_RATE` | `0.10` | Max canary failure rate before quality-degraded latch. |
+| `LLM_DEGRADED_CANARY_MIN_TREND_MATCH_ACCURACY` | `0.60` | Min canary trend-id match accuracy required to pass. |
+| `LLM_DEGRADED_CANARY_MIN_SIGNAL_TYPE_ACCURACY` | `0.60` | Min canary signal-type match accuracy required to pass. |
+| `LLM_DEGRADED_CANARY_MIN_DIRECTION_ACCURACY` | `0.60` | Min canary direction match accuracy required to pass. |
+| `LLM_DEGRADED_CANARY_MAX_SEVERITY_MAE` | `0.25` | Max canary severity MAE allowed to pass. |
+| `LLM_DEGRADED_CANARY_MAX_CONFIDENCE_MAE` | `0.30` | Max canary confidence MAE allowed to pass. |
+| `LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS` | `43200` | TTL seconds for quality-degraded latch after canary failure. |
+| `LLM_DEGRADED_REPLAY_ENABLED` | `true` | Enable bounded replay of high-impact events after degraded-mode recovery. |
+| `LLM_DEGRADED_REPLAY_INTERVAL_MINUTES` | `60` | Replay worker schedule interval in minutes (when enabled). |
+| `LLM_DEGRADED_REPLAY_DRAIN_LIMIT` | `50` | Max replay queue items drained per replay worker run. |
+| `LLM_DEGRADED_REPLAY_MAX_QUEUE` | `500` | Best-effort max replay queue size before enqueue begins skipping. |
+| `LLM_DEGRADED_REPLAY_MIN_ABS_DELTA` | `0.15` | Min absolute log-odds delta required to enqueue event for replay. |
 | `PROCESSING_PIPELINE_BATCH_SIZE` | `200` | Pending items handled per pipeline run. |
 | `PROCESSING_STALE_TIMEOUT_MINUTES` | `30` | Age threshold before stale `processing` items are reset to `pending`. |
 | `DEDUP_URL_QUERY_MODE` | `keep_non_tracking` | URL query handling mode for dedup normalization (`keep_non_tracking` or `strip_all`). |

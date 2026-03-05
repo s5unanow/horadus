@@ -23,6 +23,16 @@ LLM_ESTIMATED_COST_USD_TOTAL = Counter(
     "Estimated LLM cost in USD by stage.",
     ["stage"],
 )
+LLM_FAILOVERS_TOTAL = Counter(
+    "llm_failovers_total",
+    "Count of LLM invocations that executed on a secondary failover route by stage.",
+    ["stage"],
+)
+LLM_DEGRADED_MODE = Gauge(
+    "llm_degraded_mode",
+    "Whether degraded-mode policy is currently active for a stage (best-effort).",
+    ["stage"],
+)
 WORKER_ERRORS_TOTAL = Counter(
     "worker_errors_total",
     "Worker task failures by task name.",
@@ -165,6 +175,16 @@ def record_pipeline_metrics(run_result: dict[str, int | float | str]) -> None:
     LLM_ESTIMATED_COST_USD_TOTAL.labels(stage="tier1").inc(max(0.0, tier1_cost))
     LLM_ESTIMATED_COST_USD_TOTAL.labels(stage="tier2").inc(max(0.0, tier2_cost))
     LLM_ESTIMATED_COST_USD_TOTAL.labels(stage="embedding").inc(max(0.0, embedding_cost))
+
+
+def record_llm_failover(*, stage: str) -> None:
+    normalized_stage = stage.strip() or "unknown"
+    LLM_FAILOVERS_TOTAL.labels(stage=normalized_stage).inc()
+
+
+def set_llm_degraded_mode(*, stage: str, is_degraded: bool) -> None:
+    normalized_stage = stage.strip() or "unknown"
+    LLM_DEGRADED_MODE.labels(stage=normalized_stage).set(1 if is_degraded else 0)
 
 
 def record_worker_error(task_name: str) -> None:

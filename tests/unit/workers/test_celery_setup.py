@@ -108,6 +108,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
         "apply-trend-decay",
         "check-event-lifecycles",
         "reap-stale-processing-items",
+        "replay-degraded-events",
         "check-source-freshness",
         "generate-weekly-reports",
         "generate-monthly-reports",
@@ -120,6 +121,8 @@ def test_build_beat_schedule_omits_disabled_collectors(
     assert schedule["check-event-lifecycles"]["schedule"] == timedelta(hours=1)
     assert schedule["reap-stale-processing-items"]["task"] == "workers.reap_stale_processing_items"
     assert schedule["reap-stale-processing-items"]["schedule"] == timedelta(minutes=10)
+    assert schedule["replay-degraded-events"]["task"] == "workers.replay_degraded_events"
+    assert schedule["replay-degraded-events"]["schedule"] == timedelta(minutes=60)
     assert schedule["check-source-freshness"]["task"] == "workers.check_source_freshness"
     assert schedule["check-source-freshness"]["schedule"] == timedelta(minutes=30)
     assert schedule["generate-weekly-reports"]["task"] == "workers.generate_weekly_reports"

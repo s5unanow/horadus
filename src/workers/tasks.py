@@ -45,13 +45,17 @@ from src.core.trend_engine import TrendEngine
 from src.ingestion.gdelt_client import GDELTClient
 from src.ingestion.rss_collector import RSSCollector
 from src.processing.cost_tracker import CostTracker
+from src.processing.degraded_llm_tracker import DegradedLLMTracker
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.pipeline_orchestrator import ProcessingPipeline
+from src.processing.tier2_canary import run_tier2_canary
+from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.database import async_session_maker
 from src.storage.models import (
     Event,
     EventItem,
     EventLifecycle,
+    LLMReplayQueueItem,
     ProcessingStatus,
     RawItem,
     Trend,
@@ -707,7 +711,65 @@ def _queue_processing_for_new_items(*, collector: str, stored_items: int) -> boo
 
 async def _process_pending_async(limit: int) -> dict[str, Any]:
     async with async_session_maker() as session:
-        pipeline = ProcessingPipeline(session=session)
+        degraded_tracker = (
+            DegradedLLMTracker(stage="tier2") if settings.LLM_DEGRADED_MODE_ENABLED else None
+        )
+
+        tier2_model = settings.LLM_TIER2_MODEL
+        if degraded_tracker is not None and settings.LLM_DEGRADED_CANARY_ENABLED:
+            try:
+                primary_canary = await run_tier2_canary(
+                    model=settings.LLM_TIER2_MODEL,
+                    api_key=settings.OPENAI_API_KEY,
+                    base_url=settings.LLM_PRIMARY_BASE_URL,
+                    max_items=settings.LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS,
+                )
+            except Exception as exc:
+                primary_canary = None
+                degraded_tracker.latch_quality_degraded(
+                    ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
+                    reason=f"primary_canary_error:{type(exc).__name__}",
+                )
+
+            if primary_canary is not None and primary_canary.passed:
+                degraded_tracker.clear_quality_degraded()
+            elif primary_canary is not None:
+                emergency_model = settings.LLM_TIER2_EMERGENCY_MODEL
+                if isinstance(emergency_model, str) and emergency_model.strip():
+                    try:
+                        emergency_canary = await run_tier2_canary(
+                            model=emergency_model.strip(),
+                            api_key=settings.OPENAI_API_KEY,
+                            base_url=settings.LLM_PRIMARY_BASE_URL,
+                            max_items=settings.LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS,
+                        )
+                    except Exception as exc:
+                        emergency_canary = None
+                        degraded_tracker.latch_quality_degraded(
+                            ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
+                            reason=f"emergency_canary_error:{type(exc).__name__}",
+                        )
+                    else:
+                        if emergency_canary is not None and emergency_canary.passed:
+                            tier2_model = emergency_model.strip()
+                            degraded_tracker.clear_quality_degraded()
+                        else:
+                            degraded_tracker.latch_quality_degraded(
+                                ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
+                                reason=f"primary:{primary_canary.reason};emergency:{getattr(emergency_canary, 'reason', 'unknown')}",
+                            )
+                else:
+                    degraded_tracker.latch_quality_degraded(
+                        ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
+                        reason=f"primary:{primary_canary.reason}",
+                    )
+
+        tier2_classifier = Tier2Classifier(session=session, model=tier2_model)
+        pipeline = ProcessingPipeline(
+            session=session,
+            tier2_classifier=tier2_classifier,
+            degraded_llm_tracker=degraded_tracker,
+        )
         run_result = await pipeline.process_pending_items(limit=limit)
         await session.commit()
 
@@ -1084,6 +1146,9 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
                 classified=result["classified"],
                 noise=result["noise"],
                 errors=result["errors"],
+                degraded_llm=result.get("degraded_llm"),
+                degraded_holds=result.get("degraded_holds"),
+                replay_enqueued=result.get("replay_enqueued"),
             )
             return result
         finally:
@@ -1095,6 +1160,127 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
 
     return _run_task_with_heartbeat(
         task_name="workers.process_pending_items",
+        runner=_runner,
+    )
+
+
+async def _replay_degraded_events_async(limit: int) -> dict[str, Any]:
+    tracker = DegradedLLMTracker(stage="tier2") if settings.LLM_DEGRADED_MODE_ENABLED else None
+    if tracker is not None:
+        status = await asyncio.to_thread(tracker.evaluate)
+        if status.is_degraded:
+            return {
+                "status": "skipped",
+                "task": "replay_degraded_events",
+                "reason": "degraded_llm_active",
+                "stage": status.stage,
+                "window": {
+                    "total_calls": status.window.total_calls,
+                    "secondary_calls": status.window.secondary_calls,
+                    "failover_ratio": round(status.window.failover_ratio, 6),
+                },
+            }
+
+    now = datetime.now(tz=UTC)
+    async with async_session_maker() as session:
+        run_limit = max(1, int(limit))
+        rows = (
+            await session.scalars(
+                select(LLMReplayQueueItem)
+                .where(LLMReplayQueueItem.status == "pending")
+                .order_by(LLMReplayQueueItem.priority.desc(), LLMReplayQueueItem.enqueued_at.asc())
+                .limit(run_limit)
+                .with_for_update(skip_locked=True)
+            )
+        ).all()
+        items = list(rows)
+        if not items:
+            return {"status": "ok", "task": "replay_degraded_events", "drained": 0, "errors": 0}
+
+        for item in items:
+            item.status = "processing"
+            item.locked_at = now
+            item.locked_by = "workers.replay_degraded_events"
+            item.attempt_count = int(item.attempt_count or 0) + 1
+            item.last_attempt_at = now
+        await session.flush()
+
+        trends = list(
+            (
+                await session.scalars(
+                    select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
+                )
+            ).all()
+        )
+        tier2 = Tier2Classifier(
+            session=session, model=settings.LLM_TIER2_MODEL, secondary_model=None
+        )
+        pipeline = ProcessingPipeline(
+            session=session, tier2_classifier=tier2, degraded_llm_tracker=None
+        )
+
+        drained = 0
+        errors = 0
+        for item in items:
+            drained += 1
+            try:
+                event = await session.get(Event, item.event_id)
+                if event is None:
+                    raise ValueError(f"Event not found: {item.event_id}")
+                await tier2.classify_event(event=event, trends=trends)
+                impacts_seen, updates_applied = await pipeline._apply_trend_impacts(
+                    event=event,
+                    trends=trends,
+                )
+                item.status = "done"
+                item.processed_at = now
+                item.locked_at = None
+                item.locked_by = None
+                item.last_error = None
+                details = dict(item.details or {})
+                details["replay_result"] = {
+                    "impacts_seen": impacts_seen,
+                    "updates_applied": updates_applied,
+                    "processed_at": now.isoformat(),
+                    "model": settings.LLM_TIER2_MODEL,
+                }
+                item.details = details
+            except Exception as exc:
+                errors += 1
+                item.status = "error"
+                item.last_error = str(exc)[:1000]
+                item.locked_at = None
+                item.locked_by = None
+        await session.commit()
+
+    return {
+        "status": "ok",
+        "task": "replay_degraded_events",
+        "drained": drained,
+        "errors": errors,
+    }
+
+
+@typed_shared_task(name="workers.replay_degraded_events")
+def replay_degraded_events(limit: int | None = None) -> dict[str, Any]:
+    """Drain bounded degraded-mode replay queue when primary Tier-2 is healthy."""
+
+    def _runner() -> dict[str, Any]:
+        configured = max(1, int(settings.LLM_DEGRADED_REPLAY_DRAIN_LIMIT))
+        run_limit = max(1, int(limit or configured))
+        logger.info("Starting degraded replay task", limit=run_limit)
+        result = _run_async(_replay_degraded_events_async(limit=run_limit))
+        logger.info(
+            "Finished degraded replay task",
+            drained=result.get("drained"),
+            errors=result.get("errors"),
+            status=result.get("status"),
+            reason=result.get("reason"),
+        )
+        return result
+
+    return _run_task_with_heartbeat(
+        task_name="workers.replay_degraded_events",
         runner=_runner,
     )
 

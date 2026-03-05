@@ -725,6 +725,13 @@ class Settings(BaseSettings):
         default=None,
         description="Optional secondary model for Tier 2 failover",
     )
+    LLM_TIER2_EMERGENCY_MODEL: str | None = Field(
+        default=None,
+        description=(
+            "Optional emergency Tier-2 model used when the primary Tier-2 model fails the "
+            "gold-set canary quality gate"
+        ),
+    )
     LLM_REPORT_MODEL: str = Field(
         default="gpt-4.1-mini",
         description="Model for weekly report narrative generation",
@@ -792,6 +799,136 @@ class Settings(BaseSettings):
     LLM_SEMANTIC_CACHE_REDIS_PREFIX: str = Field(
         default="horadus:llm_semantic_cache",
         description="Redis prefix for semantic cache keys/indexes",
+    )
+    LLM_DEGRADED_MODE_ENABLED: bool = Field(
+        default=True,
+        description="Enable degraded-mode policy for sustained Tier-2 failover/quality drift",
+    )
+    LLM_DEGRADED_REDIS_PREFIX: str = Field(
+        default="horadus:llm_degraded",
+        description="Redis key prefix for degraded-mode rolling-window accounting",
+    )
+    LLM_DEGRADED_BUCKET_SECONDS: int = Field(
+        default=600,
+        ge=10,
+        description="Bucket size in seconds for degraded-mode rolling-window accounting",
+    )
+    LLM_DEGRADED_WINDOW_SECONDS: int = Field(
+        default=43200,
+        ge=60,
+        description="Rolling-window size in seconds used for degraded-mode evaluation",
+    )
+    LLM_DEGRADED_ENTER_MIN_FAILOVERS: int = Field(
+        default=3,
+        ge=1,
+        description="Enter degraded mode when this many Tier-2 failovers occur within the window",
+    )
+    LLM_DEGRADED_ENTER_RATIO: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Enter degraded mode when failover ratio exceeds this threshold (with min calls)",
+    )
+    LLM_DEGRADED_ENTER_MIN_CALLS: int = Field(
+        default=6,
+        ge=1,
+        description="Minimum Tier-2 calls required before ratio-based degraded entry can trigger",
+    )
+    LLM_DEGRADED_EXIT_RATIO: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Exit degraded mode when failover ratio is at or below this threshold",
+    )
+    LLM_DEGRADED_EXIT_MIN_CALLS: int = Field(
+        default=6,
+        ge=1,
+        description="Minimum Tier-2 calls required before ratio-based degraded exit can trigger",
+    )
+    LLM_DEGRADED_MIN_ACTIVE_SECONDS: int = Field(
+        default=3600,
+        ge=0,
+        description="Minimum seconds to remain in degraded mode before allowing exit",
+    )
+    LLM_DEGRADED_CANARY_ENABLED: bool = Field(
+        default=True,
+        description="Run Tier-2 gold-set canary before processing pipeline runs (best-effort)",
+    )
+    LLM_DEGRADED_CANARY_GOLD_SET_PATH: str = Field(
+        default="ai/eval/gold_set.jsonl",
+        description="Path to Tier-2 gold-set JSONL used by degraded-mode canary",
+    )
+    LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS: int = Field(
+        default=12,
+        ge=1,
+        le=200,
+        description="Max Tier-2-labeled gold-set items evaluated by the canary",
+    )
+    LLM_DEGRADED_CANARY_MAX_FAILURE_RATE: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=1.0,
+        description="Max allowed canary failure rate (parse/validation failures) before degraded mode",
+    )
+    LLM_DEGRADED_CANARY_MIN_TREND_MATCH_ACCURACY: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Min canary trend-id match accuracy required to pass",
+    )
+    LLM_DEGRADED_CANARY_MIN_SIGNAL_TYPE_ACCURACY: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Min canary signal-type match accuracy required to pass",
+    )
+    LLM_DEGRADED_CANARY_MIN_DIRECTION_ACCURACY: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Min canary direction match accuracy required to pass",
+    )
+    LLM_DEGRADED_CANARY_MAX_SEVERITY_MAE: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Max canary severity MAE allowed to pass",
+    )
+    LLM_DEGRADED_CANARY_MAX_CONFIDENCE_MAE: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="Max canary confidence MAE allowed to pass",
+    )
+    LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS: int = Field(
+        default=43200,
+        ge=60,
+        description="TTL in seconds for quality-degraded latch after a canary failure",
+    )
+    LLM_DEGRADED_REPLAY_ENABLED: bool = Field(
+        default=True,
+        description="Enable bounded replay of high-impact events after degraded-mode recovery",
+    )
+    LLM_DEGRADED_REPLAY_INTERVAL_MINUTES: int = Field(
+        default=60,
+        ge=1,
+        description="Replay worker schedule interval in minutes (when enabled)",
+    )
+    LLM_DEGRADED_REPLAY_DRAIN_LIMIT: int = Field(
+        default=50,
+        ge=1,
+        description="Max replay queue items drained per replay worker run",
+    )
+    LLM_DEGRADED_REPLAY_MAX_QUEUE: int = Field(
+        default=500,
+        ge=1,
+        description="Best-effort max replay queue size before enqueue begins dropping/skipping",
+    )
+    LLM_DEGRADED_REPLAY_MIN_ABS_DELTA: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=10.0,
+        description="Minimum absolute log-odds delta required to enqueue an event for replay",
     )
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-small",

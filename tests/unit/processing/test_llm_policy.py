@@ -70,6 +70,9 @@ async def test_invoke_with_policy_records_budget_and_cost() -> None:
         budget_tier="tier2",
     )
 
+    assert result.active_provider == "openai"
+    assert result.active_model == "gpt-4.1-mini"
+    assert result.used_secondary_route is False
     assert result.prompt_tokens == 10
     assert result.completion_tokens == 5
     assert result.estimated_cost_usd == pytest.approx(0.000012, rel=0.001)
@@ -119,6 +122,7 @@ async def test_invoke_with_policy_falls_back_when_strict_schema_unsupported() ->
 
     assert result.prompt_tokens == 7
     assert result.completion_tokens == 3
+    assert result.used_secondary_route is False
     cost_tracker.ensure_within_budget.assert_awaited_once_with(
         "tier1",
         provider="openai",

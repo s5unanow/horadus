@@ -799,6 +799,69 @@ class TaxonomyGap(Base):
     )
 
 
+LLM_REPLAY_STATUS_VALUES = ("pending", "processing", "done", "error")
+LLM_REPLAY_STATUS_SQL_VALUES = sql_string_literals(LLM_REPLAY_STATUS_VALUES)
+
+
+class LLMReplayQueueItem(Base):
+    """
+    Bounded replay queue for post-recovery Tier-2 reprocessing.
+
+    Used by degraded-mode policy to defer high-impact trend evidence application until
+    a primary-quality Tier-2 model is available again.
+    """
+
+    __tablename__ = "llm_replay_queue"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    stage: Mapped[str] = mapped_column(String(50), nullable=False)
+    event_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20),
+        default="pending",
+        server_default=text("'pending'"),
+        nullable=False,
+    )
+    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    locked_by: Mapped[str | None] = mapped_column(String(255))
+    processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(Text)
+    details: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
+    enqueued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    event: Mapped[Event] = relationship()
+
+    __table_args__ = (
+        CheckConstraint(
+            f"status IN ({LLM_REPLAY_STATUS_SQL_VALUES})",
+            name="check_llm_replay_queue_status_allowed",
+        ),
+        UniqueConstraint("stage", "event_id", name="uq_llm_replay_stage_event"),
+        Index("idx_llm_replay_status_enqueued", "status", "enqueued_at"),
+        Index("idx_llm_replay_event", "event_id"),
+    )
+
+
 class TrendSnapshot(Base):
     """
     Point-in-time snapshot of trend probability.

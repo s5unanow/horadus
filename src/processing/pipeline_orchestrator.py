@@ -4,15 +4,17 @@ Processing pipeline orchestration for pending raw items.
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from inspect import isawaitable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -23,12 +25,19 @@ from src.core.observability import (
     record_processing_tier1_language_outcome,
     record_processing_tier2_language_usage,
     record_taxonomy_gap,
+    set_llm_degraded_mode,
 )
+from src.core.risk import get_risk_level
 from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
 )
-from src.core.trend_engine import TrendEngine, calculate_evidence_delta, calculate_recency_novelty
+from src.core.trend_engine import (
+    TrendEngine,
+    calculate_evidence_delta,
+    calculate_recency_novelty,
+    logodds_to_prob,
+)
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
@@ -39,6 +48,7 @@ from src.storage.models import (
     Event,
     EventItem,
     HumanFeedback,
+    LLMReplayQueueItem,
     ProcessingStatus,
     RawItem,
     Source,
@@ -47,6 +57,9 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
+
+if TYPE_CHECKING:
+    from src.processing.degraded_llm_tracker import DegradedLLMStatus, DegradedLLMTracker
 
 logger = structlog.get_logger(__name__)
 
@@ -79,6 +92,8 @@ class PipelineItemResult:
     event_created: bool = False
     event_merged: bool = False
     tier2_applied: bool = False
+    degraded_llm_hold: bool = False
+    replay_enqueued: bool = False
     trend_impacts_seen: int = 0
     trend_updates: int = 0
     error_message: str | None = None
@@ -99,6 +114,9 @@ class PipelineRunResult:
     events_merged: int = 0
     trend_impacts_seen: int = 0
     trend_updates: int = 0
+    degraded_llm: bool = False
+    degraded_holds: int = 0
+    replay_enqueued: int = 0
     results: list[PipelineItemResult] = field(default_factory=list)
     usage: PipelineUsage = field(default_factory=PipelineUsage)
 
@@ -132,6 +150,7 @@ class ProcessingPipeline:
         tier1_classifier: Tier1Classifier | None = None,
         tier2_classifier: Tier2Classifier | None = None,
         trend_engine: TrendEngine | None = None,
+        degraded_llm_tracker: DegradedLLMTracker | None = None,
     ) -> None:
         self.session = session
         self.deduplication_service = deduplication_service or DeduplicationService(session=session)
@@ -140,6 +159,7 @@ class ProcessingPipeline:
         self.tier1_classifier = tier1_classifier or Tier1Classifier(session=session)
         self.tier2_classifier = tier2_classifier or Tier2Classifier(session=session)
         self.trend_engine = trend_engine or TrendEngine(session=session)
+        self.degraded_llm_tracker = degraded_llm_tracker
 
     async def process_pending_items(
         self,
@@ -290,6 +310,11 @@ class ProcessingPipeline:
             run_result.events_merged += 1
         run_result.trend_impacts_seen += execution.result.trend_impacts_seen
         run_result.trend_updates += execution.result.trend_updates
+        if execution.result.degraded_llm_hold:
+            run_result.degraded_llm = True
+            run_result.degraded_holds += 1
+        if execution.result.replay_enqueued:
+            run_result.replay_enqueued += 1
 
     async def _prepare_item_for_tier1(
         self,
@@ -599,10 +624,58 @@ class ProcessingPipeline:
             usage.tier2_completion_tokens += tier2_usage.completion_tokens
             usage.tier2_api_calls += tier2_usage.api_calls
             usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
-            trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
-                event=event,
-                trends=trends,
-            )
+
+            degraded_hold = False
+            replay_enqueued = False
+            trend_impacts_seen = 0
+            trend_updates = 0
+            if self.degraded_llm_tracker is not None:
+                await asyncio.to_thread(
+                    self.degraded_llm_tracker.record_invocation,
+                    used_secondary_route=bool(tier2_usage.used_secondary_route),
+                )
+                degraded_status = await asyncio.to_thread(self.degraded_llm_tracker.evaluate)
+                set_llm_degraded_mode(
+                    stage=degraded_status.stage,
+                    is_degraded=bool(degraded_status.is_degraded),
+                )
+                degraded_hold = bool(degraded_status.is_degraded)
+                if degraded_hold:
+                    claims = (
+                        event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+                    )
+                    policy_meta = {
+                        "degraded_llm": True,
+                        "availability_degraded": bool(degraded_status.availability_degraded),
+                        "quality_degraded": bool(degraded_status.quality_degraded),
+                        "degraded_since_epoch": degraded_status.degraded_since_epoch,
+                        "window_total_calls": degraded_status.window.total_calls,
+                        "window_secondary_calls": degraded_status.window.secondary_calls,
+                        "window_failover_ratio": round(degraded_status.window.failover_ratio, 6),
+                        "tier2_active_provider": tier2_usage.active_provider,
+                        "tier2_active_model": tier2_usage.active_model,
+                        "tier2_used_secondary_route": bool(tier2_usage.used_secondary_route),
+                    }
+                    claims["_llm_policy"] = policy_meta
+                    event.extracted_claims = claims
+                    replay_enqueued = await self._maybe_enqueue_replay(
+                        event=event,
+                        trends=trends,
+                        degraded_status=degraded_status,
+                        tier2_usage=tier2_usage,
+                    )
+
+            if not degraded_hold:
+                trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
+                    event=event,
+                    trends=trends,
+                )
+            else:
+                # Preserve extraction fields, but hold probability semantics until replay.
+                claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+                impacts_payload = claims.get("trend_impacts", [])
+                if isinstance(impacts_payload, list):
+                    trend_impacts_seen = len(impacts_payload)
 
             item.processing_status = ProcessingStatus.CLASSIFIED
             item.processing_started_at = None
@@ -613,7 +686,9 @@ class ProcessingPipeline:
                     status=item.processing_status,
                     cluster_result=cluster_result,
                     embedded=embedded,
-                    tier2_applied=True,
+                    tier2_applied=not degraded_hold,
+                    degraded_llm_hold=degraded_hold,
+                    replay_enqueued=replay_enqueued,
                     trend_impacts_seen=trend_impacts_seen,
                     trend_updates=trend_updates,
                 ),
@@ -857,6 +932,147 @@ class ProcessingPipeline:
                 updates_applied += 1
 
         return (impacts_seen, updates_applied)
+
+    async def _maybe_enqueue_replay(
+        self,
+        *,
+        event: Event,
+        trends: list[Trend],
+        degraded_status: DegradedLLMStatus,
+        tier2_usage: Any,
+    ) -> bool:
+        if not settings.LLM_DEGRADED_REPLAY_ENABLED:
+            return False
+        if event.id is None:
+            return False
+
+        high_impact, max_abs_delta, risk_level_crossing = await self._is_high_impact_event(
+            event=event,
+            trends=trends,
+        )
+        if not high_impact:
+            return False
+
+        pending_count = await self.session.scalar(
+            select(func.count())
+            .select_from(LLMReplayQueueItem)
+            .where(LLMReplayQueueItem.status == "pending")
+        )
+        if int(pending_count or 0) >= int(settings.LLM_DEGRADED_REPLAY_MAX_QUEUE):
+            logger.warning(
+                "Replay queue full; skipping enqueue",
+                event_id=str(event.id),
+                pending_count=int(pending_count or 0),
+                max_queue=int(settings.LLM_DEGRADED_REPLAY_MAX_QUEUE),
+            )
+            return False
+
+        priority = int(min(1000, round(max_abs_delta * 1000)))
+        details = {
+            "reason": "degraded_llm_high_impact",
+            "max_abs_delta": round(max_abs_delta, 6),
+            "risk_level_crossing": bool(risk_level_crossing),
+            "degraded_since_epoch": degraded_status.degraded_since_epoch,
+            "window": {
+                "total_calls": degraded_status.window.total_calls,
+                "secondary_calls": degraded_status.window.secondary_calls,
+                "failover_ratio": round(degraded_status.window.failover_ratio, 6),
+            },
+            "tier2_route": {
+                "active_provider": getattr(tier2_usage, "active_provider", None),
+                "active_model": getattr(tier2_usage, "active_model", None),
+                "used_secondary_route": bool(getattr(tier2_usage, "used_secondary_route", False)),
+            },
+        }
+        self.session.add(
+            LLMReplayQueueItem(
+                stage="tier2",
+                event_id=event.id,
+                priority=priority,
+                details=details,
+            )
+        )
+        try:
+            await self.session.flush()
+            logger.info(
+                "Enqueued event for post-recovery Tier-2 replay",
+                event_id=str(event.id),
+                priority=priority,
+                max_abs_delta=round(max_abs_delta, 6),
+                risk_level_crossing=bool(risk_level_crossing),
+            )
+            return True
+        except IntegrityError:
+            # Another worker already queued it (or the event was queued earlier).
+            return False
+
+    async def _is_high_impact_event(
+        self,
+        *,
+        event: Event,
+        trends: list[Trend],
+    ) -> tuple[bool, float, bool]:
+        claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+        impacts_payload = claims.get("trend_impacts", [])
+        if not isinstance(impacts_payload, list) or not impacts_payload:
+            return (False, 0.0, False)
+
+        trend_by_id = {self._trend_identifier(trend): trend for trend in trends}
+        source_credibility = await self._load_event_source_credibility(event)
+        corroboration_score = await self._corroboration_score(event)
+
+        max_abs_delta = 0.0
+        any_risk_crossing = False
+        min_abs_delta = float(settings.LLM_DEGRADED_REPLAY_MIN_ABS_DELTA)
+
+        for payload in impacts_payload:
+            impact = self._parse_trend_impact(payload)
+            if impact is None:
+                continue
+
+            trend = trend_by_id.get(impact["trend_id"])
+            if trend is None or trend.id is None:
+                continue
+
+            signal_type = impact["signal_type"]
+            indicator_weight = self._resolve_indicator_weight(trend=trend, signal_type=signal_type)
+            if indicator_weight is None:
+                continue
+            indicator_decay_half_life_days = self._resolve_indicator_decay_half_life(
+                trend=trend, signal_type=signal_type
+            )
+            evidence_age_days = self._event_age_days(event)
+            novelty_score = await self._novelty_score(
+                trend_id=trend.id,
+                signal_type=signal_type,
+                event_id=event.id,
+            )
+
+            delta, _factors = calculate_evidence_delta(
+                signal_type=signal_type,
+                indicator_weight=indicator_weight,
+                source_credibility=source_credibility,
+                corroboration_count=corroboration_score,
+                novelty_score=novelty_score,
+                direction=impact["direction"],
+                severity=impact["severity"],
+                confidence=impact["confidence"],
+                evidence_age_days=evidence_age_days,
+                indicator_decay_half_life_days=indicator_decay_half_life_days,
+            )
+            abs_delta = abs(float(delta))
+            if abs_delta > max_abs_delta:
+                max_abs_delta = abs_delta
+
+            old_prob = logodds_to_prob(float(trend.current_log_odds))
+            new_prob = logodds_to_prob(float(trend.current_log_odds) + float(delta))
+            if get_risk_level(old_prob) != get_risk_level(new_prob):
+                any_risk_crossing = True
+
+            if abs_delta >= min_abs_delta or any_risk_crossing:
+                return (True, max_abs_delta, any_risk_crossing)
+
+        return (False, max_abs_delta, any_risk_crossing)
 
     async def _capture_taxonomy_gap(
         self,
@@ -1240,6 +1456,8 @@ class ProcessingPipeline:
         cluster_result: ClusterResult | None,
         embedded: bool,
         tier2_applied: bool = False,
+        degraded_llm_hold: bool = False,
+        replay_enqueued: bool = False,
         trend_impacts_seen: int = 0,
         trend_updates: int = 0,
         error_message: str | None = None,
@@ -1259,6 +1477,8 @@ class ProcessingPipeline:
             event_created=event_created,
             event_merged=event_merged,
             tier2_applied=tier2_applied,
+            degraded_llm_hold=degraded_llm_hold,
+            replay_enqueued=replay_enqueued,
             trend_impacts_seen=trend_impacts_seen,
             trend_updates=trend_updates,
             error_message=error_message,
@@ -1279,6 +1499,9 @@ class ProcessingPipeline:
             "events_merged": result.events_merged,
             "trend_impacts_seen": result.trend_impacts_seen,
             "trend_updates": result.trend_updates,
+            "degraded_llm": bool(result.degraded_llm),
+            "degraded_holds": result.degraded_holds,
+            "replay_enqueued": result.replay_enqueued,
             "embedding_api_calls": result.usage.embedding_api_calls,
             "embedding_estimated_cost_usd": round(result.usage.embedding_estimated_cost_usd, 8),
             "tier1_prompt_tokens": result.usage.tier1_prompt_tokens,

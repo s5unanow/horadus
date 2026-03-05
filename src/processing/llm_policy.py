@@ -14,6 +14,7 @@ from typing import Any
 import structlog
 
 from src.core.config import settings
+from src.core.observability import record_llm_failover
 from src.processing.llm_failover import LLMChatFailoverInvoker, LLMChatRetryPolicy, LLMChatRoute
 from src.processing.llm_input_safety import (
     estimate_tokens,
@@ -28,7 +29,9 @@ logger = structlog.get_logger(__name__)
 @dataclass(frozen=True, slots=True)
 class LLMInvocationResult:
     response: Any
+    active_provider: str
     active_model: str
+    used_secondary_route: bool
     prompt_tokens: int
     completion_tokens: int
     estimated_cost_usd: float
@@ -119,7 +122,7 @@ async def invoke_with_policy(
 
     if strict_response_format is not None:
         try:
-            response, active_model = await invoker.create_chat_completion(
+            response, active_route = await invoker.create_chat_completion(
                 messages=messages,
                 temperature=temperature,
                 response_format=strict_response_format,
@@ -132,22 +135,24 @@ async def invoke_with_policy(
                 stage=stage,
                 model=primary_route.model,
             )
-            response, active_model = await invoker.create_chat_completion(
+            response, active_route = await invoker.create_chat_completion(
                 messages=messages,
                 temperature=temperature,
                 response_format=fallback_response_format,
             )
     else:
-        response, active_model = await invoker.create_chat_completion(
+        response, active_route = await invoker.create_chat_completion(
             messages=messages,
             temperature=temperature,
             response_format=fallback_response_format,
         )
 
     prompt_tokens, completion_tokens = extract_usage_tokens(response)
-    active_provider = primary_route.provider
-    if secondary_route is not None and active_model == secondary_route.model:
-        active_provider = secondary_route.provider
+    active_provider = active_route.provider
+    active_model = active_route.model
+    used_secondary = secondary_route is not None and active_route is secondary_route
+    if used_secondary:
+        record_llm_failover(stage=stage)
     if cost_tracker is not None and budget_tier is not None:
         await cost_tracker.record_usage(
             tier=budget_tier,
@@ -164,7 +169,9 @@ async def invoke_with_policy(
     )
     return LLMInvocationResult(
         response=response,
+        active_provider=active_provider,
         active_model=active_model,
+        used_secondary_route=used_secondary,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,
         estimated_cost_usd=estimated_cost,

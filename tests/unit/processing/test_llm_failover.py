@@ -67,13 +67,13 @@ async def test_invoker_retries_primary_route_before_success() -> None:
         retry_policy=LLMChatRetryPolicy(max_attempts=2, backoff_seconds=0.0),
     )
 
-    _response_obj, active_model = await invoker.create_chat_completion(
+    _response_obj, active_route = await invoker.create_chat_completion(
         messages=[{"role": "user", "content": "{}"}],
         temperature=0,
         response_format={"type": "json_object"},
     )
 
-    assert active_model == "gpt-4.1-nano"
+    assert active_route.model == "gpt-4.1-nano"
     assert primary.calls == 2
 
 
@@ -96,13 +96,13 @@ async def test_invoker_fails_over_after_primary_retry_budget() -> None:
         retry_policy=LLMChatRetryPolicy(max_attempts=2, backoff_seconds=0.0),
     )
 
-    _response_obj, active_model = await invoker.create_chat_completion(
+    _response_obj, active_route = await invoker.create_chat_completion(
         messages=[{"role": "user", "content": "{}"}],
         temperature=0,
         response_format={"type": "json_object"},
     )
 
-    assert active_model == "gpt-4.1-mini"
+    assert active_route.model == "gpt-4.1-mini"
     assert primary.calls == 2
     assert secondary.calls == 1
 

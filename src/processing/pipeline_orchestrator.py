@@ -630,10 +630,12 @@ class ProcessingPipeline:
             trend_impacts_seen = 0
             trend_updates = 0
             if self.degraded_llm_tracker is not None:
-                await asyncio.to_thread(
-                    self.degraded_llm_tracker.record_invocation,
-                    used_secondary_route=bool(tier2_usage.used_secondary_route),
-                )
+                # Avoid inflating the rolling window with semantic-cache hits (no actual API call).
+                if int(tier2_usage.api_calls) > 0:
+                    await asyncio.to_thread(
+                        self.degraded_llm_tracker.record_invocation,
+                        used_secondary_route=bool(tier2_usage.used_secondary_route),
+                    )
                 degraded_status = await asyncio.to_thread(self.degraded_llm_tracker.evaluate)
                 set_llm_degraded_mode(
                     stage=degraded_status.stage,
@@ -1026,6 +1028,7 @@ class ProcessingPipeline:
         any_risk_crossing = False
         min_abs_delta = float(settings.LLM_DEGRADED_REPLAY_MIN_ABS_DELTA)
 
+        high_impact = False
         for payload in impacts_payload:
             impact = self._parse_trend_impact(payload)
             if impact is None:
@@ -1071,9 +1074,9 @@ class ProcessingPipeline:
                 any_risk_crossing = True
 
             if abs_delta >= min_abs_delta or any_risk_crossing:
-                return (True, max_abs_delta, any_risk_crossing)
+                high_impact = True
 
-        return (False, max_abs_delta, any_risk_crossing)
+        return (high_impact, max_abs_delta, any_risk_crossing)
 
     async def _capture_taxonomy_gap(
         self,

@@ -824,14 +824,24 @@ class LLMReplayQueueItem(Base):
         ForeignKey("events.id", ondelete="CASCADE"),
         nullable=False,
     )
-    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    priority: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False,
+    )
     status: Mapped[str] = mapped_column(
         String(20),
         default="pending",
         server_default=text("'pending'"),
         nullable=False,
     )
-    attempt_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False,
+    )
     last_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     locked_by: Mapped[str | None] = mapped_column(String(255))

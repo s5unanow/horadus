@@ -984,16 +984,17 @@ class ProcessingPipeline:
                 "used_secondary_route": bool(getattr(tier2_usage, "used_secondary_route", False)),
             },
         }
-        self.session.add(
-            LLMReplayQueueItem(
-                stage="tier2",
-                event_id=event.id,
-                priority=priority,
-                details=details,
-            )
-        )
         try:
-            await self.session.flush()
+            async with self.session.begin_nested():
+                self.session.add(
+                    LLMReplayQueueItem(
+                        stage="tier2",
+                        event_id=event.id,
+                        priority=priority,
+                        details=details,
+                    )
+                )
+                await self.session.flush()
             logger.info(
                 "Enqueued event for post-recovery Tier-2 replay",
                 event_id=str(event.id),

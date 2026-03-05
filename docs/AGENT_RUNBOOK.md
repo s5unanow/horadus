@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-03
+**Last Verified**: 2026-03-05
 
 Short command index for day-to-day agent/operator work.
 
@@ -29,3 +29,8 @@ When: full pre-release checks before promotion.
 
 8. `make task-finish`
 When: complete PR lifecycle (checks -> merge -> local `main` sync).
+
+9. `make test-integration-docker`
+When: run integration tests locally in an ephemeral Docker stack (safe defaults).
+Note: the repo `pre-push` hook runs the same gate by default; bypass only with
+`HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

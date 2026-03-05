@@ -3380,6 +3380,31 @@ canonical task-start command routing, and protected-branch enforcement defaults.
 
 ---
 
+### TASK-197: Enforce Local Integration Test Gate Before Push/PR
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+CI already runs the full integration suite per PR, but developers (and agents)
+still regularly discover integration-only failures after pushing. Add a safe,
+repeatable local harness to run the integration suite in Docker against an
+explicit `*_test` database, and wire it into `pre-push` so every PR push
+benefits from early failure feedback.
+
+**Files**: `scripts/`, `Makefile`, `.pre-commit-config.yaml`, `docs/`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Add `make test-integration-docker` that:
+  - spins up ephemeral Postgres + Redis containers on non-default ports
+  - uses an explicit test database name (e.g. `geoint_test`)
+  - runs migrations + drift gate + `pytest tests/integration/`
+  - always cleans up containers on exit (success/failure)
+- [ ] Add a `pre-push` hook that runs the local integration gate by default
+- [ ] Provide a documented escape hatch (env var) for exceptional cases
+- [ ] Add unit tests for the `pre-push` gate script behavior (at least skip-path)
+- [ ] Document the new workflow in `docs/AGENT_RUNBOOK.md` (and/or a short README note)
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] WebSocket for real-time trend updates

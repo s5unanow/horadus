@@ -21,6 +21,12 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-commit, pre-push]
+      - id: integration-tests-guard
+        name: integration-tests-guard
+        entry: ./scripts/prepush_integration_gate.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
 
   # -------------------------------------------------------------------------
   # General file checks

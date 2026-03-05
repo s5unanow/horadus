@@ -215,6 +215,7 @@ Tasks that have been completed and verified.
 - TASK-193: Degraded-mode policy for sustained LLM failover ✅
 - TASK-194: Weekly triage minimum search set enforcement ✅
 - TASK-195: Pull all open backlog tasks into current sprint ✅
+- TASK-197: Enforce local integration test gate before push/PR ✅
 
 ## Archive
 

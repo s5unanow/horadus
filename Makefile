@@ -7,6 +7,7 @@
 
 .PHONY: help venv deps deps-dev hooks install install-dev setup clean \
         format lint typecheck test test-unit test-integration test-cov \
+        test-integration-docker \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
@@ -180,6 +181,9 @@ test-integration: deps-dev ## Run integration tests only
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" $(UV_RUN) alembic upgrade head
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)" ./scripts/check_migration_drift.sh
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" REDIS_URL="$(INTEGRATION_REDIS_URL)" $(UV_RUN) pytest tests/integration/ -v -m integration --allow-hosts=127.0.0.1,localhost
+
+test-integration-docker: deps-dev ## Run integration tests in an ephemeral Docker stack (safe defaults)
+	./scripts/test_integration_docker.sh
 
 test-cov: deps-dev ## Run tests with coverage report
 	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html --allow-hosts=127.0.0.1,localhost

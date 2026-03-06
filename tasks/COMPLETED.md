@@ -220,6 +220,7 @@ Tasks that have been completed and verified.
 - TASK-210: Unify assessment artifact contract across writers and validator ✅
 - TASK-211: Add 7-day novelty gate with `All clear` fallback for assessment roles ✅
 - TASK-212: Ground assessment task references against current sprint truth ✅
+- TASK-213: Suppress cross-role overlap before assessment artifacts are written ✅
 
 ## Archive
 

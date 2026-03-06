@@ -28,11 +28,13 @@ Use the canonical multiline section format from `docs/ASSESSMENTS.md`:
 - `Verification:` with bullet lines
 - `Blast radius:` with bullet lines
 - compare against same-role artifacts from the last 7 days before finalizing
+- compare against other-role artifacts from the last 7 days before finalizing
 - if no materially new proposal remains, write `All clear` instead of repeating prior themes
 - if repeating a proposal intentionally, include an explicit delta section such as `Delta since prior report:`
 - ground any live `TASK-###` references against `tasks/CURRENT_SPRINT.md`
 - mark past references explicitly as `[historical] TASK-###` or `[completed] TASK-###`
-- before publishing, run `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding --check-novelty --lookback-days 7`
+- if cross-role overlap suppression fires, record the matched prior proposal in automation memory/log output
+- before publishing, run `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding --check-novelty --check-cross-role-overlap --lookback-days 7`
 
 ## Constraints
 

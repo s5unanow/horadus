@@ -21,11 +21,13 @@ secrets handling, rate limiting, logging leaks). Propose up to 3 improvements.
 Include the minimum fields from `docs/ASSESSMENTS.md` (area must be `security`).
 Use the canonical multiline `Verification:` and `Blast radius:` section format.
 Compare against Security artifacts from the last 7 days before finalizing.
+Compare against other-role artifacts from the last 7 days before finalizing.
 If nothing materially new remains after that lookback, write `All clear`.
 If you intentionally repeat a finding/proposal, include an explicit delta section.
 Ground any live `TASK-###` references against `tasks/CURRENT_SPRINT.md`.
 Mark past references explicitly as `[historical] TASK-###` or `[completed] TASK-###`.
-Before publishing, run `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding --check-novelty --lookback-days 7`.
+If cross-role overlap suppression fires, record the matched prior proposal in automation memory/log output.
+Before publishing, run `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding --check-novelty --check-cross-role-overlap --lookback-days 7`.
 
 ## Constraints
 

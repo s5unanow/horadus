@@ -231,7 +231,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## In Progress
 
-- `TASK-213` Suppress cross-role overlap before assessment artifacts are written
 - `TASK-214` Switch PO/BA automations to change-triggered publishing under fully human-gated queues
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`

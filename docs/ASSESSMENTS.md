@@ -29,6 +29,7 @@ To validate the most recent assessment artifacts locally:
 - `python scripts/validate_assessment_artifacts.py`
 - `python scripts/validate_assessment_artifacts.py <target> --check-novelty --lookback-days 7`
 - `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding`
+- `python scripts/validate_assessment_artifacts.py <target> --check-cross-role-overlap --lookback-days 7`
 
 Daily artifact integrity enforced by validator:
 - Filename date (`artifacts/assessments/<role>/daily/YYYY-MM-DD.md`) must match the top report
@@ -58,6 +59,19 @@ Current-sprint grounding policy for task references:
   explicitly as `[historical] TASK-###` or `[completed] TASK-###`.
 - The grounding check only applies to artifacts whose filename date falls inside
   the current sprint date window; older archived artifacts are left untouched.
+
+Cross-role overlap policy for daily role assessments:
+
+- Before publishing, compare draft proposals against other-role artifacts from
+  the previous 7 days.
+- If another role already covered the same issue and you do not have materially
+  new evidence, suppress the duplicate proposal and emit `All clear` if nothing
+  else remains.
+- Reuse the same explicit delta sections as the novelty gate when repeating a
+  cross-role theme with genuinely new scope/evidence.
+- Record any suppressed overlap in automation memory/log output with the matched
+  prior `(proposal_id, Assessment-Ref)` so operators can audit why the proposal
+  was omitted.
 
 ## Proposal Schema (Minimum Fields)
 

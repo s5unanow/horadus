@@ -105,6 +105,9 @@ After completing work:
 - Before creating a task branch, run sequencing preflight: `make task-preflight`.
 - Start task branches via guarded command: `make task-start TASK=XXX NAME=short-name`.
 - Canonical agent start command is `make agent-safe-start TASK=XXX NAME=short-name` (enforces sprint eligibility + sequencing guard).
+- Prefer `horadus` for repo workflow operations when an equivalent command
+  exists (for example `horadus tasks ...` and `horadus triage collect`), and
+  prefer `--format json` for agent consumption where appropriate.
 - Task start is blocked unless `main` is clean/synced and there is no open non-merged task PR for the current operator.
 - Open one PR per task branch and merge only after required checks are green.
 - Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX` matching the branch task ID.
@@ -129,6 +132,10 @@ After completing work:
 
 ## Development Commands
 
+- Repo workflow CLI:
+  - `uv run --no-sync horadus tasks list-active --format json`
+  - `uv run --no-sync horadus tasks context-pack TASK-XXX --format json`
+  - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 - Tests: `pytest tests/ -v`
 - Dev API: `uvicorn src.api.main:app --reload`
 - Format/lint: `ruff format src/ tests/` and `ruff check src/ tests/`

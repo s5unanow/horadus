@@ -223,6 +223,12 @@ Tasks that have been completed and verified.
 - TASK-213: Suppress cross-role overlap before assessment artifacts are written ✅
 - TASK-214: Switch PO/BA automations to change-triggered publishing under fully human-gated queues ✅
 - TASK-215: Gate task completion on current-head PR review comments ✅
+- TASK-216: Agent-Facing Horadus CLI Initiative ✅
+- TASK-217: Refactor CLI into an internal package ✅
+- TASK-218: Add task and sprint workflow commands to `horadus` ✅
+- TASK-219: Add structured triage input collection command ✅
+- TASK-220: Migrate wrapper targets and agent docs to the CLI ✅
+- TASK-221: Add repo-owned Horadus CLI skill ✅
 
 ## Archive
 

@@ -11,8 +11,8 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
-        check-tracked-artifacts validate-assessments automations-export automations-apply
+        db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-context-pack task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
+        check-tracked-artifacts validate-assessments automations-export automations-apply install-horadus-cli-skill
 
 # Default target
 .DEFAULT_GOAL := help
@@ -119,22 +119,32 @@ automations-export: ## Export repo-relevant Codex automation TOMLs into ops/auto
 automations-apply: ## Apply ops/automations/specs/ into local $CODEX_HOME/automations/
 	$(UV_RUN) python scripts/sync_automations.py apply
 
+install-horadus-cli-skill: ## Install repo-owned Horadus CLI skill into local $CODEX_HOME/skills/
+	./scripts/install_horadus_cli_skill.sh
+
 task-preflight: ## Validate task-start sequencing preflight on main
-	./scripts/check_task_start_preflight.sh
+	$(UV_RUN) horadus tasks preflight
 
 agent-task-preflight: ## Validate agent task eligibility guards (TASK=XXX)
 	@if [ -z "$(TASK)" ]; then \
 		echo "Usage: make agent-task-preflight TASK=XXX"; \
 		exit 1; \
 	fi
-	./scripts/check_agent_task_eligibility.sh "$(TASK)"
+	$(UV_RUN) horadus tasks eligibility "$(TASK)"
+
+task-context-pack: ## Show task backlog/spec/sprint context pack (TASK=XXX)
+	@if [ -z "$(TASK)" ]; then \
+		echo "Usage: make task-context-pack TASK=117"; \
+		exit 1; \
+	fi
+	$(UV_RUN) horadus tasks context-pack "$(TASK)"
 
 task-start: ## Start a new task branch with sequencing guards (TASK=117 NAME=short-name)
 	@if [ -z "$(TASK)" ] || [ -z "$(NAME)" ]; then \
 		echo "Usage: make task-start TASK=117 NAME=short-name"; \
 		exit 1; \
 	fi
-	./scripts/start_task_branch.sh "$(TASK)" "$(NAME)"
+	$(UV_RUN) horadus tasks start "$(TASK)" --name "$(NAME)"
 
 agent-safe-start: ## Start a task branch with sprint-eligibility + sequencing guard (TASK=117 NAME=short-name)
 	@if [ -z "$(TASK)" ] || [ -z "$(NAME)" ]; then \
@@ -153,7 +163,7 @@ agent-safe-start: ## Start a task branch with sprint-eligibility + sequencing gu
 		echo "TASK-$(TASK) is marked [REQUIRES_HUMAN] and cannot be started autonomously"; \
 		exit 1; \
 	fi
-	./scripts/start_task_branch.sh "$(TASK)" "$(NAME)"
+	$(UV_RUN) horadus tasks start "$(TASK)" --name "$(NAME)"
 
 task-finish: ## Finish current task PR lifecycle (checks -> merge -> main sync)
 	./scripts/finish_task_pr.sh

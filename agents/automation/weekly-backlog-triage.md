@@ -11,6 +11,8 @@ Read and follow:
 - `PROJECT_STATUS.md`
 - Recent assessment artifacts:
   - `artifacts/assessments/**/daily/*.md` (last 14 days if present)
+- Preferred structured bundle:
+  - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 
 ## Backlog context policy (cost + hygiene)
 
@@ -30,11 +32,18 @@ Read and follow:
 For each candidate, run and record (in the triage report) at least:
 
 - Candidate keywords (2-4 nouns) across backlog + completed ledgers:
+  - Prefer a structured triage bundle first:
+    - `uv run --no-sync horadus triage collect --keyword "<kw1>" --keyword "<kw2>" --keyword "<kw3>" --keyword "<kw4>" --lookback-days 14 --format json`
+  - Then refine with direct search only when needed:
   - `rg -n "<kw1>|<kw2>|<kw3>|<kw4>" tasks/BACKLOG.md tasks/COMPLETED.md`
 - Blast-radius file paths/modules against backlog (to catch same-work-different-title):
+  - Prefer:
+    - `uv run --no-sync horadus triage collect --path "<path-or-module>" --lookback-days 14 --format json`
   - `rg -n "<path-or-module>" tasks/BACKLOG.md`
   - (repeat for 2-5 key paths/modules from `blast_radius`)
 - Proposal/finding ID across recent assessments (to de-dup across roles and days):
+  - Prefer:
+    - `uv run --no-sync horadus triage collect --proposal-id "<proposal_id>" --lookback-days 14 --format json`
   - `rg -n "<proposal_id>" artifacts/assessments/**/daily/*.md`
 
 If any search returns matches, briefly state whether it is a true overlap, and

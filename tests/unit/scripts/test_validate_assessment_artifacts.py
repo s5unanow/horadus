@@ -472,6 +472,79 @@ def test_validator_accepts_all_clear_with_novelty_check(tmp_path: Path) -> None:
     assert result.returncode == 0
 
 
+def test_validator_novelty_ignores_future_artifacts(tmp_path: Path) -> None:
+    future = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-07.md"
+    future.parent.mkdir(parents=True, exist_ok=True)
+    future.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-07",
+                "",
+                "### PROPOSAL-2026-03-07-po-status-freshness-surface",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.8",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "PROJECT_STATUS is stale.",
+                "",
+                "Proposed change:",
+                "Add a freshness surface.",
+                "",
+                "Verification:",
+                "- make docs-freshness",
+                "",
+                "Blast radius:",
+                "- PROJECT_STATUS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    target.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-status-freshness-surface",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.8",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "PROJECT_STATUS is stale.",
+                "",
+                "Proposed change:",
+                "Add a freshness surface.",
+                "",
+                "Verification:",
+                "- make docs-freshness",
+                "",
+                "Blast radius:",
+                "- PROJECT_STATUS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-novelty",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0
+
+
 def _write_current_sprint(tmp_path: Path, *, active_tasks: list[str]) -> None:
     active_lines = "\n".join(f"- `{task_id}` Active test task" for task_id in active_tasks)
     (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
@@ -610,4 +683,239 @@ def test_validator_accepts_historical_task_reference_marker(tmp_path: Path) -> N
     )
 
     result = _run(path, "--check-sprint-grounding", cwd=tmp_path)
+    assert result.returncode == 0
+
+
+def test_validator_accepts_cross_role_unique_proposal(tmp_path: Path) -> None:
+    prior = tmp_path / "artifacts" / "assessments" / "security" / "daily" / "2026-03-05.md"
+    prior.parent.mkdir(parents=True, exist_ok=True)
+    prior.write_text(
+        "\n".join(
+            [
+                "# Security Assessment - 2026-03-05",
+                "",
+                "### FINDING-2026-03-05-security-public-metrics-surface",
+                "area: security",
+                "priority: P1",
+                "confidence: 0.9",
+                "estimate: 1-2h",
+                "recommended_gate: REQUIRES_HUMAN",
+                "",
+                "Problem:",
+                "Metrics are public.",
+                "",
+                "Proposed change:",
+                "Require auth for metrics endpoints.",
+                "",
+                "Verification:",
+                "- curl -i /metrics",
+                "",
+                "Blast radius:",
+                "- src/api/routes/metrics.py",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "sa" / "daily" / "2026-03-06.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "# SA Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-sa-failover-quality-sentinel",
+                "area: processing",
+                "priority: P1",
+                "confidence: 0.8",
+                "estimate: 2-4h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "Failover lacks a quality sentinel.",
+                "",
+                "Proposed change:",
+                "Track failover quality with sampled comparisons.",
+                "",
+                "Verification:",
+                "- pytest tests/unit/processing -k failover -v",
+                "",
+                "Blast radius:",
+                "- src/processing/llm_failover.py",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-cross-role-overlap",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0
+
+
+def test_validator_rejects_cross_role_overlap(tmp_path: Path) -> None:
+    prior = tmp_path / "artifacts" / "assessments" / "security" / "daily" / "2026-03-05.md"
+    prior.parent.mkdir(parents=True, exist_ok=True)
+    prior.write_text(
+        "\n".join(
+            [
+                "# Security Assessment - 2026-03-05",
+                "",
+                "### FINDING-2026-03-05-security-observability-endpoints-public",
+                "area: security",
+                "priority: P1",
+                "confidence: 0.95",
+                "estimate: 1-2h",
+                "recommended_gate: REQUIRES_HUMAN",
+                "",
+                "Problem:",
+                "Health and metrics endpoints are publicly reachable without auth.",
+                "",
+                "Proposed change:",
+                "Require auth or allowlisting for all privileged diagnostics.",
+                "",
+                "Verification:",
+                "- curl -i /health /health/ready /metrics",
+                "",
+                "Blast radius:",
+                "- src/api/routes/health.py",
+                "- src/api/routes/metrics.py",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "sa" / "daily" / "2026-03-06.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "# SA Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-sa-observability-endpoints-public",
+                "area: security",
+                "priority: P1",
+                "confidence: 0.82",
+                "estimate: 1d",
+                "recommended_gate: REQUIRES_HUMAN",
+                "",
+                "Problem:",
+                "Health and metrics endpoints are publicly reachable without auth.",
+                "",
+                "Proposed change:",
+                "Require auth or allowlisting for all privileged diagnostics.",
+                "",
+                "Verification:",
+                "- curl -i /health /health/ready /metrics",
+                "",
+                "Blast radius:",
+                "- src/api/routes/health.py",
+                "- src/api/routes/metrics.py",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-cross-role-overlap",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
+    expected_overlap_id = (
+        "FINDING-2026-03-05-security-observability-endpoints-public"  # pragma: allowlist secret
+    )
+    assert result.returncode == 2
+    assert "overlaps with recent security proposal" in result.stdout
+    assert expected_overlap_id in result.stdout
+
+
+def test_validator_accepts_cross_role_overlap_with_explicit_delta(tmp_path: Path) -> None:
+    prior = tmp_path / "artifacts" / "assessments" / "security" / "daily" / "2026-03-05.md"
+    prior.parent.mkdir(parents=True, exist_ok=True)
+    prior.write_text(
+        "\n".join(
+            [
+                "# Security Assessment - 2026-03-05",
+                "",
+                "### FINDING-2026-03-05-security-observability-endpoints-public",
+                "area: security",
+                "priority: P1",
+                "confidence: 0.95",
+                "estimate: 1-2h",
+                "recommended_gate: REQUIRES_HUMAN",
+                "",
+                "Problem:",
+                "Health and metrics endpoints are publicly reachable without auth.",
+                "",
+                "Proposed change:",
+                "Require auth or allowlisting for all privileged diagnostics.",
+                "",
+                "Verification:",
+                "- curl -i /health /health/ready /metrics",
+                "",
+                "Blast radius:",
+                "- src/api/routes/health.py",
+                "- src/api/routes/metrics.py",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "sa" / "daily" / "2026-03-06.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "# SA Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-sa-observability-endpoints-public",
+                "area: security",
+                "priority: P1",
+                "confidence: 0.84",
+                "estimate: 1d",
+                "recommended_gate: REQUIRES_HUMAN",
+                "",
+                "Problem:",
+                "Health and metrics endpoints are publicly reachable without auth.",
+                "",
+                "Proposed change:",
+                "Require auth or allowlisting for all privileged diagnostics.",
+                "",
+                "New evidence:",
+                "- Architecture review adds ingress-policy drift controls missing from the security finding.",
+                "",
+                "Verification:",
+                "- curl -i /health /health/ready /metrics",
+                "",
+                "Blast radius:",
+                "- src/api/routes/health.py",
+                "- src/api/routes/metrics.py",
+                "- docs/DEPLOYMENT.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-cross-role-overlap",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
     assert result.returncode == 0

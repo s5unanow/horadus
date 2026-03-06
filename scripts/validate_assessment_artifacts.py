@@ -394,6 +394,74 @@ def _load_current_sprint_truth(
     return active_tasks, sprint_window
 
 
+def _history_artifacts_for_file(
+    artifact: ParsedArtifact,
+    *,
+    lookback_days: int,
+    all_files: list[Path],
+    repo_root: Path,
+    include_same_role: bool,
+) -> list[ParsedArtifact]:
+    normalized_target_path = artifact.path.resolve()
+    file_date = _artifact_file_date(artifact.path)
+    cutoff = file_date - timedelta(days=lookback_days) if file_date is not None else None
+    assessments_root = repo_root / "artifacts" / "assessments"
+    candidate_history_files = (
+        _iter_markdown_files([assessments_root]) if assessments_root.exists() else all_files
+    )
+
+    history: list[ParsedArtifact] = []
+    for candidate in candidate_history_files:
+        if candidate.resolve() == normalized_target_path:
+            continue
+
+        candidate_artifact = _parse_artifact(candidate)
+        if artifact.role is None or candidate_artifact.role is None:
+            continue
+
+        same_role = candidate_artifact.role == artifact.role
+        if include_same_role and not same_role:
+            continue
+        if not include_same_role and same_role:
+            continue
+
+        candidate_date = _artifact_file_date(candidate)
+        if cutoff is not None and candidate_date is not None and candidate_date < cutoff:
+            continue
+        if file_date is not None and candidate_date is not None and candidate_date > file_date:
+            continue
+
+        history.append(candidate_artifact)
+
+    return history
+
+
+def _similar_history_match(
+    proposal: ProposalBlock,
+    *,
+    history: list[ParsedArtifact],
+) -> tuple[ProposalBlock, Path, float] | None:
+    slug_tokens = _tokenize(_normalize_slug(proposal.proposal_id))
+    body_tokens = _tokenize(_proposal_body_text(proposal))
+
+    prior_match: tuple[ProposalBlock, Path, float] | None = None
+    for previous in history:
+        for previous_proposal in previous.proposals:
+            prev_slug_tokens = _tokenize(_normalize_slug(previous_proposal.proposal_id))
+            prev_body_tokens = _tokenize(_proposal_body_text(previous_proposal))
+            slug_similarity = _token_similarity(slug_tokens, prev_slug_tokens)
+            body_similarity = _token_similarity(body_tokens, prev_body_tokens)
+            if (
+                slug_similarity >= SLUG_SIMILARITY_THRESHOLD
+                or body_similarity >= BODY_SIMILARITY_THRESHOLD
+            ):
+                score = max(slug_similarity, body_similarity)
+                if prior_match is None or score > prior_match[2]:
+                    prior_match = (previous_proposal, previous.path, score)
+
+    return prior_match
+
+
 def _grounding_findings_for_file(path: Path, *, repo_root: Path) -> list[Finding]:
     file_date = _artifact_file_date(path)
     active_tasks, sprint_window = _load_current_sprint_truth(repo_root)
@@ -444,24 +512,13 @@ def _novelty_findings_for_file(
     if artifact.is_all_clear or not artifact.proposals or artifact.role is None:
         return []
 
-    normalized_target_path = path.resolve()
-    file_date = _artifact_file_date(path)
-    cutoff = file_date - timedelta(days=lookback_days) if file_date is not None else None
-    role_history_root = repo_root / "artifacts" / "assessments" / artifact.role / "daily"
-    candidate_history_files = (
-        _iter_markdown_files([role_history_root]) if role_history_root.exists() else all_files
+    history = _history_artifacts_for_file(
+        artifact,
+        lookback_days=lookback_days,
+        all_files=all_files,
+        repo_root=repo_root,
+        include_same_role=True,
     )
-    history: list[ParsedArtifact] = []
-    for candidate in candidate_history_files:
-        if candidate.resolve() == normalized_target_path:
-            continue
-        candidate_artifact = _parse_artifact(candidate)
-        if candidate_artifact.role != artifact.role:
-            continue
-        candidate_date = _artifact_file_date(candidate)
-        if cutoff is not None and candidate_date is not None and candidate_date < cutoff:
-            continue
-        history.append(candidate_artifact)
 
     task_titles = _load_task_titles(repo_root)
     findings: list[Finding] = []
@@ -473,26 +530,7 @@ def _novelty_findings_for_file(
             continue
 
         slug_tokens = _tokenize(_normalize_slug(proposal.proposal_id))
-        body_tokens = _tokenize(_proposal_body_text(proposal))
-
-        prior_match: tuple[str, Path, float] | None = None
-        for previous in history:
-            for previous_proposal in previous.proposals:
-                prev_slug_tokens = _tokenize(_normalize_slug(previous_proposal.proposal_id))
-                prev_body_tokens = _tokenize(_proposal_body_text(previous_proposal))
-                slug_similarity = _token_similarity(slug_tokens, prev_slug_tokens)
-                body_similarity = _token_similarity(body_tokens, prev_body_tokens)
-                if (
-                    slug_similarity >= SLUG_SIMILARITY_THRESHOLD
-                    or body_similarity >= BODY_SIMILARITY_THRESHOLD
-                ):
-                    score = max(slug_similarity, body_similarity)
-                    if prior_match is None or score > prior_match[2]:
-                        prior_match = (
-                            previous_proposal.proposal_id,
-                            previous.path,
-                            score,
-                        )
+        prior_match = _similar_history_match(proposal, history=history)
 
         if prior_match is not None:
             findings.append(
@@ -501,7 +539,7 @@ def _novelty_findings_for_file(
                     line_no=proposal.line_no,
                     message=(
                         f"{proposal.proposal_id}: non-novel within {lookback_days} days; "
-                        f"matches prior same-role proposal {prior_match[0]} in "
+                        f"matches prior same-role proposal {prior_match[0].proposal_id} in "
                         f"{prior_match[1].as_posix()} (similarity {prior_match[2]:.2f}). "
                         "Add an explicit delta section or emit 'All clear'."
                     ),
@@ -543,6 +581,69 @@ def _novelty_findings_for_file(
                 message=(
                     f"no materially new proposals remain after {lookback_days}-day novelty "
                     "check; emit an explicit 'All clear' report instead."
+                ),
+            )
+        )
+
+    return findings
+
+
+def _cross_role_overlap_findings_for_file(
+    path: Path,
+    *,
+    lookback_days: int,
+    all_files: list[Path],
+    repo_root: Path,
+) -> list[Finding]:
+    artifact = _parse_artifact(path)
+    if artifact.is_all_clear or not artifact.proposals or artifact.role is None:
+        return []
+
+    history = _history_artifacts_for_file(
+        artifact,
+        lookback_days=lookback_days,
+        all_files=all_files,
+        repo_root=repo_root,
+        include_same_role=False,
+    )
+    if not history:
+        return []
+
+    findings: list[Finding] = []
+    novel_count = 0
+    for proposal in artifact.proposals:
+        if _proposal_has_explicit_delta(proposal):
+            novel_count += 1
+            continue
+
+        prior_match = _similar_history_match(proposal, history=history)
+        if prior_match is None:
+            novel_count += 1
+            continue
+
+        prior_role = _role_from_path(prior_match[1]) or "unknown"
+        findings.append(
+            Finding(
+                path=path,
+                line_no=proposal.line_no,
+                message=(
+                    f"{proposal.proposal_id}: overlaps with recent {prior_role} proposal "
+                    f"{prior_match[0].proposal_id} in {prior_match[1].as_posix()} "
+                    f"(similarity {prior_match[2]:.2f}). Suppress the duplicate, record the "
+                    "suppression in automation memory/log output, add an explicit delta, or "
+                    "emit 'All clear'."
+                ),
+            )
+        )
+
+    if novel_count == 0:
+        findings.append(
+            Finding(
+                path=path,
+                line_no=1,
+                message=(
+                    f"no materially new cross-role proposals remain after {lookback_days}-day "
+                    "overlap check; emit an explicit 'All clear' report instead."
                 ),
             )
         )
@@ -738,6 +839,11 @@ def main(argv: list[str] | None = None) -> int:
         ),
     )
     parser.add_argument(
+        "--check-cross-role-overlap",
+        action="store_true",
+        help=("Check whether proposal blocks duplicate recent other-role assessment coverage."),
+    )
+    parser.add_argument(
         "--lookback-days",
         type=int,
         default=7,
@@ -769,6 +875,15 @@ def main(argv: list[str] | None = None) -> int:
             )
         if args.check_sprint_grounding:
             all_findings.extend(_grounding_findings_for_file(file_path, repo_root=Path.cwd()))
+        if args.check_cross_role_overlap:
+            all_findings.extend(
+                _cross_role_overlap_findings_for_file(
+                    file_path,
+                    lookback_days=args.lookback_days,
+                    all_files=files,
+                    repo_root=Path.cwd(),
+                )
+            )
 
     if all_findings:
         for finding in all_findings:

@@ -32,6 +32,8 @@ Daily artifact integrity enforced by validator:
 - Filename date (`artifacts/assessments/<role>/daily/YYYY-MM-DD.md`) must match the top report
   heading date.
 - Proposal/Finding IDs in that file must use the same `YYYY-MM-DD` date segment.
+- Scratch files under `_raw/` are ignored by the validator; only dated daily
+  artifacts are part of the enforced contract.
 
 ## Proposal Schema (Minimum Fields)
 
@@ -49,10 +51,11 @@ Each proposal must include:
 - `blast_radius`: files/modules likely to change
 - `recommended_gate`: `AUTO_OK|HUMAN_REVIEW|REQUIRES_HUMAN`
 
-Suggested Markdown template:
+Canonical Markdown template:
 
 ```md
 ### PROPOSAL-2026-02-25-security-metrics-auth
+proposal_id: PROPOSAL-2026-02-25-security-metrics-auth
 area: security
 priority: P2
 confidence: 0.78
@@ -73,6 +76,21 @@ Blast radius:
 - src/api/...
 - docs/DEPLOYMENT.md
 ```
+
+Canonical formatting rules:
+
+- Use section-style `Verification:` and `Blast radius:` blocks with one or more
+  bullet lines.
+- `Problem:` and `Proposed change:` are strongly recommended for readability but
+  are not currently required by the validator.
+- The `### PROPOSAL-...` / `### FINDING-...` heading is the authoritative ID.
+  A `proposal_id:` line is recommended and may repeat the heading for clarity.
+
+Legacy compatibility:
+
+- The validator still accepts historical single-line forms such as
+  `verification: make test-unit` and `blast_radius: scripts/`.
+- New and updated automations should emit the canonical multiline section form.
 
 ## ID Policy (Hard Rule)
 

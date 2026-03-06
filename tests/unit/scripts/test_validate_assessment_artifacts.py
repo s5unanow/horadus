@@ -52,6 +52,74 @@ def test_validator_accepts_valid_proposal(tmp_path: Path) -> None:
     assert "passed" in result.stdout.lower()
 
 
+def test_validator_accepts_canonical_multiline_sections(tmp_path: Path) -> None:
+    path = tmp_path / "2026-03-06.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-example",
+                "proposal_id: PROPOSAL-2026-03-06-po-example",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "Something changed.",
+                "",
+                "Proposed change:",
+                "Do the thing.",
+                "",
+                "Verification:",
+                "- make test-unit",
+                "- python scripts/validate_assessment_artifacts.py",
+                "",
+                "Blast radius:",
+                "- scripts/validate_assessment_artifacts.py",
+                "- docs/ASSESSMENTS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = _run(path)
+    assert result.returncode == 0
+    assert "passed" in result.stdout.lower()
+
+
+def test_validator_rejects_empty_multiline_required_section(tmp_path: Path) -> None:
+    path = tmp_path / "2026-03-06.md"
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-example",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Verification:",
+                "",
+                "Blast radius:",
+                "- scripts/validate_assessment_artifacts.py",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    result = _run(path)
+    assert result.returncode == 2
+    assert "missing required fields: verification" in result.stdout
+
+
 def test_validator_rejects_task_heading(tmp_path: Path) -> None:
     path = tmp_path / "a.md"
     path.write_text(
@@ -179,3 +247,13 @@ def test_validator_accepts_daily_date_integrity_match(tmp_path: Path) -> None:
     )
     result = _run(path)
     assert result.returncode == 0
+
+
+def test_validator_ignores_raw_subdirectories(tmp_path: Path) -> None:
+    raw_dir = tmp_path / "artifacts" / "assessments" / "agents" / "daily" / "_raw"
+    raw_dir.mkdir(parents=True)
+    (raw_dir / "scratch.md").write_text("not a real report\n", encoding="utf-8")
+
+    result = _run(tmp_path / "artifacts" / "assessments")
+    assert result.returncode == 0
+    assert "No assessment artifacts found" in result.stdout

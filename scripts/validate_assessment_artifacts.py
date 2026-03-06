@@ -30,7 +30,7 @@ ALLOWED_GATES = {"AUTO_OK", "HUMAN_REVIEW", "REQUIRES_HUMAN"}
 
 RE_PROPOSAL_HEADING = re.compile(r"^###\s+((?:PROPOSAL|FINDING)-[A-Za-z0-9._:-]+)\s*$")
 RE_FORBIDDEN_TASK_HEADING = re.compile(r"^###\s+TASK-\d{3}\b")
-RE_KV = re.compile(r"^\s*([a-z_]+)\s*:\s*(.+?)\s*$", re.IGNORECASE)
+RE_FIELD_LINE = re.compile(r"^\s*([A-Za-z_ ]+)\s*:\s*(.*?)\s*$")
 RE_DAILY_FILENAME_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\.md$")
 RE_TITLE_DATE = re.compile(r"^#\s+.+?(\d{4}-\d{2}-\d{2})\s*$")
 RE_PROPOSAL_DATE = re.compile(r"^(?:PROPOSAL|FINDING)-(\d{4}-\d{2}-\d{2})-")
@@ -49,6 +49,26 @@ REQUIRED_FIELDS = {
     "recommended_gate",
 }
 
+FIELD_ALIASES = {
+    "proposal_id": "proposal_id",
+    "area": "area",
+    "priority": "priority",
+    "confidence": "confidence",
+    "estimate": "estimate",
+    "recommended_gate": "recommended_gate",
+    "verification": "verification",
+    "blast_radius": "blast_radius",
+    "blast radius": "blast_radius",
+}
+NON_FIELD_SECTION_ALIASES = {
+    "problem",
+    "proposed_change",
+    "proposed change",
+    "summary",
+    "scope reviewed",
+    "scope_reviewed",
+}
+
 
 @dataclass(frozen=True)
 class Finding:
@@ -61,7 +81,11 @@ def _iter_markdown_files(paths: list[Path]) -> list[Path]:
     files: list[Path] = []
     for path in paths:
         if path.is_dir():
-            files.extend(sorted(path.rglob("*.md")))
+            files.extend(
+                sorted(
+                    candidate for candidate in path.rglob("*.md") if "_raw" not in candidate.parts
+                )
+            )
         else:
             files.append(path)
     return files
@@ -75,6 +99,63 @@ def _parse_confidence(value: str) -> float | None:
     if 0.0 <= confidence <= 1.0:
         return confidence
     return None
+
+
+def _normalize_field_key(raw_key: str) -> str | None:
+    normalized = " ".join(raw_key.strip().lower().split())
+    return FIELD_ALIASES.get(normalized)
+
+
+def _normalize_non_field_section(raw_key: str) -> str | None:
+    normalized = " ".join(raw_key.strip().lower().split())
+    if normalized in NON_FIELD_SECTION_ALIASES:
+        return normalized.replace(" ", "_")
+    return None
+
+
+def _parse_block_fields(block_lines: list[str], start_line_no: int) -> dict[str, str]:
+    fields: dict[str, str] = {}
+    current_key: str | None = None
+    current_values: list[str] = []
+
+    def flush() -> None:
+        nonlocal current_key, current_values
+        if current_key is None:
+            return
+        content = "\n".join(line.rstrip() for line in current_values).strip()
+        if content:
+            fields[current_key] = content
+        current_key = None
+        current_values = []
+
+    for _line_no, line in enumerate(block_lines, start=start_line_no + 1):
+        field_match = RE_FIELD_LINE.match(line)
+        if field_match:
+            raw_key = field_match.group(1)
+            raw_value = field_match.group(2)
+            field_key = _normalize_field_key(raw_key)
+            non_field_key = _normalize_non_field_section(raw_key)
+
+            if field_key is not None:
+                flush()
+                if raw_value.strip():
+                    fields[field_key] = raw_value.strip()
+                else:
+                    current_key = field_key
+                continue
+
+            if non_field_key is not None:
+                flush()
+                continue
+
+        if current_key is not None:
+            if line.strip():
+                current_values.append(line)
+            else:
+                flush()
+
+    flush()
+    return fields
 
 
 def validate_file(path: Path) -> list[Finding]:
@@ -174,14 +255,7 @@ def validate_file(path: Path) -> list[Finding]:
         end_line_no = proposal_starts[i + 1][0] - 1 if i + 1 < len(proposal_starts) else len(lines)
         block_lines = lines[start_line_no:end_line_no]
 
-        fields: dict[str, str] = {}
-        for _line_no, line in enumerate(block_lines, start=start_line_no + 1):
-            kv = RE_KV.match(line)
-            if not kv:
-                continue
-            key = kv.group(1).strip().lower()
-            value = kv.group(2).strip()
-            fields[key] = value
+        fields = _parse_block_fields(block_lines, start_line_no)
 
         missing = sorted(REQUIRED_FIELDS - set(fields.keys()))
         if missing:

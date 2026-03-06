@@ -217,6 +217,7 @@ Tasks that have been completed and verified.
 - TASK-195: Pull all open backlog tasks into current sprint ✅
 - TASK-197: Enforce local integration test gate before push/PR ✅
 - TASK-198: External review backlog intake preservation (2026-03-05) ✅
+- TASK-210: Unify assessment artifact contract across writers and validator ✅
 
 ## Archive
 

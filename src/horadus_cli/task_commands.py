@@ -332,8 +332,10 @@ def start_task_data(
     )
 
 
-def _task_record_payload(record: Any) -> dict[str, Any]:
+def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, Any]:
     payload = asdict(record)
+    if not include_raw:
+        payload.pop("raw_block", None)
     payload["backlog_path"] = str(backlog_path().relative_to(repo_root()))
     payload["current_sprint_path"] = str(current_sprint_path().relative_to(repo_root()))
     return payload
@@ -392,9 +394,19 @@ def handle_show(args: Any) -> CommandResult:
 
 
 def handle_search(args: Any) -> CommandResult:
+    if args.limit is not None and args.limit < 1:
+        return CommandResult(
+            exit_code=ExitCode.VALIDATION_ERROR,
+            error_lines=["--limit must be a positive integer"],
+        )
+
     query = " ".join(args.query).strip()
-    matches = search_task_records(query)
+    matches = search_task_records(query, status=args.status, limit=args.limit)
     lines = [f"Task search: {query}"]
+    lines.append(
+        f"- status={args.status}, limit={args.limit if args.limit is not None else 'none'}, "
+        f"results={len(matches)}"
+    )
     if not matches:
         lines.append("(no matches)")
     else:
@@ -403,9 +415,20 @@ def handle_search(args: Any) -> CommandResult:
                 f"- {record.task_id}: {record.title} [{record.status}] "
                 f"(priority={record.priority or 'unknown'}, estimate={record.estimate or 'unknown'})"
             )
+        if args.include_raw:
+            for record in matches:
+                lines.extend(["", f"## {record.task_id}", record.raw_block])
     return CommandResult(
         lines=lines,
-        data={"query": query, "matches": [_task_record_payload(item) for item in matches]},
+        data={
+            "query": query,
+            "status_filter": args.status,
+            "limit": args.limit,
+            "include_raw": bool(args.include_raw),
+            "matches": [
+                _task_record_payload(item, include_raw=bool(args.include_raw)) for item in matches
+            ],
+        },
     )
 
 
@@ -526,6 +549,22 @@ def register_task_commands(subparsers: Any) -> None:
     search_parser = tasks_subparsers.add_parser("search", help="Search backlog tasks by text.")
     add_leaf_cli_options(search_parser)
     search_parser.add_argument("query", nargs="+", help="Query text.")
+    search_parser.add_argument(
+        "--status",
+        choices=["active", "backlog", "completed", "all"],
+        default="all",
+        help="Filter search results by task status.",
+    )
+    search_parser.add_argument(
+        "--limit",
+        type=int,
+        help="Maximum number of results to return.",
+    )
+    search_parser.add_argument(
+        "--include-raw",
+        action="store_true",
+        help="Include the raw backlog block for each matching task.",
+    )
     search_parser.set_defaults(handler=handle_search)
 
     context_pack_parser = tasks_subparsers.add_parser(

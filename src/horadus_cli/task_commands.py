@@ -344,16 +344,36 @@ def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, 
 def handle_list_active(_args: Any) -> CommandResult:
     tasks = parse_active_tasks()
     blockers = parse_human_blockers()
+    blockers_by_task = {blocker.task_id: blocker for blocker in blockers}
+    overdue_blockers = [
+        blocker
+        for blocker in blockers
+        if blocker.urgency is not None and blocker.urgency.is_overdue
+    ]
     lines = ["Active tasks:"]
     for task in tasks:
         suffix = " [REQUIRES_HUMAN]" if task.requires_human else ""
         note = f" — {task.note}" if task.note else ""
-        lines.append(f"- {task.task_id}: {task.title}{suffix}{note}")
+        urgency_note = ""
+        blocker = blockers_by_task.get(task.task_id)
+        if blocker is not None and blocker.urgency is not None:
+            if blocker.urgency.is_overdue:
+                overdue_days = abs(blocker.urgency.days_until_next_action or 0)
+                urgency_note = f" [OVERDUE by {overdue_days}d]"
+            elif blocker.urgency.is_due_today:
+                urgency_note = " [DUE TODAY]"
+        lines.append(f"- {task.task_id}: {task.title}{suffix}{urgency_note}{note}")
+    if overdue_blockers:
+        lines.append(
+            "- overdue_human_blockers="
+            f"{len(overdue_blockers)} ({', '.join(blocker.task_id for blocker in overdue_blockers)})"
+        )
     return CommandResult(
         lines=lines,
         data={
             "tasks": [asdict(task) for task in tasks],
             "human_blockers": [asdict(item) for item in blockers],
+            "overdue_human_blockers": [asdict(item) for item in overdue_blockers],
         },
     )
 

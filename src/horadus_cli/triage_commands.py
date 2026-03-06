@@ -59,11 +59,17 @@ def handle_collect(args: Any) -> CommandResult:
 
     active_tasks = parse_active_tasks()
     blockers = parse_human_blockers()
+    overdue_blockers = [
+        blocker
+        for blocker in blockers
+        if blocker.urgency is not None and blocker.urgency.is_overdue
+    ]
 
     lines = [
         "Triage input bundle",
         f"- active_tasks={len(active_tasks)}",
         f"- human_blockers={len(blockers)}",
+        f"- overdue_human_blockers={len(overdue_blockers)}",
         f"- recent_assessments={len(recent_paths)}",
         f"- keyword_hits={len(keyword_hits)}",
         f"- path_hits={len(path_hits)}",
@@ -75,6 +81,10 @@ def handle_collect(args: Any) -> CommandResult:
         lines.append(f"- paths={', '.join(args.path)}")
     if args.proposal_id:
         lines.append(f"- proposal_ids={', '.join(args.proposal_id)}")
+    if overdue_blockers:
+        lines.append(
+            f"- overdue_tasks={', '.join(blocker.task_id for blocker in overdue_blockers)}"
+        )
 
     return CommandResult(
         lines=lines,
@@ -83,6 +93,7 @@ def handle_collect(args: Any) -> CommandResult:
                 "path": str(current_sprint_path().relative_to(repo_root())),
                 "active_tasks": [asdict(task) for task in active_tasks],
                 "human_blockers": [asdict(blocker) for blocker in blockers],
+                "overdue_human_blockers": [asdict(blocker) for blocker in overdue_blockers],
             },
             "searches": {
                 "keywords": args.keyword or [],

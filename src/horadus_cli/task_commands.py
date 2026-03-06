@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import shutil
 import subprocess  # nosec B404
 from dataclasses import asdict
@@ -541,12 +542,13 @@ def add_leaf_cli_options(parser: Any) -> None:
         "--format",
         dest="output_format",
         choices=["text", "json"],
-        default="text",
+        default=argparse.SUPPRESS,
         help="Output format.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="Validate and describe the command without making changes.",
     )
 

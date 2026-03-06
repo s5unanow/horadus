@@ -629,12 +629,13 @@ def _legacy_leaf_options(parser: argparse.ArgumentParser) -> None:
         "--format",
         dest="output_format",
         choices=["text", "json"],
-        default="text",
+        default=argparse.SUPPRESS,
         help="Output format.",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
+        default=argparse.SUPPRESS,
         help="Validate and describe the command without making changes.",
     )
 

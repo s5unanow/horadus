@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-215`.
+- Next available task IDs start at `TASK-216`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3796,6 +3796,26 @@ another daily artifact.
 - [ ] Publish normally when blocker state changes, or when the queue contains at least one non-human executable task
 - [ ] Record skip/publish decisions in automation memory with the state hash and comparison reason
 - [ ] Add tests covering unchanged human-gated queue skip, changed queue publish, and mixed queue publish
+
+---
+
+### TASK-215: Gate task completion on current-head PR review comments
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+`make task-finish` currently waits for required CI checks only. That means a PR
+can merge before Codex/GitHub review comments arrive or while actionable
+current-head review comments still exist, which undermines the “green CI + no
+review findings” completion rule.
+
+**Files**: `scripts/finish_task_pr.sh`, `scripts/check_pr_review_gate.py`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Add a review gate that resolves the current PR head SHA and waits for a current-head Codex review up to a bounded timeout
+- [ ] Ignore older review comments tied to superseded commits; only current-head review findings block merge
+- [ ] Fail task completion when actionable current-head review comments exist, with clear output pointing to the offending comments
+- [ ] Allow merge to continue when the wait window expires without a review, with explicit timeout messaging/policy
+- [ ] Cover helper-script behavior and `make task-finish` integration with unit tests
 
 ---
 

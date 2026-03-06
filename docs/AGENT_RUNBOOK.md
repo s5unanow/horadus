@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-05
+**Last Verified**: 2026-03-06
 
 Short command index for day-to-day agent/operator work.
 
@@ -28,7 +28,7 @@ When: deterministic no-network/no-LLM regression exercise.
 When: full pre-release checks before promotion.
 
 8. `make task-finish`
-When: complete PR lifecycle (checks -> merge -> local `main` sync).
+When: complete PR lifecycle (checks -> current-head review gate -> merge -> local `main` sync).
 
 9. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).

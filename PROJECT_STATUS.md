@@ -259,8 +259,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Complete assessment automation signal-quality tasks (`TASK-210`..`TASK-214`)
-2. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
+1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
 
 ## Expert Feedback Integration ✅
 

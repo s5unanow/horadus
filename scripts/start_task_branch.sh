@@ -16,4 +16,12 @@ fi
 
 task_input="$1"
 shift
-uv run --no-sync horadus tasks start "${task_input}" --name "$*"
+set +e
+output="$(uv run --no-sync horadus tasks start "${task_input}" --name "$*" 2>&1)"
+status=$?
+set -e
+printf '%s\n' "${output}"
+if [[ ${status} -eq 0 ]]; then
+  exit 0
+fi
+exit 1

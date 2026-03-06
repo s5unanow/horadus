@@ -28,6 +28,7 @@ To validate the most recent assessment artifacts locally:
 
 - `python scripts/validate_assessment_artifacts.py`
 - `python scripts/validate_assessment_artifacts.py <target> --check-novelty --lookback-days 7`
+- `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding`
 
 Daily artifact integrity enforced by validator:
 - Filename date (`artifacts/assessments/<role>/daily/YYYY-MM-DD.md`) must match the top report
@@ -46,6 +47,17 @@ Novelty policy for daily role assessments:
   `Delta since prior report:` or `New evidence:` with the new fact/scope change.
 - If no materially new proposals remain after the 7-day lookback, emit a short
   `All clear` report instead of rephrasing prior recommendations.
+
+Current-sprint grounding policy for task references:
+
+- Treat `tasks/CURRENT_SPRINT.md` as the only source of truth for live
+  `TASK-###` references in daily assessments.
+- Before publishing a current-sprint artifact, run
+  `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding`.
+- If you need to mention a no-longer-active or already completed task, mark it
+  explicitly as `[historical] TASK-###` or `[completed] TASK-###`.
+- The grounding check only applies to artifacts whose filename date falls inside
+  the current sprint date window; older archived artifacts are left untouched.
 
 ## Proposal Schema (Minimum Fields)
 

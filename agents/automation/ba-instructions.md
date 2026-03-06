@@ -23,6 +23,9 @@ Use the canonical multiline `Verification:` and `Blast radius:` section format.
 Compare against BA artifacts from the last 7 days before finalizing.
 If nothing materially new remains after that lookback, write `All clear`.
 If you intentionally repeat a proposal, include an explicit delta section.
+Ground any live `TASK-###` references against `tasks/CURRENT_SPRINT.md`.
+Mark past references explicitly as `[historical] TASK-###` or `[completed] TASK-###`.
+Before publishing, run `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding --check-novelty --lookback-days 7`.
 
 ## Constraints
 

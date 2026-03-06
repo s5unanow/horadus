@@ -35,6 +35,11 @@ RE_FIELD_LINE = re.compile(r"^\s*([A-Za-z_ ]+)\s*:\s*(.*?)\s*$")
 RE_DAILY_FILENAME_DATE = re.compile(r"(\d{4}-\d{2}-\d{2})\.md$")
 RE_TITLE_DATE = re.compile(r"^#\s+.+?(\d{4}-\d{2}-\d{2})\s*$")
 RE_PROPOSAL_DATE = re.compile(r"^(?:PROPOSAL|FINDING)-(\d{4}-\d{2}-\d{2})-")
+RE_TASK_REFERENCE = re.compile(r"\bTASK-\d{3}\b")
+RE_SPRINT_DATES = re.compile(
+    r"^\*\*Sprint Dates\*\*:\s+(\d{4}-\d{2}-\d{2})\s+to\s+(\d{4}-\d{2}-\d{2})\s*$"
+)
+RE_ACTIVE_SPRINT_TASK = re.compile(r"^-\s+`(TASK-\d{3})`")
 
 RE_PRIORITY = re.compile(r"^P[0-3]$")
 
@@ -100,6 +105,17 @@ TOKEN_STOPWORDS = {
 }
 DELTA_HINT_PATTERN = re.compile(
     r"\b(delta since prior report|new evidence|change since last report|updated scope)\b",
+    re.IGNORECASE,
+)
+CURRENT_TASK_ASSERTION_PATTERN = re.compile(
+    r"\b(active|current|remaining|open|overdue|blocker|blockers|human-gated|"
+    r"launch blocker|still|today|next_action|decision required)\b",
+    re.IGNORECASE,
+)
+HISTORICAL_TASK_MARKER_PATTERN = re.compile(
+    r"(?:\[(?:historical|completed|closed)\]|"
+    r"\b(?:historical|completed|closed|prior|previous|earlier|former|formerly|"
+    r"past|reference(?:d)?|carryover|already implemented)\b)",
     re.IGNORECASE,
 )
 ROLE_PREFIXES = {"po", "ba", "sa", "security", "agents"}
@@ -338,6 +354,83 @@ def _load_task_titles(repo_root: Path) -> list[tuple[str, str]]:
             if completed_match:
                 titles.append((completed_match.group(1), completed_match.group(2).strip()))
     return titles
+
+
+def _load_current_sprint_truth(
+    repo_root: Path,
+) -> tuple[dict[str, int], tuple[date, date] | None]:
+    sprint_path = repo_root / "tasks/CURRENT_SPRINT.md"
+    if not sprint_path.exists():
+        return {}, None
+
+    active_tasks: dict[str, int] = {}
+    sprint_window: tuple[date, date] | None = None
+    in_active_tasks = False
+
+    for line_no, line in enumerate(sprint_path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = line.strip()
+        sprint_match = RE_SPRINT_DATES.match(stripped)
+        if sprint_match:
+            sprint_window = (
+                date.fromisoformat(sprint_match.group(1)),
+                date.fromisoformat(sprint_match.group(2)),
+            )
+            continue
+
+        if stripped == "## Active Tasks":
+            in_active_tasks = True
+            continue
+
+        if in_active_tasks and stripped.startswith("## "):
+            break
+
+        if not in_active_tasks:
+            continue
+
+        task_match = RE_ACTIVE_SPRINT_TASK.match(stripped)
+        if task_match:
+            active_tasks[task_match.group(1)] = line_no
+
+    return active_tasks, sprint_window
+
+
+def _grounding_findings_for_file(path: Path, *, repo_root: Path) -> list[Finding]:
+    file_date = _artifact_file_date(path)
+    active_tasks, sprint_window = _load_current_sprint_truth(repo_root)
+    if file_date is None or sprint_window is None:
+        return []
+
+    sprint_start, sprint_end = sprint_window
+    if not (sprint_start <= file_date <= sprint_end):
+        return []
+
+    findings: list[Finding] = []
+    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        task_ids = RE_TASK_REFERENCE.findall(line)
+        if not task_ids:
+            continue
+        if not CURRENT_TASK_ASSERTION_PATTERN.search(line):
+            continue
+        if HISTORICAL_TASK_MARKER_PATTERN.search(line):
+            continue
+
+        for task_id in task_ids:
+            if task_id in active_tasks:
+                continue
+            findings.append(
+                Finding(
+                    path=path,
+                    line_no=line_no,
+                    message=(
+                        f"{task_id}: referenced as current/active/blocking but not present in "
+                        "tasks/CURRENT_SPRINT.md Active Tasks. Use current sprint truth for live "
+                        "references, or mark historical references explicitly with "
+                        "[historical]/[completed]."
+                    ),
+                )
+            )
+
+    return findings
 
 
 def _novelty_findings_for_file(
@@ -637,6 +730,14 @@ def main(argv: list[str] | None = None) -> int:
         help="Check whether proposal blocks are materially new versus recent same-role history.",
     )
     parser.add_argument(
+        "--check-sprint-grounding",
+        action="store_true",
+        help=(
+            "Check TASK-### references against tasks/CURRENT_SPRINT.md when the artifact date "
+            "falls inside the current sprint window."
+        ),
+    )
+    parser.add_argument(
         "--lookback-days",
         type=int,
         default=7,
@@ -666,6 +767,8 @@ def main(argv: list[str] | None = None) -> int:
                     repo_root=Path.cwd(),
                 )
             )
+        if args.check_sprint_grounding:
+            all_findings.extend(_grounding_findings_for_file(file_path, repo_root=Path.cwd()))
 
     if all_findings:
         for finding in all_findings:

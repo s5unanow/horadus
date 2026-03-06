@@ -470,3 +470,144 @@ def test_validator_accepts_all_clear_with_novelty_check(tmp_path: Path) -> None:
 
     result = _run(path, "--check-novelty", "--lookback-days", "7", cwd=tmp_path)
     assert result.returncode == 0
+
+
+def _write_current_sprint(tmp_path: Path, *, active_tasks: list[str]) -> None:
+    active_lines = "\n".join(f"- `{task_id}` Active test task" for task_id in active_tasks)
+    (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "**Sprint Goal**: Test grounding",
+                "**Sprint Number**: 3",
+                "**Sprint Dates**: 2026-03-04 to 2026-03-18",
+                "",
+                "## Active Tasks",
+                "",
+                active_lines,
+                "",
+                "## Completed This Sprint",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
+def test_validator_accepts_current_sprint_task_reference(tmp_path: Path) -> None:
+    _write_current_sprint(tmp_path, active_tasks=["TASK-189"])
+    path = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-health-guard",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "`TASK-189` remains an active blocker in the current sprint.",
+                "",
+                "Proposed change:",
+                "Keep the blocker visible in the launch view.",
+                "",
+                "Verification:",
+                '- rg -n "TASK-189" tasks/CURRENT_SPRINT.md',
+                "",
+                "Blast radius:",
+                "- tasks/CURRENT_SPRINT.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(path, "--check-sprint-grounding", cwd=tmp_path)
+    assert result.returncode == 0
+
+
+def test_validator_rejects_stale_current_sprint_task_reference(tmp_path: Path) -> None:
+    _write_current_sprint(tmp_path, active_tasks=["TASK-189"])
+    path = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-stale-blocker-reference",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "`TASK-193` remains an active blocker in the current sprint.",
+                "",
+                "Proposed change:",
+                "Remove stale blocker references before publish.",
+                "",
+                "Verification:",
+                '- rg -n "TASK-193" artifacts/assessments/po/daily/2026-03-06.md',
+                "",
+                "Blast radius:",
+                "- artifacts/assessments/po/daily/",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(path, "--check-sprint-grounding", cwd=tmp_path)
+    assert result.returncode == 2
+    assert "TASK-193" in result.stdout
+    assert "tasks/CURRENT_SPRINT.md Active Tasks" in result.stdout
+
+
+def test_validator_accepts_historical_task_reference_marker(tmp_path: Path) -> None:
+    _write_current_sprint(tmp_path, active_tasks=["TASK-189"])
+    path = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-historical-reference",
+                "area: docs",
+                "priority: P3",
+                "confidence: 0.6",
+                "estimate: <1h",
+                "recommended_gate: AUTO_OK",
+                "",
+                "Problem:",
+                "[historical] TASK-193 was previously referenced as an active blocker.",
+                "",
+                "Proposed change:",
+                "Document the marker convention for non-current task references.",
+                "",
+                "Verification:",
+                "- python scripts/validate_assessment_artifacts.py 2026-03-06.md --check-sprint-grounding",
+                "",
+                "Blast radius:",
+                "- docs/ASSESSMENTS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(path, "--check-sprint-grounding", cwd=tmp_path)
+    assert result.returncode == 0

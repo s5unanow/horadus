@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-222`.
+- Next available task IDs start at `TASK-227`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3922,6 +3922,95 @@ install/sync path into `$CODEX_HOME/skills/horadus-cli`.
 - [ ] Document JSON-first CLI usage for agents
 - [ ] Provide a safe install/sync script that resolves `$CODEX_HOME` correctly
 - [ ] Update agent docs to reference the skill once installed
+
+---
+
+### TASK-222: Dogfood Horadus CLI Triage Flow and Capture Follow-Ups
+**Priority**: P2 (Medium)
+**Estimate**: 30-60 minutes
+
+Run the new Horadus repo-workflow CLI against the current planning flow and
+capture concrete follow-up tasks based on real operator/agent friction instead
+of speculative scope expansion.
+
+**Acceptance Criteria**:
+- [ ] Use `horadus triage collect`, `horadus tasks list-active`, `horadus tasks search`, and `horadus tasks context-pack` against current repo state
+- [ ] Record concrete usability gaps grounded in observed command output
+- [ ] Add follow-up backlog tasks with bounded acceptance criteria
+- [ ] Keep task ID policy synchronized after reserving IDs
+
+---
+
+### TASK-223: Add Status Filters and Compact Output to `horadus tasks search`
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Make task search useful during triage by reducing irrelevant completed-task
+noise and avoiding oversized payloads when agents only need compact summaries.
+
+**Files**: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Add status filtering for `horadus tasks search` (at minimum `active`, `completed`, `all`)
+- [ ] Add a result limit control for both text and JSON modes
+- [ ] Keep default text output compact and task-oriented rather than dumping full task blocks
+- [ ] Make raw backlog blocks optional in JSON mode instead of always including them
+- [ ] Add regression tests for filters, limits, and compact-vs-raw output behavior
+
+---
+
+### TASK-224: Surface Human-Blocker Urgency in Task and Triage Outputs
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Turn blocker metadata into actionable signals by marking overdue human-gated
+tasks and exposing derived urgency fields directly in Horadus CLI output.
+
+**Files**: `src/horadus_cli/task_commands.py`, `src/horadus_cli/triage_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Derive blocker urgency fields such as overdue state and days relative to `next_action`
+- [ ] Include derived urgency data in `horadus tasks list-active --format json`
+- [ ] Include derived urgency data in `horadus triage collect --format json`
+- [ ] Highlight overdue blockers in text output without breaking machine-readable contracts
+- [ ] Add deterministic tests that pin date-sensitive behavior
+
+---
+
+### TASK-225: Make `horadus triage collect` Return Task-Aware Search Hits
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Replace raw line-grep style search hits in triage bundles with deduplicated,
+task-aware matches that are directly useful to agents during backlog review.
+
+**Files**: `src/horadus_cli/triage_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Convert keyword/path/proposal search hits into task-aware records with `task_id`, title, status, and matched fields
+- [ ] Deduplicate multiple matching lines from the same task while preserving enough context to explain the hit
+- [ ] Keep raw line-level details optional rather than the default payload
+- [ ] Preserve JSON stability for agent consumption and concise text summaries for humans
+- [ ] Add regression tests covering keyword, path, and proposal matching
+
+---
+
+### TASK-226: Add Compact Assessment Summaries to `horadus triage collect`
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+The current triage bundle returns long flat assessment path lists. Replace that
+with compact summaries that preserve recent-signal value without flooding agent
+contexts.
+
+**Files**: `src/horadus_cli/triage_commands.py`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Group recent assessments by role with counts and latest artifact metadata
+- [ ] Add an option to bound or summarize assessment lists for agent-oriented JSON output
+- [ ] Keep full path enumeration available when explicitly requested
+- [ ] Keep text output concise while still indicating assessment coverage
+- [ ] Add regression tests for grouped summaries and explicit full-list mode
 
 ---
 

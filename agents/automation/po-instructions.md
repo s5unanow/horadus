@@ -13,6 +13,9 @@ Assess project state from a product standpoint. Identify gaps and propose up to
 - Write final output to: `artifacts/assessments/po/daily/YYYY-MM-DD.md`
 - Use real current date for `YYYY-MM-DD`.
 - Ensure the output directory exists (create it if needed): `mkdir -p artifacts/assessments/po/daily`.
+- Resolve `CODEX_HOME_RESOLVED="${CODEX_HOME:-$HOME/.codex}"` before any automation-memory writes.
+- Before writing the artifact, run `python scripts/assessment_publish_gate.py --role po --memory-file "$CODEX_HOME_RESOLVED/automations/repo-state-po/memory.md"`.
+- If the gate returns `decision=skip`, stop without writing today's PO artifact.
 - Do not allocate `TASK-###` IDs. Use proposal IDs like:
   - `PROPOSAL-YYYY-MM-DD-po-<slug>`
 

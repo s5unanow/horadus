@@ -13,6 +13,9 @@ gaps, and operational blind spots. Propose up to 3 improvements.
 - Write final output to: `artifacts/assessments/ba/daily/YYYY-MM-DD.md`
 - Use real current date for `YYYY-MM-DD`.
 - Ensure the output directory exists (create it if needed): `mkdir -p artifacts/assessments/ba/daily`.
+- Resolve `CODEX_HOME_RESOLVED="${CODEX_HOME:-$HOME/.codex}"` before any automation-memory writes.
+- Before writing the artifact, run `python scripts/assessment_publish_gate.py --role ba --memory-file "$CODEX_HOME_RESOLVED/automations/repos-state-ba/memory.md"`.
+- If the gate returns `decision=skip`, stop without writing today's BA artifact.
 - Do not allocate `TASK-###` IDs. Use proposal IDs like:
   - `PROPOSAL-YYYY-MM-DD-ba-<slug>`
 

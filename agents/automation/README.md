@@ -11,6 +11,7 @@ Related policy:
 - `docs/ASSESSMENTS.md`
 
 Related tooling:
+- `scripts/assessment_publish_gate.py`
 - `scripts/validate_assessment_artifacts.py`
 - `scripts/promote_assessment_proposal.sh`
 

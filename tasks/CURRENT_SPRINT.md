@@ -11,7 +11,6 @@
 
 - TASKs pulled in: all backlog tasks not listed in `tasks/COMPLETED.md`.
 
-- `TASK-214` Switch PO/BA automations to change-triggered publishing under fully human-gated queues
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -57,3 +56,4 @@
 - `TASK-211` Add 7-day novelty gate with `All clear` fallback for assessment roles ✅
 - `TASK-212` Ground assessment task references against current sprint truth ✅
 - `TASK-213` Suppress cross-role overlap before assessment artifacts are written ✅
+- `TASK-214` Switch PO/BA automations to change-triggered publishing under fully human-gated queues ✅

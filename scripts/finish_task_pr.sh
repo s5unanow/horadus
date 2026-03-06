@@ -10,9 +10,14 @@ set -euo pipefail
 
 GH_BIN="${GH_BIN:-gh}"
 GIT_BIN="${GIT_BIN:-git}"
+PYTHON_BIN="${PYTHON_BIN:-python3}"
 
 CHECKS_TIMEOUT_SECONDS="${CHECKS_TIMEOUT_SECONDS:-1800}" # 30 minutes
 CHECKS_POLL_SECONDS="${CHECKS_POLL_SECONDS:-10}"
+REVIEW_TIMEOUT_SECONDS="${REVIEW_TIMEOUT_SECONDS:-600}" # 10 minutes
+REVIEW_POLL_SECONDS="${REVIEW_POLL_SECONDS:-10}"
+REVIEW_BOT_LOGIN="${REVIEW_BOT_LOGIN:-chatgpt-codex-connector[bot]}"
+REVIEW_TIMEOUT_POLICY="${REVIEW_TIMEOUT_POLICY:-allow}"
 
 require_cmd() {
   local cmd="$1"
@@ -24,6 +29,7 @@ require_cmd() {
 
 require_cmd "${GH_BIN}"
 require_cmd "${GIT_BIN}"
+require_cmd "${PYTHON_BIN}"
 
 current_branch="$("${GIT_BIN}" rev-parse --abbrev-ref HEAD)"
 if [[ "${current_branch}" == "HEAD" ]]; then
@@ -83,6 +89,14 @@ while true; do
   fi
   sleep "${CHECKS_POLL_SECONDS}"
 done
+
+echo "Waiting for review gate (reviewer=${REVIEW_BOT_LOGIN}, timeout=${REVIEW_TIMEOUT_SECONDS}s)..."
+"${PYTHON_BIN}" ./scripts/check_pr_review_gate.py \
+  --pr-url "${pr_url}" \
+  --reviewer-login "${REVIEW_BOT_LOGIN}" \
+  --timeout-seconds "${REVIEW_TIMEOUT_SECONDS}" \
+  --poll-seconds "${REVIEW_POLL_SECONDS}" \
+  --timeout-policy "${REVIEW_TIMEOUT_POLICY}"
 
 pr_state="$("${GH_BIN}" pr view "${pr_url}" --json state --jq .state)"
 if [[ "${pr_state}" == "MERGED" ]]; then

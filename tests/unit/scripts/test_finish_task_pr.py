@@ -75,6 +75,21 @@ esac
         bin_dir / "gh",
         f"""#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${{1:-}}" == "repo" ]]; then
+  echo '{{"nameWithOwner":"example/repo"}}'
+  exit 0
+fi
+if [[ "${{1:-}}" == "api" ]]; then
+  if [[ "${{2:-}}" == "repos/example/repo/pulls/175/reviews" ]]; then
+    echo '[{{"id":701,"commit_id":"head-oid-175","user":{{"login":"chatgpt-codex-connector[bot]"}}}}]'
+    exit 0
+  fi
+  if [[ "${{2:-}}" == "repos/example/repo/pulls/175/comments" ]]; then
+    echo '[]'
+    exit 0
+  fi
+  exit 1
+fi
 for arg in "$@"; do
   if [[ "$arg" == "--yes" ]]; then
     echo "unsupported flag: --yes" >&2
@@ -96,6 +111,10 @@ case "$sub" in
     if [[ "$*" == *"--json body"* ]]; then
       echo "## Primary Task"
       echo "Primary-Task: TASK-175"
+      exit 0
+    fi
+    if [[ "$*" == *"--json number,headRefOid,url"* ]]; then
+      echo '{{"number":175,"headRefOid":"head-oid-175","url":"https://example.invalid/pr/175"}}'
       exit 0
     fi
     if [[ "$*" == *"--json state"* ]]; then
@@ -185,6 +204,21 @@ esac
         bin_dir / "gh",
         f"""#!/usr/bin/env bash
 set -euo pipefail
+if [[ "${{1:-}}" == "repo" ]]; then
+  echo '{{"nameWithOwner":"example/repo"}}'
+  exit 0
+fi
+if [[ "${{1:-}}" == "api" ]]; then
+  if [[ "${{2:-}}" == "repos/example/repo/pulls/181/reviews" ]]; then
+    echo '[{{"id":801,"commit_id":"head-oid-181","user":{{"login":"chatgpt-codex-connector[bot]"}}}}]'
+    exit 0
+  fi
+  if [[ "${{2:-}}" == "repos/example/repo/pulls/181/comments" ]]; then
+    echo '[]'
+    exit 0
+  fi
+  exit 1
+fi
 for arg in "$@"; do
   if [[ "$arg" == "--yes" ]]; then
     echo "unsupported flag: --yes" >&2
@@ -202,6 +236,10 @@ case "$sub" in
     fi
     if [[ "$*" == *"--json body"* ]]; then
       echo "Primary-Task: TASK-181"
+      exit 0
+    fi
+    if [[ "$*" == *"--json number,headRefOid,url"* ]]; then
+      echo '{{"number":181,"headRefOid":"head-oid-181","url":"https://example.invalid/pr/181"}}'
       exit 0
     fi
     if [[ "$*" == *"--json isDraft"* ]]; then
@@ -419,3 +457,85 @@ esac
     )
     assert result.returncode == 1
     assert "checks did not pass" in result.stdout
+
+
+def test_finish_task_pr_fails_when_review_gate_finds_comments(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+
+    _write_executable(
+        bin_dir / "git",
+        """#!/usr/bin/env bash
+set -euo pipefail
+cmd="${1:-}"
+shift || true
+case "$cmd" in
+  rev-parse) echo "codex/task-215-pr-review-gate" ;;
+  status) printf '%s' "" ;;
+  *) exit 0 ;;
+esac
+""",
+    )
+
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "repo" ]]; then
+  echo '{"nameWithOwner":"example/repo"}'
+  exit 0
+fi
+if [[ "${1:-}" == "api" ]]; then
+  if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+    echo '[{"id":901,"commit_id":"head-oid-215","user":{"login":"chatgpt-codex-connector[bot]"}}]'
+    exit 0
+  fi
+  if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+    echo '[{"pull_request_review_id":901,"user":{"login":"chatgpt-codex-connector[bot]"},"path":"scripts/finish_task_pr.sh","line":80,"html_url":"https://example.invalid/comment/215","body":"Address this before merge."}]'
+    exit 0
+  fi
+  exit 1
+fi
+if [[ "${1:-}" != "pr" ]]; then exit 1; fi
+sub="${2:-}"
+shift 2 || true
+case "$sub" in
+  view)
+    if [[ "$*" == *"--json url"* ]]; then
+      echo "https://example.invalid/pr/215"
+      exit 0
+    fi
+    if [[ "$*" == *"--json body"* ]]; then
+      echo "Primary-Task: TASK-215"
+      exit 0
+    fi
+    if [[ "$*" == *"--json number,headRefOid,url"* ]]; then
+      echo '{"number":215,"headRefOid":"head-oid-215","url":"https://example.invalid/pr/215"}'
+      exit 0
+    fi
+    if [[ "$*" == *"--json isDraft"* ]]; then
+      echo "false"
+      exit 0
+    fi
+    if [[ "$*" == *"--json state"* ]]; then
+      echo "OPEN"
+      exit 0
+    fi
+    exit 1
+    ;;
+  checks) exit 0 ;;
+  merge)
+    echo "merge should not be reached" >&2
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_finish(env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"})
+    assert result.returncode == 2
+    assert "actionable current-head review comments found" in result.stdout
+    assert "scripts/finish_task_pr.sh:80" in result.stdout

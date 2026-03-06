@@ -222,6 +222,7 @@ Tasks that have been completed and verified.
 - TASK-212: Ground assessment task references against current sprint truth ✅
 - TASK-213: Suppress cross-role overlap before assessment artifacts are written ✅
 - TASK-214: Switch PO/BA automations to change-triggered publishing under fully human-gated queues ✅
+- TASK-215: Gate task completion on current-head PR review comments ✅
 
 ## Archive
 

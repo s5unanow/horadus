@@ -65,4 +65,5 @@
 - `TASK-221` Add repo-owned Horadus CLI skill ✅
 - `TASK-222` Dogfood Horadus CLI triage flow and capture follow-ups ✅
 - `TASK-223` Add status filters and compact output to `horadus tasks search` ✅
+- `TASK-224` Surface human-blocker urgency in task and triage outputs ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅

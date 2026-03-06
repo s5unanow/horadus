@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 TASK_ID_PATTERN = re.compile(r"^TASK-(\d{3})$")
@@ -30,6 +31,20 @@ class BlockerMetadata:
     next_action: str
     escalate_after_days: int
     raw_line: str
+    urgency: BlockerUrgency | None = None
+
+
+@dataclass(slots=True)
+class BlockerUrgency:
+    state: str
+    as_of: str
+    days_until_next_action: int | None
+    is_overdue: bool
+    is_due_today: bool
+    days_since_last_touched: int | None
+    escalation_due_date: str | None
+    days_until_escalation: int | None
+    is_escalated: bool
 
 
 @dataclass(slots=True)
@@ -92,6 +107,10 @@ def read_text(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def current_date() -> date:
+    return datetime.now(tz=UTC).date()
+
+
 def active_section_text(path: Path | None = None) -> str:
     sprint_path = path or current_sprint_path()
     text = read_text(sprint_path)
@@ -148,7 +167,69 @@ def parse_active_tasks(path: Path | None = None) -> list[ActiveTask]:
     return tasks
 
 
-def parse_human_blockers(path: Path | None = None) -> list[BlockerMetadata]:
+def _parse_iso_date(raw: str) -> date | None:
+    try:
+        return date.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def blocker_urgency(
+    *,
+    last_touched: str,
+    next_action: str,
+    escalate_after_days: int,
+    as_of: date | None = None,
+) -> BlockerUrgency:
+    evaluation_date = as_of or current_date()
+    next_action_date = _parse_iso_date(next_action)
+    last_touched_date = _parse_iso_date(last_touched)
+
+    days_until_next_action = None
+    is_overdue = False
+    is_due_today = False
+    if next_action_date is not None:
+        days_until_next_action = (next_action_date - evaluation_date).days
+        is_overdue = days_until_next_action < 0
+        is_due_today = days_until_next_action == 0
+
+    days_since_last_touched = None
+    escalation_due_date = None
+    days_until_escalation = None
+    is_escalated = False
+    if last_touched_date is not None and escalate_after_days > 0:
+        days_since_last_touched = (evaluation_date - last_touched_date).days
+        escalation_date = last_touched_date + timedelta(days=escalate_after_days)
+        escalation_due_date = escalation_date.isoformat()
+        days_until_escalation = (escalation_date - evaluation_date).days
+        is_escalated = days_until_escalation < 0
+
+    if is_overdue:
+        state = "overdue"
+    elif is_due_today:
+        state = "due_today"
+    else:
+        state = "pending"
+
+    return BlockerUrgency(
+        state=state,
+        as_of=evaluation_date.isoformat(),
+        days_until_next_action=days_until_next_action,
+        is_overdue=is_overdue,
+        is_due_today=is_due_today,
+        days_since_last_touched=days_since_last_touched,
+        escalation_due_date=escalation_due_date,
+        days_until_escalation=days_until_escalation,
+        is_escalated=is_escalated,
+    )
+
+
+def parse_human_blockers(
+    path: Path | None = None,
+    *,
+    as_of: date | None = None,
+    task_ids: set[str] | None = None,
+) -> list[BlockerMetadata]:
     section = human_blocker_section_text(path)
     blockers: list[BlockerMetadata] = []
     for raw_line in section.splitlines():
@@ -159,6 +240,8 @@ def parse_human_blockers(path: Path | None = None) -> list[BlockerMetadata]:
         if len(parts) != 5:
             continue
         task_id = parts[0]
+        if task_ids is not None and task_id not in task_ids:
+            continue
         metadata: dict[str, str] = {}
         for chunk in parts[1:]:
             if "=" not in chunk:
@@ -178,6 +261,12 @@ def parse_human_blockers(path: Path | None = None) -> list[BlockerMetadata]:
                 next_action=metadata.get("next_action", ""),
                 escalate_after_days=escalate_days,
                 raw_line=line,
+                urgency=blocker_urgency(
+                    last_touched=metadata.get("last_touched", ""),
+                    next_action=metadata.get("next_action", ""),
+                    escalate_after_days=escalate_days,
+                    as_of=as_of,
+                ),
             )
         )
     return blockers

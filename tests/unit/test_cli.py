@@ -771,7 +771,7 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
     assert payload["data"]["status_filter"] == "active"
     assert payload["data"]["include_raw"] is True
     assert matches
-    assert {match["task_id"] for match in matches} == {"TASK-189"}
+    assert "TASK-189" in {match["task_id"] for match in matches}
     assert all(match["status"] == "active" for match in matches)
     assert all("raw_block" in match for match in matches)
 

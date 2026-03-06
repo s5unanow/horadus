@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-227`.
+- Next available task IDs start at `TASK-240`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4011,6 +4011,320 @@ contexts.
 - [ ] Keep full path enumeration available when explicitly requested
 - [ ] Keep text output concise while still indicating assessment coverage
 - [ ] Add regression tests for grouped summaries and explicit full-list mode
+
+---
+
+## Phase 13: External Architecture Review Intake (2026-03)
+
+Backlog items derived from user-provided external architecture evaluation on
+2026-03-06 against current `main`. Recommendations already implemented in the
+repo were intentionally not duplicated as new tasks.
+
+### TASK-227: Make Corroboration Provenance-Aware Instead of Source-Count-Aware
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+The current pipeline already avoids raw item-count inflation, but corroboration
+is still too easily overstated by syndicated, copied, or tightly coupled
+reporting ecosystems. Extend the existing claim-graph/corroboration work so
+trend scoring uses conservative independent-evidence groups instead of treating
+distinct outlets as sufficient proof of independence.
+
+This is a follow-up hardening task, not a replacement for completed
+`TASK-065` and `TASK-128`.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/processing/pipeline_orchestrator.py`, `src/storage/models.py`, `src/ingestion/`, `src/api/routes/events.py`, `src/api/routes/trends.py`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Derive and persist bounded provenance signals needed to group event evidence by likely independent origin (for example source family, syndication lineage, or near-duplicate reporting clusters)
+- [ ] Update corroboration scoring to prefer independent-evidence group counts over raw/distinct source counts when provenance metadata is available
+- [ ] Keep scoring fail-safe by falling back to the current conservative path when provenance grouping is incomplete or ambiguous
+- [ ] Expose enough runtime/debug visibility to compare raw source counts versus independent-evidence counts on events and/or evidence responses
+- [ ] Preserve existing invalidation, replay, and idempotency semantics under the new corroboration model
+- [ ] Add regression coverage for syndicated wire copy, reposted channel content, and genuinely independent multi-source corroboration cases
+
+---
+
+### TASK-228: Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Trend probabilities are only semantically honest when each trend has a clearly
+defined forecast object. Extend trend definitions and runtime validation so each
+active trend explicitly states the forecast horizon, measurable resolution
+criteria, and closure semantics instead of relying on descriptive prose alone.
+
+This is a follow-up hardening task that builds on existing baseline and
+falsification-criteria work.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/core/trend_config.py`, `src/api/routes/trends.py`, `config/trends/`, `tests/`, `docs/`
+
+**Acceptance Criteria**:
+- [ ] Extend trend definition schema with explicit forecast-contract fields such as horizon, measurable resolution basis, and closure rule
+- [ ] Fail config sync and API writes when required forecast-contract fields are missing or internally inconsistent
+- [ ] Surface forecast-contract metadata in trend API responses so operators can inspect what the probability actually refers to
+- [ ] Add migration/backfill guidance for existing trend YAMLs without breaking current trend IDs
+- [ ] Add regression coverage for missing-horizon, ambiguous-resolution, and valid-contract cases
+
+---
+
+### TASK-229: Add a Novelty Lane Outside the Active Trend List
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+Tier-1 routing against only the active trend catalog is cost-efficient but can
+create tunnel vision. Add a bounded side channel that surfaces persistent novel
+clusters and near-miss items that do not map cleanly to current tracked trends.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/processing/`, `src/storage/models.py`, `src/api/routes/feedback.py`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Persist bounded novelty candidates derived from unscored or low-confidence items/events without applying trend deltas
+- [ ] Rank novelty candidates using stable signals such as recurrence, unusual actor/location combinations, or repeated near-threshold relevance
+- [ ] Keep the novelty lane budget-safe and independent from the normal active-trend scoring path
+- [ ] Expose novelty candidates in an operator-facing API or review queue endpoint
+- [ ] Add regression coverage showing that novel persistent signals surface even when they do not map to active trends
+
+---
+
+### TASK-230: Add Coverage Observability Beyond Source Freshness
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Fresh collectors do not guarantee adequate coverage. Add coverage observability
+so operators can distinguish "no signal" from "no coverage" across geography,
+language, source family, and topical dimensions.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/core/observability.py`, `src/workers/tasks.py`, `src/api/routes/reports.py`, `src/storage/models.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Compute bounded coverage summaries segmented by language, source family/tier, and configured topical dimensions
+- [ ] Persist or export coverage artifacts suitable for operational review and release-gate inputs
+- [ ] Expose a read-only API/report path for recent coverage health distinct from collector freshness
+- [ ] Add metrics/logs that make sudden coverage drops visible even when collectors remain healthy
+- [ ] Add regression coverage for low-coverage and balanced-coverage cases
+
+---
+
+### TASK-231: Extend Event Invalidation into a Compensating Restatement Ledger
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+The system already preserves invalidation lineage, but it still lacks a richer
+restatement model for material reinterpretation, partial retraction, and
+analyst-issued compensating corrections. Extend invalidation into an explicit
+ledger of restatement actions without destroying audit history.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/api/routes/feedback.py`, `src/core/trend_engine.py`, `src/processing/pipeline_orchestrator.py`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Introduce explicit compensating-restatement records that distinguish full invalidation from partial reinterpretation/manual correction
+- [ ] Preserve append-only auditability while allowing later corrections to adjust prior probability effects honestly
+- [ ] Keep replay, decay, and idempotency semantics correct under compensating restatement flows
+- [ ] Expose lineage so operators can inspect original evidence, restatement action, and resulting net effect
+- [ ] Add regression coverage for invalidate, partial restate, and manual compensating-delta scenarios
+
+---
+
+### TASK-232: Strengthen Operator Adjudication Workflow for High-Risk Events
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+
+The backend already exposes review-oriented primitives, but high-risk event
+handling still needs a more explicit adjudication workflow. Harden the operator
+path for contradiction-heavy, high-delta, low-confidence, and taxonomy-gap
+cases so review is first-class rather than ad hoc.
+
+This task should build on `TASK-231` for any persisted `restate` semantics so
+the operator workflow reuses one canonical compensating-restatement model.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/api/routes/feedback.py`, `src/api/routes/events.py`, `src/storage/models.py`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Extend review-queue ranking and filtering for high-delta low-confidence, contradiction-heavy, and taxonomy-gap-linked events
+- [ ] Persist operator workflow state needed to track review status beyond simple feedback rows
+- [ ] Support explicit adjudication outcomes such as confirm, suppress, restate, and escalate-for-taxonomy-review
+- [ ] Expose enough queue metadata for a future UI without coupling the backend to a frontend implementation
+- [ ] Add regression coverage for ranking, status transitions, and adjudication outcome effects
+
+---
+
+### TASK-233: Support Multi-Horizon Trend Variants for the Same Underlying Theme
+**Priority**: P2 (Medium)
+**Estimate**: 6-8 hours
+
+Many forecast subjects behave differently across 7-day, 30-day, and 90-day
+horizons. Add bounded support for multi-horizon trend variants so the system
+can represent short-, medium-, and longer-horizon probabilities without
+pretending they are interchangeable.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/core/trend_config.py`, `src/api/routes/trends.py`, `src/storage/models.py`, `config/trends/`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Extend trend definitions so related horizon variants can be modeled explicitly without overloading one trend record
+- [ ] Keep scoring, decay, outcomes, and calibration paths horizon-aware
+- [ ] Preserve backward compatibility for existing single-horizon trends
+- [ ] Expose horizon metadata clearly in APIs and reporting outputs
+- [ ] Add regression coverage for multiple horizon variants under the same theme
+
+---
+
+### TASK-234: Make Uncertainty and Momentum First-Class Trend State
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+
+Probability alone is too compressive for operator-facing interpretation. Promote
+uncertainty and recent directional momentum from derived presentation details to
+first-class tracked trend state and reporting context.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/core/risk.py`, `src/api/routes/trends.py`, `src/core/report_generator.py`, `src/storage/models.py`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Define bounded, explainable representations for trend uncertainty and recent momentum that do not duplicate raw probability
+- [ ] Persist or deterministically derive these fields in a way that is stable across API and report paths
+- [ ] Expose them directly in trend APIs and report statistics
+- [ ] Keep historical interpretation possible by tying momentum to recent snapshot/evidence windows
+- [ ] Add regression coverage for stable, accelerating, and highly uncertain trend cases
+
+---
+
+### TASK-235: Add Event Split/Merge Lineage for Evolving Stories
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+Similarity-plus-time-window clustering is a good baseline, but evolving stories
+need explicit lineage when one event later proves to contain multiple subevents
+or when separate clusters converge into the same story. Add event split/merge
+lineage so clustering corrections remain auditable.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/processing/event_clusterer.py`, `src/storage/models.py`, `src/api/routes/events.py`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Add explicit event-lineage records for split and merge operations
+- [ ] Preserve raw-item linkage auditability when events are corrected after initial clustering
+- [ ] Keep downstream evidence/reporting paths consistent when lineage changes occur
+- [ ] Expose lineage metadata in event detail responses for operator debugging
+- [ ] Add regression coverage for split, merge, and no-op lineage cases
+
+---
+
+### TASK-236: Add Canonical Entity Registry for Actors, Organizations, and Locations
+**Priority**: P2 (Medium)
+**Estimate**: 8-12 hours
+
+Event extraction currently stores useful text fields, but the system lacks a
+canonical entity layer for actors, organizations, locations, facilities, and
+aliases. Add a bounded entity registry to improve clustering quality, review
+workflow clarity, and future causal/precursor analysis.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/processing/tier2_classifier.py`, `src/api/routes/events.py`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Introduce canonical entity records with alias support for at least people/organizations/locations
+- [ ] Link extracted event entities to canonical entities without blocking the pipeline on perfect resolution
+- [ ] Keep the entity-matching path bounded and safe under multilingual/alias ambiguity
+- [ ] Expose canonical entity references in event detail responses
+- [ ] Add regression coverage for alias resolution, unresolved entities, and mixed-language cases
+
+---
+
+### TASK-237: Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
+**Priority**: P2 (Medium)
+**Estimate**: 6-8 hours
+
+Static source credibility tiers are useful as a baseline, but they are too
+blunt to fully represent topic-specific, region-specific, and time-varying
+source behavior. Extend the existing reliability diagnostics so the system can
+surface empirical source reliability patterns and optionally derive bounded
+advisory adjustments without replacing the operator-controlled base ratings.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/core/calibration_dashboard.py`, `src/core/source_credibility.py`, `src/api/routes/reports.py`, `src/storage/models.py`, `tests/`, `docs/`
+
+**Acceptance Criteria**:
+- [ ] Extend reliability diagnostics to segment outcome-linked source behavior by bounded dimensions such as source, source tier, topic family, or geography where data is available
+- [ ] Define a conservative time-varying reliability signal or advisory adjustment layer that never silently overrides configured base credibility
+- [ ] Keep sparse-data handling fail-safe by suppressing or flagging low-sample diagnostics instead of producing misleading precision
+- [ ] Expose source-reliability diagnostics in an operator-facing API/report path with enough context to distinguish configured credibility from empirical advisory signals
+- [ ] Add regression coverage for stable, drifting, and low-sample reliability cases
+
+---
+
+### TASK-238: Prioritize Tier-2 Budget with Value-of-Information Scheduling
+**Priority**: P2 (Medium)
+**Estimate**: 5-7 hours
+
+Tier-2 budget is bounded, so queue order should favor items that are most likely
+to reduce uncertainty or materially change tracked forecasts. Add a bounded
+value-of-information scheduler for Tier-2 processing so scarce model budget is
+spent on the most decision-relevant work first.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/processing/pipeline_orchestrator.py`, `src/processing/tier1_classifier.py`, `src/processing/cost_tracker.py`, `src/storage/models.py`, `tests/`, `docs/`
+
+**Acceptance Criteria**:
+- [ ] Define a deterministic Tier-2 prioritization score using bounded inputs such as expected delta magnitude, uncertainty, contradiction risk, novelty, and trend relevance
+- [ ] Reorder or batch Tier-2 candidate processing by this score when budget pressure exists, without breaking idempotency or starvation safety
+- [ ] Keep the scheduling policy explainable by surfacing the main factors behind Tier-2 prioritization decisions in logs, metrics, or debug responses
+- [ ] Preserve current behavior as a safe fallback when value-of-information inputs are unavailable
+- [ ] Add regression coverage for high-impact ambiguity-first prioritization, low-value deprioritization, and bounded fairness behavior
+
+---
+
+### TASK-239: External architecture review backlog intake preservation (2026-03-06)
+**Priority**: P1 (High)
+**Estimate**: 30-60 minutes
+
+Capture valid tasks derived from the 2026-03-06 external architecture review in
+`tasks/BACKLOG.md` and `tasks/CURRENT_SPRINT.md`, preserving source references
+and keeping implementation follow-up work one-task-per-branch.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Acceptance Criteria**:
+- [x] Add dedicated backlog tasks for each still-valid, non-duplicate recommendation that is not already implemented in the repo
+- [x] Add `Assessment-Ref` metadata to each derived task for intake traceability
+- [x] Queue the derived tasks in `tasks/CURRENT_SPRINT.md` without marking any as `[REQUIRES_HUMAN]` unless the task itself requires it
+- [x] Preserve explicit notes where recommendations overlap existing completed work instead of duplicating those areas as new tasks
+- [x] Keep Task ID policy synchronized after reserving `TASK-239`
+
+**Overlap mapping note**:
+- Outcomes/calibration, counterfactual simulation, review-queue primitives, and Responses migration already exist in the repo and were intentionally not duplicated as new implementation tasks.
 
 ---
 

@@ -107,11 +107,11 @@ git pull --ff-only
 ```
 2. Run task-start preflight (clean/synced `main`, no open task PR):
 ```bash
-make task-preflight
+uv run --no-sync horadus tasks preflight
 ```
 3. Create/confirm a `TASK-XXX` and open a dedicated branch from `main`:
 ```bash
-make task-start TASK=XXX NAME=short-name
+uv run --no-sync horadus tasks start TASK-XXX --name short-name
 ```
 4. Keep branch scope to one task only; open one PR for that task.
 5. Include canonical PR metadata field in body:
@@ -153,8 +153,8 @@ make branch-guard
 ```
 - Mandatory task-start sequencing guard:
 ```bash
-make task-preflight
-make task-start TASK=XXX NAME=short-name
+uv run --no-sync horadus tasks preflight
+uv run --no-sync horadus tasks start TASK-XXX --name short-name
 ```
 - Apply/refresh GitHub `main` protection defaults:
 ```bash

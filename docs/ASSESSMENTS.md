@@ -14,6 +14,8 @@ into real work happens explicitly via backlog/sprint intake.
 
 Canonical automation role instructions live in:
 - `agents/automation/`
+- Repo workflow/triage CLI for agent use:
+  - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 
 Directory convention for raw outputs:
 

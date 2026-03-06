@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-216`.
+- Next available task IDs start at `TASK-222`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3816,6 +3816,112 @@ review findings” completion rule.
 - [ ] Fail task completion when actionable current-head review comments exist, with clear output pointing to the offending comments
 - [ ] Allow merge to continue when the wait window expires without a review, with explicit timeout messaging/policy
 - [ ] Cover helper-script behavior and `make task-finish` integration with unit tests
+
+---
+
+### TASK-216: Agent-Facing Horadus CLI Initiative
+**Priority**: P1 (High)
+**Estimate**: 1 day
+
+Umbrella task for turning `horadus` into the canonical structured interface for
+agent/operator repo workflows, including rollout docs, wrapper guidance, and a
+repo-owned Codex skill.
+
+**Files**: `docs/adr/`, `tasks/exec_plans/`, `src/horadus_cli/`, `src/cli.py`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `ops/skills/`
+
+**Acceptance Criteria**:
+- [ ] Add ADR-009 documenting the decision, boundaries, and non-goals
+- [ ] Add execution plan with migration inventory for scripts and `make` targets
+- [ ] Add child task decomposition for CLI refactor, repo workflow commands, triage collection, wrappers/docs, and skill packaging
+- [ ] Update agent/operator docs to prefer CLI-first repo workflows where appropriate
+
+---
+
+### TASK-217: Refactor CLI into an Internal Package
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Move the CLI implementation behind an internal package while keeping the public
+entrypoint `horadus` stable.
+
+**Files**: `src/cli.py`, `src/horadus_cli/`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Move CLI internals into a dedicated package
+- [ ] Keep `src.cli:main` as the public entrypoint
+- [ ] Add shared result/output helpers for text vs JSON output
+- [ ] Add stable exit-code categories for success, validation, not-found, and environment failures
+
+---
+
+### TASK-218: Add Task and Sprint Workflow Commands to `horadus`
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Expose repo workflow reads and branch-start helpers through structured CLI
+commands.
+
+**Files**: `src/horadus_cli/`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Add `horadus tasks list-active`
+- [ ] Add `horadus tasks show TASK-XXX`
+- [ ] Add `horadus tasks search <query>`
+- [ ] Add `horadus tasks context-pack TASK-XXX`
+- [ ] Add `horadus tasks preflight`
+- [ ] Add `horadus tasks eligibility TASK-XXX`
+- [ ] Add `horadus tasks start TASK-XXX --name short-name --dry-run`
+
+---
+
+### TASK-219: Add Structured Triage Input Collection Command
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Expose a structured triage bundle for backlog/assessment workflows so automations
+and agents can avoid ad hoc parsing as the default path.
+
+**Files**: `src/horadus_cli/`, `agents/automation/weekly-backlog-triage.md`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Add `horadus triage collect`
+- [ ] Include current sprint summary and human blocker metadata
+- [ ] Include recent assessment artifact paths with configurable lookback
+- [ ] Support keyword/path/proposal-id filters with JSON output
+
+---
+
+### TASK-220: Migrate Wrapper Targets and Agent Docs to the CLI
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Repoint selected wrappers, runbooks, and automation instructions at the new CLI
+surface while preserving backwards compatibility.
+
+**Files**: `Makefile`, `scripts/*.sh`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `agents/automation/`
+
+**Acceptance Criteria**:
+- [ ] Update selected `make` targets to call `horadus`
+- [ ] Convert selected legacy scripts into thin CLI wrappers with deprecation notices
+- [ ] Update agent/operator docs to use CLI-first repo workflow commands
+- [ ] Keep PR/merge, branch-protection, backup, and Docker-heavy scripts outside the first migration wave
+
+---
+
+### TASK-221: Add Repo-Owned Horadus CLI Skill
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Ship a concise Codex skill for using the Horadus CLI and provide a safe local
+install/sync path into `$CODEX_HOME/skills/horadus-cli`.
+
+**Files**: `ops/skills/horadus-cli/`, `scripts/install_horadus_cli_skill.sh`, `Makefile`
+
+**Acceptance Criteria**:
+- [ ] Add repo-owned skill source under `ops/skills/horadus-cli/`
+- [ ] Document JSON-first CLI usage for agents
+- [ ] Provide a safe install/sync script that resolves `$CODEX_HOME` correctly
+- [ ] Update agent docs to reference the skill once installed
 
 ---
 

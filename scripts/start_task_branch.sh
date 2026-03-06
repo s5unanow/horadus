@@ -10,38 +10,10 @@ EOF
   exit 1
 fi
 
+if [[ "${HORADUS_CLI_WRAPPER_SILENT:-0}" != "1" ]]; then
+  echo "Deprecated wrapper: use 'uv run --no-sync horadus tasks start TASK-XXX --name short-name'." >&2
+fi
+
 task_input="$1"
 shift
-raw_slug="$*"
-
-if [[ "${task_input}" =~ ^TASK-([0-9]{3})$ ]]; then
-  task_num="${BASH_REMATCH[1]}"
-elif [[ "${task_input}" =~ ^([0-9]{3})$ ]]; then
-  task_num="${BASH_REMATCH[1]}"
-else
-  echo "Invalid task id '${task_input}'. Expected TASK-XXX or XXX."
-  exit 1
-fi
-
-slug="$(printf '%s' "${raw_slug}" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9._-]+/-/g; s/^-+//; s/-+$//')"
-if [[ -z "${slug}" ]]; then
-  echo "Invalid branch suffix '${raw_slug}'."
-  exit 1
-fi
-
-branch_name="codex/task-${task_num}-${slug}"
-
-./scripts/check_task_start_preflight.sh
-
-if git show-ref --verify --quiet "refs/heads/${branch_name}"; then
-  echo "Branch already exists locally: ${branch_name}"
-  exit 1
-fi
-
-if git ls-remote --exit-code --heads origin "${branch_name}" >/dev/null 2>&1; then
-  echo "Branch already exists on origin: ${branch_name}"
-  exit 1
-fi
-
-git switch -c "${branch_name}"
-echo "Created task branch: ${branch_name}"
+uv run --no-sync horadus tasks start "${task_input}" --name "$*"

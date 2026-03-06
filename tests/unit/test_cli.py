@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 from uuid import uuid4
 
@@ -307,6 +308,57 @@ def test_build_parser_accepts_doctor_command() -> None:
     assert args.timeout_seconds == pytest.approx(3.5)
 
 
+def test_build_parser_accepts_tasks_start_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "start",
+            "TASK-216",
+            "--name",
+            "agent-facing-cli",
+            "--dry-run",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "start"
+    assert args.task_id == "TASK-216"
+    assert args.name == "agent-facing-cli"
+    assert args.dry_run is True
+    assert args.output_format == "json"
+
+
+def test_build_parser_accepts_triage_collect_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "triage",
+            "collect",
+            "--keyword",
+            "agent",
+            "--path",
+            "src/cli.py",
+            "--proposal-id",
+            "PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe",
+            "--lookback-days",
+            "7",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert args.command == "triage"
+    assert args.triage_command == "collect"
+    assert args.keyword == ["agent"]
+    assert args.path == ["src/cli.py"]
+    assert args.proposal_id == ["PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe"]
+    assert args.lookback_days == 7
+    assert args.output_format == "json"
+
+
 def test_run_agent_smoke_passes_when_server_enforces_auth_and_no_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -521,3 +573,35 @@ def test_run_doctor_returns_failure_on_safety_refusal(
 
     result = cli_module._run_doctor(timeout_seconds=0.2)
     assert result == 2
+
+
+def test_main_tasks_context_pack_json_output(capsys: pytest.CaptureFixture[str]) -> None:
+    result = cli_module.main(["tasks", "context-pack", "TASK-164", "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["data"]["task"]["task_id"] == "TASK-164"
+    assert "suggested_validation_commands" in payload["data"]
+
+
+def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> None:
+    result = cli_module.main(
+        [
+            "triage",
+            "collect",
+            "--keyword",
+            "agent",
+            "--lookback-days",
+            "14",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["data"]["lookback_days"] == 14
+    assert "current_sprint" in payload["data"]
+    assert "keyword_hits" in payload["data"]["searches"]

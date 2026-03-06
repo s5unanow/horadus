@@ -125,6 +125,9 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Cross-trend reliability statements ("When we said X%, it happened Y%")
 - [x] Brier score timeline series for drift visibility
 - [x] `horadus trends status` CLI for quick movement checks
+- [x] `horadus tasks ...` repo workflow CLI with JSON/text output, dry-run support, and explicit validation/environment exit codes
+- [x] `horadus triage collect` structured backlog/assessment input bundle for agent triage workflows
+- [x] Repo-owned Horadus CLI Codex skill plus local install target (`make install-horadus-cli-skill`)
 - [x] File-based secret loading via `*_FILE` settings for production runtimes
 - [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
 - [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations

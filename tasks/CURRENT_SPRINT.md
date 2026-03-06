@@ -80,5 +80,6 @@
 - `TASK-222` Dogfood Horadus CLI triage flow and capture follow-ups ✅
 - `TASK-223` Add status filters and compact output to `horadus tasks search` ✅
 - `TASK-224` Surface human-blocker urgency in task and triage outputs ✅
+- `TASK-240` Keep `docs-freshness` from dropping dev dependencies ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

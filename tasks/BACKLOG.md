@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-240`.
+- Next available task IDs start at `TASK-241`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4325,6 +4325,23 @@ and keeping implementation follow-up work one-task-per-branch.
 
 **Overlap mapping note**:
 - Outcomes/calibration, counterfactual simulation, review-queue primitives, and Responses migration already exist in the repo and were intentionally not duplicated as new implementation tasks.
+
+---
+
+### TASK-240: Keep `docs-freshness` from Dropping Dev Dependencies
+**Priority**: P2 (Medium)
+**Estimate**: 15-30 minutes
+
+`make docs-freshness` currently depends on `deps`, which runs a production-only
+`uv sync` and strips dev extras from `.venv`. That breaks local hooks and other
+developer commands until `deps-dev` is run again.
+
+**Files**: `Makefile`
+
+**Acceptance Criteria**:
+- [ ] `make docs-freshness` no longer removes dev extras from `.venv`
+- [ ] Local follow-up commands that rely on dev dependencies (for example `pre-commit`) still resolve after `make docs-freshness`
+- [ ] Keep the target behavior limited to docs-freshness validation rather than mutating the environment in surprising ways
 
 ---
 

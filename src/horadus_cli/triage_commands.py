@@ -58,7 +58,8 @@ def handle_collect(args: Any) -> CommandResult:
             proposal_hits.extend(line_search(repo_root() / relative_path, proposal_pattern))
 
     active_tasks = parse_active_tasks()
-    blockers = parse_human_blockers()
+    active_task_ids = {task.task_id for task in active_tasks}
+    blockers = parse_human_blockers(task_ids=active_task_ids)
     overdue_blockers = [
         blocker
         for blocker in blockers

@@ -225,7 +225,10 @@ def blocker_urgency(
 
 
 def parse_human_blockers(
-    path: Path | None = None, *, as_of: date | None = None
+    path: Path | None = None,
+    *,
+    as_of: date | None = None,
+    task_ids: set[str] | None = None,
 ) -> list[BlockerMetadata]:
     section = human_blocker_section_text(path)
     blockers: list[BlockerMetadata] = []
@@ -237,6 +240,8 @@ def parse_human_blockers(
         if len(parts) != 5:
             continue
         task_id = parts[0]
+        if task_ids is not None and task_id not in task_ids:
+            continue
         metadata: dict[str, str] = {}
         for chunk in parts[1:]:
             if "=" not in chunk:

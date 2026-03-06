@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -628,6 +629,37 @@ def test_parse_human_blockers_derives_urgency(monkeypatch: pytest.MonkeyPatch) -
     assert urgency.days_since_last_touched == 3
 
 
+def test_parse_human_blockers_can_filter_to_active_task_ids(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-189` Active blocker `[REQUIRES_HUMAN]`",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-189 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7",
+                "- TASK-999 | owner=human-operator | last_touched=2026-03-01 | next_action=2026-03-02 | escalate_after_days=7",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        task_repo_module,
+        "current_date",
+        lambda: task_repo_module.date(2026, 3, 6),
+    )
+
+    blockers = task_repo_module.parse_human_blockers(sprint_path, task_ids={"TASK-189"})
+
+    assert [blocker.task_id for blocker in blockers] == ["TASK-189"]
+
+
 def test_main_tasks_list_active_json_includes_blocker_urgency(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -646,6 +678,42 @@ def test_main_tasks_list_active_json_includes_blocker_urgency(
     assert blocker["urgency"]["state"] == "overdue"
     assert blocker["urgency"]["days_until_next_action"] == -1
     assert payload["data"]["overdue_human_blockers"]
+
+
+def test_main_tasks_list_active_ignores_stale_metadata_rows(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-189` Restrict `/health` `[REQUIRES_HUMAN]`",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-189 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7",
+                "- TASK-999 | owner=human-operator | last_touched=2026-03-01 | next_action=2026-03-02 | escalate_after_days=7",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(task_repo_module, "current_sprint_path", lambda: sprint_path)
+    monkeypatch.setattr(
+        task_repo_module,
+        "current_date",
+        lambda: task_repo_module.date(2026, 3, 6),
+    )
+
+    result = cli_module.main(["tasks", "list-active", "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert [item["task_id"] for item in payload["data"]["human_blockers"]] == ["TASK-189"]
+    assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == ["TASK-189"]
 
 
 def test_main_tasks_list_active_text_highlights_overdue_blockers(
@@ -785,6 +853,44 @@ def test_main_triage_collect_includes_overdue_blockers(
     overdue = payload["data"]["current_sprint"]["overdue_human_blockers"]
     assert {item["task_id"] for item in overdue} == {"TASK-080", "TASK-189", "TASK-190"}
     assert overdue[0]["urgency"]["state"] == "overdue"
+
+
+def test_main_triage_collect_ignores_stale_metadata_rows(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-189` Restrict `/health` `[REQUIRES_HUMAN]`",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-189 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7",
+                "- TASK-999 | owner=human-operator | last_touched=2026-03-01 | next_action=2026-03-02 | escalate_after_days=7",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(task_repo_module, "current_sprint_path", lambda: sprint_path)
+    monkeypatch.setattr(
+        task_repo_module,
+        "current_date",
+        lambda: task_repo_module.date(2026, 3, 6),
+    )
+
+    result = cli_module.main(["triage", "collect", "--lookback-days", "14", "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    blockers = payload["data"]["current_sprint"]["human_blockers"]
+    overdue = payload["data"]["current_sprint"]["overdue_human_blockers"]
+    assert [item["task_id"] for item in blockers] == ["TASK-189"]
+    assert [item["task_id"] for item in overdue] == ["TASK-189"]
 
 
 def test_main_triage_collect_text_highlights_overdue_blockers(

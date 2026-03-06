@@ -343,7 +343,8 @@ def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, 
 
 def handle_list_active(_args: Any) -> CommandResult:
     tasks = parse_active_tasks()
-    blockers = parse_human_blockers()
+    active_task_ids = {task.task_id for task in tasks}
+    blockers = parse_human_blockers(task_ids=active_task_ids)
     blockers_by_task = {blocker.task_id: blocker for blocker in blockers}
     overdue_blockers = [
         blocker

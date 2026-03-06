@@ -291,7 +291,7 @@ validate-taxonomy-eval: deps ## Validate trend taxonomy contract against eval go
 audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and provenance
 	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
 
-docs-freshness: deps ## Validate docs freshness and runtime consistency invariants
+docs-freshness: deps-dev ## Validate docs freshness and runtime consistency invariants
 	$(UV_RUN) python scripts/check_docs_freshness.py
 
 release-gate: deps-dev ## Run release gates (check + test + docs + migration gate [+ optional eval audit])

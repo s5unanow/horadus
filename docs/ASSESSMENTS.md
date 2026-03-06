@@ -73,6 +73,17 @@ Cross-role overlap policy for daily role assessments:
   prior `(proposal_id, Assessment-Ref)` so operators can audit why the proposal
   was omitted.
 
+PO/BA change-trigger policy under fully human-gated queues:
+
+- When every active sprint task is marked `[REQUIRES_HUMAN]`, PO and BA should
+  gate publication through `python scripts/assessment_publish_gate.py`.
+- The gate computes a stable blocker-state hash from active task ids, human
+  blocker metadata, and launch-scope context in `tasks/CURRENT_SPRINT.md`.
+- If the queue is fully human-gated and the blocker-state hash is unchanged from
+  the prior run, skip artifact publication for that role.
+- If the queue changes or includes any non-human executable task, publish
+  normally and record the decision/hash in automation memory.
+
 ## Proposal Schema (Minimum Fields)
 
 Assessments must emit proposals/findings with a stable ID that is **not** a

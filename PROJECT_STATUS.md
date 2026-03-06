@@ -231,7 +231,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## In Progress
 
-- `TASK-211` Add 7-day novelty gate with `All clear` fallback for assessment roles
 - `TASK-212` Ground assessment task references against current sprint truth
 - `TASK-213` Suppress cross-role overlap before assessment artifacts are written
 - `TASK-214` Switch PO/BA automations to change-triggered publishing under fully human-gated queues

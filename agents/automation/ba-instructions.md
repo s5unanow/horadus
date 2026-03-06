@@ -20,6 +20,9 @@ gaps, and operational blind spots. Propose up to 3 improvements.
 
 Include the minimum fields from `docs/ASSESSMENTS.md`.
 Use the canonical multiline `Verification:` and `Blast radius:` section format.
+Compare against BA artifacts from the last 7 days before finalizing.
+If nothing materially new remains after that lookback, write `All clear`.
+If you intentionally repeat a proposal, include an explicit delta section.
 
 ## Constraints
 

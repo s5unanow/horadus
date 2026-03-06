@@ -20,6 +20,9 @@ Assess project state from a product standpoint. Identify gaps and propose up to
 
 Include the minimum fields from `docs/ASSESSMENTS.md`.
 Use the canonical multiline `Verification:` and `Blast radius:` section format.
+Compare against PO artifacts from the last 7 days before finalizing.
+If nothing materially new remains after that lookback, write `All clear`.
+If you intentionally repeat a proposal, include an explicit delta section.
 
 ## Constraints
 

@@ -63,4 +63,5 @@
 - `TASK-219` Add structured triage input collection command ✅
 - `TASK-220` Migrate wrapper targets and agent docs to the CLI ✅
 - `TASK-221` Add repo-owned Horadus CLI skill ✅
+- `TASK-222` Dogfood Horadus CLI triage flow and capture follow-ups ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅

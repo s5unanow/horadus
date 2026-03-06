@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-210`.
+- Next available task IDs start at `TASK-215`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -3669,6 +3669,133 @@ classification. That reintroduces the semantic drift the earlier task removed.
 - [ ] Ensure Tier-2 writes do not silently violate the documented `primary_item_id` semantics
 - [ ] Add regression tests covering cluster merge plus Tier-2 classification on the same event
 - [ ] Update docs to reflect the final semantics unambiguously
+
+---
+
+## Phase 13: Assessment Automation Signal Quality (2026-03)
+
+Backlog items derived from assessment automation review on 2026-03-06 against
+current `main`. These tasks extend prior assessment hygiene/promotion work
+instead of duplicating `TASK-179` or `TASK-188`.
+
+### TASK-210: Unify assessment artifact contract across writers and validator
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Assessment writers now emit human-friendly multiline `Verification` /
+`Blast radius` sections, but `scripts/validate_assessment_artifacts.py` still
+parses only single-line `key: value` fields. The repo currently disagrees with
+itself: recent artifacts look correct to humans while the validator marks them
+invalid.
+
+**Assessment-Ref**:
+- `artifacts/assessments/ba/daily/2026-03-06.md` (`PROPOSAL-2026-03-06-ba-assessment-schema-contract-enforcement`)
+- `artifacts/assessments/agents/daily/2026-03-04.md` (`PROPOSAL-2026-03-04-agents-postwrite-validation-gate`)
+
+**Files**: `scripts/validate_assessment_artifacts.py`, `docs/ASSESSMENTS.md`, `agents/automation/*.md`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Define one canonical assessment field format in `docs/ASSESSMENTS.md` for `verification` and `blast_radius`
+- [ ] Update the validator to accept the canonical multiline block format used by current role artifacts
+- [ ] Reject ambiguous/malformed field blocks with actionable line-based diagnostics
+- [ ] Update role automation instructions/templates so all roles emit the same canonical shape
+- [ ] Add tests for canonical multiline pass, malformed multiline fail, and legacy-format compatibility policy
+- [ ] Decide and document recent-history handling so current automation outputs are not left permanently stale or structurally invalid
+
+---
+
+### TASK-211: Add 7-day novelty gate with “All clear” fallback for assessment roles
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Daily assessment roles currently reformulate the same proposals across adjacent
+days when repo state is mostly unchanged. Add a novelty gate so roles look back
+7 days, account for already-implemented changes, and emit `All clear` when no
+materially new signal remains.
+
+**Assessment-Ref**:
+- `artifacts/assessments/agents/daily/2026-02-27.md` (`PROPOSAL-2026-02-27-agents-assessment-novelty-gate`)
+- `artifacts/assessments/agents/daily/2026-03-03.md` (`PROPOSAL-2026-03-03-agents-assessment-novelty-guard`)
+
+**Files**: `scripts/validate_assessment_artifacts.py`, `scripts/` (new novelty helper if needed), `docs/ASSESSMENTS.md`, `agents/automation/*.md`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Compare each candidate proposal/finding against same-role artifacts from the previous 7 days
+- [ ] Treat already-implemented/resolved changes as non-novel so stale proposals are suppressed instead of rephrased
+- [ ] Allow repeated proposals only when the new artifact includes explicit delta evidence (for example changed scope, confidence, blocker state, or new reproduction)
+- [ ] If no materially new proposal remains for a role, emit a valid `All clear` output instead of another reformulation
+- [ ] Add tests covering duplicate proposal suppression, explicit-delta allow, resolved/stale proposal suppression, and clean `All clear` behavior
+
+---
+
+### TASK-212: Ground assessment task references against current sprint truth
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+Assessment artifacts can reference stale or no-longer-active `TASK-###` items as
+if they were current blockers. That weakens trust in assessment-driven planning
+and can create noisy follow-up work.
+
+**Assessment-Ref**:
+- `artifacts/assessments/po/daily/2026-03-06.md` (`PROPOSAL-2026-03-06-po-assessment-consistency-guard`)
+
+**Files**: `scripts/validate_assessment_artifacts.py`, `tasks/CURRENT_SPRINT.md`, `docs/ASSESSMENTS.md`, `agents/automation/*.md`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Extract `TASK-###` references from assessment artifacts during validation/publish checks
+- [ ] Fail when a task is referenced as current/active/blocking but is absent from current sprint truth
+- [ ] Support an explicit historical/completed marker so intentional non-current references remain possible without false positives
+- [ ] Surface actionable diagnostics that show the offending task id and the expected current-sprint source of truth
+- [ ] Add tests covering active-task pass, stale-task fail, and explicitly historical-task pass
+
+---
+
+### TASK-213: Suppress cross-role overlap before assessment artifacts are written
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`TASK-188` de-duplicates proposals at promotion time, but overlap is still
+allowed to accumulate across role artifacts before triage. Suppress cross-role
+duplicates earlier so daily artifacts carry new signal instead of repeated
+security/governance themes under different role labels.
+
+**Assessment-Ref**:
+- `artifacts/assessments/agents/daily/2026-03-02.md` (`PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe`)
+
+**Files**: `agents/automation/*.md`, `scripts/validate_assessment_artifacts.py`, `docs/ASSESSMENTS.md`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Compare candidate proposals against recent other-role artifacts before final output is published
+- [ ] Suppress or convert overlapping proposals to `All clear` when another role already covered the same issue without materially new evidence
+- [ ] Share overlap/delta rules with the 7-day novelty gate so same-role and cross-role suppression do not drift
+- [ ] Record suppressed-overlap decisions in automation memory/log output for operator auditability
+- [ ] Add tests covering: no-overlap pass, cross-role overlap suppression, and explicit-delta override
+
+---
+
+### TASK-214: Switch PO/BA automations to change-triggered publishing under fully human-gated queues
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+When the active queue is 100% `[REQUIRES_HUMAN]`, daily PO/BA automations mostly
+restate the same blocker-management advice. Make those roles change-triggered:
+publish only when blocker state materially changes, and otherwise avoid creating
+another daily artifact.
+
+**Assessment-Ref**:
+- `artifacts/assessments/ba/daily/2026-03-03.md` (`PROPOSAL-2026-03-03-ba-human-gate-throughput-buffer`)
+- `artifacts/assessments/po/daily/2026-03-06.md` (`PROPOSAL-2026-03-06-po-overdue-blocker-escalation-gate`)
+- `artifacts/sprint_health/health-2026-03-06.md`
+
+**Files**: `agents/automation/ba-instructions.md`, `agents/automation/po-instructions.md`, `ops/automations/specs/*.toml`, `$CODEX_HOME/automations/*/memory.md` handling, `docs/ASSESSMENTS.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Detect when all active sprint tasks are marked `[REQUIRES_HUMAN]`
+- [ ] Define a stable “blocker state hash” from the current human-gated queue (for example active task ids, `next_action`, `last_touched`, scope/blocker metadata)
+- [ ] Skip PO/BA artifact publication when the queue is fully human-gated and the blocker state hash is unchanged from the prior run
+- [ ] Publish normally when blocker state changes, or when the queue contains at least one non-human executable task
+- [ ] Record skip/publish decisions in automation memory with the state hash and comparison reason
+- [ ] Add tests covering unchanged human-gated queue skip, changed queue publish, and mixed queue publish
 
 ---
 

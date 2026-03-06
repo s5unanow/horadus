@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-03-03
+**Last Updated**: 2026-03-06
 **Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
 **Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
@@ -231,6 +231,10 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## In Progress
 
+- `TASK-211` Add 7-day novelty gate with `All clear` fallback for assessment roles
+- `TASK-212` Ground assessment task references against current sprint truth
+- `TASK-213` Suppress cross-role overlap before assessment artifacts are written
+- `TASK-214` Switch PO/BA automations to change-triggered publishing under fully human-gated queues
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -259,7 +263,8 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
+1. Complete assessment automation signal-quality tasks (`TASK-210`..`TASK-214`)
+2. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
 
 ## Expert Feedback Integration ✅
 

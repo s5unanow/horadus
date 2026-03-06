@@ -19,6 +19,7 @@ Assess project state from a product standpoint. Identify gaps and propose up to
 ## Content Requirements (per proposal)
 
 Include the minimum fields from `docs/ASSESSMENTS.md`.
+Use the canonical multiline `Verification:` and `Blast radius:` section format.
 
 ## Constraints
 

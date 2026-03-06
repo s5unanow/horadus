@@ -19,6 +19,7 @@ secrets handling, rate limiting, logging leaks). Propose up to 3 improvements.
 ## Content Requirements (per proposal)
 
 Include the minimum fields from `docs/ASSESSMENTS.md` (area must be `security`).
+Use the canonical multiline `Verification:` and `Blast radius:` section format.
 
 ## Constraints
 

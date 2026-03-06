@@ -23,6 +23,11 @@ For each proposal include the minimum fields from `docs/ASSESSMENTS.md`:
 - `proposal_id`, `area`, `priority`, `confidence`, `estimate`, `verification`,
   `blast_radius`, `recommended_gate`
 
+Use the canonical multiline section format from `docs/ASSESSMENTS.md`:
+- metadata fields near the top (`area`, `priority`, `confidence`, `estimate`, `recommended_gate`)
+- `Verification:` with bullet lines
+- `Blast radius:` with bullet lines
+
 ## Constraints
 
 - Do not edit tracked files in the repo; write the assessment artifact only.

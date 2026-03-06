@@ -19,6 +19,7 @@ gaps, and operational blind spots. Propose up to 3 improvements.
 ## Content Requirements (per proposal)
 
 Include the minimum fields from `docs/ASSESSMENTS.md`.
+Use the canonical multiline `Verification:` and `Blast radius:` section format.
 
 ## Constraints
 

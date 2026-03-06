@@ -9,10 +9,10 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "validate_assessment_artifacts.py"
 
 
-def _run(*paths: Path) -> subprocess.CompletedProcess[str]:
+def _run(*args: str | Path, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        ["python", str(SCRIPT_PATH), *[str(p) for p in paths]],
-        cwd=REPO_ROOT,
+        ["python", str(SCRIPT_PATH), *[str(arg) for arg in args]],
+        cwd=cwd or REPO_ROOT,
         capture_output=True,
         text=True,
         check=False,
@@ -257,3 +257,216 @@ def test_validator_ignores_raw_subdirectories(tmp_path: Path) -> None:
     result = _run(tmp_path / "artifacts" / "assessments")
     assert result.returncode == 0
     assert "No assessment artifacts found" in result.stdout
+
+
+def test_validator_rejects_non_novel_same_role_proposal(tmp_path: Path) -> None:
+    prior = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-05.md"
+    prior.parent.mkdir(parents=True, exist_ok=True)
+    prior.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-05",
+                "",
+                "### PROPOSAL-2026-03-05-po-status-freshness-surface",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "PROJECT_STATUS is stale.",
+                "",
+                "Proposed change:",
+                "Add a freshness surface.",
+                "",
+                "Verification:",
+                "- make docs-freshness",
+                "",
+                "Blast radius:",
+                "- PROJECT_STATUS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    target.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-status-freshness-surface",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.8",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "PROJECT_STATUS is still stale.",
+                "",
+                "Proposed change:",
+                "Add a freshness surface.",
+                "",
+                "Verification:",
+                "- make docs-freshness",
+                "",
+                "Blast radius:",
+                "- PROJECT_STATUS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-novelty",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 2
+    assert "non-novel within 7 days" in result.stdout
+    assert "2026-03-05.md" in result.stdout
+
+
+def test_validator_accepts_duplicate_with_explicit_delta_note(tmp_path: Path) -> None:
+    prior = tmp_path / "artifacts" / "assessments" / "sa" / "daily" / "2026-03-05.md"
+    prior.parent.mkdir(parents=True, exist_ok=True)
+    prior.write_text(
+        "\n".join(
+            [
+                "# SA Daily Assessment - 2026-03-05",
+                "",
+                "### PROPOSAL-2026-03-05-sa-failover-policy",
+                "area: processing",
+                "priority: P1",
+                "confidence: 0.8",
+                "estimate: 2-4h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "Failover policy is unclear.",
+                "",
+                "Proposed change:",
+                "Define degraded-mode policy.",
+                "",
+                "Verification:",
+                "- pytest tests/unit/processing -k failover -v",
+                "",
+                "Blast radius:",
+                "- src/processing/",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "sa" / "daily" / "2026-03-06.md"
+    target.write_text(
+        "\n".join(
+            [
+                "# SA Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-sa-failover-policy",
+                "area: processing",
+                "priority: P1",
+                "confidence: 0.82",
+                "estimate: 2-4h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "Failover policy is still unclear.",
+                "",
+                "Proposed change:",
+                "Define degraded-mode policy.",
+                "",
+                "Delta since prior report:",
+                "- Added emergency-model pass criteria based on the latest canary change.",
+                "",
+                "Verification:",
+                "- pytest tests/unit/processing -k failover -v",
+                "",
+                "Blast radius:",
+                "- src/processing/",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-novelty",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 0
+
+
+def test_validator_rejects_proposal_already_captured_in_task_ledger(tmp_path: Path) -> None:
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "BACKLOG.md").write_text(
+        "# Backlog\n\n### TASK-210: Launch truth single artifact\n",
+        encoding="utf-8",
+    )
+    (tasks_dir / "COMPLETED.md").write_text("# Completed Tasks\n", encoding="utf-8")
+
+    target = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-launch-truth-single-artifact",
+                "area: repo",
+                "priority: P1",
+                "confidence: 0.9",
+                "estimate: 2-4h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "Launch truth is fragmented.",
+                "",
+                "Proposed change:",
+                "Create one launch truth artifact.",
+                "",
+                "Verification:",
+                "- test -f artifacts/launch/readiness/2026-03-06.json",
+                "",
+                "Blast radius:",
+                "- artifacts/launch/readiness/",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = _run(
+        target,
+        "--check-novelty",
+        "--lookback-days",
+        "7",
+        cwd=tmp_path,
+    )
+    assert result.returncode == 2
+    assert "already captured in task ledger" in result.stdout
+    assert "TASK-210" in result.stdout
+
+
+def test_validator_accepts_all_clear_with_novelty_check(tmp_path: Path) -> None:
+    path = tmp_path / "artifacts" / "assessments" / "agents" / "daily" / "2026-03-06.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("# Agentic Assessment - 2026-03-06\n\nAll clear.\n", encoding="utf-8")
+
+    result = _run(path, "--check-novelty", "--lookback-days", "7", cwd=tmp_path)
+    assert result.returncode == 0

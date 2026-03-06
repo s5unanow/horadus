@@ -27,6 +27,7 @@ Roles are free-form but should stay stable (e.g. `security`, `sa`, `po`, `ba`,
 To validate the most recent assessment artifacts locally:
 
 - `python scripts/validate_assessment_artifacts.py`
+- `python scripts/validate_assessment_artifacts.py <target> --check-novelty --lookback-days 7`
 
 Daily artifact integrity enforced by validator:
 - Filename date (`artifacts/assessments/<role>/daily/YYYY-MM-DD.md`) must match the top report
@@ -34,6 +35,17 @@ Daily artifact integrity enforced by validator:
 - Proposal/Finding IDs in that file must use the same `YYYY-MM-DD` date segment.
 - Scratch files under `_raw/` are ignored by the validator; only dated daily
   artifacts are part of the enforced contract.
+
+Novelty policy for daily role assessments:
+
+- Compare draft proposals/findings against same-role artifacts from the previous
+  7 days before publishing.
+- If a proposal is already captured in recent same-role history or the current
+  task ledgers, it is not materially new by default.
+- To intentionally repeat a proposal, include an explicit delta section such as
+  `Delta since prior report:` or `New evidence:` with the new fact/scope change.
+- If no materially new proposals remain after the 7-day lookback, emit a short
+  `All clear` report instead of rephrasing prior recommendations.
 
 ## Proposal Schema (Minimum Fields)
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import re
 from dataclasses import dataclass
+from datetime import date, timedelta
 from pathlib import Path
 
 ALLOWED_AREAS = {
@@ -65,9 +66,47 @@ NON_FIELD_SECTION_ALIASES = {
     "proposed_change",
     "proposed change",
     "summary",
+    "delta",
+    "delta since prior report",
+    "delta_since_prior_report",
+    "new evidence",
+    "new_evidence",
+    "change since last report",
+    "change_since_last_report",
+    "updated scope",
+    "updated_scope",
     "scope reviewed",
     "scope_reviewed",
 }
+TOKEN_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "by",
+    "for",
+    "from",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "the",
+    "to",
+    "with",
+}
+DELTA_HINT_PATTERN = re.compile(
+    r"\b(delta since prior report|new evidence|change since last report|updated scope)\b",
+    re.IGNORECASE,
+)
+ROLE_PREFIXES = {"po", "ba", "sa", "security", "agents"}
+RE_TASK_TITLE = re.compile(r"^###\s+(TASK-\d+):\s+(.+?)\s*$")
+RE_COMPLETED_TASK = re.compile(r"^-\s+(TASK-\d+):\s+(.+?)\s+✅\s*$")
+SLUG_SIMILARITY_THRESHOLD = 0.6
+BODY_SIMILARITY_THRESHOLD = 0.72
 
 
 @dataclass(frozen=True)
@@ -75,6 +114,22 @@ class Finding:
     path: Path
     line_no: int
     message: str
+
+
+@dataclass(frozen=True)
+class ProposalBlock:
+    proposal_id: str
+    line_no: int
+    fields: dict[str, str]
+    sections: dict[str, str]
+
+
+@dataclass(frozen=True)
+class ParsedArtifact:
+    path: Path
+    role: str | None
+    is_all_clear: bool
+    proposals: tuple[ProposalBlock, ...]
 
 
 def _iter_markdown_files(paths: list[Path]) -> list[Path]:
@@ -113,18 +168,26 @@ def _normalize_non_field_section(raw_key: str) -> str | None:
     return None
 
 
-def _parse_block_fields(block_lines: list[str], start_line_no: int) -> dict[str, str]:
+def _parse_block_content(
+    block_lines: list[str], start_line_no: int
+) -> tuple[dict[str, str], dict[str, str]]:
     fields: dict[str, str] = {}
+    sections: dict[str, str] = {}
+    current_kind: str | None = None
     current_key: str | None = None
     current_values: list[str] = []
 
     def flush() -> None:
-        nonlocal current_key, current_values
+        nonlocal current_kind, current_key, current_values
         if current_key is None:
             return
         content = "\n".join(line.rstrip() for line in current_values).strip()
         if content:
-            fields[current_key] = content
+            if current_kind == "field":
+                fields[current_key] = content
+            elif current_kind == "section":
+                sections[current_key] = content
+        current_kind = None
         current_key = None
         current_values = []
 
@@ -141,11 +204,16 @@ def _parse_block_fields(block_lines: list[str], start_line_no: int) -> dict[str,
                 if raw_value.strip():
                     fields[field_key] = raw_value.strip()
                 else:
+                    current_kind = "field"
                     current_key = field_key
                 continue
 
             if non_field_key is not None:
                 flush()
+                current_kind = "section"
+                current_key = non_field_key
+                if raw_value.strip():
+                    current_values.append(raw_value.strip())
                 continue
 
         if current_key is not None:
@@ -155,12 +223,244 @@ def _parse_block_fields(block_lines: list[str], start_line_no: int) -> dict[str,
                 flush()
 
     flush()
-    return fields
+    return fields, sections
+
+
+def _role_from_path(path: Path) -> str | None:
+    parts = path.parts
+    for index, part in enumerate(parts):
+        if part == "assessments" and index + 2 < len(parts):
+            return parts[index + 1]
+    return None
+
+
+def _parse_artifact(path: Path) -> ParsedArtifact:
+    text = path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    proposal_starts: list[tuple[int, str]] = []
+    for idx, line in enumerate(lines, start=1):
+        match = RE_PROPOSAL_HEADING.match(line)
+        if match:
+            proposal_starts.append((idx, match.group(1)))
+
+    proposals: list[ProposalBlock] = []
+    for i, (start_line_no, proposal_id) in enumerate(proposal_starts):
+        end_line_no = proposal_starts[i + 1][0] - 1 if i + 1 < len(proposal_starts) else len(lines)
+        block_lines = lines[start_line_no:end_line_no]
+        fields, sections = _parse_block_content(block_lines, start_line_no)
+        proposals.append(
+            ProposalBlock(
+                proposal_id=proposal_id,
+                line_no=start_line_no,
+                fields=fields,
+                sections=sections,
+            )
+        )
+
+    return ParsedArtifact(
+        path=path,
+        role=_role_from_path(path),
+        is_all_clear=bool(RE_ALL_CLEAR.search(text)),
+        proposals=tuple(proposals),
+    )
+
+
+def _normalize_slug(proposal_id: str) -> str:
+    match = RE_PROPOSAL_DATE.match(proposal_id)
+    slug = proposal_id
+    if match:
+        slug = proposal_id.split("-", 4)[4]
+    parts = [part for part in slug.split("-") if part]
+    if parts and parts[0] in ROLE_PREFIXES:
+        parts = parts[1:]
+    return "-".join(parts)
+
+
+def _tokenize(text: str) -> set[str]:
+    return {
+        token
+        for token in re.findall(r"[a-z0-9]+", text.lower())
+        if token not in TOKEN_STOPWORDS and len(token) > 1
+    }
+
+
+def _token_similarity(left: set[str], right: set[str]) -> float:
+    if not left or not right:
+        return 0.0
+    intersection = left & right
+    union = left | right
+    return len(intersection) / len(union)
+
+
+def _proposal_body_text(proposal: ProposalBlock) -> str:
+    return "\n".join(
+        [
+            proposal.sections.get("problem", ""),
+            proposal.sections.get("proposed_change", ""),
+            proposal.fields.get("verification", ""),
+            proposal.fields.get("blast_radius", ""),
+        ]
+    ).strip()
+
+
+def _proposal_has_explicit_delta(proposal: ProposalBlock) -> bool:
+    for key in (
+        "delta",
+        "delta_since_prior_report",
+        "new_evidence",
+        "change_since_last_report",
+        "updated_scope",
+    ):
+        if proposal.sections.get(key, "").strip():
+            return True
+    return bool(DELTA_HINT_PATTERN.search(_proposal_body_text(proposal)))
+
+
+def _artifact_file_date(path: Path) -> date | None:
+    match = RE_DAILY_FILENAME_DATE.search(path.name)
+    if match is None:
+        return None
+    return date.fromisoformat(match.group(1))
+
+
+def _load_task_titles(repo_root: Path) -> list[tuple[str, str]]:
+    titles: list[tuple[str, str]] = []
+    for relative_path in ("tasks/BACKLOG.md", "tasks/COMPLETED.md"):
+        path = repo_root / relative_path
+        if not path.exists():
+            continue
+        for line in path.read_text(encoding="utf-8").splitlines():
+            backlog_match = RE_TASK_TITLE.match(line.strip())
+            if backlog_match:
+                titles.append((backlog_match.group(1), backlog_match.group(2).strip()))
+                continue
+            completed_match = RE_COMPLETED_TASK.match(line.strip())
+            if completed_match:
+                titles.append((completed_match.group(1), completed_match.group(2).strip()))
+    return titles
+
+
+def _novelty_findings_for_file(
+    path: Path,
+    *,
+    lookback_days: int,
+    all_files: list[Path],
+    repo_root: Path,
+) -> list[Finding]:
+    artifact = _parse_artifact(path)
+    if artifact.is_all_clear or not artifact.proposals or artifact.role is None:
+        return []
+
+    normalized_target_path = path.resolve()
+    file_date = _artifact_file_date(path)
+    cutoff = file_date - timedelta(days=lookback_days) if file_date is not None else None
+    role_history_root = repo_root / "artifacts" / "assessments" / artifact.role / "daily"
+    candidate_history_files = (
+        _iter_markdown_files([role_history_root]) if role_history_root.exists() else all_files
+    )
+    history: list[ParsedArtifact] = []
+    for candidate in candidate_history_files:
+        if candidate.resolve() == normalized_target_path:
+            continue
+        candidate_artifact = _parse_artifact(candidate)
+        if candidate_artifact.role != artifact.role:
+            continue
+        candidate_date = _artifact_file_date(candidate)
+        if cutoff is not None and candidate_date is not None and candidate_date < cutoff:
+            continue
+        history.append(candidate_artifact)
+
+    task_titles = _load_task_titles(repo_root)
+    findings: list[Finding] = []
+    novel_count = 0
+
+    for proposal in artifact.proposals:
+        if _proposal_has_explicit_delta(proposal):
+            novel_count += 1
+            continue
+
+        slug_tokens = _tokenize(_normalize_slug(proposal.proposal_id))
+        body_tokens = _tokenize(_proposal_body_text(proposal))
+
+        prior_match: tuple[str, Path, float] | None = None
+        for previous in history:
+            for previous_proposal in previous.proposals:
+                prev_slug_tokens = _tokenize(_normalize_slug(previous_proposal.proposal_id))
+                prev_body_tokens = _tokenize(_proposal_body_text(previous_proposal))
+                slug_similarity = _token_similarity(slug_tokens, prev_slug_tokens)
+                body_similarity = _token_similarity(body_tokens, prev_body_tokens)
+                if (
+                    slug_similarity >= SLUG_SIMILARITY_THRESHOLD
+                    or body_similarity >= BODY_SIMILARITY_THRESHOLD
+                ):
+                    score = max(slug_similarity, body_similarity)
+                    if prior_match is None or score > prior_match[2]:
+                        prior_match = (
+                            previous_proposal.proposal_id,
+                            previous.path,
+                            score,
+                        )
+
+        if prior_match is not None:
+            findings.append(
+                Finding(
+                    path=path,
+                    line_no=proposal.line_no,
+                    message=(
+                        f"{proposal.proposal_id}: non-novel within {lookback_days} days; "
+                        f"matches prior same-role proposal {prior_match[0]} in "
+                        f"{prior_match[1].as_posix()} (similarity {prior_match[2]:.2f}). "
+                        "Add an explicit delta section or emit 'All clear'."
+                    ),
+                )
+            )
+            continue
+
+        task_match: tuple[str, str, float] | None = None
+        for task_id, task_title in task_titles:
+            task_tokens = _tokenize(task_title)
+            score = _token_similarity(slug_tokens, task_tokens)
+            if (
+                score >= SLUG_SIMILARITY_THRESHOLD
+                or (len(slug_tokens & task_tokens) >= 2 and score >= 0.5)
+            ) and (task_match is None or score > task_match[2]):
+                task_match = (task_id, task_title, score)
+
+        if task_match is not None:
+            findings.append(
+                Finding(
+                    path=path,
+                    line_no=proposal.line_no,
+                    message=(
+                        f"{proposal.proposal_id}: already captured in task ledger by "
+                        f"{task_match[0]} ({task_match[1]}) (similarity {task_match[2]:.2f}); "
+                        "adjust the proposal with an explicit delta or emit 'All clear'."
+                    ),
+                )
+            )
+            continue
+
+        novel_count += 1
+
+    if novel_count == 0:
+        findings.append(
+            Finding(
+                path=path,
+                line_no=1,
+                message=(
+                    f"no materially new proposals remain after {lookback_days}-day novelty "
+                    "check; emit an explicit 'All clear' report instead."
+                ),
+            )
+        )
+
+    return findings
 
 
 def validate_file(path: Path) -> list[Finding]:
     text = path.read_text(encoding="utf-8")
     lines = text.splitlines()
+    artifact = _parse_artifact(path)
 
     findings: list[Finding] = []
 
@@ -206,40 +506,37 @@ def validate_file(path: Path) -> list[Finding]:
                 )
             )
 
-    proposal_starts: list[tuple[int, str]] = []
-    for idx, line in enumerate(lines, start=1):
-        match = RE_PROPOSAL_HEADING.match(line)
-        if match:
-            proposal_starts.append((idx, match.group(1)))
-            if filename_date is not None:
-                proposal_id = match.group(1)
-                date_match = RE_PROPOSAL_DATE.match(proposal_id)
-                if date_match is None:
-                    findings.append(
-                        Finding(
-                            path=path,
-                            line_no=idx,
-                            message=(
-                                f"{proposal_id}: missing YYYY-MM-DD segment matching "
-                                f"filename date {filename_date}"
-                            ),
-                        )
-                    )
-                elif date_match.group(1) != filename_date:
-                    findings.append(
-                        Finding(
-                            path=path,
-                            line_no=idx,
-                            message=(
-                                f"{proposal_id}: proposal date mismatch "
-                                f"(expected {filename_date}, found {date_match.group(1)})"
-                            ),
-                        )
-                    )
+    proposal_starts = [(proposal.line_no, proposal.proposal_id) for proposal in artifact.proposals]
+    for line_no, proposal_id in proposal_starts:
+        if filename_date is None:
+            continue
+        date_match = RE_PROPOSAL_DATE.match(proposal_id)
+        if date_match is None:
+            findings.append(
+                Finding(
+                    path=path,
+                    line_no=line_no,
+                    message=(
+                        f"{proposal_id}: missing YYYY-MM-DD segment matching "
+                        f"filename date {filename_date}"
+                    ),
+                )
+            )
+        elif date_match.group(1) != filename_date:
+            findings.append(
+                Finding(
+                    path=path,
+                    line_no=line_no,
+                    message=(
+                        f"{proposal_id}: proposal date mismatch "
+                        f"(expected {filename_date}, found {date_match.group(1)})"
+                    ),
+                )
+            )
 
     if not proposal_starts:
         # Allow a deliberate "no findings" report.
-        if RE_ALL_CLEAR.search(text):
+        if artifact.is_all_clear:
             return findings
         findings.append(
             Finding(
@@ -255,7 +552,7 @@ def validate_file(path: Path) -> list[Finding]:
         end_line_no = proposal_starts[i + 1][0] - 1 if i + 1 < len(proposal_starts) else len(lines)
         block_lines = lines[start_line_no:end_line_no]
 
-        fields = _parse_block_fields(block_lines, start_line_no)
+        fields, _sections = _parse_block_content(block_lines, start_line_no)
 
         missing = sorted(REQUIRED_FIELDS - set(fields.keys()))
         if missing:
@@ -334,7 +631,21 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Exit 0 even if violations are found.",
     )
+    parser.add_argument(
+        "--check-novelty",
+        action="store_true",
+        help="Check whether proposal blocks are materially new versus recent same-role history.",
+    )
+    parser.add_argument(
+        "--lookback-days",
+        type=int,
+        default=7,
+        help="Lookback window for novelty checks (default: 7).",
+    )
     args = parser.parse_args(argv)
+
+    if args.lookback_days < 0:
+        parser.error("--lookback-days must be non-negative")
 
     paths = [Path(p) for p in args.paths]
     files = [p for p in _iter_markdown_files(paths) if p.exists()]
@@ -346,6 +657,15 @@ def main(argv: list[str] | None = None) -> int:
     all_findings: list[Finding] = []
     for file_path in files:
         all_findings.extend(validate_file(file_path))
+        if args.check_novelty:
+            all_findings.extend(
+                _novelty_findings_for_file(
+                    file_path,
+                    lookback_days=args.lookback_days,
+                    all_files=files,
+                    repo_root=Path.cwd(),
+                )
+            )
 
     if all_findings:
         for finding in all_findings:

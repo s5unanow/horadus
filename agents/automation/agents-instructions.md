@@ -27,6 +27,9 @@ Use the canonical multiline section format from `docs/ASSESSMENTS.md`:
 - metadata fields near the top (`area`, `priority`, `confidence`, `estimate`, `recommended_gate`)
 - `Verification:` with bullet lines
 - `Blast radius:` with bullet lines
+- compare against same-role artifacts from the last 7 days before finalizing
+- if no materially new proposal remains, write `All clear` instead of repeating prior themes
+- if repeating a proposal intentionally, include an explicit delta section such as `Delta since prior report:`
 
 ## Constraints
 

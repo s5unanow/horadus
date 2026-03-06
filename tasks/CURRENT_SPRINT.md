@@ -24,7 +24,6 @@
   - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
-
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -81,5 +80,6 @@
 - `TASK-223` Add status filters and compact output to `horadus tasks search` ✅
 - `TASK-224` Surface human-blocker urgency in task and triage outputs ✅
 - `TASK-240` Keep `docs-freshness` from dropping dev dependencies ✅
+- `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

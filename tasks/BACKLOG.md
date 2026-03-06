@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-241`.
+- Next available task IDs start at `TASK-242`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4342,6 +4342,25 @@ developer commands until `deps-dev` is run again.
 - [ ] `make docs-freshness` no longer removes dev extras from `.venv`
 - [ ] Local follow-up commands that rely on dev dependencies (for example `pre-commit`) still resolve after `make docs-freshness`
 - [ ] Keep the target behavior limited to docs-freshness validation rather than mutating the environment in surprising ways
+
+---
+
+### TASK-241: Fix Horadus CLI Global Flag Precedence
+**Priority**: P1 (High)
+**Estimate**: 30-60 minutes
+
+The `horadus` CLI currently defines `--format` and `--dry-run` both at the
+root parser and again on leaf subcommands. In practice the leaf defaults shadow
+top-level values, so `horadus --format json ...` can emit text and
+`horadus --dry-run tasks start ...` can perform real side effects.
+
+**Files**: `src/horadus_cli/app.py`, `src/horadus_cli/task_commands.py`, `src/horadus_cli/triage_commands.py`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Top-level `--format` is honored consistently across task and triage subcommands
+- [ ] Top-level `--dry-run` is honored consistently for side-effecting task commands such as `tasks start`
+- [ ] Leaf-position flags continue to work for backward compatibility
+- [ ] Add regression coverage for root-vs-leaf flag precedence so accidental branch creation or format fallback cannot recur
 
 ---
 

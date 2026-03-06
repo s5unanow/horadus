@@ -9,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 import src.cli as cli_module
+import src.horadus_cli.task_commands as task_commands_module
 import src.horadus_cli.task_repo as task_repo_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
@@ -356,6 +357,29 @@ def test_build_parser_accepts_tasks_start_command() -> None:
     assert args.output_format == "json"
 
 
+def test_build_parser_preserves_root_flags_for_tasks_start() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "--format",
+            "json",
+            "--dry-run",
+            "tasks",
+            "start",
+            "TASK-216",
+            "--name",
+            "agent-facing-cli",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "start"
+    assert args.task_id == "TASK-216"
+    assert args.name == "agent-facing-cli"
+    assert args.dry_run is True
+    assert args.output_format == "json"
+
+
 def test_build_parser_accepts_triage_collect_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(
@@ -381,6 +405,16 @@ def test_build_parser_accepts_triage_collect_command() -> None:
     assert args.path == ["src/cli.py"]
     assert args.proposal_id == ["PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe"]
     assert args.lookback_days == 7
+    assert args.output_format == "json"
+
+
+def test_build_parser_preserves_root_flags_for_legacy_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["--format", "json", "--dry-run", "pipeline", "dry-run"])
+
+    assert args.command == "pipeline"
+    assert args.pipeline_command == "dry-run"
+    assert args.dry_run is True
     assert args.output_format == "json"
 
 
@@ -680,6 +714,24 @@ def test_main_tasks_list_active_json_includes_blocker_urgency(
     assert payload["data"]["overdue_human_blockers"]
 
 
+def test_main_tasks_list_active_honors_root_format_flag(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_repo_module,
+        "current_date",
+        lambda: task_repo_module.date(2026, 3, 6),
+    )
+
+    result = cli_module.main(["--format", "json", "tasks", "list-active"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["data"]["tasks"]
+
+
 def test_main_tasks_list_active_ignores_stale_metadata_rows(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -812,6 +864,56 @@ def test_main_tasks_search_rejects_non_positive_limit(
 
     assert result == 2
     assert "--limit must be a positive integer" in capsys.readouterr().err
+
+
+def test_main_tasks_start_honors_root_dry_run_flag(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_start_task_data(
+        task_input: str,
+        raw_name: str,
+        *,
+        dry_run: bool,
+    ) -> tuple[int, dict[str, object], list[str]]:
+        captured["task_input"] = task_input
+        captured["raw_name"] = raw_name
+        captured["dry_run"] = dry_run
+        return (
+            0,
+            {
+                "task_id": task_input,
+                "branch_name": "codex/task-216-agent-facing-cli",
+                "dry_run": dry_run,
+            },
+            ["ok"],
+        )
+
+    monkeypatch.setattr(task_commands_module, "start_task_data", fake_start_task_data)
+
+    result = cli_module.main(
+        [
+            "--format",
+            "json",
+            "--dry-run",
+            "tasks",
+            "start",
+            "TASK-216",
+            "--name",
+            "agent-facing-cli",
+        ]
+    )
+
+    assert result == 0
+    assert captured == {
+        "task_input": "TASK-216",
+        "raw_name": "agent-facing-cli",
+        "dry_run": True,
+    }
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["data"]["dry_run"] is True
 
 
 def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> None:

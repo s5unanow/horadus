@@ -53,6 +53,29 @@ def test_build_parser_accepts_dashboard_export_command() -> None:
     assert args.limit == 5
 
 
+def test_build_parser_accepts_task_search_filters() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "search",
+            "health",
+            "--status",
+            "active",
+            "--limit",
+            "2",
+            "--include-raw",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "search"
+    assert args.query == ["health"]
+    assert args.status == "active"
+    assert args.limit == 2
+    assert args.include_raw is True
+
+
 def test_build_parser_accepts_eval_benchmark_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(
@@ -583,6 +606,86 @@ def test_main_tasks_context_pack_json_output(capsys: pytest.CaptureFixture[str])
     assert payload["status"] == "ok"
     assert payload["data"]["task"]["task_id"] == "TASK-164"
     assert "suggested_validation_commands" in payload["data"]
+
+
+def test_main_tasks_search_json_output_is_compact_by_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main(["tasks", "search", "health", "--limit", "1", "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["status"] == "ok"
+    assert payload["data"]["status_filter"] == "all"
+    assert payload["data"]["limit"] == 1
+    assert payload["data"]["include_raw"] is False
+    assert len(payload["data"]["matches"]) == 1
+    assert "raw_block" not in payload["data"]["matches"][0]
+
+
+def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main(
+        [
+            "tasks",
+            "search",
+            "health",
+            "--status",
+            "active",
+            "--include-raw",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    matches = payload["data"]["matches"]
+    assert payload["data"]["status_filter"] == "active"
+    assert payload["data"]["include_raw"] is True
+    assert matches
+    assert {match["task_id"] for match in matches} == {"TASK-189"}
+    assert all(match["status"] == "active" for match in matches)
+    assert all("raw_block" in match for match in matches)
+
+
+def test_main_tasks_search_text_output_remains_compact_by_default(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main(["tasks", "search", "health", "--status", "active"])
+
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "Task search: health" in output
+    assert "TASK-189" in output
+    assert "## TASK-189" not in output
+    assert "Acceptance Criteria" not in output
+
+
+def test_main_tasks_search_text_output_can_include_raw_blocks(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main(
+        ["tasks", "search", "health", "--status", "active", "--limit", "1", "--include-raw"]
+    )
+
+    assert result == 0
+    output = capsys.readouterr().out
+    assert "## TASK-189" in output
+    assert (
+        "### TASK-189: Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]"
+        in output
+    )
+
+
+def test_main_tasks_search_rejects_non_positive_limit(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main(["tasks", "search", "health", "--limit", "0"])
+
+    assert result == 2
+    assert "--limit must be a positive integer" in capsys.readouterr().err
 
 
 def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> None:

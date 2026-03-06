@@ -10,6 +10,7 @@ TASK_HEADER_PATTERN = re.compile(
     re.MULTILINE | re.DOTALL,
 )
 TASK_REF_PATTERN = re.compile(r"TASK-\d{3}")
+TASK_STATUS_ORDER = {"active": 0, "backlog": 1, "completed": 2}
 
 
 @dataclass(slots=True)
@@ -294,7 +295,12 @@ def task_record(task_id: str) -> TaskRecord | None:
     return record
 
 
-def search_task_records(query: str) -> list[TaskRecord]:
+def search_task_records(
+    query: str,
+    *,
+    status: str = "all",
+    limit: int | None = None,
+) -> list[TaskRecord]:
     normalized = query.strip().lower()
     matches: list[TaskRecord] = []
     for record in backlog_task_records().values():
@@ -309,8 +315,16 @@ def search_task_records(query: str) -> list[TaskRecord]:
         ).lower()
         if normalized in haystack:
             enriched = task_record(record.task_id)
-            if enriched is not None:
+            if enriched is not None and (status == "all" or enriched.status == status):
                 matches.append(enriched)
+    matches.sort(
+        key=lambda record: (
+            TASK_STATUS_ORDER.get(record.status, 99),
+            int(record.task_id[5:]),
+        )
+    )
+    if limit is not None:
+        return matches[:limit]
     return matches
 
 

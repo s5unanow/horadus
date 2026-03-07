@@ -26,11 +26,13 @@ Two artifact types are required:
 1. Candidate run artifacts (always timestamped):
 - `ai/eval/results/benchmark-*.json`
 - `ai/eval/results/audit-*.json`
+- These remain ignored/untracked by default and are for exploratory or candidate runs only.
 
 2. Accepted baseline artifact (pinned):
 - Keep one committed baseline JSON in Git, e.g. `ai/eval/baselines/current.json`.
 - Update this file only when a prompt change is explicitly accepted.
 - Keep previous accepted baselines under `ai/eval/baselines/history/` when replacing `current.json`.
+- If you need a committed milestone snapshot (for example a major model-switch decision), promote it through the same path by copying the selected artifact into `ai/eval/baselines/history/<date>-<tag>.json` and documenting why it is being retained.
 
 Without a pinned baseline, comparisons become ambiguous over time.
 
@@ -62,6 +64,7 @@ Required handling:
 - `--dispatch-mode batch` is diagnostic-only while Tier-1 multi-item scoring remains unstable on the current baseline models. Those artifacts record `tier1_batch_policy=diagnostic_multi_item_batch`.
 - Do not re-enable multi-item Tier-1 runtime batching by default until a same-slice human-verified benchmark shows no worse failure rate and no worse queue accuracy than realtime dispatch.
 - Benchmark artifacts now include per-item stage diagnostics under each config’s `item_results`, including failure category/message, raw model output when available, and compact predicted summaries for successful rows.
+- Benchmark artifacts also include reproducibility provenance: source-control state (`git` commit SHA + dirty/clean flag when available), prompt file paths/content hashes, trend-config fingerprint, and per-config invocation provenance (`api_mode`, `reasoning_effort`, normalized request overrides).
 - Metadata-only prompt/payload enrichments still require the same benchmark evidence; do not assume richer indicator descriptions improve Tier-2 accuracy without a fresh artifact comparison.
 - GPT-5 candidate evaluations may stay on Chat Completions in this repo as long as the benchmark artifact records any stage-specific `reasoning_effort` / `temperature` overrides; current Tier-1/Tier-2 Responses-mode structured-output parity is not required just to compare GPT-5 candidates.
 
@@ -114,6 +117,7 @@ After acceptance:
 1. Merge prompt change.
 2. Commit/update pinned baseline artifact.
    - Move old `ai/eval/baselines/current.json` into `ai/eval/baselines/history/` first.
+   - Do not commit the raw timestamped file from `ai/eval/results/` directly; promote by copying the chosen artifact into `current.json` or `history/<date>-<tag>.json`.
 3. Deploy worker/runtime before the next scheduled processing window.
 
 Operational note:

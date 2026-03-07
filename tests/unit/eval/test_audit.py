@@ -9,6 +9,25 @@ from src.eval import audit as audit_module
 
 pytestmark = pytest.mark.unit
 
+_STATIC_SOURCE_CONTROL = {
+    "git": {
+        "available": True,
+        "repo_root": "/repo",
+        "commit_sha": "abc123",
+        "worktree_dirty": False,
+        "branch": "main",
+    }
+}
+
+
+@pytest.fixture(autouse=True)
+def _stub_source_control_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        audit_module.provenance,
+        "build_source_control_provenance",
+        lambda: _STATIC_SOURCE_CONTROL,
+    )
+
 
 def _write_dataset(path: Path, *, human_verified: int, llm_seeded: int, duplicate: bool) -> None:
     rows: list[dict[str, object]] = []
@@ -67,6 +86,10 @@ def test_run_gold_set_audit_reports_warnings_for_low_quality_dataset(tmp_path: P
 
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
     assert payload["items_evaluated"] == 4
+    assert payload["dataset_scope"] == {"max_items": 200}
+    assert payload["source_control"] == _STATIC_SOURCE_CONTROL
+    assert len(payload["gold_set_fingerprint_sha256"]) == 64
+    assert len(payload["gold_set_item_ids_sha256"]) == 64
     assert payload["passes_quality_gate"] is False
     assert payload["summary"]["label_verification_counts"] == {"llm_seeded": 4}
     assert payload["summary"]["content"]["unique_count"] == 1
@@ -89,6 +112,10 @@ def test_run_gold_set_audit_passes_for_human_verified_diverse_dataset(tmp_path: 
 
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
     assert payload["items_evaluated"] == 4
+    assert payload["dataset_scope"] == {"max_items": 200}
+    assert payload["source_control"] == _STATIC_SOURCE_CONTROL
+    assert len(payload["gold_set_fingerprint_sha256"]) == 64
+    assert len(payload["gold_set_item_ids_sha256"]) == 64
     assert payload["passes_quality_gate"] is True
     assert payload["warnings"] == []
     assert payload["summary"]["label_verification_counts"] == {"human_verified": 4}

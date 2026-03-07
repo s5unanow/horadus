@@ -14,6 +14,16 @@ from src.processing.tier2_classifier import Tier2EventResult, Tier2Usage
 
 pytestmark = pytest.mark.unit
 
+_STATIC_SOURCE_CONTROL = {
+    "git": {
+        "available": True,
+        "repo_root": "/repo",
+        "commit_sha": "abc123",
+        "worktree_dirty": False,
+        "branch": "main",
+    }
+}
+
 
 def _write_gold_set(path: Path) -> None:
     rows = [
@@ -126,6 +136,15 @@ def _write_trend_configs(config_dir: Path) -> None:
         (config_dir / file_name).write_text(json.dumps(payload), encoding="utf-8")
 
 
+@pytest.fixture(autouse=True)
+def _stub_source_control_provenance(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        benchmark_module.provenance,
+        "build_source_control_provenance",
+        lambda: _STATIC_SOURCE_CONTROL,
+    )
+
+
 def test_available_configs_include_gpt5_reasoning_candidates() -> None:
     configs = benchmark_module.available_configs()
 
@@ -151,6 +170,7 @@ class _FakeTier1Classifier:
         client,
         model,
         batch_size,
+        prompt_path,
         cost_tracker,
         reasoning_effort=None,
         request_overrides=None,
@@ -162,6 +182,7 @@ class _FakeTier1Classifier:
             client,
             model,
             batch_size,
+            prompt_path,
             cost_tracker,
             reasoning_effort,
             request_overrides,
@@ -208,6 +229,7 @@ class _FakeTier2Classifier:
         session,
         client,
         model,
+        prompt_path,
         cost_tracker,
         reasoning_effort=None,
         request_overrides=None,
@@ -218,6 +240,7 @@ class _FakeTier2Classifier:
             session,
             client,
             model,
+            prompt_path,
             cost_tracker,
             reasoning_effort,
             request_overrides,
@@ -341,12 +364,24 @@ async def test_run_gold_set_benchmark_writes_results(
         "tier1_batch_size": 1,
         "tier1_batch_policy": "safe_single_item_default",
     }
+    assert payload["source_control"] == _STATIC_SOURCE_CONTROL
+    assert payload["prompt_provenance"]["tier1"]["path"] == "ai/prompts/tier1_filter.md"
+    assert len(payload["prompt_provenance"]["tier1"]["sha256"]) == 64
+    assert payload["prompt_provenance"]["tier2"]["path"] == "ai/prompts/tier2_classify.md"
+    assert len(payload["prompt_provenance"]["tier2"]["sha256"]) == 64
+    assert payload["trend_config_provenance"]["path"] == str(trend_config_dir)
+    assert payload["trend_config_provenance"]["file_count"] >= 1
+    assert len(payload["trend_config_provenance"]["fingerprint_sha256"]) == 64
     assert isinstance(payload["gold_set_fingerprint_sha256"], str)
     assert len(payload["gold_set_fingerprint_sha256"]) == 64
     assert isinstance(payload["gold_set_item_ids_sha256"], str)
     assert len(payload["gold_set_item_ids_sha256"]) == 64
     assert len(payload["configs"]) == 1
     assert payload["configs"][0]["name"] == "baseline"
+    assert payload["configs"][0]["tier1_api_mode"] == "chat_completions"
+    assert payload["configs"][0]["tier2_api_mode"] == "chat_completions"
+    assert payload["configs"][0]["tier1_reasoning_effort"] is None
+    assert payload["configs"][0]["tier2_reasoning_effort"] is None
     assert payload["configs"][0]["tier1_request_overrides"] is None
     assert payload["configs"][0]["tier2_request_overrides"] is None
     assert payload["configs"][0]["elapsed_seconds"] >= 0
@@ -619,6 +654,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             client,
             model,
             batch_size,
+            prompt_path,
             cost_tracker,
             reasoning_effort=None,
             request_overrides=None,
@@ -627,6 +663,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
         ) -> None:
             captured["tier1_batch_size"] = batch_size
             captured["tier1_reasoning_effort"] = reasoning_effort
+            captured["tier1_prompt_path"] = prompt_path
             captured["tier1_request_overrides"] = request_overrides
             captured["tier1_secondary_client"] = secondary_client
             super().__init__(
@@ -634,6 +671,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
                 client=client,
                 model=model,
                 batch_size=batch_size,
+                prompt_path=prompt_path,
                 cost_tracker=cost_tracker,
                 reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
@@ -648,6 +686,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             session,
             client,
             model,
+            prompt_path,
             cost_tracker,
             reasoning_effort=None,
             request_overrides=None,
@@ -655,12 +694,14 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             semantic_cache=None,
         ) -> None:
             captured["tier2_reasoning_effort"] = reasoning_effort
+            captured["tier2_prompt_path"] = prompt_path
             captured["tier2_request_overrides"] = request_overrides
             captured["tier2_secondary_client"] = secondary_client
             super().__init__(
                 session=session,
                 client=client,
                 model=model,
+                prompt_path=prompt_path,
                 cost_tracker=cost_tracker,
                 reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
@@ -697,6 +738,8 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
     assert captured["tier1_batch_size"] == 10
     assert captured["tier1_reasoning_effort"] is None
     assert captured["tier2_reasoning_effort"] is None
+    assert captured["tier1_prompt_path"] == "ai/prompts/tier1_filter.md"
+    assert captured["tier2_prompt_path"] == "ai/prompts/tier2_classify.md"
     assert captured["tier1_request_overrides"] == {"service_tier": "flex"}
     assert captured["tier2_request_overrides"] == {"service_tier": "flex"}
 
@@ -721,6 +764,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
             client,
             model,
             batch_size,
+            prompt_path,
             cost_tracker,
             reasoning_effort=None,
             request_overrides=None,
@@ -733,6 +777,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
                 client=client,
                 model=model,
                 batch_size=batch_size,
+                prompt_path=prompt_path,
                 cost_tracker=cost_tracker,
                 reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
@@ -747,6 +792,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
             session,
             client,
             model,
+            prompt_path,
             cost_tracker,
             reasoning_effort=None,
             request_overrides=None,
@@ -758,6 +804,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
                 session=session,
                 client=client,
                 model=model,
+                prompt_path=prompt_path,
                 cost_tracker=cost_tracker,
                 reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,

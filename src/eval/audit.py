@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.eval import artifact_provenance as provenance
 from src.eval.benchmark import HUMAN_VERIFIED_LABEL, GoldSetItem, load_gold_set
 
 
@@ -30,14 +31,24 @@ def run_gold_set_audit(
     max_items: int = 200,
 ) -> AuditRunResult:
     """Run gold-set quality audit and persist JSON result."""
-    items = load_gold_set(Path(gold_set_path), max_items=max(1, max_items))
-    payload = _build_audit_payload(items=items, gold_set_path=Path(gold_set_path))
+    bounded_max_items = max(1, max_items)
+    items = load_gold_set(Path(gold_set_path), max_items=bounded_max_items)
+    payload = _build_audit_payload(
+        items=items,
+        gold_set_path=Path(gold_set_path),
+        max_items=bounded_max_items,
+    )
     output_path = _write_audit_result(output_dir=Path(output_dir), payload=payload)
     warnings = [str(message) for message in payload["warnings"]]
     return AuditRunResult(output_path=output_path, warnings=warnings)
 
 
-def _build_audit_payload(*, items: list[GoldSetItem], gold_set_path: Path) -> dict[str, Any]:
+def _build_audit_payload(
+    *,
+    items: list[GoldSetItem],
+    gold_set_path: Path,
+    max_items: int,
+) -> dict[str, Any]:
     label_counts = Counter(item.label_verification for item in items)
     content_counts = Counter(_normalize_text(item.content) for item in items)
     tier2_items = [item for item in items if item.tier2 is not None]
@@ -78,6 +89,10 @@ def _build_audit_payload(*, items: list[GoldSetItem], gold_set_path: Path) -> di
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "gold_set_path": str(gold_set_path),
         "items_evaluated": total_items,
+        "dataset_scope": {"max_items": max_items},
+        "source_control": provenance.build_source_control_provenance(),
+        "gold_set_fingerprint_sha256": provenance.gold_set_fingerprint(items),
+        "gold_set_item_ids_sha256": provenance.gold_set_item_ids_fingerprint(items),
         "passes_quality_gate": len(warnings) == 0,
         "warnings": warnings,
         "summary": {

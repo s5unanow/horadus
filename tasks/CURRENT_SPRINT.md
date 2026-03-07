@@ -25,7 +25,6 @@
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
-  - `TASK-250` Make Eval Artifacts Strictly Reproducible and Traceable
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -98,6 +97,8 @@
   completion note: reused the cache-disabled `TASK-247` artifact to close the Tier-1-specific decision; `gpt-5-nano` with `minimal` reasoning beat both `gpt-4.1-nano` and `gpt-5-nano` `low` on the shared human-verified slice, so it is the recommended Tier-1 target after runtime reasoning controls land.
 - `TASK-249` Add First-Class Reasoning-Effort Controls for LLM Routes ✅
   completion note: promoted `reasoning_effort` to a first-class Tier-1/Tier-2 runtime and benchmark route setting, omitted unsupported reasoning/temperature params safely in the shared adapter, and surfaced active reasoning metadata in benchmark artifacts plus Tier-2 degraded-mode telemetry.
+- `TASK-250` Make Eval Artifacts Strictly Reproducible and Traceable ✅
+  completion note: benchmark and audit artifacts now record source-control provenance, prompt/config fingerprints, dataset fingerprints, and normalized invocation metadata, while the docs keep `ai/eval/results/*.json` ignored and route all committed eval artifacts through `ai/eval/baselines/`.
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

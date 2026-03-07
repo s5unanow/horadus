@@ -125,6 +125,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Tier-2 trend payloads now include human-readable indicator descriptions and prompt guidance for choosing the most specific supported signal type or abstaining
 - [x] Benchmark harness now supports stage-specific GPT-5 candidate overrides (`reasoning_effort`, `temperature`), disables semantic cache for fair model comparisons, and records per-config elapsed seconds
 - [x] Tier-1/Tier-2 runtime and benchmark routes now expose first-class reasoning-effort controls with GPT-5-safe omission of unsupported reasoning/temperature params and active reasoning metadata in eval artifacts/telemetry
+- [x] Benchmark and audit artifacts now include source-control provenance, prompt/config fingerprints, dataset fingerprints, and normalized invocation metadata, while the repo-managed promotion path stays limited to committed baselines/history artifacts
 - [x] Feedback audit endpoint (`GET /api/v1/feedback`)
 - [x] Event invalidation support that reverts trend contributions
 - [x] Processing suppression for events marked as noise/invalidated
@@ -252,7 +253,6 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-227`, `TASK-228`, `TASK-229`, `TASK-230`, `TASK-231`, `TASK-232`,
   `TASK-233`, `TASK-234`, `TASK-235`, `TASK-236`, `TASK-237`, `TASK-238`
 - Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
-  `TASK-250`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

@@ -18,6 +18,7 @@ from openai import AsyncOpenAI
 
 from src.core.config import settings
 from src.core.trend_config_loader import load_trends_from_config_dir
+from src.eval import artifact_provenance as provenance
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import (
@@ -35,6 +36,8 @@ _BATCH_DISPATCH_SIZE = 10
 _SAFE_TIER1_BATCH_SIZE = 1
 _TIER1_BATCH_POLICY_SAFE_DEFAULT = "safe_single_item_default"
 _TIER1_BATCH_POLICY_DIAGNOSTIC = "diagnostic_multi_item_batch"
+_TIER1_PROMPT_PATH = "ai/prompts/tier1_filter.md"
+_TIER2_PROMPT_PATH = "ai/prompts/tier2_classify.md"
 
 
 @dataclass(slots=True)
@@ -409,40 +412,6 @@ def _count_label_verification(items: list[GoldSetItem]) -> dict[str, int]:
     return dict(sorted(counts.items()))
 
 
-def _gold_set_fingerprint(items: list[GoldSetItem]) -> str:
-    canonical_rows: list[dict[str, Any]] = []
-    for item in items:
-        row: dict[str, Any] = {
-            "item_id": item.item_id,
-            "title": item.title,
-            "content": item.content,
-            "label_verification": item.label_verification,
-            "tier1": {
-                "trend_scores": item.tier1.trend_scores,
-                "max_relevance": item.tier1.max_relevance,
-            },
-        }
-        if item.tier2 is not None:
-            row["tier2"] = {
-                "trend_id": item.tier2.trend_id,
-                "signal_type": item.tier2.signal_type,
-                "direction": item.tier2.direction,
-                "severity": item.tier2.severity,
-                "confidence": item.tier2.confidence,
-            }
-        else:
-            row["tier2"] = None
-        canonical_rows.append(row)
-
-    payload = json.dumps(canonical_rows, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
-
-
-def _gold_set_item_ids_fingerprint(items: list[GoldSetItem]) -> str:
-    normalized_ids = "\n".join(sorted(item.item_id for item in items))
-    return hashlib.sha256(normalized_ids.encode("utf-8")).hexdigest()
-
-
 def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetItem:
     item_id = str(payload.get("item_id", "")).strip()
     title = str(payload.get("title", "")).strip()
@@ -791,8 +760,15 @@ async def run_gold_set_benchmark(
             "tier1_batch_size": tier1_batch_size,
             "tier1_batch_policy": tier1_batch_policy,
         },
-        "gold_set_fingerprint_sha256": _gold_set_fingerprint(gold_items),
-        "gold_set_item_ids_sha256": _gold_set_item_ids_fingerprint(gold_items),
+        "source_control": provenance.build_source_control_provenance(),
+        "prompt_provenance": provenance.build_file_manifest_provenance(
+            {"tier1": _TIER1_PROMPT_PATH, "tier2": _TIER2_PROMPT_PATH}
+        ),
+        "trend_config_provenance": provenance.build_directory_provenance(
+            directory=Path(trend_config_dir)
+        ),
+        "gold_set_fingerprint_sha256": provenance.gold_set_fingerprint(gold_items),
+        "gold_set_item_ids_sha256": provenance.gold_set_item_ids_fingerprint(gold_items),
         "configs": [],
     }
 
@@ -827,6 +803,7 @@ async def run_gold_set_benchmark(
             client=_wrap_client_with_recorder(client=client, recorder=tier1_recorder),
             model=config.tier1_model,
             batch_size=tier1_batch_size,
+            prompt_path=_TIER1_PROMPT_PATH,
             cost_tracker=cast("Any", noop_cost_tracker),
             reasoning_effort=config.tier1_reasoning_effort,
             request_overrides=tier1_request_overrides,
@@ -837,6 +814,7 @@ async def run_gold_set_benchmark(
             session=cast("Any", noop_session),
             client=_wrap_client_with_recorder(client=client, recorder=tier2_recorder),
             model=config.tier2_model,
+            prompt_path=_TIER2_PROMPT_PATH,
             cost_tracker=cast("Any", noop_cost_tracker),
             reasoning_effort=config.tier2_reasoning_effort,
             request_overrides=tier2_request_overrides,
@@ -950,10 +928,16 @@ async def run_gold_set_benchmark(
                 "provider": config.provider,
                 "tier1_model": config.tier1_model,
                 "tier2_model": config.tier2_model,
+                "tier1_api_mode": "chat_completions",
+                "tier2_api_mode": "chat_completions",
                 "tier1_reasoning_effort": config.tier1_reasoning_effort,
                 "tier2_reasoning_effort": config.tier2_reasoning_effort,
-                "tier1_request_overrides": tier1_request_overrides,
-                "tier2_request_overrides": tier2_request_overrides,
+                "tier1_request_overrides": provenance.normalize_request_overrides(
+                    tier1_request_overrides
+                ),
+                "tier2_request_overrides": provenance.normalize_request_overrides(
+                    tier2_request_overrides
+                ),
                 "elapsed_seconds": round(perf_counter() - config_started_at, 6),
                 "tier1_metrics": tier1_metrics.to_dict(),
                 "tier2_metrics": tier2_metrics.to_dict(),

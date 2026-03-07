@@ -248,12 +248,19 @@ def test_classify_error_supports_openai_exception_types(monkeypatch: pytest.Monk
     rate_limit = LLMChatFailoverInvoker.classify_error(FakeRateLimitError("boom"))
     timeout = LLMChatFailoverInvoker.classify_error(FakeTimeoutError("boom"))
     connection = LLMChatFailoverInvoker.classify_error(FakeConnectionError("boom"))
+    status_rate_limit = LLMChatFailoverInvoker.classify_error(FakeStatusError(429))
     http_5xx = LLMChatFailoverInvoker.classify_error(FakeStatusError(503))
+    non_retryable = LLMChatFailoverInvoker.classify_error(FakeStatusError(400))
 
     assert rate_limit.code == LLMInvocationErrorCode.RATE_LIMIT
     assert timeout.code == LLMInvocationErrorCode.TIMEOUT
     assert connection.code == LLMInvocationErrorCode.CONNECTION
+    assert status_rate_limit.code == LLMInvocationErrorCode.RATE_LIMIT
+    assert status_rate_limit.retryable is True
     assert http_5xx.code == LLMInvocationErrorCode.PROVIDER_HTTP_5XX
+    assert non_retryable.code == LLMInvocationErrorCode.NON_RETRYABLE
+    assert LLMChatFailoverInvoker.is_retryable_error(FakeStatusError(503)) is True
+    assert LLMChatFailoverInvoker.is_retryable_error(FakeStatusError(400)) is False
 
 
 def test_classify_error_uses_response_status_when_present() -> None:

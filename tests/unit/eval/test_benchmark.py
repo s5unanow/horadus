@@ -7,6 +7,7 @@ from uuid import UUID
 
 import pytest
 
+from src.core.config import settings
 from src.eval import benchmark as benchmark_module
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage, TrendRelevanceScore
 from src.processing.tier2_classifier import Tier2EventResult, Tier2Usage
@@ -135,8 +136,17 @@ class _FakeTier1Classifier:
         batch_size,
         cost_tracker,
         request_overrides=None,
+        secondary_client=None,
     ) -> None:
-        _ = (session, client, model, batch_size, cost_tracker, request_overrides)
+        _ = (
+            session,
+            client,
+            model,
+            batch_size,
+            cost_tracker,
+            request_overrides,
+            secondary_client,
+        )
 
     async def classify_items(self, items, trends):
         trend_ids = [trend.definition["id"] for trend in trends]
@@ -179,8 +189,9 @@ class _FakeTier2Classifier:
         model,
         cost_tracker,
         request_overrides=None,
+        secondary_client=None,
     ) -> None:
-        _ = (session, client, model, cost_tracker, request_overrides)
+        _ = (session, client, model, cost_tracker, request_overrides, secondary_client)
 
     async def classify_event(self, *, event, trends, context_chunks):
         _ = context_chunks
@@ -533,9 +544,11 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             batch_size,
             cost_tracker,
             request_overrides=None,
+            secondary_client=None,
         ) -> None:
             captured["tier1_batch_size"] = batch_size
             captured["tier1_request_overrides"] = request_overrides
+            captured["tier1_secondary_client"] = secondary_client
             super().__init__(
                 session=session,
                 client=client,
@@ -543,6 +556,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
                 batch_size=batch_size,
                 cost_tracker=cost_tracker,
                 request_overrides=request_overrides,
+                secondary_client=secondary_client,
             )
 
     class _CapturingTier2Classifier(_FakeTier2Classifier):
@@ -554,14 +568,17 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             model,
             cost_tracker,
             request_overrides=None,
+            secondary_client=None,
         ) -> None:
             captured["tier2_request_overrides"] = request_overrides
+            captured["tier2_secondary_client"] = secondary_client
             super().__init__(
                 session=session,
                 client=client,
                 model=model,
                 cost_tracker=cost_tracker,
                 request_overrides=request_overrides,
+                secondary_client=secondary_client,
             )
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _CapturingTier1Classifier)
@@ -593,6 +610,91 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
     assert captured["tier1_batch_size"] == 10
     assert captured["tier1_request_overrides"] == {"service_tier": "flex"}
     assert captured["tier2_request_overrides"] == {"service_tier": "flex"}
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_capture(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+    captured: dict[str, object] = {}
+
+    class _CapturingTier1Classifier(_FakeTier1Classifier):
+        def __init__(
+            self,
+            *,
+            session,
+            client,
+            model,
+            batch_size,
+            cost_tracker,
+            request_overrides=None,
+            secondary_client=None,
+        ) -> None:
+            captured["tier1_secondary_client"] = secondary_client
+            super().__init__(
+                session=session,
+                client=client,
+                model=model,
+                batch_size=batch_size,
+                cost_tracker=cost_tracker,
+                request_overrides=request_overrides,
+                secondary_client=secondary_client,
+            )
+
+    class _CapturingTier2Classifier(_FakeTier2Classifier):
+        def __init__(
+            self,
+            *,
+            session,
+            client,
+            model,
+            cost_tracker,
+            request_overrides=None,
+            secondary_client=None,
+        ) -> None:
+            captured["tier2_secondary_client"] = secondary_client
+            super().__init__(
+                session=session,
+                client=client,
+                model=model,
+                cost_tracker=cost_tracker,
+                request_overrides=request_overrides,
+                secondary_client=secondary_client,
+            )
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _CapturingTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _CapturingTier2Classifier)
+    monkeypatch.setattr(settings, "LLM_TIER1_SECONDARY_MODEL", "gpt-4o-mini")
+    monkeypatch.setattr(settings, "LLM_TIER2_SECONDARY_MODEL", "gpt-4o-mini")
+    monkeypatch.setattr(settings, "LLM_SECONDARY_API_KEY", "dummy-secondary")
+    monkeypatch.setattr(settings, "LLM_SECONDARY_BASE_URL", "https://secondary.example/v1")
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(
+            api_key=api_key,
+            base_url=base_url,
+            chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: kwargs)),
+        ),
+    )
+
+    await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    assert captured["tier1_secondary_client"] is not None
+    assert captured["tier2_secondary_client"] is not None
 
 
 @pytest.mark.asyncio

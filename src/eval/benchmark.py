@@ -253,6 +253,22 @@ def _wrap_client_with_recorder(
     )
 
 
+def _build_benchmark_secondary_client(
+    *,
+    primary_api_key: str,
+    secondary_model: str | None,
+    recorder: _BenchmarkResponseRecorder,
+) -> Any | None:
+    if secondary_model is None:
+        return None
+    secondary_api_key = settings.LLM_SECONDARY_API_KEY or primary_api_key
+    secondary_client = _build_openai_client(
+        api_key=secondary_api_key,
+        base_url=settings.LLM_SECONDARY_BASE_URL or None,
+    )
+    return _wrap_client_with_recorder(client=secondary_client, recorder=recorder)
+
+
 def available_configs() -> dict[str, EvalConfig]:
     """Return default named benchmark configurations."""
     configs = (
@@ -740,6 +756,16 @@ async def run_gold_set_benchmark(
         noop_cost_tracker = _NoopCostTracker()
         tier1_recorder = _BenchmarkResponseRecorder()
         tier2_recorder = _BenchmarkResponseRecorder()
+        tier1_secondary_client = _build_benchmark_secondary_client(
+            primary_api_key=api_key,
+            secondary_model=settings.LLM_TIER1_SECONDARY_MODEL,
+            recorder=tier1_recorder,
+        )
+        tier2_secondary_client = _build_benchmark_secondary_client(
+            primary_api_key=api_key,
+            secondary_model=settings.LLM_TIER2_SECONDARY_MODEL,
+            recorder=tier2_recorder,
+        )
         tier1 = Tier1Classifier(
             session=cast("Any", noop_session),
             client=_wrap_client_with_recorder(client=client, recorder=tier1_recorder),
@@ -747,6 +773,7 @@ async def run_gold_set_benchmark(
             batch_size=tier1_batch_size,
             cost_tracker=cast("Any", noop_cost_tracker),
             request_overrides=request_overrides,
+            secondary_client=tier1_secondary_client,
         )
         tier2 = Tier2Classifier(
             session=cast("Any", noop_session),
@@ -754,6 +781,7 @@ async def run_gold_set_benchmark(
             model=config.tier2_model,
             cost_tracker=cast("Any", noop_cost_tracker),
             request_overrides=request_overrides,
+            secondary_client=tier2_secondary_client,
         )
 
         tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)

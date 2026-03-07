@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import hashlib
 import json
+from base64 import urlsafe_b64encode
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import pytest
 
-from src.core.api_key_manager import APIKeyManager
+import src.core.api_key_manager as api_key_manager_module
+from src.core.api_key_manager import APIKeyManager, APIKeyRecord, get_api_key_manager
 
 pytestmark = pytest.mark.unit
 
@@ -356,3 +358,370 @@ def test_distributed_sliding_window_is_shared_across_manager_instances(tmp_path:
     assert blocked_second is False
     assert retry_second is not None
     assert retry_second > 0
+
+
+def test_constructor_validates_strategy_and_bootstraps_env_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(api_key_manager_module.settings, "API_RATE_LIMIT_STRATEGY", "fixed_window")
+
+    with pytest.raises(ValueError, match="API rate limit strategy must be one of"):
+        _build_manager(rate_limit_strategy="invalid")
+
+    manager = APIKeyManager(
+        auth_enabled=False,
+        legacy_api_key=" legacy-key ",
+        static_api_keys=["static-key"],
+        default_rate_limit_per_minute=3,
+    )
+
+    assert manager.auth_required is True
+    assert len(manager.list_keys()) == 2
+    assert manager.authenticate("legacy-key") is not None
+
+
+def test_auth_required_false_without_keys_and_blank_authentication() -> None:
+    manager = _build_manager(auth_enabled=False)
+
+    assert manager.auth_required is False
+    assert manager.authenticate("   ") is None
+
+
+def test_list_keys_sorted_and_create_key_normalizes_name_and_limit() -> None:
+    manager = _build_manager(rate_limit_per_minute=5)
+    created_one, _raw_one = manager.create_key(name="  ", rate_limit_per_minute=0)
+    created_two, _raw_two = manager.create_key(name="second", rate_limit_per_minute=None)
+
+    listed = manager.list_keys()
+
+    assert listed[0].id == created_one.id
+    assert listed[0].name == "unnamed"
+    assert listed[0].rate_limit_per_minute == 1
+    assert listed[1].id == created_two.id
+    assert listed[1].rate_limit_per_minute == 5
+
+
+def test_revoke_and_rotate_return_falsey_for_missing_or_inactive_keys() -> None:
+    manager = _build_manager()
+    record, _raw = manager.create_key(name="revoke")
+    assert manager.revoke_key("missing") is False
+    assert manager.rotate_key("missing") is None
+    assert manager.revoke_key(record.id) is True
+    assert manager.revoke_key(record.id) is False
+    assert manager.rotate_key(record.id) is None
+
+
+def test_check_rate_limit_returns_false_for_unknown_or_revoked_keys() -> None:
+    manager = _build_manager()
+    record, _raw = manager.create_key(name="revoked")
+    manager.revoke_key(record.id)
+
+    assert manager.check_rate_limit("missing") == (False, None)
+    assert manager.check_rate_limit(record.id) == (False, None)
+
+
+def test_check_rate_limit_falls_back_to_memory_when_distributed_backend_returns_none() -> None:
+    now = [1.0]
+    manager = _build_manager(
+        rate_limit_per_minute=1,
+        rate_limit_backend="auto",
+        rate_limit_strategy="sliding_window",
+        wall_time_fn=lambda: now[0],
+    )
+    record, _raw = manager.create_key(name="fallback")
+    manager._check_rate_limit_distributed = lambda **_: None
+
+    assert manager.check_rate_limit(record.id) == (True, None)
+    assert manager.check_rate_limit(record.id)[0] is False
+
+
+def test_distributed_rate_limit_respects_memory_backend_and_degraded_retry_window(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager = _build_manager(rate_limit_backend="memory")
+    assert manager._check_rate_limit_distributed(key_id="x", per_minute_limit=1, now=1.0) is None
+
+    manager = _build_manager(rate_limit_backend="redis")
+    manager._redis_unavailable_until = 10.0
+    assert manager._check_rate_limit_distributed(key_id="x", per_minute_limit=1, now=5.0) is None
+
+    warnings: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        api_key_manager_module.logger,
+        "warning",
+        lambda event, **kwargs: warnings.append({"event": event, **kwargs}),
+    )
+    manager._check_rate_limit_distributed_fixed_window = lambda **_: (_ for _ in ()).throw(
+        RuntimeError("redis down")
+    )
+
+    assert manager._check_rate_limit_distributed(key_id="x", per_minute_limit=1, now=20.0) is None
+    assert manager._redis_unavailable_until == 50.0
+    assert warnings[0]["event"] == "Rate limit backend degraded to memory"
+
+
+def test_distributed_sliding_window_handles_invalid_redis_result_and_blocked_case() -> None:
+    now = [10.0]
+    redis_client = _FakeRedisClient(now_fn=lambda: now[0])
+    manager = _build_manager(
+        redis_client=redis_client,
+        rate_limit_backend="redis",
+        rate_limit_strategy="sliding_window",
+        wall_time_fn=lambda: now[0],
+    )
+
+    redis_client.eval = lambda *_args, **_kwargs: [0, 1]
+    assert manager._check_rate_limit_distributed_sliding_window(
+        key_id="id",
+        per_minute_limit=1,
+        now=10.0,
+    ) == (False, 1)
+
+    redis_client.eval = lambda *_args, **_kwargs: "bad"
+    with pytest.raises(RuntimeError, match="Invalid Redis sliding-window result"):
+        manager._check_rate_limit_distributed_sliding_window(
+            key_id="id",
+            per_minute_limit=1,
+            now=10.0,
+        )
+
+
+def test_get_redis_client_uses_from_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_client = object()
+    manager = _build_manager(redis_client=None)
+    monkeypatch.setattr(api_key_manager_module.settings, "REDIS_URL", "redis://example")
+
+    def from_url(*_args: object, **_kwargs: object) -> object:
+        return fake_client
+
+    monkeypatch.setattr(api_key_manager_module.redis, "from_url", from_url)
+
+    assert manager._get_redis_client() is fake_client
+    assert manager._get_redis_client() is fake_client
+
+
+def test_add_key_rejects_blank_and_returns_existing_for_duplicates() -> None:
+    manager = _build_manager()
+    with pytest.raises(ValueError, match="API key cannot be blank"):
+        manager._add_key(raw_key="   ", name="bad", source="runtime", rate_limit_per_minute=1)
+
+    first = manager._add_key(
+        raw_key="duplicate-key",
+        name="first",
+        source="runtime",
+        rate_limit_per_minute=1,
+    )
+    duplicate = manager._add_key(
+        raw_key="duplicate-key",
+        name="second",
+        source="runtime",
+        rate_limit_per_minute=5,
+    )
+    first.is_active = False
+    replacement = manager._add_key(
+        raw_key="duplicate-key",
+        name="replacement",
+        source="runtime",
+        rate_limit_per_minute=2,
+    )
+
+    assert duplicate is first
+    assert replacement is not first
+
+
+def test_add_record_preserves_existing_instance() -> None:
+    manager = _build_manager()
+    record = APIKeyRecord(
+        id="id-1",
+        name="name",
+        prefix="prefix",
+        key_hash="hash",
+        hash_version="sha256-v1",
+        is_active=True,
+        rate_limit_per_minute=1,
+        created_at=datetime.now(tz=UTC),
+        last_used_at=None,
+        revoked_at=None,
+        source="persisted",
+    )
+
+    assert manager._add_record(record) is record
+    replacement = APIKeyRecord(
+        id=record.id,
+        name="replacement",
+        prefix=record.prefix,
+        key_hash=record.key_hash,
+        hash_version=record.hash_version,
+        is_active=record.is_active,
+        rate_limit_per_minute=record.rate_limit_per_minute,
+        created_at=record.created_at,
+        last_used_at=record.last_used_at,
+        revoked_at=record.revoked_at,
+        source=record.source,
+    )
+    assert manager._add_record(replacement) is record
+
+
+def test_load_persisted_keys_skips_invalid_rows(tmp_path: Path) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    persist_path.write_text(
+        json.dumps(
+            [
+                "bad-row",
+                {"id": "missing-hash"},
+                {"id": "bad-rate", "key_hash": "hash", "rate_limit_per_minute": "NaN"},
+                {
+                    "id": "good",
+                    "name": "good",
+                    "prefix": "prefix123",
+                    "key_hash": "abc123",
+                    "rate_limit_per_minute": 0,
+                    "created_at": "2026-03-08T12:00:00",
+                    "last_used_at": "2026-03-08T12:01:00+00:00",
+                    "revoked_at": "bad-date",
+                    "source": "runtime",
+                },
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    manager = _build_manager(persist_path=str(persist_path))
+
+    records = manager.list_keys()
+    assert len(records) == 1
+    assert records[0].id == "good"
+    assert records[0].rate_limit_per_minute == 1
+    assert records[0].prefix == "prefix12"
+
+
+def test_load_persisted_keys_ignores_missing_or_invalid_payload(tmp_path: Path) -> None:
+    missing = _build_manager(persist_path=str(tmp_path / "missing.json"))
+    assert missing.list_keys() == []
+
+    invalid_json = tmp_path / "invalid.json"
+    invalid_json.write_text("{", encoding="utf-8")
+    assert _build_manager(persist_path=str(invalid_json)).list_keys() == []
+
+    invalid_list = tmp_path / "invalid-list.json"
+    invalid_list.write_text(json.dumps({"not": "a-list"}), encoding="utf-8")
+    assert _build_manager(persist_path=str(invalid_list)).list_keys() == []
+
+
+def test_save_persisted_keys_ignores_env_records(tmp_path: Path) -> None:
+    persist_path = tmp_path / "keys.json"
+    manager = _build_manager(persist_path=str(persist_path))
+    runtime_record, _raw = manager.create_key(name="runtime")
+    env_record = APIKeyRecord(
+        id="env-id",
+        name="env",
+        prefix="env",
+        key_hash="hash",
+        hash_version="sha256-v1",
+        is_active=True,
+        rate_limit_per_minute=1,
+        created_at=datetime.now(tz=UTC),
+        last_used_at=None,
+        revoked_at=None,
+        source="env",
+    )
+    manager._records_by_id[env_record.id] = env_record
+
+    manager._save_persisted_keys()
+
+    payload = json.loads(persist_path.read_text(encoding="utf-8"))
+    assert [row["id"] for row in payload] == [runtime_record.id]
+
+
+@pytest.mark.parametrize(
+    ("value", "expected_none"),
+    [
+        (None, True),
+        ("not-a-date", True),
+        (123, True),
+    ],
+)
+def test_parse_datetime_handles_invalid_values(value: object, expected_none: bool) -> None:
+    parsed = APIKeyManager._parse_datetime(value)
+    assert (parsed is None) is expected_none
+
+
+def test_parse_datetime_normalizes_strings_and_datetimes() -> None:
+    aware = datetime(2026, 3, 8, 12, 0, tzinfo=UTC)
+    naive_str = "2026-03-08T12:00:00"
+    aware_str = "2026-03-08T12:00:00+00:00"
+
+    assert APIKeyManager._parse_datetime(aware) is aware
+    assert APIKeyManager._parse_datetime(naive_str) == aware
+    assert APIKeyManager._parse_datetime(aware_str) == aware
+
+
+def test_hash_version_helpers_and_hash_roundtrip() -> None:
+    raw_key = "geo_test_key"
+    hashed = APIKeyManager._hash_key(raw_key)
+    sha_hash = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
+
+    assert APIKeyManager._coerce_hash_version(" SCRYPT-V1 ", key_hash=hashed) == "scrypt-v1"
+    assert APIKeyManager._coerce_hash_version(None, key_hash=hashed) == "scrypt-v1"
+    assert APIKeyManager._coerce_hash_version(None, key_hash=sha_hash) == "sha256-v1"
+    assert APIKeyManager._is_scrypt_hash(hashed) is True
+    assert APIKeyManager._verify_key_hash(raw_key, hashed) is True
+    assert APIKeyManager._verify_key_hash(raw_key, sha_hash) is True
+    assert APIKeyManager._verify_key_hash("wrong", sha_hash) is False
+
+
+def test_hash_version_falls_back_for_unknown_value() -> None:
+    raw_key = "geo_test_key"
+    hashed = APIKeyManager._hash_key(raw_key)
+
+    assert APIKeyManager._coerce_hash_version("unknown", key_hash=hashed) == "scrypt-v1"
+
+
+def test_verify_key_hash_rejects_malformed_scrypt_payloads() -> None:
+    raw_key = "geo_test_key"
+    malformed_parts = "scrypt-v1$1$2$3$only-five-parts"
+    digest = urlsafe_b64encode(b"digest").decode("ascii")
+    salt = urlsafe_b64encode(b"salt").decode("ascii")
+    malformed_numbers = f"scrypt-v1$bad$2$3${salt}${digest}"
+
+    assert APIKeyManager._verify_key_hash(raw_key, malformed_parts) is False
+    assert APIKeyManager._verify_key_hash(raw_key, malformed_numbers) is False
+
+
+def test_memory_fixed_window_helper_blocks_when_count_reaches_limit() -> None:
+    manager = _build_manager(rate_limit_backend="memory")
+    manager._fixed_window_counts["key"] = (0, 1)
+
+    assert manager._check_rate_limit_memory_fixed_window(
+        key_id="key",
+        per_minute_limit=1,
+        now=1.0,
+    ) == (False, 59)
+
+
+def test_memory_sliding_window_helper_discards_stale_requests() -> None:
+    manager = _build_manager(rate_limit_backend="memory")
+    manager._request_windows["key"] = api_key_manager_module.deque([-61.0, 0.0])
+
+    assert manager._check_rate_limit_memory_sliding_window(
+        key_id="key",
+        per_minute_limit=2,
+        now=61.0,
+    ) == (True, None)
+    assert list(manager._request_windows["key"]) == [61.0]
+
+
+def test_get_api_key_manager_uses_settings(monkeypatch: pytest.MonkeyPatch) -> None:
+    get_api_key_manager.cache_clear()
+    monkeypatch.setattr(api_key_manager_module.settings, "API_AUTH_ENABLED", True)
+    monkeypatch.setattr(api_key_manager_module.settings, "API_KEY", "legacy")
+    monkeypatch.setattr(api_key_manager_module.settings, "API_KEYS", ["static"])
+    monkeypatch.setattr(api_key_manager_module.settings, "API_RATE_LIMIT_PER_MINUTE", 7)
+    monkeypatch.setattr(api_key_manager_module.settings, "API_KEYS_PERSIST_PATH", None)
+
+    manager_one = get_api_key_manager()
+    manager_two = get_api_key_manager()
+
+    assert manager_one is manager_two
+    assert len(manager_one.list_keys()) == 2
+    get_api_key_manager.cache_clear()

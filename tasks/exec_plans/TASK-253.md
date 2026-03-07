@@ -42,6 +42,7 @@ orchestration, CLI, observability, and worker paths.
 - 2026-03-07: Cover `src/core/tracing.py` with mock-driven tests around tracer-provider bootstrap, shared instrumentation, Celery hook registration, and disabled/unavailable guard paths; remove one impossible postrun branch while preserving behavior. Repo-wide unit coverage moved from 75% to 76% after this slice.
 - 2026-03-07: Close out the thin wrapper long tail by covering `src/core/logging_setup.py` and the `src/cli.py` script entrypoint. Repo-wide unit coverage remains 76% after rounding, but these two files are now at 100% and no longer contribute avoidable misses.
 - 2026-03-07: Sweep the remaining helper/runtime seams before moving into the heavier orchestration/reporting modules; `src/api/middleware/auth.py`, `src/api/middleware/agent_runtime.py`, `src/core/migration_parity.py`, `src/core/source_credibility.py`, `src/core/trend_config_loader.py`, and `src/storage/database.py` are now covered at 100%. Repo-wide unit coverage remains 76% after rounding, with misses now concentrated in larger route, reporting, ingestion, and worker modules.
+- 2026-03-07: Extend low-coverage processing guardrails before tackling the biggest orchestration modules; `src/processing/degraded_llm_tracker.py` is up to 92% and `src/processing/tier2_canary.py` is up to 94% with deterministic tests around Redis persistence, degraded-mode transitions, canary selection, threshold evaluation, and canary run outcomes. Repo-wide unit coverage moved from 76% to 78%.
 
 ## Risks / Foot-guns
 

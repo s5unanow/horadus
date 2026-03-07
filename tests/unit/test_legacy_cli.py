@@ -28,6 +28,19 @@ from src.horadus_cli.result import ExitCode
 
 pytestmark = pytest.mark.unit
 
+_ORIGINAL_HTTP_GET = legacy_module._http_get
+_ORIGINAL_HTTP_GET_JSON = legacy_module._http_get_json
+_ORIGINAL_DOCTOR_CHECK_DATABASE = legacy_module._doctor_check_database
+_ORIGINAL_DOCTOR_CHECK_REDIS = legacy_module._doctor_check_redis
+
+
+@pytest.fixture(autouse=True)
+def reset_legacy_helpers() -> None:
+    legacy_module._http_get = _ORIGINAL_HTTP_GET
+    legacy_module._http_get_json = _ORIGINAL_HTTP_GET_JSON
+    legacy_module._doctor_check_database = _ORIGINAL_DOCTOR_CHECK_DATABASE
+    legacy_module._doctor_check_redis = _ORIGINAL_DOCTOR_CHECK_REDIS
+
 
 def test_parse_iso_datetime_and_embedding_count_helpers() -> None:
     assert legacy_module._parse_iso_datetime(None) is None

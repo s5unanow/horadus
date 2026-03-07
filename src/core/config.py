@@ -765,10 +765,13 @@ class Settings(BaseSettings):
     LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
     LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
     LLM_TIER1_BATCH_SIZE: int = Field(
-        default=10,
+        default=1,
         ge=1,
         le=256,
-        description="Maximum raw items per Tier 1 classification API request",
+        description=(
+            "Maximum raw items per Tier 1 classification API request. "
+            "Default stays at 1 until multi-item batching is re-benchmarked as quality-safe."
+        ),
     )
     LLM_ROUTE_RETRY_ATTEMPTS: int = Field(
         default=2,

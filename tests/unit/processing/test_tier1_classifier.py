@@ -181,6 +181,13 @@ def _build_classifier(
     return classifier, chat, cost_tracker
 
 
+def _build_cost_tracker():
+    return SimpleNamespace(
+        ensure_within_budget=AsyncMock(return_value=None),
+        record_usage=AsyncMock(return_value=None),
+    )
+
+
 def _build_item(title: str) -> RawItem:
     return RawItem(
         id=uuid4(),
@@ -231,6 +238,24 @@ async def test_classify_items_batches_and_tracks_usage(mock_db_session) -> None:
     )
     assert cost_tracker.ensure_within_budget.await_count == 2
     assert cost_tracker.record_usage.await_count == 2
+
+
+def test_classifier_defaults_to_safe_runtime_batch_size(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_TIER1_BATCH_SIZE", 1)
+    chat = FakeChatCompletions(calls=[])
+    client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
+
+    classifier = Tier1Classifier(
+        session=mock_db_session,
+        client=client,
+        model="gpt-4.1-nano",
+        cost_tracker=_build_cost_tracker(),
+    )
+
+    assert classifier.batch_size == 1
 
 
 @pytest.mark.asyncio

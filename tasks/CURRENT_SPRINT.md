@@ -90,7 +90,7 @@
 - `TASK-224` Surface human-blocker urgency in task and triage outputs ✅
 - `TASK-240` Keep `docs-freshness` from dropping dev dependencies ✅
 - `TASK-242` Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
-  - completion note: restored runnable benchmark preflight, generated candidate eval artifacts, did not promote a new baseline because quality remained unacceptable, and queued follow-up fixes `TASK-243`..`TASK-250`.
+  completion note: restored runnable benchmark preflight, generated candidate eval artifacts, did not promote a new baseline because quality remained unacceptable, and queued the follow-up fixes into the active sprint backlog.
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

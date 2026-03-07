@@ -236,10 +236,10 @@ Tasks that have been completed and verified.
 - TASK-224: Surface human-blocker urgency in task and triage outputs ✅
 - TASK-240: Keep `docs-freshness` from dropping dev dependencies ✅
 - TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
-  - Restored runnable benchmark preflight for the current sparse Tier-1 gold set.
-  - Aligned benchmark default config with current runtime model defaults.
-  - Generated candidate benchmark artifacts without promoting a new baseline because quality remained unacceptable.
-  - Queued follow-up fixes `TASK-243`..`TASK-250` into the sprint backlog.
+  Restored runnable benchmark preflight for the current sparse Tier-1 gold set.
+  Aligned benchmark default config with current runtime model defaults.
+  Generated candidate benchmark artifacts without promoting a new baseline because quality remained unacceptable.
+  Queued the identified follow-up fixes into the sprint backlog.
 
 ## Archive
 

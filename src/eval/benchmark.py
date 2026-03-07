@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
@@ -206,6 +207,66 @@ class _NoopCostTracker:
     ) -> None:
         _ = (tier, input_tokens, output_tokens, provider, model)
         return
+
+
+@dataclass(slots=True)
+class _BenchmarkResponseRecorder:
+    last_raw_output: str | None = None
+
+    def reset(self) -> None:
+        self.last_raw_output = None
+
+    def capture_response(self, response: Any) -> None:
+        choices = getattr(response, "choices", None)
+        if not isinstance(choices, list) or not choices:
+            return
+        message = getattr(choices[0], "message", None)
+        raw_content = getattr(message, "content", None)
+        if isinstance(raw_content, str) and raw_content.strip():
+            self.last_raw_output = raw_content
+
+
+class _RecordingChatCompletions:
+    def __init__(self, *, wrapped: Any, recorder: _BenchmarkResponseRecorder) -> None:
+        self._wrapped = wrapped
+        self._recorder = recorder
+
+    async def create(self, **kwargs: Any) -> Any:
+        response = await self._wrapped.create(**kwargs)
+        self._recorder.capture_response(response)
+        return response
+
+
+def _wrap_client_with_recorder(
+    *,
+    client: Any,
+    recorder: _BenchmarkResponseRecorder,
+) -> Any:
+    chat = getattr(client, "chat", None)
+    completions = getattr(chat, "completions", None)
+    if completions is None or not hasattr(completions, "create"):
+        return client
+    return SimpleNamespace(
+        chat=SimpleNamespace(
+            completions=_RecordingChatCompletions(wrapped=completions, recorder=recorder)
+        )
+    )
+
+
+def _build_benchmark_secondary_client(
+    *,
+    primary_api_key: str,
+    secondary_model: str | None,
+    recorder: _BenchmarkResponseRecorder,
+) -> Any | None:
+    if secondary_model is None:
+        return None
+    secondary_api_key = settings.LLM_SECONDARY_API_KEY or primary_api_key
+    secondary_client = _build_openai_client(
+        api_key=secondary_api_key,
+        base_url=settings.LLM_SECONDARY_BASE_URL or None,
+    )
+    return _wrap_client_with_recorder(client=secondary_client, recorder=recorder)
 
 
 def available_configs() -> dict[str, EvalConfig]:
@@ -557,6 +618,80 @@ def _usage_to_dict(
     }
 
 
+def _serialize_tier1_prediction(predicted: Tier1ItemResult) -> dict[str, Any]:
+    return {
+        "max_relevance": predicted.max_relevance,
+        "should_queue_tier2": predicted.should_queue_tier2,
+        "trend_scores": {score.trend_id: score.relevance_score for score in predicted.trend_scores},
+    }
+
+
+def _serialize_tier2_prediction(predicted: Tier2GoldLabel) -> dict[str, Any]:
+    return {
+        "trend_id": predicted.trend_id,
+        "signal_type": predicted.signal_type,
+        "direction": predicted.direction,
+        "severity": predicted.severity,
+        "confidence": predicted.confidence,
+    }
+
+
+def _extract_stage_raw_output(*, recorder: _BenchmarkResponseRecorder, subject: Any) -> str | None:
+    if recorder.last_raw_output:
+        return recorder.last_raw_output
+    raw_output = getattr(subject, "_benchmark_last_raw_output", None)
+    return raw_output if isinstance(raw_output, str) and raw_output.strip() else None
+
+
+def _build_item_result(item: GoldSetItem) -> dict[str, Any]:
+    return {
+        "item_id": item.item_id,
+        "title": item.title,
+        "label_verification": item.label_verification,
+        "expected": {
+            "tier1": {
+                "trend_scores": item.tier1.trend_scores,
+                "max_relevance": item.tier1.max_relevance,
+            },
+            "tier2": (_serialize_tier2_prediction(item.tier2) if item.tier2 is not None else None),
+        },
+        "tier1": None,
+        "tier2": (
+            {"status": "skipped", "reason": "no_tier2_gold_label"} if item.tier2 is None else None
+        ),
+    }
+
+
+def _stage_failure(
+    *,
+    error_category: str,
+    error_message: str,
+    raw_model_output: str | None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "failure",
+        "error_category": error_category,
+        "error_message": error_message,
+    }
+    if raw_model_output is not None:
+        payload["raw_model_output"] = raw_model_output
+    return payload
+
+
+def _stage_success(
+    *,
+    predicted: dict[str, Any],
+    raw_model_output: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": "success",
+        "predicted": predicted,
+    }
+    if raw_model_output is not None:
+        payload["raw_model_output"] = raw_model_output
+    return payload
+
+
 async def run_gold_set_benchmark(
     *,
     gold_set_path: str,
@@ -619,32 +754,54 @@ async def run_gold_set_benchmark(
         client = _build_openai_client(api_key=api_key, base_url=config.base_url)
         noop_session = _NoopSession()
         noop_cost_tracker = _NoopCostTracker()
+        tier1_recorder = _BenchmarkResponseRecorder()
+        tier2_recorder = _BenchmarkResponseRecorder()
+        tier1_secondary_client = _build_benchmark_secondary_client(
+            primary_api_key=api_key,
+            secondary_model=settings.LLM_TIER1_SECONDARY_MODEL,
+            recorder=tier1_recorder,
+        )
+        tier2_secondary_client = _build_benchmark_secondary_client(
+            primary_api_key=api_key,
+            secondary_model=settings.LLM_TIER2_SECONDARY_MODEL,
+            recorder=tier2_recorder,
+        )
         tier1 = Tier1Classifier(
             session=cast("Any", noop_session),
-            client=client,
+            client=_wrap_client_with_recorder(client=client, recorder=tier1_recorder),
             model=config.tier1_model,
             batch_size=tier1_batch_size,
             cost_tracker=cast("Any", noop_cost_tracker),
             request_overrides=request_overrides,
+            secondary_client=tier1_secondary_client,
         )
         tier2 = Tier2Classifier(
             session=cast("Any", noop_session),
-            client=client,
+            client=_wrap_client_with_recorder(client=client, recorder=tier2_recorder),
             model=config.tier2_model,
             cost_tracker=cast("Any", noop_cost_tracker),
             request_overrides=request_overrides,
+            secondary_client=tier2_secondary_client,
         )
 
         tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)
         tier1_usage = Tier1Usage()
+        item_results_by_id = {item.item_id: _build_item_result(item) for item in gold_items}
         for batch_start in range(0, len(gold_items), tier1_batch_size):
             item_batch = gold_items[batch_start : batch_start + tier1_batch_size]
             raw_batch = raw_items[batch_start : batch_start + tier1_batch_size]
+            tier1_recorder.reset()
             try:
                 tier1_results, tier1_call_usage = await tier1.classify_items(raw_batch, trends)
-            except ValueError:
+            except ValueError as exc:
+                raw_output = _extract_stage_raw_output(recorder=tier1_recorder, subject=tier1)
                 for item in item_batch:
                     tier1_metrics.record_failure(gold=item)
+                    item_results_by_id[item.item_id]["tier1"] = _stage_failure(
+                        error_category=type(exc).__name__,
+                        error_message=str(exc),
+                        raw_model_output=raw_output,
+                    )
                 continue
 
             tier1_usage.prompt_tokens += tier1_call_usage.prompt_tokens
@@ -657,9 +814,24 @@ async def run_gold_set_benchmark(
                 prediction = predictions_by_item.get(_item_uuid(item.item_id))
                 if prediction is None:
                     tier1_metrics.record_failure(gold=item)
+                    item_results_by_id[item.item_id]["tier1"] = _stage_failure(
+                        error_category="MissingPrediction",
+                        error_message="Tier 1 benchmark received no prediction for input item",
+                        raw_model_output=_extract_stage_raw_output(
+                            recorder=tier1_recorder,
+                            subject=tier1,
+                        ),
+                    )
                     continue
 
                 tier1_metrics.record(gold=item, predicted=prediction)
+                item_results_by_id[item.item_id]["tier1"] = _stage_success(
+                    predicted=_serialize_tier1_prediction(prediction),
+                    raw_model_output=_extract_stage_raw_output(
+                        recorder=tier1_recorder,
+                        subject=tier1,
+                    ),
+                )
 
         tier2_metrics = _Tier2Metrics()
         tier2_usage = Tier2Usage()
@@ -668,14 +840,23 @@ async def run_gold_set_benchmark(
                 continue
 
             event = _build_event(item)
+            tier2_recorder.reset()
             try:
                 _, tier2_call_usage = await tier2.classify_event(
                     event=event,
                     trends=trends,
                     context_chunks=[f"{item.title}\n\n{item.content}"],
                 )
-            except ValueError:
+            except ValueError as exc:
                 tier2_metrics.record(expected=item.tier2, predicted=None)
+                item_results_by_id[item.item_id]["tier2"] = _stage_failure(
+                    error_category=type(exc).__name__,
+                    error_message=str(exc),
+                    raw_model_output=_extract_stage_raw_output(
+                        recorder=tier2_recorder,
+                        subject=tier2,
+                    ),
+                )
                 continue
             tier2_usage.prompt_tokens += tier2_call_usage.prompt_tokens
             tier2_usage.completion_tokens += tier2_call_usage.completion_tokens
@@ -684,6 +865,23 @@ async def run_gold_set_benchmark(
 
             tier2_prediction = _extract_first_impact(event)
             tier2_metrics.record(expected=item.tier2, predicted=tier2_prediction)
+            if tier2_prediction is None:
+                item_results_by_id[item.item_id]["tier2"] = _stage_failure(
+                    error_category="MissingPrediction",
+                    error_message="Tier 2 benchmark received no trend impact prediction",
+                    raw_model_output=_extract_stage_raw_output(
+                        recorder=tier2_recorder,
+                        subject=tier2,
+                    ),
+                )
+            else:
+                item_results_by_id[item.item_id]["tier2"] = _stage_success(
+                    predicted=_serialize_tier2_prediction(tier2_prediction),
+                    raw_model_output=_extract_stage_raw_output(
+                        recorder=tier2_recorder,
+                        subject=tier2,
+                    ),
+                )
 
         tier2_usage.estimated_cost_usd = round(tier2_usage.estimated_cost_usd, 8)
         run_payload["configs"].append(
@@ -699,6 +897,7 @@ async def run_gold_set_benchmark(
                     tier2_usage=tier2_usage,
                     items_total=len(gold_items),
                 ),
+                "item_results": [item_results_by_id[item.item_id] for item in gold_items],
             }
         )
 

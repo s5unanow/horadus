@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-242`.
+- Next available task IDs start at `TASK-251`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4361,6 +4361,179 @@ top-level values, so `horadus --format json ...` can emit text and
 - [ ] Top-level `--dry-run` is honored consistently for side-effecting task commands such as `tasks start`
 - [ ] Leaf-position flags continue to work for backward compatibility
 - [ ] Add regression coverage for root-vs-leaf flag precedence so accidental branch creation or format fallback cannot recur
+
+---
+
+### TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Restore a runnable prompt/model evaluation path against `ai/eval/gold_set.jsonl`
+and capture the concrete quality blockers preventing prompt/model promotion.
+
+**Files**: `src/eval/benchmark.py`, `docs/PROMPT_EVAL_POLICY.md`, `ai/eval/results/`, `ai/eval/baselines/`, `tasks/`
+
+**Acceptance Criteria**:
+- [ ] Benchmark path no longer fails on the current gold-set Tier-1 sparse-label structure when run in the documented benchmark mode
+- [ ] Benchmark default/current config aligns with runtime accepted model defaults (including Tier-2 model generation)
+- [ ] Prompt/model evaluation docs reflect the runnable workflow and current gold-set state
+- [ ] Generate at least one benchmark artifact for the current accepted configuration under `ai/eval/results/`
+- [ ] Do not promote a new accepted baseline when candidate quality is unacceptable
+- [ ] Capture identified follow-up fixes as backlog tasks and queue them into the current sprint
+
+---
+
+### TASK-243: Stabilize Tier-1 Routing Quality Under Eval and Runtime Load
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+The current eval artifacts show `gpt-4.1-nano` is materially less reliable when
+Tier-1 scores multiple items per request. Isolate whether batching itself is the
+quality cliff, then keep Tier-1 on the highest-throughput mode that still
+preserves routing accuracy.
+
+**Files**: `src/eval/benchmark.py`, `src/processing/tier1_classifier.py`, `src/core/config.py`, `tests/unit/eval/test_benchmark.py`, `tests/unit/processing/test_tier1_classifier.py`, `docs/`
+
+**Acceptance Criteria**:
+- [ ] Reproduce and document Tier-1 quality differences between realtime (`batch_size=1`) and batched evaluation modes
+- [ ] Keep benchmark/runtime on a safe Tier-1 batch policy by default (or fail closed when batch mode is not quality-safe)
+- [ ] Add regression coverage for the chosen batching policy in benchmark and/or classifier tests
+- [ ] Document operator guidance for when Tier-1 batching may be re-enabled
+
+---
+
+### TASK-244: Persist Per-Item Benchmark Failure Diagnostics
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Current benchmark artifacts report aggregate metrics only, which makes prompt
+and model debugging too slow. Persist enough per-item detail to distinguish JSON
+shape failures, alignment failures, and wrong-but-parseable predictions.
+
+**Files**: `src/eval/benchmark.py`, `tests/unit/eval/test_benchmark.py`, `docs/PROMPT_EVAL_POLICY.md`, `ai/eval/results/`
+
+**Acceptance Criteria**:
+- [ ] Benchmark artifacts include per-item stage outcomes for Tier-1 and Tier-2
+- [ ] Failures capture item id, stage, exception category/message, and raw model output where available
+- [ ] Successful rows capture predicted trend/signal summaries sufficient for debugging without replaying the model
+- [ ] Add unit coverage for artifact shape and failure-capture behavior
+
+---
+
+### TASK-245: Add Explicit Tier-1 Scoring Rubric and Calibration Examples
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Tier-1 currently asks for `0..10` relevance scores without enough anchor points
+for consistent routing. Add a rubric and a small set of targeted examples tied
+to known false-positive and under-scoring cases.
+
+**Files**: `ai/prompts/tier1_filter.md`, `ai/eval/gold_set.jsonl`, `docs/PROMPT_EVAL_POLICY.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Prompt defines score bands with clear routing semantics around the runtime threshold
+- [ ] Prompt includes targeted examples for current-event positives vs background/fiction/historical negatives
+- [ ] Benchmark or regression tests cover the intended score-band behavior on representative gold-set items
+- [ ] Prompt update is evaluated against the gold set before promotion
+
+---
+
+### TASK-246: Enrich Tier-2 Signal Payload Beyond Keyword Bags
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Tier-2 currently receives signal keys, direction, and keywords only. Add richer
+indicator metadata so the classifier can distinguish nearby signal types
+(`military_movement` vs `military_incident`, etc.) without relying on bare
+keyword overlap.
+
+**Files**: `config/trends/*.yaml`, `src/processing/tier2_classifier.py`, `ai/prompts/tier2_classify.md`, `tests/unit/processing/test_tier2_classifier.py`, `docs/`
+
+**Acceptance Criteria**:
+- [ ] Trend payload passed to Tier-2 includes short human-readable indicator descriptions in addition to keywords
+- [ ] Prompt explicitly instructs the model to choose the most specific supported signal type or abstain
+- [ ] Add regression coverage for at least one ambiguous signal-family pair
+- [ ] Benchmark notes capture whether enriched metadata improves Tier-2 signal-type accuracy
+
+---
+
+### TASK-247: Evaluate GPT-5 Reasoning Models for Tier-1/Tier-2
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Evaluate whether moving Tier-1/Tier-2 from the current `gpt-4.1-*` defaults to
+`gpt-5-nano` / `gpt-5-mini` is justified for this repo, including whether
+reasoning-effort controls and the Responses API are required to realize the
+benefit safely.
+
+**Files**: `src/eval/benchmark.py`, `src/processing/llm_invocation_adapter.py`, `src/processing/llm_policy.py`, `docs/RESPONSES_API_MIGRATION.md`, `docs/PROMPT_EVAL_POLICY.md`, `docs/adr/002-llm-provider.md`, `ai/eval/results/`
+
+**Acceptance Criteria**:
+- [ ] Compare at least these configs on a shared human-verified gold-set slice: current baseline, `gpt-5-nano` Tier-1 candidate, `gpt-5-mini` Tier-2 candidate
+- [ ] Evaluate `reasoning.effort` settings appropriate to each stage rather than assuming `medium` is best
+- [ ] Document latency/cost/quality trade-offs and whether GPT-5 requires Responses API migration for structured-output parity in this repo
+- [ ] Make a concrete recommendation: stay on `gpt-4.1-*`, switch Tier-2 only, or switch both tiers, with rollback criteria
+
+---
+
+### TASK-248: Evaluate `gpt-5-nano` with Minimal Reasoning for Tier-1
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Evaluate whether Tier-1 should move from `gpt-4.1-nano` to `gpt-5-nano`
+using the lowest practical reasoning setting for high-volume relevance scoring.
+Focus on routing quality, output-contract reliability, latency, and cost rather
+than benchmark-table assumptions alone.
+
+**Files**: `src/eval/benchmark.py`, `src/processing/llm_policy.py`, `src/processing/tier1_classifier.py`, `docs/PROMPT_EVAL_POLICY.md`, `docs/adr/002-llm-provider.md`, `ai/eval/results/`
+
+**Acceptance Criteria**:
+- [ ] Add an evaluation config for `gpt-5-nano` Tier-1 against the current Tier-2 baseline
+- [ ] Compare at least `minimal` and `low` reasoning settings for Tier-1 on the same human-verified gold-set slice
+- [ ] Measure not just score accuracy but also Tier-1 failure rate, queue accuracy, latency, and estimated cost per item
+- [ ] Document whether `minimal` reasoning materially harms schema adherence or trend-score completeness
+- [ ] Make a concrete recommendation: keep `gpt-4.1-nano`, switch to `gpt-5-nano` `minimal`, or switch to `gpt-5-nano` `low`
+
+---
+
+### TASK-249: Add First-Class Reasoning-Effort Controls for LLM Routes
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Tier-1/Tier-2 evaluation of GPT-5 reasoning models needs a clean way to set and
+observe reasoning-effort controls per route. Add first-class plumbing so
+reasoning settings are configurable, testable, and visible in evaluation
+artifacts rather than hidden in ad hoc request overrides.
+
+**Files**: `src/processing/llm_invocation_adapter.py`, `src/processing/llm_policy.py`, `src/processing/llm_failover.py`, `src/core/config.py`, `src/eval/benchmark.py`, `tests/unit/processing/`, `tests/unit/eval/`, `docs/ENVIRONMENT.md`, `docs/RESPONSES_API_MIGRATION.md`
+
+**Acceptance Criteria**:
+- [ ] Add explicit per-route reasoning-effort configuration for benchmark and runtime paths where provider/model supports it
+- [ ] Keep unsupported models/routes safe by omitting unsupported reasoning parameters rather than failing unexpectedly
+- [ ] Surface the active reasoning setting in benchmark artifacts and relevant logs/telemetry
+- [ ] Add unit coverage for reasoning-setting propagation and unsupported-route fallback behavior
+- [ ] Document how reasoning-effort interacts with current chat-completions vs Responses API routing in this repo
+
+---
+
+### TASK-250: Make Eval Artifacts Strictly Reproducible and Traceable
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Benchmark and audit artifacts should be trustworthy release evidence without
+committing every exploratory run. Add enough provenance metadata to reproduce an
+accepted eval run exactly, while keeping the repo-managed workflow limited to
+promoted baselines and intentional milestone artifacts.
+
+**Files**: `src/eval/benchmark.py`, `src/eval/audit.py`, `docs/PROMPT_EVAL_POLICY.md`, `ai/eval/README.md`, `ai/eval/baselines/README.md`, `tests/unit/eval/`
+
+**Acceptance Criteria**:
+- [ ] Benchmark artifacts include source-control provenance (`git` commit SHA, dirty/clean worktree flag when available)
+- [ ] Benchmark artifacts include prompt provenance sufficient to detect prompt drift (for example prompt file paths + content hashes)
+- [ ] Benchmark artifacts include invocation provenance: API mode, reasoning setting, dispatch mode, priority mode, and normalized request overrides
+- [ ] Benchmark artifacts continue to include dataset provenance and configuration scope, and tests verify the full artifact contract
+- [ ] Docs explicitly define which eval artifacts stay ignored vs which promoted artifacts belong in git
+- [ ] Keep the process manageable: default exploratory outputs remain untracked, while accepted baselines/milestone artifacts follow one documented promotion path
 
 ---
 

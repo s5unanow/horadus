@@ -17,11 +17,7 @@ This policy covers:
 
 - Primary dataset: `ai/eval/gold_set.jsonl`
 - True gold rows: `label_verification="human_verified"`
-- Current project status: human verification is still in progress (`TASK-044`)
-
-Until `TASK-044` is complete:
-- Treat benchmark outcomes as provisional.
-- Still run the workflow to catch regressions.
+- Current project status: human verification was completed in `TASK-044`
 
 ## Baseline Source of Truth
 
@@ -60,8 +56,8 @@ Required handling:
 
 3. Run benchmark
 - Preferred (true gold): `uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --require-human-verified`
-- Temporary fallback (until TASK-044): run without `--require-human-verified`, and mark run as provisional.
- - Benchmark now fails fast if gold-set taxonomy mismatches configured trends/indicators.
+- Transitional fallback for broader historical comparison: run without `--require-human-verified`, and mark run as provisional.
+- Benchmark accepts sparse Tier-1 `trend_scores` labels, but still fails fast on unknown trend IDs or unknown Tier-2 signal mappings.
 
 4. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.

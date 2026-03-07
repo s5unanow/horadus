@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-251`.
+- Next available task IDs start at `TASK-258`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4014,7 +4014,7 @@ contexts.
 
 ---
 
-## Phase 13: External Architecture Review Intake (2026-03)
+## Phase 14: External Architecture Review Intake (2026-03)
 
 Backlog items derived from user-provided external architecture evaluation on
 2026-03-06 against current `main`. Recommendations already implemented in the
@@ -4534,6 +4534,155 @@ promoted baselines and intentional milestone artifacts.
 - [ ] Benchmark artifacts continue to include dataset provenance and configuration scope, and tests verify the full artifact contract
 - [ ] Docs explicitly define which eval artifacts stay ignored vs which promoted artifacts belong in git
 - [ ] Keep the process manageable: default exploratory outputs remain untracked, while accepted baselines/milestone artifacts follow one documented promotion path
+
+---
+
+## Phase 15: Agent Workflow + Documentation Discipline Hardening (2026-03)
+
+### TASK-251: Normalize Task Specs Around Explicit Input/Output Contracts
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Current backlog items already have acceptance criteria, but spec quality still
+depends too much on author judgment. Tighten the task/spec template so new work
+is consistently framed in terms of inputs, outputs, non-goals, and acceptance
+criteria that an agent can execute against without inflating scope.
+
+**Files**: `tasks/BACKLOG.md`, `tasks/specs/`, `tasks/exec_plans/TEMPLATE.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/task_commands.py`, `tests/unit/`
+
+**Acceptance Criteria**:
+- [ ] Define a canonical task/spec shape for new implementation work: problem statement, inputs, outputs, non-goals, and acceptance criteria
+- [ ] Add a concrete repo artifact for that shape, such as `tasks/specs/TEMPLATE.md` or one canonical example spec referenced from workflow docs
+- [ ] Update the repo templates or documented examples so future specs follow the same structure by default
+- [ ] Keep the contract lightweight enough for small tasks while still being explicit for complex tasks
+- [ ] Surface the structure in task-context tooling or docs so agents see it without reading the full backlog
+
+---
+
+### TASK-252: Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+The repo already has a fast local iteration gate in `make agent-check`. Preserve
+that fast path and add a separate canonical post-task local gate so agents have
+one command for “done with this task locally” checks without blurring the
+current fast/full split.
+
+**Files**: `Makefile`, `scripts/run_with_backpressure.sh`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/task_commands.py`, `tests/unit/scripts/`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Keep `make agent-check` positioned as the fast local iteration gate
+- [ ] Add a separate canonical post-task local gate command (for example `make local-gate` or `make task-gate`)
+- [ ] The new gate runs the intended post-task checks in one documented sequence without replacing the fast gate
+- [ ] `horadus tasks context-pack` suggested validation commands are updated to reflect the new canonical post-task gate rather than the old validation flow
+- [ ] Output remains backpressure-friendly and clearly identifies which sub-step failed
+- [ ] Docs explain when to use the fast gate versus the new post-task gate
+
+---
+
+### TASK-253: Raise Measured Runtime Coverage to 100% with Behavior-Focused Tests
+**Priority**: P1 (High)
+**Estimate**: 2-5 days
+
+Coverage is measured today but not enforced, and meaningful runtime paths still
+remain untested. Make full measured coverage a deliberate repo goal: raise the
+configured `src/` surface to 100% with behavior-focused tests that exercise real
+branches, failures, invariants, and operator-relevant use cases rather than
+low-signal snapshots or implementation-trivia assertions.
+
+**Files**: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`, `docs/AGENT_RUNBOOK.md`, `PROJECT_STATUS.md`, `src/cli.py`, `src/horadus_cli/`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] The configured coverage target for measured runtime code reaches 100% with no uncovered lines or partial branches in the final report for `src/` after the repo’s intentional omit rules
+- [ ] New tests cover real behavior, decision branches, boundary cases, error handling, and recovery paths rather than relying on broad snapshot-only assertions
+- [ ] Coverage gaps in critical orchestration and runtime paths are closed first, including currently weak areas in API startup/deps, workers, `horadus` CLI entrypoints and task flows, tracing/observability, eval tooling, and ingestion/processing edge cases
+- [ ] Integration tests needed for realistic branch coverage run against a safe, explicit test database configuration rather than depending on unsafe local overrides
+- [ ] The resulting test suite stays readable and maintainable: duplicated fixtures/helpers are consolidated where useful and unnecessary test noise is avoided
+- [ ] Any coverage exclusions added or retained are explicitly justified in repo docs or config comments rather than used to “game” the 100% target
+
+---
+
+### TASK-254: Refine and Unify Agent-Facing Context Entry Points
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 hours
+
+Agents benefit from a short routing document, but a second full-project
+`README_AI.md` would duplicate existing truth in `AGENTS.md`, architecture docs,
+runtime code, and existing runbook/context-pack entry points. Refine those
+entrypoints into a more coherent agent-facing navigation layer without creating
+another canonical project summary to keep in sync.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/task_commands.py`, `scripts/check_docs_freshness.py`, `src/core/docs_freshness.py`, `tests/unit/core/test_docs_freshness.py`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Refine or unify the existing agent-facing entrypoints (`AGENTS.md`, runbook, context-pack guidance) into a clearer navigation path
+- [ ] Define one short agent-facing entrypoint/index that links to the current runtime, sprint, architecture, data model, and workflow sources of truth
+- [ ] Explicitly state that runtime code/tests remain authoritative over the agent-facing index
+- [ ] Avoid duplicating detailed architecture, schema, or ops content that already lives elsewhere
+- [ ] `horadus tasks context-pack` remains aligned with the unified agent-facing navigation rather than pointing to stale or divergent workflow guidance
+- [ ] Add or extend drift checks only if needed to keep the index’s core pointers accurate
+
+---
+
+### TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces
+**Priority**: P2 (Medium)
+**Estimate**: 3-5 hours
+
+Detailed code explanations are valuable in complex domain logic, but blanket
+“document every function exhaustively” rules would create noise and stale prose.
+Add an automated docstring policy for the parts of the codebase where it
+actually improves agent and human comprehension.
+
+**Files**: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`, `src/core/`, `src/processing/`, `src/workers/`, `docs/AGENT_RUNBOOK.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Define a scoped docstring policy covering module docs, public APIs, and complex algorithms/invariants in selected high-value paths
+- [ ] Add an automated check for that scoped policy in local and/or CI quality gates
+- [ ] Avoid forcing exhaustive comments for trivial private helpers where names and types are already sufficient
+- [ ] Document when to prefer docstrings versus short inline comments versus no extra prose
+
+---
+
+### TASK-256: Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+The repo already expects tests and docs updates, but the completion contract is
+still partly social. Make the “task is done” rules more explicit in tooling so
+agents reliably add tests, rerun local gates, and update docs when behavior or
+workflow changes.
+
+**Files**: `AGENTS.md`, `Makefile`, `scripts/finish_task_pr.sh`, `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `tests/unit/scripts/`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Task-finish guidance or tooling explicitly requires relevant tests for code changes unless a documented N/A condition applies
+- [ ] Task-finish guidance or tooling explicitly requires rerunning the canonical post-task local gate before merge
+- [ ] Task-finish guidance or tooling explicitly requires the local integration gate where the task touches integration-covered paths or push/PR workflow requires it
+- [ ] Task-finish guidance or tooling calls out documentation updates when behavior, workflow, or operator-facing contracts changed
+- [ ] `horadus tasks context-pack` suggested validation commands stay aligned with the effective completion contract when that contract changes
+- [ ] The resulting contract is visible in agent-facing workflow docs, not just implicit in scattered instructions
+
+---
+
+### TASK-257: Fail Pre-Commit and CI When Coverage Drops Below 100%
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Once the repo has actually reached full measured coverage, make that standard
+non-optional. Wire the coverage gate into local workflow automation and CI so
+coverage regressions fail immediately and developers do not have to remember a
+separate manual check.
+
+**Files**: `pyproject.toml`, `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `src/cli.py`, `src/horadus_cli/`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] The canonical local coverage command enforces a hard 100% fail-under threshold
+- [ ] The repo-managed pre-commit workflow fails when measured coverage drops below 100%
+- [ ] CI fails on the same threshold using the same or stricter coverage invocation so local and remote behavior do not diverge
+- [ ] The failing output identifies missing files/lines/branches clearly enough for quick remediation
+- [ ] Any operator-facing gate commands or docs stay aligned with the existing `horadus` CLI and runbook entry points rather than introducing a divergent parallel workflow
+- [ ] Docs explain when the full coverage gate runs, how to run it locally, and how to debug failures
+- [ ] `TASK-253` is completed first or otherwise the hard gate is introduced in the same change that brings measured coverage to 100%
 
 ---
 

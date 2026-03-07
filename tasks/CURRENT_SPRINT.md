@@ -25,6 +25,15 @@
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
+- Newly queued from 2026-03-07 workflow/coverage hardening intake
+  (execution priority: `TASK-253` first, then `TASK-257`; one task per branch/PR):
+  - `TASK-251` Normalize Task Specs Around Explicit Input/Output Contracts
+  - `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
+  - `TASK-253` Raise Measured Runtime Coverage to 100% with Behavior-Focused Tests
+  - `TASK-254` Refine and Unify Agent-Facing Context Entry Points
+  - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
+  - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
+  - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

@@ -33,6 +33,7 @@ Tier-1 and Tier-2 stage outcomes, not just aggregate metrics.
 ## Decisions (Timestamped)
 
 - 2026-03-07: Keep per-item diagnostics local to benchmark artifacts instead of changing runtime classifier return types.
+- 2026-03-07: Wrap both primary and configured secondary benchmark clients so failover responses still contribute raw-output diagnostics.
 
 ## Risks / Foot-guns
 

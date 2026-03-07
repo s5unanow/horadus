@@ -6,6 +6,7 @@ import json
 import os
 import runpy
 import subprocess
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -16,6 +17,7 @@ import src.horadus_cli.app as cli_app_module
 import src.horadus_cli.result as result_module
 import src.horadus_cli.task_commands as task_commands_module
 import src.horadus_cli.task_repo as task_repo_module
+import src.horadus_cli.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 
@@ -699,6 +701,57 @@ def test_parse_human_blockers_can_filter_to_active_task_ids(
     assert [blocker.task_id for blocker in blockers] == ["TASK-189"]
 
 
+def test_task_repo_helper_functions_cover_validation_edges(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text("# Current Sprint\n", encoding="utf-8")
+
+    assert task_repo_module.normalize_task_id("253") == "TASK-253"
+    assert task_repo_module.slugify_name(" Coverage Plan ") == "coverage-plan"
+    with pytest.raises(ValueError, match="Invalid branch suffix"):
+        task_repo_module.slugify_name("   ")
+    with pytest.raises(ValueError, match="Unable to locate Active Tasks"):
+        task_repo_module.active_section_text(sprint_path)
+    assert task_repo_module.human_blocker_section_text(sprint_path) == ""
+
+    urgency = task_repo_module.blocker_urgency(
+        last_touched="bad-date",
+        next_action="2026-03-06",
+        escalate_after_days=0,
+        as_of=task_repo_module.date(2026, 3, 6),
+    )
+    assert urgency.state == "due_today"
+    assert urgency.days_since_last_touched is None
+
+
+def test_parse_human_blockers_skips_malformed_rows(tmp_path: Path) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-253` Coverage task",
+                "",
+                "## Human Blocker Metadata",
+                "- malformed",
+                "- TASK-253 | owner=human | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=bad",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    blockers = task_repo_module.parse_human_blockers(sprint_path)
+
+    assert len(blockers) == 1
+    assert blockers[0].task_id == "TASK-253"
+    assert blockers[0].escalate_after_days == 0
+
+
 def test_main_tasks_list_active_json_includes_blocker_urgency(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -988,6 +1041,16 @@ def test_json_default_rejects_unknown_types() -> None:
 
 def test_emit_result_returns_plain_int_unchanged() -> None:
     assert result_module.emit_result(7, "json") == 7
+
+
+def test_emit_result_json_omits_optional_fields(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    exit_code = result_module.emit_result(result_module.CommandResult(), "json")
+
+    payload = json.loads(capsys.readouterr().out)
+    assert exit_code == 0
+    assert payload == {"exit_code": 0, "status": "ok"}
 
 
 def test_emit_result_prints_text_lines_and_errors(
@@ -1399,6 +1462,33 @@ def test_eligibility_data_succeeds_for_active_non_human_task(
     assert lines == ["Agent task eligibility passed: TASK-253"]
 
 
+def test_eligibility_data_propagates_preflight_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Active Tasks\n- `TASK-253` Coverage\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+    monkeypatch.delenv("TASK_ELIGIBILITY_PREFLIGHT_CMD", raising=False)
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (
+            task_commands_module.ExitCode.VALIDATION_ERROR,
+            {"reason": "dirty"},
+            ["preflight failed"],
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["preflight"] == {"reason": "dirty"}
+    assert lines[-1] == "Task sequencing preflight failed for TASK-253."
+
+
 def test_start_task_data_rejects_existing_local_branch(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         task_commands_module,
@@ -1418,6 +1508,26 @@ def test_start_task_data_rejects_existing_local_branch(monkeypatch: pytest.Monke
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert data["branch_name"] == "codex/task-253-coverage-100"
     assert "already exists locally" in lines[0]
+
+
+def test_start_task_data_returns_preflight_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (
+            task_commands_module.ExitCode.VALIDATION_ERROR,
+            {"reason": "dirty"},
+            ["preflight failed"],
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["preflight"] == {"reason": "dirty"}
+    assert lines == ["preflight failed"]
 
 
 def test_start_task_data_rejects_existing_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1523,6 +1633,13 @@ def test_handle_show_returns_not_found_for_unknown_task() -> None:
     assert result.error_lines == ["TASK-999 not found in tasks/BACKLOG.md"]
 
 
+def test_handle_show_rejects_invalid_task_id() -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="bad-task"))
+
+    assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
 def test_handle_show_returns_task_details() -> None:
     result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
 
@@ -1530,6 +1647,19 @@ def test_handle_show_returns_task_details() -> None:
     assert result.lines is not None
     assert result.lines[0].startswith("# TASK-253:")
     assert "Acceptance Criteria:" in result.lines
+
+
+def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
+    record = task_repo_module.task_record("TASK-253")
+    assert record is not None
+    record.spec_paths = ["tasks/specs/253-coverage.md"]
+    monkeypatch.setattr(task_commands_module, "task_record", lambda _task_id: record)
+
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
+
+    assert result.lines is not None
+    assert "Specs:" in result.lines
+    assert "- tasks/specs/253-coverage.md" in result.lines
 
 
 def test_handle_search_reports_no_matches(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1753,3 +1883,84 @@ def test_main_triage_collect_text_highlights_overdue_blockers(
     output = capsys.readouterr().out
     assert "- overdue_human_blockers=3" in output
     assert "- overdue_tasks=TASK-080, TASK-189, TASK-190" in output
+
+
+def test_recent_assessment_paths_skips_invalid_dates_and_honors_cutoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assessment_dir = tmp_path / "artifacts" / "assessments" / "ops" / "daily"
+    assessment_dir.mkdir(parents=True)
+    (assessment_dir / "2026-03-06.md").write_text("ok", encoding="utf-8")
+    (assessment_dir / "2026-02-10.md").write_text("old", encoding="utf-8")
+    (assessment_dir / "invalid.md").write_text("bad", encoding="utf-8")
+
+    class _FakeDatetime:
+        @classmethod
+        def now(cls, _tz=None):
+            return datetime(2026, 3, 7, tzinfo=UTC)
+
+    monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage_commands_module, "datetime", _FakeDatetime)
+
+    paths = triage_commands_module._recent_assessment_paths(lookback_days=7)
+
+    assert paths == ["artifacts/assessments/ops/daily/2026-03-06.md"]
+
+
+def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    assert triage_commands_module._compile_or_pattern([" ", "alpha", "beta?"]) == "alpha|beta\\?"
+    assert triage_commands_module._compile_or_pattern([" ", ""]) is None
+
+    line_hit = task_repo_module.SearchHit(
+        source="tasks/BACKLOG.md",
+        line_number=1,
+        line="TASK-253 hit",
+    )
+    active_task = task_repo_module.ActiveTask(
+        task_id="TASK-253",
+        title="Coverage task",
+        requires_human=False,
+        note=None,
+        raw_line="- `TASK-253` Coverage task",
+    )
+
+    monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage_commands_module, "completed_path", lambda: tmp_path / "COMPLETED.md")
+    monkeypatch.setattr(
+        triage_commands_module,
+        "current_sprint_path",
+        lambda: tmp_path / "CURRENT_SPRINT.md",
+    )
+    monkeypatch.setattr(
+        triage_commands_module,
+        "_recent_assessment_paths",
+        lambda _lookback_days: ["artifacts/assessments/ops/daily/2026-03-06.md"],
+    )
+    monkeypatch.setattr(
+        triage_commands_module,
+        "line_search",
+        lambda _path, _pattern: [line_hit],
+    )
+    monkeypatch.setattr(triage_commands_module, "parse_active_tasks", lambda: [active_task])
+    monkeypatch.setattr(triage_commands_module, "parse_human_blockers", lambda **_kwargs: [])
+
+    result = triage_commands_module.handle_collect(
+        argparse.Namespace(
+            keyword=["agent"],
+            path=["src/core"],
+            proposal_id=["PROPOSAL-1"],
+            lookback_days=14,
+        )
+    )
+
+    assert result.lines is not None
+    assert "- paths=src/core" in result.lines
+    assert "- proposal_ids=PROPOSAL-1" in result.lines
+    assert all("overdue_tasks=" not in line for line in result.lines)
+    assert result.data is not None
+    assert result.data["searches"]["path_hits"][0]["source"] == "tasks/BACKLOG.md"
+    assert result.data["searches"]["proposal_hits"][0]["line"] == "TASK-253 hit"

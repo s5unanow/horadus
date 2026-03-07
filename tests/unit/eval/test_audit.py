@@ -119,3 +119,51 @@ def test_run_gold_set_audit_passes_for_human_verified_diverse_dataset(tmp_path: 
     assert payload["passes_quality_gate"] is True
     assert payload["warnings"] == []
     assert payload["summary"]["label_verification_counts"] == {"human_verified": 4}
+
+
+def test_run_gold_set_audit_warns_on_unknown_labels_and_bounds_max_items(tmp_path: Path) -> None:
+    dataset_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    dataset_path.write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "item_id": "unknown-0",
+                        "title": "Unknown row",
+                        "content": "Unknown content",
+                        "label_verification": "unknown",
+                        "expected": {
+                            "tier1": {"trend_scores": {"eu-russia": 5}, "max_relevance": 5},
+                            "tier2": None,
+                        },
+                    }
+                ),
+                json.dumps(
+                    {
+                        "item_id": "human-0",
+                        "title": "Human row",
+                        "content": "Human content",
+                        "label_verification": "human_verified",
+                        "expected": {
+                            "tier1": {"trend_scores": {"eu-russia": 7}, "max_relevance": 7},
+                            "tier2": None,
+                        },
+                    }
+                ),
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    result = audit_module.run_gold_set_audit(
+        gold_set_path=str(dataset_path),
+        output_dir=str(output_dir),
+        max_items=0,
+    )
+
+    payload = json.loads(result.output_path.read_text(encoding="utf-8"))
+    assert payload["dataset_scope"] == {"max_items": 1}
+    assert payload["items_evaluated"] == 1
+    assert "Rows with unknown label_verification value detected." in payload["warnings"]

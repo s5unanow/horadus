@@ -265,6 +265,12 @@ async def test_run_gold_set_benchmark_writes_results(
         "require_human_verified": False,
         "tier1_label_mode": "sparse_allowed",
     }
+    assert payload["execution_mode"] == {
+        "dispatch_mode": "realtime",
+        "request_priority": "realtime",
+        "tier1_batch_size": 1,
+        "tier1_batch_policy": "safe_single_item_default",
+    }
     assert isinstance(payload["gold_set_fingerprint_sha256"], str)
     assert len(payload["gold_set_fingerprint_sha256"]) == 64
     assert isinstance(payload["gold_set_item_ids_sha256"], str)
@@ -492,7 +498,12 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
     )
 
     payload = json.loads(result_path.read_text(encoding="utf-8"))
-    assert payload["execution_mode"] == {"dispatch_mode": "batch", "request_priority": "flex"}
+    assert payload["execution_mode"] == {
+        "dispatch_mode": "batch",
+        "request_priority": "flex",
+        "tier1_batch_size": 10,
+        "tier1_batch_policy": "diagnostic_multi_item_batch",
+    }
     assert captured["tier1_batch_size"] == 10
     assert captured["tier1_request_overrides"] == {"service_tier": "flex"}
     assert captured["tier2_request_overrides"] == {"service_tier": "flex"}

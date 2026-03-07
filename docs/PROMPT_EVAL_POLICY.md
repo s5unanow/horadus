@@ -58,6 +58,9 @@ Required handling:
 - Preferred (true gold): `uv run --no-sync horadus eval benchmark --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --require-human-verified`
 - Transitional fallback for broader historical comparison: run without `--require-human-verified`, and mark run as provisional.
 - Benchmark accepts sparse Tier-1 `trend_scores` labels, but still fails fast on unknown trend IDs or unknown Tier-2 signal mappings.
+- Accepted safe benchmark mode is realtime dispatch, which forces Tier-1 `batch_size=1` and records `tier1_batch_policy=safe_single_item_default`.
+- `--dispatch-mode batch` is diagnostic-only while Tier-1 multi-item scoring remains unstable on the current baseline models. Those artifacts record `tier1_batch_policy=diagnostic_multi_item_batch`.
+- Do not re-enable multi-item Tier-1 runtime batching by default until a same-slice human-verified benchmark shows no worse failure rate and no worse queue accuracy than realtime dispatch.
 
 4. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.

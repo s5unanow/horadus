@@ -143,7 +143,7 @@ Production auth/secret guardrails:
 | `EMBEDDING_TOKEN_ESTIMATE_CHARS_PER_TOKEN` | `4` | Chars-per-token heuristic used for deterministic embedding token estimation. |
 | `VECTOR_REVALIDATION_CADENCE_DAYS` | `30` | Target days-between ANN strategy revalidation benchmark runs. |
 | `VECTOR_REVALIDATION_DATASET_GROWTH_PCT` | `20` | Trigger revalidation when benchmark dataset/profile grows by this percent. |
-| `LLM_TIER1_BATCH_SIZE` | `10` | Max items per tier-1 call. |
+| `LLM_TIER1_BATCH_SIZE` | `1` | Safe-default max items per Tier-1 call. Values above `1` are experimental until a paired gold-set benchmark shows no routing regression. |
 | `LLM_ROUTE_RETRY_ATTEMPTS` | `2` | Retry attempts per LLM route before failover/final failure. |
 | `LLM_ROUTE_RETRY_BACKOFF_SECONDS` | `0.25` | Base retry delay in seconds (linear by attempt). |
 | `LLM_SEMANTIC_CACHE_ENABLED` | `false` | Enables Redis-backed semantic response cache for Tier-1/Tier-2. |

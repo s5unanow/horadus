@@ -240,6 +240,10 @@ Tasks that have been completed and verified.
   Aligned benchmark default config with current runtime model defaults.
   Generated candidate benchmark artifacts without promoting a new baseline because quality remained unacceptable.
   Queued the identified follow-up fixes into the sprint backlog.
+- TASK-243: Stabilize Tier-1 Routing Quality Under Eval and Runtime Load ✅
+  Changed runtime Tier-1 default batching to single-item requests.
+  Kept benchmark batch mode as an explicit diagnostic path with recorded batch-policy metadata.
+  Captured fresh realtime-vs-batch evidence showing diagnostic batch mode still underperforms realtime on the current 10-item human-verified slice.
 
 ## Archive
 

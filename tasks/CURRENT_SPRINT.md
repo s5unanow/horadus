@@ -25,7 +25,6 @@
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
-  - `TASK-243` Stabilize Tier-1 Routing Quality Under Eval and Runtime Load
   - `TASK-244` Persist Per-Item Benchmark Failure Diagnostics
   - `TASK-245` Add Explicit Tier-1 Scoring Rubric and Calibration Examples
   - `TASK-246` Enrich Tier-2 Signal Payload Beyond Keyword Bags
@@ -91,6 +90,8 @@
 - `TASK-240` Keep `docs-freshness` from dropping dev dependencies ✅
 - `TASK-242` Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
   completion note: restored runnable benchmark preflight, generated candidate eval artifacts, did not promote a new baseline because quality remained unacceptable, and queued the follow-up fixes into the active sprint backlog.
+- `TASK-243` Stabilize Tier-1 Routing Quality Under Eval and Runtime Load ✅
+  completion note: changed runtime Tier-1 safe default to single-item requests, kept benchmark batch mode as explicit diagnostic mode with artifact metadata, and recorded paired realtime vs batch evidence showing batch still underperforms realtime.
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

@@ -29,6 +29,9 @@ DISPATCH_MODE_BATCH = "batch"
 REQUEST_PRIORITY_REALTIME = "realtime"
 REQUEST_PRIORITY_FLEX = "flex"
 _BATCH_DISPATCH_SIZE = 10
+_SAFE_TIER1_BATCH_SIZE = 1
+_TIER1_BATCH_POLICY_SAFE_DEFAULT = "safe_single_item_default"
+_TIER1_BATCH_POLICY_DIAGNOSTIC = "diagnostic_multi_item_batch"
 
 
 @dataclass(slots=True)
@@ -246,6 +249,12 @@ def _request_overrides_for_priority(priority: str) -> dict[str, Any] | None:
     if priority == REQUEST_PRIORITY_FLEX:
         return {"service_tier": "flex"}
     return None
+
+
+def _tier1_batch_settings_for_dispatch(dispatch_mode: str) -> tuple[int, str]:
+    if dispatch_mode == DISPATCH_MODE_REALTIME:
+        return (_SAFE_TIER1_BATCH_SIZE, _TIER1_BATCH_POLICY_SAFE_DEFAULT)
+    return (_BATCH_DISPATCH_SIZE, _TIER1_BATCH_POLICY_DIAGNOSTIC)
 
 
 def load_gold_set(
@@ -571,6 +580,9 @@ async def run_gold_set_benchmark(
     normalized_dispatch_mode = _normalize_dispatch_mode(dispatch_mode)
     normalized_request_priority = _normalize_request_priority(request_priority)
     request_overrides = _request_overrides_for_priority(normalized_request_priority)
+    tier1_batch_size, tier1_batch_policy = _tier1_batch_settings_for_dispatch(
+        normalized_dispatch_mode
+    )
     configs = _resolve_configs(config_names)
     trends = _load_trends_from_config(config_dir=Path(trend_config_dir))
     _assert_gold_set_taxonomy_alignment(items=gold_items, trends=trends)
@@ -595,6 +607,8 @@ async def run_gold_set_benchmark(
         "execution_mode": {
             "dispatch_mode": normalized_dispatch_mode,
             "request_priority": normalized_request_priority,
+            "tier1_batch_size": tier1_batch_size,
+            "tier1_batch_policy": tier1_batch_policy,
         },
         "gold_set_fingerprint_sha256": _gold_set_fingerprint(gold_items),
         "gold_set_item_ids_sha256": _gold_set_item_ids_fingerprint(gold_items),
@@ -605,9 +619,6 @@ async def run_gold_set_benchmark(
         client = _build_openai_client(api_key=api_key, base_url=config.base_url)
         noop_session = _NoopSession()
         noop_cost_tracker = _NoopCostTracker()
-        tier1_batch_size = (
-            1 if normalized_dispatch_mode == DISPATCH_MODE_REALTIME else _BATCH_DISPATCH_SIZE
-        )
         tier1 = Tier1Classifier(
             session=cast("Any", noop_session),
             client=client,

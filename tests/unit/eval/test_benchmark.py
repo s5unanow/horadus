@@ -214,6 +214,9 @@ class _FakeTier2Classifier:
 class _FailingTier1Classifier(_FakeTier1Classifier):
     async def classify_items(self, items, trends):
         if items and "troop movement" in (items[0].title or "").lower():
+            self._benchmark_last_raw_output = json.dumps(
+                {"items": [{"item_id": str(items[0].id), "trend_scores": []}]}
+            )
             msg = "Tier 1 response trend ids mismatch for item"
             raise ValueError(msg)
         return await super().classify_items(items, trends)
@@ -222,8 +225,32 @@ class _FailingTier1Classifier(_FakeTier1Classifier):
 class _FailingTier2Classifier(_FakeTier2Classifier):
     async def classify_event(self, *, event, trends, context_chunks):
         _ = (event, trends, context_chunks)
+        self._benchmark_last_raw_output = json.dumps(
+            {"trend_impacts": [{"trend_id": trends[0].definition["id"]}]}
+        )
         msg = "Tier 2 response duplicated trend id eu-russia"
         raise ValueError(msg)
+
+
+class _MissingTier2PredictionClassifier(_FakeTier2Classifier):
+    async def classify_event(self, *, event, trends, context_chunks):
+        _ = (trends, context_chunks)
+        event.extracted_claims = {}
+        self._benchmark_last_raw_output = json.dumps({"trend_impacts": []})
+        usage = Tier2Usage(
+            prompt_tokens=50,
+            completion_tokens=20,
+            api_calls=1,
+            estimated_cost_usd=0.00002,
+        )
+        return (
+            Tier2EventResult(
+                event_id=event.id,
+                categories_count=0,
+                trend_impacts_count=0,
+            ),
+            usage,
+        )
 
 
 @pytest.mark.asyncio
@@ -279,6 +306,15 @@ async def test_run_gold_set_benchmark_writes_results(
     assert payload["configs"][0]["name"] == "baseline"
     assert payload["configs"][0]["tier1_metrics"]["queue_threshold"] == 5
     assert payload["configs"][0]["tier1_metrics"]["queue_accuracy"] == 1.0
+    item_results = payload["configs"][0]["item_results"]
+    assert len(item_results) == 2
+    assert item_results[0]["item_id"] == "eval-0001"
+    assert item_results[0]["tier1"]["status"] == "success"
+    assert item_results[0]["tier1"]["predicted"]["max_relevance"] == 9
+    assert item_results[0]["tier1"]["predicted"]["trend_scores"]["eu-russia"] == 9
+    assert item_results[0]["tier2"]["status"] == "success"
+    assert item_results[0]["tier2"]["predicted"]["signal_type"] == "military_movement"
+    assert item_results[1]["tier2"] == {"status": "skipped", "reason": "no_tier2_gold_label"}
 
 
 def test_load_gold_set_rejects_invalid_rows(tmp_path: Path) -> None:
@@ -387,6 +423,12 @@ async def test_run_gold_set_benchmark_records_tier1_failures(
     tier1_metrics = payload["configs"][0]["tier1_metrics"]
     assert tier1_metrics["items_total"] == 2
     assert tier1_metrics["failures"] == 1
+    item_results = payload["configs"][0]["item_results"]
+    failed_row = next(row for row in item_results if row["item_id"] == "eval-0001")
+    assert failed_row["tier1"]["status"] == "failure"
+    assert failed_row["tier1"]["error_category"] == "ValueError"
+    assert "trend ids mismatch" in failed_row["tier1"]["error_message"]
+    assert '"trend_scores": []' in failed_row["tier1"]["raw_model_output"]
 
 
 @pytest.mark.asyncio
@@ -423,6 +465,50 @@ async def test_run_gold_set_benchmark_records_tier2_failures(
     assert tier2_metrics["items_total"] == 1
     assert tier2_metrics["failures"] == 1
     assert usage["tier2_api_calls"] == 0
+    item_results = payload["configs"][0]["item_results"]
+    failed_row = next(row for row in item_results if row["item_id"] == "eval-0001")
+    assert failed_row["tier2"]["status"] == "failure"
+    assert failed_row["tier2"]["error_category"] == "ValueError"
+    assert "duplicated trend id" in failed_row["tier2"]["error_message"]
+    assert '"trend_id": "eu-russia"' in failed_row["tier2"]["raw_model_output"]
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_records_missing_tier2_prediction_diagnostics(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _MissingTier2PredictionClassifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    failed_row = next(
+        row for row in payload["configs"][0]["item_results"] if row["item_id"] == "eval-0001"
+    )
+    assert failed_row["tier2"]["status"] == "failure"
+    assert failed_row["tier2"]["error_category"] == "MissingPrediction"
+    assert "no trend impact prediction" in failed_row["tier2"]["error_message"]
+    assert failed_row["tier2"]["raw_model_output"] == '{"trend_impacts": []}'
 
 
 @pytest.mark.asyncio

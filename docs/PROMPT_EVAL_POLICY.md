@@ -61,6 +61,7 @@ Required handling:
 - Accepted safe benchmark mode is realtime dispatch, which forces Tier-1 `batch_size=1` and records `tier1_batch_policy=safe_single_item_default`.
 - `--dispatch-mode batch` is diagnostic-only while Tier-1 multi-item scoring remains unstable on the current baseline models. Those artifacts record `tier1_batch_policy=diagnostic_multi_item_batch`.
 - Do not re-enable multi-item Tier-1 runtime batching by default until a same-slice human-verified benchmark shows no worse failure rate and no worse queue accuracy than realtime dispatch.
+- Benchmark artifacts now include per-item stage diagnostics under each config’s `item_results`, including failure category/message, raw model output when available, and compact predicted summaries for successful rows.
 
 4. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.

@@ -244,6 +244,10 @@ Tasks that have been completed and verified.
   Changed runtime Tier-1 default batching to single-item requests.
   Kept benchmark batch mode as an explicit diagnostic path with recorded batch-policy metadata.
   Captured fresh realtime-vs-batch evidence showing diagnostic batch mode still underperforms realtime on the current 10-item human-verified slice.
+- TASK-244: Persist Per-Item Benchmark Failure Diagnostics ✅
+  Added per-item benchmark artifact results for Tier-1 and Tier-2 under each config.
+  Failure rows now capture stage-specific error category/message plus best-effort raw model output.
+  Successful rows now include compact predicted summaries so operators can debug without replaying the model.
 
 ## Archive
 

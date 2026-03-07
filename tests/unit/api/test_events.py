@@ -70,6 +70,34 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_events_allows_unfiltered_queries(mock_db_session) -> None:
+    event = _build_event()
+    event.categories = None
+    event.extracted_who = None
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [event])
+
+    result = await list_events(
+        lifecycle=None,
+        contradicted=None,
+        category=None,
+        trend_id=None,
+        days=3,
+        limit=5,
+        session=mock_db_session,
+    )
+
+    assert len(result) == 1
+    assert result[0].categories == []
+    assert result[0].extracted_who is None
+    query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
+    where_clause = query_text.split("where", 1)[1]
+    assert "events.lifecycle_status =" not in where_clause
+    assert "events.has_contradictions is" not in where_clause
+    assert "array_position" not in query_text
+    assert "trend_evidence.trend_id" not in query_text
+
+
+@pytest.mark.asyncio
 async def test_get_event_returns_404_when_missing(mock_db_session) -> None:
     mock_db_session.get.return_value = None
 

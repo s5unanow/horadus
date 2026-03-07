@@ -110,7 +110,7 @@ class DriftAlertWebhookNotifier:
             )
             await asyncio.sleep(delay_seconds)
 
-        return False
+        return False  # pragma: no cover - loop returns on success/final failure above
 
     def _backoff_seconds(self, attempt: int) -> float:
         if self.backoff_seconds <= 0:

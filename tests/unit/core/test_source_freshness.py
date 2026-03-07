@@ -6,7 +6,11 @@ from uuid import uuid4
 
 import pytest
 
-from src.core.source_freshness import build_source_freshness_report
+from src.core.source_freshness import (
+    _as_utc,
+    _collector_interval_minutes,
+    build_source_freshness_report,
+)
 from src.storage.models import Source, SourceType
 
 pytestmark = pytest.mark.unit
@@ -31,6 +35,27 @@ def _build_source(
         last_fetched_at=last_fetched_at,
         error_count=0,
     )
+
+
+def test_as_utc_normalizes_naive_and_aware_datetimes() -> None:
+    naive = datetime(2026, 2, 16, 12, 0, tzinfo=UTC).replace(tzinfo=None)
+    aware = datetime(2026, 2, 16, 14, 0, tzinfo=UTC)
+
+    assert _as_utc(naive).tzinfo is UTC
+    assert _as_utc(naive).hour == 12
+    assert _as_utc(aware).tzinfo is UTC
+    assert _as_utc(aware).hour == 14
+
+
+def test_collector_interval_minutes_handles_supported_and_unknown_collectors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("src.core.source_freshness.settings.RSS_COLLECTION_INTERVAL", 0)
+    monkeypatch.setattr("src.core.source_freshness.settings.GDELT_COLLECTION_INTERVAL", 15)
+
+    assert _collector_interval_minutes(SourceType.RSS) == 1
+    assert _collector_interval_minutes(SourceType.GDELT) == 15
+    assert _collector_interval_minutes(SourceType.TELEGRAM) is None
 
 
 @pytest.mark.asyncio
@@ -101,3 +126,40 @@ async def test_build_source_freshness_report_respects_multiplier_override(
     assert default_report.rows[0].stale_after_seconds == 7200
     assert strict_report.rows[0].is_stale is True
     assert strict_report.rows[0].stale_after_seconds == 3600
+
+
+@pytest.mark.asyncio
+async def test_build_source_freshness_report_skips_unknown_collectors_and_missing_ids(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = datetime(2026, 2, 16, 12, 0, tzinfo=UTC).replace(tzinfo=None)
+    valid_source = _build_source(
+        name="RSS Valid",
+        source_type=SourceType.RSS,
+        last_fetched_at=now,
+    )
+    skipped_source = _build_source(
+        name="GDELT Missing ID",
+        source_type=SourceType.GDELT,
+        last_fetched_at=now,
+    )
+    skipped_source.id = None
+    unsupported_source = _build_source(
+        name="Telegram",
+        source_type=SourceType.TELEGRAM,
+        last_fetched_at=now,
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(
+        all=lambda: [unsupported_source, skipped_source, valid_source]
+    )
+    monkeypatch.setattr("src.core.source_freshness.settings.RSS_COLLECTION_INTERVAL", 30)
+    monkeypatch.setattr("src.core.source_freshness.settings.GDELT_COLLECTION_INTERVAL", 45)
+    monkeypatch.setattr("src.core.source_freshness.settings.SOURCE_FRESHNESS_ALERT_MULTIPLIER", 0.5)
+
+    report = await build_source_freshness_report(session=mock_db_session, checked_at=now)
+
+    assert report.checked_at.tzinfo is UTC
+    assert report.stale_multiplier == 1.0
+    assert [row.source_name for row in report.rows] == ["RSS Valid"]
+    assert report.rows[0].age_seconds == 0

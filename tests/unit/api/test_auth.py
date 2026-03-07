@@ -210,6 +210,72 @@ def test_admin_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -> Non
     assert last_log.kwargs["outcome"] == "denied"
 
 
+def test_create_key_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+
+    response = client.post(
+        "/api/v1/auth/keys",
+        headers={"X-API-Key": credential},
+        json={"name": "dashboard", "rate_limit_per_minute": 50},
+    )
+
+    assert response.status_code == 403
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "create_key"
+    assert last_log.kwargs["outcome"] == "denied"
+    assert last_log.kwargs["requested_name"] == "dashboard"
+    assert last_log.kwargs["requested_rate_limit"] == 50
+
+
+def test_revoke_and_rotate_missing_keys_are_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+    headers = {
+        "X-API-Key": credential,
+        "X-Admin-API-Key": "admin-secret",
+    }
+
+    revoked = client.delete("/api/v1/auth/keys/missing-key", headers=headers)
+    rotated = client.post("/api/v1/auth/keys/missing-key/rotate", headers=headers)
+
+    assert revoked.status_code == 404
+    assert rotated.status_code == 404
+    actions = [
+        (call.kwargs["action"], call.kwargs["outcome"]) for call in audit_logger.info.call_args_list
+    ]
+    assert ("revoke_key", "not_found") in actions
+    assert ("rotate_key", "not_found") in actions
+
+
+def test_revoke_and_rotate_denied_attempts_are_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+
+    revoked = client.delete("/api/v1/auth/keys/missing-key", headers={"X-API-Key": credential})
+    rotated = client.post("/api/v1/auth/keys/missing-key/rotate", headers={"X-API-Key": credential})
+
+    assert revoked.status_code == 403
+    assert rotated.status_code == 403
+    actions = [
+        (call.kwargs["action"], call.kwargs["outcome"]) for call in audit_logger.info.call_args_list
+    ]
+    assert ("revoke_key", "denied") in actions
+    assert ("rotate_key", "denied") in actions
+
+
 def test_key_management_rejects_invalid_admin_header_value(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

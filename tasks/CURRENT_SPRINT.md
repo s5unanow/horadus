@@ -24,6 +24,15 @@
   - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
+- Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
+  - `TASK-243` Stabilize Tier-1 Routing Quality Under Eval and Runtime Load
+  - `TASK-244` Persist Per-Item Benchmark Failure Diagnostics
+  - `TASK-245` Add Explicit Tier-1 Scoring Rubric and Calibration Examples
+  - `TASK-246` Enrich Tier-2 Signal Payload Beyond Keyword Bags
+  - `TASK-247` Evaluate GPT-5 Reasoning Models for Tier-1/Tier-2
+  - `TASK-248` Evaluate `gpt-5-nano` with Minimal Reasoning for Tier-1
+  - `TASK-249` Add First-Class Reasoning-Effort Controls for LLM Routes
+  - `TASK-250` Make Eval Artifacts Strictly Reproducible and Traceable
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -80,6 +89,8 @@
 - `TASK-223` Add status filters and compact output to `horadus tasks search` ✅
 - `TASK-224` Surface human-blocker urgency in task and triage outputs ✅
 - `TASK-240` Keep `docs-freshness` from dropping dev dependencies ✅
+- `TASK-242` Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
+  completion note: restored runnable benchmark preflight, generated candidate eval artifacts, did not promote a new baseline because quality remained unacceptable, and queued the follow-up fixes into the active sprint backlog.
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

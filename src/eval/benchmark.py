@@ -205,23 +205,23 @@ class _NoopCostTracker:
         return
 
 
-DEFAULT_CONFIGS: tuple[EvalConfig, EvalConfig] = (
-    EvalConfig(
-        name="baseline",
-        tier1_model="gpt-4.1-nano",
-        tier2_model="gpt-4o-mini",
-    ),
-    EvalConfig(
-        name="alternative",
-        tier1_model="gpt-4o-mini",
-        tier2_model="gpt-4.1-nano",
-    ),
-)
-
-
 def available_configs() -> dict[str, EvalConfig]:
     """Return default named benchmark configurations."""
-    return {config.name: config for config in DEFAULT_CONFIGS}
+    configs = (
+        EvalConfig(
+            name="baseline",
+            tier1_model=settings.LLM_TIER1_MODEL,
+            tier2_model=settings.LLM_TIER2_MODEL,
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            base_url=settings.LLM_PRIMARY_BASE_URL or None,
+        ),
+        EvalConfig(
+            name="alternative",
+            tier1_model="gpt-4o-mini",
+            tier2_model="gpt-4.1-nano",
+        ),
+    )
+    return {config.name: config for config in configs}
 
 
 def _normalize_dispatch_mode(value: str) -> str:
@@ -389,7 +389,7 @@ def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetIte
 
 def _resolve_configs(config_names: list[str] | None) -> list[EvalConfig]:
     if not config_names:
-        return list(DEFAULT_CONFIGS)
+        return list(available_configs().values())
     known = available_configs()
     selected: list[EvalConfig] = []
     for name in config_names:
@@ -428,7 +428,6 @@ def _assert_gold_set_taxonomy_alignment(*, items: list[GoldSetItem], trends: lis
 
     configured_trend_ids = set(indicators_by_trend.keys())
     tier1_unknown_keys: dict[str, list[str]] = {}
-    tier1_missing_keys: dict[str, list[str]] = {}
     tier2_unknown_trend_ids: dict[str, list[str]] = {}
     tier2_unknown_signal_types: dict[str, list[str]] = {}
 
@@ -436,8 +435,6 @@ def _assert_gold_set_taxonomy_alignment(*, items: list[GoldSetItem], trends: lis
         row_trend_keys = set(item.tier1.trend_scores.keys())
         for unknown_key in sorted(row_trend_keys - configured_trend_ids):
             tier1_unknown_keys.setdefault(unknown_key, []).append(item.item_id)
-        for missing_key in sorted(configured_trend_ids - row_trend_keys):
-            tier1_missing_keys.setdefault(missing_key, []).append(item.item_id)
 
         if item.tier2 is None:
             continue
@@ -455,11 +452,6 @@ def _assert_gold_set_taxonomy_alignment(*, items: list[GoldSetItem], trends: lis
         failures.append(
             "Tier-1 trend_scores contains unknown trend_id values: "
             + _format_group_summary(tier1_unknown_keys)
-        )
-    if tier1_missing_keys:
-        failures.append(
-            "Tier-1 benchmark preflight requires exact configured trend_ids; missing keys: "
-            + _format_group_summary(tier1_missing_keys)
         )
     if tier2_unknown_trend_ids:
         failures.append(
@@ -598,6 +590,7 @@ async def run_gold_set_benchmark(
         "dataset_scope": {
             "max_items": bounded_max_items,
             "require_human_verified": require_human_verified,
+            "tier1_label_mode": "sparse_allowed",
         },
         "execution_mode": {
             "dispatch_mode": normalized_dispatch_mode,

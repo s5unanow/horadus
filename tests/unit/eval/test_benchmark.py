@@ -52,6 +52,44 @@ def _write_gold_set(path: Path) -> None:
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
 
+def _write_sparse_gold_set(path: Path) -> None:
+    rows = [
+        {
+            "item_id": "eval-0001",
+            "title": "EU-Russia troop movement update",
+            "content": "Troop deployment near border expanded with artillery support.",
+            "label_verification": "human_verified",
+            "expected": {
+                "tier1": {
+                    "trend_scores": {"eu-russia": 9, "us-china": 2},
+                    "max_relevance": 9,
+                },
+                "tier2": {
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.82,
+                    "confidence": 0.91,
+                },
+            },
+        },
+        {
+            "item_id": "eval-0002",
+            "title": "Market recap and weather",
+            "content": "General market and weather bulletin with no geopolitical signal.",
+            "label_verification": "llm_seeded",
+            "expected": {
+                "tier1": {
+                    "trend_scores": {"eu-russia": 1},
+                    "max_relevance": 1,
+                },
+                "tier2": None,
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+
 def _write_trend_configs(config_dir: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     configs = {
@@ -222,7 +260,11 @@ async def test_run_gold_set_benchmark_writes_results(
     assert payload["trend_config_dir"] == str(trend_config_dir)
     assert payload["require_human_verified"] is False
     assert payload["label_verification_counts"] == {"human_verified": 1, "llm_seeded": 1}
-    assert payload["dataset_scope"] == {"max_items": 2, "require_human_verified": False}
+    assert payload["dataset_scope"] == {
+        "max_items": 2,
+        "require_human_verified": False,
+        "tier1_label_mode": "sparse_allowed",
+    }
     assert isinstance(payload["gold_set_fingerprint_sha256"], str)
     assert len(payload["gold_set_fingerprint_sha256"]) == 64
     assert isinstance(payload["gold_set_item_ids_sha256"], str)
@@ -274,7 +316,11 @@ async def test_run_gold_set_benchmark_filters_human_verified(
     assert payload["items_evaluated"] == 1
     assert payload["require_human_verified"] is True
     assert payload["label_verification_counts"] == {"human_verified": 1}
-    assert payload["dataset_scope"] == {"max_items": 10, "require_human_verified": True}
+    assert payload["dataset_scope"] == {
+        "max_items": 10,
+        "require_human_verified": True,
+        "tier1_label_mode": "sparse_allowed",
+    }
 
 
 def test_load_gold_set_requires_human_verified_rows(tmp_path: Path) -> None:
@@ -492,3 +538,36 @@ async def test_run_gold_set_benchmark_fails_fast_on_taxonomy_mismatch(tmp_path: 
             max_items=2,
             config_names=["baseline"],
         )
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_accepts_sparse_tier1_labels(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_sparse_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    assert payload["items_evaluated"] == 2
+    assert payload["configs"][0]["tier1_metrics"]["failures"] == 0

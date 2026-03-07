@@ -1,14 +1,17 @@
 from __future__ import annotations
 
+import argparse
 import asyncio
 import json
 import os
+import subprocess
 from pathlib import Path
 from uuid import uuid4
 
 import pytest
 
 import src.cli as cli_module
+import src.horadus_cli.result as result_module
 import src.horadus_cli.task_commands as task_commands_module
 import src.horadus_cli.task_repo as task_repo_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
@@ -914,6 +917,734 @@ def test_main_tasks_start_honors_root_dry_run_flag(
     }
     payload = json.loads(capsys.readouterr().out)
     assert payload["data"]["dry_run"] is True
+
+
+def _completed(
+    args: list[str],
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.CompletedProcess(
+        args=args, returncode=returncode, stdout=stdout, stderr=stderr
+    )
+
+
+def test_horadus_app_main_returns_1_without_subcommand(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main([])
+
+    assert result == 1
+    assert "usage:" in capsys.readouterr().out
+
+
+def test_emit_result_serializes_errors_in_json(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    payload = task_commands_module.CommandResult(
+        exit_code=task_commands_module.ExitCode.VALIDATION_ERROR,
+        data={"ok": False},
+        error_lines=["bad input"],
+    )
+
+    result = result_module.emit_result(payload, "json")
+
+    assert result == task_commands_module.ExitCode.VALIDATION_ERROR
+    output = json.loads(capsys.readouterr().out)
+    assert output["status"] == "error"
+    assert output["errors"] == ["bad input"]
+
+
+def test_json_default_serializes_dates_paths_and_dataclasses(tmp_path: Path) -> None:
+    serialized_date = result_module._json_default(task_repo_module.date(2026, 3, 7))
+    serialized_path = result_module._json_default(tmp_path / "artifact.json")
+    serialized_dataclass = result_module._json_default(
+        result_module.CommandResult(lines=["ok"], data={"x": 1})
+    )
+
+    assert serialized_date == "2026-03-07"
+    assert str(tmp_path / "artifact.json") == serialized_path
+    assert serialized_dataclass["lines"] == ["ok"]
+    assert serialized_dataclass["data"] == {"x": 1}
+
+
+def test_json_default_rejects_unknown_types() -> None:
+    with pytest.raises(TypeError):
+        result_module._json_default(object())
+
+
+def test_emit_result_returns_plain_int_unchanged() -> None:
+    assert result_module.emit_result(7, "json") == 7
+
+
+def test_emit_result_prints_text_lines_and_errors(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = result_module.CommandResult(
+        exit_code=result_module.ExitCode.NOT_FOUND,
+        lines=["stdout line"],
+        error_lines=["stderr line"],
+    )
+
+    exit_code = result_module.emit_result(result, "text")
+
+    captured = capsys.readouterr()
+    assert exit_code == result_module.ExitCode.NOT_FOUND
+    assert "stdout line" in captured.out
+    assert "stderr line" in captured.err
+
+
+def test_run_command_and_shell_execute_locally() -> None:
+    command_result = task_commands_module._run_command(["/bin/echo", "hi"])
+    shell_result = task_commands_module._run_shell("printf shell-ok")
+
+    assert command_result.stdout.strip() == "hi"
+    assert shell_result.stdout == "shell-ok"
+
+
+def test_ensure_required_hooks_reports_missing_hooks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    hooks_dir = tmp_path / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    pre_commit = hooks_dir / "pre-commit"
+    pre_commit.write_text("#!/bin/sh\n", encoding="utf-8")
+    pre_commit.chmod(0o755)
+
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    hooks_ok, missing = task_commands_module._ensure_required_hooks()
+
+    assert hooks_ok is False
+    assert missing == ["pre-push", "commit-msg"]
+
+
+def test_open_task_prs_filters_non_task_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "list"],
+            stdout=json.dumps(
+                [
+                    {
+                        "number": 12,
+                        "headRefName": "codex/task-253-coverage-100",
+                        "url": "https://x/12",
+                    },
+                    {"number": 13, "headRefName": "feature/misc", "url": "https://x/13"},
+                ]
+            ),
+        ),
+    )
+
+    ok, payload = task_commands_module._open_task_prs()
+
+    assert ok is True
+    assert payload == ["#12 codex/task-253-coverage-100 https://x/12"]
+
+
+def test_open_task_prs_reports_gh_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["gh", "pr", "list"], returncode=1, stderr="boom"),
+    )
+
+    ok, payload = task_commands_module._open_task_prs()
+
+    assert ok is False
+    assert payload == "boom"
+
+
+def test_task_preflight_data_skips_when_env_override_set(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("SKIP_TASK_SEQUENCE_GUARD", "1")
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data == {"skipped": True}
+    assert "skipped" in lines[0]
+
+
+def test_task_preflight_data_fails_without_gh(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("SKIP_TASK_SEQUENCE_GUARD", raising=False)
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: None)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["missing_command"] == "gh"
+    assert "GitHub CLI" in lines[-1]
+
+
+def test_task_preflight_data_fails_when_required_hooks_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(
+        task_commands_module,
+        "_ensure_required_hooks",
+        lambda: (False, ["pre-commit", "pre-push"]),
+    )
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["missing_hooks"] == ["pre-commit", "pre-push"]
+    assert "pre-commit, pre-push" in lines[-1]
+
+
+def test_task_preflight_data_fails_when_not_on_main(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["git", "rev-parse"], stdout="codex/task-253-coverage-100\n"
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["current_branch"] == "codex/task-253-coverage-100"
+    assert "must start tasks from 'main'" in lines[-1]
+
+
+def test_task_preflight_data_fails_for_dirty_worktree(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=" M tasks/BACKLOG.md\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["working_tree_clean"] is False
+    assert "Working tree must be clean" in lines[-1]
+
+
+def test_task_preflight_data_fails_when_fetch_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"], returncode=1, stderr="fetch failed"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["fetch_error"] == "fetch failed"
+    assert lines[-1] == "fetch failed"
+
+
+def test_task_preflight_data_fails_when_main_is_not_synced(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+            _completed(["git", "rev-parse"], stdout="def\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["local_main_sha"] == "abc"
+    assert data["remote_main_sha"] == "def"
+    assert "not synced to origin/main" in lines[-1]
+
+
+def test_task_preflight_data_fails_when_open_pr_query_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    monkeypatch.setattr(task_commands_module, "_open_task_prs", lambda: (False, "gh failed"))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["open_pr_query_error"] == "gh failed"
+    assert "Unable to query open PRs" in lines[-1]
+
+
+def test_task_preflight_data_reports_open_task_prs(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    monkeypatch.setattr(
+        task_commands_module, "_open_task_prs", lambda: (True, ["#12 codex/task-253-x"])
+    )
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["open_task_prs"] == ["#12 codex/task-253-x"]
+    assert "Open non-merged task PR" in "\n".join(lines)
+
+
+def test_task_preflight_data_passes_when_open_pr_guard_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ALLOW_OPEN_TASK_PRS", "1")
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["working_tree_clean"] is True
+    assert "passed" in lines[0]
+
+
+def test_preflight_result_wraps_preflight_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {"ok": True}, ["passed"]),
+    )
+
+    result = task_commands_module._preflight_result()
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.data == {"ok": True}
+    assert result.lines == ["passed"]
+
+
+def test_eligibility_data_reports_missing_sprint_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", "/tmp/definitely-missing-sprint.md")
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert "Missing sprint file" in lines[0]
+    assert data["sprint_file"].endswith("definitely-missing-sprint.md")
+
+
+def test_eligibility_data_reports_invalid_active_section(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text("# Current Sprint\n", encoding="utf-8")
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["sprint_file"] == str(sprint_path)
+    assert "Unable to locate Active Tasks section" in lines[0]
+
+
+def test_eligibility_data_requires_task_to_be_in_active_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Active Tasks\n- `TASK-252` Something\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["task_id"] == "TASK-253"
+    assert "not listed in Active Tasks" in lines[0]
+
+
+def test_eligibility_data_reports_requires_human_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Active Tasks\n- `TASK-189` Restricted health [REQUIRES_HUMAN]\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-189")
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["requires_human"] is True
+    assert "[REQUIRES_HUMAN]" in lines[0]
+
+
+def test_eligibility_data_respects_preflight_override_failure(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Active Tasks\n- `TASK-253` Coverage\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+    monkeypatch.setenv("TASK_ELIGIBILITY_PREFLIGHT_CMD", "printf fail && exit 1")
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["preflight_cmd"] == "printf fail && exit 1"
+    assert "preflight failed" in lines[0]
+
+
+def test_eligibility_data_succeeds_for_active_non_human_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Active Tasks\n- `TASK-253` Coverage\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+    monkeypatch.delenv("TASK_ELIGIBILITY_PREFLIGHT_CMD", raising=False)
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {"ok": True}, ["passed"]),
+    )
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["requires_human"] is False
+    assert lines == ["Agent task eligibility passed: TASK-253"]
+
+
+def test_start_task_data_rejects_existing_local_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return _completed(args, returncode=0) if "show-ref" in args else _completed(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["branch_name"] == "codex/task-253-coverage-100"
+    assert "already exists locally" in lines[0]
+
+
+def test_start_task_data_rejects_existing_remote_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+    )
+
+    def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "show-ref" in args:
+            return _completed(args, returncode=1)
+        if "ls-remote" in args:
+            return _completed(args, returncode=0)
+        return _completed(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["branch_name"] == "codex/task-253-coverage-100"
+    assert "already exists on origin" in lines[0]
+
+
+def test_start_task_data_dry_run_reports_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return _completed(args, returncode=1)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=True
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["dry_run"] is True
+    assert "would create task branch codex/task-253-coverage-100" in lines[-1]
+
+
+def test_start_task_data_reports_git_switch_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+    )
+
+    def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "show-ref" in args or "ls-remote" in args:
+            return _completed(args, returncode=1)
+        if args[:2] == ["git", "switch"]:
+            return _completed(args, returncode=1, stderr="switch failed")
+        return _completed(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["error"] == "switch failed"
+    assert lines == ["switch failed"]
+
+
+def test_start_task_data_switches_to_new_branch(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+    )
+
+    def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "show-ref" in args or "ls-remote" in args:
+            return _completed(args, returncode=1)
+        if args[:2] == ["git", "switch"]:
+            return _completed(args)
+        return _completed(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["branch_name"] == "codex/task-253-coverage-100"
+    assert "Created task branch: codex/task-253-coverage-100" in lines[-1]
+
+
+def test_handle_show_returns_not_found_for_unknown_task() -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-999"))
+
+    assert result.exit_code == task_commands_module.ExitCode.NOT_FOUND
+    assert result.error_lines == ["TASK-999 not found in tasks/BACKLOG.md"]
+
+
+def test_handle_show_returns_task_details() -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert result.lines[0].startswith("# TASK-253:")
+    assert "Acceptance Criteria:" in result.lines
+
+
+def test_handle_search_reports_no_matches(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module, "search_task_records", lambda *_args, **_kwargs: [])
+
+    result = task_commands_module.handle_search(
+        argparse.Namespace(query=["missing"], status="all", limit=None, include_raw=False)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "(no matches)" in result.lines
+    assert result.data is not None
+    assert result.data["matches"] == []
+
+
+def test_handle_context_pack_rejects_invalid_task_id() -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="bad-task"))
+
+    assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_handle_context_pack_returns_not_found_for_unknown_task() -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-999"))
+
+    assert result.exit_code == task_commands_module.ExitCode.NOT_FOUND
+    assert result.error_lines == ["TASK-999 not found in tasks/BACKLOG.md"]
+
+
+def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = task_repo_module.task_record("TASK-253")
+    assert record is not None
+    monkeypatch.setattr(task_commands_module, "task_record", lambda _task_id: record)
+
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-253"))
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "(not listed in current sprint)" not in result.lines
+    assert "## Suggested Validation Commands" in result.lines
+
+
+def test_handle_preflight_returns_wrapped_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_preflight_result",
+        lambda: task_commands_module.CommandResult(lines=["preflight ok"]),
+    )
+
+    result = task_commands_module.handle_preflight(argparse.Namespace())
+
+    assert result.lines == ["preflight ok"]
+
+
+def test_handle_eligibility_rejects_invalid_task_id() -> None:
+    result = task_commands_module.handle_eligibility(argparse.Namespace(task_id="bad-task"))
+
+    assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_handle_eligibility_wraps_eligibility_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "eligibility_data",
+        lambda _task_id: (task_commands_module.ExitCode.OK, {"task_id": "TASK-253"}, ["eligible"]),
+    )
+
+    result = task_commands_module.handle_eligibility(argparse.Namespace(task_id="TASK-253"))
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.data == {"task_id": "TASK-253"}
+    assert result.lines == ["eligible"]
+
+
+def test_handle_start_rejects_invalid_task_id() -> None:
+    result = task_commands_module.handle_start(
+        argparse.Namespace(task_id="bad-task", name="coverage")
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_handle_list_active_marks_due_today_blockers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active_tasks = [
+        task_repo_module.ActiveTask(
+            task_id="TASK-253",
+            title="Coverage",
+            requires_human=False,
+            note=None,
+            raw_line="- `TASK-253` Coverage",
+        )
+    ]
+    blocker = task_repo_module.BlockerMetadata(
+        task_id="TASK-253",
+        owner="human-operator",
+        last_touched="2026-03-06",
+        next_action="2026-03-07",
+        escalate_after_days=7,
+        raw_line="- TASK-253 | owner=human-operator | last_touched=2026-03-06 | next_action=2026-03-07 | escalate_after_days=7",
+        urgency=task_repo_module.BlockerUrgency(
+            state="due_today",
+            as_of="2026-03-07",
+            days_until_next_action=0,
+            is_overdue=False,
+            is_due_today=True,
+            days_since_last_touched=1,
+            escalation_due_date="2026-03-13",
+            days_until_escalation=6,
+            is_escalated=False,
+        ),
+    )
+    monkeypatch.setattr(task_commands_module, "parse_active_tasks", lambda: active_tasks)
+    monkeypatch.setattr(task_commands_module, "parse_human_blockers", lambda **_kwargs: [blocker])
+
+    result = task_commands_module.handle_list_active(argparse.Namespace())
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "[DUE TODAY]" in result.lines[1]
 
 
 def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> None:

@@ -37,6 +37,7 @@ orchestration, CLI, observability, and worker paths.
 - 2026-03-07: Start with `TASK-253` because the user made full coverage the immediate focus and `TASK-257` depends on it.
 - 2026-03-07: Treat Horadus CLI surfaces as first-class coverage targets, not incidental coverage through legacy wrappers.
 - 2026-03-07: Prioritize meaningful branch coverage over synthetic line-chasing; if a path is hard to cover, improve the seam or fixture rather than adding a brittle assertion.
+- 2026-03-07: Complete the first coverage slice on CLI workflow surfaces before moving to broader runtime modules; this lifted `src/horadus_cli/task_commands.py` coverage from 40% to 95% and improved repo-wide unit coverage from 73% to 74%.
 
 ## Risks / Foot-guns
 

@@ -128,3 +128,38 @@ Rationale:
 - Better structured extraction and narrative quality for Tier 2/reporting tasks.
 - Acceptable cost profile for current low-volume personal-scale operation.
 - Retain lower-cost secondary provider for resilience/cost fallback during upstream incidents.
+
+## 2026-03 GPT-5 Eval Review
+
+Benchmark update (2026-03-07, cache-disabled 10-item human-verified slice):
+
+- Baseline artifact: `ai/eval/results/benchmark-20260307T155840Z-a166f992.json`
+- `gpt-5-nano` Tier-1 candidate:
+  - `minimal` reasoning materially outperformed current `gpt-4.1-nano` on Tier-1 quality
+    (`queue_accuracy` `0.9` vs `0.0`; failures `1` vs `10`) and beat `low`
+    reasoning on the same slice.
+  - It was slower than the current Tier-1 baseline and the benchmark cost figures
+    for failure-heavy configs should be treated as lower bounds, not exact totals.
+- `gpt-5-mini` Tier-2 candidate:
+  - `low` reasoning materially outperformed current `gpt-4.1-mini` on Tier-2
+    quality (`signal_type_accuracy` / `trend_match_accuracy` / `direction_accuracy`
+    `0.8` vs `0.2`) and beat `medium` reasoning on both quality and latency.
+  - `medium` reasoning was substantially slower and did not justify itself.
+
+Decision update:
+
+- Immediate operational default remains `gpt-4.1-nano` / `gpt-4.1-mini` until
+  runtime reasoning-effort controls land in `TASK-249`.
+- Target promotion path after that plumbing is available: switch **both tiers**
+  to:
+  - Tier 1: `gpt-5-nano` with `minimal` reasoning
+  - Tier 2: `gpt-5-mini` with `low` reasoning
+
+Rollback criteria for any GPT-5 rollout:
+
+- Revert if same-slice Tier-1 `queue_accuracy` drops by more than `0.05` from
+  the promoted candidate benchmark.
+- Revert if same-slice Tier-2 `signal_type_accuracy` or `trend_match_accuracy`
+  drops by more than `0.05`.
+- Revert if end-to-end eval latency regresses materially without matching
+  quality benefit.

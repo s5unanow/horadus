@@ -33,6 +33,8 @@ _PRODUCTION_WEAK_SECRET_KEY_VALUES = frozenset(
 )
 
 _DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M = {
+    "openai:gpt-5-nano": (0.05, 0.40),
+    "openai:gpt-5-mini": (0.25, 2.00),
     "openai:gpt-4.1-nano": (0.10, 0.40),
     "openai:gpt-4.1-mini": (0.40, 1.60),
     "openai:gpt-4o-mini": (0.15, 0.60),

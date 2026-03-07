@@ -126,6 +126,31 @@ def _write_trend_configs(config_dir: Path) -> None:
         (config_dir / file_name).write_text(json.dumps(payload), encoding="utf-8")
 
 
+def test_available_configs_include_gpt5_reasoning_candidates() -> None:
+    configs = benchmark_module.available_configs()
+
+    assert "tier1-gpt5-nano-minimal" in configs
+    assert configs["tier1-gpt5-nano-minimal"].tier1_request_overrides == {
+        "reasoning_effort": "minimal",
+        "temperature": 1,
+    }
+    assert "tier1-gpt5-nano-low" in configs
+    assert configs["tier1-gpt5-nano-low"].tier1_request_overrides == {
+        "reasoning_effort": "low",
+        "temperature": 1,
+    }
+    assert "tier2-gpt5-mini-low" in configs
+    assert configs["tier2-gpt5-mini-low"].tier2_request_overrides == {
+        "reasoning_effort": "low",
+        "temperature": 1,
+    }
+    assert "tier2-gpt5-mini-medium" in configs
+    assert configs["tier2-gpt5-mini-medium"].tier2_request_overrides == {
+        "reasoning_effort": "medium",
+        "temperature": 1,
+    }
+
+
 class _FakeTier1Classifier:
     def __init__(
         self,
@@ -137,6 +162,7 @@ class _FakeTier1Classifier:
         cost_tracker,
         request_overrides=None,
         secondary_client=None,
+        semantic_cache=None,
     ) -> None:
         _ = (
             session,
@@ -146,6 +172,7 @@ class _FakeTier1Classifier:
             cost_tracker,
             request_overrides,
             secondary_client,
+            semantic_cache,
         )
 
     async def classify_items(self, items, trends):
@@ -190,8 +217,17 @@ class _FakeTier2Classifier:
         cost_tracker,
         request_overrides=None,
         secondary_client=None,
+        semantic_cache=None,
     ) -> None:
-        _ = (session, client, model, cost_tracker, request_overrides, secondary_client)
+        _ = (
+            session,
+            client,
+            model,
+            cost_tracker,
+            request_overrides,
+            secondary_client,
+            semantic_cache,
+        )
 
     async def classify_event(self, *, event, trends, context_chunks):
         _ = context_chunks
@@ -315,6 +351,9 @@ async def test_run_gold_set_benchmark_writes_results(
     assert len(payload["gold_set_item_ids_sha256"]) == 64
     assert len(payload["configs"]) == 1
     assert payload["configs"][0]["name"] == "baseline"
+    assert payload["configs"][0]["tier1_request_overrides"] is None
+    assert payload["configs"][0]["tier2_request_overrides"] is None
+    assert payload["configs"][0]["elapsed_seconds"] >= 0
     assert payload["configs"][0]["tier1_metrics"]["queue_threshold"] == 5
     assert payload["configs"][0]["tier1_metrics"]["queue_accuracy"] == 1.0
     item_results = payload["configs"][0]["item_results"]
@@ -374,6 +413,51 @@ async def test_run_gold_set_benchmark_filters_human_verified(
         "require_human_verified": True,
         "tier1_label_mode": "sparse_allowed",
     }
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_records_stage_specific_request_overrides(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=1,
+        config_names=["tier1-gpt5-nano-minimal", "tier2-gpt5-mini-medium"],
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    config_payloads = {entry["name"]: entry for entry in payload["configs"]}
+
+    assert config_payloads["tier1-gpt5-nano-minimal"]["tier1_request_overrides"] == {
+        "reasoning_effort": "minimal",
+        "temperature": 1,
+    }
+    assert config_payloads["tier1-gpt5-nano-minimal"]["tier2_request_overrides"] is None
+    assert config_payloads["tier1-gpt5-nano-minimal"]["elapsed_seconds"] >= 0
+    assert config_payloads["tier2-gpt5-mini-medium"]["tier1_request_overrides"] is None
+    assert config_payloads["tier2-gpt5-mini-medium"]["tier2_request_overrides"] == {
+        "reasoning_effort": "medium",
+        "temperature": 1,
+    }
+    assert config_payloads["tier2-gpt5-mini-medium"]["elapsed_seconds"] >= 0
 
 
 def test_load_gold_set_requires_human_verified_rows(tmp_path: Path) -> None:
@@ -545,6 +629,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             cost_tracker,
             request_overrides=None,
             secondary_client=None,
+            semantic_cache=None,
         ) -> None:
             captured["tier1_batch_size"] = batch_size
             captured["tier1_request_overrides"] = request_overrides
@@ -557,6 +642,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
                 cost_tracker=cost_tracker,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
+                semantic_cache=semantic_cache,
             )
 
     class _CapturingTier2Classifier(_FakeTier2Classifier):
@@ -569,6 +655,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             cost_tracker,
             request_overrides=None,
             secondary_client=None,
+            semantic_cache=None,
         ) -> None:
             captured["tier2_request_overrides"] = request_overrides
             captured["tier2_secondary_client"] = secondary_client
@@ -579,6 +666,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
                 cost_tracker=cost_tracker,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
+                semantic_cache=semantic_cache,
             )
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _CapturingTier1Classifier)
@@ -635,6 +723,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
             cost_tracker,
             request_overrides=None,
             secondary_client=None,
+            semantic_cache=None,
         ) -> None:
             captured["tier1_secondary_client"] = secondary_client
             super().__init__(
@@ -645,6 +734,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
                 cost_tracker=cost_tracker,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
+                semantic_cache=semantic_cache,
             )
 
     class _CapturingTier2Classifier(_FakeTier2Classifier):
@@ -657,6 +747,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
             cost_tracker,
             request_overrides=None,
             secondary_client=None,
+            semantic_cache=None,
         ) -> None:
             captured["tier2_secondary_client"] = secondary_client
             super().__init__(
@@ -666,6 +757,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
                 cost_tracker=cost_tracker,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
+                semantic_cache=semantic_cache,
             )
 
     monkeypatch.setattr(benchmark_module, "Tier1Classifier", _CapturingTier1Classifier)

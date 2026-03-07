@@ -9,6 +9,7 @@ import json
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from time import perf_counter
 from types import SimpleNamespace
 from typing import Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
@@ -17,6 +18,7 @@ from openai import AsyncOpenAI
 
 from src.core.config import settings
 from src.core.trend_config_loader import load_trends_from_config_dir
+from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import (
     Tier2Classifier,
@@ -44,6 +46,8 @@ class EvalConfig:
     tier2_model: str
     provider: str = "openai"
     base_url: str | None = None
+    tier1_request_overrides: dict[str, Any] | None = None
+    tier2_request_overrides: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -284,6 +288,38 @@ def available_configs() -> dict[str, EvalConfig]:
             tier1_model="gpt-4o-mini",
             tier2_model="gpt-4.1-nano",
         ),
+        EvalConfig(
+            name="tier1-gpt5-nano-minimal",
+            tier1_model="gpt-5-nano",
+            tier2_model=settings.LLM_TIER2_MODEL,
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            base_url=settings.LLM_PRIMARY_BASE_URL or None,
+            tier1_request_overrides={"reasoning_effort": "minimal", "temperature": 1},
+        ),
+        EvalConfig(
+            name="tier1-gpt5-nano-low",
+            tier1_model="gpt-5-nano",
+            tier2_model=settings.LLM_TIER2_MODEL,
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            base_url=settings.LLM_PRIMARY_BASE_URL or None,
+            tier1_request_overrides={"reasoning_effort": "low", "temperature": 1},
+        ),
+        EvalConfig(
+            name="tier2-gpt5-mini-low",
+            tier1_model=settings.LLM_TIER1_MODEL,
+            tier2_model="gpt-5-mini",
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            base_url=settings.LLM_PRIMARY_BASE_URL or None,
+            tier2_request_overrides={"reasoning_effort": "low", "temperature": 1},
+        ),
+        EvalConfig(
+            name="tier2-gpt5-mini-medium",
+            tier1_model=settings.LLM_TIER1_MODEL,
+            tier2_model="gpt-5-mini",
+            provider=settings.LLM_PRIMARY_PROVIDER,
+            base_url=settings.LLM_PRIMARY_BASE_URL or None,
+            tier2_request_overrides={"reasoning_effort": "medium", "temperature": 1},
+        ),
     )
     return {config.name: config for config in configs}
 
@@ -310,6 +346,14 @@ def _request_overrides_for_priority(priority: str) -> dict[str, Any] | None:
     if priority == REQUEST_PRIORITY_FLEX:
         return {"service_tier": "flex"}
     return None
+
+
+def _merge_request_overrides(*overrides: dict[str, Any] | None) -> dict[str, Any] | None:
+    merged: dict[str, Any] = {}
+    for override in overrides:
+        if isinstance(override, dict):
+            merged.update(override)
+    return merged or None
 
 
 def _tier1_batch_settings_for_dispatch(dispatch_mode: str) -> tuple[int, str]:
@@ -714,7 +758,7 @@ async def run_gold_set_benchmark(
     )
     normalized_dispatch_mode = _normalize_dispatch_mode(dispatch_mode)
     normalized_request_priority = _normalize_request_priority(request_priority)
-    request_overrides = _request_overrides_for_priority(normalized_request_priority)
+    priority_request_overrides = _request_overrides_for_priority(normalized_request_priority)
     tier1_batch_size, tier1_batch_policy = _tier1_batch_settings_for_dispatch(
         normalized_dispatch_mode
     )
@@ -751,11 +795,21 @@ async def run_gold_set_benchmark(
     }
 
     for config in configs:
+        config_started_at = perf_counter()
         client = _build_openai_client(api_key=api_key, base_url=config.base_url)
         noop_session = _NoopSession()
         noop_cost_tracker = _NoopCostTracker()
+        disabled_semantic_cache = LLMSemanticCache(enabled=False)
         tier1_recorder = _BenchmarkResponseRecorder()
         tier2_recorder = _BenchmarkResponseRecorder()
+        tier1_request_overrides = _merge_request_overrides(
+            priority_request_overrides,
+            config.tier1_request_overrides,
+        )
+        tier2_request_overrides = _merge_request_overrides(
+            priority_request_overrides,
+            config.tier2_request_overrides,
+        )
         tier1_secondary_client = _build_benchmark_secondary_client(
             primary_api_key=api_key,
             secondary_model=settings.LLM_TIER1_SECONDARY_MODEL,
@@ -772,16 +826,18 @@ async def run_gold_set_benchmark(
             model=config.tier1_model,
             batch_size=tier1_batch_size,
             cost_tracker=cast("Any", noop_cost_tracker),
-            request_overrides=request_overrides,
+            request_overrides=tier1_request_overrides,
             secondary_client=tier1_secondary_client,
+            semantic_cache=disabled_semantic_cache,
         )
         tier2 = Tier2Classifier(
             session=cast("Any", noop_session),
             client=_wrap_client_with_recorder(client=client, recorder=tier2_recorder),
             model=config.tier2_model,
             cost_tracker=cast("Any", noop_cost_tracker),
-            request_overrides=request_overrides,
+            request_overrides=tier2_request_overrides,
             secondary_client=tier2_secondary_client,
+            semantic_cache=disabled_semantic_cache,
         )
 
         tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)
@@ -890,6 +946,9 @@ async def run_gold_set_benchmark(
                 "provider": config.provider,
                 "tier1_model": config.tier1_model,
                 "tier2_model": config.tier2_model,
+                "tier1_request_overrides": tier1_request_overrides,
+                "tier2_request_overrides": tier2_request_overrides,
+                "elapsed_seconds": round(perf_counter() - config_started_at, 6),
                 "tier1_metrics": tier1_metrics.to_dict(),
                 "tier2_metrics": tier2_metrics.to_dict(),
                 "usage": _usage_to_dict(

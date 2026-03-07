@@ -1,6 +1,6 @@
 # Responses API Migration Plan
 
-**Last Verified**: 2026-02-16
+**Last Verified**: 2026-03-07
 
 ## Migration Inventory
 
@@ -72,6 +72,16 @@ No schema migration is required.
 Runtime call sites (Tier-1/Tier-2/report/retrospective) now use shared policy
 and adapter plumbing. Remaining migration work is concentrated in offline eval
 paths and observability refinements.
+
+## 2026-03 GPT-5 Evaluation Note
+
+- `TASK-247` benchmarked GPT-5 candidates on Chat Completions rather than Responses API.
+- Reason: current OpenAI docs support `response_format` structured outputs and
+  `reasoning_effort` for GPT-5 on Chat Completions, while this repo's
+  Responses-mode adapter still lacks strict structured-output parity for Tier-1/Tier-2.
+- Conclusion: Responses API migration is **not** a prerequisite for GPT-5 model
+  evaluation or a controlled runtime switch in this repo; it remains a separate
+  migration concern for future adapter unification.
 
 ## Follow-Up Checklist
 

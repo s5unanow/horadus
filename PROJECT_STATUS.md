@@ -121,6 +121,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Gold-set benchmark path now runs against current sparse Tier-1 labels and current runtime model defaults
 - [x] Tier-1 runtime now defaults to single-item safe batching, while benchmark batch mode is marked as diagnostic-only in eval artifacts
 - [x] Benchmark artifacts now include per-item Tier-1/Tier-2 diagnostics with best-effort raw model output capture
+- [x] Tier-1 prompt now includes explicit score bands and calibration examples for fiction/history/current-event distinctions
 - [x] Feedback audit endpoint (`GET /api/v1/feedback`)
 - [x] Event invalidation support that reverts trend contributions
 - [x] Processing suppression for events marked as noise/invalidated
@@ -248,7 +249,7 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-227`, `TASK-228`, `TASK-229`, `TASK-230`, `TASK-231`, `TASK-232`,
   `TASK-233`, `TASK-234`, `TASK-235`, `TASK-236`, `TASK-237`, `TASK-238`
 - Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
-  `TASK-245`, `TASK-246`, `TASK-247`, `TASK-248`, `TASK-249`, `TASK-250`
+  `TASK-246`, `TASK-247`, `TASK-248`, `TASK-249`, `TASK-250`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

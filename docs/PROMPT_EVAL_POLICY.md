@@ -63,6 +63,7 @@ Required handling:
 - Do not re-enable multi-item Tier-1 runtime batching by default until a same-slice human-verified benchmark shows no worse failure rate and no worse queue accuracy than realtime dispatch.
 - Benchmark artifacts now include per-item stage diagnostics under each config’s `item_results`, including failure category/message, raw model output when available, and compact predicted summaries for successful rows.
 - Metadata-only prompt/payload enrichments still require the same benchmark evidence; do not assume richer indicator descriptions improve Tier-2 accuracy without a fresh artifact comparison.
+- GPT-5 candidate evaluations may stay on Chat Completions in this repo as long as the benchmark artifact records any stage-specific `reasoning_effort` / `temperature` overrides; current Tier-1/Tier-2 Responses-mode structured-output parity is not required just to compare GPT-5 candidates.
 
 4. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.

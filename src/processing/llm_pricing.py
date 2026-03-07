@@ -7,6 +7,8 @@ from __future__ import annotations
 from typing import Final
 
 MODEL_PRICING_USD_PER_1M: Final[dict[str, tuple[float, float]]] = {
+    "gpt-5-nano": (0.05, 0.40),
+    "gpt-5-mini": (0.25, 2.00),
     "gpt-4.1-nano": (0.10, 0.40),
     "gpt-4.1-mini": (0.40, 1.60),
     "gpt-4o-mini": (0.15, 0.60),

@@ -223,6 +223,7 @@ Tasks that have been completed and verified.
 - TASK-244: Persist Per-Item Benchmark Failure Diagnostics ✅
 - TASK-245: Add Explicit Tier-1 Scoring Rubric and Calibration Examples ✅
 - TASK-246: Enrich Tier-2 Signal Payload Beyond Keyword Bags ✅
+- TASK-247: Evaluate GPT-5 Reasoning Models for Tier-1/Tier-2 ✅
 - TASK-241: Fix Horadus CLI Global Flag Precedence ✅
 - TASK-210: Unify assessment artifact contract across writers and validator ✅
 - TASK-211: Add 7-day novelty gate with `All clear` fallback for assessment roles ✅

@@ -307,6 +307,24 @@ async def test_build_monthly_statistics_handles_missing_previous_month_change(
 
 
 @pytest.mark.asyncio
+async def test_build_monthly_statistics_requires_trend_id(mock_db_session) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    trend_engine = SimpleNamespace(
+        get_probability=lambda _trend: 0.5,
+        get_probability_at=AsyncMock(return_value=0.4),
+        get_direction=AsyncMock(return_value="stable"),
+    )
+
+    with pytest.raises(ValueError, match="Trend id is required"):
+        await generator._build_monthly_statistics(
+            trend=SimpleNamespace(id=None),
+            trend_engine=trend_engine,
+            period_start=datetime(2026, 3, 1, tzinfo=UTC),
+            period_end=datetime(2026, 3, 31, tzinfo=UTC),
+        )
+
+
+@pytest.mark.asyncio
 async def test_calculate_previous_period_change_handles_missing_snapshots(mock_db_session) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend_engine = SimpleNamespace(

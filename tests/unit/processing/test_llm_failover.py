@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -152,3 +153,114 @@ def test_classify_error_reports_retryable_taxonomy() -> None:
     bad_request_classification = LLMChatFailoverInvoker.classify_error(bad_request_error)
     assert bad_request_classification.code == LLMInvocationErrorCode.NON_RETRYABLE
     assert bad_request_classification.retryable is False
+
+
+def test_retry_policy_rejects_invalid_values() -> None:
+    with pytest.raises(ValueError, match="max_attempts >= 1"):
+        LLMChatRetryPolicy(max_attempts=0)
+
+    with pytest.raises(ValueError, match="backoff_seconds >= 0"):
+        LLMChatRetryPolicy(backoff_seconds=-0.1)
+
+
+@pytest.mark.asyncio
+async def test_invoker_sleeps_before_retry_when_backoff_positive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary_route, primary = _route(
+        "openai",
+        "gpt-4.1-nano",
+        outcomes=[TimeoutError("primary timeout"), _response()],
+    )
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr("src.processing.llm_failover.asyncio.sleep", sleep_mock)
+    invoker = LLMChatFailoverInvoker(
+        stage="tier1",
+        primary=primary_route,
+        retry_policy=LLMChatRetryPolicy(max_attempts=2, backoff_seconds=0.5),
+    )
+
+    await invoker.create_chat_completion(
+        messages=[{"role": "user", "content": "{}"}],
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+
+    assert primary.calls == 2
+    sleep_mock.assert_awaited_once_with(0.5)
+
+
+@pytest.mark.asyncio
+async def test_create_for_route_uses_adapter(monkeypatch: pytest.MonkeyPatch) -> None:
+    route, _ = _route("openai", "gpt-4.1-nano", outcomes=[])
+    invoker = LLMChatFailoverInvoker(stage="tier1", primary=route)
+    expected = _response()
+    captured: dict[str, object] = {}
+
+    async def fake_create_route_completion(**kwargs):
+        captured.update(kwargs)
+        return expected
+
+    monkeypatch.setattr(
+        "src.processing.llm_failover.create_route_completion", fake_create_route_completion
+    )
+
+    response = await invoker._create_for_route(
+        route=route,
+        messages=[{"role": "user", "content": "{}"}],
+        temperature=0.3,
+        response_format={"type": "json_object"},
+    )
+
+    assert response is expected
+    assert captured["route"] is route
+    assert captured["temperature"] == 0.3
+
+
+def test_extract_status_code_and_error_reason_helpers() -> None:
+    response_error = SimpleNamespace(response=SimpleNamespace(status_code=503))
+
+    assert LLMChatFailoverInvoker._extract_status_code(response_error) == 503
+    assert LLMChatFailoverInvoker._extract_status_code(Exception("boom")) is None
+    assert LLMChatFailoverInvoker._error_reason(_HttpStatusError(429)) == "rate_limit"
+
+
+def test_classify_error_supports_openai_exception_types(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeRateLimitError(Exception):
+        pass
+
+    class FakeTimeoutError(Exception):
+        pass
+
+    class FakeConnectionError(Exception):
+        pass
+
+    class FakeStatusError(Exception):
+        def __init__(self, status_code: int):
+            super().__init__(f"status {status_code}")
+            self.status_code = status_code
+
+    monkeypatch.setattr("src.processing.llm_failover.RateLimitError", FakeRateLimitError)
+    monkeypatch.setattr("src.processing.llm_failover.APITimeoutError", FakeTimeoutError)
+    monkeypatch.setattr("src.processing.llm_failover.APIConnectionError", FakeConnectionError)
+    monkeypatch.setattr("src.processing.llm_failover.APIStatusError", FakeStatusError)
+
+    rate_limit = LLMChatFailoverInvoker.classify_error(FakeRateLimitError("boom"))
+    timeout = LLMChatFailoverInvoker.classify_error(FakeTimeoutError("boom"))
+    connection = LLMChatFailoverInvoker.classify_error(FakeConnectionError("boom"))
+    http_5xx = LLMChatFailoverInvoker.classify_error(FakeStatusError(503))
+
+    assert rate_limit.code == LLMInvocationErrorCode.RATE_LIMIT
+    assert timeout.code == LLMInvocationErrorCode.TIMEOUT
+    assert connection.code == LLMInvocationErrorCode.CONNECTION
+    assert http_5xx.code == LLMInvocationErrorCode.PROVIDER_HTTP_5XX
+
+
+def test_classify_error_uses_response_status_when_present() -> None:
+    error = Exception("boom")
+    error.response = SimpleNamespace(status_code=500)  # type: ignore[attr-defined]
+
+    classification = LLMChatFailoverInvoker.classify_error(error)
+
+    assert classification.code == LLMInvocationErrorCode.PROVIDER_HTTP_5XX
+    assert classification.retryable is True

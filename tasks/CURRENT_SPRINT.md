@@ -25,7 +25,6 @@
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
-  - `TASK-246` Enrich Tier-2 Signal Payload Beyond Keyword Bags
   - `TASK-247` Evaluate GPT-5 Reasoning Models for Tier-1/Tier-2
   - `TASK-248` Evaluate `gpt-5-nano` with Minimal Reasoning for Tier-1
   - `TASK-249` Add First-Class Reasoning-Effort Controls for LLM Routes
@@ -94,6 +93,8 @@
   completion note: benchmark artifacts now persist per-item Tier-1/Tier-2 outcomes, failure category/message, best-effort raw model output, and compact success summaries for faster debugging.
 - `TASK-245` Add Explicit Tier-1 Scoring Rubric and Calibration Examples ✅
   completion note: added explicit Tier-1 score bands and targeted fiction/documentary/commentary examples, added prompt regression tests, and ran a fresh gold-set benchmark before promotion.
+- `TASK-246` Enrich Tier-2 Signal Payload Beyond Keyword Bags ✅
+  completion note: Tier-2 payloads now include human-readable indicator descriptions plus specificity/abstention prompt guidance and regression tests, but the 10-item human-verified benchmark showed no measurable accuracy improvement so no baseline was promoted.
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

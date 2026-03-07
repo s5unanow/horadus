@@ -218,6 +218,11 @@ Tasks that have been completed and verified.
 - TASK-197: Enforce local integration test gate before push/PR ✅
 - TASK-198: External review backlog intake preservation (2026-03-05) ✅
 - TASK-239: External architecture review backlog intake preservation (2026-03-06) ✅
+- TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
+- TASK-243: Stabilize Tier-1 Routing Quality Under Eval and Runtime Load ✅
+- TASK-244: Persist Per-Item Benchmark Failure Diagnostics ✅
+- TASK-245: Add Explicit Tier-1 Scoring Rubric and Calibration Examples ✅
+- TASK-246: Enrich Tier-2 Signal Payload Beyond Keyword Bags ✅
 - TASK-241: Fix Horadus CLI Global Flag Precedence ✅
 - TASK-210: Unify assessment artifact contract across writers and validator ✅
 - TASK-211: Add 7-day novelty gate with `All clear` fallback for assessment roles ✅

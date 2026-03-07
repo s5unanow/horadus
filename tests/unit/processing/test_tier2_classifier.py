@@ -181,6 +181,7 @@ def _build_trend(trend_id: str, name: str):
         indicators={
             "military_movement": {
                 "direction": "escalatory",
+                "description": "Force repositioning without direct hostile contact.",
                 "keywords": ["troops", "deployment"],
             }
         },
@@ -225,6 +226,49 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert mock_db_session.flush.await_count == 1
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
+
+
+def test_build_payload_includes_indicator_descriptions_and_fallbacks(mock_db_session) -> None:
+    classifier, _, _ = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trend = SimpleNamespace(
+        id=uuid4(),
+        name="EU-Russia",
+        definition={"id": "eu-russia"},
+        indicators={
+            "military_movement": {
+                "direction": "escalatory",
+                "description": "Force repositioning without direct hostile contact.",
+                "keywords": ["troops", "deployment"],
+            },
+            "military_incident": {
+                "direction": "escalatory",
+                "keywords": ["fired upon", "collision"],
+            },
+        },
+    )
+
+    payload = classifier._build_payload(
+        event=event,
+        trends=[trend],
+        context_chunks=["Context paragraph"],
+    )
+
+    indicators = payload["trends"][0]["indicators"]
+    assert indicators == [
+        {
+            "signal_type": "military_movement",
+            "direction": "escalatory",
+            "description": "Force repositioning without direct hostile contact.",
+            "keywords": ["troops", "deployment"],
+        },
+        {
+            "signal_type": "military_incident",
+            "direction": "escalatory",
+            "description": "Signals of military incident relevant to this trend.",
+            "keywords": ["fired upon", "collision"],
+        },
+    ]
 
 
 @pytest.mark.asyncio

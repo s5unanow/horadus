@@ -32,6 +32,7 @@ class TrendIndicatorConfig(BaseModel):
     direction: Literal["escalatory", "de_escalatory"]
     type: Literal["leading", "lagging"] = "leading"
     decay_half_life_days: int | None = Field(default=None, ge=1)
+    description: str | None = Field(default=None, min_length=1)
     keywords: list[str] = Field(default_factory=list)
 
 

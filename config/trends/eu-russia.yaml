@@ -32,48 +32,56 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
+    description: "Force repositioning, reinforcement, or readiness changes near NATO or contested borders without confirmed hostile contact."
     keywords: ["troop buildup", "deployment", "reinforcement", "forward posture"]
 
   military_incident:
     weight: 0.06
     direction: escalatory
     type: leading
+    description: "Direct hostile or dangerous encounter such as an airspace violation, fired-upon aircraft, naval collision, or intercept with concrete incident details."
     keywords: ["airspace violation", "naval collision", "fired upon", "intercept"]
 
   weapons_transfer:
     weight: 0.04
     direction: escalatory
     type: leading
+    description: "Delivery or approval of weapons systems, munitions, or long-range strike capabilities to actors in the theater."
     keywords: ["long-range systems", "arms package", "munition transfer"]
 
   nuclear_rhetoric:
     weight: 0.04
     direction: escalatory
     type: leading
+    description: "Official statements or posture changes invoking nuclear readiness, deterrence, or strategic forces."
     keywords: ["nuclear posture", "strategic deterrence", "nuclear readiness"]
 
   cyber_infrastructure_attack:
     weight: 0.03
     direction: escalatory
     type: leading
+    description: "Cyber or hybrid attack disrupting critical infrastructure such as power, telecoms, transport, GPS, or undersea cables."
     keywords: ["critical infrastructure attack", "power grid disruption", "undersea cable sabotage", "GPS jamming"]
 
   diplomatic_breakdown:
     weight: 0.03
     direction: escalatory
     type: lagging
+    description: "Suspension or collapse of diplomatic channels, expulsions, or formal termination of talks."
     keywords: ["expelled diplomats", "suspended talks", "severed channels"]
 
   ceasefire:
     weight: 0.04
     direction: de_escalatory
     type: lagging
+    description: "Verified halt or reduction in hostilities under a truce, ceasefire, or cessation agreement."
     keywords: ["ceasefire", "truce", "cessation of hostilities"]
 
   diplomatic_talks:
     weight: 0.04
     direction: de_escalatory
     type: leading
+    description: "Active negotiation, summit, hotline, or deconfliction talks aimed at reducing confrontation."
     keywords: ["peace talks", "summit", "negotiation", "deconfliction"]
 
 regions:

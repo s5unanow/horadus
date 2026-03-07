@@ -67,6 +67,7 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
                         "direction": config.direction,
                         "type": config.type,
                         "decay_half_life_days": config.decay_half_life_days,
+                        "description": config.description,
                         "keywords": list(config.keywords),
                     }
                     for signal_type, config in parsed.indicators.items()

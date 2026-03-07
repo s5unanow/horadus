@@ -25,7 +25,6 @@
   - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
-  - `TASK-248` Evaluate `gpt-5-nano` with Minimal Reasoning for Tier-1
   - `TASK-249` Add First-Class Reasoning-Effort Controls for LLM Routes
   - `TASK-250` Make Eval Artifacts Strictly Reproducible and Traceable
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
@@ -96,6 +95,8 @@
   completion note: Tier-2 payloads now include human-readable indicator descriptions plus specificity/abstention prompt guidance and regression tests, but the 10-item human-verified benchmark showed no measurable accuracy improvement so no baseline was promoted.
 - `TASK-247` Evaluate GPT-5 Reasoning Models for Tier-1/Tier-2 ✅
   completion note: benchmarked cache-disabled GPT-5 candidate configs on the shared 10-item human-verified slice, found `gpt-5-nano` + `minimal` best for Tier-1 and `gpt-5-mini` + `low` best for Tier-2, and documented that Responses API migration is not required for the switch because Chat Completions already supports the needed structured-output and reasoning controls.
+- `TASK-248` Evaluate `gpt-5-nano` with Minimal Reasoning for Tier-1 ✅
+  completion note: reused the cache-disabled `TASK-247` artifact to close the Tier-1-specific decision; `gpt-5-nano` with `minimal` reasoning beat both `gpt-4.1-nano` and `gpt-5-nano` `low` on the shared human-verified slice, so it is the recommended Tier-1 target after runtime reasoning controls land.
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅

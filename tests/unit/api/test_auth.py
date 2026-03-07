@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.testclient import TestClient
 
 import src.api.routes.auth as auth_module
@@ -77,6 +79,41 @@ def test_health_route_bypasses_auth() -> None:
     assert response.json() == {"status": "ok"}
 
 
+@pytest.mark.asyncio
+async def test_auth_disabled_bypasses_protected_route() -> None:
+    middleware = APIKeyAuthMiddleware(FastAPI(), manager=SimpleNamespace(auth_required=False))
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/protected",
+            "headers": [],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+    async def call_next(_request: Request) -> Response:
+        return Response(status_code=204)
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 204
+
+
+def test_invalid_api_key_returns_401() -> None:
+    manager, _credential = _build_manager()
+    client = TestClient(_build_app(manager))
+
+    response = client.get("/api/v1/protected", headers={"X-API-Key": "invalid"})
+
+    assert response.status_code == 401
+    assert response.json()["message"] == "Invalid API key"
+
+
 def test_rate_limit_returns_429() -> None:
     manager, credential = _build_manager(rate_limit_per_minute=1)
     client = TestClient(_build_app(manager))
@@ -88,6 +125,20 @@ def test_rate_limit_returns_429() -> None:
     assert first.status_code == 200
     assert second.status_code == 429
     assert "Retry-After" in second.headers
+
+
+def test_rate_limit_without_retry_after_omits_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    client = TestClient(_build_app(manager))
+    record = manager.authenticate(credential)
+    assert record is not None
+    monkeypatch.setattr(manager, "check_rate_limit", lambda _record_id: (False, None))
+
+    response = client.get("/api/v1/protected", headers={"X-API-Key": credential})
+
+    assert response.status_code == 429
+    assert "Retry-After" not in response.headers
+    assert response.json()["message"] == "Rate limit exceeded"
 
 
 def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:

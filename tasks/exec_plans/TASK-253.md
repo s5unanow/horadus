@@ -41,6 +41,7 @@ orchestration, CLI, observability, and worker paths.
 - 2026-03-07: Fold the next slice into API runtime seams rather than only leaf routes; `src/api/main.py`, `src/api/deps.py`, and `src/api/routes/health.py` are now covered at 100% with behavior-level tests for lifespan, exception handling, readiness, and worker-heartbeat states. Repo-wide unit coverage moved from 74% to 75% after this slice.
 - 2026-03-07: Cover `src/core/tracing.py` with mock-driven tests around tracer-provider bootstrap, shared instrumentation, Celery hook registration, and disabled/unavailable guard paths; remove one impossible postrun branch while preserving behavior. Repo-wide unit coverage moved from 75% to 76% after this slice.
 - 2026-03-07: Close out the thin wrapper long tail by covering `src/core/logging_setup.py` and the `src/cli.py` script entrypoint. Repo-wide unit coverage remains 76% after rounding, but these two files are now at 100% and no longer contribute avoidable misses.
+- 2026-03-07: Sweep the remaining helper/runtime seams before moving into the heavier orchestration/reporting modules; `src/api/middleware/auth.py`, `src/api/middleware/agent_runtime.py`, `src/core/migration_parity.py`, `src/core/source_credibility.py`, `src/core/trend_config_loader.py`, and `src/storage/database.py` are now covered at 100%. Repo-wide unit coverage remains 76% after rounding, with misses now concentrated in larger route, reporting, ingestion, and worker modules.
 
 ## Risks / Foot-guns
 

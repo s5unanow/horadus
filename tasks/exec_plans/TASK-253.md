@@ -38,6 +38,7 @@ orchestration, CLI, observability, and worker paths.
 - 2026-03-07: Treat Horadus CLI surfaces as first-class coverage targets, not incidental coverage through legacy wrappers.
 - 2026-03-07: Prioritize meaningful branch coverage over synthetic line-chasing; if a path is hard to cover, improve the seam or fixture rather than adding a brittle assertion.
 - 2026-03-07: Complete the first coverage slice on CLI workflow surfaces before moving to broader runtime modules; this lifted `src/horadus_cli/task_commands.py` coverage from 40% to 95% and improved repo-wide unit coverage from 73% to 74%.
+- 2026-03-07: Fold the next slice into API runtime seams rather than only leaf routes; `src/api/main.py`, `src/api/deps.py`, and `src/api/routes/health.py` are now covered at 100% with behavior-level tests for lifespan, exception handling, readiness, and worker-heartbeat states. Repo-wide unit coverage moved from 74% to 75% after this slice.
 
 ## Risks / Foot-guns
 

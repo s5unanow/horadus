@@ -231,21 +231,15 @@ class CalibrationService:
             if outcome.brier_score is not None:
                 brier_values.append(float(outcome.brier_score))
                 continue
-            if outcome.outcome is None:
-                continue
+            # scored_outcomes only contains validated, scored outcome enums
             outcome_enum = OutcomeType(outcome.outcome)
             computed = calculate_brier_score(float(outcome.predicted_probability), outcome_enum)
-            if computed is not None:
-                brier_values.append(computed)
+            brier_values.append(computed)
 
         mean_brier_score = sum(brier_values) / len(brier_values) if brier_values else None
         signed_error = 0.0
         for outcome in scored_outcomes:
-            if outcome.outcome is None:
-                continue
             actual = _actual_value(OutcomeType(outcome.outcome))
-            if actual is None:
-                continue
             signed_error += actual - float(outcome.predicted_probability)
 
         mean_signed_error = signed_error / len(scored_outcomes) if scored_outcomes else 0.0

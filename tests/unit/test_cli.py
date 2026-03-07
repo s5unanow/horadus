@@ -6,7 +6,7 @@ import json
 import os
 import runpy
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from uuid import uuid4
 
@@ -1347,6 +1347,36 @@ def test_task_preflight_data_passes_when_open_pr_guard_disabled(
     assert "passed" in lines[0]
 
 
+def test_task_preflight_data_passes_when_open_pr_query_returns_no_results(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("ALLOW_OPEN_TASK_PRS", raising=False)
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    monkeypatch.setattr(task_commands_module, "_open_task_prs", lambda: (True, []))
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["local_main_sha"] == "abc"
+    assert "passed" in lines[0]
+
+
 def test_preflight_result_wraps_preflight_data(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         task_commands_module,
@@ -1437,6 +1467,29 @@ def test_eligibility_data_respects_preflight_override_failure(
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert data["preflight_cmd"] == "printf fail && exit 1"
     assert "preflight failed" in lines[0]
+
+
+def test_eligibility_data_accepts_successful_preflight_override(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Active Tasks\n- `TASK-253` Coverage\n", encoding="utf-8"
+    )
+    monkeypatch.setenv("TASK_ELIGIBILITY_SPRINT_FILE", str(sprint_path))
+    monkeypatch.setenv("TASK_ELIGIBILITY_PREFLIGHT_CMD", "printf ok")
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_shell",
+        lambda _command: _completed(["sh"], stdout="ok"),
+    )
+
+    exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["task_id"] == "TASK-253"
+    assert lines == ["Agent task eligibility passed: TASK-253"]
 
 
 def test_eligibility_data_succeeds_for_active_non_human_task(
@@ -1662,6 +1715,32 @@ def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.Monkey
     assert "- tasks/specs/253-coverage.md" in result.lines
 
 
+def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-253",
+        title="Coverage",
+        priority="P0",
+        estimate="2d",
+        description=[],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="active",
+        sprint_lines=["- `TASK-253` Coverage"],
+        spec_paths=[],
+    )
+    monkeypatch.setattr(task_commands_module, "task_record", lambda _task_id: record)
+
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
+
+    assert result.lines is not None
+    assert "Description:" not in result.lines
+    assert "Files:" not in result.lines
+    assert "Acceptance Criteria:" not in result.lines
+    assert "Specs:" not in result.lines
+
+
 def test_handle_search_reports_no_matches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(task_commands_module, "search_task_records", lambda *_args, **_kwargs: [])
 
@@ -1788,6 +1867,85 @@ def test_handle_list_active_marks_due_today_blockers(
     assert "[DUE TODAY]" in result.lines[1]
 
 
+def test_handle_list_active_marks_overdue_blockers(monkeypatch: pytest.MonkeyPatch) -> None:
+    active_tasks = [
+        task_repo_module.ActiveTask(
+            task_id="TASK-253",
+            title="Coverage",
+            requires_human=False,
+            note=None,
+            raw_line="- `TASK-253` Coverage",
+        )
+    ]
+    blocker = task_repo_module.BlockerMetadata(
+        task_id="TASK-253",
+        owner="human-operator",
+        last_touched="2026-03-01",
+        next_action="2026-03-05",
+        escalate_after_days=7,
+        raw_line="- TASK-253 | owner=human-operator | last_touched=2026-03-01 | next_action=2026-03-05 | escalate_after_days=7",
+        urgency=task_repo_module.BlockerUrgency(
+            state="overdue",
+            as_of="2026-03-07",
+            days_until_next_action=-2,
+            is_overdue=True,
+            is_due_today=False,
+            days_since_last_touched=6,
+            escalation_due_date="2026-03-08",
+            days_until_escalation=1,
+            is_escalated=False,
+        ),
+    )
+    monkeypatch.setattr(task_commands_module, "parse_active_tasks", lambda: active_tasks)
+    monkeypatch.setattr(task_commands_module, "parse_human_blockers", lambda **_kwargs: [blocker])
+
+    result = task_commands_module.handle_list_active(argparse.Namespace())
+
+    assert result.lines is not None
+    assert "[OVERDUE by 2d]" in result.lines[1]
+
+
+def test_handle_list_active_omits_urgency_note_for_pending_blockers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    active_tasks = [
+        task_repo_module.ActiveTask(
+            task_id="TASK-253",
+            title="Coverage",
+            requires_human=False,
+            note=None,
+            raw_line="- `TASK-253` Coverage",
+        )
+    ]
+    blocker = task_repo_module.BlockerMetadata(
+        task_id="TASK-253",
+        owner="human-operator",
+        last_touched="2026-03-06",
+        next_action="2026-03-09",
+        escalate_after_days=7,
+        raw_line="- TASK-253 | owner=human-operator | last_touched=2026-03-06 | next_action=2026-03-09 | escalate_after_days=7",
+        urgency=task_repo_module.BlockerUrgency(
+            state="pending",
+            as_of="2026-03-07",
+            days_until_next_action=2,
+            is_overdue=False,
+            is_due_today=False,
+            days_since_last_touched=1,
+            escalation_due_date="2026-03-13",
+            days_until_escalation=6,
+            is_escalated=False,
+        ),
+    )
+    monkeypatch.setattr(task_commands_module, "parse_active_tasks", lambda: active_tasks)
+    monkeypatch.setattr(task_commands_module, "parse_human_blockers", lambda **_kwargs: [blocker])
+
+    result = task_commands_module.handle_list_active(argparse.Namespace())
+
+    assert result.lines is not None
+    assert "[DUE TODAY]" not in result.lines[1]
+    assert "[OVERDUE" not in result.lines[1]
+
+
 def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> None:
     result = cli_module.main(
         [
@@ -1897,7 +2055,8 @@ def test_recent_assessment_paths_skips_invalid_dates_and_honors_cutoff(
 
     class _FakeDatetime:
         @classmethod
-        def now(cls, _tz=None):
+        def now(cls, tz=None):
+            assert tz is UTC
             return datetime(2026, 3, 7, tzinfo=UTC)
 
     monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
@@ -1964,3 +2123,87 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
     assert result.data is not None
     assert result.data["searches"]["path_hits"][0]["source"] == "tasks/BACKLOG.md"
     assert result.data["searches"]["proposal_hits"][0]["line"] == "TASK-253 hit"
+
+
+def test_blocker_urgency_defaults_to_pending_without_next_action() -> None:
+    urgency = task_repo_module.blocker_urgency(
+        last_touched="2026-03-01",
+        next_action="",
+        escalate_after_days=0,
+        as_of=date(2026, 3, 7),
+    )
+
+    assert urgency.state == "pending"
+    assert urgency.days_until_next_action is None
+    assert urgency.is_overdue is False
+
+
+def test_parse_human_blockers_skips_non_kv_chunks(tmp_path: Path) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Human Blocker Metadata\n"
+        "- TASK-253 | owner=alice | malformed | next_action=2026-03-10 | escalate_after_days=3\n",
+        encoding="utf-8",
+    )
+
+    blockers = task_repo_module.parse_human_blockers(sprint_path)
+
+    assert len(blockers) == 1
+    assert blockers[0].owner == "alice"
+    assert blockers[0].last_touched == ""
+
+
+def test_parse_human_blockers_ignores_non_bullet_lines(tmp_path: Path) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "# Current Sprint\n\n## Human Blocker Metadata\n"
+        "TASK-253 | owner=alice | last_touched=2026-03-06 | next_action=2026-03-10 | escalate_after_days=3\n"
+        "- TASK-254 | owner=bob | last_touched=2026-03-06 | next_action=2026-03-10 | escalate_after_days=3\n",
+        encoding="utf-8",
+    )
+
+    blockers = task_repo_module.parse_human_blockers(sprint_path)
+
+    assert [blocker.task_id for blocker in blockers] == ["TASK-254"]
+
+
+def test_parse_task_block_stops_description_at_unknown_heading() -> None:
+    raw_block = """### TASK-253: Coverage
+**Priority**: P0
+**Estimate**: 2d
+This is part of the description.
+**Unexpected**
+This should not stay in the description.
+"""
+
+    record = task_repo_module._parse_task_block("TASK-253", "Coverage", raw_block)
+
+    assert record.description == ["This is part of the description."]
+
+
+def test_task_record_stays_backlog_without_sprint_or_completion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-253",
+        title="Coverage",
+        priority="P0",
+        estimate="2d",
+        description=[],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+    monkeypatch.setattr(task_repo_module, "backlog_task_records", lambda: {"TASK-253": record})
+    monkeypatch.setattr(task_repo_module, "sprint_lines_for_task", lambda _task_id: [])
+    monkeypatch.setattr(task_repo_module, "spec_paths_for_task", lambda _task_id: [])
+    monkeypatch.setattr(task_repo_module, "is_task_completed", lambda _task_id: False)
+
+    resolved = task_repo_module.task_record("TASK-253")
+
+    assert resolved is not None
+    assert resolved.status == "backlog"

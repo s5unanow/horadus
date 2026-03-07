@@ -199,13 +199,14 @@ def _evaluate_policy(config: ReplayConfig, points: list[_ReplayPoint]) -> dict[s
             continue
 
         decision_items += 1
-        if decision == "positive" and point.binary_actual == 1:
-            true_positive += 1
-        elif decision == "negative" and point.binary_actual == 0:
+        if decision == "positive":
+            if point.binary_actual == 1:
+                true_positive += 1
+            else:
+                false_positive += 1
+        elif point.binary_actual == 0:
             true_negative += 1
-        elif decision == "positive" and point.binary_actual == 0:
-            false_positive += 1
-        elif decision == "negative" and point.binary_actual == 1:
+        else:
             false_negative += 1
 
     accuracy = (true_positive + true_negative) / decision_items if decision_items > 0 else 0.0

@@ -16,7 +16,8 @@ def _load_prompt() -> str:
 def test_tier1_prompt_defines_score_bands_around_threshold() -> None:
     prompt = _load_prompt()
 
-    assert "The routing threshold is `5`." in prompt
+    assert "runtime-configured" in prompt
+    assert "Use the provided `threshold` as the routing cutoff." in prompt
     for band in ("`0-2`", "`3-4`", "`5-6`", "`7-8`", "`9-10`"):
         assert band in prompt
     assert "current real-world operational relevance" in prompt

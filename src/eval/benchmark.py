@@ -46,6 +46,8 @@ class EvalConfig:
     tier2_model: str
     provider: str = "openai"
     base_url: str | None = None
+    tier1_reasoning_effort: str | None = None
+    tier2_reasoning_effort: str | None = None
     tier1_request_overrides: dict[str, Any] | None = None
     tier2_request_overrides: dict[str, Any] | None = None
 
@@ -294,7 +296,7 @@ def available_configs() -> dict[str, EvalConfig]:
             tier2_model=settings.LLM_TIER2_MODEL,
             provider=settings.LLM_PRIMARY_PROVIDER,
             base_url=settings.LLM_PRIMARY_BASE_URL or None,
-            tier1_request_overrides={"reasoning_effort": "minimal", "temperature": 1},
+            tier1_reasoning_effort="minimal",
         ),
         EvalConfig(
             name="tier1-gpt5-nano-low",
@@ -302,7 +304,7 @@ def available_configs() -> dict[str, EvalConfig]:
             tier2_model=settings.LLM_TIER2_MODEL,
             provider=settings.LLM_PRIMARY_PROVIDER,
             base_url=settings.LLM_PRIMARY_BASE_URL or None,
-            tier1_request_overrides={"reasoning_effort": "low", "temperature": 1},
+            tier1_reasoning_effort="low",
         ),
         EvalConfig(
             name="tier2-gpt5-mini-low",
@@ -310,7 +312,7 @@ def available_configs() -> dict[str, EvalConfig]:
             tier2_model="gpt-5-mini",
             provider=settings.LLM_PRIMARY_PROVIDER,
             base_url=settings.LLM_PRIMARY_BASE_URL or None,
-            tier2_request_overrides={"reasoning_effort": "low", "temperature": 1},
+            tier2_reasoning_effort="low",
         ),
         EvalConfig(
             name="tier2-gpt5-mini-medium",
@@ -318,7 +320,7 @@ def available_configs() -> dict[str, EvalConfig]:
             tier2_model="gpt-5-mini",
             provider=settings.LLM_PRIMARY_PROVIDER,
             base_url=settings.LLM_PRIMARY_BASE_URL or None,
-            tier2_request_overrides={"reasoning_effort": "medium", "temperature": 1},
+            tier2_reasoning_effort="medium",
         ),
     )
     return {config.name: config for config in configs}
@@ -826,6 +828,7 @@ async def run_gold_set_benchmark(
             model=config.tier1_model,
             batch_size=tier1_batch_size,
             cost_tracker=cast("Any", noop_cost_tracker),
+            reasoning_effort=config.tier1_reasoning_effort,
             request_overrides=tier1_request_overrides,
             secondary_client=tier1_secondary_client,
             semantic_cache=disabled_semantic_cache,
@@ -835,6 +838,7 @@ async def run_gold_set_benchmark(
             client=_wrap_client_with_recorder(client=client, recorder=tier2_recorder),
             model=config.tier2_model,
             cost_tracker=cast("Any", noop_cost_tracker),
+            reasoning_effort=config.tier2_reasoning_effort,
             request_overrides=tier2_request_overrides,
             secondary_client=tier2_secondary_client,
             semantic_cache=disabled_semantic_cache,
@@ -946,6 +950,8 @@ async def run_gold_set_benchmark(
                 "provider": config.provider,
                 "tier1_model": config.tier1_model,
                 "tier2_model": config.tier2_model,
+                "tier1_reasoning_effort": config.tier1_reasoning_effort,
+                "tier2_reasoning_effort": config.tier2_reasoning_effort,
                 "tier1_request_overrides": tier1_request_overrides,
                 "tier2_request_overrides": tier2_request_overrides,
                 "elapsed_seconds": round(perf_counter() - config_started_at, 6),

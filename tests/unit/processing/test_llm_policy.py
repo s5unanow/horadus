@@ -72,6 +72,7 @@ async def test_invoke_with_policy_records_budget_and_cost() -> None:
 
     assert result.active_provider == "openai"
     assert result.active_model == "gpt-4.1-mini"
+    assert result.active_reasoning_effort is None
     assert result.used_secondary_route is False
     assert result.prompt_tokens == 10
     assert result.completion_tokens == 5
@@ -111,7 +112,12 @@ async def test_invoke_with_policy_falls_back_when_strict_schema_unsupported() ->
     result = await invoke_with_policy(
         stage="tier1",
         messages=[{"role": "system", "content": "s"}, {"role": "user", "content": "{}"}],
-        primary_route=route,
+        primary_route=LLMChatRoute(
+            provider="openai",
+            model="gpt-5-nano",
+            reasoning_effort="minimal",
+            client=route.client,
+        ),
         secondary_route=None,
         temperature=0,
         strict_response_format={"type": "json_schema"},
@@ -122,11 +128,12 @@ async def test_invoke_with_policy_falls_back_when_strict_schema_unsupported() ->
 
     assert result.prompt_tokens == 7
     assert result.completion_tokens == 3
+    assert result.active_reasoning_effort == "minimal"
     assert result.used_secondary_route is False
     cost_tracker.ensure_within_budget.assert_awaited_once_with(
         "tier1",
         provider="openai",
-        model="gpt-4.1-nano",
+        model="gpt-5-nano",
     )
     cost_tracker.record_usage.assert_awaited_once()
 

@@ -1,6 +1,6 @@
 # Environment Variables
 
-**Last Verified**: 2026-02-19
+**Last Verified**: 2026-03-07
 
 This document lists environment variables used by the Horadus backend.
 
@@ -126,8 +126,12 @@ Production auth/secret guardrails:
 | `LLM_SECONDARY_API_KEY` | empty | Optional API key override for secondary failover provider. |
 | `LLM_TIER1_MODEL` | `gpt-4.1-nano` | Tier-1 relevance filtering model. |
 | `LLM_TIER1_SECONDARY_MODEL` | empty | Optional Tier-1 failover model used on 429/5xx/timeout. |
+| `LLM_TIER1_REASONING_EFFORT` | empty | Optional Tier-1 primary reasoning effort (`minimal`, `low`, `medium`, `high`). Forwarded only on supported routes. |
+| `LLM_TIER1_SECONDARY_REASONING_EFFORT` | empty | Optional Tier-1 secondary-route reasoning effort. Forwarded only on supported routes. |
 | `LLM_TIER2_MODEL` | `gpt-4.1-mini` | Tier-2 extraction/classification model. |
 | `LLM_TIER2_SECONDARY_MODEL` | empty | Optional Tier-2 failover model used on 429/5xx/timeout. |
+| `LLM_TIER2_REASONING_EFFORT` | empty | Optional Tier-2 primary reasoning effort (`minimal`, `low`, `medium`, `high`). Forwarded only on supported routes. |
+| `LLM_TIER2_SECONDARY_REASONING_EFFORT` | empty | Optional Tier-2 secondary-route reasoning effort. Forwarded only on supported routes. |
 | `LLM_TIER2_EMERGENCY_MODEL` | empty | Optional emergency Tier-2 model used when the primary Tier-2 model fails the gold-set canary gate. |
 | `LLM_REPORT_MODEL` | `gpt-4.1-mini` | Weekly/monthly report narrative model. |
 | `LLM_REPORT_API_MODE` | `chat_completions` | Report narrative API mode (`chat_completions` or pilot `responses`). |
@@ -187,6 +191,11 @@ Production auth/secret guardrails:
 - Supports exact `provider:model` entries and model-prefix matching for versioned model IDs.
 - Startup fails if pricing does not cover active Tier-1/Tier-2/Embedding routes.
 - Runtime budget checks fail-closed for any invocation route without a configured price.
+
+Reasoning-effort notes:
+- Runtime Tier-1/Tier-2 routes now expose first-class reasoning controls via the `LLM_*_REASONING_EFFORT` variables above.
+- The shared adapter forwards `reasoning_effort` only when the route/model is known to support it. Unsupported routes silently omit the parameter instead of failing at request time.
+- OpenAI GPT-5 routes also omit explicit `temperature` in the shared adapter and rely on the model default. This avoids the chat-completions compatibility failure seen when Tier-1/Tier-2 attempted to send `temperature=0` to GPT-5.
 
 ## Cost and Safety Controls
 

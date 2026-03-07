@@ -86,6 +86,25 @@ def test_settings_rejects_invalid_report_api_mode() -> None:
         )
 
 
+def test_settings_normalizes_optional_reasoning_effort() -> None:
+    settings = Settings(
+        _env_file=None,
+        LLM_TIER1_REASONING_EFFORT=" Minimal ",
+        LLM_TIER2_SECONDARY_REASONING_EFFORT="LOW",
+    )
+
+    assert settings.LLM_TIER1_REASONING_EFFORT == "minimal"
+    assert settings.LLM_TIER2_SECONDARY_REASONING_EFFORT == "low"
+
+
+def test_settings_rejects_invalid_reasoning_effort() -> None:
+    with pytest.raises(ValidationError, match="LLM reasoning effort must be one of"):
+        Settings(
+            _env_file=None,
+            LLM_TIER1_REASONING_EFFORT="maximal",
+        )
+
+
 def test_settings_normalizes_optional_otel_fields() -> None:
     settings = Settings(
         _env_file=None,

@@ -57,6 +57,7 @@ _DEFAULT_DEDUP_URL_TRACKING_PARAMS = (
 _ALLOWED_ENVIRONMENTS = ("development", "staging", "production")
 _ALLOWED_RUNTIME_PROFILES = ("default", "agent")
 _ALLOWED_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_ALLOWED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
 
 
 def _normalize_pricing_key(raw_key: str) -> tuple[str, str]:
@@ -676,6 +677,26 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return normalized
 
+    @field_validator(
+        "LLM_TIER1_REASONING_EFFORT",
+        "LLM_TIER1_SECONDARY_REASONING_EFFORT",
+        "LLM_TIER2_REASONING_EFFORT",
+        "LLM_TIER2_SECONDARY_REASONING_EFFORT",
+        mode="before",
+    )
+    @classmethod
+    def parse_optional_reasoning_effort(cls, value: Any) -> str | None:
+        """Normalize optional reasoning-effort controls."""
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if not normalized:
+            return None
+        if normalized not in _ALLOWED_REASONING_EFFORTS:
+            msg = "LLM reasoning effort must be one of: minimal, low, medium, high"
+            raise ValueError(msg)
+        return normalized
+
     # =========================================================================
     # OpenAI Configuration
     # =========================================================================
@@ -723,9 +744,25 @@ class Settings(BaseSettings):
         default=None,
         description="Optional secondary model for Tier 1 failover",
     )
+    LLM_TIER1_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-1 primary route",
+    )
+    LLM_TIER1_SECONDARY_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-1 secondary failover route",
+    )
     LLM_TIER2_SECONDARY_MODEL: str | None = Field(
         default=None,
         description="Optional secondary model for Tier 2 failover",
+    )
+    LLM_TIER2_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-2 primary route",
+    )
+    LLM_TIER2_SECONDARY_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-2 secondary failover route",
     )
     LLM_TIER2_EMERGENCY_MODEL: str | None = Field(
         default=None,

@@ -69,6 +69,7 @@ class Tier2Usage:
     estimated_cost_usd: float = 0.0
     active_provider: str | None = None
     active_model: str | None = None
+    active_reasoning_effort: str | None = None
     used_secondary_route: bool = False
 
 
@@ -248,6 +249,8 @@ class Tier2Classifier:
         secondary_provider: str | None = None,
         primary_base_url: str | None = None,
         secondary_base_url: str | None = None,
+        reasoning_effort: str | None = None,
+        secondary_reasoning_effort: str | None = None,
         request_overrides: dict[str, Any] | None = None,
         semantic_cache: LLMSemanticCache | None = None,
     ) -> None:
@@ -258,6 +261,10 @@ class Tier2Classifier:
         self.secondary_provider = secondary_provider or settings.LLM_SECONDARY_PROVIDER
         self.primary_base_url = primary_base_url or settings.LLM_PRIMARY_BASE_URL
         self.secondary_base_url = secondary_base_url or settings.LLM_SECONDARY_BASE_URL
+        self.reasoning_effort = reasoning_effort or settings.LLM_TIER2_REASONING_EFFORT
+        self.secondary_reasoning_effort = (
+            secondary_reasoning_effort or settings.LLM_TIER2_SECONDARY_REASONING_EFFORT
+        )
         self.request_overrides = (
             dict(request_overrides) if isinstance(request_overrides, dict) else None
         )
@@ -328,6 +335,15 @@ class Tier2Classifier:
             usage.completion_tokens += event_usage.completion_tokens
             usage.api_calls += event_usage.api_calls
             usage.estimated_cost_usd += event_usage.estimated_cost_usd
+            if event_usage.active_provider is not None:
+                usage.active_provider = event_usage.active_provider
+            if event_usage.active_model is not None:
+                usage.active_model = event_usage.active_model
+            if event_usage.active_reasoning_effort is not None:
+                usage.active_reasoning_effort = event_usage.active_reasoning_effort
+            usage.used_secondary_route = (
+                usage.used_secondary_route or event_usage.used_secondary_route
+            )
 
         usage.estimated_cost_usd = round(usage.estimated_cost_usd, 8)
         return Tier2RunResult(
@@ -401,6 +417,7 @@ class Tier2Classifier:
                 provider=self.secondary_provider or self.primary_provider,
                 model=self.secondary_model,
                 client=self.secondary_client,
+                reasoning_effort=self.secondary_reasoning_effort,
                 request_overrides=self.request_overrides,
             )
         invocation = await invoke_with_policy(
@@ -410,6 +427,7 @@ class Tier2Classifier:
                 provider=self.primary_provider,
                 model=self.model,
                 client=self.client,
+                reasoning_effort=self.reasoning_effort,
                 request_overrides=self.request_overrides,
             ),
             secondary_route=secondary_route,
@@ -426,6 +444,7 @@ class Tier2Classifier:
             estimated_cost_usd=invocation.estimated_cost_usd,
             active_provider=invocation.active_provider,
             active_model=invocation.active_model,
+            active_reasoning_effort=invocation.active_reasoning_effort,
             used_secondary_route=invocation.used_secondary_route,
         )
 

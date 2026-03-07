@@ -156,7 +156,13 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         )
 
 
-def _build_classifier(mock_db_session, *, semantic_cache: InMemorySemanticCache | None = None):
+def _build_classifier(
+    mock_db_session,
+    *,
+    semantic_cache: InMemorySemanticCache | None = None,
+    model: str = "gpt-4o-mini",
+    reasoning_effort: str | None = None,
+):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
     cost_tracker = SimpleNamespace(
@@ -166,8 +172,9 @@ def _build_classifier(mock_db_session, *, semantic_cache: InMemorySemanticCache 
     classifier = Tier2Classifier(
         session=mock_db_session,
         client=client,
-        model="gpt-4o-mini",
+        model=model,
         cost_tracker=cost_tracker,
+        reasoning_effort=reasoning_effort,
         semantic_cache=semantic_cache,
     )
     return classifier, chat, cost_tracker
@@ -226,6 +233,29 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert mock_db_session.flush.await_count == 1
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_event_propagates_reasoning_effort_for_gpt5(mock_db_session) -> None:
+    classifier, chat, _cost_tracker = _build_classifier(
+        mock_db_session,
+        model="gpt-5-mini",
+        reasoning_effort="low",
+    )
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    _result, usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert len(chat.calls) == 1
+    assert chat.calls[0]["reasoning_effort"] == "low"
+    assert "temperature" not in chat.calls[0]
+    assert usage.active_reasoning_effort == "low"
+    assert usage.active_model == "gpt-5-mini"
 
 
 def test_build_payload_includes_indicator_descriptions_and_fallbacks(mock_db_session) -> None:

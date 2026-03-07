@@ -567,6 +567,10 @@ class Tier2Classifier:
                 {
                     "signal_type": signal_type,
                     "direction": str(config.get("direction", "")),
+                    "description": Tier2Classifier._indicator_description(
+                        signal_type=signal_type,
+                        config=config,
+                    ),
                     "keywords": keywords,
                 }
             )
@@ -576,6 +580,17 @@ class Tier2Classifier:
             "name": trend.name,
             "indicators": serialized_indicators,
         }
+
+    @staticmethod
+    def _indicator_description(*, signal_type: str, config: dict[str, Any]) -> str:
+        raw_description = config.get("description")
+        if isinstance(raw_description, str) and raw_description.strip():
+            return raw_description.strip()
+
+        humanized_signal = signal_type.replace("_", " ").strip()
+        if not humanized_signal:
+            return "Signal relevant to this trend."
+        return f"Signals of {humanized_signal} relevant to this trend."
 
     @staticmethod
     def _trend_identifier(trend: Trend) -> str:

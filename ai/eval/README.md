@@ -8,8 +8,9 @@ Policy reference:
 Recommended layout:
 
 - `ai/eval/gold_set.jsonl` — labeled items (inputs + expected structured outputs)
-- `ai/eval/results/` — benchmark outputs (timestamped)
+- `ai/eval/results/` — timestamped exploratory outputs (ignored by git; not source-of-truth)
 - `ai/eval/baselines/current.json` — pinned accepted benchmark baseline artifact
+- `ai/eval/baselines/history/` — prior accepted baselines and intentional milestone snapshots
 
 Each JSONL row supports:
 
@@ -38,6 +39,11 @@ Mode guidance:
 - `--dispatch-mode batch`: grouped Tier-1 calls for lower-cost offline sweeps/backfills.
 - `--request-priority flex`: low-priority provider hint for non-urgent offline runs.
 - Keep real-time runtime paths unchanged; these flags are intended for offline eval/backfill workflows.
+
+Artifact policy:
+- `ai/eval/results/*.json` stays ignored by default. Use this directory for exploratory and candidate runs only.
+- A run becomes repo-managed only when it is intentionally promoted by copying it into `ai/eval/baselines/current.json` or `ai/eval/baselines/history/<date>-<tag>.json`.
+- Benchmark artifacts now record source-control provenance, prompt file hashes, trend-config fingerprint, dataset fingerprints, and per-config invocation provenance so an accepted baseline can be reproduced later without keeping every exploratory run in git.
 
 Run quality audit:
 
@@ -161,9 +167,10 @@ Baseline update procedure:
 1. Run `horadus eval audit` (and fail on warnings for release gates).
 2. Run `horadus eval benchmark` with the candidate prompt/model config.
 3. Confirm `dataset_scope`, `gold_set_fingerprint_sha256`, and `gold_set_item_ids_sha256` match when comparing candidate vs baseline.
-4. Compare candidate results against `ai/eval/baselines/current.json` per `docs/PROMPT_EVAL_POLICY.md`.
-5. On approval, move previous `current.json` to `ai/eval/baselines/history/<date>-<tag>.json`.
-6. Replace `ai/eval/baselines/current.json` with the accepted benchmark artifact and commit.
+4. Confirm the promoted artifact’s provenance also matches the intended run: `source_control`, `prompt_provenance`, `trend_config_provenance`, and per-config invocation metadata.
+5. Compare candidate results against `ai/eval/baselines/current.json` per `docs/PROMPT_EVAL_POLICY.md`.
+6. On approval, move previous `current.json` to `ai/eval/baselines/history/<date>-<tag>.json`.
+7. Replace `ai/eval/baselines/current.json` with the accepted benchmark artifact and commit.
 
 Gold-set update rule:
 - If `ai/eval/gold_set.jsonl` rows or labels change, previous pass/fail baselines are superseded.

@@ -219,6 +219,7 @@ Tasks that have been completed and verified.
 - TASK-198: External review backlog intake preservation (2026-03-05) ✅
 - TASK-239: External architecture review backlog intake preservation (2026-03-06) ✅
 - TASK-249: Add First-Class Reasoning-Effort Controls for LLM Routes ✅
+- TASK-250: Make Eval Artifacts Strictly Reproducible and Traceable ✅
 - TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
 - TASK-243: Stabilize Tier-1 Routing Quality Under Eval and Runtime Load ✅
 - TASK-244: Persist Per-Item Benchmark Failure Diagnostics ✅

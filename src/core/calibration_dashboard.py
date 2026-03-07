@@ -652,9 +652,6 @@ class CalibrationDashboardService:
         rows: list[ReliabilityDiagnosticRow] = []
         for key, accumulator in accumulators.items():
             sample_size = len(accumulator.outcome_ids)
-            if sample_size == 0:
-                continue
-
             mean_predicted_probability = accumulator.predicted_sum / sample_size
             observed_rate = accumulator.actual_sum / sample_size
             mean_brier_score = accumulator.brier_sum / sample_size
@@ -784,8 +781,6 @@ class CalibrationDashboardService:
         points: list[BrierTimeseriesPoint] = []
         for week_start in sorted(grouped.keys()):
             values = grouped[week_start]
-            if not values:
-                continue
             week_end = min(week_start + timedelta(days=7), period_end)
             points.append(
                 BrierTimeseriesPoint(

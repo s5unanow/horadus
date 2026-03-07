@@ -25,6 +25,7 @@ class LLMChatRoute:
     model: str
     client: Any
     api_mode: str = "chat_completions"
+    reasoning_effort: str | None = None
     request_overrides: dict[str, Any] | None = None
 
 
@@ -99,8 +100,10 @@ class LLMChatFailoverInvoker:
             reason=self._error_reason(primary_error),
             primary_provider=self.primary.provider,
             primary_model=self.primary.model,
+            primary_reasoning_effort=self.primary.reasoning_effort,
             secondary_provider=self.secondary.provider,
             secondary_model=self.secondary.model,
+            secondary_reasoning_effort=self.secondary.reasoning_effort,
             primary_attempts=primary_attempts,
             primary_max_attempts=self.retry_policy.max_attempts,
         )
@@ -122,6 +125,7 @@ class LLMChatFailoverInvoker:
             stage=self.stage,
             secondary_provider=self.secondary.provider,
             secondary_model=self.secondary.model,
+            secondary_reasoning_effort=self.secondary.reasoning_effort,
             reason=self._error_reason(secondary_error),
             secondary_attempts=secondary_attempts,
             secondary_max_attempts=self.retry_policy.max_attempts,
@@ -156,6 +160,7 @@ class LLMChatFailoverInvoker:
                     stage=self.stage,
                     provider=route.provider,
                     model=route.model,
+                    reasoning_effort=route.reasoning_effort,
                     reason=self._error_reason(exc),
                     attempt=attempt,
                     next_attempt=attempt + 1,

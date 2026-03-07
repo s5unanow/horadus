@@ -130,25 +130,17 @@ def test_available_configs_include_gpt5_reasoning_candidates() -> None:
     configs = benchmark_module.available_configs()
 
     assert "tier1-gpt5-nano-minimal" in configs
-    assert configs["tier1-gpt5-nano-minimal"].tier1_request_overrides == {
-        "reasoning_effort": "minimal",
-        "temperature": 1,
-    }
+    assert configs["tier1-gpt5-nano-minimal"].tier1_reasoning_effort == "minimal"
+    assert configs["tier1-gpt5-nano-minimal"].tier1_request_overrides is None
     assert "tier1-gpt5-nano-low" in configs
-    assert configs["tier1-gpt5-nano-low"].tier1_request_overrides == {
-        "reasoning_effort": "low",
-        "temperature": 1,
-    }
+    assert configs["tier1-gpt5-nano-low"].tier1_reasoning_effort == "low"
+    assert configs["tier1-gpt5-nano-low"].tier1_request_overrides is None
     assert "tier2-gpt5-mini-low" in configs
-    assert configs["tier2-gpt5-mini-low"].tier2_request_overrides == {
-        "reasoning_effort": "low",
-        "temperature": 1,
-    }
+    assert configs["tier2-gpt5-mini-low"].tier2_reasoning_effort == "low"
+    assert configs["tier2-gpt5-mini-low"].tier2_request_overrides is None
     assert "tier2-gpt5-mini-medium" in configs
-    assert configs["tier2-gpt5-mini-medium"].tier2_request_overrides == {
-        "reasoning_effort": "medium",
-        "temperature": 1,
-    }
+    assert configs["tier2-gpt5-mini-medium"].tier2_reasoning_effort == "medium"
+    assert configs["tier2-gpt5-mini-medium"].tier2_request_overrides is None
 
 
 class _FakeTier1Classifier:
@@ -160,6 +152,7 @@ class _FakeTier1Classifier:
         model,
         batch_size,
         cost_tracker,
+        reasoning_effort=None,
         request_overrides=None,
         secondary_client=None,
         semantic_cache=None,
@@ -170,6 +163,7 @@ class _FakeTier1Classifier:
             model,
             batch_size,
             cost_tracker,
+            reasoning_effort,
             request_overrides,
             secondary_client,
             semantic_cache,
@@ -215,6 +209,7 @@ class _FakeTier2Classifier:
         client,
         model,
         cost_tracker,
+        reasoning_effort=None,
         request_overrides=None,
         secondary_client=None,
         semantic_cache=None,
@@ -224,6 +219,7 @@ class _FakeTier2Classifier:
             client,
             model,
             cost_tracker,
+            reasoning_effort,
             request_overrides,
             secondary_client,
             semantic_cache,
@@ -446,17 +442,14 @@ async def test_run_gold_set_benchmark_records_stage_specific_request_overrides(
     payload = json.loads(result_path.read_text(encoding="utf-8"))
     config_payloads = {entry["name"]: entry for entry in payload["configs"]}
 
-    assert config_payloads["tier1-gpt5-nano-minimal"]["tier1_request_overrides"] == {
-        "reasoning_effort": "minimal",
-        "temperature": 1,
-    }
+    assert config_payloads["tier1-gpt5-nano-minimal"]["tier1_reasoning_effort"] == "minimal"
+    assert config_payloads["tier1-gpt5-nano-minimal"]["tier1_request_overrides"] is None
     assert config_payloads["tier1-gpt5-nano-minimal"]["tier2_request_overrides"] is None
     assert config_payloads["tier1-gpt5-nano-minimal"]["elapsed_seconds"] >= 0
+    assert config_payloads["tier2-gpt5-mini-medium"]["tier1_reasoning_effort"] is None
+    assert config_payloads["tier2-gpt5-mini-medium"]["tier2_reasoning_effort"] == "medium"
     assert config_payloads["tier2-gpt5-mini-medium"]["tier1_request_overrides"] is None
-    assert config_payloads["tier2-gpt5-mini-medium"]["tier2_request_overrides"] == {
-        "reasoning_effort": "medium",
-        "temperature": 1,
-    }
+    assert config_payloads["tier2-gpt5-mini-medium"]["tier2_request_overrides"] is None
     assert config_payloads["tier2-gpt5-mini-medium"]["elapsed_seconds"] >= 0
 
 
@@ -627,11 +620,13 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             model,
             batch_size,
             cost_tracker,
+            reasoning_effort=None,
             request_overrides=None,
             secondary_client=None,
             semantic_cache=None,
         ) -> None:
             captured["tier1_batch_size"] = batch_size
+            captured["tier1_reasoning_effort"] = reasoning_effort
             captured["tier1_request_overrides"] = request_overrides
             captured["tier1_secondary_client"] = secondary_client
             super().__init__(
@@ -640,6 +635,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
                 model=model,
                 batch_size=batch_size,
                 cost_tracker=cost_tracker,
+                reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
                 semantic_cache=semantic_cache,
@@ -653,10 +649,12 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
             client,
             model,
             cost_tracker,
+            reasoning_effort=None,
             request_overrides=None,
             secondary_client=None,
             semantic_cache=None,
         ) -> None:
+            captured["tier2_reasoning_effort"] = reasoning_effort
             captured["tier2_request_overrides"] = request_overrides
             captured["tier2_secondary_client"] = secondary_client
             super().__init__(
@@ -664,6 +662,7 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
                 client=client,
                 model=model,
                 cost_tracker=cost_tracker,
+                reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
                 semantic_cache=semantic_cache,
@@ -696,6 +695,8 @@ async def test_run_gold_set_benchmark_applies_batch_and_flex_modes(
         "tier1_batch_policy": "diagnostic_multi_item_batch",
     }
     assert captured["tier1_batch_size"] == 10
+    assert captured["tier1_reasoning_effort"] is None
+    assert captured["tier2_reasoning_effort"] is None
     assert captured["tier1_request_overrides"] == {"service_tier": "flex"}
     assert captured["tier2_request_overrides"] == {"service_tier": "flex"}
 
@@ -721,6 +722,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
             model,
             batch_size,
             cost_tracker,
+            reasoning_effort=None,
             request_overrides=None,
             secondary_client=None,
             semantic_cache=None,
@@ -732,6 +734,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
                 model=model,
                 batch_size=batch_size,
                 cost_tracker=cost_tracker,
+                reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
                 semantic_cache=semantic_cache,
@@ -745,6 +748,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
             client,
             model,
             cost_tracker,
+            reasoning_effort=None,
             request_overrides=None,
             secondary_client=None,
             semantic_cache=None,
@@ -755,6 +759,7 @@ async def test_run_gold_set_benchmark_wraps_secondary_clients_for_response_captu
                 client=client,
                 model=model,
                 cost_tracker=cost_tracker,
+                reasoning_effort=reasoning_effort,
                 request_overrides=request_overrides,
                 secondary_client=secondary_client,
                 semantic_cache=semantic_cache,

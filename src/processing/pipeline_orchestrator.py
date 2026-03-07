@@ -656,6 +656,7 @@ class ProcessingPipeline:
                         "window_failover_ratio": round(degraded_status.window.failover_ratio, 6),
                         "tier2_active_provider": tier2_usage.active_provider,
                         "tier2_active_model": tier2_usage.active_model,
+                        "tier2_active_reasoning_effort": tier2_usage.active_reasoning_effort,
                         "tier2_used_secondary_route": bool(tier2_usage.used_secondary_route),
                     }
                     claims["_llm_policy"] = policy_meta
@@ -983,6 +984,7 @@ class ProcessingPipeline:
             "tier2_route": {
                 "active_provider": getattr(tier2_usage, "active_provider", None),
                 "active_model": getattr(tier2_usage, "active_model", None),
+                "active_reasoning_effort": getattr(tier2_usage, "active_reasoning_effort", None),
                 "used_secondary_route": bool(getattr(tier2_usage, "used_secondary_route", False)),
             },
         }

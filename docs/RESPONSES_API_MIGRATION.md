@@ -37,6 +37,8 @@ keeps per-stage model/provider selection at call sites.
 
 - `chat_completions` mode (default)
 - `responses` mode (pilot)
+- first-class route-level `reasoning_effort` controls, forwarded only when the
+  route/model is known to support them
 
 The adapter normalizes responses to the existing `choices[0].message.content` +
 `usage.prompt_tokens/completion_tokens` shape to keep downstream code/parsing
@@ -82,6 +84,22 @@ paths and observability refinements.
 - Conclusion: Responses API migration is **not** a prerequisite for GPT-5 model
   evaluation or a controlled runtime switch in this repo; it remains a separate
   migration concern for future adapter unification.
+
+## 2026-03 Reasoning-Control Follow-Up
+
+- `TASK-249` promoted GPT-5 reasoning control from benchmark-local request
+  overrides into the shared `LLMChatRoute` contract used by benchmark and runtime
+  Tier-1/Tier-2 paths.
+- The adapter now omits unsupported `reasoning_effort` parameters rather than
+  sending them blindly. This keeps non-GPT-5 routes safe while still allowing
+  explicit runtime configuration for GPT-5 candidates.
+- The same adapter currently omits explicit `temperature` on GPT-5 routes and
+  relies on the provider default. This is an intentional compatibility rule,
+  because the current Tier-1/Tier-2 callers still use `temperature=0` and GPT-5
+  Chat Completions rejected that setting during benchmark work.
+- Responses API remains behind Chat Completions for Tier-1/Tier-2 because
+  `response_format` parity is still missing there, not because reasoning-effort
+  configuration is unavailable.
 
 ## Follow-Up Checklist
 

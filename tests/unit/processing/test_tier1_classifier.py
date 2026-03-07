@@ -163,6 +163,8 @@ def _build_classifier(
     *,
     batch_size: int = 2,
     semantic_cache: InMemorySemanticCache | None = None,
+    model: str = "gpt-4.1-nano",
+    reasoning_effort: str | None = None,
 ):
     chat = FakeChatCompletions(calls=[])
     client = SimpleNamespace(chat=SimpleNamespace(completions=chat))
@@ -173,9 +175,10 @@ def _build_classifier(
     classifier = Tier1Classifier(
         session=mock_db_session,
         client=client,
-        model="gpt-4.1-nano",
+        model=model,
         batch_size=batch_size,
         cost_tracker=cost_tracker,
+        reasoning_effort=reasoning_effort,
         semantic_cache=semantic_cache,
     )
     return classifier, chat, cost_tracker
@@ -497,6 +500,26 @@ async def test_classify_items_fails_over_to_secondary_on_retryable_error(
         "model": "gpt-4o-mini",
     }
     cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_items_propagates_reasoning_effort_for_gpt5(mock_db_session) -> None:
+    classifier, chat, _cost_tracker = _build_classifier(
+        mock_db_session,
+        batch_size=1,
+        model="gpt-5-nano",
+        reasoning_effort="minimal",
+    )
+    items = [_build_item("eu-russia update")]
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    _results, usage = await classifier.classify_items(items, trends)
+
+    assert len(chat.calls) == 1
+    assert chat.calls[0]["reasoning_effort"] == "minimal"
+    assert "temperature" not in chat.calls[0]
+    assert usage.active_reasoning_effort == "minimal"
+    assert usage.active_model == "gpt-5-nano"
 
 
 @pytest.mark.asyncio

@@ -4,7 +4,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.processing.llm_invocation_adapter import create_route_completion
+from src.processing.llm_invocation_adapter import (
+    create_route_completion,
+    resolve_route_reasoning_effort,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -68,3 +71,79 @@ async def test_create_route_completion_responses_mode_normalizes_output() -> Non
     assert response.choices[0].message.content == "Normalized response text"
     assert response.usage.prompt_tokens == 9
     assert response.usage.completion_tokens == 4
+
+
+@pytest.mark.asyncio
+async def test_create_route_completion_omits_temperature_for_openai_gpt5_routes() -> None:
+    calls: list[dict[str, object]] = []
+
+    class ChatCompletions:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))],
+                usage=SimpleNamespace(prompt_tokens=4, completion_tokens=2),
+            )
+
+    route = SimpleNamespace(
+        provider="openai",
+        model="gpt-5-nano",
+        api_mode="chat_completions",
+        reasoning_effort="minimal",
+        client=SimpleNamespace(chat=SimpleNamespace(completions=ChatCompletions())),
+    )
+    await create_route_completion(
+        route=route,
+        messages=[{"role": "user", "content": "{}"}],
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+
+    assert len(calls) == 1
+    assert "temperature" not in calls[0]
+    assert calls[0]["reasoning_effort"] == "minimal"
+
+
+@pytest.mark.asyncio
+async def test_create_route_completion_omits_unsupported_reasoning_effort() -> None:
+    calls: list[dict[str, object]] = []
+
+    class ChatCompletions:
+        async def create(self, **kwargs):
+            calls.append(kwargs)
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content='{"ok": true}'))],
+                usage=SimpleNamespace(prompt_tokens=4, completion_tokens=2),
+            )
+
+    route = SimpleNamespace(
+        provider="openai",
+        model="gpt-4.1-mini",
+        api_mode="chat_completions",
+        reasoning_effort="medium",
+        request_overrides={"service_tier": "flex"},
+        client=SimpleNamespace(chat=SimpleNamespace(completions=ChatCompletions())),
+    )
+    await create_route_completion(
+        route=route,
+        messages=[{"role": "user", "content": "{}"}],
+        temperature=0,
+        response_format={"type": "json_object"},
+    )
+
+    assert len(calls) == 1
+    assert "reasoning_effort" not in calls[0]
+    assert calls[0]["service_tier"] == "flex"
+    assert calls[0]["temperature"] == 0
+
+
+def test_resolve_route_reasoning_effort_respects_provider_model_support() -> None:
+    supported_route = SimpleNamespace(provider="openai", model="gpt-5-mini", reasoning_effort="low")
+    unsupported_route = SimpleNamespace(
+        provider="openai",
+        model="gpt-4.1-mini",
+        request_overrides={"reasoning_effort": "medium"},
+    )
+
+    assert resolve_route_reasoning_effort(supported_route) == "low"
+    assert resolve_route_reasoning_effort(unsupported_route) is None

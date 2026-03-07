@@ -21,6 +21,7 @@ from src.processing.llm_input_safety import (
     truncate_to_token_limit,
     wrap_untrusted_text,
 )
+from src.processing.llm_invocation_adapter import resolve_route_reasoning_effort
 from src.processing.llm_pricing import estimate_model_cost_usd
 
 logger = structlog.get_logger(__name__)
@@ -31,6 +32,7 @@ class LLMInvocationResult:
     response: Any
     active_provider: str
     active_model: str
+    active_reasoning_effort: str | None
     used_secondary_route: bool
     prompt_tokens: int
     completion_tokens: int
@@ -134,6 +136,8 @@ async def invoke_with_policy(
                 "Strict schema unsupported; falling back to compatibility response format",
                 stage=stage,
                 model=primary_route.model,
+                api_mode=primary_route.api_mode,
+                reasoning_effort=resolve_route_reasoning_effort(primary_route),
             )
             response, active_route = await invoker.create_chat_completion(
                 messages=messages,
@@ -150,6 +154,7 @@ async def invoke_with_policy(
     prompt_tokens, completion_tokens = extract_usage_tokens(response)
     active_provider = active_route.provider
     active_model = active_route.model
+    active_reasoning_effort = resolve_route_reasoning_effort(active_route)
     used_secondary = secondary_route is not None and active_route is secondary_route
     if used_secondary:
         record_llm_failover(stage=stage)
@@ -171,6 +176,7 @@ async def invoke_with_policy(
         response=response,
         active_provider=active_provider,
         active_model=active_model,
+        active_reasoning_effort=active_reasoning_effort,
         used_secondary_route=used_secondary,
         prompt_tokens=prompt_tokens,
         completion_tokens=completion_tokens,

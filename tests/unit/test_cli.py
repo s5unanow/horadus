@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import os
+import runpy
 import subprocess
 from pathlib import Path
 from uuid import uuid4
@@ -11,6 +12,7 @@ from uuid import uuid4
 import pytest
 
 import src.cli as cli_module
+import src.horadus_cli.app as cli_app_module
 import src.horadus_cli.result as result_module
 import src.horadus_cli.task_commands as task_commands_module
 import src.horadus_cli.task_repo as task_repo_module
@@ -938,6 +940,15 @@ def test_horadus_app_main_returns_1_without_subcommand(
 
     assert result == 1
     assert "usage:" in capsys.readouterr().out
+
+
+def test_cli_script_entrypoint_exits_with_main_result(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cli_app_module, "main", lambda: 7)
+
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_path(str(Path(cli_module.__file__)), run_name="__main__")
+
+    assert exc_info.value.code == 7
 
 
 def test_emit_result_serializes_errors_in_json(

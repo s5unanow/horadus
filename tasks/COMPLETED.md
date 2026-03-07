@@ -248,6 +248,10 @@ Tasks that have been completed and verified.
   Added per-item benchmark artifact results for Tier-1 and Tier-2 under each config.
   Failure rows now capture stage-specific error category/message plus best-effort raw model output.
   Successful rows now include compact predicted summaries so operators can debug without replaying the model.
+- TASK-245: Add Explicit Tier-1 Scoring Rubric and Calibration Examples ✅
+  Added explicit Tier-1 score bands around the runtime threshold plus targeted examples for current-event positives and media/history negatives.
+  Added prompt regression tests to keep the rubric and examples from drifting.
+  Evaluated the updated prompt against the gold set before promotion and did not promote a new baseline.
 
 ## Archive
 

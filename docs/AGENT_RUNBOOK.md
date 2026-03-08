@@ -90,6 +90,14 @@ dependencies rather than just style.
 Keep using the workflow until prerequisite checks, required verification
 reruns, and completion verification succeed; do not stop at the first
 plausible success signal.
+Treat an empty, partial, or suspiciously narrow workflow result as a
+retrieval problem first when the missing data likely exists.
+Before concluding that no result exists, try one or two sensible recovery
+steps such as broader Horadus queries, alternate filters, or the documented
+manual recovery path.
+If a forced fallback is still required after those recovery attempts, record
+it with `horadus tasks record-friction`; do not log routine success cases or
+expected empty results.
 Treat repo-facing work as incomplete until requested deliverables, required
 repo updates, and required verification/gate runs are finished or explicitly
 reported blocked.
@@ -115,8 +123,9 @@ that completes silently inside the CLI is not a manual-recovery signal.
 13. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 When: record a real Horadus workflow gap or forced fallback in a structured
 local friction log under `artifacts/agent/horadus-cli-feedback/`.
-Use this only for genuine friction or forced fallback, not routine success
-cases, and do not treat the log as required reading during normal task flow.
+Use this only for genuine friction or forced fallback after sensible recovery
+attempts, not routine success cases or expected empty results, and do not
+treat the log as required reading during normal task flow.
 
 14. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
 When: generate the compact daily friction report at

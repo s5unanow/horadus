@@ -77,6 +77,14 @@ DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
     "ops/skills/horadus-cli/references/commands.md",
 )
 
+FALLBACK_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
+    "AGENTS.md",
+    "README.md",
+    "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
+)
+
 COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     (
         "Treat repo-facing work as incomplete until requested deliverables, "
@@ -121,6 +129,23 @@ DEPENDENCY_AWARE_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     ),
 )
 
+FALLBACK_GUIDANCE_STATEMENTS: tuple[str, ...] = (
+    (
+        "Treat an empty, partial, or suspiciously narrow workflow result as a "
+        "retrieval problem first when the missing data likely exists."
+    ),
+    (
+        "Before concluding that no result exists, try one or two sensible "
+        "recovery steps such as broader Horadus queries, alternate filters, "
+        "or the documented manual recovery path."
+    ),
+    (
+        "If a forced fallback is still required after those recovery attempts, "
+        "record it with `horadus tasks record-friction`; do not log routine "
+        "success cases or expected empty results."
+    ),
+)
+
 
 def canonical_task_workflow_command_templates() -> tuple[str, ...]:
     return tuple(command.template for command in CANONICAL_TASK_WORKFLOW_COMMANDS)
@@ -136,3 +161,7 @@ def completion_guidance_statements() -> tuple[str, ...]:
 
 def dependency_aware_guidance_statements() -> tuple[str, ...]:
     return DEPENDENCY_AWARE_GUIDANCE_STATEMENTS
+
+
+def fallback_guidance_statements() -> tuple[str, ...]:
+    return FALLBACK_GUIDANCE_STATEMENTS

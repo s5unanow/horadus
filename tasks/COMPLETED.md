@@ -285,6 +285,11 @@ Tasks that have been completed and verified.
   the likely outcome seems obvious, frames CLI commands as dependency-aware
   policy surfaces, and enforces that shared wording across AGENTS, the
   runbook, the Horadus skill, and the command reference.
+- TASK-279: Add Empty-Result Recovery and Friction-Logging Fallback Rules ✅
+  The workflow guidance now treats empty or suspiciously narrow workflow
+  results as recovery problems first, requires sensible retry paths before
+  concluding that nothing exists, and keeps friction logging limited to real
+  forced fallbacks rather than routine success or expected empty results.
 ## Archive
 
 (Older sprints will be archived here)

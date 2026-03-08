@@ -198,6 +198,7 @@ Tasks that have been completed and verified.
 - TASK-259: Add a Mechanical Done-State Verifier and Explicit Lifecycle States ✅
 - TASK-260: Add a Full Local CI-Parity Gate in Horadus CLI ✅
 - TASK-261: Auto-Handle Docker Readiness for Workflow Gates ✅
+- TASK-262: Enforce No Early Completion Claims in Agent Workflow Guidance ✅
 - TASK-263: Route Repo Workflow Automation Through Horadus CLI and Skill ✅
 - TASK-264: Enforce Horadus CLI, Skill, and Docs Drift Consistency ✅
 - TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅

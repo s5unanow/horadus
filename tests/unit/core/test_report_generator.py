@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -469,6 +470,27 @@ def test_fallback_narrative_without_contradicted_events_skips_summary() -> None:
 
     assert "Contradiction review tracked" not in narrative
     assert "Confidence is moderate" in narrative
+
+
+def test_weekly_prompt_contract_requires_grounding_and_uncertainty_language() -> None:
+    prompt = Path("ai/prompts/weekly_report.md").read_text(encoding="utf-8")
+
+    assert (
+        "Every narrative claim must be directly supported by the provided structured payload"
+        in prompt
+    )
+    assert "explicitly framed as uncertainty/inference" in prompt
+    assert "Do not add causal explanations, locations, or confidence labels" in prompt
+    assert "If evidence is sparse, conflicting, or low-coverage" in prompt
+
+
+def test_monthly_prompt_contract_forbids_unsupported_causal_explanations() -> None:
+    prompt = Path("ai/prompts/monthly_report.md").read_text(encoding="utf-8")
+
+    assert "Describe likely drivers only when the payload directly supports them" in prompt
+    assert "otherwise say the cause is uncertain" in prompt
+    assert "explicitly framed as uncertainty/inference" in prompt
+    assert "Do not add unsupported causal explanations" in prompt
 
 
 @pytest.mark.asyncio

@@ -91,6 +91,9 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "## Fallback Workflow",
                 fallback_guidance_block.strip(),
                 "",
+                "## Shared Workflow/Policy Change Guardrails",
+                workflow_guardrail_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -121,6 +124,8 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "",
                 fallback_guidance_block.strip(),
                 "",
+                workflow_guardrail_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -135,6 +140,8 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 dependency_guidance_block.strip(),
                 "",
                 fallback_guidance_block.strip(),
+                "",
+                workflow_guardrail_block.strip(),
                 "",
             ]
         ),
@@ -407,7 +414,9 @@ def test_docs_freshness_flags_missing_workflow_policy_guardrail_statement(
     )
 
     assert any(
-        issue.rule_id == "workflow_policy_guardrail_statement_missing" for issue in result.errors
+        issue.rule_id == "workflow_policy_guardrail_statement_missing"
+        and issue.path == "tasks/specs/TEMPLATE.md"
+        for issue in result.errors
     )
 
 

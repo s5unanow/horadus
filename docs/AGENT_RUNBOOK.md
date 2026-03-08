@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-06
+**Last Verified**: 2026-03-08
 
 Short command index for day-to-day agent/operator work.
 
@@ -105,3 +105,10 @@ Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.
 If Docker auto-start is unsupported in the current environment, start Docker
 manually before rerunning the workflow command.
+
+## Eval Benchmark Configs
+
+- `uv run --no-sync horadus eval benchmark` runs only the default baseline
+  configs: `baseline` and `alternative`.
+- GPT-5 benchmark candidates stay available for targeted comparisons, but must
+  be requested explicitly with repeated `--config` flags.

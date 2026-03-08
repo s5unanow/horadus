@@ -38,6 +38,7 @@ _TIER1_BATCH_POLICY_SAFE_DEFAULT = "safe_single_item_default"
 _TIER1_BATCH_POLICY_DIAGNOSTIC = "diagnostic_multi_item_batch"
 _TIER1_PROMPT_PATH = "ai/prompts/tier1_filter.md"
 _TIER2_PROMPT_PATH = "ai/prompts/tier2_classify.md"
+_DEFAULT_BENCHMARK_CONFIG_NAMES = ("baseline", "alternative")
 
 
 @dataclass(slots=True)
@@ -279,7 +280,7 @@ def _build_benchmark_secondary_client(
 
 
 def available_configs() -> dict[str, EvalConfig]:
-    """Return default named benchmark configurations."""
+    """Return all named benchmark configurations, including explicit candidates."""
     configs = (
         EvalConfig(
             name="baseline",
@@ -327,6 +328,17 @@ def available_configs() -> dict[str, EvalConfig]:
         ),
     )
     return {config.name: config for config in configs}
+
+
+def default_config_names() -> tuple[str, ...]:
+    """Return the config names used when benchmark runs omit ``--config``."""
+    return _DEFAULT_BENCHMARK_CONFIG_NAMES
+
+
+def default_configs() -> list[EvalConfig]:
+    """Return the default benchmark configs used when ``--config`` is omitted."""
+    known = available_configs()
+    return [known[name] for name in _DEFAULT_BENCHMARK_CONFIG_NAMES]
 
 
 def _normalize_dispatch_mode(value: str) -> str:
@@ -474,7 +486,7 @@ def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetIte
 
 def _resolve_configs(config_names: list[str] | None) -> list[EvalConfig]:
     if not config_names:
-        return list(available_configs().values())
+        return default_configs()
     known = available_configs()
     selected: list[EvalConfig] = []
     for name in config_names:

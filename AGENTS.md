@@ -146,8 +146,13 @@ After completing work:
   - `uv run --no-sync horadus tasks local-gate --full`
   - `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
   - `uv run --no-sync horadus tasks finish TASK-XXX`
-  - `uv run --no-sync horadus tasks list-active --format json`
+  - `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
+- `uv run --no-sync horadus tasks list-active --format json`
   - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
+- Record friction only for real Horadus workflow gaps or forced fallback, not
+  routine success cases. Entries live under gitignored
+  `artifacts/agent/horadus-cli-feedback/` and should not be read during normal
+  task execution.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.

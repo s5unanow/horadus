@@ -146,24 +146,12 @@ task-start: ## Start a new task branch with sequencing guards (TASK=117 NAME=sho
 	fi
 	$(UV_RUN) horadus tasks start "$(TASK)" --name "$(NAME)"
 
-agent-safe-start: ## Start a task branch with sprint-eligibility + sequencing guard (TASK=117 NAME=short-name)
+agent-safe-start: ## Compatibility wrapper for the canonical guarded Horadus task-start command
 	@if [ -z "$(TASK)" ] || [ -z "$(NAME)" ]; then \
 		echo "Usage: make agent-safe-start TASK=117 NAME=short-name"; \
 		exit 1; \
 	fi
-	@if ! rg -q "^## Active Tasks" tasks/CURRENT_SPRINT.md; then \
-		echo "Active Tasks section missing in tasks/CURRENT_SPRINT.md"; \
-		exit 1; \
-	fi
-	@if ! awk '/^## Active Tasks/{f=1;next}/^## /{f=0}f' tasks/CURRENT_SPRINT.md | rg -q "TASK-$(TASK)"; then \
-		echo "TASK-$(TASK) is not listed in Active Tasks"; \
-		exit 1; \
-	fi
-	@if awk '/^## Active Tasks/{f=1;next}/^## /{f=0}f' tasks/CURRENT_SPRINT.md | rg -q "TASK-$(TASK).*\\[REQUIRES_HUMAN\\]"; then \
-		echo "TASK-$(TASK) is marked [REQUIRES_HUMAN] and cannot be started autonomously"; \
-		exit 1; \
-	fi
-	$(UV_RUN) horadus tasks start "$(TASK)" --name "$(NAME)"
+	$(UV_RUN) horadus tasks safe-start "$(TASK)" --name "$(NAME)"
 
 task-finish: ## Compatibility wrapper for the canonical horadus task completion command
 	$(UV_RUN) horadus tasks finish

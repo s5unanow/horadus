@@ -1206,6 +1206,21 @@ def start_task_data(
     )
 
 
+def safe_start_task_data(
+    task_input: str, raw_name: str, *, dry_run: bool
+) -> tuple[int, dict[str, Any], list[str]]:
+    task_id = normalize_task_id(task_input)
+
+    eligibility_exit, eligibility_data_payload, eligibility_lines = eligibility_data(task_id)
+    if eligibility_exit != ExitCode.OK:
+        return (eligibility_exit, eligibility_data_payload, eligibility_lines)
+
+    start_exit, start_data_payload, start_lines = start_task_data(
+        task_id, raw_name, dry_run=dry_run
+    )
+    return (start_exit, start_data_payload, [*eligibility_lines, *start_lines])
+
+
 def finish_task_data(
     task_input: str | None, *, dry_run: bool
 ) -> tuple[int, dict[str, Any], list[str]]:
@@ -1792,6 +1807,15 @@ def handle_start(args: Any) -> CommandResult:
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
+def handle_safe_start(args: Any) -> CommandResult:
+    try:
+        task_id = normalize_task_id(args.task_id)
+    except ValueError as exc:
+        return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
+    exit_code, data, lines = safe_start_task_data(task_id, args.name, dry_run=bool(args.dry_run))
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
 def handle_finish(args: Any) -> CommandResult:
     try:
         task_input = normalize_task_id(args.task_id) if args.task_id is not None else None
@@ -1963,6 +1987,15 @@ def register_task_commands(subparsers: Any) -> None:
     start_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
     start_parser.add_argument("--name", required=True, help="Short branch suffix.")
     start_parser.set_defaults(handler=handle_start)
+
+    safe_start_parser = tasks_subparsers.add_parser(
+        "safe-start",
+        help="Run autonomous task-start eligibility plus guarded branch start.",
+    )
+    add_leaf_cli_options(safe_start_parser)
+    safe_start_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
+    safe_start_parser.add_argument("--name", required=True, help="Short branch suffix.")
+    safe_start_parser.set_defaults(handler=handle_safe_start)
 
     finish_parser = tasks_subparsers.add_parser(
         "finish",

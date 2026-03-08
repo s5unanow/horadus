@@ -23,9 +23,15 @@ Use this skill for repo workflow operations in this project.
 - Task search: `uv run --no-sync horadus tasks search "query" --format json`
 - Context pack: `uv run --no-sync horadus tasks context-pack TASK-XXX --format json`
 - Start preflight: `uv run --no-sync horadus tasks preflight --format json`
-- Eligibility: `uv run --no-sync horadus tasks eligibility TASK-XXX --format json`
-- Branch start dry-run:
+- Canonical autonomous start dry-run:
+  `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name --dry-run --format json`
+- Lower-level eligibility check:
+  `uv run --no-sync horadus tasks eligibility TASK-XXX --format json`
+- Lower-level branch start dry-run:
   `uv run --no-sync horadus tasks start TASK-XXX --name short-name --dry-run --format json`
+- Local gate: `uv run --no-sync horadus tasks local-gate --full --format json`
+- Lifecycle verifier: `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict --format json`
+- Finish: `uv run --no-sync horadus tasks finish TASK-XXX --format json`
 - Triage bundle:
   `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 

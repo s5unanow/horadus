@@ -102,9 +102,10 @@ After completing work:
 
 - Every engineering task must run on its own dedicated git branch created from `main`.
 - Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
-- Before creating a task branch, run sequencing preflight: `make task-preflight`.
-- Start task branches via guarded command: `make task-start TASK=XXX NAME=short-name`.
-- Canonical agent start command is `make agent-safe-start TASK=XXX NAME=short-name` (enforces sprint eligibility + sequencing guard).
+- Before creating a task branch, run sequencing preflight: `uv run --no-sync horadus tasks preflight`.
+- Start task branches via lower-level guarded command: `uv run --no-sync horadus tasks start TASK-XXX --name short-name`.
+- Canonical agent start command is `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name` (enforces sprint eligibility + sequencing guard).
+- `make task-preflight`, `make task-start`, and `make agent-safe-start` remain compatibility wrappers when a Make target is more convenient.
 - Prefer `horadus` for repo workflow operations when an equivalent command
   exists (for example `horadus tasks ...` and `horadus triage collect`), and
   prefer `--format json` for agent consumption where appropriate.
@@ -145,7 +146,7 @@ After completing work:
 ## Git Conventions
 
 Branch naming:
-- Task branches are enforced as `codex/task-XXX-short-name` via `make task-start`.
+- Task branches are enforced as `codex/task-XXX-short-name` via `horadus tasks start`.
 - `main` is protected and must stay merge-only.
 
 Commit message format:

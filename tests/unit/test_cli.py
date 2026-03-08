@@ -114,6 +114,19 @@ def test_build_parser_accepts_task_local_gate_command() -> None:
     assert args.full is True
 
 
+def test_build_parser_accepts_task_safe_start_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        ["tasks", "safe-start", "TASK-117", "--name", "short-name", "--dry-run"]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "safe-start"
+    assert args.task_id == "TASK-117"
+    assert args.name == "short-name"
+    assert args.dry_run is True
+
+
 def test_build_parser_accepts_eval_benchmark_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(
@@ -1746,6 +1759,70 @@ def test_start_task_data_switches_to_new_branch(monkeypatch: pytest.MonkeyPatch)
     assert "Created task branch: codex/task-253-coverage-100" in lines[-1]
 
 
+def test_safe_start_task_data_propagates_eligibility_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "eligibility_data",
+        lambda _task_id: (
+            task_commands_module.ExitCode.VALIDATION_ERROR,
+            {"task_id": "TASK-253", "requires_human": True},
+            ["TASK-253 is marked [REQUIRES_HUMAN] and is not eligible for autonomous start"],
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.safe_start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["requires_human"] is True
+    assert lines == ["TASK-253 is marked [REQUIRES_HUMAN] and is not eligible for autonomous start"]
+
+
+def test_safe_start_task_data_runs_guarded_start_after_eligibility(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "eligibility_data",
+        lambda _task_id: (
+            task_commands_module.ExitCode.OK,
+            {"task_id": "TASK-253"},
+            ["Agent task eligibility passed: TASK-253"],
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "start_task_data",
+        lambda _task_id, name, *, dry_run: (
+            task_commands_module.ExitCode.OK,
+            {
+                "task_id": "TASK-253",
+                "branch_name": "codex/task-253-coverage-100",
+                "dry_run": dry_run,
+            },
+            [
+                "Task sequencing guard passed: main is clean/synced and no open task PRs.",
+                f"Dry run: would create task branch codex/task-253-{name}",
+            ],
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.safe_start_task_data(
+        "TASK-253", "coverage-100", dry_run=True
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["branch_name"] == "codex/task-253-coverage-100"
+    assert lines == [
+        "Agent task eligibility passed: TASK-253",
+        "Task sequencing guard passed: main is clean/synced and no open task PRs.",
+        "Dry run: would create task branch codex/task-253-coverage-100",
+    ]
+
+
 def test_full_local_gate_steps_match_expected_ci_parity_commands(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2826,6 +2903,39 @@ def test_handle_start_rejects_invalid_task_id() -> None:
 
     assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_handle_safe_start_rejects_invalid_task_id() -> None:
+    result = task_commands_module.handle_safe_start(
+        argparse.Namespace(task_id="bad-task", name="coverage")
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_handle_safe_start_wraps_safe_start_task_data(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "safe_start_task_data",
+        lambda _task_id, name, *, dry_run: (
+            task_commands_module.ExitCode.OK,
+            {"task_id": "TASK-253", "branch_name": f"codex/task-253-{name}", "dry_run": dry_run},
+            ["safe start ok"],
+        ),
+    )
+
+    result = task_commands_module.handle_safe_start(
+        argparse.Namespace(task_id="TASK-253", name="coverage", dry_run=True)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.data == {
+        "task_id": "TASK-253",
+        "branch_name": "codex/task-253-coverage",
+        "dry_run": True,
+    }
+    assert result.lines == ["safe start ok"]
 
 
 def test_handle_list_active_marks_due_today_blockers(

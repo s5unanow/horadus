@@ -221,7 +221,7 @@ Task workflow guard commands:
 
 ```bash
 uv run --no-sync horadus tasks preflight
-make agent-safe-start TASK=117 NAME=short-name
+uv run --no-sync horadus tasks safe-start TASK-117 --name short-name
 uv run --no-sync horadus tasks local-gate --full
 uv run --no-sync horadus tasks lifecycle TASK-117 --strict
 uv run --no-sync horadus tasks finish TASK-117
@@ -232,6 +232,11 @@ Each task PR must include:
 ```text
 Primary-Task: TASK-XXX
 ```
+
+`horadus tasks safe-start TASK-XXX --name short-name` is the canonical guarded
+task-start command for agents. It enforces sprint eligibility plus sequencing
+checks before creating the canonical `codex/task-XXX-short-name` branch.
+`make agent-safe-start` is a compatibility wrapper to the same CLI flow.
 
 `horadus tasks finish` is the canonical task-completion command. It does not
 report success unless the branch is pushed, the PR exists, required checks are
@@ -253,6 +258,10 @@ compatibility wrapper to the same CLI flow.
 required action is a Docker-gated push. Unsupported environments fail closed
 with an explicit “start Docker and retry” blocker instead of silently skipping
 integration expectations.
+
+Use raw `git` / `gh` only when the Horadus CLI does not expose the needed
+workflow step yet, or when the CLI explicitly tells you a manual recovery step
+is required.
 
 ## Production Deployment
 

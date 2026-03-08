@@ -14,9 +14,14 @@
   - Enforces clean/synced `main`, required hooks, GitHub CLI availability, and no open task PRs unless explicitly bypassed.
 - `horadus tasks eligibility TASK-XXX`
   - Checks sprint activeness, human-gated status, and task-start preflight.
-- `horadus tasks start TASK-XXX --name short-name`
-  - Creates the canonical `codex/task-XXX-short-name` branch.
+- `horadus tasks safe-start TASK-XXX --name short-name`
+  - Canonical autonomous task-start command.
+  - Reuses eligibility checks and then creates the canonical
+    `codex/task-XXX-short-name` branch.
   - Use `--dry-run` before performing the actual branch switch.
+- `horadus tasks start TASK-XXX --name short-name`
+  - Lower-level branch creation command when eligibility was already handled.
+  - Also creates the canonical `codex/task-XXX-short-name` branch.
 
 ## Triage commands
 

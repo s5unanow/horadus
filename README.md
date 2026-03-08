@@ -280,6 +280,14 @@ green, the review gate passes, the PR is merged, and local `main` is synced.
 task lifecycle state. `--strict` succeeds only when the task reaches
 `local-main-synced`, which is the repo policy definition of done.
 
+Treat repo-facing work as incomplete until requested deliverables, required
+repo updates, and required verification/gate runs are finished or explicitly
+reported blocked.
+Implementation, required tests/gates, and required task/doc/status updates
+remain part of the same task unless they are explicitly blocked.
+If a task is blocked, report the exact missing item, the blocker causing it,
+and the furthest completed lifecycle step rather than a vague
+partial-completion claim.
 Do not claim a task is complete, done, or finished until
 `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
 `horadus tasks finish TASK-XXX` completes successfully.

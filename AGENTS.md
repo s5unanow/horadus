@@ -118,6 +118,9 @@ After completing work:
 - Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.
 - Mechanical completion for a task is defined by `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`; success requires the verifier to report `local-main-synced`.
 - Default autonomous completion for engineering tasks is full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync), not just local code changes.
+- Treat repo-facing work as incomplete until requested deliverables, required repo updates, and required verification/gate runs are finished or explicitly reported blocked.
+- Implementation, required tests/gates, and required task/doc/status updates remain part of the same task unless they are explicitly blocked.
+- If a task is blocked, report the exact missing item, the blocker causing it, and the furthest completed lifecycle step rather than a vague partial-completion claim.
 - Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
 - `horadus tasks finish` must always wait a positive review-gate timeout; actionable current-head review feedback blocks completion, while a silent timeout after the full wait window may continue inside the CLI flow without bypassing to raw `gh pr merge`.
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.

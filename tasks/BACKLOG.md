@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-277`.
+- Next available task IDs start at `TASK-282`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -38,6 +38,9 @@ Tasks are organized by phase and priority.
 - Mandatory start sequence per task: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Mandatory completion sequence per task: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify merge commit is present locally.
 - Autonomous engineering-task completion is defined as full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync).
+- Treat repo-facing work as incomplete until requested deliverables, required repo updates, and required verification/gate runs are finished or explicitly reported blocked.
+- Implementation, required tests/gates, and required task/doc/status updates remain part of the same task unless they are explicitly blocked.
+- If a task is blocked, report the exact missing item, the blocker causing it, and the furthest completed lifecycle step rather than a vague partial-completion claim.
 - Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
@@ -5103,6 +5106,114 @@ the window expires with no actionable feedback.
 - [ ] Silence caused by review quota exhaustion or equivalent no-feedback conditions does not deadlock task completion
 - [ ] Actionable current-head Codex review comments still fail the gate
 - [ ] Tests cover silent-timeout allow behavior, actionable-feedback blocking, and representative stale-head/non-current-head edge cases
+
+---
+
+### TASK-277: Make Agent Workflow Completeness and Verification Explicit
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+
+The repo already forbids early completion claims, but the guidance is still
+spread across command docs and policy bullets rather than framed as one
+explicit completeness contract. Add a reusable contract for repo-facing agents
+so they treat work as incomplete until requested deliverables, required repo
+updates, and verification gates are either finished or explicitly marked
+blocked.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `src/core/repo_workflow.py`, `tests/unit/core/test_docs_freshness.py`
+
+**Acceptance Criteria**:
+- [ ] Agent-facing workflow guidance defines one explicit completeness contract instead of relying on scattered reminders
+- [ ] The contract states that implementation, required tests/gates, and required task/doc updates remain part of the task unless explicitly marked blocked
+- [ ] Guidance requires blocked outputs to name the exact missing item and furthest completed step rather than reporting a vague partial completion
+- [ ] Shared workflow text stays sourced from one canonical repo-owned surface so docs/skill drift checks can enforce it
+- [ ] Tests or docs-freshness checks fail if the canonical completeness contract disappears from the required workflow surfaces
+
+---
+
+### TASK-278: Add Dependency-Aware Tool Persistence Rules to Repo Workflow Guidance
+**Priority**: P2 (Medium)
+**Estimate**: 1-3 hours
+
+Long-horizon agent workflows can fail by skipping prerequisite steps because
+the end state looks obvious. Tighten the repo workflow guidance so agents treat
+the Horadus CLI flow as dependency-aware and keep using tools until
+prerequisite checks and final verification are actually satisfied.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `src/core/repo_workflow.py`, `tests/unit/core/test_docs_freshness.py`
+
+**Acceptance Criteria**:
+- [ ] Agent-facing guidance explicitly says not to skip prerequisite workflow steps such as preflight, guarded task start, and context collection just because the likely outcome seems obvious
+- [ ] Finish-side guidance explicitly requires required verification steps before a task can be finalized
+- [ ] Guidance explains when to prefer Horadus CLI workflow commands over raw `git` / `gh` as a dependency-aware default, not just as a style preference
+- [ ] The workflow text describes persistence in terms of continuing until correctness/completeness checks pass rather than stopping at the first plausible success signal
+- [ ] Docs-freshness coverage keeps the dependency-aware workflow rules aligned across the runbook and Horadus skill
+
+---
+
+### TASK-279: Add Empty-Result Recovery and Friction-Logging Fallback Rules
+**Priority**: P2 (Medium)
+**Estimate**: 1-3 hours
+
+Repo workflow guidance currently explains how to log real Horadus CLI friction,
+but it does not define a standard recovery pattern for empty, partial, or
+suspiciously narrow command results. Add a small fallback contract so agents
+retry sensible recovery strategies before concluding that no result exists, and
+then record genuine forced fallbacks in the structured friction log.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `src/core/repo_workflow.py`, `tests/unit/core/test_docs_freshness.py`
+
+**Acceptance Criteria**:
+- [ ] Agent-facing guidance defines what counts as an empty, partial, or suspiciously narrow workflow result
+- [ ] Guidance requires at least one or two sensible fallback attempts before concluding that no result exists when the missing information is likely retrievable
+- [ ] Fallback examples stay grounded in repo workflow operations such as alternate CLI queries, broader task search, or documented manual recovery paths
+- [ ] The guidance explicitly routes genuine forced fallbacks to `horadus tasks record-friction` and keeps routine success cases out of the friction log
+- [ ] Docs-freshness coverage keeps the fallback and friction-logging rules aligned across required workflow surfaces
+
+---
+
+### TASK-280: Add a Bounded Research Mode for Triage and Review Workflows
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+Backlog triage, architecture review intake, and model/prompt evaluation work are
+closer to research and synthesis than to ordinary implementation. Add a bounded
+research-mode prompt pattern for those workflows so agents explicitly plan the
+sub-questions, gather evidence, resolve contradictions, and distinguish
+supported facts from inferences without forcing that heavier pattern onto every
+coding task.
+
+**Files**: `agents/automation/weekly-backlog-triage.md`, `agents/automation/agents-instructions.md`, `agents/automation/po-instructions.md`, `agents/automation/ba-instructions.md`, `agents/automation/sa-instructions.md`, `agents/automation/security-instructions.md`, `ops/automations/specs/weekly-backlog-triage.toml`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Review-oriented automation prompts define a bounded multi-pass research mode (plan, retrieve, synthesize) instead of open-ended exploration
+- [ ] The prompts require evidence-backed outputs, explicit contradiction handling, and clear labeling of inference vs directly supported fact where applicable
+- [ ] Citation or file-reference rules forbid inventing sources and keep outputs tied to retrieved repo evidence
+- [ ] Ordinary implementation-task guidance is not burdened with research-mode steps that do not improve deterministic coding work
+- [ ] Updated automation prompt text remains consistent with the repo’s canonical workflow and output-shape expectations
+
+---
+
+### TASK-281: Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty
+**Priority**: P2 (Medium)
+**Estimate**: 1-3 hours
+
+The repo’s narrative report prompts already forbid invented facts, but they do
+not yet state the stronger synthesis rule needed for durable multi-model
+behavior: every narrative claim should be directly supported by the provided
+payload or explicitly framed as uncertainty/inference. Tighten the weekly,
+monthly, and retrospective narrative prompts so they produce
+evidence-disciplined summaries instead of smooth prose that can outrun the
+structured record.
+
+**Files**: `ai/prompts/weekly_report.md`, `ai/prompts/monthly_report.md`, `ai/prompts/retrospective_analysis.md`, `tests/unit/core/test_report_generator.py`, `tests/unit/core/test_retrospective_analyzer.py`
+
+**Acceptance Criteria**:
+- [ ] Weekly, monthly, and retrospective prompt contracts explicitly require narrative claims to stay grounded in the provided structured payload
+- [ ] The prompts explicitly distinguish directly supported statements from inferences, outlooks, or uncertainty language where the payload does not support a stronger claim
+- [ ] The prompts forbid causal explanations, named entities, locations, or confidence claims that are not directly supported by the payload fields available to that prompt
+- [ ] Sparse, conflicting, or low-coverage inputs produce calibrated uncertainty language instead of overstated narrative confidence
+- [ ] Tests cover the tightened prompt contract language so future prompt edits cannot silently weaken the evidence/uncertainty rules
 
 ---
 

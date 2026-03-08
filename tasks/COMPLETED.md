@@ -275,6 +275,11 @@ Tasks that have been completed and verified.
   `horadus tasks finish` now requires a positive review-gate timeout, rejects zero-time bypass attempts, and keeps the CLI as the canonical completion path.
 - TASK-276: Allow Finish Merge After Silent Review Timeout ✅
   The finish review gate now waits the full review window, blocks actionable current-head Codex feedback, and allows merge when the timeout expires silently with no actionable comments.
+- TASK-277: Make Agent Workflow Completeness and Verification Explicit ✅
+  The repo now defines one explicit completeness contract for repo-facing work,
+  keeps it sourced from `src/core/repo_workflow.py`, and extends docs-freshness
+  enforcement to the Horadus skill so completion guidance cannot silently
+  drift.
 ## Archive
 
 (Older sprints will be archived here)

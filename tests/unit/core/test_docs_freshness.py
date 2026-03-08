@@ -90,7 +90,7 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         encoding="utf-8",
     )
     (repo_root / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
-        workflow_reference_block,
+        "\n".join([workflow_reference_block.strip(), "", completion_guidance_block.strip(), ""]),
         encoding="utf-8",
     )
     (repo_root / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(

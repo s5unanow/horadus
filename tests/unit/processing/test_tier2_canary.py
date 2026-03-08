@@ -454,3 +454,56 @@ async def test_run_tier2_canary_tracks_partial_matches_without_counting_failures
     assert result.metrics.trend_match_accuracy == 1.0
     assert result.metrics.signal_type_accuracy == 0.0
     assert result.metrics.direction_accuracy == 0.0
+
+
+@pytest.mark.asyncio
+async def test_run_tier2_canary_counts_signal_and_direction_without_trend_match(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    items = [
+        _gold_item(
+            item_id="a",
+            tier2=_tier2_label(
+                trend_id="expected-trend",
+                signal_type="military_movement",
+                direction="escalatory",
+            ),
+        )
+    ]
+
+    class _FakeTier2Classifier:
+        def __init__(self, **kwargs) -> None:
+            self.kwargs = kwargs
+
+        async def classify_event(self, *, event: Event, trends, context_chunks) -> None:
+            _ = (trends, context_chunks)
+            event.extracted_claims = {
+                "trend_impacts": [
+                    {
+                        "trend_id": "different-trend",
+                        "signal_type": "military_movement",
+                        "direction": "escalatory",
+                        "severity": 0.7,
+                        "confidence": 0.8,
+                    }
+                ]
+            }
+
+    monkeypatch.setattr(canary_module.settings, "OPENAI_API_KEY", "x")
+    monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_FAILURE_RATE", 1.0)
+    monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MIN_TREND_MATCH_ACCURACY", 0.0)
+    monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MIN_SIGNAL_TYPE_ACCURACY", 0.0)
+    monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MIN_DIRECTION_ACCURACY", 0.0)
+    monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_SEVERITY_MAE", 1.0)
+    monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_CONFIDENCE_MAE", 1.0)
+    monkeypatch.setattr(canary_module, "load_gold_set", _return_items(items))
+    monkeypatch.setattr(canary_module, "load_trends_from_config_dir", _return_trends)
+    monkeypatch.setattr(canary_module, "AsyncOpenAI", MagicMock(return_value="client"))
+    monkeypatch.setattr(canary_module, "Tier2Classifier", _FakeTier2Classifier)
+
+    result = await canary_module.run_tier2_canary(model="gpt-test")
+
+    assert result.metrics.failures == 0
+    assert result.metrics.trend_match_accuracy == 0.0
+    assert result.metrics.signal_type_accuracy == 1.0
+    assert result.metrics.direction_accuracy == 1.0

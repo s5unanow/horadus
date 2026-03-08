@@ -48,6 +48,9 @@ def test_parse_iso_datetime_and_embedding_count_helpers() -> None:
     assert legacy_module._parse_iso_datetime("2026-03-08T12:00:00Z") == datetime(
         2026, 3, 8, 12, 0, tzinfo=UTC
     )
+    assert legacy_module._parse_iso_datetime("2026-03-08T14:00:00+02:00") == datetime(
+        2026, 3, 8, 14, 0, tzinfo=datetime.fromisoformat("2026-03-08T14:00:00+02:00").tzinfo
+    )
 
     empty_summary = SimpleNamespace(model_counts=[])
     populated_summary = SimpleNamespace(
@@ -168,7 +171,7 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
     monkeypatch.setattr(benchmark_module, "run_gold_set_benchmark", fake_benchmark)
     monkeypatch.setattr(replay_module, "run_historical_replay_comparison", fake_replay)
     monkeypatch.setattr(vector_benchmark_module, "run_vector_retrieval_benchmark", fake_vector)
-    monkeypatch.setattr(legacy_module.settings, "OPENAI_API_KEY", "token")
+    monkeypatch.setattr(legacy_module.settings, "OPENAI_API_KEY", "stub")
 
     benchmark_args = SimpleNamespace(
         gold_set="gold.jsonl",
@@ -304,6 +307,45 @@ async def test_collect_embedding_lineage_and_source_freshness(
     assert freshness_exit == ExitCode.VALIDATION_ERROR
 
 
+@pytest.mark.asyncio
+async def test_collect_source_freshness_without_enabled_collectors_has_no_catchup_candidates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    freshness_report = SimpleNamespace(
+        checked_at=datetime(2026, 3, 8, 12, 0, tzinfo=UTC),
+        stale_multiplier=2.0,
+        stale_count=1,
+        stale_collectors=["rss", "gdelt"],
+        rows=[],
+    )
+
+    @asynccontextmanager
+    async def fake_session_maker():
+        yield object()
+
+    async def fake_source_freshness_report(
+        session: object, stale_multiplier: float | None
+    ) -> object:
+        del session, stale_multiplier
+        return freshness_report
+
+    monkeypatch.setattr(database_module, "async_session_maker", fake_session_maker)
+    monkeypatch.setattr(
+        source_freshness_module,
+        "build_source_freshness_report",
+        fake_source_freshness_report,
+    )
+    monkeypatch.setattr(legacy_module.settings, "ENABLE_RSS_INGESTION", False)
+    monkeypatch.setattr(legacy_module.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(legacy_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
+
+    freshness_data, _lines, _exit = await legacy_module._collect_eval_source_freshness(
+        SimpleNamespace(stale_multiplier=2.0, fail_on_stale=False)
+    )
+
+    assert freshness_data["catchup_candidates"] == []
+
+
 def test_collect_eval_audit_validate_taxonomy_and_pipeline_dry_run(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -364,6 +406,52 @@ def test_collect_eval_audit_validate_taxonomy_and_pipeline_dry_run(
     assert pipeline_data["artifact_path"].endswith("pipeline.json")
     assert pipeline_lines == [f"Dry-run artifact: {tmp_path / 'pipeline.json'}"]
     assert pipeline_exit == ExitCode.OK
+
+
+def test_collect_eval_audit_and_taxonomy_without_warnings(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(
+        audit_module,
+        "run_gold_set_audit",
+        lambda **_kwargs: SimpleNamespace(output_path=tmp_path / "audit.json", warnings=[]),
+    )
+    monkeypatch.setattr(
+        taxonomy_validation_module,
+        "run_trend_taxonomy_validation",
+        lambda **_kwargs: SimpleNamespace(
+            output_path=tmp_path / "taxonomy.json",
+            warnings=[],
+            errors=[],
+        ),
+    )
+
+    audit_data, audit_lines, audit_exit = legacy_module._collect_eval_audit(
+        SimpleNamespace(
+            gold_set="gold.jsonl", output_dir=str(tmp_path), max_items=0, fail_on_warnings=False
+        )
+    )
+    taxonomy_data, taxonomy_lines, taxonomy_exit = legacy_module._collect_eval_validate_taxonomy(
+        SimpleNamespace(
+            trend_config_dir="config/trends",
+            gold_set="gold.jsonl",
+            output_dir=str(tmp_path),
+            max_items=0,
+            tier1_trend_mode="strict",
+            signal_type_mode="warn",
+            unknown_trend_mode="warn",
+            fail_on_warnings=False,
+        )
+    )
+
+    assert audit_data["warnings"] == []
+    assert not any("Audit warnings:" in line for line in audit_lines)
+    assert audit_exit == ExitCode.OK
+    assert taxonomy_data["warnings"] == []
+    assert taxonomy_data["errors"] == []
+    assert not any("Taxonomy validation warnings:" in line for line in taxonomy_lines)
+    assert taxonomy_exit == ExitCode.OK
 
 
 def test_http_helpers_cover_success_and_error_paths(
@@ -437,6 +525,75 @@ def test_http_helpers_cover_success_and_error_paths(
     assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (0, None)
 
 
+def test_eval_taxonomy_and_http_json_cover_warning_and_non_dict_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    args = SimpleNamespace(
+        trend_config_dir="config/trends",
+        gold_set="gold.jsonl",
+        output_dir=str(tmp_path),
+        max_items=0,
+        tier1_trend_mode="strict",
+        signal_type_mode="warn",
+        unknown_trend_mode="warn",
+        fail_on_warnings=True,
+    )
+
+    monkeypatch.setattr(
+        taxonomy_validation_module,
+        "run_trend_taxonomy_validation",
+        lambda **_kwargs: SimpleNamespace(
+            output_path=tmp_path / "taxonomy.json",
+            warnings=["warn"],
+            errors=[],
+        ),
+    )
+
+    data, lines, exit_code = legacy_module._collect_eval_validate_taxonomy(args)
+
+    assert data["warnings"] == ["warn"]
+    assert data["errors"] == []
+    assert any("Taxonomy validation warnings:" in line for line in lines)
+    assert exit_code == ExitCode.VALIDATION_ERROR
+
+    class ResponseContext:
+        def __init__(self, status: int, body: bytes) -> None:
+            self.status = status
+            self._body = body
+
+        def read(self) -> bytes:
+            return self._body
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    def urlopen_list_payload(_request, timeout=None):
+        del timeout
+        return ResponseContext(200, b'["not-a-dict"]')
+
+    monkeypatch.setattr(legacy_module.urllib_request, "urlopen", urlopen_list_payload)
+    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (200, None)
+
+    invalid_http_error = urllib_error.HTTPError(
+        "https://example.com",
+        400,
+        "bad",
+        {},
+        io.BytesIO(b"not-json"),
+    )
+
+    def urlopen_invalid_http_error(_request, timeout=None):
+        del timeout
+        return (_ for _ in ()).throw(invalid_http_error)
+
+    monkeypatch.setattr(legacy_module.urllib_request, "urlopen", urlopen_invalid_http_error)
+    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (400, None)
+
+
 def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -468,6 +625,44 @@ def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
     assert exit_code == ExitCode.OK
     assert lines[-1].endswith("auth_enforced_without_key (unknown)")
     assert data["auth_hint"] == "unknown"
+
+    monkeypatch.setattr(legacy_module, "_http_get", lambda _url, **_kwargs: 200)
+    monkeypatch.setattr(legacy_module, "_http_get_json", lambda _url, **_kwargs: (0, None))
+    exit_code, lines, data = legacy_module._agent_smoke_checks(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=1.0,
+        api_key=None,
+    )
+    assert exit_code == ExitCode.VALIDATION_ERROR
+    assert lines[-1] == "FAIL /openapi.json connection_error"
+    assert data == {"health_status": 200, "openapi_status": 0}
+
+    statuses = {
+        "http://127.0.0.1:8000/health": 200,
+        "http://127.0.0.1:8000/api/v1/trends": 403,
+    }
+    monkeypatch.setattr(legacy_module, "_http_get", lambda url, **_kwargs: statuses[url])
+    monkeypatch.setattr(
+        legacy_module, "_http_get_json", lambda _url, **_kwargs: (200, {"openapi": True})
+    )
+    exit_code, lines, data = legacy_module._agent_smoke_checks(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=1.0,
+        api_key="stub",  # pragma: allowlist secret
+    )
+    assert exit_code == ExitCode.VALIDATION_ERROR
+    assert lines[-1] == "FAIL /api/v1/trends 403 api_key_rejected"
+    assert data["trend_status"] == 403
+
+    statuses["http://127.0.0.1:8000/api/v1/trends"] = 0
+    exit_code, lines, data = legacy_module._agent_smoke_checks(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=1.0,
+        api_key="stub",  # pragma: allowlist secret
+    )
+    assert exit_code == ExitCode.VALIDATION_ERROR
+    assert lines[-1] == "FAIL /api/v1/trends connection_error"
+    assert data["trend_status"] == 0
 
 
 @pytest.mark.asyncio

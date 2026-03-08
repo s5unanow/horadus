@@ -138,6 +138,53 @@ def test_create_client_requires_api_key(mock_db_session, monkeypatch: pytest.Mon
         EmbeddingService(session=mock_db_session, client=None)
 
 
+def test_create_client_uses_configured_api_key(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_factory = MagicMock(return_value="client")
+
+    monkeypatch.setattr(embedding_service_module.settings, "OPENAI_API_KEY", "stub-value")
+    monkeypatch.setattr(embedding_service_module, "AsyncOpenAI", client_factory)
+
+    service = EmbeddingService(
+        session=mock_db_session,
+        client=None,
+        cost_tracker=SimpleNamespace(
+            ensure_within_budget=AsyncMock(return_value=None),
+            record_usage=AsyncMock(return_value=None),
+        ),
+    )
+
+    assert service.client == "client"
+    client_factory.assert_called_once_with(api_key="stub-value")  # pragma: allowlist secret
+
+
+def test_last_input_audits_returns_tuple_snapshot(mock_db_session) -> None:
+    service, _embeddings_api, _cost_tracker = _build_service(mock_db_session=mock_db_session)
+    service._last_input_audits = [
+        EmbeddingInputAudit(
+            original_tokens=3,
+            retained_tokens=3,
+            strategy="none",
+            was_truncated=False,
+            dropped_tail_tokens=0,
+            chunk_count=1,
+        )
+    ]
+
+    assert service.last_input_audits == (
+        EmbeddingInputAudit(
+            original_tokens=3,
+            retained_tokens=3,
+            strategy="none",
+            was_truncated=False,
+            dropped_tail_tokens=0,
+            chunk_count=1,
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_embed_texts_with_contexts_tracks_under_and_exact_limit_paths(
     mock_db_session,
@@ -285,6 +332,20 @@ async def test_embed_texts_with_contexts_raises_when_results_or_audits_missing(
     with pytest.raises(RuntimeError, match="audits missing"):
         await service.embed_texts_with_contexts(["alpha"], entity_type="generic", entity_ids=None)
 
+    service, _embeddings_api, _cost_tracker = _build_service(mock_db_session=mock_db_session)
+    original_prepare = service._prepare_input
+
+    def prepare_without_chunks(text: str):
+        prepared = original_prepare(text)
+        return embedding_service_module._PreparedEmbeddingInput(
+            text_chunks=[],
+            audit=prepared.audit,
+        )
+
+    service._prepare_input = prepare_without_chunks  # type: ignore[method-assign]
+    with pytest.raises(RuntimeError, match="failed to produce vectors"):
+        await service.embed_texts_with_contexts(["alpha"], entity_type="generic", entity_ids=None)
+
 
 @pytest.mark.asyncio
 async def test_request_embeddings_rejects_dimension_mismatch(mock_db_session) -> None:
@@ -403,6 +464,32 @@ async def test_request_embeddings_uses_total_tokens_when_prompt_tokens_missing(
     assert vectors == [[1.0, 2.0, 3.0]]
     cost_tracker.record_usage.assert_awaited_once()
     assert cost_tracker.record_usage.await_args.kwargs["input_tokens"] == 12
+
+
+@pytest.mark.asyncio
+async def test_request_embeddings_prefers_prompt_tokens_and_handles_empty_inputs(
+    mock_db_session,
+) -> None:
+    service, _embeddings_api, cost_tracker = _build_service(
+        mock_db_session=mock_db_session, dimensions=3
+    )
+
+    assert await service._request_embeddings([]) == []
+
+    class PromptTokensAPI:
+        async def create(self, *, model: str, input: list[str]) -> SimpleNamespace:
+            _ = model, input
+            return SimpleNamespace(
+                data=[SimpleNamespace(index=0, embedding=[1.0, 2.0, 3.0])],
+                usage=SimpleNamespace(prompt_tokens=7, total_tokens=12),
+            )
+
+    service.client = SimpleNamespace(embeddings=PromptTokensAPI())
+    vectors = await service._request_embeddings(["one"])
+
+    assert vectors == [[1.0, 2.0, 3.0]]
+    cost_tracker.record_usage.assert_awaited_once()
+    assert cost_tracker.record_usage.await_args.kwargs["input_tokens"] == 7
 
 
 @pytest.mark.asyncio

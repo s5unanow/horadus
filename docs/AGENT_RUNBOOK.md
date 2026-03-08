@@ -9,8 +9,14 @@ Short command index for day-to-day agent/operator work.
 1. `uv run --no-sync horadus tasks preflight`
 When: before creating a task branch from `main`.
 
-2. `make agent-safe-start TASK=XXX NAME=short-name`
-When: start implementation for one task branch with eligibility and sequencing checks.
+2. `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
+When: canonical autonomous task-start command; enforces sprint eligibility and
+sequencing checks before creating the task branch.
+
+Compatibility wrapper:
+- `make agent-safe-start TASK=XXX NAME=short-name`
+- Use only when a Make target is more convenient; it must delegate to the same
+  `horadus tasks safe-start` flow.
 
 3. `uv run --no-sync horadus tasks context-pack TASK-XXX --format json`
 When: collect backlog/spec/sprint context for an implementation task.
@@ -61,6 +67,10 @@ Compatibility wrapper:
 - `make task-finish`
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks finish` flow.
+
+Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
+needed workflow step yet, or when the CLI reports a blocker that requires a
+manual recovery step.
 
 13. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).

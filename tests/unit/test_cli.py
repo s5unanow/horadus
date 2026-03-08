@@ -2589,6 +2589,105 @@ def test_task_lifecycle_data_strict_mode_passes_when_repo_policy_is_fully_comple
     assert lines[-1] == "- strict complete: yes"
 
 
+def test_task_lifecycle_state_allows_detached_head_when_main_is_synced() -> None:
+    snapshot = _task_snapshot(
+        current_branch="HEAD",
+        pr=task_commands_module.TaskPullRequest(
+            number=268,
+            url="https://example.invalid/pr/268",
+            state="MERGED",
+            is_draft=False,
+            head_ref_name="codex/task-268-detached-head-lifecycle",
+            head_ref_oid="head-sha",
+            merge_commit_oid="merge-sha",
+            check_state="pass",
+        ),
+        local_main_synced=True,
+        merge_commit_on_main=True,
+    )
+
+    assert task_commands_module.task_lifecycle_state(snapshot) == "local-main-synced"
+
+
+def test_resolve_task_lifecycle_allows_explicit_task_id_from_detached_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="HEAD\n"),
+            _completed(
+                ["git", "branch", "--list"], stdout="  codex/task-268-detached-head-lifecycle\n"
+            ),
+            _completed(["git", "ls-remote", "--heads"], stdout=""),
+            _completed(["git", "status", "--porcelain"], stdout=""),
+            _completed(["git", "fetch", "origin", "main", "--quiet"]),
+            _completed(["git", "rev-parse", "main"], stdout="main-sha\n"),
+            _completed(["git", "rev-parse", "origin/main"], stdout="main-sha\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_find_task_pull_request",
+        lambda **_kwargs: None,
+    )
+
+    snapshot = task_commands_module.resolve_task_lifecycle("TASK-268", config=config)
+
+    assert isinstance(snapshot, task_commands_module.TaskLifecycleSnapshot)
+    assert snapshot.task_id == "TASK-268"
+    assert snapshot.current_branch == "HEAD"
+    assert snapshot.branch_name == "codex/task-268-detached-head-lifecycle"
+    assert snapshot.local_main_synced is True
+
+
+def test_resolve_task_lifecycle_requires_explicit_task_id_from_detached_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="HEAD\n"),
+    )
+
+    result = task_commands_module.resolve_task_lifecycle(None, config=config)
+
+    assert isinstance(result, tuple)
+    exit_code, data, lines = result
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data == {"current_branch": "HEAD"}
+    assert lines == [
+        "Task lifecycle failed.",
+        "A task id is required when running from detached HEAD.",
+    ]
+
+
 def test_resolve_finish_context_rejects_task_mismatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

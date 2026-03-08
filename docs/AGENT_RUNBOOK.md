@@ -55,6 +55,9 @@ When: full pre-release checks before promotion.
 When: inspect machine-checkable task lifecycle state.
 Use the strict form to verify repo-policy completion; success requires state
 `local-main-synced`.
+When running from detached `HEAD` (for example in CI or a throwaway worktree),
+pass the task id explicitly; branch inference is only supported on canonical
+task branches.
 
 12. `uv run --no-sync horadus tasks finish TASK-XXX`
 When: canonical task-completion command; finishes the current task PR lifecycle

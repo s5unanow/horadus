@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-267`.
+- Next available task IDs start at `TASK-275`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4884,6 +4884,171 @@ local applied runtime target.
 - [ ] Operator-facing docs explain where the summary appears and how it should be triaged
 - [ ] Any automation prompt/config stays aligned with repo workflow and Codex automation guidance
 - [ ] Tests cover the summary logic if implemented in repo code
+
+---
+
+### TASK-267: Add a Thin Repo Workflow Skill Routed to AGENTS and Horadus
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Agents benefit from a short procedural workflow aid, but the repo already
+defines `AGENTS.md` as the authoritative workflow policy and expects
+agent-facing materials to route to canonical sources rather than redefine them.
+Add a thin repo workflow skill that helps agents execute the canonical flow
+while staying anchored to `AGENTS.md` and the `horadus` CLI.
+
+**Files**: `ops/skills/repo-workflow/SKILL.md`, `ops/skills/repo-workflow/references/`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/unit/core/test_docs_freshness.py`, `scripts/`
+
+**Acceptance Criteria**:
+- [ ] Add a dedicated repo workflow skill that provides short procedural guidance for the canonical task lifecycle
+- [ ] The skill explicitly states that `AGENTS.md` remains the authoritative workflow policy and `horadus` remains the canonical executable workflow surface
+- [ ] The skill routes agents to existing canonical commands and policy sections instead of restating the full workflow contract in independent prose
+- [ ] The skill explains when to use `horadus`, when wrapper commands such as `make` are acceptable, and when raw `git`/`gh` is still necessary as an escape hatch
+- [ ] The skill covers start flow, local validation flow, completion flow, and blocker escalation only at the level needed to steer agents to the correct canonical commands/docs
+- [ ] The skill stays aligned with `docs/AGENT_RUNBOOK.md` and `ops/skills/horadus-cli/SKILL.md` without creating a second standalone workflow spec
+- [ ] Add or extend a drift check so the workflow skill cannot silently diverge from canonical workflow guidance
+
+---
+
+### TASK-268: Permit Explicit Task Lifecycle Verification from Detached HEAD
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+
+`horadus tasks lifecycle TASK-XXX --strict` should work in detached-checkout
+contexts such as CI or throwaway worktrees when the task id is supplied
+explicitly. Tighten the lifecycle resolver so detached `HEAD` blocks only
+branch inference, not explicit task lookup.
+
+**Files**: `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks lifecycle TASK-XXX` works in detached `HEAD` when an explicit task id is provided
+- [ ] Detached `HEAD` without explicit task input still fails with a clear validation error instead of guessing
+- [ ] Strict lifecycle verification remains reusable by other workflow commands and does not regress normal branch-based lookup
+- [ ] Agent-facing docs describe detached-checkout behavior accurately
+- [ ] Tests cover detached `HEAD` success with explicit task input and failure without it
+
+---
+
+### TASK-269: Respect `UV_BIN` Across Full Local Gate Build Steps
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+
+The canonical full local gate should honor the same resolved `uv` executable
+across every step, including package-build validation. Remove shell-command
+drift so custom absolute `UV_BIN` setups do not pass most of the gate and then
+fail at a hardcoded `uvx` step.
+
+**Files**: `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `README.md`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] All `horadus tasks local-gate --full` steps that require `uv` or `uvx` honor the configured `UV_BIN` contract consistently
+- [ ] The package-build step does not hardcode a separate executable that can disagree with the gate preflight
+- [ ] Dry-run or structured output clearly reflects the resolved build-step command
+- [ ] Docs and examples do not imply a different executable contract than the command actually uses
+- [ ] Tests cover a custom absolute `UV_BIN` path that is not otherwise present on `PATH`
+
+---
+
+### TASK-270: Make Eval Directory Provenance Repo-Stable and Loader-Scoped
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Eval provenance fingerprints should represent the config content actually used,
+not the local checkout path or unrelated nested YAML. Tighten directory
+provenance so fingerprints are stable across machines and match the same file
+discovery scope as the trend loader.
+
+**Files**: `src/eval/artifact_provenance.py`, `src/core/trend_config_loader.py`, `src/eval/benchmark.py`, `tests/unit/eval/test_artifact_provenance.py`, `tests/unit/eval/test_benchmark.py`, `tests/unit/core/test_trend_config_loader.py`
+
+**Acceptance Criteria**:
+- [ ] Directory provenance fingerprints remain stable across different checkout roots when the relevant file content is identical
+- [ ] Provenance discovery for trend configs matches the effective scope used by `load_trends_from_config_dir` instead of hashing unrelated nested YAML by default
+- [ ] The returned file manifest still preserves enough path detail for traceability without baking machine-specific absolute paths into the content fingerprint
+- [ ] Benchmark artifact provenance no longer reports false config drift for relocated checkouts or ignored nested files
+- [ ] Tests cover checkout-root independence and loader-scope alignment
+
+---
+
+### TASK-271: Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+
+Candidate GPT-5 benchmark configs should be available for explicit evaluation
+without silently changing the default benchmark surface, cost, or access
+requirements when `--config` is omitted.
+
+**Files**: `src/eval/benchmark.py`, `src/horadus_cli/legacy.py`, `docs/AGENT_RUNBOOK.md`, `README.md`, `tests/unit/eval/test_benchmark.py`, `tests/unit/test_legacy_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Default benchmark execution without explicit `--config` does not automatically add GPT-5 candidate runs beyond the intended baseline set
+- [ ] GPT-5 candidate configs remain available through explicit selection for targeted evaluation
+- [ ] CLI help and docs clearly distinguish default benchmark configs from optional candidate configs
+- [ ] The change preserves the ability to compare all desired configs when requested intentionally
+- [ ] Tests cover default-selection behavior and explicit GPT-5 config selection
+
+---
+
+### TASK-272: Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
+**Priority**: P2 (Medium)
+**Estimate**: 1-3 hours
+
+Run-level usage metadata should not report an `active_reasoning_effort` from an
+earlier GPT-5 call after provider/model have moved to a later route that has no
+reasoning setting. Make mixed-route aggregation internally consistent across
+Tier-1 and Tier-2 telemetry and benchmark artifacts.
+
+**Files**: `src/processing/tier1_classifier.py`, `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/eval/benchmark.py`, `tests/unit/processing/test_tier1_classifier.py`, `tests/unit/processing/test_tier2_classifier.py`, `tests/unit/processing/test_pipeline_orchestrator_additional.py`
+
+**Acceptance Criteria**:
+- [ ] Mixed-route Tier-1 aggregation cannot report a later provider/model with a stale reasoning effort from an earlier route
+- [ ] Mixed-route Tier-2 aggregation cannot report a later provider/model with a stale reasoning effort from an earlier route
+- [ ] The chosen contract for aggregated reasoning metadata is explicit and internally consistent across runtime telemetry and eval artifacts
+- [ ] Existing metadata consumers continue to receive a stable shape even if the reasoning field is reset to `null`
+- [ ] Tests cover transitions from reasoning-enabled routes to routes with no reasoning metadata
+
+---
+
+### TASK-273: Constrain Tier-2 Trend Payloads to the Safe Input Budget
+**Priority**: P1 (High)
+**Estimate**: 2-5 hours
+
+The Tier-2 trend payload should stay within the declared request-input budget
+for the current taxonomy instead of relying on downstream truncation that can
+silently remove useful trend context. Rework the payload or budget enforcement
+so richer indicator guidance does not make the classifier exceed its own safe
+request limit.
+
+**Files**: `src/processing/tier2_classifier.py`, `src/core/trend_config_loader.py`, `ai/prompts/`, `docs/ARCHITECTURE.md`, `tests/unit/processing/test_tier2_classifier.py`, `tests/unit/processing/test_tier2_classifier_additional.py`
+
+**Acceptance Criteria**:
+- [ ] A Tier-2 payload built from the current committed trend taxonomy plus representative event context remains within the classifier's declared safe input budget, or the budget enforcement trims deterministically before request dispatch
+- [ ] Budget enforcement does not silently rely on provider-side hard truncation to decide which trend definitions survive
+- [ ] If indicator descriptions or other guidance are retained, they are included only in a form that keeps the request within budget for the current taxonomy scale
+- [ ] Tests pin the budget behavior against the current taxonomy size so future taxonomy growth cannot silently reintroduce the overflow
+- [ ] Docs explain the chosen payload-budget strategy and its tradeoffs
+
+---
+
+### TASK-274: Standardize Task PR Titles on `TASK-XXX: ...`
+**Priority**: P2 (Medium)
+**Estimate**: 1-3 hours
+
+Recent task PRs mix task-prefixed titles and conventional-commit titles even
+though task branches, PR body metadata, and squash-merge history are all task-
+oriented surfaces. Standardize the PR title convention on
+`TASK-XXX: short summary` and add enforcement so branch/task scope, PR body
+metadata, and PR title stay aligned.
+
+**Files**: `AGENTS.md`, `README.md`, `.github/pull_request_template.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/task_commands.py`, `scripts/`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Canonical repo workflow docs explicitly require task PR titles in the form `TASK-XXX: short summary`
+- [ ] PR templates and agent-facing guidance show the same task-title convention instead of leaving title format implicit
+- [ ] Local and/or CI workflow validation fails when a task PR title does not match the branch task id or required `TASK-XXX:` prefix
+- [ ] The rule coexists cleanly with conventional-commit commit messages instead of replacing commit-level naming policy
+- [ ] Task-completion workflow output and examples no longer suggest mixed PR-title conventions
+- [ ] Tests cover valid task PR titles and representative invalid cases such as `feat(scope): ...` on a task branch
 
 ---
 

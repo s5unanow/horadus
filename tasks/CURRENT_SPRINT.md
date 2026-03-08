@@ -34,9 +34,8 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 workflow-centralization hardening follow-up intake
-  (remaining recommended sequencing: `TASK-259` → `TASK-261` → `TASK-263` →
-  `TASK-264` → `TASK-262` → `TASK-265` → `TASK-266`; one task per branch/PR):
-  - `TASK-259` Add a Mechanical Done-State Verifier and Explicit Lifecycle States
+  (remaining recommended sequencing: `TASK-261` → `TASK-263` → `TASK-264` →
+  `TASK-262` → `TASK-265` → `TASK-266`; one task per branch/PR):
   - `TASK-261` Auto-Handle Docker Readiness for Workflow Gates
   - `TASK-262` Enforce No Early Completion Claims in Agent Workflow Guidance
   - `TASK-263` Route Repo Workflow Automation Through Horadus CLI and Skill
@@ -136,3 +135,9 @@
   as a thin compatibility wrapper, and the command list now covers tracked
   artifacts, docs freshness, repo-wide lint/type/unit/security checks,
   integration, and build verification in one backpressure-friendly sequence.
+- `TASK-259` Add a Mechanical Done-State Verifier and Explicit Lifecycle States ✅
+  completion note: `horadus tasks lifecycle [TASK-XXX] [--strict]` now reports
+  machine-checkable lifecycle state from one shared model, `--strict` defines
+  repo-policy completion as `local-main-synced`, and `horadus tasks finish`
+  reuses the same verifier instead of relying on separate informal success
+  criteria.

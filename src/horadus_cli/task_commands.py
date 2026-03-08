@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -83,6 +84,37 @@ class FinishConfig:
 class LocalGateStep:
     name: str
     command: str
+
+
+@dataclass(slots=True)
+class TaskPullRequest:
+    number: int
+    url: str
+    state: str
+    is_draft: bool
+    head_ref_name: str
+    head_ref_oid: str | None
+    merge_commit_oid: str | None
+    check_state: str
+
+
+@dataclass(slots=True)
+class TaskLifecycleSnapshot:
+    task_id: str
+    current_branch: str
+    branch_name: str | None
+    local_branch_names: list[str]
+    remote_branch_names: list[str]
+    remote_branch_exists: bool
+    working_tree_clean: bool
+    pr: TaskPullRequest | None
+    local_main_sha: str | None
+    remote_main_sha: str | None
+    local_main_synced: bool | None
+    merge_commit_available_locally: bool | None
+    merge_commit_on_main: bool | None
+    lifecycle_state: str
+    strict_complete: bool
 
 
 def _result_message(result: subprocess.CompletedProcess[str], fallback: str) -> str:
@@ -306,6 +338,304 @@ def _summarize_output_lines(lines: list[str], *, max_lines: int = 80) -> list[st
     ]
 
 
+def _task_id_from_branch_name(branch_name: str) -> str | None:
+    match = TASK_BRANCH_PATTERN.match(branch_name)
+    if match is None:
+        return None
+    return f"TASK-{match.group('number')}"
+
+
+def _task_branch_pattern(task_id: str) -> str:
+    return f"codex/task-{task_id[5:]}-*"
+
+
+def _parse_git_branch_lines(text: str) -> list[str]:
+    branches: list[str] = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("*"):
+            line = line[1:].strip()
+        branches.append(line)
+    return branches
+
+
+def _parse_remote_branch_lines(text: str) -> list[str]:
+    branches: list[str] = []
+    for raw_line in text.splitlines():
+        parts = raw_line.strip().split()
+        if len(parts) != 2:
+            continue
+        ref = parts[1]
+        if ref.startswith("refs/heads/"):
+            branches.append(ref.removeprefix("refs/heads/"))
+    return branches
+
+
+def _check_rollup_state(entries: Any) -> str:
+    if not isinstance(entries, list) or not entries:
+        return "none"
+
+    has_pending = False
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        status = str(entry.get("status") or "")
+        conclusion = str(entry.get("conclusion") or "")
+        if status != "COMPLETED":
+            has_pending = True
+            continue
+        if conclusion and conclusion not in {"SUCCESS", "NEUTRAL", "SKIPPED"}:
+            return "fail"
+        if not conclusion:
+            has_pending = True
+    if has_pending:
+        return "pending"
+    return "pass"
+
+
+def _find_task_pull_request(
+    *, task_id: str, config: FinishConfig
+) -> tuple[int, dict[str, Any], list[str]] | TaskPullRequest | None:
+    search_result = _run_command(
+        [
+            config.gh_bin,
+            "pr",
+            "list",
+            "--state",
+            "all",
+            "--search",
+            f"Primary-Task: {task_id} in:body",
+            "--limit",
+            "20",
+            "--json",
+            "number",
+        ]
+    )
+    if search_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": task_id},
+            ["Task lifecycle failed.", "Unable to query GitHub pull requests."],
+        )
+
+    search_payload = json.loads(search_result.stdout or "[]")
+    if not isinstance(search_payload, list) or not search_payload:
+        return None
+
+    pr_number = max(
+        int(entry.get("number", 0))
+        for entry in search_payload
+        if isinstance(entry, dict) and entry.get("number") is not None
+    )
+    pr_result = _run_command(
+        [
+            config.gh_bin,
+            "pr",
+            "view",
+            str(pr_number),
+            "--json",
+            "number,url,state,isDraft,headRefName,headRefOid,mergeCommit,statusCheckRollup",
+        ]
+    )
+    if pr_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": task_id, "pr_number": pr_number},
+            ["Task lifecycle failed.", f"Unable to read GitHub PR #{pr_number}."],
+        )
+
+    payload = json.loads(pr_result.stdout or "{}")
+    merge_commit = payload.get("mergeCommit")
+    merge_commit_oid = None
+    if isinstance(merge_commit, dict):
+        raw_oid = merge_commit.get("oid")
+        if raw_oid:
+            merge_commit_oid = str(raw_oid)
+    return TaskPullRequest(
+        number=int(payload.get("number", pr_number)),
+        url=str(payload.get("url") or ""),
+        state=str(payload.get("state") or ""),
+        is_draft=bool(payload.get("isDraft")),
+        head_ref_name=str(payload.get("headRefName") or ""),
+        head_ref_oid=str(payload.get("headRefOid") or "") or None,
+        merge_commit_oid=merge_commit_oid,
+        check_state=_check_rollup_state(payload.get("statusCheckRollup")),
+    )
+
+
+def task_lifecycle_state(snapshot: TaskLifecycleSnapshot) -> str:
+    if snapshot.pr is not None:
+        if snapshot.pr.state == "MERGED":
+            if (
+                snapshot.current_branch == "main"
+                and snapshot.working_tree_clean
+                and snapshot.local_main_synced
+                and snapshot.merge_commit_on_main
+            ):
+                return "local-main-synced"
+            return "merged"
+        if snapshot.pr.state == "OPEN":
+            if not snapshot.pr.is_draft and snapshot.pr.check_state == "pass":
+                return "ci-green"
+            return "pr-open"
+
+    if snapshot.remote_branch_exists:
+        return "pushed"
+    return "local-only"
+
+
+def resolve_task_lifecycle(
+    task_input: str | None, *, config: FinishConfig
+) -> tuple[int, dict[str, Any], list[str]] | TaskLifecycleSnapshot:
+    branch_result = _run_command([config.git_bin, "rev-parse", "--abbrev-ref", "HEAD"])
+    if branch_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {},
+            ["Task lifecycle failed.", "Unable to determine current branch."],
+        )
+
+    current_branch = branch_result.stdout.strip()
+    if current_branch == "HEAD":
+        return (
+            ExitCode.VALIDATION_ERROR,
+            {"current_branch": current_branch},
+            [
+                "Task lifecycle failed.",
+                "Detached HEAD is not supported; pass TASK-XXX explicitly or switch to a branch.",
+            ],
+        )
+
+    if task_input is None:
+        inferred_task_id = _task_id_from_branch_name(current_branch)
+        if inferred_task_id is None:
+            return (
+                ExitCode.VALIDATION_ERROR,
+                {"current_branch": current_branch},
+                [
+                    "Task lifecycle failed.",
+                    "A task id is required when the current branch is not a canonical task branch.",
+                ],
+            )
+        task_id = inferred_task_id
+    else:
+        try:
+            task_id = normalize_task_id(task_input)
+        except ValueError as exc:
+            return (ExitCode.VALIDATION_ERROR, {}, [str(exc)])
+
+    branch_pattern = _task_branch_pattern(task_id)
+    local_branch_result = _run_command([config.git_bin, "branch", "--list", branch_pattern])
+    if local_branch_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": task_id},
+            ["Task lifecycle failed.", "Unable to inspect local task branches."],
+        )
+    local_branch_names = _parse_git_branch_lines(local_branch_result.stdout)
+
+    remote_branch_result = _run_command(
+        [config.git_bin, "ls-remote", "--heads", "origin", branch_pattern]
+    )
+    if remote_branch_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": task_id},
+            ["Task lifecycle failed.", "Unable to inspect remote task branches."],
+        )
+    remote_branch_names = _parse_remote_branch_lines(remote_branch_result.stdout)
+
+    pr_result = _find_task_pull_request(task_id=task_id, config=config)
+    if isinstance(pr_result, tuple):
+        return pr_result
+    pr = pr_result
+
+    current_branch_task_id = _task_id_from_branch_name(current_branch)
+    branch_name = None
+    if current_branch_task_id == task_id:
+        branch_name = current_branch
+    elif pr is not None and pr.head_ref_name:
+        branch_name = pr.head_ref_name
+    elif local_branch_names:
+        branch_name = local_branch_names[0]
+    elif remote_branch_names:
+        branch_name = remote_branch_names[0]
+
+    if branch_name is None and pr is None:
+        return (
+            ExitCode.NOT_FOUND,
+            {"task_id": task_id},
+            [f"No local, remote, or PR lifecycle state found for {task_id}."],
+        )
+
+    status_result = _run_command([config.git_bin, "status", "--porcelain"])
+    if status_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": task_id},
+            ["Task lifecycle failed.", "Unable to inspect working tree state."],
+        )
+    working_tree_clean = not status_result.stdout.strip()
+
+    fetch_main_result = _run_command([config.git_bin, "fetch", "origin", "main", "--quiet"])
+    if fetch_main_result.returncode != 0:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": task_id},
+            ["Task lifecycle failed.", "Unable to refresh origin/main before verification."],
+        )
+
+    local_main_result = _run_command([config.git_bin, "rev-parse", "main"])
+    remote_main_result = _run_command([config.git_bin, "rev-parse", "origin/main"])
+    local_main_sha = local_main_result.stdout.strip() if local_main_result.returncode == 0 else None
+    remote_main_sha = (
+        remote_main_result.stdout.strip() if remote_main_result.returncode == 0 else None
+    )
+    local_main_synced = None
+    if local_main_sha and remote_main_sha:
+        local_main_synced = local_main_sha == remote_main_sha
+
+    merge_commit_available_locally = None
+    merge_commit_on_main = None
+    if pr is not None and pr.merge_commit_oid:
+        merge_commit_available_locally = (
+            _run_command([config.git_bin, "cat-file", "-e", pr.merge_commit_oid]).returncode == 0
+        )
+        merge_commit_on_main = (
+            merge_commit_available_locally
+            and _run_command(
+                [config.git_bin, "merge-base", "--is-ancestor", pr.merge_commit_oid, "main"]
+            ).returncode
+            == 0
+        )
+
+    remote_branch_exists = (
+        branch_name in remote_branch_names if branch_name else bool(remote_branch_names)
+    )
+    snapshot = TaskLifecycleSnapshot(
+        task_id=task_id,
+        current_branch=current_branch,
+        branch_name=branch_name,
+        local_branch_names=local_branch_names,
+        remote_branch_names=remote_branch_names,
+        remote_branch_exists=remote_branch_exists,
+        working_tree_clean=working_tree_clean,
+        pr=pr,
+        local_main_sha=local_main_sha,
+        remote_main_sha=remote_main_sha,
+        local_main_synced=local_main_synced,
+        merge_commit_available_locally=merge_commit_available_locally,
+        merge_commit_on_main=merge_commit_on_main,
+        lifecycle_state="",
+        strict_complete=False,
+    )
+    snapshot.lifecycle_state = task_lifecycle_state(snapshot)
+    snapshot.strict_complete = snapshot.lifecycle_state == "local-main-synced"
+    return snapshot
+
+
 def full_local_gate_steps() -> list[LocalGateStep]:
     uv_bin = getenv("UV_BIN") or "uv"
     return [
@@ -476,8 +806,6 @@ def _open_task_prs() -> tuple[bool, list[str] | str]:
     if result.returncode != 0:
         message = result.stderr.strip() or result.stdout.strip() or "unknown gh error"
         return (False, message)
-    import json
-
     payload = json.loads(result.stdout or "[]")
     open_prs = [
         f"#{entry['number']} {entry['headRefName']} {entry['url']}"
@@ -1050,6 +1378,30 @@ def finish_task_data(
                 extra_lines=_output_lines(delete_branch_result),
             )
 
+    lifecycle_exit, lifecycle_data_result, lifecycle_lines = task_lifecycle_data(
+        context.task_id,
+        strict=True,
+        dry_run=False,
+    )
+    if lifecycle_exit != ExitCode.OK:
+        return _task_blocked(
+            "completion verifier did not pass after merge.",
+            next_action=(
+                f"Run `horadus tasks lifecycle {context.task_id} --strict`, fix the remaining "
+                "repo-state gap, then re-run `horadus tasks finish`."
+            ),
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+                "lifecycle": lifecycle_data_result,
+            },
+            exit_code=lifecycle_exit,
+            extra_lines=lifecycle_lines,
+        )
+
+    lines.append("Completion verifier passed: state local-main-synced.")
     lines.append(f"Task finish passed: merged {merge_commit} and synced main.")
     return (
         ExitCode.OK,
@@ -1058,6 +1410,7 @@ def finish_task_data(
             "branch_name": context.branch_name,
             "pr_url": pr_url,
             "merge_commit": merge_commit,
+            "lifecycle": lifecycle_data_result,
             "dry_run": False,
         },
         lines,
@@ -1275,6 +1628,79 @@ def handle_finish(args: Any) -> CommandResult:
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
+def task_lifecycle_data(
+    task_input: str | None, *, strict: bool, dry_run: bool
+) -> tuple[int, dict[str, Any], list[str]]:
+    try:
+        config = _finish_config()
+    except ValueError as exc:
+        return (ExitCode.ENVIRONMENT_ERROR, {}, [str(exc)])
+
+    for command_name in (config.gh_bin, config.git_bin):
+        if _ensure_command_available(command_name) is None:
+            return (
+                ExitCode.ENVIRONMENT_ERROR,
+                {"missing_command": command_name},
+                [f"Task lifecycle failed: missing required command '{command_name}'."],
+            )
+
+    snapshot = resolve_task_lifecycle(task_input, config=config)
+    if not isinstance(snapshot, TaskLifecycleSnapshot):
+        return snapshot
+    snapshot.lifecycle_state = task_lifecycle_state(snapshot)
+    snapshot.strict_complete = snapshot.lifecycle_state == "local-main-synced"
+
+    lines = [
+        f"Task lifecycle: {snapshot.task_id}",
+        f"- state: {snapshot.lifecycle_state}",
+        f"- current branch: {snapshot.current_branch}",
+        f"- working tree clean: {'yes' if snapshot.working_tree_clean else 'no'}",
+    ]
+    if snapshot.branch_name:
+        lines.append(f"- task branch: {snapshot.branch_name}")
+    if snapshot.pr is None:
+        lines.append("- PR: none")
+    else:
+        lines.append(
+            f"- PR: {snapshot.pr.url} ({snapshot.pr.state}{' draft' if snapshot.pr.is_draft else ''})"
+        )
+        lines.append(f"- checks: {snapshot.pr.check_state}")
+        if snapshot.pr.merge_commit_oid:
+            lines.append(f"- merge commit: {snapshot.pr.merge_commit_oid}")
+    if snapshot.local_main_synced is not None:
+        lines.append(f"- local main synced: {'yes' if snapshot.local_main_synced else 'no'}")
+    if snapshot.merge_commit_on_main is not None:
+        lines.append(
+            "- local main contains merge commit: "
+            f"{'yes' if snapshot.merge_commit_on_main else 'no'}"
+        )
+    lines.append(f"- strict complete: {'yes' if snapshot.strict_complete else 'no'}")
+    if dry_run:
+        lines.append("Dry run: lifecycle inspection is read-only; returned live state.")
+
+    exit_code = ExitCode.OK
+    if strict and not snapshot.strict_complete:
+        exit_code = ExitCode.VALIDATION_ERROR
+        lines.append(
+            "Strict verification failed: repo-policy completion requires state `local-main-synced`."
+        )
+
+    return (exit_code, asdict(snapshot), lines)
+
+
+def handle_lifecycle(args: Any) -> CommandResult:
+    try:
+        task_input = normalize_task_id(args.task_id) if args.task_id is not None else None
+    except ValueError as exc:
+        return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
+    exit_code, data, lines = task_lifecycle_data(
+        task_input,
+        strict=bool(getattr(args, "strict", False)),
+        dry_run=bool(args.dry_run),
+    )
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
 def handle_local_gate(args: Any) -> CommandResult:
     exit_code, data, lines = local_gate_data(full=bool(args.full), dry_run=bool(args.dry_run))
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
@@ -1376,6 +1802,23 @@ def register_task_commands(subparsers: Any) -> None:
         help="Optional task id (TASK-XXX or XXX) to verify against the current task branch.",
     )
     finish_parser.set_defaults(handler=handle_finish)
+
+    lifecycle_parser = tasks_subparsers.add_parser(
+        "lifecycle",
+        help="Report task lifecycle state and optionally verify repo-policy completion.",
+    )
+    add_leaf_cli_options(lifecycle_parser)
+    lifecycle_parser.add_argument(
+        "task_id",
+        nargs="?",
+        help="Optional task id (TASK-XXX or XXX). Required when not on the task branch.",
+    )
+    lifecycle_parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Exit non-zero unless the task is fully complete by repo policy.",
+    )
+    lifecycle_parser.set_defaults(handler=handle_lifecycle)
 
     local_gate_parser = tasks_subparsers.add_parser(
         "local-gate",

@@ -45,6 +45,9 @@
 - Newly queued from 2026-03-08 workflow-consistency intake
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
+- Newly queued from 2026-03-08 finish-timeout follow-up intake
+  (one task per branch/PR):
+  - `TASK-284` Make `horadus tasks finish` Exit Cleanly After Silent Review Timeout
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

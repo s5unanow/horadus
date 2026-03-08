@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-284`.
+- Next available task IDs start at `TASK-285`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5262,6 +5262,27 @@ current-head comment blocker.
 - [ ] A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts as a positive review-gate signal while actionable current-head review comments still block completion
 - [ ] Tests cover the default timeout behavior plus the blocked-override path
 - [ ] The repo docs/skill surfaces stay aligned with the hardened timeout policy
+
+---
+
+### TASK-284: Make `horadus tasks finish` Exit Cleanly After Silent Review Timeout
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`horadus tasks finish` now has the correct review-gate policy for timeout
+handling, but the CLI can still remain stuck after the full silent-timeout
+window elapses even when the PR is clean, checks are green, and merge should
+be allowed. Harden the finish flow so the CLI either merges and exits cleanly
+after the timeout-allow path or fails with a concrete blocker instead of
+hanging indefinitely.
+
+**Files**: `src/horadus_cli/task_commands.py`, `scripts/check_pr_review_gate.py`, `tests/unit/test_cli.py`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/`
+
+**Acceptance Criteria**:
+- [ ] When the review gate reaches the silent-timeout allow path, `horadus tasks finish` proceeds to the merge step or exits with a concrete blocker instead of hanging
+- [ ] The finish command surfaces the blocking step clearly if GitHub/CLI state prevents merge after timeout
+- [ ] Tests cover the silent-timeout completion path end to end at the CLI level so regressions are caught before merge
+- [ ] Agent-facing guidance remains aligned with the timeout-allow behavior and manual-fallback boundary
 
 ---
 

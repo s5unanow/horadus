@@ -82,6 +82,14 @@ Compatibility wrapper:
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks finish` flow.
 
+Do not skip prerequisite workflow steps such as preflight, guarded task start,
+or context collection just because the likely end state looks obvious.
+Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers the
+step because the CLI encodes sequencing, policy, and verification
+dependencies rather than just style.
+Keep using the workflow until prerequisite checks, required verification
+reruns, and completion verification succeed; do not stop at the first
+plausible success signal.
 Treat repo-facing work as incomplete until requested deliverables, required
 repo updates, and required verification/gate runs are finished or explicitly
 reported blocked.

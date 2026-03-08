@@ -53,6 +53,15 @@
 
 ## Output guidance
 
+- Do not skip prerequisite workflow steps such as preflight, guarded task
+  start, or context collection just because the likely end state looks
+  obvious.
+- Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers
+  the step because the CLI encodes sequencing, policy, and verification
+  dependencies rather than just style.
+- Keep using the workflow until prerequisite checks, required verification
+  reruns, and completion verification succeed; do not stop at the first
+  plausible success signal.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.

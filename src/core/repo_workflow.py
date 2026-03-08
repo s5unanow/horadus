@@ -69,6 +69,14 @@ COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
     "tasks/BACKLOG.md",
 )
 
+DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
+    "AGENTS.md",
+    "README.md",
+    "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
+)
+
 COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     (
         "Treat repo-facing work as incomplete until requested deliverables, "
@@ -95,6 +103,24 @@ COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     "Resolve locally solvable environment blockers before reporting blocked.",
 )
 
+DEPENDENCY_AWARE_GUIDANCE_STATEMENTS: tuple[str, ...] = (
+    (
+        "Do not skip prerequisite workflow steps such as preflight, guarded "
+        "task start, or context collection just because the likely end state "
+        "looks obvious."
+    ),
+    (
+        "Prefer Horadus workflow commands over raw `git` / `gh` when the CLI "
+        "covers the step because the CLI encodes sequencing, policy, and "
+        "verification dependencies rather than just style."
+    ),
+    (
+        "Keep using the workflow until prerequisite checks, required "
+        "verification reruns, and completion verification succeed; do not stop "
+        "at the first plausible success signal."
+    ),
+)
+
 
 def canonical_task_workflow_command_templates() -> tuple[str, ...]:
     return tuple(command.template for command in CANONICAL_TASK_WORKFLOW_COMMANDS)
@@ -106,3 +132,7 @@ def canonical_task_workflow_commands_for_task(task_id: str) -> tuple[str, ...]:
 
 def completion_guidance_statements() -> tuple[str, ...]:
     return COMPLETION_GUIDANCE_STATEMENTS
+
+
+def dependency_aware_guidance_statements() -> tuple[str, ...]:
+    return DEPENDENCY_AWARE_GUIDANCE_STATEMENTS

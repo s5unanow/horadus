@@ -118,6 +118,9 @@ After completing work:
 - Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.
 - Mechanical completion for a task is defined by `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`; success requires the verifier to report `local-main-synced`.
 - Default autonomous completion for engineering tasks is full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync), not just local code changes.
+- Do not skip prerequisite workflow steps such as preflight, guarded task start, or context collection just because the likely end state looks obvious.
+- Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers the step because the CLI encodes sequencing, policy, and verification dependencies rather than just style.
+- Keep using the workflow until prerequisite checks, required verification reruns, and completion verification succeed; do not stop at the first plausible success signal.
 - Treat repo-facing work as incomplete until requested deliverables, required repo updates, and required verification/gate runs are finished or explicitly reported blocked.
 - Implementation, required tests/gates, and required task/doc/status updates remain part of the same task unless they are explicitly blocked.
 - If a task is blocked, report the exact missing item, the blocker causing it, and the furthest completed lifecycle step rather than a vague partial-completion claim.

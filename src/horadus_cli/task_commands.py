@@ -79,6 +79,12 @@ class FinishConfig:
     review_timeout_policy: str
 
 
+@dataclass(slots=True)
+class LocalGateStep:
+    name: str
+    command: str
+
+
 def _result_message(result: subprocess.CompletedProcess[str], fallback: str) -> str:
     return result.stderr.strip() or result.stdout.strip() or fallback
 
@@ -285,6 +291,151 @@ def _wait_for_pr_state(
             )
         if config.checks_poll_seconds:
             time.sleep(config.checks_poll_seconds)
+
+
+def _summarize_output_lines(lines: list[str], *, max_lines: int = 80) -> list[str]:
+    if len(lines) <= max_lines:
+        return lines
+    head_count = 30
+    tail_count = 30
+    omitted = len(lines) - head_count - tail_count
+    return [
+        *lines[:head_count],
+        f"... ({omitted} lines omitted) ...",
+        *lines[-tail_count:],
+    ]
+
+
+def full_local_gate_steps() -> list[LocalGateStep]:
+    uv_bin = getenv("UV_BIN") or "uv"
+    return [
+        LocalGateStep(
+            name="check-tracked-artifacts",
+            command="./scripts/check_no_tracked_artifacts.sh",
+        ),
+        LocalGateStep(
+            name="docs-freshness",
+            command=f"{uv_bin} run --no-sync python scripts/check_docs_freshness.py",
+        ),
+        LocalGateStep(
+            name="ruff-format-check",
+            command=f"{uv_bin} run --no-sync ruff format src/ tests/ --check",
+        ),
+        LocalGateStep(
+            name="ruff-check",
+            command=f"{uv_bin} run --no-sync ruff check src/ tests/",
+        ),
+        LocalGateStep(
+            name="mypy",
+            command=f"{uv_bin} run --no-sync mypy src/",
+        ),
+        LocalGateStep(
+            name="validate-taxonomy",
+            command=(
+                f"{uv_bin} run --no-sync horadus eval validate-taxonomy "
+                "--gold-set ai/eval/gold_set.jsonl "
+                "--trend-config-dir config/trends "
+                "--output-dir ai/eval/results "
+                "--max-items 200 "
+                "--tier1-trend-mode subset "
+                "--signal-type-mode warn "
+                "--unknown-trend-mode warn"
+            ),
+        ),
+        LocalGateStep(
+            name="pytest-unit-cov",
+            command=(
+                f"{uv_bin} run --no-sync pytest tests/unit/ -v "
+                "--cov=src --cov-report=term-missing:skip-covered"
+            ),
+        ),
+        LocalGateStep(
+            name="bandit",
+            command=f"{uv_bin} run --no-sync bandit -c pyproject.toml -r src/",
+        ),
+        LocalGateStep(
+            name="lockfile-check",
+            command=f"{uv_bin} lock --check",
+        ),
+        LocalGateStep(
+            name="integration-docker",
+            command="./scripts/test_integration_docker.sh",
+        ),
+        LocalGateStep(
+            name="build-package",
+            command="rm -rf dist build *.egg-info && uvx --from build pyproject-build && uvx twine check dist/*",
+        ),
+    ]
+
+
+def local_gate_data(*, full: bool, dry_run: bool) -> tuple[int, dict[str, Any], list[str]]:
+    if not full:
+        return (
+            ExitCode.VALIDATION_ERROR,
+            {"full": False},
+            [
+                "Local gate selection failed.",
+                "Use `horadus tasks local-gate --full` for the canonical post-task local gate.",
+            ],
+        )
+
+    if _ensure_command_available(getenv("UV_BIN") or "uv") is None:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"missing_command": getenv("UV_BIN") or "uv"},
+            ["Local gate failed: uv is required to run the canonical full local gate."],
+        )
+
+    steps = full_local_gate_steps()
+    lines = [
+        "Running canonical full local gate:",
+        *[f"- {step.name}: {step.command}" for step in steps],
+    ]
+    if dry_run:
+        lines.append("Dry run: validated the canonical step list without executing it.")
+        return (
+            ExitCode.OK,
+            {
+                "mode": "full",
+                "dry_run": True,
+                "steps": [asdict(step) for step in steps],
+            },
+            lines,
+        )
+
+    progress_lines = ["Running canonical full local gate:"]
+    for index, step in enumerate(steps, start=1):
+        progress_lines.append(f"[{index}/{len(steps)}] RUN {step.name}")
+        result = _run_shell(step.command)
+        if result.returncode != 0:
+            output_lines = _summarize_output_lines(_output_lines(result))
+            return (
+                ExitCode.ENVIRONMENT_ERROR,
+                {
+                    "mode": "full",
+                    "failed_step": step.name,
+                    "command": step.command,
+                    "steps": [asdict(item) for item in steps],
+                },
+                [
+                    *progress_lines,
+                    f"Local gate failed at step `{step.name}`.",
+                    f"Command: {step.command}",
+                    *output_lines,
+                ],
+            )
+        progress_lines.append(f"[{index}/{len(steps)}] PASS {step.name}")
+
+    progress_lines.append("Full local gate passed.")
+    return (
+        ExitCode.OK,
+        {
+            "mode": "full",
+            "dry_run": False,
+            "steps": [asdict(step) for step in steps],
+        },
+        progress_lines,
+    )
 
 
 def _ensure_required_hooks() -> tuple[bool, list[str]]:
@@ -1076,8 +1227,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             "",
             "## Suggested Validation Commands",
             "make agent-check",
-            "make docs-freshness",
-            "uv run --no-sync pytest tests/unit/ -v -m unit",
+            "uv run --no-sync horadus tasks local-gate --full",
         ]
     )
     return CommandResult(
@@ -1088,8 +1238,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             "spec_paths": record.spec_paths,
             "suggested_validation_commands": [
                 "make agent-check",
-                "make docs-freshness",
-                "uv run --no-sync pytest tests/unit/ -v -m unit",
+                "uv run --no-sync horadus tasks local-gate --full",
             ],
         },
     )
@@ -1123,6 +1272,11 @@ def handle_finish(args: Any) -> CommandResult:
     except ValueError as exc:
         return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
     exit_code, data, lines = finish_task_data(task_input, dry_run=bool(args.dry_run))
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
+def handle_local_gate(args: Any) -> CommandResult:
+    exit_code, data, lines = local_gate_data(full=bool(args.full), dry_run=bool(args.dry_run))
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
@@ -1222,3 +1376,15 @@ def register_task_commands(subparsers: Any) -> None:
         help="Optional task id (TASK-XXX or XXX) to verify against the current task branch.",
     )
     finish_parser.set_defaults(handler=handle_finish)
+
+    local_gate_parser = tasks_subparsers.add_parser(
+        "local-gate",
+        help="Run the canonical post-task local validation gate.",
+    )
+    add_leaf_cli_options(local_gate_parser)
+    local_gate_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Run the full CI-parity local gate.",
+    )
+    local_gate_parser.set_defaults(handler=handle_local_gate)

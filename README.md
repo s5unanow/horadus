@@ -222,6 +222,7 @@ Task workflow guard commands:
 ```bash
 uv run --no-sync horadus tasks preflight
 make agent-safe-start TASK=117 NAME=short-name
+uv run --no-sync horadus tasks local-gate --full
 uv run --no-sync horadus tasks finish TASK-117
 ```
 
@@ -235,6 +236,11 @@ Primary-Task: TASK-XXX
 report success unless the branch is pushed, the PR exists, required checks are
 green, the review gate passes, the PR is merged, and local `main` is synced.
 `make task-finish` is a compatibility wrapper to the same CLI flow.
+
+`horadus tasks local-gate --full` is the canonical post-task local validation
+gate before push/PR. It stays separate from `make agent-check`, which remains
+the fast inner-loop gate. `make local-gate` is a compatibility wrapper to the
+same CLI flow.
 
 ## Production Deployment
 

@@ -11,7 +11,7 @@
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
-        db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-context-pack task-start agent-safe-start task-finish protect-main doctor agent-smoke-run agent-check \
+        db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-context-pack task-start agent-safe-start task-finish local-gate protect-main doctor agent-smoke-run agent-check \
         check-tracked-artifacts validate-assessments automations-export automations-apply install-horadus-cli-skill
 
 # Default target
@@ -167,6 +167,9 @@ agent-safe-start: ## Start a task branch with sprint-eligibility + sequencing gu
 
 task-finish: ## Compatibility wrapper for the canonical horadus task completion command
 	$(UV_RUN) horadus tasks finish
+
+local-gate: ## Compatibility wrapper for the canonical full local validation gate
+	$(UV_RUN) horadus tasks local-gate --full
 
 protect-main: ## Apply required main-branch protection + merge policy (requires gh auth)
 	./scripts/enforce_main_protection.sh

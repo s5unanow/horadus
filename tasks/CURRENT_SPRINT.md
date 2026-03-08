@@ -34,10 +34,9 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 workflow-centralization hardening follow-up intake
-  (remaining recommended sequencing: `TASK-260` → `TASK-259` → `TASK-261` →
-  `TASK-263` → `TASK-264` → `TASK-262` → `TASK-265` → `TASK-266`; one task per branch/PR):
+  (remaining recommended sequencing: `TASK-259` → `TASK-261` → `TASK-263` →
+  `TASK-264` → `TASK-262` → `TASK-265` → `TASK-266`; one task per branch/PR):
   - `TASK-259` Add a Mechanical Done-State Verifier and Explicit Lifecycle States
-  - `TASK-260` Add a Full Local CI-Parity Gate in Horadus CLI
   - `TASK-261` Auto-Handle Docker Readiness for Workflow Gates
   - `TASK-262` Enforce No Early Completion Claims in Agent Workflow Guidance
   - `TASK-263` Route Repo Workflow Automation Through Horadus CLI and Skill
@@ -131,3 +130,9 @@
   end to end, `make task-finish` delegates to the CLI as a thin compatibility
   wrapper, and the legacy shell entrypoint is reduced to a compatibility shim
   rather than a second lifecycle engine.
+- `TASK-260` Add a Full Local CI-Parity Gate in Horadus CLI ✅
+  completion note: `horadus tasks local-gate --full` now owns the canonical
+  post-task CI-parity validation path, `make local-gate` delegates to the CLI
+  as a thin compatibility wrapper, and the command list now covers tracked
+  artifacts, docs freshness, repo-wide lint/type/unit/security checks,
+  integration, and build verification in one backpressure-friendly sequence.

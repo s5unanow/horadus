@@ -95,6 +95,15 @@ def test_build_parser_accepts_task_finish_command() -> None:
     assert args.task_id == "TASK-258"
 
 
+def test_build_parser_accepts_task_local_gate_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["tasks", "local-gate", "--full"])
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "local-gate"
+    assert args.full is True
+
+
 def test_build_parser_accepts_eval_benchmark_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(
@@ -1686,6 +1695,142 @@ def test_start_task_data_switches_to_new_branch(monkeypatch: pytest.MonkeyPatch)
     assert exit_code == task_commands_module.ExitCode.OK
     assert data["branch_name"] == "codex/task-253-coverage-100"
     assert "Created task branch: codex/task-253-coverage-100" in lines[-1]
+
+
+def test_full_local_gate_steps_match_expected_ci_parity_commands(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("UV_BIN", raising=False)
+
+    steps = task_commands_module.full_local_gate_steps()
+
+    assert [step.name for step in steps] == [
+        "check-tracked-artifacts",
+        "docs-freshness",
+        "ruff-format-check",
+        "ruff-check",
+        "mypy",
+        "validate-taxonomy",
+        "pytest-unit-cov",
+        "bandit",
+        "lockfile-check",
+        "integration-docker",
+        "build-package",
+    ]
+    assert steps[0].command == "./scripts/check_no_tracked_artifacts.sh"
+    assert steps[1].command == "uv run --no-sync python scripts/check_docs_freshness.py"
+    assert steps[2].command == "uv run --no-sync ruff format src/ tests/ --check"
+    assert steps[5].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
+    assert steps[6].command.endswith("--cov=src --cov-report=term-missing:skip-covered")
+    assert "-m unit" not in steps[6].command
+    assert steps[9].command == "./scripts/test_integration_docker.sh"
+    assert steps[10].command == (
+        "rm -rf dist build *.egg-info && uvx --from build pyproject-build && uvx twine check dist/*"
+    )
+
+
+def test_local_gate_data_requires_full_mode() -> None:
+    exit_code, data, lines = task_commands_module.local_gate_data(full=False, dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data == {"full": False}
+    assert lines[-1] == (
+        "Use `horadus tasks local-gate --full` for the canonical post-task local gate."
+    )
+
+
+def test_local_gate_data_dry_run_reports_canonical_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "full_local_gate_steps",
+        lambda: [
+            task_commands_module.LocalGateStep(name="docs-freshness", command="uv run docs"),
+            task_commands_module.LocalGateStep(name="ruff-check", command="uv run ruff"),
+        ],
+    )
+
+    exit_code, data, lines = task_commands_module.local_gate_data(full=True, dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["mode"] == "full"
+    assert data["dry_run"] is True
+    assert lines == [
+        "Running canonical full local gate:",
+        "- docs-freshness: uv run docs",
+        "- ruff-check: uv run ruff",
+        "Dry run: validated the canonical step list without executing it.",
+    ]
+
+
+def test_local_gate_data_runs_all_steps_and_reports_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "full_local_gate_steps",
+        lambda: [
+            task_commands_module.LocalGateStep(name="docs-freshness", command="step-1"),
+            task_commands_module.LocalGateStep(name="ruff-check", command="step-2"),
+        ],
+    )
+    calls: list[str] = []
+
+    def fake_run_shell(command: str) -> subprocess.CompletedProcess[str]:
+        calls.append(command)
+        return _completed(["bash", "-lc", command], stdout=f"ok:{command}\n")
+
+    monkeypatch.setattr(task_commands_module, "_run_shell", fake_run_shell)
+
+    exit_code, data, lines = task_commands_module.local_gate_data(full=True, dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert calls == ["step-1", "step-2"]
+    assert data["mode"] == "full"
+    assert lines == [
+        "Running canonical full local gate:",
+        "[1/2] RUN docs-freshness",
+        "[1/2] PASS docs-freshness",
+        "[2/2] RUN ruff-check",
+        "[2/2] PASS ruff-check",
+        "Full local gate passed.",
+    ]
+
+
+def test_local_gate_data_reports_failed_step_with_condensed_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "full_local_gate_steps",
+        lambda: [task_commands_module.LocalGateStep(name="pytest-unit-cov", command="step-fail")],
+    )
+    noisy_output = "\n".join(f"line-{index}" for index in range(100))
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_shell",
+        lambda _command: _completed(
+            ["bash", "-lc", "step-fail"], returncode=1, stdout=noisy_output
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.local_gate_data(full=True, dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["failed_step"] == "pytest-unit-cov"
+    assert lines[2] == "Local gate failed at step `pytest-unit-cov`."
+    assert lines[3] == "Command: step-fail"
+    assert "... (" in "\n".join(lines)
 
 
 def test_resolve_finish_context_rejects_task_mismatch(

@@ -11,9 +11,11 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from src.core.repo_workflow import (
+    COMPLETION_GUIDANCE_REFERENCE_PATHS,
     WORKFLOW_ESCAPE_HATCH_TEXT,
     WORKFLOW_REFERENCE_PATHS,
     canonical_task_workflow_command_templates,
+    completion_guidance_statements,
 )
 
 
@@ -470,6 +472,35 @@ def run_docs_freshness_check(
                     message=(
                         f"{reference_path} must include the canonical raw git/gh escape-hatch "
                         "guidance."
+                    ),
+                    path=reference_path,
+                )
+            )
+
+    guidance_statements = completion_guidance_statements()
+    for reference_path in COMPLETION_GUIDANCE_REFERENCE_PATHS:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="completion_guidance_reference_file_missing",
+                    message=f"Missing completion guidance file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+            continue
+
+        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
+        for statement in guidance_statements:
+            if _normalize_whitespace(statement) in normalized_content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="completion_guidance_statement_missing",
+                    message=(
+                        f"{reference_path} must include canonical completion guidance: {statement}"
                     ),
                     path=reference_path,
                 )

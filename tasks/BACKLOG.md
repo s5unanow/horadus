@@ -30,6 +30,10 @@ Tasks are organized by phase and priority.
 - Mandatory start sequence per task: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Mandatory completion sequence per task: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify merge commit is present locally.
 - Autonomous engineering-task completion is defined as full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync).
+- Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
+- Local commits, local tests, and a clean working tree are checkpoints, not completion.
+- Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
+- Resolve locally solvable environment blockers before reporting blocked.
 - If any lifecycle step is blocked (permissions/CI/platform), stop at the furthest completed step and capture exact blocker + required manual action.
 - If unrelated work appears, create a new task immediately but do not switch branches by default; continue current task unless the new work blocks current acceptance criteria or is urgent.
 - Never mix two tasks in one commit/PR; blockers must be done on a separate task branch after a safe checkpoint.

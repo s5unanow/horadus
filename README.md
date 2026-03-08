@@ -249,6 +249,15 @@ green, the review gate passes, the PR is merged, and local `main` is synced.
 task lifecycle state. `--strict` succeeds only when the task reaches
 `local-main-synced`, which is the repo policy definition of done.
 
+Do not claim a task is complete, done, or finished until
+`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
+`horadus tasks finish TASK-XXX` completes successfully.
+Local commits, local tests, and a clean working tree are checkpoints, not
+completion.
+Do not stop at a local commit boundary unless the user explicitly asked for a
+checkpoint.
+Resolve locally solvable environment blockers before reporting blocked.
+
 `horadus tasks local-gate --full` is the canonical post-task local validation
 gate before push/PR. It stays separate from `make agent-check`, which remains
 the fast inner-loop gate. If the Docker-backed integration step needs the

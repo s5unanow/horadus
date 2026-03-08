@@ -68,6 +68,15 @@ Compatibility wrapper:
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks finish` flow.
 
+Do not claim a task is complete, done, or finished until
+`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
+`horadus tasks finish TASK-XXX` completes successfully.
+Local commits, local tests, and a clean working tree are checkpoints, not
+completion.
+Do not stop at a local commit boundary unless the user explicitly asked for a
+checkpoint.
+Resolve locally solvable environment blockers before reporting blocked.
+
 Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
 needed workflow step yet, or when the CLI explicitly tells you a manual
 recovery step is required.

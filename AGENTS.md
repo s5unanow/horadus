@@ -117,6 +117,10 @@ After completing work:
 - Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.
 - Mechanical completion for a task is defined by `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`; success requires the verifier to report `local-main-synced`.
 - Default autonomous completion for engineering tasks is full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync), not just local code changes.
+- Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
+- Local commits, local tests, and a clean working tree are checkpoints, not completion.
+- Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
+- Resolve locally solvable environment blockers before reporting blocked.
 - If any lifecycle step is blocked (permissions/CI/platform), stop at the furthest completed step and report the exact blocker and required manual action.
 - If unrelated work is discovered mid-task, create a new task immediately but do not switch branches by default; continue current task unless the new work is a blocker/urgent.
 - Never mix two tasks in one commit/PR; blockers must be handled via a separate task branch after a safe checkpoint.

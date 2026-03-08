@@ -682,7 +682,7 @@ def register_legacy_commands(subparsers: Any) -> None:
     eval_parser = subparsers.add_parser("eval")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
 
-    from src.eval.benchmark import available_configs
+    from src.eval.benchmark import available_configs, default_config_names
     from src.eval.replay import available_replay_configs
 
     eval_benchmark_parser = eval_subparsers.add_parser(
@@ -711,7 +711,11 @@ def register_legacy_commands(subparsers: Any) -> None:
         "--config",
         action="append",
         choices=sorted(available_configs().keys()),
-        help="Benchmark config name (repeat to run multiple). Defaults to all.",
+        help=(
+            "Benchmark config name (repeat to run multiple). Defaults to the baseline "
+            f"set ({', '.join(default_config_names())}); GPT-5 candidates require "
+            "explicit --config selection."
+        ),
     )
     eval_benchmark_parser.add_argument(
         "--require-human-verified",

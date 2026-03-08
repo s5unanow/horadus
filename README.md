@@ -159,6 +159,21 @@ This writes `artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`. Review
 the report before proposing any backlog follow-up; backlog task creation remains
 human-gated.
 
+Run the benchmark on the default baseline config set:
+
+```bash
+uv run --no-sync horadus eval benchmark
+```
+
+Use explicit `--config` flags to include optional GPT-5 candidate configs:
+
+```bash
+uv run --no-sync horadus eval benchmark \
+  --config baseline \
+  --config tier1-gpt5-nano-minimal \
+  --config tier2-gpt5-mini-low
+```
+
 ## Configuration
 
 ### Defining Trends

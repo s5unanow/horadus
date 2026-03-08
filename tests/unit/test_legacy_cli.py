@@ -808,7 +808,20 @@ def test_doctor_helpers_and_command_result_wrappers(
 
 
 def test_legacy_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(benchmark_module, "available_configs", lambda: {"baseline": object()})
+    monkeypatch.setattr(
+        benchmark_module,
+        "available_configs",
+        lambda: {
+            "alternative": object(),
+            "baseline": object(),
+            "tier1-gpt5-nano-minimal": object(),
+        },
+    )
+    monkeypatch.setattr(
+        benchmark_module,
+        "default_config_names",
+        lambda: ("baseline", "alternative"),
+    )
     monkeypatch.setattr(replay_module, "available_replay_configs", lambda: {"stable": object()})
 
     parser = argparse.ArgumentParser()
@@ -825,3 +838,17 @@ def test_legacy_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPat
     assert args.command == "agent"
     assert args.agent_command == "smoke"
     assert args.dry_run is True
+
+    eval_parser = next(
+        action.choices["eval"]
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction) and "eval" in action.choices
+    )
+    benchmark_parser = next(
+        action.choices["benchmark"]
+        for action in eval_parser._actions
+        if isinstance(action, argparse._SubParsersAction) and "benchmark" in action.choices
+    )
+    help_text = benchmark_parser.format_help()
+    assert "Defaults to the baseline set (baseline, alternative)" in help_text
+    assert "GPT-5 candidates require explicit --config selection" in help_text

@@ -162,6 +162,27 @@ def test_available_configs_include_gpt5_reasoning_candidates() -> None:
     assert configs["tier2-gpt5-mini-medium"].tier2_request_overrides is None
 
 
+def test_default_configs_exclude_explicit_gpt5_candidates() -> None:
+    default_names = benchmark_module.default_config_names()
+    resolved = benchmark_module._resolve_configs(None)
+
+    assert default_names == ("baseline", "alternative")
+    assert [config.name for config in resolved] == list(default_names)
+    assert all("gpt5" not in config.name for config in resolved)
+
+
+def test_resolve_configs_keeps_explicit_gpt5_candidates_available() -> None:
+    resolved = benchmark_module._resolve_configs(
+        ["baseline", "tier1-gpt5-nano-minimal", "tier2-gpt5-mini-low"]
+    )
+
+    assert [config.name for config in resolved] == [
+        "baseline",
+        "tier1-gpt5-nano-minimal",
+        "tier2-gpt5-mini-low",
+    ]
+
+
 class _FakeTier1Classifier:
     def __init__(
         self,

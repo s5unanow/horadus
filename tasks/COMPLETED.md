@@ -305,6 +305,12 @@ Tasks that have been completed and verified.
   path loop, and a divergence-focused unit test keeps dependency-only and
   fallback-only path sets from silently being validated against the wrong
   statement set.
+- TASK-283: Forbid Agent-Initiated Review Timeout Overrides in `horadus tasks finish` ✅
+  `horadus tasks finish` now rejects review-timeout overrides unless
+  explicit human approval is declared, treats the configured reviewer's
+  PR-summary `THUMBS_UP` as a positive review-gate signal while still
+  waiting the full review window, and keeps that policy aligned across the
+  CLI docs and Horadus skill surfaces.
 ## Archive
 
 (Older sprints will be archived here)

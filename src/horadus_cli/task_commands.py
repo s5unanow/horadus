@@ -37,6 +37,7 @@ DEFAULT_REVIEW_TIMEOUT_SECONDS = 600
 DEFAULT_REVIEW_POLL_SECONDS = 10
 DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
+REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV = "HORADUS_HUMAN_APPROVED_REVIEW_TIMEOUT_OVERRIDE"
 DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
@@ -224,6 +225,25 @@ def _read_positive_int_env(name: str, default: int, *, command_name: str) -> int
     value = _read_int_env(name, default)
     if value == 0:
         raise ValueError(f"{name} must be positive for `{command_name}`.")
+    return value
+
+
+def _read_review_timeout_seconds_env() -> int:
+    value = _read_positive_int_env(
+        "REVIEW_TIMEOUT_SECONDS",
+        DEFAULT_REVIEW_TIMEOUT_SECONDS,
+        command_name="horadus tasks finish",
+    )
+    if value == DEFAULT_REVIEW_TIMEOUT_SECONDS:
+        return value
+
+    approval_raw = getenv(REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV)
+    approval = approval_raw.strip().lower() if approval_raw is not None else ""
+    if approval not in {"1", "true", "yes"}:
+        raise ValueError(
+            "REVIEW_TIMEOUT_SECONDS may differ from the default 600s (10 minutes) only when "
+            f"{REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV}=1 confirms an explicit human request."
+        )
     return value
 
 
@@ -677,11 +697,7 @@ def _finish_config() -> FinishConfig:
             "CHECKS_TIMEOUT_SECONDS", DEFAULT_CHECKS_TIMEOUT_SECONDS
         ),
         checks_poll_seconds=_read_int_env("CHECKS_POLL_SECONDS", DEFAULT_CHECKS_POLL_SECONDS),
-        review_timeout_seconds=_read_positive_int_env(
-            "REVIEW_TIMEOUT_SECONDS",
-            DEFAULT_REVIEW_TIMEOUT_SECONDS,
-            command_name="horadus tasks finish",
-        ),
+        review_timeout_seconds=_read_review_timeout_seconds_env(),
         review_poll_seconds=_read_int_env("REVIEW_POLL_SECONDS", DEFAULT_REVIEW_POLL_SECONDS),
         review_bot_login=getenv("REVIEW_BOT_LOGIN") or DEFAULT_REVIEW_BOT_LOGIN,
         review_timeout_policy=_read_review_timeout_policy_env(),

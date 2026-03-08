@@ -84,6 +84,20 @@ def _matching_review_comments(
     return matching_reviews, matching_comments
 
 
+def _has_pr_summary_thumbs_up(*, repo: str, pr_number: int, reviewer_login: str) -> bool:
+    reactions = _run_gh_json("api", f"repos/{repo}/issues/{pr_number}/reactions")
+    if not isinstance(reactions, list):
+        raise GhError("unexpected reactions payload from gh api")
+
+    return any(
+        isinstance(reaction, dict)
+        and reaction.get("content") == "+1"
+        and isinstance(reaction.get("user"), dict)
+        and reaction["user"].get("login") == reviewer_login
+        for reaction in reactions
+    )
+
+
 def _print_actionable_comments(comments: list[dict[str, object]]) -> None:
     print("review gate failed: actionable current-head review comments found:")
     for comment in comments:
@@ -132,12 +146,18 @@ def main(argv: list[str] | None = None) -> int:
     repo, pr_number, head_oid = _review_context(args.pr_url)
     deadline = time.time() + args.timeout_seconds
     saw_clean_current_head_review = False
+    has_pr_summary_thumbs_up = False
 
     while True:
         matching_reviews, matching_comments = _matching_review_comments(
             repo=repo,
             pr_number=pr_number,
             head_oid=head_oid,
+            reviewer_login=args.reviewer_login,
+        )
+        has_pr_summary_thumbs_up = _has_pr_summary_thumbs_up(
+            repo=repo,
+            pr_number=pr_number,
             reviewer_login=args.reviewer_login,
         )
         if matching_comments:
@@ -147,11 +167,26 @@ def main(argv: list[str] | None = None) -> int:
             saw_clean_current_head_review = True
 
         if time.time() >= deadline:
+            if saw_clean_current_head_review and has_pr_summary_thumbs_up:
+                print(
+                    "review gate passed: "
+                    f"{args.reviewer_login} reviewed current head {head_oid} with no inline comments "
+                    f"and reacted THUMBS_UP on the PR summary during the {args.timeout_seconds}s "
+                    "wait window."
+                )
+                return 0
             if saw_clean_current_head_review:
                 print(
                     "review gate passed: "
                     f"{args.reviewer_login} reviewed current head {head_oid} with no inline comments "
                     f"during the {args.timeout_seconds}s wait window."
+                )
+                return 0
+            if has_pr_summary_thumbs_up:
+                print(
+                    "review gate passed: "
+                    f"{args.reviewer_login} reacted THUMBS_UP on the PR summary during the "
+                    f"{args.timeout_seconds}s wait window."
                 )
                 return 0
             message = (

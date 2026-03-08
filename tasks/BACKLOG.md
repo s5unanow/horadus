@@ -42,6 +42,9 @@ Tasks are organized by phase and priority.
 - Implementation, required tests/gates, and required task/doc/status updates remain part of the same task unless they are explicitly blocked.
 - If a task is blocked, report the exact missing item, the blocker causing it, and the furthest completed lifecycle step rather than a vague partial-completion claim.
 - Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
+- The default review-gate timeout for `horadus tasks finish` is 600 seconds (10 minutes). Agents must not override it unless a human explicitly requested a different timeout.
+- Do not proactively suggest changing the `horadus tasks finish` review timeout; wait the canonical 10-minute window unless the human explicitly asked otherwise.
+- A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts as a positive review-gate signal, but the gate still waits the full timeout window and still blocks actionable current-head review comments.
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
 - Resolve locally solvable environment blockers before reporting blocked.
@@ -5245,8 +5248,10 @@ The review gate timeout in `horadus tasks finish` is intended to be a repo
 policy control, but agents can currently override it ad hoc through the
 environment. Harden the finish flow and agent-facing guidance so agents must
 not lower the default review timeout unless a human explicitly asks for that
-override, and agents must not proactively suggest timeout reductions on their
-own.
+override, agents must not proactively suggest timeout reductions on their
+own, and the review gate can treat the configured reviewer bot's PR-summary
+`THUMBS_UP` reaction as a valid positive signal without weakening the existing
+current-head comment blocker.
 
 **Files**: `src/horadus_cli/task_commands.py`, `scripts/check_pr_review_gate.py`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
 
@@ -5254,6 +5259,7 @@ own.
 - [ ] `horadus tasks finish` rejects agent-initiated review timeout overrides by default, while still allowing an explicit human-authorized path if the workflow chooses to support one
 - [ ] The default 10-minute review window remains the canonical timeout unless a human explicitly requests something else
 - [ ] Agent-facing guidance explicitly forbids agents from changing the review timeout on their own or suggesting a shorter timeout unprompted
+- [ ] A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts as a positive review-gate signal while actionable current-head review comments still block completion
 - [ ] Tests cover the default timeout behavior plus the blocked-override path
 - [ ] The repo docs/skill surfaces stay aligned with the hardened timeout policy
 

@@ -3349,11 +3349,14 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
     assert "(not listed in current sprint)" not in result.lines
+    assert "## Spec Contract Template" in result.lines
+    assert "tasks/specs/TEMPLATE.md" in result.lines
     assert "## Suggested Workflow Commands" in result.lines
     assert "uv run --no-sync horadus tasks context-pack TASK-253" in result.lines
     assert "uv run --no-sync horadus tasks finish TASK-253" in result.lines
     assert "## Suggested Validation Commands" in result.lines
     assert result.data is not None
+    assert result.data["spec_template_path"] == "tasks/specs/TEMPLATE.md"
     assert (
         result.data["suggested_workflow_commands"][0] == "uv run --no-sync horadus tasks preflight"
     )

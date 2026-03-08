@@ -297,3 +297,78 @@ async def test_get_calibration_report_marks_underconfidence_when_actuals_exceed_
     assert report.mean_brier_score == pytest.approx(0.725)
     assert report.overconfident is False
     assert report.underconfident is True
+
+
+@pytest.mark.asyncio
+async def test_get_calibration_report_skips_none_scores_and_snapshot_fallbacks(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CalibrationService(mock_db_session)
+    trend_id = uuid4()
+    outcomes = [
+        _build_outcome(probability=0.4, outcome=OutcomeType.OCCURRED, brier_score=None),
+        _build_outcome(probability=0.2, outcome=OutcomeType.DID_NOT_OCCUR, brier_score=0.04),
+    ]
+    for outcome in outcomes:
+        outcome.trend_id = trend_id
+    mock_db_session.scalars.return_value = _ScalarResult(outcomes)
+
+    monkeypatch.setattr(
+        "src.core.calibration.calculate_brier_score",
+        lambda predicted_probability, _outcome: None if predicted_probability == 0.4 else 0.0,
+    )
+    report = await service.get_calibration_report(trend_id=trend_id)
+
+    assert report.total_predictions == 2
+    assert report.resolved_predictions == 2
+    assert report.mean_brier_score == pytest.approx(0.04)
+    assert report.overconfident is False
+    assert report.underconfident is True
+
+    trend = _build_trend(probability=0.35)
+    mock_db_session.scalar.return_value = None
+    assert await service._get_predicted_probability(trend, datetime.now(tz=UTC)) == pytest.approx(
+        0.35
+    )
+
+    snapshot = TrendSnapshot(
+        trend_id=trend.id,
+        timestamp=datetime.now(tz=UTC),
+        log_odds=prob_to_logodds(0.8),
+        event_count_24h=3,
+    )
+    mock_db_session.scalar.return_value = snapshot
+    assert await service._get_predicted_probability(trend, datetime.now(tz=UTC)) == pytest.approx(
+        0.8
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_calibration_report_skips_none_actual_in_signed_error_loop(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = CalibrationService(mock_db_session)
+    trend_id = uuid4()
+    outcome = _build_outcome(probability=0.4, outcome=OutcomeType.OCCURRED, brier_score=0.36)
+    outcome.trend_id = trend_id
+    mock_db_session.scalars.return_value = _ScalarResult([outcome])
+
+    calls = {"count": 0}
+
+    def fake_actual_value(_outcome_type: OutcomeType) -> float | None:
+        calls["count"] += 1
+        if calls["count"] >= 3:
+            return None
+        return 1.0
+
+    monkeypatch.setattr("src.core.calibration._actual_value", fake_actual_value)
+
+    report = await service.get_calibration_report(trend_id=trend_id)
+
+    assert report.total_predictions == 1
+    assert report.resolved_predictions == 1
+    assert report.mean_brier_score == pytest.approx(0.36)
+    assert report.overconfident is False
+    assert report.underconfident is False

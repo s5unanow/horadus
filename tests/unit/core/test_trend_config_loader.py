@@ -72,7 +72,7 @@ def test_load_trends_from_config_dir_rejects_invalid_yaml(tmp_path: Path) -> Non
     config_dir.mkdir()
     (config_dir / "invalid.yaml").write_text("id: [\n", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="Failed to load trend config invalid.yaml"):
+    with pytest.raises(ValueError, match=r"Failed to load trend config invalid\.yaml"):
         load_trends_from_config_dir(config_dir=config_dir)
 
 
@@ -89,7 +89,7 @@ indicators: {}
         encoding="utf-8",
     )
 
-    with pytest.raises(ValueError, match="TrendConfig validation failed for invalid.yaml"):
+    with pytest.raises(ValueError, match=r"TrendConfig validation failed for invalid\.yaml"):
         load_trends_from_config_dir(config_dir=config_dir)
 
 

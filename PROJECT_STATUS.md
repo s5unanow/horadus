@@ -254,6 +254,8 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-227`, `TASK-228`, `TASK-229`, `TASK-230`, `TASK-231`, `TASK-232`,
   `TASK-233`, `TASK-234`, `TASK-235`, `TASK-236`, `TASK-237`, `TASK-238`
 - Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
+- Workflow/coverage hardening queue remains active in Sprint 3:
+  `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`, `TASK-257`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

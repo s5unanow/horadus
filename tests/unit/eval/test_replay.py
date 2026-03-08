@@ -424,7 +424,7 @@ async def test_run_historical_replay_comparison_requires_scored_points(
 
     monkeypatch.setattr(replay_module, "async_session_maker", _fake_session_maker)
 
-    with pytest.raises(ValueError, match="No scored outcomes available in replay window."):
+    with pytest.raises(ValueError, match=r"No scored outcomes available in replay window\."):
         await replay_module.run_historical_replay_comparison(output_dir=str(tmp_path))
 
 

@@ -314,7 +314,7 @@ def _build_agent_shutdown_callback(
             reason=reason,
             exit_code=exit_code,
         )
-        server.should_exit = True  # type: ignore[attr-defined]
+        server.should_exit = True
 
     return _agent_shutdown_callback
 

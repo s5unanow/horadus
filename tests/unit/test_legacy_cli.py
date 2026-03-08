@@ -724,6 +724,17 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
     monkeypatch.setattr(builtins, "__import__", failing_import)
     assert await legacy_module._doctor_check_redis(0.2) == ("FAIL", "redis client is not installed")
 
+    class BrokenRedisClient:
+        async def ping(self) -> None:
+            raise RuntimeError("boom")
+
+        async def close(self) -> None:
+            return None
+
+    monkeypatch.setattr(builtins, "__import__", original_import)
+    fake_redis_module.from_url = lambda _url: BrokenRedisClient()
+    assert await legacy_module._doctor_check_redis(0.2) == ("FAIL", "redis check failed: boom")
+
 
 def test_doctor_helpers_and_command_result_wrappers(
     monkeypatch: pytest.MonkeyPatch,

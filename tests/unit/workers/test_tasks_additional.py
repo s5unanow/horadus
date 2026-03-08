@@ -97,6 +97,17 @@ def test_run_async_delegates_to_asyncio_run(monkeypatch: pytest.MonkeyPatch) -> 
     assert seen["name"] == "sample"
 
 
+def test_processing_in_flight_helpers_return_zero_on_redis_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        tasks_module, "_get_redis_client", MagicMock(side_effect=RuntimeError("boom"))
+    )
+
+    assert tasks_module._increment_processing_in_flight() == 0
+    assert tasks_module._decrement_processing_in_flight() == 0
+
+
 def test_push_dead_letter_logs_error_and_closes_client(monkeypatch: pytest.MonkeyPatch) -> None:
     fake_redis = MagicMock()
     fake_redis.lpush.side_effect = RuntimeError("boom")

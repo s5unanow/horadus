@@ -280,6 +280,11 @@ Tasks that have been completed and verified.
   keeps it sourced from `src/core/repo_workflow.py`, and extends docs-freshness
   enforcement to the Horadus skill so completion guidance cannot silently
   drift.
+- TASK-278: Add Dependency-Aware Tool Persistence Rules to Repo Workflow Guidance ✅
+  The workflow guidance now forbids skipping prerequisite Horadus steps when
+  the likely outcome seems obvious, frames CLI commands as dependency-aware
+  policy surfaces, and enforces that shared wording across AGENTS, the
+  runbook, the Horadus skill, and the command reference.
 ## Archive
 
 (Older sprints will be archived here)

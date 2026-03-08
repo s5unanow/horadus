@@ -46,9 +46,8 @@
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - Newly queued from 2026-03-08 workflow/prompt contract hardening intake
-  (remaining recommended sequencing: `TASK-278` -> `TASK-279` -> `TASK-280`
-  -> `TASK-281`; one task per branch/PR):
-  - `TASK-278` Add Dependency-Aware Tool Persistence Rules to Repo Workflow Guidance
+  (remaining recommended sequencing: `TASK-279` -> `TASK-280` -> `TASK-281`;
+  one task per branch/PR):
   - `TASK-279` Add Empty-Result Recovery and Friction-Logging Fallback Rules
   - `TASK-280` Add a Bounded Research Mode for Triage and Review Workflows
   - `TASK-281` Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty
@@ -201,3 +200,9 @@
   repo-facing agents, keeps that contract sourced from `repo_workflow`, and
   extends docs-freshness coverage to the Horadus skill so the contract cannot
   quietly drift across workflow surfaces.
+- `TASK-278` Add Dependency-Aware Tool Persistence Rules to Repo Workflow Guidance ✅
+  completion note: the workflow guidance now states that agents must not skip
+  prerequisite Horadus steps when outcomes look obvious, treats CLI workflow
+  commands as dependency-aware policy surfaces rather than style preferences,
+  and enforces that wording across AGENTS, the runbook, the skill, and the
+  command notes via docs-freshness.

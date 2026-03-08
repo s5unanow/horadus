@@ -581,22 +581,22 @@ def finish_task_data(
     remote_branch_result = _run_command(
         [config.git_bin, "ls-remote", "--exit-code", "--heads", "origin", context.branch_name]
     )
-    if remote_branch_result.returncode != 0:
-        return _task_blocked(
-            f"branch `{context.branch_name}` is not pushed to origin.",
-            next_action=f"Run `git push -u origin {context.branch_name}` and open a PR for {context.task_id}.",
-            data={"task_id": context.task_id, "branch_name": context.branch_name},
-        )
+    remote_branch_exists = remote_branch_result.returncode == 0
 
     pr_url_result = _run_command([config.gh_bin, "pr", "view", "--json", "url", "--jq", ".url"])
     pr_url = pr_url_result.stdout.strip()
     if pr_url_result.returncode != 0 or not pr_url:
-        return _task_blocked(
-            f"unable to locate a PR for branch `{context.branch_name}`.",
-            next_action=(
+        next_action = (
+            f"Run `git push -u origin {context.branch_name}` and open a PR for {context.task_id}."
+            if not remote_branch_exists
+            else (
                 f"Open a PR for `{context.branch_name}` with `Primary-Task: {context.task_id}` in the body, "
                 "then re-run `horadus tasks finish`."
-            ),
+            )
+        )
+        return _task_blocked(
+            f"unable to locate a PR for branch `{context.branch_name}`.",
+            next_action=next_action,
             data={"task_id": context.task_id, "branch_name": context.branch_name},
         )
 
@@ -626,6 +626,25 @@ def finish_task_data(
         )
 
     lines = [f"Finishing {context.task_id} from {context.branch_name}", f"PR: {pr_url}"]
+
+    pr_state_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
+    )
+    if pr_state_result.returncode != 0:
+        return _task_blocked(
+            _result_message(pr_state_result, "Unable to determine PR state."),
+            next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    pr_state = pr_state_result.stdout.strip()
+
+    if pr_state != "MERGED" and not remote_branch_exists:
+        return _task_blocked(
+            f"branch `{context.branch_name}` is not pushed to origin.",
+            next_action=f"Run `git push -u origin {context.branch_name}` and re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+        )
 
     draft_result = _run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "isDraft", "--jq", ".isDraft"]
@@ -659,49 +678,45 @@ def finish_task_data(
             lines,
         )
 
-    lines.append(f"Waiting for PR checks to pass (timeout={config.checks_timeout_seconds}s)...")
-    checks_ok, check_lines = _wait_for_required_checks(pr_url=pr_url, config=config)
-    if not checks_ok:
-        return _task_blocked(
-            "required PR checks did not pass before timeout.",
-            next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
-            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
-            extra_lines=check_lines,
-        )
-
-    lines.append(
-        "Waiting for review gate "
-        f"(reviewer={config.review_bot_login}, timeout={config.review_timeout_seconds}s)..."
-    )
-    review_result = _run_review_gate(pr_url=pr_url, config=config)
-    if review_result.returncode != 0:
-        return _task_blocked(
-            "review gate did not pass.",
-            next_action=(
-                "Address the current-head review feedback or reviewer timeout blocker, "
-                "then re-run `horadus tasks finish`."
-            ),
-            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
-            exit_code=review_result.returncode,
-            extra_lines=_output_lines(review_result),
-        )
-    lines.extend(_output_lines(review_result))
-
-    pr_state_result = _run_command(
-        [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
-    )
-    if pr_state_result.returncode != 0:
-        return _task_blocked(
-            _result_message(pr_state_result, "Unable to determine PR state."),
-            next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
-            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
-            exit_code=ExitCode.ENVIRONMENT_ERROR,
-        )
-    pr_state = pr_state_result.stdout.strip()
-
     if pr_state == "MERGED":
         lines.append("PR already merged; skipping merge step.")
     else:
+        lines.append(f"Waiting for PR checks to pass (timeout={config.checks_timeout_seconds}s)...")
+        checks_ok, check_lines = _wait_for_required_checks(pr_url=pr_url, config=config)
+        if not checks_ok:
+            return _task_blocked(
+                "required PR checks did not pass before timeout.",
+                next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                extra_lines=check_lines,
+            )
+
+        lines.append(
+            "Waiting for review gate "
+            f"(reviewer={config.review_bot_login}, timeout={config.review_timeout_seconds}s)..."
+        )
+        review_result = _run_review_gate(pr_url=pr_url, config=config)
+        if review_result.returncode != 0:
+            return _task_blocked(
+                "review gate did not pass.",
+                next_action=(
+                    "Address the current-head review feedback or reviewer timeout blocker, "
+                    "then re-run `horadus tasks finish`."
+                ),
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                exit_code=review_result.returncode,
+                extra_lines=_output_lines(review_result),
+            )
+        lines.extend(_output_lines(review_result))
+
         lines.append("Merging PR (squash, delete branch)...")
         merge_result = _run_command(
             [config.gh_bin, "pr", "merge", pr_url, "--squash", "--delete-branch"]

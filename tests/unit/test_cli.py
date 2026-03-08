@@ -1740,8 +1740,11 @@ def test_finish_task_data_blocks_when_branch_not_pushed(
     )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        assert args[:2] == ["git", "ls-remote"]
-        return _completed(args, returncode=2)
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, returncode=1, stderr="no pull requests found")
+        raise AssertionError(args)
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
@@ -1749,7 +1752,7 @@ def test_finish_task_data_blocks_when_branch_not_pushed(
 
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert data["branch_name"] == "codex/task-258-canonical-finish"
-    assert "not pushed to origin" in lines[0]
+    assert "unable to locate a PR" in lines[0]
     assert "git push -u origin codex/task-258-canonical-finish" in lines[1]
 
 
@@ -1784,11 +1787,13 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:4] == ["gh", "pr", "view", "--json"]:
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
             if "--json" in args and "body" in args:
                 return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
             if "--json" in args and "isDraft" in args:
                 return _completed(args, stdout="false\n")
         raise AssertionError(args)
@@ -1804,7 +1809,7 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     assert lines[-1] == "required-check failure details"
 
 
-def test_finish_task_data_succeeds_when_pr_already_merged(
+def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_deletion(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -1839,7 +1844,7 @@ def test_finish_task_data_succeeds_when_pr_already_merged(
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
-            return _completed(args)
+            return _completed(args, returncode=2)
         if args[:5] == ["gh", "pr", "view", "--json", "url"]:
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:

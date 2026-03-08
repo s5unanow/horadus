@@ -2075,6 +2075,38 @@ def test_summarize_friction_data_creates_empty_daily_checkpoint_when_log_missing
     assert "- None for this report window." in report
 
 
+def test_summarize_friction_data_reports_filesystem_read_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    log_path = tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "entries.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("[]\n", encoding="utf-8")
+    original_read_text = Path.read_text
+
+    def fail_read_text(self: Path, *args: object, **kwargs: object) -> str:
+        if self == log_path:
+            raise OSError("permission denied")
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", fail_read_text)
+
+    exit_code, data, lines = task_commands_module.summarize_friction_data(
+        report_date_input="2026-03-08",
+        output_path_input=None,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["log_path"] == "artifacts/agent/horadus-cli-feedback/entries.jsonl"
+    assert data["error"] == "permission denied"
+    assert lines == [
+        "Workflow friction summary failed while reading the friction log artifact.",
+        "Filesystem error: permission denied",
+    ]
+
+
 def test_handle_record_friction_rejects_invalid_task_id() -> None:
     result = task_commands_module.handle_record_friction(
         argparse.Namespace(

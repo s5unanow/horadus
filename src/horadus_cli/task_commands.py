@@ -582,6 +582,15 @@ def summarize_friction_data(
             {"log_path": _relative_display_path(log_path)},
             [f"Workflow friction summary failed: {exc}"],
         )
+    except OSError as exc:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"log_path": _relative_display_path(log_path), "error": str(exc)},
+            [
+                "Workflow friction summary failed while reading the friction log artifact.",
+                f"Filesystem error: {exc}",
+            ],
+        )
 
     filtered_entries = _entries_for_report_date(entries, report_date)
     patterns, improvements, friction_type_counts = _summarize_workflow_friction(filtered_entries)

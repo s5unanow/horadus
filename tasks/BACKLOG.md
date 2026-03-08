@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-276`.
+- Next available task IDs start at `TASK-277`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5079,6 +5079,28 @@ swapping to raw merge commands when the CLI is available.
 - [ ] Passing `0` (or any equivalent no-wait value) cannot be used to skip the review-gate wait path
 - [ ] Timeout failures surface a specific blocker and next required action instead of encouraging a raw merge fallback
 - [ ] Tests cover the positive-timeout requirement, timeout-expiry blocker behavior, and representative bypass attempts
+
+---
+
+### TASK-276: Treat Clean Codex Review Issue Comments as Review-Gate Success
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+**Spec**: `tasks/specs/276-clean-codex-issue-comment-review-gate.md`
+
+`horadus tasks finish` now fails closed on review timeout, but the current
+Codex GitHub integration can respond to `@codex review` with a clean issue
+comment instead of a current-head PR review. The review gate currently ignores
+that success signal, so clean PRs can block indefinitely until timeout even
+when Codex has already reviewed the current head and found no issues.
+
+**Files**: `scripts/check_pr_review_gate.py`, `src/horadus_cli/task_commands.py`, `tests/unit/scripts/`, `tests/unit/test_cli.py`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] The finish review gate recognizes a clean Codex issue comment for the current PR head as a success condition, or otherwise uses an equivalent machine-checkable current-head success signal
+- [ ] Stale clean comments from an older head commit and comments from other authors do not satisfy the gate
+- [ ] Actionable current-head Codex review comments still fail the gate
+- [ ] `horadus tasks finish` can complete on a clean PR after Codex responds with its current issue-comment-only success path
+- [ ] Tests cover clean issue-comment success, stale-head rejection, and coexistence with actionable inline review feedback
 
 ---
 

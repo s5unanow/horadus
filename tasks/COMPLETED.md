@@ -271,10 +271,6 @@ Tasks that have been completed and verified.
   Added explicit Tier-1 score bands around the runtime threshold plus targeted examples for current-event positives and media/history negatives.
   Added prompt regression tests to keep the rubric and examples from drifting.
   Evaluated the updated prompt against the gold set before promotion and did not promote a new baseline.
-- TASK-275: Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
-  `horadus tasks finish` now requires a positive review-gate timeout, rejects timeout-policy bypass overrides, and fails closed when the required current-head review does not arrive before timeout.
-  Agent-facing workflow guidance now treats review timeout as a blocker rather than a raw `gh pr merge` escape hatch.
-
 ## Archive
 
 (Older sprints will be archived here)

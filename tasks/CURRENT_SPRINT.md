@@ -46,7 +46,9 @@
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - Newly queued from 2026-03-08 finish-workflow follow-up intake
-  (one task per branch/PR):
+  (blocking sequencing: `TASK-275` -> `TASK-276`; one task per branch/PR):
+  - `TASK-275` Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass
+  - `TASK-276` Treat Clean Codex Review Issue Comments as Review-Gate Success
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -183,9 +185,3 @@
   repo-owned automation desired state is versioned under `ops/automations/`,
   and follow-up task ideas remain human-review suggestions rather than auto-
   created backlog records.
-- `TASK-275` Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
-  completion note: `horadus tasks finish` now requires a positive review-gate
-  timeout, rejects timeout-policy bypass overrides, fails closed when the
-  required current-head review never arrives, and the agent-facing workflow
-  docs now treat reviewer timeout as a blocker instead of a raw `gh pr merge`
-  escape hatch.

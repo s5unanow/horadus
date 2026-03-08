@@ -307,6 +307,15 @@ partial-completion claim.
 Do not claim a task is complete, done, or finished until
 `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
 `horadus tasks finish TASK-XXX` completes successfully.
+The default review-gate timeout for `horadus tasks finish` is 600 seconds
+(10 minutes). Agents must not override it unless a human explicitly requested
+a different timeout.
+Do not proactively suggest changing the `horadus tasks finish` review
+timeout; wait the canonical 10-minute window unless the human explicitly
+asked otherwise.
+A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts
+as a positive review-gate signal, but the gate still waits the full timeout
+window and still blocks actionable current-head review comments.
 Local commits, local tests, and a clean working tree are checkpoints, not
 completion.
 Do not stop at a local commit boundary unless the user explicitly asked for a

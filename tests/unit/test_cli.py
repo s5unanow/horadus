@@ -2952,6 +2952,166 @@ def test_finish_task_data_rejects_zero_review_timeout_override(
     ]
 
 
+def test_finish_task_data_rejects_review_timeout_override_without_human_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REVIEW_TIMEOUT_SECONDS", "5")
+
+    exit_code, _data, lines = task_commands_module.finish_task_data("TASK-283", dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert lines == [
+        (
+            "Task finish blocked: REVIEW_TIMEOUT_SECONDS may differ from the default 600s "
+            "(10 minutes) only when "
+            "HORADUS_HUMAN_APPROVED_REVIEW_TIMEOUT_OVERRIDE=1 confirms an explicit human "
+            "request."
+        ),
+        "Next action: Fix the invalid environment override and re-run `horadus tasks finish`.",
+    ]
+
+
+def test_finish_task_data_allows_review_timeout_override_with_human_approval(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REVIEW_TIMEOUT_SECONDS", "5")
+    monkeypatch.setenv("HORADUS_HUMAN_APPROVED_REVIEW_TIMEOUT_OVERRIDE", "1")
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-283-finish-review-thumbs-up",
+            branch_task_id="TASK-283",
+            task_id="TASK-283",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-283 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            stdout=(
+                "review gate passed: chatgpt-codex-connector[bot] reacted THUMBS_UP on the "
+                "PR summary during the 5s wait window."
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-283", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/283\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/283"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-283: finish review thumbs up","body":"Primary-Task: TASK-283\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-283\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/283"]:
+            return _completed(args)
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-283-finish-review-thumbs-up",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-283", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-283"
+    assert any("reacted THUMBS_UP on the PR summary" in line for line in lines)
+    assert lines[-1] == "Task finish passed: merged merge-commit-283 and synced main."
+
+
+def test_task_lifecycle_data_does_not_enforce_finish_timeout_override_policy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REVIEW_TIMEOUT_SECONDS", "5")
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: task_commands_module.TaskLifecycleSnapshot(
+            task_id="TASK-283",
+            current_branch="codex/task-283-finish-review-thumbs-up",
+            branch_name="codex/task-283-finish-review-thumbs-up",
+            local_branch_names=["codex/task-283-finish-review-thumbs-up"],
+            remote_branch_names=["origin/codex/task-283-finish-review-thumbs-up"],
+            remote_branch_exists=True,
+            working_tree_clean=True,
+            pr=task_commands_module.TaskPullRequest(
+                number=217,
+                url="https://example.invalid/pr/283",
+                state="OPEN",
+                is_draft=False,
+                head_ref_name="codex/task-283-finish-review-thumbs-up",
+                head_ref_oid="head-sha-283",
+                merge_commit_oid=None,
+                check_state="pass",
+            ),
+            local_main_sha="main-sha",
+            remote_main_sha="main-sha",
+            local_main_synced=True,
+            merge_commit_available_locally=None,
+            merge_commit_on_main=None,
+            lifecycle_state="ci-green",
+            strict_complete=False,
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-283",
+        strict=False,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["task_id"] == "TASK-283"
+    assert lines[0] == "Task lifecycle: TASK-283"
+
+
 def test_finish_task_data_rejects_review_timeout_policy_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

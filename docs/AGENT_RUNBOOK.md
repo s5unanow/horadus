@@ -73,9 +73,34 @@ Task PRs must be titled `TASK-XXX: short summary` and include exactly one
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
 The finish flow always waits a positive review-gate timeout. Actionable
-current-head review feedback blocks completion, but a silent timeout after the
-full wait window is allowed to continue inside the CLI flow. Do not bypass the
-CLI with raw `gh pr merge`.
+current-head review feedback blocks completion. The default review-gate
+timeout is 600 seconds (10 minutes), and agents must not override or suggest
+changing it unless a human explicitly asked for a different timeout. A
+`THUMBS_UP` reaction from the configured reviewer on the PR summary counts as
+a positive review-gate signal, but the gate still waits the full timeout
+window. A silent timeout after the full wait window is allowed to continue
+inside the CLI flow. Do not bypass the CLI with raw `gh pr merge`.
+
+Treat repo-facing work as incomplete until requested deliverables, required
+repo updates, and required verification/gate runs are finished or explicitly
+reported blocked.
+Implementation, required tests/gates, and required task/doc/status updates
+remain part of the same task unless they are explicitly blocked.
+If a task is blocked, report the exact missing item, the blocker causing it,
+and the furthest completed lifecycle step rather than a vague
+partial-completion claim.
+Do not claim a task is complete, done, or finished until
+`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
+`horadus tasks finish TASK-XXX` completes successfully.
+The default review-gate timeout for `horadus tasks finish` is 600 seconds
+(10 minutes). Agents must not override it unless a human explicitly requested
+a different timeout.
+Do not proactively suggest changing the `horadus tasks finish` review
+timeout; wait the canonical 10-minute window unless the human explicitly
+asked otherwise.
+A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts
+as a positive review-gate signal, but the gate still waits the full timeout
+window and still blocks actionable current-head review comments.
 
 Compatibility wrapper:
 - `make task-finish`

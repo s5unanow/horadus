@@ -54,6 +54,10 @@ case "${1:-}" in
       echo '[]'
       exit 0
     fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      echo '[]'
+      exit 0
+    fi
     exit 1
     ;;
   *)
@@ -105,6 +109,10 @@ case "${1:-}" in
       echo '[{"pull_request_review_id":502,"user":{"login":"chatgpt-codex-connector[bot]"},"path":"scripts/finish_task_pr.sh","line":80,"html_url":"https://example.invalid/comment/1","body":"Please address this before merge."}]'
       exit 0
     fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      echo '[]'
+      exit 0
+    fi
     exit 1
     ;;
   *)
@@ -146,6 +154,10 @@ case "${1:-}" in
       echo '[]'
       exit 0
     fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      echo '[]'
+      exit 0
+    fi
     exit 1
     ;;
   *)
@@ -169,6 +181,114 @@ esac
     assert result.returncode == 0
     assert "review gate timeout" in result.stdout
     assert "timeout policy=allow" in result.stdout
+
+
+def test_review_gate_accepts_pr_summary_thumbs_up_after_full_wait(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      printf '[{"content":"+1","created_at":"%s","user":{"login":"chatgpt-codex-connector[bot]"}}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    started = time.monotonic()
+    result = _run_gate(
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
+    )
+    elapsed = time.monotonic() - started
+
+    assert result.returncode == 0
+    assert "reacted THUMBS_UP on the PR summary" in result.stdout
+    assert elapsed >= 0.9
+
+
+def test_review_gate_ignores_stale_pr_summary_thumbs_up(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      echo '[{"content":"+1","created_at":"2020-01-01T00:00:00Z","user":{"login":"chatgpt-codex-connector[bot]"}}]'
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_gate(
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
+    )
+
+    assert result.returncode == 0
+    assert "review gate timeout" in result.stdout
+    assert "THUMBS_UP" not in result.stdout
 
 
 def test_review_gate_rejects_non_positive_timeout(tmp_path: Path) -> None:
@@ -210,6 +330,10 @@ case "${1:-}" in
       exit 0
     fi
     if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
       echo '[]'
       exit 0
     fi
@@ -260,6 +384,10 @@ case "${1:-}" in
       exit 0
     fi
     if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
       echo '[]'
       exit 0
     fi

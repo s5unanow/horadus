@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-285`.
+- Next available task IDs start at `TASK-287`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5286,6 +5286,50 @@ hanging indefinitely.
 
 ---
 
+### TASK-285: Add Shared-Workflow Change Guardrails for Caller Audits and Review-State Semantics
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Recent `horadus` workflow changes produced regressions not because the repo
+was missing broad documentation, but because two specific engineering
+guardrails were absent: changes to shared workflow helpers did not require an
+explicit caller audit, and new GitHub review/reaction logic did not require
+current-head/current-window semantics to be stated and regression-tested. Add
+lightweight repo-owned guardrails that make those two checks explicit for
+future workflow/policy changes without turning the task template into generic
+prompt boilerplate.
+
+**Files**: `AGENTS.md`, `tasks/specs/TEMPLATE.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `src/core/repo_workflow.py`, `src/core/docs_freshness.py`, `tests/unit/core/test_docs_freshness.py`
+
+**Acceptance Criteria**:
+- [ ] Workflow-change guidance explicitly requires enumerating callers before changing shared workflow helpers/config and adding at least one regression test for an unaffected caller when shared behavior changes
+- [ ] Workflow/review-gate guidance explicitly requires defining current-head/current-window semantics for review, comment, and reaction signals before changing merge policy behavior
+- [ ] The guidance stays narrowly scoped to workflow/policy changes and does not introduce broad generic prompt-writing requirements
+- [ ] Docs-freshness or an equivalent repo-owned check enforces the new workflow guardrail statements across the canonical agent-facing surfaces
+- [ ] Tests cover the new docs-freshness expectations so the guardrails cannot silently drift
+
+---
+
+### TASK-286: Add Local Pre-Push Review via Codex CLI `[REQUIRES_HUMAN]`
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+The repo currently relies on local gates plus remote PR review, but there is
+no first-class repo workflow step for running a separate Codex review against
+local branch changes before push. Add a repo-owned pre-push review command
+that wraps the local Codex CLI review flow so agents and humans can request a
+local review against unpushed branch diffs without relying on GitHub PR state.
+
+**Files**: `src/horadus_cli/task_commands.py`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] The repo exposes a canonical command for local pre-push review via Codex CLI (for example under `horadus tasks ...`), with clear failure behavior when `codex` is unavailable
+- [ ] The command can review the current branch diff against a configured base branch without requiring a remote PR
+- [ ] Agent-facing docs and skill surfaces describe when to use the local Codex review step versus remote PR review
+- [ ] Tests cover the happy path plus the missing-`codex` or invalid-context blocker path
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] WebSocket for real-time trend updates
@@ -5299,3 +5343,4 @@ hanging indefinitely.
 - [ ] Email report delivery
 - [ ] Mobile push notifications for significant changes
 - [ ] Historical accuracy learning (auto-adjust source credibility)
+- [ ] Harness reviewer `EYES` reactions as PR review-in-progress feedback (observability first; do not treat as merge-gating policy until semantics are proven stable)

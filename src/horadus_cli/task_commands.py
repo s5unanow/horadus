@@ -38,6 +38,8 @@ DEFAULT_REVIEW_POLL_SECONDS = 10
 DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
 REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV = "HORADUS_HUMAN_APPROVED_REVIEW_TIMEOUT_OVERRIDE"
+DEFAULT_FINISH_REVIEW_GATE_GRACE_SECONDS = 30
+DEFAULT_FINISH_MERGE_COMMAND_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
@@ -52,18 +54,69 @@ VALID_FRICTION_TYPES: tuple[str, ...] = (
 )
 
 
+class CommandTimeoutError(RuntimeError):
+    def __init__(
+        self,
+        command: list[str],
+        timeout_seconds: float,
+        *,
+        stdout: str = "",
+        stderr: str = "",
+    ) -> None:
+        self.command = list(command)
+        self.timeout_seconds = timeout_seconds
+        self.stdout = stdout
+        self.stderr = stderr
+        super().__init__(f"Command timed out after {timeout_seconds}s: {shlex.join(self.command)}")
+
+    def output_lines(self) -> list[str]:
+        text = "\n".join(
+            part.strip() for part in (self.stdout, self.stderr) if part is not None and part.strip()
+        )
+        return text.splitlines() if text else []
+
+
 def _run_command(
     args: list[str],
     *,
     cwd: Path | None = None,
     check: bool = False,
+    timeout_seconds: float | None = None,
 ) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(  # nosec B603
+    try:
+        return subprocess.run(  # nosec B603
+            args,
+            cwd=cwd or repo_root(),
+            capture_output=True,
+            text=True,
+            check=check,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        if timeout_seconds is None:
+            raise RuntimeError("subprocess timed out without an explicit timeout value") from exc
+        stdout = exc.stdout if isinstance(exc.stdout, str) else ""
+        stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+        raise CommandTimeoutError(
+            args,
+            timeout_seconds,
+            stdout=stdout,
+            stderr=stderr,
+        ) from exc
+
+
+def _run_command_with_timeout(
+    args: list[str],
+    *,
+    timeout_seconds: float,
+    cwd: Path | None = None,
+    check: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    return _run_command(
         args,
-        cwd=cwd or repo_root(),
-        capture_output=True,
-        text=True,
+        cwd=cwd,
         check=check,
+        timeout_seconds=timeout_seconds,
     )
 
 
@@ -813,7 +866,7 @@ def _run_pr_scope_guard(
 
 
 def _run_review_gate(*, pr_url: str, config: FinishConfig) -> subprocess.CompletedProcess[str]:
-    return _run_command(
+    return _run_command_with_timeout(
         [
             config.python_bin,
             "./scripts/check_pr_review_gate.py",
@@ -827,7 +880,12 @@ def _run_review_gate(*, pr_url: str, config: FinishConfig) -> subprocess.Complet
             str(config.review_poll_seconds),
             "--timeout-policy",
             config.review_timeout_policy,
-        ]
+        ],
+        timeout_seconds=(
+            config.review_timeout_seconds
+            + max(config.review_poll_seconds, 1)
+            + DEFAULT_FINISH_REVIEW_GATE_GRACE_SECONDS
+        ),
     )
 
 
@@ -1926,7 +1984,23 @@ def finish_task_data(
             "Waiting for review gate "
             f"(reviewer={config.review_bot_login}, timeout={config.review_timeout_seconds}s)..."
         )
-        review_result = _run_review_gate(pr_url=pr_url, config=config)
+        try:
+            review_result = _run_review_gate(pr_url=pr_url, config=config)
+        except CommandTimeoutError as exc:
+            return _task_blocked(
+                "review gate command did not exit after the configured wait window.",
+                next_action=(
+                    "Inspect GitHub/Codex review delivery and re-run `horadus tasks finish` "
+                    "if the review gate keeps hanging."
+                ),
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                exit_code=ExitCode.ENVIRONMENT_ERROR,
+                extra_lines=[str(exc), *exc.output_lines()],
+            )
         if review_result.returncode != 0:
             review_lines = _output_lines(review_result)
             review_timed_out = any(line.startswith("review gate timeout:") for line in review_lines)
@@ -1954,9 +2028,37 @@ def finish_task_data(
         lines.extend(_output_lines(review_result))
 
         lines.append("Merging PR (squash, delete branch)...")
-        merge_result = _run_command(
-            [config.gh_bin, "pr", "merge", pr_url, "--squash", "--delete-branch"]
-        )
+        try:
+            merge_result = _run_command_with_timeout(
+                [config.gh_bin, "pr", "merge", pr_url, "--squash", "--delete-branch"],
+                timeout_seconds=DEFAULT_FINISH_MERGE_COMMAND_TIMEOUT_SECONDS,
+            )
+        except CommandTimeoutError as exc:
+            state_after_result = _run_command(
+                [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
+            )
+            state_after = (
+                state_after_result.stdout.strip() if state_after_result.returncode == 0 else ""
+            )
+            if state_after != "MERGED":
+                return _task_blocked(
+                    "merge command did not exit cleanly after the review gate passed.",
+                    next_action="Inspect the PR merge state in GitHub, then re-run `horadus tasks finish`.",
+                    data={
+                        "task_id": context.task_id,
+                        "branch_name": context.branch_name,
+                        "pr_url": pr_url,
+                    },
+                    exit_code=ExitCode.ENVIRONMENT_ERROR,
+                    extra_lines=[str(exc), *exc.output_lines()],
+                )
+            lines.append("Merge command timed out, but PR is already MERGED; continuing.")
+            merge_result = subprocess.CompletedProcess(
+                args=[config.gh_bin, "pr", "merge", pr_url, "--squash", "--delete-branch"],
+                returncode=0,
+                stdout="",
+                stderr="",
+            )
         if merge_result.returncode != 0:
             state_after_result = _run_command(
                 [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
@@ -1971,17 +2073,69 @@ def finish_task_data(
                     lines.append(
                         "Base branch policy requires auto-merge; enabling auto-merge and waiting for merge completion."
                     )
-                    auto_merge_result = _run_command(
-                        [
-                            config.gh_bin,
-                            "pr",
-                            "merge",
-                            pr_url,
-                            "--auto",
-                            "--squash",
-                            "--delete-branch",
-                        ]
-                    )
+                    try:
+                        auto_merge_result = _run_command_with_timeout(
+                            [
+                                config.gh_bin,
+                                "pr",
+                                "merge",
+                                pr_url,
+                                "--auto",
+                                "--squash",
+                                "--delete-branch",
+                            ],
+                            timeout_seconds=DEFAULT_FINISH_MERGE_COMMAND_TIMEOUT_SECONDS,
+                        )
+                    except CommandTimeoutError as exc:
+                        auto_state_after_result = _run_command(
+                            [
+                                config.gh_bin,
+                                "pr",
+                                "view",
+                                pr_url,
+                                "--json",
+                                "state",
+                                "--jq",
+                                ".state",
+                            ]
+                        )
+                        auto_state_after = (
+                            auto_state_after_result.stdout.strip()
+                            if auto_state_after_result.returncode == 0
+                            else ""
+                        )
+                        if auto_state_after != "MERGED":
+                            return _task_blocked(
+                                "auto-merge command did not exit cleanly after the review gate passed.",
+                                next_action=(
+                                    "Inspect the PR auto-merge state in GitHub, then re-run "
+                                    "`horadus tasks finish`."
+                                ),
+                                data={
+                                    "task_id": context.task_id,
+                                    "branch_name": context.branch_name,
+                                    "pr_url": pr_url,
+                                },
+                                exit_code=ExitCode.ENVIRONMENT_ERROR,
+                                extra_lines=[str(exc), *exc.output_lines()],
+                            )
+                        lines.append(
+                            "Auto-merge command timed out, but PR is already MERGED; continuing."
+                        )
+                        auto_merge_result = subprocess.CompletedProcess(
+                            args=[
+                                config.gh_bin,
+                                "pr",
+                                "merge",
+                                pr_url,
+                                "--auto",
+                                "--squash",
+                                "--delete-branch",
+                            ],
+                            returncode=0,
+                            stdout="",
+                            stderr="",
+                        )
                     if auto_merge_result.returncode != 0:
                         auto_state_after_result = _run_command(
                             [

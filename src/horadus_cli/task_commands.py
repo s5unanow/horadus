@@ -33,6 +33,8 @@ DEFAULT_REVIEW_TIMEOUT_SECONDS = 600
 DEFAULT_REVIEW_POLL_SECONDS = 10
 DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
+DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
+DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 
 
 def _run_command(
@@ -87,6 +89,13 @@ class LocalGateStep:
 
 
 @dataclass(slots=True)
+class DockerStartPlan:
+    description: str
+    argv: list[str] | None = None
+    shell_command: str | None = None
+
+
+@dataclass(slots=True)
 class TaskPullRequest:
     number: int
     url: str
@@ -115,6 +124,14 @@ class TaskLifecycleSnapshot:
     merge_commit_on_main: bool | None
     lifecycle_state: str
     strict_complete: bool
+
+
+@dataclass(slots=True)
+class DockerReadiness:
+    ready: bool
+    attempted_start: bool
+    supported_auto_start: bool
+    lines: list[str]
 
 
 def _result_message(result: subprocess.CompletedProcess[str], fallback: str) -> str:
@@ -393,6 +410,125 @@ def _check_rollup_state(entries: Any) -> str:
     if has_pending:
         return "pending"
     return "pass"
+
+
+def _docker_ready_timeout_seconds() -> int:
+    return _read_int_env("DOCKER_READY_TIMEOUT_SECONDS", DEFAULT_DOCKER_READY_TIMEOUT_SECONDS)
+
+
+def _docker_ready_poll_seconds() -> int:
+    return _read_int_env("DOCKER_READY_POLL_SECONDS", DEFAULT_DOCKER_READY_POLL_SECONDS)
+
+
+def _docker_start_plan() -> DockerStartPlan | None:
+    override = getenv("HORADUS_DOCKER_START_CMD")
+    if override and override.strip():
+        return DockerStartPlan(
+            description=f"custom start command `{override.strip()}`",
+            shell_command=override.strip(),
+        )
+    if sys.platform == "darwin" and _ensure_command_available("open") is not None:
+        return DockerStartPlan(description="macOS Docker Desktop", argv=["open", "-a", "Docker"])
+    if _ensure_command_available("docker-desktop") is not None:
+        return DockerStartPlan(
+            description="docker-desktop CLI",
+            argv=["docker-desktop", "start"],
+        )
+    return None
+
+
+def _docker_info_result() -> subprocess.CompletedProcess[str]:
+    return _run_command(["docker", "info"])
+
+
+def ensure_docker_ready(*, reason: str) -> DockerReadiness:
+    if _ensure_command_available("docker") is None:
+        return DockerReadiness(
+            ready=False,
+            attempted_start=False,
+            supported_auto_start=False,
+            lines=[
+                f"Docker readiness failed: docker CLI is required for {reason}.",
+            ],
+        )
+
+    info_result = _docker_info_result()
+    if info_result.returncode == 0:
+        return DockerReadiness(
+            ready=True,
+            attempted_start=False,
+            supported_auto_start=True,
+            lines=[f"Docker is ready for {reason}."],
+        )
+
+    plan = _docker_start_plan()
+    if plan is None:
+        return DockerReadiness(
+            ready=False,
+            attempted_start=False,
+            supported_auto_start=False,
+            lines=[
+                f"Docker daemon is not reachable for {reason}.",
+                "Auto-start is unsupported on this environment; start Docker manually and retry.",
+            ],
+        )
+
+    lines = [
+        f"Docker daemon is not reachable for {reason}.",
+        f"Attempting Docker auto-start via {plan.description}.",
+    ]
+    try:
+        timeout_seconds = _docker_ready_timeout_seconds()
+        poll_seconds = _docker_ready_poll_seconds()
+    except ValueError as exc:
+        return DockerReadiness(
+            ready=False,
+            attempted_start=False,
+            supported_auto_start=True,
+            lines=[
+                f"Docker readiness failed: {exc}",
+            ],
+        )
+    if plan.shell_command is not None:
+        start_result = _run_shell(plan.shell_command)
+    else:
+        assert plan.argv is not None
+        start_result = _run_command(plan.argv)
+    if start_result.returncode != 0:
+        return DockerReadiness(
+            ready=False,
+            attempted_start=True,
+            supported_auto_start=True,
+            lines=[
+                *lines,
+                "Docker auto-start command failed.",
+                *_output_lines(start_result),
+            ],
+        )
+
+    deadline = time.time() + timeout_seconds
+    while True:
+        info_result = _docker_info_result()
+        if info_result.returncode == 0:
+            return DockerReadiness(
+                ready=True,
+                attempted_start=True,
+                supported_auto_start=True,
+                lines=[*lines, "Docker became ready after auto-start."],
+            )
+        if time.time() >= deadline:
+            return DockerReadiness(
+                ready=False,
+                attempted_start=True,
+                supported_auto_start=True,
+                lines=[
+                    *lines,
+                    "Docker auto-start did not make the daemon ready before timeout.",
+                    *_output_lines(info_result),
+                ],
+            )
+        if poll_seconds:
+            time.sleep(poll_seconds)
 
 
 def _find_task_pull_request(
@@ -736,6 +872,24 @@ def local_gate_data(*, full: bool, dry_run: bool) -> tuple[int, dict[str, Any], 
     progress_lines = ["Running canonical full local gate:"]
     for index, step in enumerate(steps, start=1):
         progress_lines.append(f"[{index}/{len(steps)}] RUN {step.name}")
+        if step.name == "integration-docker":
+            docker_readiness = ensure_docker_ready(reason="the integration-docker local gate step")
+            progress_lines.extend(docker_readiness.lines)
+            if not docker_readiness.ready:
+                return (
+                    ExitCode.ENVIRONMENT_ERROR,
+                    {
+                        "mode": "full",
+                        "failed_step": step.name,
+                        "command": step.command,
+                        "steps": [asdict(item) for item in steps],
+                        "docker_ready": False,
+                    },
+                    [
+                        *progress_lines,
+                        "Local gate failed because Docker is not ready for the integration step.",
+                    ],
+                )
         result = _run_shell(step.command)
         if result.returncode != 0:
             output_lines = _summarize_output_lines(_output_lines(result))
@@ -1085,6 +1239,25 @@ def finish_task_data(
     pr_url_result = _run_command([config.gh_bin, "pr", "view", "--json", "url", "--jq", ".url"])
     pr_url = pr_url_result.stdout.strip()
     if pr_url_result.returncode != 0 or not pr_url:
+        if not remote_branch_exists and not dry_run:
+            docker_readiness = ensure_docker_ready(
+                reason="the next required `git push` pre-push integration gate"
+            )
+            if not docker_readiness.ready:
+                return _task_blocked(
+                    "Docker is not ready for the next required push gate.",
+                    next_action=(
+                        f"Make Docker ready, then run `git push -u origin {context.branch_name}` "
+                        f"and re-run `horadus tasks finish {context.task_id}`."
+                    ),
+                    data={
+                        "task_id": context.task_id,
+                        "branch_name": context.branch_name,
+                        "docker_ready": False,
+                    },
+                    exit_code=ExitCode.ENVIRONMENT_ERROR,
+                    extra_lines=docker_readiness.lines,
+                )
         next_action = (
             f"Run `git push -u origin {context.branch_name}` and open a PR for {context.task_id}."
             if not remote_branch_exists

@@ -244,8 +244,15 @@ task lifecycle state. `--strict` succeeds only when the task reaches
 
 `horadus tasks local-gate --full` is the canonical post-task local validation
 gate before push/PR. It stays separate from `make agent-check`, which remains
-the fast inner-loop gate. `make local-gate` is a compatibility wrapper to the
-same CLI flow.
+the fast inner-loop gate. If the Docker-backed integration step needs the
+daemon, the CLI attempts best-effort local auto-start on supported
+environments before failing with a specific blocker. `make local-gate` is a
+compatibility wrapper to the same CLI flow.
+
+`horadus tasks finish` uses the same Docker-readiness logic when the next
+required action is a Docker-gated push. Unsupported environments fail closed
+with an explicit “start Docker and retry” blocker instead of silently skipping
+integration expectations.
 
 ## Production Deployment
 

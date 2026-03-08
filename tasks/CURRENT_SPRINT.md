@@ -34,9 +34,8 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 workflow-centralization hardening follow-up intake
-  (remaining recommended sequencing: `TASK-261` → `TASK-263` → `TASK-264` →
-  `TASK-262` → `TASK-265` → `TASK-266`; one task per branch/PR):
-  - `TASK-261` Auto-Handle Docker Readiness for Workflow Gates
+  (remaining recommended sequencing: `TASK-263` → `TASK-264` → `TASK-262` →
+  `TASK-265` → `TASK-266`; one task per branch/PR):
   - `TASK-262` Enforce No Early Completion Claims in Agent Workflow Guidance
   - `TASK-263` Route Repo Workflow Automation Through Horadus CLI and Skill
   - `TASK-264` Enforce Horadus CLI, Skill, and Docs Drift Consistency
@@ -141,3 +140,9 @@
   repo-policy completion as `local-main-synced`, and `horadus tasks finish`
   reuses the same verifier instead of relying on separate informal success
   criteria.
+- `TASK-261` Auto-Handle Docker Readiness for Workflow Gates ✅
+  completion note: the canonical workflow gates now detect when Docker is
+  required, attempt best-effort local auto-start on supported environments,
+  fail closed with a specific blocker when the daemon still is not ready, and
+  keep that behavior scoped to the explicit workflow paths rather than unrelated
+  CLI commands.

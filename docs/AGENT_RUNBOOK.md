@@ -21,6 +21,9 @@ When: fast local quality gate (lint + typecheck + unit tests).
 5. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
 local validation sequence without replacing the fast iteration gate.
+If the gate reaches the Docker-backed integration step and the daemon is not
+ready, it attempts best-effort local auto-start on supported environments
+before failing with a specific blocker.
 
 Compatibility wrapper:
 - `make local-gate`
@@ -51,6 +54,8 @@ Use `--strict` to verify repo-policy completion; success requires state
 When: canonical task-completion command; finishes the current task PR lifecycle
 (branch/task verification -> pushed branch/PR checks -> current-head review gate
 -> merge -> local `main` sync -> strict lifecycle verification).
+If the next required action is a Docker-gated push and Docker is not ready, the
+command attempts supported local auto-start before returning a blocker.
 
 Compatibility wrapper:
 - `make task-finish`
@@ -61,3 +66,5 @@ Compatibility wrapper:
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.
+If Docker auto-start is unsupported in the current environment, start Docker
+manually before rerunning the workflow command.

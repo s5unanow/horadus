@@ -95,6 +95,16 @@ def test_build_parser_accepts_task_finish_command() -> None:
     assert args.task_id == "TASK-258"
 
 
+def test_build_parser_accepts_task_lifecycle_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["tasks", "lifecycle", "TASK-259", "--strict"])
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "lifecycle"
+    assert args.task_id == "TASK-259"
+    assert args.strict is True
+
+
 def test_build_parser_accepts_task_local_gate_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(["tasks", "local-gate", "--full"])
@@ -1004,6 +1014,45 @@ def _completed(
     )
 
 
+def _task_snapshot(
+    *,
+    current_branch: str = "codex/task-259-done-state-verifier",
+    branch_name: str | None = "codex/task-259-done-state-verifier",
+    remote_branch_exists: bool = False,
+    pr: task_commands_module.TaskPullRequest | None = None,
+    working_tree_clean: bool = True,
+    local_main_synced: bool | None = None,
+    merge_commit_on_main: bool | None = None,
+) -> task_commands_module.TaskLifecycleSnapshot:
+    local_main_sha = None
+    remote_main_sha = None
+    if local_main_synced is not None:
+        local_main_sha = "main-sha"
+        remote_main_sha = "main-sha" if local_main_synced else "remote-sha"
+
+    merge_commit_available_locally = None
+    if pr is not None and pr.merge_commit_oid is not None:
+        merge_commit_available_locally = merge_commit_on_main
+
+    return task_commands_module.TaskLifecycleSnapshot(
+        task_id="TASK-259",
+        current_branch=current_branch,
+        branch_name=branch_name,
+        local_branch_names=[branch_name] if branch_name else [],
+        remote_branch_names=[branch_name] if remote_branch_exists and branch_name else [],
+        remote_branch_exists=remote_branch_exists,
+        working_tree_clean=working_tree_clean,
+        pr=pr,
+        local_main_sha=local_main_sha,
+        remote_main_sha=remote_main_sha,
+        local_main_synced=local_main_synced,
+        merge_commit_available_locally=merge_commit_available_locally,
+        merge_commit_on_main=merge_commit_on_main,
+        lifecycle_state="",
+        strict_complete=False,
+    )
+
+
 def test_horadus_app_main_returns_1_without_subcommand(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -1833,6 +1882,163 @@ def test_local_gate_data_reports_failed_step_with_condensed_output(
     assert "... (" in "\n".join(lines)
 
 
+@pytest.mark.parametrize(
+    ("snapshot", "expected_state"),
+    [
+        (_task_snapshot(), "local-only"),
+        (_task_snapshot(remote_branch_exists=True), "pushed"),
+        (
+            _task_snapshot(
+                pr=task_commands_module.TaskPullRequest(
+                    number=259,
+                    url="https://example.invalid/pr/259",
+                    state="OPEN",
+                    is_draft=False,
+                    head_ref_name="codex/task-259-done-state-verifier",
+                    head_ref_oid="head-sha",
+                    merge_commit_oid=None,
+                    check_state="pending",
+                )
+            ),
+            "pr-open",
+        ),
+        (
+            _task_snapshot(
+                pr=task_commands_module.TaskPullRequest(
+                    number=259,
+                    url="https://example.invalid/pr/259",
+                    state="OPEN",
+                    is_draft=False,
+                    head_ref_name="codex/task-259-done-state-verifier",
+                    head_ref_oid="head-sha",
+                    merge_commit_oid=None,
+                    check_state="pass",
+                )
+            ),
+            "ci-green",
+        ),
+        (
+            _task_snapshot(
+                pr=task_commands_module.TaskPullRequest(
+                    number=259,
+                    url="https://example.invalid/pr/259",
+                    state="MERGED",
+                    is_draft=False,
+                    head_ref_name="codex/task-259-done-state-verifier",
+                    head_ref_oid="head-sha",
+                    merge_commit_oid="merge-sha",
+                    check_state="pass",
+                ),
+                local_main_synced=False,
+                merge_commit_on_main=False,
+            ),
+            "merged",
+        ),
+        (
+            _task_snapshot(
+                current_branch="main",
+                branch_name="codex/task-259-done-state-verifier",
+                pr=task_commands_module.TaskPullRequest(
+                    number=259,
+                    url="https://example.invalid/pr/259",
+                    state="MERGED",
+                    is_draft=False,
+                    head_ref_name="codex/task-259-done-state-verifier",
+                    head_ref_oid="head-sha",
+                    merge_commit_oid="merge-sha",
+                    check_state="pass",
+                ),
+                local_main_synced=True,
+                merge_commit_on_main=True,
+            ),
+            "local-main-synced",
+        ),
+    ],
+)
+def test_task_lifecycle_state_distinguishes_required_states(
+    snapshot: task_commands_module.TaskLifecycleSnapshot,
+    expected_state: str,
+) -> None:
+    assert task_commands_module.task_lifecycle_state(snapshot) == expected_state
+
+
+def test_task_lifecycle_data_strict_mode_fails_before_local_main_sync(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(
+            pr=task_commands_module.TaskPullRequest(
+                number=259,
+                url="https://example.invalid/pr/259",
+                state="MERGED",
+                is_draft=False,
+                head_ref_name="codex/task-259-done-state-verifier",
+                head_ref_oid="head-sha",
+                merge_commit_oid="merge-sha",
+                check_state="pass",
+            ),
+            local_main_synced=False,
+            merge_commit_on_main=False,
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-259",
+        strict=True,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["lifecycle_state"] == "merged"
+    assert data["strict_complete"] is False
+    assert lines[-1] == (
+        "Strict verification failed: repo-policy completion requires state `local-main-synced`."
+    )
+
+
+def test_task_lifecycle_data_strict_mode_passes_when_repo_policy_is_fully_complete(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(
+            current_branch="main",
+            pr=task_commands_module.TaskPullRequest(
+                number=259,
+                url="https://example.invalid/pr/259",
+                state="MERGED",
+                is_draft=False,
+                head_ref_name="codex/task-259-done-state-verifier",
+                head_ref_oid="head-sha",
+                merge_commit_oid="merge-sha",
+                check_state="pass",
+            ),
+            local_main_synced=True,
+            merge_commit_on_main=True,
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-259",
+        strict=True,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["lifecycle_state"] == "local-main-synced"
+    assert data["strict_complete"] is True
+    assert lines[-1] == "- strict complete: yes"
+
+
 def test_resolve_finish_context_rejects_task_mismatch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -1986,6 +2192,15 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
         "_run_review_gate",
         lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-258", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
@@ -2022,6 +2237,7 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
 
     assert exit_code == task_commands_module.ExitCode.OK
     assert data["merge_commit"] == "merge-commit-258"
+    assert data["lifecycle"]["lifecycle_state"] == "local-main-synced"
     assert "PR already merged; skipping merge step." in lines
     assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
 
@@ -2057,6 +2273,15 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
         lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
     )
     monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-258", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
@@ -2101,8 +2326,85 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
 
     assert exit_code == task_commands_module.ExitCode.OK
     assert data["merge_commit"] == "merge-commit-258"
+    assert data["lifecycle"]["lifecycle_state"] == "local-main-synced"
     assert any("Base branch policy requires auto-merge" in line for line in lines)
     assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
+
+
+def test_finish_task_data_blocks_when_completion_verifier_fails_after_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-259-done-state-verifier",
+            branch_task_id="TASK-259",
+            task_id="TASK-259",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-259 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.VALIDATION_ERROR,
+            {"lifecycle_state": "merged", "strict_complete": False},
+            [
+                "Task lifecycle: TASK-259",
+                "- state: merged",
+                "- strict complete: no",
+                "Strict verification failed: repo-policy completion requires state `local-main-synced`.",
+            ],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/259\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/259"]:
+            if "--json" in args and "body" in args:
+                return _completed(args, stdout="Primary-Task: TASK-259\n")
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="MERGED\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-259\n")
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-259-done-state-verifier",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-259", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["lifecycle"]["lifecycle_state"] == "merged"
+    assert "completion verifier did not pass after merge" in lines[0]
+    assert "horadus tasks lifecycle TASK-259 --strict" in lines[1]
 
 
 def test_handle_show_returns_not_found_for_unknown_task() -> None:

@@ -42,17 +42,22 @@ When: deterministic no-network/no-LLM regression exercise.
 10. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
 When: full pre-release checks before promotion.
 
-11. `uv run --no-sync horadus tasks finish [TASK-XXX]`
+11. `uv run --no-sync horadus tasks lifecycle [TASK-XXX] [--strict]`
+When: inspect machine-checkable task lifecycle state.
+Use `--strict` to verify repo-policy completion; success requires state
+`local-main-synced`.
+
+12. `uv run --no-sync horadus tasks finish [TASK-XXX]`
 When: canonical task-completion command; finishes the current task PR lifecycle
 (branch/task verification -> pushed branch/PR checks -> current-head review gate
--> merge -> local `main` sync).
+-> merge -> local `main` sync -> strict lifecycle verification).
 
 Compatibility wrapper:
 - `make task-finish`
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks finish` flow.
 
-12. `make test-integration-docker`
+13. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

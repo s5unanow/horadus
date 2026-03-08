@@ -61,6 +61,24 @@ WORKFLOW_REFERENCE_PATHS: tuple[str, ...] = (
     "ops/skills/horadus-cli/references/commands.md",
 )
 
+COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
+    "AGENTS.md",
+    "README.md",
+    "docs/AGENT_RUNBOOK.md",
+    "tasks/BACKLOG.md",
+)
+
+COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
+    (
+        "Do not claim a task is complete, done, or finished until "
+        "`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or "
+        "`horadus tasks finish TASK-XXX` completes successfully."
+    ),
+    "Local commits, local tests, and a clean working tree are checkpoints, not completion.",
+    "Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.",
+    "Resolve locally solvable environment blockers before reporting blocked.",
+)
+
 
 def canonical_task_workflow_command_templates() -> tuple[str, ...]:
     return tuple(command.template for command in CANONICAL_TASK_WORKFLOW_COMMANDS)
@@ -68,3 +86,7 @@ def canonical_task_workflow_command_templates() -> tuple[str, ...]:
 
 def canonical_task_workflow_commands_for_task(task_id: str) -> tuple[str, ...]:
     return tuple(command.render(task_id) for command in CANONICAL_TASK_WORKFLOW_COMMANDS)
+
+
+def completion_guidance_statements() -> tuple[str, ...]:
+    return COMPLETION_GUIDANCE_STATEMENTS

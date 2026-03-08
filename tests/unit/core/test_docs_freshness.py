@@ -25,6 +25,7 @@ from src.core.docs_freshness import (
 from src.core.repo_workflow import (
     WORKFLOW_ESCAPE_HATCH_TEXT,
     canonical_task_workflow_command_templates,
+    completion_guidance_statements,
 )
 
 pytestmark = pytest.mark.unit
@@ -43,6 +44,7 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
 
     workflow_commands = canonical_task_workflow_command_templates()
     workflow_reference_block = "\n".join([*workflow_commands, WORKFLOW_ESCAPE_HATCH_TEXT, ""])
+    completion_guidance_block = "\n".join([*completion_guidance_statements(), ""])
 
     (repo_root / "PROJECT_STATUS.md").write_text(
         (
@@ -60,6 +62,10 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         "# Completed Tasks\n",
         encoding="utf-8",
     )
+    (repo_root / "tasks" / "BACKLOG.md").write_text(
+        completion_guidance_block,
+        encoding="utf-8",
+    )
     (repo_root / "AGENTS.md").write_text(
         "\n".join(
             [
@@ -68,13 +74,19 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "## Development Commands",
                 workflow_reference_block.strip(),
                 "",
+                "## Completion Policy",
+                completion_guidance_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
     )
-    (repo_root / "README.md").write_text(workflow_reference_block, encoding="utf-8")
+    (repo_root / "README.md").write_text(
+        "\n".join([workflow_reference_block.strip(), "", completion_guidance_block.strip(), ""]),
+        encoding="utf-8",
+    )
     (repo_root / "docs" / "AGENT_RUNBOOK.md").write_text(
-        workflow_reference_block,
+        "\n".join([workflow_reference_block.strip(), "", completion_guidance_block.strip(), ""]),
         encoding="utf-8",
     )
     (repo_root / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
@@ -259,6 +271,22 @@ def test_docs_freshness_flags_missing_workflow_escape_hatch_guidance(tmp_path: P
     )
 
     assert any(issue.rule_id == "workflow_escape_hatch_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_completion_guidance_statement(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+        "\n".join(completion_guidance_statements()[1:]) + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "completion_guidance_statement_missing" for issue in result.errors)
 
 
 def test_docs_freshness_flags_missing_hierarchy_reference_link(tmp_path: Path) -> None:

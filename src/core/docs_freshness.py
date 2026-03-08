@@ -15,11 +15,13 @@ from src.core.repo_workflow import (
     DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS,
     FALLBACK_GUIDANCE_REFERENCE_PATHS,
     WORKFLOW_ESCAPE_HATCH_TEXT,
+    WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS,
     WORKFLOW_REFERENCE_PATHS,
     canonical_task_workflow_command_templates,
     completion_guidance_statements,
     dependency_aware_guidance_statements,
     fallback_guidance_statements,
+    workflow_policy_guardrail_statements,
 )
 
 
@@ -565,6 +567,36 @@ def run_docs_freshness_check(
                     message=(
                         f"{reference_path} must include canonical fallback workflow "
                         f"guidance: {statement}"
+                    ),
+                    path=reference_path,
+                )
+            )
+
+    workflow_guardrail_statements = workflow_policy_guardrail_statements()
+    for reference_path in WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_policy_guardrail_reference_file_missing",
+                    message=f"Missing workflow policy guardrail file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+            continue
+
+        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
+        for statement in workflow_guardrail_statements:
+            if _normalize_whitespace(statement) in normalized_content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_policy_guardrail_statement_missing",
+                    message=(
+                        f"{reference_path} must include canonical workflow/policy "
+                        f"guardrail guidance: {statement}"
                     ),
                     path=reference_path,
                 )

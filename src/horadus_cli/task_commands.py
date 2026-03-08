@@ -688,7 +688,7 @@ def summarize_friction_data(
     return (ExitCode.OK, data, lines)
 
 
-def _finish_config() -> FinishConfig:
+def _finish_config(*, enforce_review_timeout_override_policy: bool = True) -> FinishConfig:
     return FinishConfig(
         gh_bin=getenv("GH_BIN") or "gh",
         git_bin=getenv("GIT_BIN") or "git",
@@ -697,7 +697,15 @@ def _finish_config() -> FinishConfig:
             "CHECKS_TIMEOUT_SECONDS", DEFAULT_CHECKS_TIMEOUT_SECONDS
         ),
         checks_poll_seconds=_read_int_env("CHECKS_POLL_SECONDS", DEFAULT_CHECKS_POLL_SECONDS),
-        review_timeout_seconds=_read_review_timeout_seconds_env(),
+        review_timeout_seconds=(
+            _read_review_timeout_seconds_env()
+            if enforce_review_timeout_override_policy
+            else _read_positive_int_env(
+                "REVIEW_TIMEOUT_SECONDS",
+                DEFAULT_REVIEW_TIMEOUT_SECONDS,
+                command_name="horadus tasks finish",
+            )
+        ),
         review_poll_seconds=_read_int_env("REVIEW_POLL_SECONDS", DEFAULT_REVIEW_POLL_SECONDS),
         review_bot_login=getenv("REVIEW_BOT_LOGIN") or DEFAULT_REVIEW_BOT_LOGIN,
         review_timeout_policy=_read_review_timeout_policy_env(),
@@ -2413,7 +2421,7 @@ def task_lifecycle_data(
     task_input: str | None, *, strict: bool, dry_run: bool
 ) -> tuple[int, dict[str, Any], list[str]]:
     try:
-        config = _finish_config()
+        config = _finish_config(enforce_review_timeout_override_policy=False)
     except ValueError as exc:
         return (ExitCode.ENVIRONMENT_ERROR, {}, [str(exc)])
 

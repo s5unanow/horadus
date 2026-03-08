@@ -8,6 +8,7 @@ import json
 import subprocess  # nosec B404
 import sys
 import time
+from datetime import UTC, datetime
 
 DEFAULT_REVIEWER_LOGIN = "chatgpt-codex-connector[bot]"
 
@@ -84,7 +85,22 @@ def _matching_review_comments(
     return matching_reviews, matching_comments
 
 
-def _has_pr_summary_thumbs_up(*, repo: str, pr_number: int, reviewer_login: str) -> bool:
+def _parse_github_timestamp(value: object) -> datetime | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def _has_pr_summary_thumbs_up(
+    *,
+    repo: str,
+    pr_number: int,
+    reviewer_login: str,
+    wait_window_started_at: datetime,
+) -> bool:
     reactions = _run_gh_json("api", f"repos/{repo}/issues/{pr_number}/reactions")
     if not isinstance(reactions, list):
         raise GhError("unexpected reactions payload from gh api")
@@ -94,6 +110,8 @@ def _has_pr_summary_thumbs_up(*, repo: str, pr_number: int, reviewer_login: str)
         and reaction.get("content") == "+1"
         and isinstance(reaction.get("user"), dict)
         and reaction["user"].get("login") == reviewer_login
+        and (created_at := _parse_github_timestamp(reaction.get("created_at"))) is not None
+        and created_at >= wait_window_started_at
         for reaction in reactions
     )
 
@@ -144,6 +162,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("--poll-seconds must be non-negative")
 
     repo, pr_number, head_oid = _review_context(args.pr_url)
+    wait_window_started_at = datetime.now(tz=UTC)
     deadline = time.time() + args.timeout_seconds
     saw_clean_current_head_review = False
     has_pr_summary_thumbs_up = False
@@ -159,6 +178,7 @@ def main(argv: list[str] | None = None) -> int:
             repo=repo,
             pr_number=pr_number,
             reviewer_login=args.reviewer_login,
+            wait_window_started_at=wait_window_started_at,
         )
         if matching_comments:
             _print_actionable_comments(matching_comments)

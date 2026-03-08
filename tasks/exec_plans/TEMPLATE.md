@@ -8,6 +8,21 @@
 
 ## Goal (1-3 lines)
 
+## Inputs
+
+- Spec/backlog references:
+- Runtime/code touchpoints:
+- Preconditions/dependencies:
+
+## Outputs
+
+- Expected behavior/artifacts:
+- Validation evidence:
+
+## Non-Goals
+
+- Explicitly excluded work:
+
 ## Scope
 
 - In scope:

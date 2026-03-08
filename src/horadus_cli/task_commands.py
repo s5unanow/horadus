@@ -2255,6 +2255,13 @@ def handle_context_pack(args: Any) -> CommandResult:
     lines.extend(
         [
             "",
+            "## Spec Contract Template",
+            "tasks/specs/TEMPLATE.md",
+        ]
+    )
+    lines.extend(
+        [
+            "",
             "## Likely Code Areas",
         ]
     )
@@ -2281,6 +2288,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             "task": _task_record_payload(record),
             "sprint_lines": record.sprint_lines,
             "spec_paths": record.spec_paths,
+            "spec_template_path": "tasks/specs/TEMPLATE.md",
             "suggested_workflow_commands": workflow_commands,
             "suggested_validation_commands": [
                 "make agent-check",

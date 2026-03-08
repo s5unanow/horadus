@@ -20,6 +20,9 @@ Compatibility wrapper:
 
 3. `uv run --no-sync horadus tasks context-pack TASK-XXX`
 When: collect backlog/spec/sprint context for an implementation task.
+Use `tasks/specs/TEMPLATE.md` when a task needs a new or refreshed spec; keep
+the contract explicit around problem statement, inputs, outputs, non-goals, and
+acceptance criteria.
 
 4. `make agent-check`
 When: fast local quality gate (lint + typecheck + unit tests).

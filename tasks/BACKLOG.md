@@ -18,6 +18,14 @@ Tasks are organized by phase and priority.
 - `[REQUIRES_HUMAN]`: task includes a mandatory manual step and must not be auto-completed by an agent.
 - For `[REQUIRES_HUMAN]` tasks, agents may prepare instructions/checklists only and must stop for human completion.
 
+## Task Spec Contract
+
+- New implementation specs should state: problem statement, inputs, outputs,
+  non-goals, and acceptance criteria.
+- Canonical lightweight spec template: `tasks/specs/TEMPLATE.md`
+- Use the template as a default shape, then keep individual specs only as
+  detailed as the task complexity requires.
+
 ## Task Branching Policy (Hard Rule)
 
 - Every implementation task must be executed on a dedicated task branch created from `main`.

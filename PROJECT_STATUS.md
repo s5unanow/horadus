@@ -137,6 +137,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `horadus tasks finish` is now the canonical task-completion lifecycle command, with `make task-finish` and `scripts/finish_task_pr.sh` reduced to thin compatibility wrappers
 - [x] `horadus tasks local-gate --full` is now the canonical post-task CI-parity local validation command, with `make local-gate` reduced to a thin compatibility wrapper
 - [x] `horadus tasks lifecycle [TASK-XXX] [--strict]` now provides mechanical lifecycle-state verification, and repo-policy completion is defined by the `local-main-synced` verifier state
+- [x] Canonical workflow gates now auto-check Docker readiness, attempt supported local auto-start when needed, and fail closed with an explicit blocker when Docker still cannot be made ready
 - [x] `horadus triage collect` structured backlog/assessment input bundle for agent triage workflows
 - [x] Repo-owned Horadus CLI Codex skill plus local install target (`make install-horadus-cli-skill`)
 - [x] Measured runtime coverage for `src/` now reaches `100%` with behavior-focused unit tests across CLI, API, workers, ingestion, eval, and processing/runtime edge cases (`1294 passed` in the validating unit coverage run)
@@ -260,7 +261,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - Workflow/coverage hardening queue remains active in Sprint 3:
   `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`, `TASK-257`
 - Workflow-centralization hardening follow-up queue added to Sprint 3 for sequencing:
-  `TASK-261`, `TASK-262`, `TASK-263`, `TASK-264`, `TASK-265`, `TASK-266`
+  `TASK-262`, `TASK-263`, `TASK-264`, `TASK-265`, `TASK-266`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

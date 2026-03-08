@@ -271,7 +271,7 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-274`
 - Workflow/prompt contract hardening queue added to Sprint 3 with recommended
   sequencing:
-  `TASK-279`, `TASK-280`, `TASK-281`
+  `TASK-280`, `TASK-281`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

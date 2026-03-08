@@ -25,6 +25,14 @@ Use this skill for repo workflow operations in this project.
 - Keep using the workflow until prerequisite checks, required verification
   reruns, and completion verification succeed; do not stop at the first
   plausible success signal.
+- Treat an empty, partial, or suspiciously narrow workflow result as a
+  retrieval problem first when the missing data likely exists.
+- Before concluding that no result exists, try one or two sensible recovery
+  steps such as broader Horadus queries, alternate filters, or the documented
+  manual recovery path.
+- If a forced fallback is still required after those recovery attempts,
+  record it with `horadus tasks record-friction`; do not log routine success
+  cases or expected empty results.
 - Treat repo-facing work as incomplete until requested deliverables, required
   repo updates, and required verification/gate runs are finished or
   explicitly reported blocked.
@@ -41,10 +49,11 @@ Use this skill for repo workflow operations in this project.
 - Do not stop at a local commit boundary unless the user explicitly asked for
   a checkpoint.
 - Resolve locally solvable environment blockers before reporting blocked.
-- If Horadus is insufficient or forces a fallback, record one structured
-  friction entry via `horadus tasks record-friction`; do not log routine
-  success cases or treat the friction log as required reading during normal
-  execution.
+- If Horadus is insufficient or forces a fallback after sensible recovery
+  attempts, record one structured friction entry via
+  `horadus tasks record-friction`; do not log routine success cases,
+  expected empty results, or treat the friction log as required reading
+  during normal execution.
 - Fall back to repo files or legacy scripts only when the CLI does not expose
   the needed surface.
 

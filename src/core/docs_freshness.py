@@ -13,11 +13,13 @@ from pathlib import Path
 from src.core.repo_workflow import (
     COMPLETION_GUIDANCE_REFERENCE_PATHS,
     DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS,
+    FALLBACK_GUIDANCE_REFERENCE_PATHS,
     WORKFLOW_ESCAPE_HATCH_TEXT,
     WORKFLOW_REFERENCE_PATHS,
     canonical_task_workflow_command_templates,
     completion_guidance_statements,
     dependency_aware_guidance_statements,
+    fallback_guidance_statements,
 )
 
 
@@ -517,6 +519,36 @@ def run_docs_freshness_check(
                     level="error",
                     rule_id="dependency_guidance_reference_file_missing",
                     message=f"Missing dependency-aware workflow guidance file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+
+    fallback_statements = fallback_guidance_statements()
+    for reference_path in FALLBACK_GUIDANCE_REFERENCE_PATHS:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="fallback_guidance_reference_file_missing",
+                    message=f"Missing fallback workflow guidance file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+            continue
+
+        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
+        for statement in fallback_statements:
+            if _normalize_whitespace(statement) in normalized_content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="fallback_guidance_statement_missing",
+                    message=(
+                        f"{reference_path} must include canonical fallback workflow "
+                        f"guidance: {statement}"
+                    ),
                     path=reference_path,
                 )
             )

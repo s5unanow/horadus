@@ -27,6 +27,7 @@ from src.core.repo_workflow import (
     canonical_task_workflow_command_templates,
     completion_guidance_statements,
     dependency_aware_guidance_statements,
+    fallback_guidance_statements,
 )
 
 pytestmark = pytest.mark.unit
@@ -47,6 +48,7 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     workflow_reference_block = "\n".join([*workflow_commands, WORKFLOW_ESCAPE_HATCH_TEXT, ""])
     completion_guidance_block = "\n".join([*completion_guidance_statements(), ""])
     dependency_guidance_block = "\n".join([*dependency_aware_guidance_statements(), ""])
+    fallback_guidance_block = "\n".join([*fallback_guidance_statements(), ""])
 
     (repo_root / "PROJECT_STATUS.md").write_text(
         (
@@ -82,6 +84,9 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "## Dependency-Aware Workflow",
                 dependency_guidance_block.strip(),
                 "",
+                "## Fallback Workflow",
+                fallback_guidance_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -94,6 +99,8 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 completion_guidance_block.strip(),
                 "",
                 dependency_guidance_block.strip(),
+                "",
+                fallback_guidance_block.strip(),
                 "",
             ]
         ),
@@ -108,6 +115,8 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "",
                 dependency_guidance_block.strip(),
                 "",
+                fallback_guidance_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -121,12 +130,23 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "",
                 dependency_guidance_block.strip(),
                 "",
+                fallback_guidance_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
     )
     (repo_root / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(
-        "\n".join([workflow_reference_block.strip(), "", dependency_guidance_block.strip(), ""]),
+        "\n".join(
+            [
+                workflow_reference_block.strip(),
+                "",
+                dependency_guidance_block.strip(),
+                "",
+                fallback_guidance_block.strip(),
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
     (repo_root / "docs" / "ARCHITECTURE.md").write_text(
@@ -337,6 +357,22 @@ def test_docs_freshness_flags_missing_dependency_guidance_statement(
     )
 
     assert any(issue.rule_id == "dependency_guidance_statement_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_fallback_guidance_statement(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
+        "\n".join(fallback_guidance_statements()[1:]) + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "fallback_guidance_statement_missing" for issue in result.errors)
 
 
 def test_docs_freshness_flags_missing_hierarchy_reference_link(tmp_path: Path) -> None:

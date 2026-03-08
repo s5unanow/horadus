@@ -62,6 +62,14 @@
 - Keep using the workflow until prerequisite checks, required verification
   reruns, and completion verification succeed; do not stop at the first
   plausible success signal.
+- Treat an empty, partial, or suspiciously narrow workflow result as a
+  retrieval problem first when the missing data likely exists.
+- Before concluding that no result exists, try one or two sensible recovery
+  steps such as broader Horadus queries, alternate filters, or the documented
+  manual recovery path.
+- If a forced fallback is still required after those recovery attempts,
+  record it with `horadus tasks record-friction`; do not log routine success
+  cases or expected empty results.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.

@@ -195,6 +195,7 @@ Tasks that have been completed and verified.
 ## Sprint 3
 
 - TASK-258: Add a Canonical Horadus Task Completion Command ✅
+- TASK-259: Add a Mechanical Done-State Verifier and Explicit Lifecycle States ✅
 - TASK-260: Add a Full Local CI-Parity Gate in Horadus CLI ✅
 - TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅
 - TASK-165: Make `horadus agent smoke` robust across auth/environment settings ✅

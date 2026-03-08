@@ -134,6 +134,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] Brier score timeline series for drift visibility
 - [x] `horadus trends status` CLI for quick movement checks
 - [x] `horadus tasks ...` repo workflow CLI with JSON/text output, dry-run support, and explicit validation/environment exit codes
+- [x] `horadus tasks finish` is now the canonical task-completion lifecycle command, with `make task-finish` and `scripts/finish_task_pr.sh` reduced to thin compatibility wrappers
 - [x] `horadus triage collect` structured backlog/assessment input bundle for agent triage workflows
 - [x] Repo-owned Horadus CLI Codex skill plus local install target (`make install-horadus-cli-skill`)
 - [x] Measured runtime coverage for `src/` now reaches `100%` with behavior-focused unit tests across CLI, API, workers, ingestion, eval, and processing/runtime edge cases (`1294 passed` in the validating unit coverage run)
@@ -256,6 +257,9 @@ Phase 8: Hardening (NEW)     [████████████████�
 - Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
 - Workflow/coverage hardening queue remains active in Sprint 3:
   `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`, `TASK-257`
+- Workflow-centralization hardening follow-up queue added to Sprint 3 for sequencing:
+  `TASK-259`, `TASK-260`, `TASK-261`, `TASK-262`, `TASK-263`, `TASK-264`,
+  `TASK-265`, `TASK-266`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

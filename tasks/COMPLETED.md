@@ -194,6 +194,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 3
 
+- TASK-258: Add a Canonical Horadus Task Completion Command ✅
 - TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅
 - TASK-165: Make `horadus agent smoke` robust across auth/environment settings ✅
 - TASK-166: Add fast agent gate target (`make agent-check`) ✅

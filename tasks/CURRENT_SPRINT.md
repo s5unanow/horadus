@@ -33,6 +33,17 @@
   - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
+- Newly queued from 2026-03-08 workflow-centralization hardening follow-up intake
+  (remaining recommended sequencing: `TASK-260` → `TASK-259` → `TASK-261` →
+  `TASK-263` → `TASK-264` → `TASK-262` → `TASK-265` → `TASK-266`; one task per branch/PR):
+  - `TASK-259` Add a Mechanical Done-State Verifier and Explicit Lifecycle States
+  - `TASK-260` Add a Full Local CI-Parity Gate in Horadus CLI
+  - `TASK-261` Auto-Handle Docker Readiness for Workflow Gates
+  - `TASK-262` Enforce No Early Completion Claims in Agent Workflow Guidance
+  - `TASK-263` Route Repo Workflow Automation Through Horadus CLI and Skill
+  - `TASK-264` Enforce Horadus CLI, Skill, and Docs Drift Consistency
+  - `TASK-265` Add Structured Horadus CLI Friction Logging
+  - `TASK-266` Add Daily Horadus Friction Summary Automation
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -115,3 +126,8 @@
   in the unit coverage run (`1294 passed`) using behavior-focused tests across
   CLI, API, workers, ingestion, eval, and processing/runtime edge cases rather
   than new omit rules or snapshot padding.
+- `TASK-258` Add a Canonical Horadus Task Completion Command ✅
+  completion note: `horadus tasks finish` now owns the task-completion lifecycle
+  end to end, `make task-finish` delegates to the CLI as a thin compatibility
+  wrapper, and the legacy shell entrypoint is reduced to a compatibility shim
+  rather than a second lifecycle engine.

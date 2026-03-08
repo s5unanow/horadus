@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import shutil
 import subprocess  # nosec B404
-from dataclasses import asdict
+import sys
+import time
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +24,14 @@ from src.horadus_cli.task_repo import (
     slugify_name,
     task_record,
 )
+
+TASK_BRANCH_PATTERN = re.compile(r"^codex/task-(?P<number>\d{3})-[a-z0-9][a-z0-9._-]*$")
+DEFAULT_CHECKS_TIMEOUT_SECONDS = 1800
+DEFAULT_CHECKS_POLL_SECONDS = 10
+DEFAULT_REVIEW_TIMEOUT_SECONDS = 600
+DEFAULT_REVIEW_POLL_SECONDS = 10
+DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
+DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
 
 
 def _run_command(
@@ -45,6 +57,214 @@ def _run_shell(command: str) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+@dataclass(slots=True)
+class FinishContext:
+    branch_name: str
+    branch_task_id: str
+    task_id: str
+
+
+@dataclass(slots=True)
+class FinishConfig:
+    gh_bin: str
+    git_bin: str
+    python_bin: str
+    checks_timeout_seconds: int
+    checks_poll_seconds: int
+    review_timeout_seconds: int
+    review_poll_seconds: int
+    review_bot_login: str
+    review_timeout_policy: str
+
+
+def _result_message(result: subprocess.CompletedProcess[str], fallback: str) -> str:
+    return result.stderr.strip() or result.stdout.strip() or fallback
+
+
+def _output_lines(result: subprocess.CompletedProcess[str]) -> list[str]:
+    text = "\n".join(
+        part.strip() for part in (result.stdout, result.stderr) if part is not None and part.strip()
+    )
+    return text.splitlines() if text else []
+
+
+def _task_blocked(
+    message: str,
+    *,
+    next_action: str,
+    data: dict[str, Any] | None = None,
+    exit_code: int = ExitCode.VALIDATION_ERROR,
+    extra_lines: list[str] | None = None,
+) -> tuple[int, dict[str, Any], list[str]]:
+    lines = [f"Task finish blocked: {message}", f"Next action: {next_action}"]
+    if extra_lines:
+        lines.extend(extra_lines)
+    return (exit_code, data or {}, lines)
+
+
+def _read_int_env(name: str, default: int) -> int:
+    raw = getenv(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer.") from exc
+    if value < 0:
+        raise ValueError(f"{name} must be non-negative.")
+    return value
+
+
+def _finish_config() -> FinishConfig:
+    return FinishConfig(
+        gh_bin=getenv("GH_BIN") or "gh",
+        git_bin=getenv("GIT_BIN") or "git",
+        python_bin=getenv("PYTHON_BIN") or sys.executable or "python3",
+        checks_timeout_seconds=_read_int_env(
+            "CHECKS_TIMEOUT_SECONDS", DEFAULT_CHECKS_TIMEOUT_SECONDS
+        ),
+        checks_poll_seconds=_read_int_env("CHECKS_POLL_SECONDS", DEFAULT_CHECKS_POLL_SECONDS),
+        review_timeout_seconds=_read_int_env(
+            "REVIEW_TIMEOUT_SECONDS", DEFAULT_REVIEW_TIMEOUT_SECONDS
+        ),
+        review_poll_seconds=_read_int_env("REVIEW_POLL_SECONDS", DEFAULT_REVIEW_POLL_SECONDS),
+        review_bot_login=getenv("REVIEW_BOT_LOGIN") or DEFAULT_REVIEW_BOT_LOGIN,
+        review_timeout_policy=getenv("REVIEW_TIMEOUT_POLICY") or DEFAULT_REVIEW_TIMEOUT_POLICY,
+    )
+
+
+def _ensure_command_available(command: str) -> str | None:
+    return shutil.which(command)
+
+
+def _resolve_finish_context(
+    task_input: str | None, config: FinishConfig
+) -> tuple[int, dict[str, Any], list[str]] | FinishContext:
+    branch_result = _run_command([config.git_bin, "rev-parse", "--abbrev-ref", "HEAD"])
+    if branch_result.returncode != 0:
+        return _task_blocked(
+            _result_message(branch_result, "Unable to determine current branch."),
+            next_action="Resolve local git issues, then re-run `horadus tasks finish`.",
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    current_branch = branch_result.stdout.strip()
+    if current_branch == "HEAD":
+        return _task_blocked(
+            "detached HEAD is not allowed.",
+            next_action="Check out the task branch you want to finish, then re-run `horadus tasks finish`.",
+            data={"current_branch": current_branch},
+        )
+    if current_branch == "main":
+        return _task_blocked(
+            "refusing to run on 'main'.",
+            next_action="Switch to the task branch that owns the PR lifecycle you want to finish.",
+            data={"current_branch": current_branch},
+        )
+
+    match = TASK_BRANCH_PATTERN.match(current_branch)
+    if match is None:
+        return _task_blocked(
+            (
+                "branch does not match the required task pattern "
+                f"`codex/task-XXX-short-name`: {current_branch}"
+            ),
+            next_action="Switch to a canonical task branch before running `horadus tasks finish`.",
+            data={"current_branch": current_branch},
+        )
+
+    branch_task_id = f"TASK-{match.group('number')}"
+    requested_task_id = branch_task_id
+    if task_input is not None:
+        requested_task_id = normalize_task_id(task_input)
+        if requested_task_id != branch_task_id:
+            return _task_blocked(
+                (f"branch {current_branch} maps to {branch_task_id}, not {requested_task_id}."),
+                next_action=(
+                    f"Run `horadus tasks finish {branch_task_id}` on this branch, or switch to the "
+                    f"branch for {requested_task_id}."
+                ),
+                data={
+                    "current_branch": current_branch,
+                    "branch_task_id": branch_task_id,
+                    "task_id": requested_task_id,
+                },
+            )
+
+    status_result = _run_command([config.git_bin, "status", "--porcelain"])
+    if status_result.returncode != 0:
+        return _task_blocked(
+            _result_message(status_result, "Unable to determine working tree state."),
+            next_action="Resolve local git issues, then re-run `horadus tasks finish`.",
+            data={"branch_name": current_branch, "task_id": requested_task_id},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    if status_result.stdout.strip():
+        return _task_blocked(
+            "working tree must be clean.",
+            next_action=(
+                "Commit or stash local changes, then re-run "
+                f"`horadus tasks finish {requested_task_id}`."
+            ),
+            data={"branch_name": current_branch, "task_id": requested_task_id},
+        )
+
+    return FinishContext(
+        branch_name=current_branch,
+        branch_task_id=branch_task_id,
+        task_id=requested_task_id,
+    )
+
+
+def _run_pr_scope_guard(*, branch_name: str, pr_body: str) -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PR_BRANCH"] = branch_name
+    env["PR_BODY"] = pr_body
+    return subprocess.run(  # nosec B603
+        ["./scripts/check_pr_task_scope.sh"],
+        cwd=repo_root(),
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+def _run_review_gate(*, pr_url: str, config: FinishConfig) -> subprocess.CompletedProcess[str]:
+    return _run_command(
+        [
+            config.python_bin,
+            "./scripts/check_pr_review_gate.py",
+            "--pr-url",
+            pr_url,
+            "--reviewer-login",
+            config.review_bot_login,
+            "--timeout-seconds",
+            str(config.review_timeout_seconds),
+            "--poll-seconds",
+            str(config.review_poll_seconds),
+            "--timeout-policy",
+            config.review_timeout_policy,
+        ]
+    )
+
+
+def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str]]:
+    deadline = time.time() + config.checks_timeout_seconds
+    while True:
+        result = _run_command([config.gh_bin, "pr", "checks", pr_url, "--required"])
+        if result.returncode == 0:
+            return (True, [])
+        if time.time() >= deadline:
+            return (
+                False,
+                _output_lines(result)
+                or ["`gh pr checks --required` did not report success before timeout."],
+            )
+        if config.checks_poll_seconds:
+            time.sleep(config.checks_poll_seconds)
 
 
 def _ensure_required_hooks() -> tuple[bool, list[str]]:
@@ -333,6 +553,268 @@ def start_task_data(
     )
 
 
+def finish_task_data(
+    task_input: str | None, *, dry_run: bool
+) -> tuple[int, dict[str, Any], list[str]]:
+    try:
+        config = _finish_config()
+    except ValueError as exc:
+        return _task_blocked(
+            str(exc),
+            next_action="Fix the invalid environment override and re-run `horadus tasks finish`.",
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    for command_name in (config.gh_bin, config.git_bin, config.python_bin):
+        if _ensure_command_available(command_name) is None:
+            return _task_blocked(
+                f"missing required command '{command_name}'.",
+                next_action=f"Install or expose `{command_name}` on PATH, then re-run `horadus tasks finish`.",
+                data={"missing_command": command_name},
+                exit_code=ExitCode.ENVIRONMENT_ERROR,
+            )
+
+    context = _resolve_finish_context(task_input, config)
+    if not isinstance(context, FinishContext):
+        return context
+
+    remote_branch_result = _run_command(
+        [config.git_bin, "ls-remote", "--exit-code", "--heads", "origin", context.branch_name]
+    )
+    if remote_branch_result.returncode != 0:
+        return _task_blocked(
+            f"branch `{context.branch_name}` is not pushed to origin.",
+            next_action=f"Run `git push -u origin {context.branch_name}` and open a PR for {context.task_id}.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name},
+        )
+
+    pr_url_result = _run_command([config.gh_bin, "pr", "view", "--json", "url", "--jq", ".url"])
+    pr_url = pr_url_result.stdout.strip()
+    if pr_url_result.returncode != 0 or not pr_url:
+        return _task_blocked(
+            f"unable to locate a PR for branch `{context.branch_name}`.",
+            next_action=(
+                f"Open a PR for `{context.branch_name}` with `Primary-Task: {context.task_id}` in the body, "
+                "then re-run `horadus tasks finish`."
+            ),
+            data={"task_id": context.task_id, "branch_name": context.branch_name},
+        )
+
+    pr_body_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "body", "--jq", ".body"]
+    )
+    if pr_body_result.returncode != 0:
+        return _task_blocked(
+            _result_message(pr_body_result, "Unable to read the PR body."),
+            next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    scope_result = _run_pr_scope_guard(
+        branch_name=context.branch_name, pr_body=pr_body_result.stdout
+    )
+    if scope_result.returncode != 0:
+        return _task_blocked(
+            "PR scope validation failed.",
+            next_action=(
+                f"Fix the PR body so it contains exactly `Primary-Task: {context.task_id}`, "
+                "then re-run `horadus tasks finish`."
+            ),
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            extra_lines=_output_lines(scope_result),
+        )
+
+    lines = [f"Finishing {context.task_id} from {context.branch_name}", f"PR: {pr_url}"]
+
+    draft_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "isDraft", "--jq", ".isDraft"]
+    )
+    if draft_result.returncode != 0:
+        return _task_blocked(
+            _result_message(draft_result, "Unable to determine PR draft status."),
+            next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    if draft_result.stdout.strip() == "true":
+        return _task_blocked(
+            "PR is draft; refusing to merge.",
+            next_action="Mark the PR ready for review, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+        )
+
+    if dry_run:
+        lines.append(
+            "Dry run: scope and PR preconditions passed; would wait for checks, merge, and sync main."
+        )
+        return (
+            ExitCode.OK,
+            {
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "dry_run": True,
+            },
+            lines,
+        )
+
+    lines.append(f"Waiting for PR checks to pass (timeout={config.checks_timeout_seconds}s)...")
+    checks_ok, check_lines = _wait_for_required_checks(pr_url=pr_url, config=config)
+    if not checks_ok:
+        return _task_blocked(
+            "required PR checks did not pass before timeout.",
+            next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            extra_lines=check_lines,
+        )
+
+    lines.append(
+        "Waiting for review gate "
+        f"(reviewer={config.review_bot_login}, timeout={config.review_timeout_seconds}s)..."
+    )
+    review_result = _run_review_gate(pr_url=pr_url, config=config)
+    if review_result.returncode != 0:
+        return _task_blocked(
+            "review gate did not pass.",
+            next_action=(
+                "Address the current-head review feedback or reviewer timeout blocker, "
+                "then re-run `horadus tasks finish`."
+            ),
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=review_result.returncode,
+            extra_lines=_output_lines(review_result),
+        )
+    lines.extend(_output_lines(review_result))
+
+    pr_state_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
+    )
+    if pr_state_result.returncode != 0:
+        return _task_blocked(
+            _result_message(pr_state_result, "Unable to determine PR state."),
+            next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    pr_state = pr_state_result.stdout.strip()
+
+    if pr_state == "MERGED":
+        lines.append("PR already merged; skipping merge step.")
+    else:
+        lines.append("Merging PR (squash, delete branch)...")
+        merge_result = _run_command(
+            [config.gh_bin, "pr", "merge", pr_url, "--squash", "--delete-branch"]
+        )
+        if merge_result.returncode != 0:
+            state_after_result = _run_command(
+                [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
+            )
+            state_after = (
+                state_after_result.stdout.strip() if state_after_result.returncode == 0 else ""
+            )
+            if state_after != "MERGED":
+                return _task_blocked(
+                    "merge failed.",
+                    next_action="Resolve the merge blocker in GitHub, then re-run `horadus tasks finish`.",
+                    data={
+                        "task_id": context.task_id,
+                        "branch_name": context.branch_name,
+                        "pr_url": pr_url,
+                    },
+                    exit_code=ExitCode.ENVIRONMENT_ERROR,
+                    extra_lines=_output_lines(merge_result),
+                )
+            lines.append("Merge step reported failure, but PR is already MERGED; continuing.")
+
+    merge_commit_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "mergeCommit", "--jq", ".mergeCommit.oid"]
+    )
+    merge_commit = merge_commit_result.stdout.strip()
+    if merge_commit_result.returncode != 0 or not merge_commit or merge_commit == "null":
+        return _task_blocked(
+            "could not determine merge commit.",
+            next_action="Inspect the merged PR state in GitHub, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    lines.append("Syncing main...")
+    switch_main_result = _run_command([config.git_bin, "switch", "main"])
+    if switch_main_result.returncode != 0:
+        return _task_blocked(
+            _result_message(switch_main_result, "Failed to switch to main."),
+            next_action="Resolve the local git state and switch to `main`, then re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    pull_result = _run_command([config.git_bin, "pull", "--ff-only"])
+    if pull_result.returncode != 0:
+        return _task_blocked(
+            _result_message(pull_result, "Failed to fast-forward local main."),
+            next_action="Resolve the local `main` sync issue and re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    cat_file_result = _run_command([config.git_bin, "cat-file", "-e", merge_commit])
+    if cat_file_result.returncode != 0:
+        return _task_blocked(
+            f"merge commit {merge_commit} is not available locally after syncing main.",
+            next_action="Fetch/pull `main` successfully, then re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+
+    branch_exists_result = _run_command(
+        [config.git_bin, "show-ref", "--verify", f"refs/heads/{context.branch_name}"]
+    )
+    if branch_exists_result.returncode == 0:
+        delete_branch_result = _run_command([config.git_bin, "branch", "-d", context.branch_name])
+        if delete_branch_result.returncode != 0:
+            return _task_blocked(
+                f"merged branch `{context.branch_name}` still exists locally and could not be deleted.",
+                next_action=f"Delete `{context.branch_name}` locally after syncing main, then re-run `horadus tasks finish`.",
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                    "merge_commit": merge_commit,
+                },
+                exit_code=ExitCode.ENVIRONMENT_ERROR,
+                extra_lines=_output_lines(delete_branch_result),
+            )
+
+    lines.append(f"Task finish passed: merged {merge_commit} and synced main.")
+    return (
+        ExitCode.OK,
+        {
+            "task_id": context.task_id,
+            "branch_name": context.branch_name,
+            "pr_url": pr_url,
+            "merge_commit": merge_commit,
+            "dry_run": False,
+        },
+        lines,
+    )
+
+
 def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, Any]:
     payload = asdict(record)
     if not include_raw:
@@ -537,6 +1019,15 @@ def handle_start(args: Any) -> CommandResult:
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
+def handle_finish(args: Any) -> CommandResult:
+    try:
+        task_input = normalize_task_id(args.task_id) if args.task_id is not None else None
+    except ValueError as exc:
+        return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
+    exit_code, data, lines = finish_task_data(task_input, dry_run=bool(args.dry_run))
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
 def add_leaf_cli_options(parser: Any) -> None:
     parser.add_argument(
         "--format",
@@ -621,3 +1112,15 @@ def register_task_commands(subparsers: Any) -> None:
     start_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
     start_parser.add_argument("--name", required=True, help="Short branch suffix.")
     start_parser.set_defaults(handler=handle_start)
+
+    finish_parser = tasks_subparsers.add_parser(
+        "finish",
+        help="Complete the current task PR lifecycle and sync local main.",
+    )
+    add_leaf_cli_options(finish_parser)
+    finish_parser.add_argument(
+        "task_id",
+        nargs="?",
+        help="Optional task id (TASK-XXX or XXX) to verify against the current task branch.",
+    )
+    finish_parser.set_defaults(handler=handle_finish)

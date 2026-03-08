@@ -86,6 +86,15 @@ def test_build_parser_accepts_task_search_filters() -> None:
     assert args.include_raw is True
 
 
+def test_build_parser_accepts_task_finish_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["tasks", "finish", "TASK-258"])
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "finish"
+    assert args.task_id == "TASK-258"
+
+
 def test_build_parser_accepts_eval_benchmark_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(
@@ -1677,6 +1686,194 @@ def test_start_task_data_switches_to_new_branch(monkeypatch: pytest.MonkeyPatch)
     assert exit_code == task_commands_module.ExitCode.OK
     assert data["branch_name"] == "codex/task-253-coverage-100"
     assert "Created task branch: codex/task-253-coverage-100" in lines[-1]
+
+
+def test_resolve_finish_context_rejects_task_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="codex/task-258-canonical-finish\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    result = task_commands_module._resolve_finish_context("TASK-259", config)
+
+    assert not isinstance(result, task_commands_module.FinishContext)
+    exit_code, data, lines = result
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["branch_task_id"] == "TASK-258"
+    assert data["task_id"] == "TASK-259"
+    assert "maps to TASK-258, not TASK-259" in lines[0]
+
+
+def test_finish_task_data_blocks_when_branch_not_pushed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        assert args[:2] == ["git", "ls-remote"]
+        return _completed(args, returncode=2)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["branch_name"] == "codex/task-258-canonical-finish"
+    assert "not pushed to origin" in lines[0]
+    assert "git push -u origin codex/task-258-canonical-finish" in lines[1]
+
+
+def test_finish_task_data_blocks_when_required_checks_do_not_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (False, ["required-check failure details"]),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "--json"]:
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "body" in args:
+                return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert "required PR checks did not pass before timeout" in lines[0]
+    assert "Inspect the failing required checks" in lines[1]
+    assert lines[-1] == "required-check failure details"
+
+
+def test_finish_task_data_succeeds_when_pr_already_merged(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, []),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "body" in args:
+                return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="MERGED\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-258\n")
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-258-canonical-finish",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+    assert "PR already merged; skipping merge step." in lines
+    assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
 
 
 def test_handle_show_returns_not_found_for_unknown_task() -> None:

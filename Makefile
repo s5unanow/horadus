@@ -165,8 +165,8 @@ agent-safe-start: ## Start a task branch with sprint-eligibility + sequencing gu
 	fi
 	$(UV_RUN) horadus tasks start "$(TASK)" --name "$(NAME)"
 
-task-finish: ## Finish current task PR lifecycle (checks -> merge -> main sync)
-	./scripts/finish_task_pr.sh
+task-finish: ## Compatibility wrapper for the canonical horadus task completion command
+	$(UV_RUN) horadus tasks finish
 
 protect-main: ## Apply required main-branch protection + merge policy (requires gh auth)
 	./scripts/enforce_main_protection.sh

@@ -9,6 +9,7 @@ import subprocess  # nosec B404
 import sys
 import time
 from dataclasses import asdict, dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,15 @@ DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
 DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_POLL_SECONDS = 2
+FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
+FRICTION_LOG_FILENAME = "entries.jsonl"
+VALID_FRICTION_TYPES: tuple[str, ...] = (
+    "missing_cli_surface",
+    "forced_fallback",
+    "docs_gap",
+    "confusing_output",
+    "unexpected_blocker",
+)
 
 
 def _run_command(
@@ -135,6 +145,17 @@ class DockerReadiness:
     lines: list[str]
 
 
+@dataclass(slots=True)
+class WorkflowFrictionEntry:
+    recorded_at: str
+    task_id: str
+    command_attempted: str
+    fallback_used: str
+    friction_type: str
+    note: str
+    suggested_improvement: str
+
+
 def _result_message(result: subprocess.CompletedProcess[str], fallback: str) -> str:
     return result.stderr.strip() or result.stdout.strip() or fallback
 
@@ -171,6 +192,71 @@ def _read_int_env(name: str, default: int) -> int:
     if value < 0:
         raise ValueError(f"{name} must be non-negative.")
     return value
+
+
+def _friction_log_path() -> Path:
+    return repo_root() / FRICTION_LOG_DIRECTORY / FRICTION_LOG_FILENAME
+
+
+def record_friction_data(
+    *,
+    task_input: str,
+    command_attempted: str,
+    fallback_used: str,
+    friction_type: str,
+    note: str,
+    suggested_improvement: str,
+    dry_run: bool,
+) -> tuple[int, dict[str, Any], list[str]]:
+    task_id = normalize_task_id(task_input)
+    normalized_type = friction_type.strip().lower()
+    if normalized_type not in VALID_FRICTION_TYPES:
+        return (
+            ExitCode.VALIDATION_ERROR,
+            {"friction_type": friction_type, "valid_friction_types": list(VALID_FRICTION_TYPES)},
+            [
+                "Workflow friction logging failed.",
+                (
+                    "Unsupported friction type "
+                    f"{friction_type!r}; expected one of: {', '.join(VALID_FRICTION_TYPES)}"
+                ),
+            ],
+        )
+
+    entry = WorkflowFrictionEntry(
+        recorded_at=datetime.now(tz=UTC).isoformat().replace("+00:00", "Z"),
+        task_id=task_id,
+        command_attempted=command_attempted.strip(),
+        fallback_used=fallback_used.strip(),
+        friction_type=normalized_type,
+        note=note.strip(),
+        suggested_improvement=suggested_improvement.strip(),
+    )
+    log_path = _friction_log_path()
+    relative_log_path = str(log_path.relative_to(repo_root()))
+    lines = [
+        f"Workflow friction log target: {relative_log_path}",
+        "Record entries only for real Horadus workflow friction or forced fallback, not routine success cases.",
+        "Friction entries remain in gitignored artifacts and are not source-of-truth task/spec/project records.",
+        "Normal task execution should not require reading the friction log.",
+    ]
+    if dry_run:
+        lines.append("Dry run: would append structured workflow friction entry.")
+        return (
+            ExitCode.OK,
+            {"dry_run": True, "log_path": relative_log_path, "entry": entry},
+            lines,
+        )
+
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
+    lines.append("Recorded structured workflow friction entry.")
+    return (
+        ExitCode.OK,
+        {"dry_run": False, "log_path": relative_log_path, "entry": entry},
+        lines,
+    )
 
 
 def _finish_config() -> FinishConfig:
@@ -1835,6 +1921,23 @@ def handle_finish(args: Any) -> CommandResult:
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
+def handle_record_friction(args: Any) -> CommandResult:
+    try:
+        task_id = normalize_task_id(args.task_id)
+    except ValueError as exc:
+        return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
+    exit_code, data, lines = record_friction_data(
+        task_input=task_id,
+        command_attempted=args.command_attempted,
+        fallback_used=args.fallback_used,
+        friction_type=args.friction_type,
+        note=args.note,
+        suggested_improvement=args.suggested_improvement,
+        dry_run=bool(args.dry_run),
+    )
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
 def task_lifecycle_data(
     task_input: str | None, *, strict: bool, dry_run: bool
 ) -> tuple[int, dict[str, Any], list[str]]:
@@ -2006,6 +2109,40 @@ def register_task_commands(subparsers: Any) -> None:
     safe_start_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
     safe_start_parser.add_argument("--name", required=True, help="Short branch suffix.")
     safe_start_parser.set_defaults(handler=handle_safe_start)
+
+    record_friction_parser = tasks_subparsers.add_parser(
+        "record-friction",
+        help="Append a structured Horadus workflow friction entry to local gitignored artifacts.",
+    )
+    add_leaf_cli_options(record_friction_parser)
+    record_friction_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
+    record_friction_parser.add_argument(
+        "--command-attempted",
+        required=True,
+        help="Canonical command or workflow step that triggered friction.",
+    )
+    record_friction_parser.add_argument(
+        "--fallback-used",
+        required=True,
+        help="Fallback command or manual action used instead.",
+    )
+    record_friction_parser.add_argument(
+        "--friction-type",
+        required=True,
+        choices=list(VALID_FRICTION_TYPES),
+        help="Structured friction category.",
+    )
+    record_friction_parser.add_argument(
+        "--note",
+        required=True,
+        help="Short note describing the friction.",
+    )
+    record_friction_parser.add_argument(
+        "--suggested-improvement",
+        required=True,
+        help="Short suggestion for improving Horadus or its guidance.",
+    )
+    record_friction_parser.set_defaults(handler=handle_record_friction)
 
     finish_parser = tasks_subparsers.add_parser(
         "finish",

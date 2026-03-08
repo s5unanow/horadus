@@ -16,6 +16,10 @@ Use this skill for repo workflow operations in this project.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.
+- If Horadus is insufficient or forces a fallback, record one structured
+  friction entry via `horadus tasks record-friction`; do not log routine
+  success cases or treat the friction log as required reading during normal
+  execution.
 - Fall back to repo files or legacy scripts only when the CLI does not expose
   the needed surface.
 
@@ -28,6 +32,8 @@ Use this skill for repo workflow operations in this project.
 - Canonical local gate: `uv run --no-sync horadus tasks local-gate --full`
 - Lifecycle verifier: `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
 - Finish: `uv run --no-sync horadus tasks finish TASK-XXX`
+- Friction logging:
+  `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 - Task list: `uv run --no-sync horadus tasks list-active --format json`
 - Task record: `uv run --no-sync horadus tasks show TASK-XXX --format json`
 - Task search: `uv run --no-sync horadus tasks search "query" --format json`

@@ -81,7 +81,13 @@ Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
 needed workflow step yet, or when the CLI explicitly tells you a manual
 recovery step is required.
 
-13. `make test-integration-docker`
+13. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
+When: record a real Horadus workflow gap or forced fallback in a structured
+local friction log under `artifacts/agent/horadus-cli-feedback/`.
+Use this only for genuine friction or forced fallback, not routine success
+cases, and do not treat the log as required reading during normal task flow.
+
+14. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

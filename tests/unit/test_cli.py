@@ -127,6 +127,34 @@ def test_build_parser_accepts_task_safe_start_command() -> None:
     assert args.dry_run is True
 
 
+def test_build_parser_accepts_task_record_friction_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "record-friction",
+            "TASK-117",
+            "--command-attempted",
+            "uv run --no-sync horadus tasks finish TASK-117",
+            "--fallback-used",
+            "gh pr merge 123 --squash",
+            "--friction-type",
+            "forced_fallback",
+            "--note",
+            "Needed manual merge path.",
+            "--suggested-improvement",
+            "Teach finish about this blocker.",
+            "--dry-run",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "record-friction"
+    assert args.task_id == "TASK-117"
+    assert args.friction_type == "forced_fallback"
+    assert args.dry_run is True
+
+
 def test_build_parser_accepts_eval_benchmark_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(
@@ -1821,6 +1849,85 @@ def test_safe_start_task_data_runs_guarded_start_after_eligibility(
         "Task sequencing guard passed: main is clean/synced and no open task PRs.",
         "Dry run: would create task branch codex/task-253-coverage-100",
     ]
+
+
+def test_record_friction_data_dry_run_reports_entry_without_writing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    exit_code, data, lines = task_commands_module.record_friction_data(
+        task_input="TASK-265",
+        command_attempted="uv run --no-sync horadus tasks finish TASK-265",
+        fallback_used="gh pr merge 197 --squash",
+        friction_type="forced_fallback",
+        note="Needed a manual merge fallback.",
+        suggested_improvement="Teach finish to surface the blocker better.",
+        dry_run=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["dry_run"] is True
+    assert data["log_path"] == "artifacts/agent/horadus-cli-feedback/entries.jsonl"
+    assert any(
+        "Dry run: would append structured workflow friction entry." in line for line in lines
+    )
+    assert not (
+        tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "entries.jsonl"
+    ).exists()
+
+
+def test_record_friction_data_appends_structured_jsonl_entry(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    exit_code, data, lines = task_commands_module.record_friction_data(
+        task_input="TASK-265",
+        command_attempted="uv run --no-sync horadus tasks start TASK-265 --name friction-log",
+        fallback_used="git switch -c codex/task-265-friction-log",
+        friction_type="missing_cli_surface",
+        note="Needed lower-level git fallback.",
+        suggested_improvement="Expose the missing workflow surface in horadus.",
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["dry_run"] is False
+    assert lines[-1] == "Recorded structured workflow friction entry."
+
+    log_path = tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "entries.jsonl"
+    payload = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert payload == [
+        {
+            "command_attempted": "uv run --no-sync horadus tasks start TASK-265 --name friction-log",
+            "fallback_used": "git switch -c codex/task-265-friction-log",
+            "friction_type": "missing_cli_surface",
+            "note": "Needed lower-level git fallback.",
+            "recorded_at": payload[0]["recorded_at"],
+            "suggested_improvement": "Expose the missing workflow surface in horadus.",
+            "task_id": "TASK-265",
+        }
+    ]
+    assert payload[0]["recorded_at"].endswith("Z")
+
+
+def test_handle_record_friction_rejects_invalid_task_id() -> None:
+    result = task_commands_module.handle_record_friction(
+        argparse.Namespace(
+            task_id="bad-task",
+            command_attempted="cmd",
+            fallback_used="fallback",
+            friction_type="forced_fallback",
+            note="note",
+            suggested_improvement="improve",
+        )
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
 
 
 def test_full_local_gate_steps_match_expected_ci_parity_commands(

@@ -18,6 +18,11 @@
   - Mechanical repo-policy verifier; success requires `local-main-synced`.
 - `uv run --no-sync horadus tasks finish TASK-XXX`
   - Canonical task-completion lifecycle command.
+- `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
+  - Appends one structured workflow friction entry under the gitignored path
+    `artifacts/agent/horadus-cli-feedback/entries.jsonl`.
+  - Use only for real Horadus gaps or forced fallback, not routine success
+    cases.
 - `uv run --no-sync horadus tasks list-active`
   - Returns active sprint tasks plus human blocker metadata.
 - `uv run --no-sync horadus tasks show TASK-XXX`

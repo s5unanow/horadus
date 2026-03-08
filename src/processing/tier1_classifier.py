@@ -30,6 +30,7 @@ from src.processing.llm_input_safety import (
     wrap_untrusted_text,
 )
 from src.processing.llm_policy import (
+    apply_latest_active_route_metadata,
     build_safe_payload_content,
     invoke_with_policy,
 )
@@ -264,12 +265,7 @@ class Tier1Classifier:
             usage.completion_tokens += batch_usage.completion_tokens
             usage.api_calls += batch_usage.api_calls
             usage.estimated_cost_usd += batch_usage.estimated_cost_usd
-            if batch_usage.active_provider is not None:
-                usage.active_provider = batch_usage.active_provider
-            if batch_usage.active_model is not None:
-                usage.active_model = batch_usage.active_model
-            if batch_usage.active_reasoning_effort is not None:
-                usage.active_reasoning_effort = batch_usage.active_reasoning_effort
+            apply_latest_active_route_metadata(target_usage=usage, source_usage=batch_usage)
             usage.used_secondary_route = (
                 usage.used_secondary_route or batch_usage.used_secondary_route
             )
@@ -307,19 +303,7 @@ class Tier1Classifier:
             right_results, right_usage = await self._classify_batch(items[midpoint:], trends)
             return (
                 [*left_results, *right_results],
-                Tier1Usage(
-                    prompt_tokens=left_usage.prompt_tokens + right_usage.prompt_tokens,
-                    completion_tokens=left_usage.completion_tokens + right_usage.completion_tokens,
-                    api_calls=left_usage.api_calls + right_usage.api_calls,
-                    estimated_cost_usd=left_usage.estimated_cost_usd
-                    + right_usage.estimated_cost_usd,
-                    active_provider=right_usage.active_provider or left_usage.active_provider,
-                    active_model=right_usage.active_model or left_usage.active_model,
-                    active_reasoning_effort=right_usage.active_reasoning_effort
-                    or left_usage.active_reasoning_effort,
-                    used_secondary_route=left_usage.used_secondary_route
-                    or right_usage.used_secondary_route,
-                ),
+                self._merge_usage(left_usage=left_usage, right_usage=right_usage),
             )
 
         payload_content = build_safe_payload_content(
@@ -389,6 +373,20 @@ class Tier1Classifier:
             used_secondary_route=invocation.used_secondary_route,
         )
         return (results, usage)
+
+    @staticmethod
+    def _merge_usage(*, left_usage: Tier1Usage, right_usage: Tier1Usage) -> Tier1Usage:
+        merged = Tier1Usage(
+            prompt_tokens=left_usage.prompt_tokens + right_usage.prompt_tokens,
+            completion_tokens=left_usage.completion_tokens + right_usage.completion_tokens,
+            api_calls=left_usage.api_calls + right_usage.api_calls,
+            estimated_cost_usd=left_usage.estimated_cost_usd + right_usage.estimated_cost_usd,
+            used_secondary_route=left_usage.used_secondary_route
+            or right_usage.used_secondary_route,
+        )
+        apply_latest_active_route_metadata(target_usage=merged, source_usage=left_usage)
+        apply_latest_active_route_metadata(target_usage=merged, source_usage=right_usage)
+        return merged
 
     async def _load_pending_items(self, limit: int) -> list[RawItem]:
         query = (

@@ -30,6 +30,7 @@ from src.processing.llm_input_safety import (
     wrap_untrusted_text,
 )
 from src.processing.llm_policy import (
+    apply_latest_active_route_metadata,
     build_safe_payload_content,
     invoke_with_policy,
 )
@@ -337,12 +338,7 @@ class Tier2Classifier:
             usage.completion_tokens += event_usage.completion_tokens
             usage.api_calls += event_usage.api_calls
             usage.estimated_cost_usd += event_usage.estimated_cost_usd
-            if event_usage.active_provider is not None:
-                usage.active_provider = event_usage.active_provider
-            if event_usage.active_model is not None:
-                usage.active_model = event_usage.active_model
-            if event_usage.active_reasoning_effort is not None:
-                usage.active_reasoning_effort = event_usage.active_reasoning_effort
+            apply_latest_active_route_metadata(target_usage=usage, source_usage=event_usage)
             usage.used_secondary_route = (
                 usage.used_secondary_route or event_usage.used_secondary_route
             )

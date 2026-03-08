@@ -101,6 +101,50 @@ def _write_sparse_gold_set(path: Path) -> None:
     path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
 
 
+def _write_two_tier2_gold_set(path: Path) -> None:
+    rows = [
+        {
+            "item_id": "eval-0001",
+            "title": "EU-Russia troop movement update",
+            "content": "Troop deployment near border expanded with artillery support.",
+            "label_verification": "human_verified",
+            "expected": {
+                "tier1": {
+                    "trend_scores": {"eu-russia": 9, "us-china": 2, "middle-east": 1},
+                    "max_relevance": 9,
+                },
+                "tier2": {
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.82,
+                    "confidence": 0.91,
+                },
+            },
+        },
+        {
+            "item_id": "eval-0002",
+            "title": "EU-Russia diplomatic setback",
+            "content": "Negotiations collapsed after new sanctions and force posture changes.",
+            "label_verification": "human_verified",
+            "expected": {
+                "tier1": {
+                    "trend_scores": {"eu-russia": 8, "us-china": 1, "middle-east": 1},
+                    "max_relevance": 8,
+                },
+                "tier2": {
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.7,
+                    "confidence": 0.85,
+                },
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+
 def _write_trend_configs(config_dir: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     configs = {
@@ -338,6 +382,72 @@ class _MissingTier2PredictionClassifier(_FakeTier2Classifier):
             ),
             usage,
         )
+
+
+class _MixedRouteTier1Classifier(_FakeTier1Classifier):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._calls = 0
+
+    async def classify_items(self, items, trends):
+        results, _usage = await super().classify_items(items, trends)
+        self._calls += 1
+        if self._calls == 1:
+            usage = Tier1Usage(
+                prompt_tokens=100,
+                completion_tokens=10,
+                api_calls=1,
+                estimated_cost_usd=0.00002,
+                active_provider="openai",
+                active_model="gpt-5-nano",
+                active_reasoning_effort="low",
+            )
+        else:
+            usage = Tier1Usage(
+                prompt_tokens=100,
+                completion_tokens=10,
+                api_calls=1,
+                estimated_cost_usd=0.00002,
+                active_provider="openai",
+                active_model="gpt-4.1-nano",
+                active_reasoning_effort=None,
+            )
+        return (results, usage)
+
+
+class _MixedRouteTier2Classifier(_FakeTier2Classifier):
+    def __init__(self, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self._calls = 0
+
+    async def classify_event(self, *, event, trends, context_chunks):
+        result, _usage = await super().classify_event(
+            event=event,
+            trends=trends,
+            context_chunks=context_chunks,
+        )
+        self._calls += 1
+        if self._calls == 1:
+            usage = Tier2Usage(
+                prompt_tokens=80,
+                completion_tokens=30,
+                api_calls=1,
+                estimated_cost_usd=0.00003,
+                active_provider="openai",
+                active_model="gpt-5-mini",
+                active_reasoning_effort="low",
+            )
+        else:
+            usage = Tier2Usage(
+                prompt_tokens=80,
+                completion_tokens=30,
+                api_calls=1,
+                estimated_cost_usd=0.00003,
+                active_provider="openai",
+                active_model="gpt-4o-mini",
+                active_reasoning_effort=None,
+            )
+        return (result, usage)
 
 
 @pytest.mark.asyncio
@@ -580,6 +690,45 @@ async def test_run_gold_set_benchmark_records_stage_specific_request_overrides(
     assert config_payloads["tier2-gpt5-mini-medium"]["tier1_request_overrides"] is None
     assert config_payloads["tier2-gpt5-mini-medium"]["tier2_request_overrides"] is None
     assert config_payloads["tier2-gpt5-mini-medium"]["elapsed_seconds"] >= 0
+
+
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_resets_active_reasoning_metadata_for_later_routes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_two_tier2_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _MixedRouteTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _MixedRouteTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    usage = payload["configs"][0]["usage"]
+
+    assert usage["tier1_active_provider"] == "openai"
+    assert usage["tier1_active_model"] == "gpt-4.1-nano"
+    assert usage["tier1_active_reasoning_effort"] is None
+    assert usage["tier2_active_provider"] == "openai"
+    assert usage["tier2_active_model"] == "gpt-4o-mini"
+    assert usage["tier2_active_reasoning_effort"] is None
 
 
 def test_load_gold_set_requires_human_verified_rows(tmp_path: Path) -> None:

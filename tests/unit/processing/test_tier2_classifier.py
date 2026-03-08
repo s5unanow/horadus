@@ -12,7 +12,7 @@ import pytest
 
 from src.core.config import settings
 from src.processing.cost_tracker import BudgetExceededError
-from src.processing.tier2_classifier import Tier2Classifier
+from src.processing.tier2_classifier import Tier2Classifier, Tier2EventResult, Tier2Usage
 from src.storage.models import Event
 
 pytestmark = pytest.mark.unit
@@ -256,6 +256,48 @@ async def test_classify_event_propagates_reasoning_effort_for_gpt5(mock_db_sessi
     assert "temperature" not in chat.calls[0]
     assert usage.active_reasoning_effort == "low"
     assert usage.active_model == "gpt-5-mini"
+
+
+@pytest.mark.asyncio
+async def test_classify_events_resets_reasoning_metadata_when_later_event_has_none(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    events = [
+        Event(id=uuid4(), canonical_summary="first"),
+        Event(id=uuid4(), canonical_summary="second"),
+    ]
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+    classifier._load_unclassified_events = AsyncMock(return_value=events)
+    classifier._load_event_context = AsyncMock(return_value=["Context paragraph"])
+    classifier.classify_event = AsyncMock(
+        side_effect=[
+            (
+                Tier2EventResult(event_id=events[0].id, categories_count=1, trend_impacts_count=1),
+                Tier2Usage(
+                    api_calls=1,
+                    active_provider="openai",
+                    active_model="gpt-5-mini",
+                    active_reasoning_effort="low",
+                ),
+            ),
+            (
+                Tier2EventResult(event_id=events[1].id, categories_count=1, trend_impacts_count=1),
+                Tier2Usage(
+                    api_calls=1,
+                    active_provider="openai",
+                    active_model="gpt-4o-mini",
+                    active_reasoning_effort=None,
+                ),
+            ),
+        ]
+    )
+
+    result = await classifier.classify_events(trends=trends)
+
+    assert result.usage.active_provider == "openai"
+    assert result.usage.active_model == "gpt-4o-mini"
+    assert result.usage.active_reasoning_effort is None
 
 
 def test_build_payload_includes_indicator_descriptions_and_fallbacks(mock_db_session) -> None:

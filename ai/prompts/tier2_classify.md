@@ -10,7 +10,7 @@ The caller will send JSON with:
 - `event_id`
 - `summary`
 - `context_chunks[]` where each chunk is wrapped in `<UNTRUSTED_EVENT_CONTEXT>...</UNTRUSTED_EVENT_CONTEXT>`
-- `trends[]` including indicator metadata: `signal_type`, `direction`, `description`, and `keywords[]`
+- `trends[]` including indicator metadata: `signal_type`, `direction`, `description`, and best-effort `keywords[]` (may be empty when payload-budget enforcement prunes keyword bags)
 
 Return JSON only, with this exact shape:
 

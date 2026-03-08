@@ -124,8 +124,10 @@ class Tier2Classifier:
     """
 
     _MAX_REQUEST_INPUT_TOKENS: ClassVar[int] = 8000
+    _PAYLOAD_HEADROOM_TOKENS: ClassVar[int] = 256
     _MAX_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 350
     _MIN_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 64
+    _MAX_INDICATOR_DESCRIPTION_CHARS: ClassVar[int] = 96
     _CHARS_PER_TOKEN: ClassVar[int] = DEFAULT_CHARS_PER_TOKEN
     _TRUNCATION_MARKER: ClassVar[str] = DEFAULT_TRUNCATION_MARKER
     _STRICT_RESPONSE_FORMAT: ClassVar[dict[str, Any]] = {
@@ -540,23 +542,28 @@ class Tier2Classifier:
             wrap_untrusted_text(text=str(chunk), tag="UNTRUSTED_EVENT_CONTEXT")
             for chunk in payload["context_chunks"]
         ]
+        if self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS:
+            msg = "Tier 2 payload exceeds safe input budget after deterministic reductions"
+            raise ValueError(msg)
         return payload
 
     def _enforce_payload_budget(self, payload: dict[str, Any]) -> None:
-        if self._estimate_payload_tokens(payload) <= self._MAX_REQUEST_INPUT_TOKENS:
+        budget_limit = self._payload_budget_limit()
+        if self._estimate_payload_tokens(payload) <= budget_limit:
+            return
+
+        self._trim_trend_payload_for_budget(payload, budget_limit=budget_limit)
+        if self._estimate_payload_tokens(payload) <= budget_limit:
             return
 
         context_chunks = payload.get("context_chunks")
         if not isinstance(context_chunks, list):
             return
 
-        while (
-            len(context_chunks) > 1
-            and self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS
-        ):
+        while len(context_chunks) > 1 and self._estimate_payload_tokens(payload) > budget_limit:
             context_chunks.pop()
 
-        if self._estimate_payload_tokens(payload) <= self._MAX_REQUEST_INPUT_TOKENS:
+        if self._estimate_payload_tokens(payload) <= budget_limit:
             return
 
         context_chunks[0] = truncate_to_token_limit(
@@ -565,10 +572,71 @@ class Tier2Classifier:
             marker=self._TRUNCATION_MARKER,
             chars_per_token=self._CHARS_PER_TOKEN,
         )
+        if self._estimate_payload_tokens(payload) > budget_limit:
+            msg = "Tier 2 payload exceeds safe input budget after deterministic reductions"
+            raise ValueError(msg)
 
     def _estimate_payload_tokens(self, payload: dict[str, Any]) -> int:
         serialized = json.dumps(payload, ensure_ascii=True)
         return estimate_tokens(text=serialized, chars_per_token=self._CHARS_PER_TOKEN)
+
+    def _payload_budget_limit(self) -> int:
+        return max(1, self._MAX_REQUEST_INPUT_TOKENS - self._PAYLOAD_HEADROOM_TOKENS)
+
+    def _trim_trend_payload_for_budget(self, payload: dict[str, Any], *, budget_limit: int) -> None:
+        trends = payload.get("trends")
+        if not isinstance(trends, list):
+            return
+
+        keywords_trimmed = False
+        for trend in trends:
+            if not isinstance(trend, dict):
+                continue
+            indicators = trend.get("indicators")
+            if not isinstance(indicators, list):
+                continue
+            for indicator in indicators:
+                if not isinstance(indicator, dict):
+                    continue
+                keywords = indicator.get("keywords")
+                if isinstance(keywords, list) and keywords:
+                    indicator["keywords"] = []
+                    keywords_trimmed = True
+        if keywords_trimmed and self._estimate_payload_tokens(payload) <= budget_limit:
+            return
+
+        descriptions_trimmed = False
+        for trend in trends:
+            if not isinstance(trend, dict):
+                continue
+            indicators = trend.get("indicators")
+            if not isinstance(indicators, list):
+                continue
+            for indicator in indicators:
+                if not isinstance(indicator, dict):
+                    continue
+                description = indicator.get("description")
+                if not isinstance(description, str):
+                    continue
+                compact_description = self._compact_indicator_description(description)
+                if compact_description != description:
+                    indicator["description"] = compact_description
+                    descriptions_trimmed = True
+        if descriptions_trimmed and self._estimate_payload_tokens(payload) <= budget_limit:
+            return
+
+        for trend in trends:
+            if not isinstance(trend, dict):
+                continue
+            trend_id = trend.get("trend_id")
+            if isinstance(trend_id, str) and trend.get("name") != trend_id:
+                trend["name"] = trend_id
+
+    def _compact_indicator_description(self, description: str) -> str:
+        normalized = " ".join(description.strip().split())
+        if len(normalized) <= self._MAX_INDICATOR_DESCRIPTION_CHARS:
+            return normalized
+        return f"{normalized[: self._MAX_INDICATOR_DESCRIPTION_CHARS - 3].rstrip()}..."
 
     @staticmethod
     def _trend_payload(trend: Trend) -> dict[str, Any]:

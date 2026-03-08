@@ -436,6 +436,7 @@ async def test_build_payload_wraps_and_truncates_untrusted_context(mock_db_sessi
 async def test_build_payload_reduces_context_chunks_when_over_budget(mock_db_session) -> None:
     classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
     classifier._MAX_REQUEST_INPUT_TOKENS = 220
+    classifier._PAYLOAD_HEADROOM_TOKENS = 0
     classifier._MAX_CONTEXT_CHUNK_TOKENS = 180
     classifier._MIN_CONTEXT_CHUNK_TOKENS = 40
     event = Event(id=uuid4(), canonical_summary="Initial summary")

@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-03-07
-- Current state: In progress
+- Current state: Completed
 
 ## Goal (1-3 lines)
 
@@ -45,6 +45,7 @@ orchestration, CLI, observability, and worker paths.
 - 2026-03-07: Extend low-coverage processing guardrails before tackling the biggest orchestration modules; `src/processing/degraded_llm_tracker.py` is up to 92% and `src/processing/tier2_canary.py` is up to 94% with deterministic tests around Redis persistence, degraded-mode transitions, canary selection, threshold evaluation, and canary run outcomes. Repo-wide unit coverage moved from 76% to 78%.
 - 2026-03-07: Clear the next thin-tail batch before taking on the largest modules; `src/core/source_freshness.py`, `src/core/dashboard_export.py`, `src/core/drift_alert_notifier.py`, `src/core/observability.py`, `src/api/routes/auth.py`, `src/api/routes/events.py`, `src/api/routes/reports.py`, `src/api/routes/sources.py`, `src/core/cluster_drift.py`, `src/core/narrative_grounding.py`, `src/core/release_gate_runtime.py`, and `src/processing/llm_input_safety.py` are now at 100%. Repo-wide unit coverage moved from 78% to 79%.
 - 2026-03-07: Push the deterministic helper and CLI/task tail further before entering the largest service modules; `src/eval/artifact_provenance.py`, `src/eval/audit.py`, `src/processing/vector_similarity.py`, and `src/processing/llm_policy.py` are now at 100%, while `src/horadus_cli/task_commands.py` improved to 98% and `src/horadus_cli/task_repo.py` improved to 96%. Repo-wide unit coverage moved from 79% to 80%.
+- 2026-03-08: Finish the remaining config, trends, feedback, benchmark, GDELT, and pipeline-orchestrator residue with behavior-focused tests for real helper branches, replay queue logic, taxonomy/error handling, and ingestion window edge cases. Final validation reached `1294 passed` with `100%` measured coverage for `src/` and no uncovered lines or partial branches.
 
 ## Risks / Foot-guns
 
@@ -58,6 +59,13 @@ orchestration, CLI, observability, and worker paths.
 - `uv run --no-sync pytest tests/unit/test_cli.py tests/unit/scripts/ -v`
 - `uv run --no-sync pytest tests/unit/core/ tests/unit/processing/ tests/unit/workers/ -v`
 - `make test-integration-docker`
+
+## Outcome
+
+- Completed on 2026-03-08.
+- Final repo-wide unit coverage for `src/`: `100%`
+- Final validating run: `uv run --no-sync pytest tests/unit/ -q --cov=src --cov-report=term-missing:skip-covered`
+- Final validating result: `1294 passed`
 
 ## Notes / Links
 

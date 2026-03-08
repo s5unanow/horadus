@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-03-07
+**Last Updated**: 2026-03-08
 **Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
 **Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
@@ -136,6 +136,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `horadus tasks ...` repo workflow CLI with JSON/text output, dry-run support, and explicit validation/environment exit codes
 - [x] `horadus triage collect` structured backlog/assessment input bundle for agent triage workflows
 - [x] Repo-owned Horadus CLI Codex skill plus local install target (`make install-horadus-cli-skill`)
+- [x] Measured runtime coverage for `src/` now reaches `100%` with behavior-focused unit tests across CLI, API, workers, ingestion, eval, and processing/runtime edge cases (`1294 passed` in the validating unit coverage run)
 - [x] File-based secret loading via `*_FILE` settings for production runtimes
 - [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
 - [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations

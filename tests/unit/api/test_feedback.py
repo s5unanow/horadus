@@ -554,6 +554,38 @@ async def test_list_review_queue_handles_empty_and_skipped_candidates(mock_db_se
 
 
 @pytest.mark.asyncio
+async def test_list_review_queue_without_trend_filter_keeps_base_evidence_query(
+    mock_db_session,
+) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Candidate",
+        lifecycle_status="confirmed",
+        source_count=1,
+        unique_source_count=1,
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [event])
+    mock_db_session.execute.side_effect = [
+        SimpleNamespace(
+            all=lambda: [
+                (event.id, uuid4(), "Trend", "signal", 0.2, 0.8, 0.9),
+            ]
+        ),
+        SimpleNamespace(all=list),
+    ]
+
+    result = await list_review_queue(
+        trend_id=None,
+        unreviewed_only=False,
+        session=mock_db_session,
+    )
+
+    evidence_query = str(mock_db_session.execute.await_args_list[0].args[0]).lower()
+    assert "trend_evidence.trend_id =" not in evidence_query
+    assert len(result) == 1
+
+
+@pytest.mark.asyncio
 async def test_list_taxonomy_gaps_returns_summary_and_top_unknown_signals(
     mock_db_session,
 ) -> None:

@@ -218,6 +218,7 @@ Tasks that have been completed and verified.
 - TASK-197: Enforce local integration test gate before push/PR ✅
 - TASK-198: External review backlog intake preservation (2026-03-05) ✅
 - TASK-239: External architecture review backlog intake preservation (2026-03-06) ✅
+- TASK-253: Raise Measured Runtime Coverage to 100% with Behavior-Focused Tests ✅
 - TASK-249: Add First-Class Reasoning-Effort Controls for LLM Routes ✅
 - TASK-250: Make Eval Artifacts Strictly Reproducible and Traceable ✅
 - TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers ✅

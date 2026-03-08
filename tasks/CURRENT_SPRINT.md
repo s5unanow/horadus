@@ -26,10 +26,9 @@
   - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - Newly queued from 2026-03-07 prompt/model evaluation follow-up intake:
 - Newly queued from 2026-03-07 workflow/coverage hardening intake
-  (execution priority: `TASK-253` first, then `TASK-257`; one task per branch/PR):
+  (sequencing required; one task per branch/PR):
   - `TASK-251` Normalize Task Specs Around Explicit Input/Output Contracts
   - `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
-  - `TASK-253` Raise Measured Runtime Coverage to 100% with Behavior-Focused Tests
   - `TASK-254` Refine and Unify Agent-Facing Context Entry Points
   - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
@@ -111,3 +110,8 @@
 - `TASK-241` Fix Horadus CLI Global Flag Precedence ✅
 - `TASK-215` Gate task completion on current-head PR review comments ✅
 - `TASK-239` External architecture review backlog intake preservation (2026-03-06) ✅
+- `TASK-253` Raise Measured Runtime Coverage to 100% with Behavior-Focused Tests ✅
+  completion note: the repo now reaches `100%` measured coverage for `src/`
+  in the unit coverage run (`1294 passed`) using behavior-focused tests across
+  CLI, API, workers, ingestion, eval, and processing/runtime edge cases rather
+  than new omit rules or snapshot padding.

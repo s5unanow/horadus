@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from src.core.trend_config import TrendConfig
 
 
-def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
+def discover_trend_config_files(*, config_dir: Path) -> list[Path]:
     if not config_dir.exists() or not config_dir.is_dir():
         msg = f"Trend config directory not found: {config_dir}"
         raise ValueError(msg)
@@ -26,6 +26,11 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
     if not files:
         msg = f"No trend config YAML files found in: {config_dir}"
         raise ValueError(msg)
+    return files
+
+
+def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
+    files = discover_trend_config_files(config_dir=config_dir)
 
     trends: list[SimpleNamespace] = []
     seen_ids: set[str] = set()

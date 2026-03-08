@@ -17,7 +17,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from openai import AsyncOpenAI
 
 from src.core.config import settings
-from src.core.trend_config_loader import load_trends_from_config_dir
+from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 from src.eval import artifact_provenance as provenance
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
@@ -738,6 +738,7 @@ async def run_gold_set_benchmark(
     _assert_gold_set_taxonomy_alignment(items=gold_items, trends=trends)
     raw_items = [_build_raw_item(item) for item in gold_items]
     label_verification_counts = _count_label_verification(gold_items)
+    trend_config_files = discover_trend_config_files(config_dir=Path(trend_config_dir))
 
     bounded_max_items = max(1, max_items)
     run_payload: dict[str, Any] = {
@@ -765,7 +766,8 @@ async def run_gold_set_benchmark(
             {"tier1": _TIER1_PROMPT_PATH, "tier2": _TIER2_PROMPT_PATH}
         ),
         "trend_config_provenance": provenance.build_directory_provenance(
-            directory=Path(trend_config_dir)
+            directory=Path(trend_config_dir),
+            files=trend_config_files,
         ),
         "gold_set_fingerprint_sha256": provenance.gold_set_fingerprint(gold_items),
         "gold_set_item_ids_sha256": provenance.gold_set_item_ids_fingerprint(gold_items),

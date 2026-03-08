@@ -58,12 +58,33 @@ def test_build_manifest_and_directory_provenance(tmp_path: Path) -> None:
     second.write_text("beta: 2\n", encoding="utf-8")
 
     manifest = provenance.build_file_manifest_provenance({"first": first, "second": second})
-    directory = provenance.build_directory_provenance(directory=tmp_path)
+    directory = provenance.build_directory_provenance(directory=tmp_path, recursive=True)
 
     assert manifest["first"]["path"] == str(first)
     assert len(manifest["second"]["sha256"]) == 64
     assert directory["file_count"] == 2
     assert len(directory["fingerprint_sha256"]) == 64
+
+
+def test_build_directory_provenance_is_checkout_stable_and_non_recursive_by_default(
+    tmp_path: Path,
+) -> None:
+    left = tmp_path / "left" / "trends"
+    right = tmp_path / "right" / "trends"
+    for directory in (left, right):
+        directory.mkdir(parents=True)
+        (directory / "alpha.yaml").write_text("id: alpha\n", encoding="utf-8")
+        nested = directory / "nested"
+        nested.mkdir()
+        (nested / "ignored.yaml").write_text("id: ignored\n", encoding="utf-8")
+
+    left_provenance = provenance.build_directory_provenance(directory=left)
+    right_provenance = provenance.build_directory_provenance(directory=right)
+
+    assert left_provenance["file_count"] == 1
+    assert left_provenance["files"][0]["path"] == "alpha.yaml"
+    assert right_provenance["files"][0]["path"] == "alpha.yaml"
+    assert left_provenance["fingerprint_sha256"] == right_provenance["fingerprint_sha256"]
 
 
 def test_normalize_request_overrides_and_gold_set_fingerprints() -> None:

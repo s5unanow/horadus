@@ -398,6 +398,79 @@ async def test_run_gold_set_benchmark_writes_results(
     assert item_results[1]["tier2"] == {"status": "skipped", "reason": "no_tier2_gold_label"}
 
 
+@pytest.mark.asyncio
+async def test_run_gold_set_benchmark_uses_loader_scoped_checkout_stable_trend_provenance(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    left_root = tmp_path / "left"
+    right_root = tmp_path / "right"
+    left_gold_set_path = left_root / "gold_set.jsonl"
+    right_gold_set_path = right_root / "gold_set.jsonl"
+    left_output_dir = left_root / "results"
+    right_output_dir = right_root / "results"
+    left_trend_dir = left_root / "trends"
+    right_trend_dir = right_root / "trends"
+
+    left_root.mkdir()
+    right_root.mkdir()
+    _write_gold_set(left_gold_set_path)
+    _write_gold_set(right_gold_set_path)
+    _write_trend_configs(left_trend_dir)
+    _write_trend_configs(right_trend_dir)
+    for trend_dir in (left_trend_dir, right_trend_dir):
+        nested_dir = trend_dir / "nested"
+        nested_dir.mkdir()
+        (nested_dir / "ignored.yaml").write_text(
+            '{"id":"ignored","name":"Ignored"}', encoding="utf-8"
+        )
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", _FakeTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", _FakeTier2Classifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    left_result = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(left_gold_set_path),
+        output_dir=str(left_output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(left_trend_dir),
+        max_items=2,
+        config_names=["baseline"],
+    )
+    right_result = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(right_gold_set_path),
+        output_dir=str(right_output_dir),
+        api_key="dummy",  # pragma: allowlist secret
+        trend_config_dir=str(right_trend_dir),
+        max_items=2,
+        config_names=["baseline"],
+    )
+
+    left_payload = json.loads(left_result.read_text(encoding="utf-8"))
+    right_payload = json.loads(right_result.read_text(encoding="utf-8"))
+
+    assert left_payload["trend_config_provenance"]["file_count"] == 3
+    assert right_payload["trend_config_provenance"]["file_count"] == 3
+    assert [item["path"] for item in left_payload["trend_config_provenance"]["files"]] == [
+        "eu-russia.yaml",
+        "middle-east.yaml",
+        "us-china.yaml",
+    ]
+    assert [item["path"] for item in right_payload["trend_config_provenance"]["files"]] == [
+        "eu-russia.yaml",
+        "middle-east.yaml",
+        "us-china.yaml",
+    ]
+    assert (
+        left_payload["trend_config_provenance"]["fingerprint_sha256"]
+        == right_payload["trend_config_provenance"]["fingerprint_sha256"]
+    )
+
+
 def test_load_gold_set_rejects_invalid_rows(tmp_path: Path) -> None:
     invalid_path = tmp_path / "invalid.jsonl"
     invalid_path.write_text('{"item_id":"x"}\n', encoding="utf-8")

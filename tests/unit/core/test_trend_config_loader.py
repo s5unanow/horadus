@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from src.core.trend_config_loader import load_trends_from_config_dir
+from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 
 pytestmark = pytest.mark.unit
 
@@ -178,3 +178,33 @@ indicators:
 
     with pytest.raises(ValueError, match="Duplicate trend id in config dir: alpha"):
         load_trends_from_config_dir(config_dir=config_dir)
+
+
+def test_discover_trend_config_files_ignores_nested_yaml(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    nested_dir = config_dir / "nested"
+    nested_dir.mkdir()
+    (config_dir / "top.yaml").write_text(
+        """
+id: "top"
+name: "Top"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (nested_dir / "ignored.yaml").write_text("id: nested\n", encoding="utf-8")
+
+    files = discover_trend_config_files(config_dir=config_dir)
+    trends = load_trends_from_config_dir(config_dir=config_dir)
+
+    assert files == [config_dir / "top.yaml"]
+    assert [trend.definition["id"] for trend in trends] == ["top"]

@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess  # nosec B404
 import sys
@@ -1249,7 +1250,7 @@ def resolve_task_lifecycle(
 
 
 def full_local_gate_steps() -> list[LocalGateStep]:
-    uv_bin = getenv("UV_BIN") or "uv"
+    uv_bin = shlex.quote(getenv("UV_BIN") or "uv")
     return [
         LocalGateStep(
             name="check-tracked-artifacts",
@@ -1305,7 +1306,11 @@ def full_local_gate_steps() -> list[LocalGateStep]:
         ),
         LocalGateStep(
             name="build-package",
-            command="rm -rf dist build *.egg-info && uvx --from build pyproject-build && uvx twine check dist/*",
+            command=(
+                "rm -rf dist build *.egg-info && "
+                f"{uv_bin} run --no-sync --with build python -m build && "
+                f"{uv_bin} run --no-sync --with twine twine check dist/*"
+            ),
         ),
     ]
 

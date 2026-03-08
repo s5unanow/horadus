@@ -2151,8 +2151,33 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert "-m unit" not in steps[6].command
     assert steps[9].command == "./scripts/test_integration_docker.sh"
     assert steps[10].command == (
-        "rm -rf dist build *.egg-info && uvx --from build pyproject-build && uvx twine check dist/*"
+        "rm -rf dist build *.egg-info && "
+        "uv run --no-sync --with build python -m build && "
+        "uv run --no-sync --with twine twine check dist/*"
     )
+
+
+def test_local_gate_data_dry_run_reports_custom_absolute_uv_bin_for_build_steps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    custom_uv = "/tmp/custom-tools/uv"
+    monkeypatch.setenv("UV_BIN", custom_uv)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_ensure_command_available",
+        lambda name: name if name == custom_uv else None,
+    )
+
+    exit_code, data, lines = task_commands_module.local_gate_data(full=True, dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    build_step = next(step for step in data["steps"] if step["name"] == "build-package")
+    assert build_step["command"] == (
+        "rm -rf dist build *.egg-info && "
+        f"{custom_uv} run --no-sync --with build python -m build && "
+        f"{custom_uv} run --no-sync --with twine twine check dist/*"
+    )
+    assert f"- build-package: {build_step['command']}" in lines
 
 
 def test_local_gate_data_requires_full_mode() -> None:

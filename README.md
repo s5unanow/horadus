@@ -272,7 +272,9 @@ Resolve locally solvable environment blockers before reporting blocked.
 gate before push/PR. It stays separate from `make agent-check`, which remains
 the fast inner-loop gate. If the Docker-backed integration step needs the
 daemon, the CLI attempts best-effort local auto-start on supported
-environments before failing with a specific blocker. `make local-gate` is a
+environments before failing with a specific blocker. If `UV_BIN` points to a
+specific `uv` executable, that same binary is used for every `uv`-backed full-
+gate step, including package-build validation. `make local-gate` is a
 compatibility wrapper to the same CLI flow.
 
 `horadus tasks finish` uses the same Docker-readiness logic when the next

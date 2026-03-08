@@ -30,6 +30,8 @@ local validation sequence without replacing the fast iteration gate.
 If the gate reaches the Docker-backed integration step and the daemon is not
 ready, it attempts best-effort local auto-start on supported environments
 before failing with a specific blocker.
+If `UV_BIN` is set to an absolute `uv` path, every `uv`-backed full-gate step
+uses that same executable, including package-build validation.
 
 Compatibility wrapper:
 - `make local-gate`

@@ -311,6 +311,11 @@ Tasks that have been completed and verified.
   PR-summary `THUMBS_UP` as a positive review-gate signal while still
   waiting the full review window, and keeps that policy aligned across the
   CLI docs and Horadus skill surfaces.
+- TASK-284: Make `horadus tasks finish` Exit Cleanly After Silent Review Timeout ✅
+  The finish flow now bounds the review-gate helper and merge commands with
+  explicit subprocess timeouts, reports concrete blockers when those steps
+  fail to exit cleanly, and includes regression coverage for both the stuck
+  review-gate and stuck-merge paths.
 ## Archive
 
 (Older sprints will be archived here)

@@ -3222,6 +3222,152 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     assert lines[-1] == "Task finish passed: merged merge-commit-275 and synced main."
 
 
+def test_finish_task_data_blocks_when_review_gate_process_hangs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-284-finish-timeout-exit",
+            branch_task_id="TASK-284",
+            task_id="TASK-284",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-284 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+
+    def fake_run_review_gate(**_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise task_commands_module.CommandTimeoutError(
+            ["python", "./scripts/check_pr_review_gate.py"],
+            631,
+        )
+
+    monkeypatch.setattr(task_commands_module, "_run_review_gate", fake_run_review_gate)
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/284\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/284"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-284: finish timeout exit","body":"Primary-Task: TASK-284\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-284", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/284"
+    assert (
+        lines[0]
+        == "Task finish blocked: review gate command did not exit after the configured wait window."
+    )
+    assert lines[-1] == "Command timed out after 631s: python ./scripts/check_pr_review_gate.py"
+
+
+def test_finish_task_data_blocks_when_merge_command_hangs_after_review_gate_passes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-284-finish-timeout-exit",
+            branch_task_id="TASK-284",
+            task_id="TASK-284",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-284 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            stdout=(
+                "review gate timeout: no actionable current-head review feedback from "
+                "chatgpt-codex-connector[bot] for head-sha-284 within 600s. "
+                "Continuing due to timeout policy=allow."
+            ),
+        ),
+    )
+
+    real_run_command_with_timeout = task_commands_module._run_command_with_timeout
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/284\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/284"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-284: finish timeout exit","body":"Primary-Task: TASK-284\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    def fake_run_command_with_timeout(
+        args: list[str], **kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["gh", "pr", "merge"]:
+            raise task_commands_module.CommandTimeoutError(args, 120)
+        return real_run_command_with_timeout(args, **kwargs)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        fake_run_command_with_timeout,
+    )
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-284", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/284"
+    assert (
+        lines[0]
+        == "Task finish blocked: merge command did not exit cleanly after the review gate passed."
+    )
+    assert lines[-1].startswith("Command timed out after 120s: gh pr merge")
+
+
 def test_finish_task_data_blocks_when_review_gate_finds_actionable_comments(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

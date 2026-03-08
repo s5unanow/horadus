@@ -194,6 +194,16 @@ def test_quality_latch_and_clear_round_trip(monkeypatch: pytest.MonkeyPatch) -> 
     logger.warning.assert_called_once()
 
 
+def test_quality_latch_noops_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = MagicMock()
+    tracker = tracker_module.DegradedLLMTracker(redis_client=client)
+    monkeypatch.setattr(tracker_module.settings, "LLM_DEGRADED_MODE_ENABLED", False)
+
+    tracker.latch_quality_degraded(ttl_seconds=30, reason="disabled")
+
+    client.setex.assert_not_called()
+
+
 def test_quality_latch_logs_warning_on_failure(monkeypatch: pytest.MonkeyPatch) -> None:
     logger = MagicMock()
 
@@ -227,7 +237,19 @@ def test_load_window_aggregates_and_ignores_invalid_rows(monkeypatch: pytest.Mon
     client.hashes["prefix:tier2:bucket:180"] = {"total": 2, "secondary": 1}
     client.hashes["prefix:tier2:bucket:120"] = {"total": 3, "secondary": 2}
     tracker = tracker_module.DegradedLLMTracker(stage="tier2", redis_client=client)
+    original_pipeline = client.pipeline
 
+    def pipeline_with_invalid_rows() -> _FakePipeline:
+        pipeline = original_pipeline()
+        original_execute = pipeline.execute
+
+        def execute() -> list[object]:
+            return [*original_execute(), "bad-row", [1]]
+
+        pipeline.execute = execute  # type: ignore[assignment]
+        return pipeline
+
+    client.pipeline = pipeline_with_invalid_rows  # type: ignore[assignment]
     window = tracker._load_window(now_epoch=181)
 
     assert window == DegradedLLMWindow(total_calls=5, secondary_calls=3)
@@ -244,6 +266,8 @@ def test_mode_state_helpers_and_client_loader(monkeypatch: pytest.MonkeyPatch) -
     assert tracker._load_mode_state() == _ModeState(mode="degraded", since_epoch=15)
     client.values[tracker._mode_key()] = b"\xff"
     assert tracker._load_mode_state() is None
+    client.values[tracker._mode_key()] = 123
+    assert tracker._load_mode_state() is None
 
     lazy_client = _FakeRedisClient()
     from_url = MagicMock(return_value=lazy_client)
@@ -253,6 +277,28 @@ def test_mode_state_helpers_and_client_loader(monkeypatch: pytest.MonkeyPatch) -
 
     assert loaded is lazy_client
     from_url.assert_called_once_with("redis://test", decode_responses=True)
+
+
+def test_mode_state_helpers_handle_client_errors_and_quality_checks() -> None:
+    class _BrokenClient:
+        def get(self, _key: str) -> None:
+            raise RuntimeError("redis down")
+
+        def set(self, _key: str, _value: str) -> None:
+            raise RuntimeError("redis down")
+
+    tracker = tracker_module.DegradedLLMTracker(redis_client=_BrokenClient())
+
+    assert tracker._load_mode_state() is None
+    tracker._set_mode_state(_ModeState(mode="normal", since_epoch=1))
+
+    quality_tracker = tracker_module.DegradedLLMTracker(redis_client=_FakeRedisClient())
+    quality_tracker._redis.values[quality_tracker._mode_key()] = "x"  # type: ignore[union-attr]
+    assert quality_tracker._is_quality_degraded() is False
+    quality_tracker._redis.values[
+        f"{quality_tracker._redis_prefix}:{quality_tracker.stage}:quality_degraded"
+    ] = "1"  # type: ignore[union-attr]
+    assert quality_tracker._is_quality_degraded() is True
 
 
 def test_next_mode_transitions_and_hysteresis(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -299,6 +345,35 @@ def test_next_mode_transitions_and_hysteresis(monkeypatch: pytest.MonkeyPatch) -
     )
     assert (mode, since) == ("normal", 150)
     assert set_state.call_count >= 3
+
+
+def test_next_mode_handles_invalid_state_and_unrecovered_degraded_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tracker = tracker_module.DegradedLLMTracker(redis_client=_FakeRedisClient())
+    set_state = MagicMock()
+    monkeypatch.setattr(tracker, "_set_mode_state", set_state)
+    monkeypatch.setattr(tracker_module.settings, "LLM_DEGRADED_MIN_ACTIVE_SECONDS", 0)
+    monkeypatch.setattr(tracker_module.settings, "LLM_DEGRADED_EXIT_RATIO", 0.0)
+    monkeypatch.setattr(tracker_module.settings, "LLM_DEGRADED_EXIT_MIN_CALLS", 3)
+
+    mode, since = tracker._next_mode(
+        now_epoch=100,
+        mode_state=_ModeState(mode="weird", since_epoch=50),  # type: ignore[arg-type]
+        quality_degraded=False,
+        availability_degraded=False,
+        window=DegradedLLMWindow(total_calls=0, secondary_calls=0),
+    )
+    assert (mode, since) == ("normal", 100)
+
+    mode, since = tracker._next_mode(
+        now_epoch=120,
+        mode_state=_ModeState(mode="degraded", since_epoch=100),
+        quality_degraded=False,
+        availability_degraded=False,
+        window=DegradedLLMWindow(total_calls=1, secondary_calls=1),
+    )
+    assert (mode, since) == ("degraded", 100)
 
 
 def test_evaluate_handles_disabled_and_fail_open_paths(monkeypatch: pytest.MonkeyPatch) -> None:

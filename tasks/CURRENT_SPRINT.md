@@ -45,6 +45,9 @@
 - Newly queued from 2026-03-08 workflow-consistency intake
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
+- Newly queued from 2026-03-08 post-merge review-gate follow-up intake
+  (remaining recommended sequencing: `TASK-283`; one task per branch/PR):
+  - `TASK-283` Forbid Agent-Initiated Review Timeout Overrides in `horadus tasks finish`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -216,3 +219,8 @@
   now require every claim to be payload-grounded or explicitly provisional,
   forbid unsupported causal/confidence/location details, and have regression
   tests that keep those evidence and uncertainty rules from silently weakening.
+- `TASK-282` Validate Dependency Guidance Against Its Own Path Set ✅
+  completion note: docs-freshness now validates dependency guidance inside the
+  dependency path loop rather than the fallback loop, and a divergence-focused
+  unit test keeps dependency-only and fallback-only path sets from silently
+  crossing again.

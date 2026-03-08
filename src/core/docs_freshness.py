@@ -522,6 +522,23 @@ def run_docs_freshness_check(
                     path=reference_path,
                 )
             )
+            continue
+
+        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
+        for statement in dependency_statements:
+            if _normalize_whitespace(statement) in normalized_content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="dependency_guidance_statement_missing",
+                    message=(
+                        f"{reference_path} must include canonical dependency-aware "
+                        f"workflow guidance: {statement}"
+                    ),
+                    path=reference_path,
+                )
+            )
 
     fallback_statements = fallback_guidance_statements()
     for reference_path in FALLBACK_GUIDANCE_REFERENCE_PATHS:
@@ -548,23 +565,6 @@ def run_docs_freshness_check(
                     message=(
                         f"{reference_path} must include canonical fallback workflow "
                         f"guidance: {statement}"
-                    ),
-                    path=reference_path,
-                )
-            )
-            continue
-
-        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
-        for statement in dependency_statements:
-            if _normalize_whitespace(statement) in normalized_content:
-                continue
-            errors.append(
-                DocsFreshnessIssue(
-                    level="error",
-                    rule_id="dependency_guidance_statement_missing",
-                    message=(
-                        f"{reference_path} must include canonical dependency-aware "
-                        f"workflow guidance: {statement}"
                     ),
                     path=reference_path,
                 )

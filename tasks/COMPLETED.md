@@ -300,6 +300,11 @@ Tasks that have been completed and verified.
   claim to stay payload-grounded or explicitly provisional, forbid unsupported
   causal/confidence/location details, and are covered by prompt-text
   regression tests.
+- TASK-282: Validate Dependency Guidance Against Its Own Path Set ✅
+  Docs freshness now validates dependency-aware guidance inside the correct
+  path loop, and a divergence-focused unit test keeps dependency-only and
+  fallback-only path sets from silently being validated against the wrong
+  statement set.
 ## Archive
 
 (Older sprints will be archived here)

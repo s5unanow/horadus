@@ -8,6 +8,26 @@ Read and follow:
 Assess architecture/runtime flow and identify risks, missing guardrails, and
 high-leverage improvements. Propose up to 3 improvements.
 
+## Bounded Research Mode
+
+Use a bounded three-pass workflow for this assessment:
+
+1. Plan
+   - Identify the architecture and runtime questions that need evidence before
+     you propose changes.
+2. Retrieve
+   - Gather only the repo evidence needed to answer those questions.
+   - Prefer authoritative runtime docs, code paths, and explicit command
+     output.
+   - If evidence conflicts, call out the contradiction instead of smoothing it
+     away.
+3. Synthesize
+   - Keep every proposal grounded in the retrieved evidence.
+   - Label inference versus directly supported fact when the recommendation
+     extends beyond the literal repo record.
+   - Cite the exact file path, task id, proposal id, or command result that
+     supports each proposal; do not invent sources.
+
 ## Output
 
 - Write final output to: `artifacts/assessments/sa/daily/YYYY-MM-DD.md`

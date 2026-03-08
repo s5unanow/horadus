@@ -8,6 +8,24 @@ Read and follow:
 Assess project state for missing requirements, data quality risks, workflow
 gaps, and operational blind spots. Propose up to 3 improvements.
 
+## Bounded Research Mode
+
+Use a bounded three-pass workflow for this assessment:
+
+1. Plan
+   - Identify the requirement, data-quality, and workflow questions that must
+     be answered first.
+2. Retrieve
+   - Gather only the repo evidence needed to answer those questions.
+   - Prefer authoritative repo files and explicit command output.
+   - If evidence conflicts, call out the contradiction and its scope.
+3. Synthesize
+   - Keep every proposal grounded in the retrieved evidence.
+   - Label inference versus directly supported fact when you connect separate
+     repo signals into one recommendation.
+   - Cite the exact file path, task id, proposal id, or command result that
+     supports each proposal; do not invent sources.
+
 ## Output
 
 - Write final output to: `artifacts/assessments/ba/daily/YYYY-MM-DD.md`

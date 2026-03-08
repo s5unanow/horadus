@@ -9,6 +9,24 @@ As a senior AI/agentic engineer, assess the repo and propose up to 3 high
 leverage improvements to make agents safer/faster/more reliable when operating
 this project.
 
+## Bounded Research Mode
+
+Use a bounded three-pass workflow for this assessment:
+
+1. Plan
+   - Identify the sub-questions most likely to reveal agent reliability gaps.
+2. Retrieve
+   - Gather only the repo evidence needed to answer those sub-questions.
+   - Prefer authoritative repo sources and explicit command/file evidence.
+   - If evidence conflicts, call out the contradiction and keep both sides in
+     view.
+3. Synthesize
+   - Keep every claim grounded in the retrieved evidence.
+   - Label inference versus directly supported fact when a conclusion goes
+     beyond the literal repo record.
+   - Cite the exact file path, task id, proposal id, or command result that
+     supports each proposal; do not invent sources.
+
 ## Output
 
 - Write final output to: `artifacts/assessments/agents/daily/YYYY-MM-DD.md`

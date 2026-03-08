@@ -46,9 +46,7 @@
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - Newly queued from 2026-03-08 workflow/prompt contract hardening intake
-  (remaining recommended sequencing: `TASK-280` -> `TASK-281`; one task per
-  branch/PR):
-  - `TASK-280` Add a Bounded Research Mode for Triage and Review Workflows
+  (remaining recommended sequencing: `TASK-281`; one task per branch/PR):
   - `TASK-281` Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
@@ -210,3 +208,9 @@
   narrow results as recovery problems first, requires sensible retry paths
   before declaring no result, and keeps `record-friction` scoped to genuine
   forced fallbacks rather than routine success or expected empty results.
+- `TASK-280` Add a Bounded Research Mode for Triage and Review Workflows ✅
+  completion note: the triage and assessment automations now use a bounded
+  `plan -> retrieve -> synthesize` research mode with contradiction handling,
+  inference-vs-fact labeling, and explicit repo citation rules, while the
+  runbook keeps that heavier pattern scoped away from ordinary implementation
+  work.

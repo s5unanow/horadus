@@ -3,6 +3,28 @@
 Read and follow:
 - `docs/ASSESSMENTS.md` (assessment intake rules)
 
+## Bounded Research Mode
+
+Use a bounded three-pass workflow for this triage run:
+
+1. Plan
+   - Identify the 3-6 sub-questions needed to rank backlog candidates.
+   - Decide which repo sources can answer each question before you retrieve
+     anything else.
+2. Retrieve
+   - Gather only the repo evidence needed to answer those sub-questions.
+   - Prefer structured Horadus CLI output first, then direct file search only
+     when the CLI output is empty, partial, or too narrow.
+   - When sources disagree, surface the contradiction instead of smoothing it
+     away.
+3. Synthesize
+   - Keep final recommendations evidence-backed and bounded to the retrieved
+     repo evidence.
+   - Label inference versus directly supported fact when a recommendation goes
+     beyond the literal retrieved text.
+   - Cite the exact file path, task id, proposal id, or command result that
+     supports each claim; do not invent sources.
+
 ## Inputs
 
 - `tasks/CURRENT_SPRINT.md`
@@ -77,3 +99,5 @@ sentences.
 - Assessments are advisory; do not copy their `TASK-###` labels even if present.
 - Do not allocate new `TASK-###` IDs in this report.
 - De-duplicate overlapping proposals across roles.
+- Distinguish directly supported facts from inference in the write-up when the
+  recommendation depends on interpretation rather than a literal repo record.

@@ -147,3 +147,15 @@ manually before rerunning the workflow command.
   configs: `baseline` and `alternative`.
 - GPT-5 benchmark candidates stay available for targeted comparisons, but must
   be requested explicitly with repeated `--config` flags.
+
+## Research-Heavy Workflows
+
+- Use bounded research mode only for triage, assessments, architecture review
+  intake, and similar synthesis-heavy workflows, not for ordinary
+  implementation tasks.
+- Bounded research mode is: plan the sub-questions, retrieve only the repo
+  evidence needed to answer them, then synthesize with explicit contradiction
+  handling and clear labeling of directly supported fact versus inference.
+- Cite the exact file path, task id, proposal id, or command output that backs
+  each research claim; do not invent sources or smooth over conflicting
+  evidence.

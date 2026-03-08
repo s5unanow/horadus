@@ -262,6 +262,8 @@ def test_mode_state_helpers_and_client_loader(monkeypatch: pytest.MonkeyPatch) -
     tracker._set_mode_state(_ModeState(mode="normal", since_epoch=10))
 
     assert tracker._load_mode_state() == _ModeState(mode="normal", since_epoch=10)
+    client.values[tracker._mode_key()] = None
+    assert tracker._load_mode_state() is None
     client.values[tracker._mode_key()] = b'{"mode":"degraded","since_epoch":15}'
     assert tracker._load_mode_state() == _ModeState(mode="degraded", since_epoch=15)
     client.values[tracker._mode_key()] = b"\xff"

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -8,6 +9,7 @@ from uuid import uuid4
 import pytest
 
 import src.processing.tier2_classifier as tier2_module
+from src.core.trend_config_loader import load_trends_from_config_dir
 from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.models import Event
 
@@ -212,22 +214,25 @@ def test_build_payload_budget_and_indicator_fallbacks(
     mock_db_session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     classifier = _build_classifier(mock_db_session)
-    classifier._MAX_REQUEST_INPUT_TOKENS = 1
+    classifier._MAX_REQUEST_INPUT_TOKENS = 220
+    classifier._PAYLOAD_HEADROOM_TOKENS = 0
     classifier._MIN_CONTEXT_CHUNK_TOKENS = 1
     event = Event(id=uuid4(), canonical_summary="summary")
     trend = _build_trend(
         definition={},
         indicators={
-            "one": {"direction": "escalatory", "keywords": [" a ", "", 1]},
+            "one": {
+                "direction": "escalatory",
+                "description": "x" * 200,
+                "keywords": ["keyword"] * 50,
+            },
             "two": {"direction": "escalatory"},
             "three": "bad",
         },
     )
 
-    def fake_estimate(_payload: dict[str, object]) -> int:
-        return 999
+    original_estimate = classifier._estimate_payload_tokens
 
-    monkeypatch.setattr(classifier, "_estimate_payload_tokens", fake_estimate)
     payload = classifier._build_payload(
         event=event,
         trends=[trend],
@@ -235,18 +240,19 @@ def test_build_payload_budget_and_indicator_fallbacks(
     )
 
     assert payload["trends"][0]["trend_id"] == str(trend.id)
-    assert payload["trends"][0]["indicators"][0]["keywords"] == ["a"]
+    assert payload["trends"][0]["indicators"][0]["keywords"] == []
+    assert payload["trends"][0]["indicators"][0]["description"] == "x" * 200
     assert (
         payload["trends"][0]["indicators"][1]["description"]
         == "Signals of two relevant to this trend."
     )
-    assert len(payload["context_chunks"]) == 1
+    assert len(payload["context_chunks"]) == 2
     assert payload["context_chunks"][0].startswith("<UNTRUSTED_EVENT_CONTEXT>")
+    assert original_estimate(payload) <= classifier._MAX_REQUEST_INPUT_TOKENS
 
-    payload = classifier._build_payload(event=event, trends=[trend], context_chunks=["   "])
-    assert payload["context_chunks"] == [
-        "<UNTRUSTED_EVENT_CONTEXT>\n[TRUNCATED]\n</UNTRUSTED_EVENT_CONTEXT>"
-    ]
+    classifier._MAX_REQUEST_INPUT_TOKENS = 80
+    with pytest.raises(ValueError, match="exceeds safe input budget"):
+        classifier._build_payload(event=event, trends=[trend], context_chunks=["   "])
 
     payload = {"context_chunks": "bad"}
     classifier._enforce_payload_budget(payload)
@@ -254,10 +260,31 @@ def test_build_payload_budget_and_indicator_fallbacks(
 
     payload = {"context_chunks": ["one", "two"]}
 
-    estimates = iter([999, 999, 1])
+    estimates = iter([999, 999, 999, 1])
     monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
     classifier._enforce_payload_budget(payload)
     assert payload["context_chunks"] == ["one"]
+
+
+def test_build_payload_current_taxonomy_stays_within_safe_budget(mock_db_session) -> None:
+    classifier = _build_classifier(mock_db_session)
+    trends = load_trends_from_config_dir(config_dir=Path("config/trends"))
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Representative summary covering a plausible geopolitical development.",
+    )
+    payload = classifier._build_payload(
+        event=event,
+        trends=trends,
+        context_chunks=[" ".join(["Representative context sentence."] * 200)],
+    )
+
+    assert classifier._estimate_payload_tokens(payload) <= classifier._MAX_REQUEST_INPUT_TOKENS
+    assert all(
+        indicator["keywords"] == []
+        for trend_payload in payload["trends"]
+        for indicator in trend_payload["indicators"]
+    )
 
 
 def test_indicator_description_and_trend_identifier_fallbacks(mock_db_session) -> None:

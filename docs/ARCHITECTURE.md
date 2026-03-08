@@ -212,6 +212,11 @@ Language-segmented operational metrics are emitted for:
 - taxonomy-gap volume (`taxonomy_gaps_total`)
 - unknown signal keys by trend (`taxonomy_gap_signal_keys_total`)
 
+Tier-2 payload budget strategy:
+- The request builder keeps deterministic headroom inside the Tier-2 safe input budget instead of relying on downstream hard truncation.
+- When the taxonomy payload is too large, the builder trims indicator keyword bags first, then compacts indicator descriptions, then reduces event context as a later fallback.
+- If the payload still cannot fit after deterministic reductions, Tier-2 fails closed with an explicit budget error rather than letting provider-side truncation choose which trend definitions survive.
+
 ### 3. Probability Update (Detail)
 
 ```

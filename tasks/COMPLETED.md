@@ -316,6 +316,11 @@ Tasks that have been completed and verified.
   explicit subprocess timeouts, reports concrete blockers when those steps
   fail to exit cleanly, and includes regression coverage for both the stuck
   review-gate and stuck-merge paths.
+- TASK-285: Add Shared-Workflow Change Guardrails for Caller Audits and Review-State Semantics ✅
+  Shared workflow/policy changes now require explicit caller audits,
+  unaffected-caller regression coverage, and current-head/current-window
+  semantics for review signals across the canonical workflow surfaces, with
+  docs-freshness tests enforcing the narrow guardrail text against drift.
 ## Archive
 
 (Older sprints will be archived here)

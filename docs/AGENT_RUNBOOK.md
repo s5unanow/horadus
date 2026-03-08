@@ -184,3 +184,18 @@ manually before rerunning the workflow command.
 - Cite the exact file path, task id, proposal id, or command output that backs
   each research claim; do not invent sources or smooth over conflicting
   evidence.
+
+## Shared Workflow/Policy Guardrails
+
+- Apply these guardrails only when changing shared workflow helpers, shared
+  workflow config, or review/merge policy behavior; do not inflate unrelated
+  tasks with generic process boilerplate.
+- Before changing shared workflow helpers or shared workflow config,
+  enumerate every caller that depends on the shared behavior.
+- When shared workflow behavior changes, add at least one regression test for
+  an unaffected caller so the change does not silently break other workflow
+  entry points.
+- Before changing review, comment, or reaction handling in merge policy
+  logic, define the current-head and current-window semantics for each signal
+  and regression-test both the intended pass path and at least one stale or
+  non-applicable signal path.

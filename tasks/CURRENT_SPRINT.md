@@ -47,9 +47,6 @@
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - Newly queued from 2026-03-08 finish-timeout follow-up intake
   (one task per branch/PR):
-- Newly queued from 2026-03-08 workflow-guardrail follow-up intake
-  (one task per branch/PR):
-  - `TASK-285` Add Shared-Workflow Change Guardrails for Caller Audits and Review-State Semantics
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -237,3 +234,9 @@
   commands with explicit timeouts, fails with concrete blockers instead of
   idling indefinitely when those subprocesses do not exit, and regression
   tests cover both the stuck-review-gate and stuck-merge paths.
+- `TASK-285` Add Shared-Workflow Change Guardrails for Caller Audits and Review-State Semantics ✅
+  completion note: shared workflow/policy changes now require caller audits,
+  unaffected-caller regression coverage, and explicit
+  current-head/current-window semantics for review signals across the
+  canonical workflow surfaces, while docs-freshness tests enforce the narrow
+  guardrail text against drift.

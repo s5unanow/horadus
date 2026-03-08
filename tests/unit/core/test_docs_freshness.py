@@ -29,6 +29,7 @@ from src.core.repo_workflow import (
     completion_guidance_statements,
     dependency_aware_guidance_statements,
     fallback_guidance_statements,
+    workflow_policy_guardrail_statements,
 )
 
 pytestmark = pytest.mark.unit
@@ -44,12 +45,14 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     (repo_root / "src" / "api").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "core").mkdir(parents=True, exist_ok=True)
     (repo_root / "tasks").mkdir(parents=True, exist_ok=True)
+    (repo_root / "tasks" / "specs").mkdir(parents=True, exist_ok=True)
 
     workflow_commands = canonical_task_workflow_command_templates()
     workflow_reference_block = "\n".join([*workflow_commands, WORKFLOW_ESCAPE_HATCH_TEXT, ""])
     completion_guidance_block = "\n".join([*completion_guidance_statements(), ""])
     dependency_guidance_block = "\n".join([*dependency_aware_guidance_statements(), ""])
     fallback_guidance_block = "\n".join([*fallback_guidance_statements(), ""])
+    workflow_guardrail_block = "\n".join([*workflow_policy_guardrail_statements(), ""])
 
     (repo_root / "PROJECT_STATUS.md").write_text(
         (
@@ -88,6 +91,9 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "## Fallback Workflow",
                 fallback_guidance_block.strip(),
                 "",
+                "## Shared Workflow/Policy Change Guardrails",
+                workflow_guardrail_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -118,6 +124,8 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "",
                 fallback_guidance_block.strip(),
                 "",
+                workflow_guardrail_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -133,6 +141,8 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 "",
                 fallback_guidance_block.strip(),
                 "",
+                workflow_guardrail_block.strip(),
+                "",
             ]
         ),
         encoding="utf-8",
@@ -145,6 +155,18 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
                 dependency_guidance_block.strip(),
                 "",
                 fallback_guidance_block.strip(),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (repo_root / "tasks" / "specs" / "TEMPLATE.md").write_text(
+        "\n".join(
+            [
+                "# TASK-XXX: <Title>",
+                "",
+                "## Shared Workflow/Policy Change Checklist (Only If Applicable)",
+                workflow_guardrail_block.strip(),
                 "",
             ]
         ),
@@ -374,6 +396,28 @@ def test_docs_freshness_flags_missing_fallback_guidance_statement(tmp_path: Path
     )
 
     assert any(issue.rule_id == "fallback_guidance_statement_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_workflow_policy_guardrail_statement(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "specs" / "TEMPLATE.md").write_text(
+        "\n".join(workflow_policy_guardrail_statements()[1:]) + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(
+        issue.rule_id == "workflow_policy_guardrail_statement_missing"
+        and issue.path == "tasks/specs/TEMPLATE.md"
+        for issue in result.errors
+    )
 
 
 def test_docs_freshness_keeps_dependency_and_fallback_path_sets_independent(

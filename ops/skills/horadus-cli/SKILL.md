@@ -53,6 +53,18 @@ Use this skill for repo workflow operations in this project.
 - A `THUMBS_UP` reaction from the configured reviewer on the PR summary
   counts as a positive review-gate signal, but the gate still waits the full
   timeout window and still blocks actionable current-head review comments.
+- Apply these guardrails only when changing shared workflow helpers, shared
+  workflow config, or review/merge policy behavior; do not inflate unrelated
+  tasks with generic process boilerplate.
+- Before changing shared workflow helpers or shared workflow config,
+  enumerate every caller that depends on the shared behavior.
+- When shared workflow behavior changes, add at least one regression test for
+  an unaffected caller so the change does not silently break other workflow
+  entry points.
+- Before changing review, comment, or reaction handling in merge policy
+  logic, define the current-head and current-window semantics for each signal
+  and regression-test both the intended pass path and at least one stale or
+  non-applicable signal path.
 - Local commits, local tests, and a clean working tree are checkpoints, not
   completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for

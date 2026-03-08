@@ -252,6 +252,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-266` now adds `horadus tasks summarize-friction`, a repo-owned daily automation spec synced through `ops/automations/`, and compact human-triaged workflow friction reports under `artifacts/agent/horadus-cli-feedback/daily/`
 - [x] `TASK-283` now hardens `horadus tasks finish` so review-timeout overrides require explicit human approval, recognizes the configured reviewer's PR-summary `THUMBS_UP` as a positive review-gate signal, and keeps that policy aligned across repo workflow docs and skill surfaces
 - [x] `TASK-284` now bounds `horadus tasks finish` review-gate and merge subprocesses with explicit timeouts so the command exits with a concrete blocker instead of idling indefinitely after the silent-timeout allow path
+- [x] `TASK-285` now adds narrow shared-workflow guardrails that require caller audits, unaffected-caller regression coverage, and explicit current-head/current-window semantics before changing workflow policy behavior, with docs-freshness enforcement across the canonical agent-facing surfaces
 
 ## Current Focus
 
@@ -271,8 +272,6 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-268`, `TASK-269`, `TASK-270`, `TASK-273`, `TASK-271`, `TASK-272`
 - Workflow-consistency follow-up queue added to Sprint 3:
   `TASK-274`
-- Workflow-guardrail follow-up queue added to Sprint 3:
-  `TASK-285`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

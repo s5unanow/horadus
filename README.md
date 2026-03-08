@@ -254,7 +254,13 @@ uv run --no-sync horadus tasks lifecycle TASK-XXX --strict
 uv run --no-sync horadus tasks finish TASK-XXX
 ```
 
-Each task PR must include:
+Each task PR must use the title:
+
+```text
+TASK-XXX: short summary
+```
+
+Each task PR body must include:
 
 ```text
 Primary-Task: TASK-XXX

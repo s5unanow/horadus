@@ -2916,8 +2916,11 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
         if args[:5] == ["gh", "pr", "view", "--json", "url"]:
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
-            if "--json" in args and "body" in args:
-                return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
             if "--json" in args and "state" in args:
                 return _completed(args, stdout="OPEN\n")
             if "--json" in args and "isDraft" in args:
@@ -2933,6 +2936,59 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     assert "required PR checks did not pass before timeout" in lines[0]
     assert "Inspect the failing required checks" in lines[1]
     assert lines[-1] == "required-check failure details"
+
+
+def test_finish_task_data_blocks_when_pr_title_or_body_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-274-standardize-task-pr-titles",
+            branch_task_id="TASK-274",
+            task_id="TASK-274",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"],
+            returncode=1,
+            stdout="PR scope guard failed.\nPR title must match required task format:\n  TASK-XXX: short summary\n",
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/274\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/274"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"feat(repo): standardize PR titles","body":"Primary-Task: TASK-274\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-274", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/274"
+    assert "PR scope validation failed." in lines[0]
+    assert "Fix the PR title to `TASK-274: short summary`" in lines[1]
+    assert "PR title must match required task format" in lines[-2]
 
 
 def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_deletion(
@@ -2983,8 +3039,11 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
         if args[:5] == ["gh", "pr", "view", "--json", "url"]:
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
-            if "--json" in args and "body" in args:
-                return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
             if "--json" in args and "isDraft" in args:
                 return _completed(args, stdout="false\n")
             if "--json" in args and "state" in args:
@@ -3064,8 +3123,11 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
         if args[:5] == ["gh", "pr", "view", "--json", "url"]:
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
-            if "--json" in args and "body" in args:
-                return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
             if "--json" in args and "state" in args:
                 return _completed(args, stdout="OPEN\n")
             if "--json" in args and "isDraft" in args:
@@ -3149,8 +3211,11 @@ def test_finish_task_data_blocks_when_completion_verifier_fails_after_merge(
         if args[:5] == ["gh", "pr", "view", "--json", "url"]:
             return _completed(args, stdout="https://example.invalid/pr/259\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/259"]:
-            if "--json" in args and "body" in args:
-                return _completed(args, stdout="Primary-Task: TASK-259\n")
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-259: done state verifier","body":"Primary-Task: TASK-259\\n"}\n',
+                )
             if "--json" in args and "state" in args:
                 return _completed(args, stdout="MERGED\n")
             if "--json" in args and "isDraft" in args:

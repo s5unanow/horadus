@@ -1,3 +1,5 @@
+<!-- PR title must be `TASK-XXX: short summary` and match the task branch id. -->
+
 ## Summary
 -
 

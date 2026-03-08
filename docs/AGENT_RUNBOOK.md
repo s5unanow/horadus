@@ -87,7 +87,14 @@ local friction log under `artifacts/agent/horadus-cli-feedback/`.
 Use this only for genuine friction or forced fallback, not routine success
 cases, and do not treat the log as required reading during normal task flow.
 
-14. `make test-integration-docker`
+14. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
+When: generate the compact daily friction report at
+`artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`.
+The report groups duplicate patterns, highlights candidate CLI/skill
+improvements, and keeps follow-up work in human-review-only form. Do not
+auto-create backlog tasks from the report.
+
+15. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

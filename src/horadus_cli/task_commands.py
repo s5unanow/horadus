@@ -751,9 +751,12 @@ def _resolve_finish_context(
     )
 
 
-def _run_pr_scope_guard(*, branch_name: str, pr_body: str) -> subprocess.CompletedProcess[str]:
+def _run_pr_scope_guard(
+    *, branch_name: str, pr_title: str, pr_body: str
+) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     env["PR_BRANCH"] = branch_name
+    env["PR_TITLE"] = pr_title
     env["PR_BODY"] = pr_body
     return subprocess.run(  # nosec B603
         ["./scripts/check_pr_task_scope.sh"],
@@ -1758,8 +1761,8 @@ def finish_task_data(
             f"Run `git push -u origin {context.branch_name}` and open a PR for {context.task_id}."
             if not remote_branch_exists
             else (
-                f"Open a PR for `{context.branch_name}` with `Primary-Task: {context.task_id}` in the body, "
-                "then re-run `horadus tasks finish`."
+                f"Open a PR for `{context.branch_name}` titled `{context.task_id}: short summary` "
+                f"with `Primary-Task: {context.task_id}` in the body, then re-run `horadus tasks finish`."
             )
         )
         return _task_blocked(
@@ -1768,26 +1771,38 @@ def finish_task_data(
             data={"task_id": context.task_id, "branch_name": context.branch_name},
         )
 
-    pr_body_result = _run_command(
-        [config.gh_bin, "pr", "view", pr_url, "--json", "body", "--jq", ".body"]
-    )
-    if pr_body_result.returncode != 0:
+    pr_metadata_result = _run_command([config.gh_bin, "pr", "view", pr_url, "--json", "title,body"])
+    if pr_metadata_result.returncode != 0:
         return _task_blocked(
-            _result_message(pr_body_result, "Unable to read the PR body."),
+            _result_message(pr_metadata_result, "Unable to read the PR title/body."),
             next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
             data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
             exit_code=ExitCode.ENVIRONMENT_ERROR,
         )
+    try:
+        pr_metadata = json.loads(pr_metadata_result.stdout or "{}")
+    except json.JSONDecodeError:
+        return _task_blocked(
+            "Unable to parse the PR title/body.",
+            next_action="Resolve the GitHub CLI error, then re-run `horadus tasks finish`.",
+            data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            extra_lines=_output_lines(pr_metadata_result),
+        )
+    pr_title = str(pr_metadata.get("title", "")) if isinstance(pr_metadata, dict) else ""
+    pr_body = str(pr_metadata.get("body", "")) if isinstance(pr_metadata, dict) else ""
 
     scope_result = _run_pr_scope_guard(
-        branch_name=context.branch_name, pr_body=pr_body_result.stdout
+        branch_name=context.branch_name,
+        pr_title=pr_title,
+        pr_body=pr_body,
     )
     if scope_result.returncode != 0:
         return _task_blocked(
             "PR scope validation failed.",
             next_action=(
-                f"Fix the PR body so it contains exactly `Primary-Task: {context.task_id}`, "
-                "then re-run `horadus tasks finish`."
+                f"Fix the PR title to `{context.task_id}: short summary` and the PR body so it "
+                f"contains exactly `Primary-Task: {context.task_id}`, then re-run `horadus tasks finish`."
             ),
             data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
             extra_lines=_output_lines(scope_result),

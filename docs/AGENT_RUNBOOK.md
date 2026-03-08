@@ -65,6 +65,8 @@ task branches.
 When: canonical task-completion command; finishes the current task PR lifecycle
 (branch/task verification -> pushed branch/PR checks -> current-head review gate
 -> merge -> local `main` sync -> strict lifecycle verification).
+Task PRs must be titled `TASK-XXX: short summary` and include exactly one
+`Primary-Task: TASK-XXX` line in the body.
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
 

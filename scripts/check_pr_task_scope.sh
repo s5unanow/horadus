@@ -3,6 +3,7 @@ set -euo pipefail
 
 pr_branch="${PR_BRANCH:-}"
 pr_body="${PR_BODY:-}"
+pr_title="${PR_TITLE:-}"
 
 if [[ -z "${pr_branch}" ]]; then
   echo "PR scope guard failed: PR_BRANCH is required."
@@ -21,6 +22,35 @@ EOF
 fi
 
 branch_task_id="TASK-${BASH_REMATCH[1]}"
+title_pattern='^TASK-([0-9]{3}):[[:space:]].+$'
+
+if [[ -z "${pr_title}" ]]; then
+  echo "PR scope guard failed: PR_TITLE is required."
+  exit 1
+fi
+
+if [[ ! "${pr_title}" =~ ${title_pattern} ]]; then
+  cat <<EOF
+PR scope guard failed.
+PR title must match required task format:
+  TASK-XXX: short summary
+
+Found:
+  ${pr_title}
+EOF
+  exit 1
+fi
+
+title_task_id="TASK-${BASH_REMATCH[1]}"
+
+if [[ "${title_task_id}" != "${branch_task_id}" ]]; then
+  cat <<EOF
+PR scope guard failed: branch task ID and PR title mismatch.
+Branch task: ${branch_task_id}
+PR title: ${pr_title}
+EOF
+  exit 1
+fi
 
 normalize_pr_body() {
   local body="$1"
@@ -80,4 +110,4 @@ EOF
   exit 1
 fi
 
-echo "PR scope guard passed: ${branch_task_id} (Primary-Task)"
+echo "PR scope guard passed: ${branch_task_id} (Primary-Task, title)"

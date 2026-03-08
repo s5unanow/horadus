@@ -111,6 +111,7 @@ After completing work:
   prefer `--format json` for agent consumption where appropriate.
 - Task start is blocked unless `main` is clean/synced and there is no open non-merged task PR for the current operator.
 - Open one PR per task branch and merge only after required checks are green.
+- Every task PR title must be `TASK-XXX: short summary` matching the branch task ID.
 - Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX` matching the branch task ID.
 - After merge, delete the task branch to avoid stale branch drift.
 - Task start sequence is mandatory: `git switch main` → `git pull --ff-only` → create/switch task branch.

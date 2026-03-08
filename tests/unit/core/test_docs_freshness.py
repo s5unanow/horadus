@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import src.core.docs_freshness as docs_freshness_module
 from src.core.docs_freshness import (
     DocsFreshnessIssue,
     DocsFreshnessResult,
@@ -373,6 +374,48 @@ def test_docs_freshness_flags_missing_fallback_guidance_statement(tmp_path: Path
     )
 
     assert any(issue.rule_id == "fallback_guidance_statement_missing" for issue in result.errors)
+
+
+def test_docs_freshness_keeps_dependency_and_fallback_path_sets_independent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+
+    dependency_only_path = "docs/dependency-only.md"
+    fallback_only_path = "docs/fallback-only.md"
+    (tmp_path / dependency_only_path).write_text(
+        "\n".join(dependency_aware_guidance_statements()[1:]) + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / fallback_only_path).write_text(
+        "\n".join(fallback_guidance_statements()) + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        docs_freshness_module,
+        "DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS",
+        (dependency_only_path,),
+    )
+    monkeypatch.setattr(
+        docs_freshness_module,
+        "FALLBACK_GUIDANCE_REFERENCE_PATHS",
+        (fallback_only_path,),
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "dependency_guidance_statement_missing" for issue in result.errors)
+    assert not any(
+        issue.path == fallback_only_path
+        and issue.rule_id == "dependency_guidance_statement_missing"
+        for issue in result.errors
+    )
 
 
 def test_docs_freshness_flags_missing_hierarchy_reference_link(tmp_path: Path) -> None:

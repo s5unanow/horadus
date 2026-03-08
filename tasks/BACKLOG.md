@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-282`.
+- Next available task IDs start at `TASK-284`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5214,6 +5214,48 @@ structured record.
 - [ ] The prompts forbid causal explanations, named entities, locations, or confidence claims that are not directly supported by the payload fields available to that prompt
 - [ ] Sparse, conflicting, or low-coverage inputs produce calibrated uncertainty language instead of overstated narrative confidence
 - [ ] Tests cover the tightened prompt contract language so future prompt edits cannot silently weaken the evidence/uncertainty rules
+
+---
+
+### TASK-282: Validate Dependency Guidance Against Its Own Path Set
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+
+`run_docs_freshness_check` currently validates dependency-aware guidance inside
+the fallback-guidance path loop, so `DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS`
+only enforces file existence. That creates a latent bug where dependency-only
+surfaces would not be checked for required dependency guidance, while
+fallback-only surfaces could be checked against the wrong statement set.
+
+**Files**: `src/core/docs_freshness.py`, `tests/unit/core/test_docs_freshness.py`
+
+**Acceptance Criteria**:
+- [ ] Dependency-aware guidance statements are validated inside the dependency-aware path loop, not the fallback-guidance loop
+- [ ] Fallback guidance validation remains scoped to fallback guidance paths only
+- [ ] Tests cover the case where dependency and fallback path sets diverge so the bug cannot silently return
+- [ ] Relevant docs-freshness validation passes after the fix
+
+---
+
+### TASK-283: Forbid Agent-Initiated Review Timeout Overrides in `horadus tasks finish`
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+The review gate timeout in `horadus tasks finish` is intended to be a repo
+policy control, but agents can currently override it ad hoc through the
+environment. Harden the finish flow and agent-facing guidance so agents must
+not lower the default review timeout unless a human explicitly asks for that
+override, and agents must not proactively suggest timeout reductions on their
+own.
+
+**Files**: `src/horadus_cli/task_commands.py`, `scripts/check_pr_review_gate.py`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks finish` rejects agent-initiated review timeout overrides by default, while still allowing an explicit human-authorized path if the workflow chooses to support one
+- [ ] The default 10-minute review window remains the canonical timeout unless a human explicitly requests something else
+- [ ] Agent-facing guidance explicitly forbids agents from changing the review timeout on their own or suggesting a shorter timeout unprompted
+- [ ] Tests cover the default timeout behavior plus the blocked-override path
+- [ ] The repo docs/skill surfaces stay aligned with the hardened timeout policy
 
 ---
 

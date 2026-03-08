@@ -271,6 +271,10 @@ Tasks that have been completed and verified.
   Added explicit Tier-1 score bands around the runtime threshold plus targeted examples for current-event positives and media/history negatives.
   Added prompt regression tests to keep the rubric and examples from drifting.
   Evaluated the updated prompt against the gold set before promotion and did not promote a new baseline.
+- TASK-275: Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
+  `horadus tasks finish` now requires a positive review-gate timeout, rejects zero-time bypass attempts, and keeps the CLI as the canonical completion path.
+- TASK-276: Allow Finish Merge After Silent Review Timeout ✅
+  The finish review gate now waits the full review window, blocks actionable current-head Codex feedback, and allows merge when the timeout expires silently with no actionable comments.
 ## Archive
 
 (Older sprints will be archived here)

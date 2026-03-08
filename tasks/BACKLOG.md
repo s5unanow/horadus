@@ -5082,25 +5082,27 @@ swapping to raw merge commands when the CLI is available.
 
 ---
 
-### TASK-276: Treat Clean Codex Review Issue Comments as Review-Gate Success
+### TASK-276: Allow Finish Merge After Silent Review Timeout
 **Priority**: P1 (High)
 **Estimate**: 1-3 hours
-**Spec**: `tasks/specs/276-clean-codex-issue-comment-review-gate.md`
+**Spec**: `tasks/specs/276-allow-silent-review-timeout-merge.md`
 
-`horadus tasks finish` now fails closed on review timeout, but the current
-Codex GitHub integration can respond to `@codex review` with a clean issue
-comment instead of a current-head PR review. The review gate currently ignores
-that success signal, so clean PRs can block indefinitely until timeout even
-when Codex has already reviewed the current head and found no issues.
+`horadus tasks finish` currently fails closed on review timeout, but Codex
+review delivery is not guaranteed because quota exhaustion or integration
+behavior can leave the PR with no feedback at all. The workflow should match
+repo policy: wait the full review window, force agents to address any
+actionable review comments that arrive during that window, and allow merge when
+the window expires with no actionable feedback.
 
 **Files**: `scripts/check_pr_review_gate.py`, `src/horadus_cli/task_commands.py`, `tests/unit/scripts/`, `tests/unit/test_cli.py`, `docs/AGENT_RUNBOOK.md`
 
 **Acceptance Criteria**:
-- [ ] The finish review gate recognizes a clean Codex issue comment for the current PR head as a success condition, or otherwise uses an equivalent machine-checkable current-head success signal
-- [ ] Stale clean comments from an older head commit and comments from other authors do not satisfy the gate
+- [ ] `horadus tasks finish` waits the full configured review timeout before deciding whether merge may continue
+- [ ] If actionable current-head Codex review feedback appears during the wait window, the finish flow blocks and requires the feedback to be addressed
+- [ ] If no actionable current-head Codex feedback appears by timeout expiry, the finish flow may continue without requiring an explicit clean-review success signal
+- [ ] Silence caused by review quota exhaustion or equivalent no-feedback conditions does not deadlock task completion
 - [ ] Actionable current-head Codex review comments still fail the gate
-- [ ] `horadus tasks finish` can complete on a clean PR after Codex responds with its current issue-comment-only success path
-- [ ] Tests cover clean issue-comment success, stale-head rejection, and coexistence with actionable inline review feedback
+- [ ] Tests cover silent-timeout allow behavior, actionable-feedback blocking, and representative stale-head/non-current-head edge cases
 
 ---
 

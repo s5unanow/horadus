@@ -221,10 +221,12 @@ Task workflow guard commands:
 
 ```bash
 uv run --no-sync horadus tasks preflight
-uv run --no-sync horadus tasks safe-start TASK-117 --name short-name
+uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name
+uv run --no-sync horadus tasks context-pack TASK-XXX
+make agent-check
 uv run --no-sync horadus tasks local-gate --full
-uv run --no-sync horadus tasks lifecycle TASK-117 --strict
-uv run --no-sync horadus tasks finish TASK-117
+uv run --no-sync horadus tasks lifecycle TASK-XXX --strict
+uv run --no-sync horadus tasks finish TASK-XXX
 ```
 
 Each task PR must include:
@@ -259,9 +261,9 @@ required action is a Docker-gated push. Unsupported environments fail closed
 with an explicit “start Docker and retry” blocker instead of silently skipping
 integration expectations.
 
-Use raw `git` / `gh` only when the Horadus CLI does not expose the needed
-workflow step yet, or when the CLI explicitly tells you a manual recovery step
-is required.
+Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
+needed workflow step yet, or when the CLI explicitly tells you a manual
+recovery step is required.
 
 ## Production Deployment
 

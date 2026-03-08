@@ -34,10 +34,9 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 workflow-centralization hardening follow-up intake
-  (remaining recommended sequencing: `TASK-264` → `TASK-262` → `TASK-265` →
-  `TASK-266`; one task per branch/PR):
+  (remaining recommended sequencing: `TASK-262` → `TASK-265` → `TASK-266`;
+  one task per branch/PR):
   - `TASK-262` Enforce No Early Completion Claims in Agent Workflow Guidance
-  - `TASK-264` Enforce Horadus CLI, Skill, and Docs Drift Consistency
   - `TASK-265` Add Structured Horadus CLI Friction Logging
   - `TASK-266` Add Daily Horadus Friction Summary Automation
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
@@ -151,3 +150,9 @@
   agent-safe-start` is reduced to a thin compatibility wrapper, and the repo
   docs plus Horadus skill now point agents to one consistent CLI workflow
   surface.
+- `TASK-264` Enforce Horadus CLI, Skill, and Docs Drift Consistency ✅
+  completion note: canonical task-workflow commands now come from one shared
+  source, `horadus tasks context-pack` emits that same workflow guidance, and
+  the repo-owned docs freshness gate fails when AGENTS/README/runbook/Horadus
+  skill surfaces drift away from the canonical CLI workflow commands or raw
+  `git`/`gh` escape-hatch guidance.

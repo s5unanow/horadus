@@ -18,7 +18,7 @@ Compatibility wrapper:
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks safe-start` flow.
 
-3. `uv run --no-sync horadus tasks context-pack TASK-XXX --format json`
+3. `uv run --no-sync horadus tasks context-pack TASK-XXX`
 When: collect backlog/spec/sprint context for an implementation task.
 
 4. `make agent-check`
@@ -51,12 +51,12 @@ When: deterministic no-network/no-LLM regression exercise.
 10. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
 When: full pre-release checks before promotion.
 
-11. `uv run --no-sync horadus tasks lifecycle [TASK-XXX] [--strict]`
+11. `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
 When: inspect machine-checkable task lifecycle state.
-Use `--strict` to verify repo-policy completion; success requires state
+Use the strict form to verify repo-policy completion; success requires state
 `local-main-synced`.
 
-12. `uv run --no-sync horadus tasks finish [TASK-XXX]`
+12. `uv run --no-sync horadus tasks finish TASK-XXX`
 When: canonical task-completion command; finishes the current task PR lifecycle
 (branch/task verification -> pushed branch/PR checks -> current-head review gate
 -> merge -> local `main` sync -> strict lifecycle verification).
@@ -69,8 +69,8 @@ Compatibility wrapper:
   `horadus tasks finish` flow.
 
 Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
-needed workflow step yet, or when the CLI reports a blocker that requires a
-manual recovery step.
+needed workflow step yet, or when the CLI explicitly tells you a manual
+recovery step is required.
 
 13. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).

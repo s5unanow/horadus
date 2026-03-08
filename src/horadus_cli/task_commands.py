@@ -1082,7 +1082,7 @@ def task_lifecycle_state(snapshot: TaskLifecycleSnapshot) -> str:
     if snapshot.pr is not None:
         if snapshot.pr.state == "MERGED":
             if (
-                snapshot.current_branch == "main"
+                snapshot.current_branch in {"main", "HEAD"}
                 and snapshot.working_tree_clean
                 and snapshot.local_main_synced
                 and snapshot.merge_commit_on_main
@@ -1111,17 +1111,16 @@ def resolve_task_lifecycle(
         )
 
     current_branch = branch_result.stdout.strip()
-    if current_branch == "HEAD":
-        return (
-            ExitCode.VALIDATION_ERROR,
-            {"current_branch": current_branch},
-            [
-                "Task lifecycle failed.",
-                "Detached HEAD is not supported; pass TASK-XXX explicitly or switch to a branch.",
-            ],
-        )
-
     if task_input is None:
+        if current_branch == "HEAD":
+            return (
+                ExitCode.VALIDATION_ERROR,
+                {"current_branch": current_branch},
+                [
+                    "Task lifecycle failed.",
+                    "A task id is required when running from detached HEAD.",
+                ],
+            )
         inferred_task_id = _task_id_from_branch_name(current_branch)
         if inferred_task_id is None:
             return (

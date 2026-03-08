@@ -33,6 +33,18 @@
   - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
+- Newly queued from 2026-03-08 closed-PR review follow-up intake
+  (recommended sequencing: `TASK-268` -> `TASK-269` -> `TASK-270` ->
+  `TASK-273` -> `TASK-271` -> `TASK-272`; one task per branch/PR):
+  - `TASK-268` Permit Explicit Task Lifecycle Verification from Detached HEAD
+  - `TASK-269` Respect `UV_BIN` Across Full Local Gate Build Steps
+  - `TASK-270` Make Eval Directory Provenance Repo-Stable and Loader-Scoped
+  - `TASK-271` Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In
+  - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
+  - `TASK-273` Constrain Tier-2 Trend Payloads to the Safe Input Budget
+- Newly queued from 2026-03-08 workflow-consistency intake
+  (one task per branch/PR):
+  - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

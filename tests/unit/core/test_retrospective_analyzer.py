@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -67,6 +68,18 @@ def test_fallback_narrative_reports_unknown_coverage() -> None:
 
     assert "resolved coverage at unknown" in narrative
     assert "Conclusions should be treated as provisional" in narrative
+
+
+def test_retrospective_prompt_contract_requires_grounded_provisional_language() -> None:
+    prompt = Path("ai/prompts/retrospective_analysis.md").read_text(encoding="utf-8")
+
+    assert (
+        "Every narrative claim must be directly supported by the provided structured payload"
+        in prompt
+    )
+    assert "explicitly framed as uncertainty/inference" in prompt
+    assert "Do not add unsupported causal explanations, locations, or confidence claims" in prompt
+    assert "keep the narrative explicitly provisional" in prompt
 
 
 @pytest.mark.asyncio

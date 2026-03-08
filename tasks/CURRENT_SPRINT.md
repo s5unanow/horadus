@@ -45,9 +45,6 @@
 - Newly queued from 2026-03-08 workflow-consistency intake
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
-- Newly queued from 2026-03-08 workflow/prompt contract hardening intake
-  (remaining recommended sequencing: `TASK-281`; one task per branch/PR):
-  - `TASK-281` Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -214,3 +211,8 @@
   inference-vs-fact labeling, and explicit repo citation rules, while the
   runbook keeps that heavier pattern scoped away from ordinary implementation
   work.
+- `TASK-281` Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty ✅
+  completion note: the weekly, monthly, and retrospective narrative prompts
+  now require every claim to be payload-grounded or explicitly provisional,
+  forbid unsupported causal/confidence/location details, and have regression
+  tests that keep those evidence and uncertainty rules from silently weakening.

@@ -295,6 +295,11 @@ Tasks that have been completed and verified.
   synthesize` research mode with contradiction handling, inference-vs-fact
   labeling, and explicit repo citation rules, while ordinary implementation
   guidance remains lighter-weight.
+- TASK-281: Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty ✅
+  The weekly, monthly, and retrospective narrative prompts now require every
+  claim to stay payload-grounded or explicitly provisional, forbid unsupported
+  causal/confidence/location details, and are covered by prompt-text
+  regression tests.
 ## Archive
 
 (Older sprints will be archived here)

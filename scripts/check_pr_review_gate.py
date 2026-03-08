@@ -108,7 +108,7 @@ def main(argv: list[str] | None = None) -> int:
         "--timeout-seconds",
         type=int,
         default=600,
-        help="How long to wait for a current-head review before timing out.",
+        help="How long to wait for a current-head review before timing out; must be positive.",
     )
     parser.add_argument(
         "--poll-seconds",
@@ -118,14 +118,14 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--timeout-policy",
-        choices=("allow", "fail"),
-        default="allow",
-        help="Whether timeout allows merge to continue or fails closed.",
+        choices=("fail",),
+        default="fail",
+        help="Timeout policy is fixed to fail closed.",
     )
     args = parser.parse_args(argv)
 
-    if args.timeout_seconds < 0:
-        parser.error("--timeout-seconds must be non-negative")
+    if args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be positive")
     if args.poll_seconds < 0:
         parser.error("--poll-seconds must be non-negative")
 
@@ -155,9 +155,6 @@ def main(argv: list[str] | None = None) -> int:
                 f"no current-head review from {args.reviewer_login} for {head_oid} "
                 f"within {args.timeout_seconds}s."
             )
-            if args.timeout_policy == "allow":
-                print(f"{message} Continuing due to timeout policy=allow.")
-                return 0
             print(f"{message} Failing due to timeout policy=fail.")
             return 1
 

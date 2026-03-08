@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-275`.
+- Next available task IDs start at `TASK-276`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5057,6 +5057,28 @@ metadata, and PR title stay aligned.
 - [ ] The rule coexists cleanly with conventional-commit commit messages instead of replacing commit-level naming policy
 - [ ] Task-completion workflow output and examples no longer suggest mixed PR-title conventions
 - [ ] Tests cover valid task PR titles and representative invalid cases such as `feat(scope): ...` on a task branch
+
+---
+
+### TASK-275: Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+**Spec**: `tasks/specs/275-finish-review-gate-timeout.md`
+
+`horadus tasks finish` is supposed to be the only canonical completion path,
+but recent merges fell back to raw `gh pr merge` after checks were green. Close
+that loophole so agents must stay on the CLI path, must wait the configured
+review-gate timeout, and cannot bypass the gate by forcing a zero timeout or by
+swapping to raw merge commands when the CLI is available.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks finish` remains the canonical completion path when the CLI is available; agent-facing guidance no longer leaves room for raw `gh pr merge` bypass during normal task completion
+- [ ] The finish flow always honors a positive review-gate timeout and fails closed when the timeout expires without satisfying the required review condition
+- [ ] Passing `0` (or any equivalent no-wait value) cannot be used to skip the review-gate wait path
+- [ ] Timeout failures surface a specific blocker and next required action instead of encouraging a raw merge fallback
+- [ ] Tests cover the positive-timeout requirement, timeout-expiry blocker behavior, and representative bypass attempts
 
 ---
 

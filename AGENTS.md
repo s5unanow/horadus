@@ -119,6 +119,7 @@ After completing work:
 - Mechanical completion for a task is defined by `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`; success requires the verifier to report `local-main-synced`.
 - Default autonomous completion for engineering tasks is full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync), not just local code changes.
 - Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
+- `horadus tasks finish` must always wait a positive review-gate timeout and fail closed if the required current-head review does not arrive; timeout expiry is a blocker, not permission to bypass the CLI with raw `gh pr merge`.
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
 - Resolve locally solvable environment blockers before reporting blocked.
@@ -156,7 +157,8 @@ After completing work:
   task execution.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
-  recovery step is required.
+  recovery step is required. A review-gate timeout from `horadus tasks finish`
+  is not a manual-recovery signal.
 - Tests: `pytest tests/ -v`
 - Dev API: `uvicorn src.api.main:app --reload`
 - Format/lint: `ruff format src/ tests/` and `ruff check src/ tests/`

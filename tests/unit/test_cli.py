@@ -2646,7 +2646,7 @@ def test_resolve_task_lifecycle_allows_explicit_task_id_from_detached_head(
         review_timeout_seconds=1,
         review_poll_seconds=0,
         review_bot_login="bot",
-        review_timeout_policy="allow",
+        review_timeout_policy="fail",
     )
     responses = iter(
         [
@@ -2693,7 +2693,7 @@ def test_resolve_task_lifecycle_requires_explicit_task_id_from_detached_head(
         review_timeout_seconds=1,
         review_poll_seconds=0,
         review_bot_login="bot",
-        review_timeout_policy="allow",
+        review_timeout_policy="fail",
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -2725,7 +2725,7 @@ def test_resolve_finish_context_rejects_task_mismatch(
         review_timeout_seconds=1,
         review_poll_seconds=0,
         review_bot_login="bot",
-        review_timeout_policy="allow",
+        review_timeout_policy="fail",
     )
     responses = iter(
         [
@@ -2936,6 +2936,109 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     assert "required PR checks did not pass before timeout" in lines[0]
     assert "Inspect the failing required checks" in lines[1]
     assert lines[-1] == "required-check failure details"
+
+
+def test_finish_task_data_rejects_zero_review_timeout_override(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REVIEW_TIMEOUT_SECONDS", "0")
+
+    exit_code, _data, lines = task_commands_module.finish_task_data("TASK-275", dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert lines == [
+        "Task finish blocked: REVIEW_TIMEOUT_SECONDS must be positive for `horadus tasks finish`.",
+        "Next action: Fix the invalid environment override and re-run `horadus tasks finish`.",
+    ]
+
+
+def test_finish_task_data_rejects_review_timeout_policy_bypass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("REVIEW_TIMEOUT_POLICY", "allow")
+
+    exit_code, _data, lines = task_commands_module.finish_task_data("TASK-275", dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert lines == [
+        "Task finish blocked: REVIEW_TIMEOUT_POLICY must remain `fail` for `horadus tasks finish`.",
+        "Next action: Fix the invalid environment override and re-run `horadus tasks finish`.",
+    ]
+
+
+def test_finish_task_data_blocks_when_review_gate_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-275-enforce-finish-review-timeout",
+            branch_task_id="TASK-275",
+            task_id="TASK-275",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-275 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, []),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            returncode=1,
+            stdout=(
+                "review gate timeout: no current-head review from "
+                "chatgpt-codex-connector[bot] for head-sha-275 within 600s. "
+                "Failing due to timeout policy=fail."
+            ),
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/275\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/275"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-275: enforce finish timeout","body":"Primary-Task: TASK-275\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-275", dry_run=False)
+
+    assert exit_code == 1
+    assert data["pr_url"] == "https://example.invalid/pr/275"
+    assert (
+        lines[0]
+        == "Task finish blocked: review gate timed out before the required current-head review arrived."
+    )
+    assert (
+        lines[1]
+        == "Next action: Wait for a current-head review from `chatgpt-codex-connector[bot]`, then re-run `horadus tasks finish`."
+    )
+    assert lines[-1].startswith("review gate timeout:")
 
 
 def test_finish_task_data_blocks_when_pr_title_or_body_is_invalid(

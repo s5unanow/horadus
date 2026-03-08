@@ -271,7 +271,6 @@ Tasks that have been completed and verified.
   Added explicit Tier-1 score bands around the runtime threshold plus targeted examples for current-event positives and media/history negatives.
   Added prompt regression tests to keep the rubric and examples from drifting.
   Evaluated the updated prompt against the gold set before promotion and did not promote a new baseline.
-
 ## Archive
 
 (Older sprints will be archived here)

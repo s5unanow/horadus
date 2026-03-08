@@ -64,7 +64,7 @@ esac
 
     result = _run_gate(
         env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
-        args=["--pr-url", "https://example.invalid/pr/215", "--timeout-seconds", "0"],
+        args=["--pr-url", "https://example.invalid/pr/215", "--timeout-seconds", "1"],
     )
     assert result.returncode == 0
     assert "review gate passed" in result.stdout
@@ -104,14 +104,14 @@ esac
 
     result = _run_gate(
         env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
-        args=["--pr-url", "https://example.invalid/pr/215", "--timeout-seconds", "0"],
+        args=["--pr-url", "https://example.invalid/pr/215", "--timeout-seconds", "1"],
     )
     assert result.returncode == 2
     assert "actionable current-head review comments found" in result.stdout
     assert "scripts/finish_task_pr.sh:80" in result.stdout
 
 
-def test_review_gate_allows_timeout_when_no_review_arrives(tmp_path: Path) -> None:
+def test_review_gate_fails_closed_when_no_review_arrives(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_executable(
@@ -145,8 +145,60 @@ esac
 
     result = _run_gate(
         env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
+    )
+    assert result.returncode == 1
+    assert "review gate timeout" in result.stdout
+    assert "timeout policy=fail" in result.stdout
+
+
+def test_review_gate_rejects_non_positive_timeout(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+exit 1
+""",
+    )
+
+    result = _run_gate(
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
         args=["--pr-url", "https://example.invalid/pr/215", "--timeout-seconds", "0"],
     )
-    assert result.returncode == 0
-    assert "review gate timeout" in result.stdout
-    assert "timeout policy=allow" in result.stdout
+
+    assert result.returncode == 2
+    assert "--timeout-seconds must be positive" in result.stderr
+
+
+def test_review_gate_rejects_timeout_policy_bypass_argument(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+exit 1
+""",
+    )
+
+    result = _run_gate(
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--timeout-policy",
+            "allow",
+        ],
+    )
+
+    assert result.returncode == 2
+    assert "invalid choice: 'allow'" in result.stderr

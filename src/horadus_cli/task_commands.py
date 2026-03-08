@@ -36,7 +36,7 @@ DEFAULT_CHECKS_POLL_SECONDS = 10
 DEFAULT_REVIEW_TIMEOUT_SECONDS = 600
 DEFAULT_REVIEW_POLL_SECONDS = 10
 DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
-DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
+DEFAULT_REVIEW_TIMEOUT_POLICY = "fail"
 DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
@@ -217,6 +217,24 @@ def _read_int_env(name: str, default: int) -> int:
         raise ValueError(f"{name} must be an integer.") from exc
     if value < 0:
         raise ValueError(f"{name} must be non-negative.")
+    return value
+
+
+def _read_positive_int_env(name: str, default: int, *, command_name: str) -> int:
+    value = _read_int_env(name, default)
+    if value == 0:
+        raise ValueError(f"{name} must be positive for `{command_name}`.")
+    return value
+
+
+def _read_review_timeout_policy_env() -> str:
+    raw = getenv("REVIEW_TIMEOUT_POLICY")
+    if raw is None or not raw.strip():
+        return DEFAULT_REVIEW_TIMEOUT_POLICY
+
+    value = raw.strip().lower()
+    if value != DEFAULT_REVIEW_TIMEOUT_POLICY:
+        raise ValueError("REVIEW_TIMEOUT_POLICY must remain `fail` for `horadus tasks finish`.")
     return value
 
 
@@ -659,12 +677,14 @@ def _finish_config() -> FinishConfig:
             "CHECKS_TIMEOUT_SECONDS", DEFAULT_CHECKS_TIMEOUT_SECONDS
         ),
         checks_poll_seconds=_read_int_env("CHECKS_POLL_SECONDS", DEFAULT_CHECKS_POLL_SECONDS),
-        review_timeout_seconds=_read_int_env(
-            "REVIEW_TIMEOUT_SECONDS", DEFAULT_REVIEW_TIMEOUT_SECONDS
+        review_timeout_seconds=_read_positive_int_env(
+            "REVIEW_TIMEOUT_SECONDS",
+            DEFAULT_REVIEW_TIMEOUT_SECONDS,
+            command_name="horadus tasks finish",
         ),
         review_poll_seconds=_read_int_env("REVIEW_POLL_SECONDS", DEFAULT_REVIEW_POLL_SECONDS),
         review_bot_login=getenv("REVIEW_BOT_LOGIN") or DEFAULT_REVIEW_BOT_LOGIN,
-        review_timeout_policy=getenv("REVIEW_TIMEOUT_POLICY") or DEFAULT_REVIEW_TIMEOUT_POLICY,
+        review_timeout_policy=_read_review_timeout_policy_env(),
     )
 
 
@@ -1884,11 +1904,20 @@ def finish_task_data(
         )
         review_result = _run_review_gate(pr_url=pr_url, config=config)
         if review_result.returncode != 0:
+            review_lines = _output_lines(review_result)
+            review_timed_out = any(line.startswith("review gate timeout:") for line in review_lines)
             return _task_blocked(
-                "review gate did not pass.",
+                (
+                    "review gate timed out before the required current-head review arrived."
+                    if review_timed_out
+                    else "review gate did not pass."
+                ),
                 next_action=(
-                    "Address the current-head review feedback or reviewer timeout blocker, "
-                    "then re-run `horadus tasks finish`."
+                    f"Wait for a current-head review from `{config.review_bot_login}`, then "
+                    "re-run `horadus tasks finish`."
+                    if review_timed_out
+                    else "Address the current-head review feedback, then re-run "
+                    "`horadus tasks finish`."
                 ),
                 data={
                     "task_id": context.task_id,
@@ -1896,7 +1925,7 @@ def finish_task_data(
                     "pr_url": pr_url,
                 },
                 exit_code=review_result.returncode,
-                extra_lines=_output_lines(review_result),
+                extra_lines=review_lines,
             )
         lines.extend(_output_lines(review_result))
 

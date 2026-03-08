@@ -220,8 +220,9 @@ The project uses a `Makefile` to simplify common tasks. Run `make help` to see a
 Task workflow guard commands:
 
 ```bash
-make task-preflight
-make task-start TASK=117 NAME=short-name
+uv run --no-sync horadus tasks preflight
+make agent-safe-start TASK=117 NAME=short-name
+uv run --no-sync horadus tasks finish TASK-117
 ```
 
 Each task PR must include:
@@ -229,6 +230,11 @@ Each task PR must include:
 ```text
 Primary-Task: TASK-XXX
 ```
+
+`horadus tasks finish` is the canonical task-completion command. It does not
+report success unless the branch is pushed, the PR exists, required checks are
+green, the review gate passes, the PR is merged, and local `main` is synced.
+`make task-finish` is a compatibility wrapper to the same CLI flow.
 
 ## Production Deployment
 

@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-258`.
+- Next available task IDs start at `TASK-267`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -4683,6 +4683,203 @@ separate manual check.
 - [ ] Any operator-facing gate commands or docs stay aligned with the existing `horadus` CLI and runbook entry points rather than introducing a divergent parallel workflow
 - [ ] Docs explain when the full coverage gate runs, how to run it locally, and how to debug failures
 - [ ] `TASK-253` is completed first or otherwise the hard gate is introduced in the same change that brings measured coverage to 100%
+
+---
+
+### TASK-258: Add a Canonical Horadus Task Completion Command
+**Priority**: P1 (High)
+**Estimate**: 4-8 hours
+
+The repo defines completion as full delivery lifecycle, but that contract is
+still spread across docs, hooks, and CI. Add one canonical `horadus` workflow
+command that drives task completion end-to-end so agents cannot stop on a
+partial local milestone and still believe the task is done. This task should
+consolidate the existing completion flow rather than introducing a second
+independent lifecycle engine alongside `make task-finish`.
+
+**Files**: `src/horadus_cli/`, `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `docs/AGENT_RUNBOOK.md`, `README.md`, `tests/unit/test_cli.py`, `tests/unit/scripts/`, `Makefile`
+
+**Acceptance Criteria**:
+- [ ] Add one canonical completion command in `horadus` CLI (for example `horadus tasks finish TASK-XXX`)
+- [ ] The command verifies branch/task identity and enforces the repo’s completion sequence rather than just printing guidance
+- [ ] The command does not report success unless the task branch is pushed, a PR exists, required checks are green, the PR is merged, and local `main` is synced to the merged result
+- [ ] The command either completes the full lifecycle or exits non-zero with a specific blocker and next required action
+- [ ] `make task-finish` remains available only as a thin compatibility wrapper that delegates to the canonical `horadus` completion command
+- [ ] Existing wrapper targets/docs point to the `horadus` command as the canonical completion path instead of creating a parallel workflow
+- [ ] Unit tests cover both success flow and representative blocked states
+
+---
+
+### TASK-259: Add a Mechanical Done-State Verifier and Explicit Lifecycle States
+**Priority**: P1 (High)
+**Estimate**: 3-6 hours
+
+“Done” should be machine-checkable, not inferred from scattered state. Add a
+repo-owned verifier plus explicit lifecycle states so local implementation,
+pushed branch, open PR, green CI, merged PR, and synced `main` are distinct
+states that tooling can reason about.
+
+**Files**: `src/horadus_cli/`, `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Add a repo-owned command that reports task lifecycle state in structured output
+- [ ] Lifecycle states distinguish at least: local-only, pushed, PR-open, CI-green, merged, and local-main-synced
+- [ ] Add a strict verifier mode that exits non-zero unless the task is truly complete by repo policy
+- [ ] The verifier is reusable by other workflow commands instead of duplicating lifecycle checks
+- [ ] Agent-facing docs define completion in terms of the verifier, not informal interpretation
+- [ ] Tests cover the state transitions and strict-failure cases
+
+---
+
+### TASK-260: Add a Full Local CI-Parity Gate in Horadus CLI
+**Priority**: P1 (High)
+**Estimate**: 3-6 hours
+
+CI found issues that were locally reproducible but not run through one
+canonical gate. Add a full local parity gate in `horadus` CLI that runs the
+same categories of checks expected before PR/merge so agents cannot stop after
+only targeted validation. This task should operationalize the canonical
+post-task local gate introduced by `TASK-252` through `horadus`, not invent a
+second competing local-gate authority.
+
+**Files**: `src/horadus_cli/`, `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `README.md`, `Makefile`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Add the canonical `horadus` CLI surface for the post-task local gate defined by `TASK-252` (for example `horadus tasks local-gate --full`)
+- [ ] If a `make` local-gate wrapper exists, it delegates to the canonical `horadus` command rather than implementing separate gate logic
+- [ ] The gate covers docs freshness, repo-wide Ruff, mypy, full unit tests with coverage, and any other repo-required pre-PR checks
+- [ ] Output clearly identifies which sub-step failed and preserves useful command output without overwhelming agent context
+- [ ] The full gate remains distinct from the fast iteration gate so local inner-loop workflow is not overloaded
+- [ ] Repo docs and context-pack guidance use the same canonical command when describing pre-PR validation
+- [ ] Tests cover command wiring, failure propagation, and command list drift
+
+---
+
+### TASK-261: Auto-Handle Docker Readiness for Workflow Gates
+**Priority**: P1 (High)
+**Estimate**: 2-5 hours
+
+When the completion path requires Docker-backed integration checks, “Docker not
+running” should not silently devolve into a manual excuse if the environment is
+locally recoverable. Add explicit Docker readiness checks and best-effort local
+startup/wait logic to explicit canonical workflow commands such as the full
+local gate and completion path.
+
+**Files**: `src/horadus_cli/`, `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] Explicit workflow commands such as the canonical full local gate and completion path detect when Docker is required for the next step
+- [ ] On supported local environments, the workflow attempts to start Docker and waits for daemon readiness before failing
+- [ ] If Docker still cannot be made ready, the command exits non-zero with a specific blocker message instead of leaving ambiguous partial state
+- [ ] Docker auto-start/readiness handling does not silently trigger from unrelated `horadus` subcommands that do not require integration services
+- [ ] Behavior is safe and explicit: no hidden bypass of integration gates is introduced
+- [ ] Docs explain when Docker auto-start is attempted and how unsupported environments fail
+- [ ] Tests cover ready, auto-recovered, and still-blocked cases
+
+---
+
+### TASK-262: Enforce No Early Completion Claims in Agent Workflow Guidance
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+
+Agents should not describe a task as complete when it is only locally tested or
+committed. Tighten repo guidance so “done”, “complete”, and equivalent claims
+are reserved for mechanically verified end states.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `tasks/BACKLOG.md`, `tests/unit/core/test_docs_freshness.py`
+
+**Acceptance Criteria**:
+- [ ] Agent guidance explicitly forbids claiming a task is complete before the canonical completion verifier passes
+- [ ] Guidance explicitly says local commits, local tests, and local clean working tree are not completion
+- [ ] Guidance explicitly says agents should not stop at commit boundaries unless the user requested checkpoints
+- [ ] Guidance explicitly says locally solvable environment blockers should be resolved before reporting blocked
+- [ ] Docs freshness or equivalent drift checks are extended if needed so this guidance cannot silently regress
+
+---
+
+### TASK-263: Route Repo Workflow Automation Through Horadus CLI and Skill
+**Priority**: P1 (High)
+**Estimate**: 3-6 hours
+
+Repo workflow automation should be discoverable and consistent. Make `horadus`
+CLI the canonical surface for task workflow commands wherever practical and
+update the Horadus skill so agents are steered toward those commands instead of
+ad-hoc git/hook interpretation.
+
+**Files**: `src/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Task workflow commands that the repo expects agents to run are exposed via `horadus` CLI wherever an equivalent is practical
+- [ ] Agent-facing docs treat `horadus` CLI as the canonical workflow surface and explain when raw git/gh commands are still necessary
+- [ ] The Horadus skill is updated to prefer the canonical CLI workflow commands for task lifecycle operations
+- [ ] Existing docs/runbook/context-pack references are aligned so they do not point agents toward divergent workflow entrypoints
+- [ ] Tests cover any new CLI workflow entrypoints added by this task
+
+---
+
+### TASK-264: Enforce Horadus CLI, Skill, and Docs Drift Consistency
+**Priority**: P1 (High)
+**Estimate**: 3-6 hours
+
+If `horadus` is the canonical workflow surface, agents must be able to trust
+that the CLI, Horadus skill, runbook, and task-context guidance all describe
+the same commands and preferred flow. Add explicit drift checks so this does not
+decay silently.
+
+**Files**: `src/horadus_cli/`, `ops/skills/horadus-cli/SKILL.md`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `README.md`, `tests/unit/test_cli.py`, `tests/unit/core/test_docs_freshness.py`, `scripts/`
+
+**Acceptance Criteria**:
+- [ ] Canonical `horadus` workflow commands are documented in one consistent set across CLI help, Horadus skill, and agent-facing docs
+- [ ] Add a repo-owned drift check that fails when the Horadus skill or workflow docs fall out of sync with the canonical CLI workflow commands
+- [ ] `horadus tasks context-pack` points agents to the same preferred workflow commands rather than stale or parallel shell flows
+- [ ] Docs clearly state when raw `git`/`gh` is still appropriate as an escape hatch
+- [ ] Tests cover the drift-check logic and representative sync/mismatch cases
+
+---
+
+### TASK-265: Add Structured Horadus CLI Friction Logging
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+When `horadus` does not support a needed workflow or forces a confusing
+fallback, that signal should be captured in a structured, low-noise way without
+polluting normal task context. Add a small friction log that records only real
+workflow gaps and falls back, not routine successful usage.
+
+**Files**: `src/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `artifacts/agent/horadus-cli-feedback/`, `tests/unit/test_cli.py`
+
+**Acceptance Criteria**:
+- [ ] Add a structured friction-log format for Horadus workflow gaps stored under the gitignored path `artifacts/agent/horadus-cli-feedback/`
+- [ ] The format captures at least: date, task id, command attempted, fallback used, friction type, short note, and suggested improvement
+- [ ] Guidance explicitly says entries should be written only for real friction or forced fallback, not routine success cases
+- [ ] Runtime friction entries remain outside versioned task/spec/project data so agent workflow feedback is not mixed with product functionality or source-of-truth planning records
+- [ ] The friction-log flow is low-noise and does not require agents to read the log during normal task execution
+- [ ] CLI/docs/skill guidance explains how to record friction when Horadus is insufficient
+- [ ] Tests cover log-entry validation or append helpers if implemented in CLI tooling
+
+---
+
+### TASK-266: Add Daily Horadus Friction Summary Automation
+**Priority**: P2 (Medium)
+**Estimate**: 2-5 hours
+
+Structured friction capture only helps if it is periodically summarized into
+actionable follow-up. Add a daily automation that reviews new Horadus friction
+entries and produces a compact triage summary without flooding operators with
+raw log noise. Repo-managed automation desired state should remain versioned in
+`ops/automations/`, while `$CODEX_HOME/automations/` is treated only as the
+local applied runtime target.
+
+**Files**: `src/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `artifacts/agent/horadus-cli-feedback/`, `ops/automations/`, `scripts/sync_automations.py`, `tests/unit/test_cli.py`, `README.md`
+
+**Acceptance Criteria**:
+- [ ] Add a repo-supported workflow for summarizing new Horadus friction entries from `TASK-265`’s gitignored storage path into a compact daily report
+- [ ] The summary groups duplicate patterns and highlights candidate CLI/skill improvements rather than dumping raw entries verbatim
+- [ ] Repo-owned automation desired state for the summary flow is versioned under `ops/automations/` and applied into local `$CODEX_HOME/automations/` via the existing sync tooling rather than treating local Codex TOMLs as the source of truth
+- [ ] The automation or summary flow proposes candidate follow-up tasks, but backlog task creation requires explicit human review rather than automatic creation
+- [ ] Operator-facing docs explain where the summary appears and how it should be triaged
+- [ ] Any automation prompt/config stays aligned with repo workflow and Codex automation guidance
+- [ ] Tests cover the summary logic if implemented in repo code
 
 ---
 

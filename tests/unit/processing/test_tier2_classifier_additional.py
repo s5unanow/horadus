@@ -155,6 +155,7 @@ async def test_classify_events_aggregates_usage_metadata(mock_db_session) -> Non
                     completion_tokens=7,
                     api_calls=1,
                     estimated_cost_usd=0.2,
+                    active_provider="provider-b",
                     active_model="model-b",
                     active_reasoning_effort="low",
                 ),
@@ -167,7 +168,7 @@ async def test_classify_events_aggregates_usage_metadata(mock_db_session) -> Non
     assert result.classified == 2
     assert result.usage.prompt_tokens == 7
     assert result.usage.completion_tokens == 10
-    assert result.usage.active_provider == "provider-a"
+    assert result.usage.active_provider == "provider-b"
     assert result.usage.active_model == "model-b"
     assert result.usage.active_reasoning_effort == "low"
 

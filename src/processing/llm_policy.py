@@ -77,6 +77,18 @@ def extract_usage_tokens(response: Any) -> tuple[int, int]:
     return (prompt_tokens, completion_tokens)
 
 
+def apply_latest_active_route_metadata(*, target_usage: Any, source_usage: Any) -> None:
+    """Keep aggregated route metadata aligned with the latest real LLM invocation."""
+    source_api_calls = int(getattr(source_usage, "api_calls", 0) or 0)
+    source_provider = getattr(source_usage, "active_provider", None)
+    source_model = getattr(source_usage, "active_model", None)
+    if source_api_calls <= 0 and source_provider is None and source_model is None:
+        return
+    target_usage.active_provider = source_provider
+    target_usage.active_model = source_model
+    target_usage.active_reasoning_effort = getattr(source_usage, "active_reasoning_effort", None)
+
+
 def is_strict_schema_unsupported_error(exc: Exception) -> bool:
     status_code = LLMChatFailoverInvoker._extract_status_code(exc)
     if status_code != 400:

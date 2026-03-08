@@ -19,6 +19,7 @@ from openai import AsyncOpenAI
 from src.core.config import settings
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 from src.eval import artifact_provenance as provenance
+from src.processing.llm_policy import apply_latest_active_route_metadata
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import (
@@ -636,10 +637,18 @@ def _usage_to_dict(
         "tier1_completion_tokens": tier1_usage.completion_tokens,
         "tier1_api_calls": tier1_usage.api_calls,
         "tier1_estimated_cost_usd": round(tier1_usage.estimated_cost_usd, 8),
+        "tier1_active_provider": tier1_usage.active_provider,
+        "tier1_active_model": tier1_usage.active_model,
+        "tier1_active_reasoning_effort": tier1_usage.active_reasoning_effort,
+        "tier1_used_secondary_route": tier1_usage.used_secondary_route,
         "tier2_prompt_tokens": tier2_usage.prompt_tokens,
         "tier2_completion_tokens": tier2_usage.completion_tokens,
         "tier2_api_calls": tier2_usage.api_calls,
         "tier2_estimated_cost_usd": round(tier2_usage.estimated_cost_usd, 8),
+        "tier2_active_provider": tier2_usage.active_provider,
+        "tier2_active_model": tier2_usage.active_model,
+        "tier2_active_reasoning_effort": tier2_usage.active_reasoning_effort,
+        "tier2_used_secondary_route": tier2_usage.used_secondary_route,
         "total_estimated_cost_usd": round(total_cost, 8),
         "estimated_cost_per_item_usd": round(per_item, 8),
     }
@@ -860,6 +869,13 @@ async def run_gold_set_benchmark(
             tier1_usage.completion_tokens += tier1_call_usage.completion_tokens
             tier1_usage.api_calls += tier1_call_usage.api_calls
             tier1_usage.estimated_cost_usd += tier1_call_usage.estimated_cost_usd
+            apply_latest_active_route_metadata(
+                target_usage=tier1_usage,
+                source_usage=tier1_call_usage,
+            )
+            tier1_usage.used_secondary_route = (
+                tier1_usage.used_secondary_route or tier1_call_usage.used_secondary_route
+            )
 
             predictions_by_item = {result.item_id: result for result in tier1_results}
             for item in item_batch:
@@ -914,6 +930,13 @@ async def run_gold_set_benchmark(
             tier2_usage.completion_tokens += tier2_call_usage.completion_tokens
             tier2_usage.api_calls += tier2_call_usage.api_calls
             tier2_usage.estimated_cost_usd += tier2_call_usage.estimated_cost_usd
+            apply_latest_active_route_metadata(
+                target_usage=tier2_usage,
+                source_usage=tier2_call_usage,
+            )
+            tier2_usage.used_secondary_route = (
+                tier2_usage.used_secondary_route or tier2_call_usage.used_secondary_route
+            )
 
             tier2_prediction = _extract_first_impact(event)
             tier2_metrics.record(expected=item.tier2, predicted=tier2_prediction)

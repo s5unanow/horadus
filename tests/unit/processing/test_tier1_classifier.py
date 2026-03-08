@@ -11,7 +11,7 @@ import pytest
 
 from src.core.config import settings
 from src.processing.cost_tracker import BudgetExceededError
-from src.processing.tier1_classifier import Tier1Classifier
+from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.storage.models import ProcessingStatus, RawItem
 
 pytestmark = pytest.mark.unit
@@ -520,6 +520,76 @@ async def test_classify_items_propagates_reasoning_effort_for_gpt5(mock_db_sessi
     assert "temperature" not in chat.calls[0]
     assert usage.active_reasoning_effort == "minimal"
     assert usage.active_model == "gpt-5-nano"
+
+
+@pytest.mark.asyncio
+async def test_classify_items_resets_reasoning_metadata_when_later_batch_has_none(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=1)
+    items = [_build_item("first"), _build_item("second")]
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+    classifier._classify_batch = AsyncMock(
+        side_effect=[
+            (
+                [
+                    Tier1ItemResult(
+                        item_id=items[0].id,
+                        max_relevance=9,
+                        should_queue_tier2=True,
+                    )
+                ],
+                Tier1Usage(
+                    api_calls=1,
+                    active_provider="openai",
+                    active_model="gpt-5-nano",
+                    active_reasoning_effort="low",
+                ),
+            ),
+            (
+                [
+                    Tier1ItemResult(
+                        item_id=items[1].id,
+                        max_relevance=4,
+                        should_queue_tier2=False,
+                    )
+                ],
+                Tier1Usage(
+                    api_calls=1,
+                    active_provider="openai",
+                    active_model="gpt-4.1-nano",
+                    active_reasoning_effort=None,
+                ),
+            ),
+        ]
+    )
+
+    _results, usage = await classifier.classify_items(items, trends)
+
+    assert usage.active_provider == "openai"
+    assert usage.active_model == "gpt-4.1-nano"
+    assert usage.active_reasoning_effort is None
+
+
+def test_merge_usage_resets_reasoning_metadata_when_latest_route_has_none() -> None:
+    merged = Tier1Classifier._merge_usage(
+        left_usage=Tier1Usage(
+            api_calls=1,
+            active_provider="openai",
+            active_model="gpt-5-nano",
+            active_reasoning_effort="minimal",
+        ),
+        right_usage=Tier1Usage(
+            api_calls=1,
+            active_provider="openai",
+            active_model="gpt-4.1-nano",
+            active_reasoning_effort=None,
+        ),
+    )
+
+    assert merged.active_provider == "openai"
+    assert merged.active_model == "gpt-4.1-nano"
+    assert merged.active_reasoning_effort is None
 
 
 @pytest.mark.asyncio

@@ -1914,6 +1914,40 @@ def test_record_friction_data_appends_structured_jsonl_entry(
     assert payload[0]["recorded_at"].endswith("Z")
 
 
+def test_record_friction_data_reports_filesystem_write_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    def fail_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        raise OSError("permission denied")
+
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+
+    exit_code, data, lines = task_commands_module.record_friction_data(
+        task_input="TASK-265",
+        command_attempted="uv run --no-sync horadus tasks finish TASK-265",
+        fallback_used="gh pr merge 199 --squash",
+        friction_type="forced_fallback",
+        note="Needed manual recovery.",
+        suggested_improvement="Surface write failures cleanly.",
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["dry_run"] is False
+    assert data["log_path"] == "artifacts/agent/horadus-cli-feedback/entries.jsonl"
+    assert data["error"] == "permission denied"
+    assert lines[-2:] == [
+        "Workflow friction logging failed while writing the gitignored artifact.",
+        "Filesystem error: permission denied",
+    ]
+    assert not (
+        tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "entries.jsonl"
+    ).exists()
+
+
 def test_handle_record_friction_rejects_invalid_task_id() -> None:
     result = task_commands_module.handle_record_friction(
         argparse.Namespace(

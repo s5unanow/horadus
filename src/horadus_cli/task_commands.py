@@ -248,9 +248,27 @@ def record_friction_data(
             lines,
         )
 
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
+    except OSError as exc:
+        lines.extend(
+            [
+                "Workflow friction logging failed while writing the gitignored artifact.",
+                f"Filesystem error: {exc}",
+            ]
+        )
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {
+                "dry_run": False,
+                "log_path": relative_log_path,
+                "entry": entry,
+                "error": str(exc),
+            },
+            lines,
+        )
     lines.append("Recorded structured workflow friction entry.")
     return (
         ExitCode.OK,

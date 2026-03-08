@@ -2,6 +2,7 @@
 # Keep this list tight; personal automations should stay out of git.
 
 agents-adoption
+daily-horadus-friction-summary
 daily-sprint-health
 repo-state-po
 repo-state-sa

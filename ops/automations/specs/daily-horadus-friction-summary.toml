@@ -1,0 +1,8 @@
+version = 1
+id = "daily-horadus-friction-summary"
+name = "Daily Horadus friction summary"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/daily-horadus-friction-summary.md\n\nIf the file is missing, fail with a clear error.\nWrite the final output to: /Users/s5una/projects/horadus/artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md (real current UTC date).\nEnsure the file exists at that exact path when done."
+status = "ACTIVE"
+rrule = "FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA,SU;BYHOUR=19;BYMINUTE=0"
+execution_environment = "local"
+cwds = ["/Users/s5una/projects/horadus"]

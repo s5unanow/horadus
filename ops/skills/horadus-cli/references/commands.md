@@ -23,6 +23,11 @@
     `artifacts/agent/horadus-cli-feedback/entries.jsonl`.
   - Use only for real Horadus gaps or forced fallback, not routine success
     cases.
+- `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
+  - Writes the grouped daily friction report to
+    `artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`.
+  - Keeps candidate follow-up work as human-review suggestions only; it does
+    not create backlog tasks automatically.
 - `uv run --no-sync horadus tasks list-active`
   - Returns active sprint tasks plus human blocker metadata.
 - `uv run --no-sync horadus tasks show TASK-XXX`

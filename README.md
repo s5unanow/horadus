@@ -149,6 +149,16 @@ Export static calibration dashboard artifacts (JSON + HTML) for ops hosting:
 uv run horadus dashboard export --output-dir artifacts/dashboard
 ```
 
+Generate the daily grouped Horadus workflow friction summary:
+
+```bash
+uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD
+```
+
+This writes `artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`. Review
+the report before proposing any backlog follow-up; backlog task creation remains
+human-gated.
+
 ## Configuration
 
 ### Defining Trends

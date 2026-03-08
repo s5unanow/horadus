@@ -249,6 +249,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-161` environment semantics are now explicit and validated (`development|staging|production`), staging now shares production-like guardrails via `is_production_like`, runtime DB behavior remains NullPool-only in development, and environment/deployment guidance now includes `.env.staging.example` plus ADR `007`
 - [x] `TASK-162` introduces an independent agent runtime profile with production/loopback guardrails, request-limit and unhandled-error shutdown signaling, low-noise default log level behavior, and deterministic `horadus agent smoke` local endpoint checks
 - [x] `TASK-163` now standardizes promotion via staging with fail-closed `make release-gate`, explicit dev/staging/prod release semantics in `docs/RELEASING.md`, and aligned staging rollout/cross-link guidance across deployment/environment/readme docs
+- [x] `TASK-266` now adds `horadus tasks summarize-friction`, a repo-owned daily automation spec synced through `ops/automations/`, and compact human-triaged workflow friction reports under `artifacts/agent/horadus-cli-feedback/daily/`
 
 ## Current Focus
 
@@ -264,8 +265,6 @@ Phase 8: Hardening (NEW)     [████████████████�
 - Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
 - Workflow/coverage hardening queue remains active in Sprint 3:
   `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`, `TASK-257`
-- Workflow-centralization hardening follow-up queue added to Sprint 3 for sequencing:
-  `TASK-266`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`

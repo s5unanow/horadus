@@ -34,6 +34,8 @@ Use this skill for repo workflow operations in this project.
 - Finish: `uv run --no-sync horadus tasks finish TASK-XXX`
 - Friction logging:
   `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
+- Daily friction summary:
+  `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
 - Task list: `uv run --no-sync horadus tasks list-active --format json`
 - Task record: `uv run --no-sync horadus tasks show TASK-XXX --format json`
 - Task search: `uv run --no-sync horadus tasks search "query" --format json`

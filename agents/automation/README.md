@@ -4,6 +4,10 @@ This directory contains the canonical, versioned instructions for scheduled
 "role agent" automations (PO/BA/SA/security/agentic) and repo operational
 automations (triage, sprint health).
 
+Repo operational automations also include the Horadus friction summary flow,
+which writes daily reports under
+`artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`.
+
 Automations should keep their configured prompt minimal: open the relevant file
 here and follow it exactly.
 

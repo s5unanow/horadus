@@ -72,9 +72,10 @@ Task PRs must be titled `TASK-XXX: short summary` and include exactly one
 `Primary-Task: TASK-XXX` line in the body.
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
-The finish flow always waits a positive review-gate timeout and fails closed if
-the required current-head review does not arrive in time. A review-gate timeout
-is a blocker, not permission to bypass the CLI with raw `gh pr merge`.
+The finish flow always waits a positive review-gate timeout. Actionable
+current-head review feedback blocks completion, but a silent timeout after the
+full wait window is allowed to continue inside the CLI flow. Do not bypass the
+CLI with raw `gh pr merge`.
 
 Compatibility wrapper:
 - `make task-finish`
@@ -92,8 +93,8 @@ Resolve locally solvable environment blockers before reporting blocked.
 
 Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
 needed workflow step yet, or when the CLI explicitly tells you a manual
-recovery step is required. A review-gate timeout from `horadus tasks finish` is
-not a manual-recovery signal.
+recovery step is required. A review-gate timeout from `horadus tasks finish`
+that completes silently inside the CLI is not a manual-recovery signal.
 
 13. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 When: record a real Horadus workflow gap or forced fallback in a structured

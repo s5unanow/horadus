@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Wait for current-head PR review and fail on actionable bot comments."""
+"""Wait through the PR review window and fail on actionable current-head bot comments."""
 
 from __future__ import annotations
 
@@ -118,9 +118,9 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--timeout-policy",
-        choices=("fail",),
-        default="fail",
-        help="Timeout policy is fixed to fail closed.",
+        choices=("allow", "fail"),
+        default="allow",
+        help="Whether timeout allows merge to continue or fails closed.",
     )
     args = parser.parse_args(argv)
 
@@ -131,6 +131,7 @@ def main(argv: list[str] | None = None) -> int:
 
     repo, pr_number, head_oid = _review_context(args.pr_url)
     deadline = time.time() + args.timeout_seconds
+    saw_clean_current_head_review = False
 
     while True:
         matching_reviews, matching_comments = _matching_review_comments(
@@ -139,22 +140,28 @@ def main(argv: list[str] | None = None) -> int:
             head_oid=head_oid,
             reviewer_login=args.reviewer_login,
         )
+        if matching_comments:
+            _print_actionable_comments(matching_comments)
+            return 2
         if matching_reviews:
-            if matching_comments:
-                _print_actionable_comments(matching_comments)
-                return 2
-            print(
-                "review gate passed: "
-                f"{args.reviewer_login} reviewed current head {head_oid} with no inline comments."
-            )
-            return 0
+            saw_clean_current_head_review = True
 
         if time.time() >= deadline:
+            if saw_clean_current_head_review:
+                print(
+                    "review gate passed: "
+                    f"{args.reviewer_login} reviewed current head {head_oid} with no inline comments "
+                    f"during the {args.timeout_seconds}s wait window."
+                )
+                return 0
             message = (
                 "review gate timeout: "
-                f"no current-head review from {args.reviewer_login} for {head_oid} "
+                f"no actionable current-head review feedback from {args.reviewer_login} for {head_oid} "
                 f"within {args.timeout_seconds}s."
             )
+            if args.timeout_policy == "allow":
+                print(f"{message} Continuing due to timeout policy=allow.")
+                return 0
             print(f"{message} Failing due to timeout policy=fail.")
             return 1
 

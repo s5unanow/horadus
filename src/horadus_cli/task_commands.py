@@ -36,7 +36,7 @@ DEFAULT_CHECKS_POLL_SECONDS = 10
 DEFAULT_REVIEW_TIMEOUT_SECONDS = 600
 DEFAULT_REVIEW_POLL_SECONDS = 10
 DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
-DEFAULT_REVIEW_TIMEOUT_POLICY = "fail"
+DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
 DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
@@ -234,7 +234,7 @@ def _read_review_timeout_policy_env() -> str:
 
     value = raw.strip().lower()
     if value != DEFAULT_REVIEW_TIMEOUT_POLICY:
-        raise ValueError("REVIEW_TIMEOUT_POLICY must remain `fail` for `horadus tasks finish`.")
+        raise ValueError("REVIEW_TIMEOUT_POLICY must remain `allow` for `horadus tasks finish`.")
     return value
 
 

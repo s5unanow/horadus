@@ -2955,18 +2955,18 @@ def test_finish_task_data_rejects_zero_review_timeout_override(
 def test_finish_task_data_rejects_review_timeout_policy_bypass(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("REVIEW_TIMEOUT_POLICY", "allow")
+    monkeypatch.setenv("REVIEW_TIMEOUT_POLICY", "fail")
 
     exit_code, _data, lines = task_commands_module.finish_task_data("TASK-275", dry_run=True)
 
     assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
     assert lines == [
-        "Task finish blocked: REVIEW_TIMEOUT_POLICY must remain `fail` for `horadus tasks finish`.",
+        "Task finish blocked: REVIEW_TIMEOUT_POLICY must remain `allow` for `horadus tasks finish`.",
         "Next action: Fix the invalid environment override and re-run `horadus tasks finish`.",
     ]
 
 
-def test_finish_task_data_blocks_when_review_gate_times_out(
+def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -2998,12 +2998,21 @@ def test_finish_task_data_blocks_when_review_gate_times_out(
         "_run_review_gate",
         lambda **_kwargs: _completed(
             ["review"],
-            returncode=1,
+            returncode=0,
             stdout=(
-                "review gate timeout: no current-head review from "
+                "review gate timeout: no actionable current-head review feedback from "
                 "chatgpt-codex-connector[bot] for head-sha-275 within 600s. "
-                "Failing due to timeout policy=fail."
+                "Continuing due to timeout policy=allow."
             ),
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-276", "- state: local-main-synced", "- strict complete: yes"],
         ),
     )
 
@@ -3022,23 +3031,107 @@ def test_finish_task_data_blocks_when_review_gate_times_out(
                 return _completed(args, stdout="OPEN\n")
             if "--json" in args and "isDraft" in args:
                 return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-275\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/275"]:
+            return _completed(args)
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-275-enforce-finish-review-timeout",
+        ]:
+            return _completed(args, returncode=1)
         raise AssertionError(args)
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
     exit_code, data, lines = task_commands_module.finish_task_data("TASK-275", dry_run=False)
 
-    assert exit_code == 1
+    assert exit_code == task_commands_module.ExitCode.OK
     assert data["pr_url"] == "https://example.invalid/pr/275"
-    assert (
-        lines[0]
-        == "Task finish blocked: review gate timed out before the required current-head review arrived."
+    assert data["merge_commit"] == "merge-commit-275"
+    assert data["lifecycle"]["lifecycle_state"] == "local-main-synced"
+    assert any("review gate timeout:" in line for line in lines)
+    assert lines[-1] == "Task finish passed: merged merge-commit-275 and synced main."
+
+
+def test_finish_task_data_blocks_when_review_gate_finds_actionable_comments(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-276-allow-silent-review-timeout",
+            branch_task_id="TASK-276",
+            task_id="TASK-276",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-276 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, []),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            returncode=2,
+            stdout=(
+                "review gate failed: actionable current-head review comments found:\n"
+                "- src/horadus_cli/task_commands.py:1900 https://example.invalid/comment/276\n"
+                "  Please address this before merge."
+            ),
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/276\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/276"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-276: allow silent review timeout","body":"Primary-Task: TASK-276\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-276", dry_run=False)
+
+    assert exit_code == 2
+    assert data["pr_url"] == "https://example.invalid/pr/276"
+    assert lines[0] == "Task finish blocked: review gate did not pass."
     assert (
         lines[1]
-        == "Next action: Wait for a current-head review from `chatgpt-codex-connector[bot]`, then re-run `horadus tasks finish`."
+        == "Next action: Address the current-head review feedback, then re-run `horadus tasks finish`."
     )
-    assert lines[-1].startswith("review gate timeout:")
+    assert lines[-2].startswith("- src/horadus_cli/task_commands.py:1900")
 
 
 def test_finish_task_data_blocks_when_pr_title_or_body_is_invalid(

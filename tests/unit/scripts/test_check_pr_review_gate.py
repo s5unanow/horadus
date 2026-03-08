@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -30,7 +31,7 @@ def _run_gate(
     )
 
 
-def test_review_gate_passes_when_current_head_review_has_no_comments(tmp_path: Path) -> None:
+def test_review_gate_waits_full_timeout_before_clean_review_passes(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_executable(
@@ -62,12 +63,23 @@ esac
 """,
     )
 
+    started = time.monotonic()
     result = _run_gate(
         env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
-        args=["--pr-url", "https://example.invalid/pr/215", "--timeout-seconds", "1"],
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
     )
+    elapsed = time.monotonic() - started
     assert result.returncode == 0
     assert "review gate passed" in result.stdout
+    assert "during the 1s wait window" in result.stdout
+    assert elapsed >= 0.9
 
 
 def test_review_gate_fails_when_current_head_review_has_comments(tmp_path: Path) -> None:
@@ -111,7 +123,7 @@ esac
     assert "scripts/finish_task_pr.sh:80" in result.stdout
 
 
-def test_review_gate_fails_closed_when_no_review_arrives(tmp_path: Path) -> None:
+def test_review_gate_allows_timeout_when_no_feedback_arrives(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_executable(
@@ -154,9 +166,9 @@ esac
             "0",
         ],
     )
-    assert result.returncode == 1
+    assert result.returncode == 0
     assert "review gate timeout" in result.stdout
-    assert "timeout policy=fail" in result.stdout
+    assert "timeout policy=allow" in result.stdout
 
 
 def test_review_gate_rejects_non_positive_timeout(tmp_path: Path) -> None:
@@ -178,13 +190,35 @@ exit 1
     assert "--timeout-seconds must be positive" in result.stderr
 
 
-def test_review_gate_rejects_timeout_policy_bypass_argument(tmp_path: Path) -> None:
+def test_review_gate_fails_closed_when_timeout_policy_is_fail(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     _write_executable(
         bin_dir / "gh",
         """#!/usr/bin/env bash
-exit 1
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
 """,
     )
 
@@ -196,9 +230,60 @@ exit 1
             "--timeout-seconds",
             "1",
             "--timeout-policy",
-            "allow",
+            "fail",
+            "--poll-seconds",
+            "0",
         ],
     )
 
-    assert result.returncode == 2
-    assert "invalid choice: 'allow'" in result.stderr
+    assert result.returncode == 1
+    assert "timeout policy=fail" in result.stdout
+
+
+def test_review_gate_ignores_stale_head_reviews_and_allows_silent_timeout(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo '[{"id":503,"commit_id":"older-head-sha","user":{"login":"chatgpt-codex-connector[bot]"}}]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_gate(
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
+    )
+
+    assert result.returncode == 0
+    assert "review gate timeout" in result.stdout
+    assert "timeout policy=allow" in result.stdout

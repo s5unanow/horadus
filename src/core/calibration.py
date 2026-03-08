@@ -214,39 +214,38 @@ class CalibrationService:
             query = query.where(TrendOutcome.prediction_date <= normalize_utc(end_date))
 
         outcomes = list((await self.session.scalars(query)).all())
-        scored_outcomes: list[TrendOutcome] = []
+        scored_pairs: list[tuple[TrendOutcome, OutcomeType, float]] = []
         for outcome in outcomes:
-            if outcome.outcome is None:
+            if outcome.outcome is None or outcome.predicted_probability is None:
                 continue
             try:
                 outcome_enum = OutcomeType(outcome.outcome)
             except ValueError:
                 continue
             if _actual_value(outcome_enum) is not None:
-                scored_outcomes.append(outcome)
+                scored_pairs.append((outcome, outcome_enum, float(outcome.predicted_probability)))
 
+        scored_outcomes = [
+            outcome for outcome, _outcome_enum, _predicted_probability in scored_pairs
+        ]
         buckets = build_calibration_buckets(scored_outcomes)
-        brier_values = []
-        for outcome in scored_outcomes:
+        brier_values: list[float] = []
+        for outcome, outcome_enum, predicted_probability in scored_pairs:
             if outcome.brier_score is not None:
                 brier_values.append(float(outcome.brier_score))
                 continue
-            if outcome.outcome is None:
+            computed = calculate_brier_score(predicted_probability, outcome_enum)
+            if computed is None:
                 continue
-            outcome_enum = OutcomeType(outcome.outcome)
-            computed = calculate_brier_score(float(outcome.predicted_probability), outcome_enum)
-            if computed is not None:
-                brier_values.append(computed)
+            brier_values.append(computed)
 
         mean_brier_score = sum(brier_values) / len(brier_values) if brier_values else None
         signed_error = 0.0
-        for outcome in scored_outcomes:
-            if outcome.outcome is None:
-                continue
-            actual = _actual_value(OutcomeType(outcome.outcome))
+        for _outcome, outcome_enum, predicted_probability in scored_pairs:
+            actual = _actual_value(outcome_enum)
             if actual is None:
                 continue
-            signed_error += actual - float(outcome.predicted_probability)
+            signed_error += actual - predicted_probability
 
         mean_signed_error = signed_error / len(scored_outcomes) if scored_outcomes else 0.0
         return CalibrationReport(

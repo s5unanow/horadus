@@ -6,7 +6,22 @@ from pathlib import Path
 
 import pytest
 
-from src.core.docs_freshness import run_docs_freshness_check
+from src.core.docs_freshness import (
+    DocsFreshnessIssue,
+    DocsFreshnessResult,
+    _extract_completed_task_ids,
+    _extract_current_sprint_active_tasks,
+    _extract_h2_section,
+    _extract_human_blocker_metadata,
+    _extract_section_task_ids,
+    _extract_task_ids,
+    _extract_telegram_launch_scope,
+    _load_overrides,
+    _Override,
+    _parse_marker_date,
+    _record_issue,
+    run_docs_freshness_check,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -596,3 +611,509 @@ def test_docs_freshness_allows_project_status_at_sla_boundary(tmp_path: Path) ->
     )
 
     assert not any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)
+
+
+def test_docs_freshness_result_is_ok_tracks_error_presence() -> None:
+    assert DocsFreshnessResult(errors=(), warnings=()).is_ok is True
+    assert (
+        DocsFreshnessResult(
+            errors=(DocsFreshnessIssue(level="error", rule_id="x", message="y"),),
+            warnings=(),
+        ).is_ok
+        is False
+    )
+
+
+def test_load_overrides_validates_shape_and_required_fields(tmp_path: Path) -> None:
+    missing_file = tmp_path / "missing.json"
+    assert _load_overrides(missing_file) == ()
+
+    override_path = tmp_path / "overrides.json"
+    override_path.write_text(json.dumps({"overrides": {}}), encoding="utf-8")
+    with pytest.raises(ValueError, match="must contain an 'overrides' list"):
+        _load_overrides(override_path)
+
+    override_path.write_text(json.dumps({"overrides": ["bad"]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="is not an object"):
+        _load_overrides(override_path)
+
+    override_path.write_text(json.dumps({"overrides": [{"rule_id": "x"}]}), encoding="utf-8")
+    with pytest.raises(ValueError, match="missing required fields"):
+        _load_overrides(override_path)
+
+    override_path.write_text(
+        json.dumps(
+            {
+                "overrides": [
+                    {
+                        "rule_id": "rule",
+                        "path": "docs/file.md",
+                        "reason": "temporary",
+                        "expires_on": "2099-12-31",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    loaded = _load_overrides(override_path)
+    assert loaded[0] == _Override(
+        rule_id="rule",
+        path="docs/file.md",
+        reason="temporary",
+        expires_on=datetime(2099, 12, 31, tzinfo=UTC).date(),
+    )
+
+
+def test_helper_extractors_cover_missing_and_present_sections() -> None:
+    content = "\n".join(
+        [
+            "**Last Updated**: 2026-03-08",
+            "## Active Tasks",
+            "- TASK-001 alpha",
+            "- TASK-002 beta [REQUIRES_HUMAN]",
+            "## Human Blocker Metadata",
+            "- TASK-002 | owner=ops | last_touched=2026-03-01 | next_action=2026-03-02 | escalate_after_days=7",
+            "## Telegram Launch Scope",
+            "- launch_scope: excluded",
+            "## Completed This Sprint",
+            "- TASK-003 gamma",
+            "",
+        ]
+    )
+
+    assert _parse_marker_date(content, "Last Updated") == datetime(2026, 3, 8, tzinfo=UTC).date()
+    assert _parse_marker_date(content, "Missing") is None
+    assert _extract_h2_section(content, "Active Tasks") is not None
+    assert _extract_h2_section(content, "Missing") is None
+    assert _extract_task_ids(content) == {"TASK-001", "TASK-002", "TASK-003"}
+    assert _extract_section_task_ids(content, "Completed This Sprint") == {"TASK-003"}
+    assert _extract_current_sprint_active_tasks(content) == (
+        {"TASK-001", "TASK-002"},
+        {"TASK-002"},
+    )
+    assert _extract_human_blocker_metadata(content)["TASK-002"]["owner"] == "ops"
+    assert _extract_telegram_launch_scope(content) == "excluded"
+    assert _extract_completed_task_ids(content) == {"TASK-001", "TASK-002", "TASK-003"}
+
+
+def test_helper_extractors_handle_missing_or_partial_metadata() -> None:
+    content = "\n".join(
+        [
+            "## Human Blocker Metadata",
+            "not-a-bullet",
+            "- no task id here | owner=ops",
+            "- TASK-010 | owner=ops | malformed | =blank",
+            "## Telegram Launch Scope",
+            "- launch_scope:",
+            "",
+        ]
+    )
+
+    assert _extract_human_blocker_metadata(content) == {"TASK-010": {"owner": "ops"}}
+    assert _extract_telegram_launch_scope(content) is None
+    assert _extract_section_task_ids(content, "Missing") == set()
+
+
+def test_record_issue_adds_error_or_override_warning() -> None:
+    errors: list[DocsFreshnessIssue] = []
+    warnings: list[DocsFreshnessIssue] = []
+    override = _Override(
+        rule_id="rule",
+        path="docs/file.md",
+        reason="temporary",
+        expires_on=datetime(2099, 12, 31, tzinfo=UTC).date(),
+    )
+
+    _record_issue(
+        errors=errors,
+        warnings=warnings,
+        active_override_map={},
+        rule_id="rule",
+        message="broken",
+        path="docs/file.md",
+    )
+    assert errors[0].rule_id == "rule"
+
+    _record_issue(
+        errors=errors,
+        warnings=warnings,
+        active_override_map={("rule", "docs/file.md"): override},
+        rule_id="rule",
+        message="broken",
+        path="docs/file.md",
+    )
+    assert warnings[-1].rule_id == "docs_freshness_override_applied"
+
+
+def test_docs_freshness_flags_missing_required_marker_file(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "DEPLOYMENT.md").unlink()
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "required_marker_file_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_and_future_markers(tmp_path: Path) -> None:
+    marker_date = (datetime.now(tz=UTC) + timedelta(days=3)).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "RELEASING.md").write_text("no marker here\n", encoding="utf-8")
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "required_marker_missing" for issue in result.errors)
+    assert any(issue.rule_id == "required_marker_future_date" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_hierarchy_files_and_references(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "AGENTS.md").unlink()
+    (tmp_path / "PROJECT_STATUS.md").unlink()
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "hierarchy_policy_file_missing" for issue in result.errors)
+    assert any(
+        issue.rule_id == "hierarchy_policy_reference_file_missing" for issue in result.errors
+    )
+
+
+def test_docs_freshness_flags_human_blocker_metadata_variants(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-080 | owner=ops | last_touched=bad-date | next_action=2026-02-28 | escalate_after_days=0",
+                "",
+                "## Telegram Launch Scope",
+                "- launch_scope: excluded_until_task_080_done",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "human_blocker_metadata_invalid_date" for issue in result.errors)
+    assert any(
+        issue.rule_id == "human_blocker_metadata_invalid_escalation_threshold"
+        for issue in result.errors
+    )
+
+
+def test_docs_freshness_flags_missing_fields_and_non_integer_escalation(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-080 | owner=ops | next_action=2026-03-01 | escalate_after_days=soon",
+                "",
+                "## Telegram Launch Scope",
+                "- launch_scope: excluded_until_task_080_done",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "human_blocker_metadata_missing_fields" for issue in result.errors)
+    assert any(
+        issue.rule_id == "human_blocker_metadata_invalid_escalation_threshold"
+        for issue in result.errors
+    )
+
+
+def test_docs_freshness_allows_blank_optional_metadata_fields_to_skip_date_checks(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-080 | owner=ops | last_touched= | next_action= | escalate_after_days=",
+                "",
+                "## Telegram Launch Scope",
+                "- launch_scope: excluded_until_task_080_done",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "human_blocker_metadata_missing_fields" for issue in result.errors)
+    assert not any(
+        issue.rule_id == "human_blocker_metadata_invalid_date" for issue in result.errors
+    )
+
+
+def test_docs_freshness_flags_human_blocker_date_order_and_future_date(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    future_day = (datetime.now(tz=UTC) + timedelta(days=1)).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                f"- TASK-080 | owner=ops | last_touched={future_day} | next_action=2026-03-01 | escalate_after_days=7",
+                "",
+                "## Telegram Launch Scope",
+                "- launch_scope: excluded_until_task_080_done",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "human_blocker_metadata_future_date" for issue in result.errors)
+    assert any(
+        issue.rule_id == "human_blocker_metadata_invalid_date_order" for issue in result.errors
+    )
+
+
+def test_docs_freshness_flags_missing_archived_and_data_model_docs(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "POTENTIAL_ISSUES.md").unlink()
+    (tmp_path / "docs" / "DATA_MODEL.md").unlink()
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "archived_doc_missing" for issue in result.errors)
+    assert any(issue.rule_id == "data_model_doc_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_archived_status_banner(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "POTENTIAL_ISSUES.md").write_text(
+        "tasks/CURRENT_SPRINT.md\nPROJECT_STATUS.md\ntasks/BACKLOG.md\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "archived_doc_status_banner_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_runtime_doc_markers(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "API.md").write_text("plain docs\n", encoding="utf-8")
+    (tmp_path / "docs" / "ENVIRONMENT.md").write_text(
+        f"**Last Verified**: {marker_date}\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert any(issue.rule_id == "runtime_marker_auth_header_doc_missing" for issue in result.errors)
+    assert any(issue.rule_id == "runtime_marker_auth_toggle_doc_missing" for issue in result.errors)
+    assert any(issue.rule_id == "runtime_marker_rate_limit_doc_missing" for issue in result.errors)
+
+
+def test_docs_freshness_skips_runtime_marker_checks_when_runtime_or_docs_missing(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "API.md").unlink()
+    (tmp_path / "docs" / "ENVIRONMENT.md").unlink()
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert not any(issue.rule_id.startswith("runtime_marker_") for issue in result.errors)
+
+
+def test_docs_freshness_handles_missing_completed_ledger_and_last_updated_marker(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "COMPLETED.md").unlink()
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-164` Agent smoke run",
+                "## Blocked",
+                "- none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-164` Agent smoke run",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path, project_status_max_age_days=1)
+
+    assert not any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)
+
+
+def test_docs_freshness_handles_missing_adr_directory_and_duplicate_references(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    for adr_file in (tmp_path / "docs" / "adr").glob("*.md"):
+        adr_file.unlink()
+    (tmp_path / "docs" / "ARCHITECTURE.md").write_text(
+        f"**Last Verified**: {marker_date}\nADR-999 and ADR-999 appear twice.\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    missing_adr_errors = [
+        issue for issue in result.errors if issue.rule_id == "adr_reference_target_missing"
+    ]
+    assert len(missing_adr_errors) == 1
+
+
+def test_docs_freshness_does_not_require_telegram_scope_for_other_human_tasks(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## Active Tasks",
+                "- `TASK-081` Other Human Task [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-081 | owner=ops | last_touched=2026-03-01 | next_action=2026-03-02 | escalate_after_days=7",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                f"**Last Updated**: {marker_date}",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "## In Progress",
+                "- `TASK-081` Other Human Task [REQUIRES_HUMAN]",
+                "## Blocked",
+                "- `TASK-081` Other Human Task [REQUIRES_HUMAN]",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert not any(issue.rule_id == "telegram_launch_scope_missing" for issue in result.errors)
+
+
+def test_docs_freshness_handles_missing_adr_dir_without_references(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    for adr_file in (tmp_path / "docs" / "adr").glob("*.md"):
+        adr_file.unlink()
+    (tmp_path / "docs" / "adr").rmdir()
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert not any(issue.rule_id == "adr_reference_target_missing" for issue in result.errors)

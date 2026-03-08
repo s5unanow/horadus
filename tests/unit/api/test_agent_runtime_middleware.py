@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.testclient import TestClient
 
 from src.api.middleware.agent_runtime import (
@@ -81,4 +81,86 @@ def test_trigger_agent_runtime_shutdown_preserves_highest_exit_code() -> None:
     trigger_agent_runtime_shutdown(app, exit_code=1, reason="unhandled_exception")
 
     assert app.state.agent_runtime_exit_code == 1
+    assert shutdown_calls == [(0, "request_limit_reached")]
+
+
+def test_trigger_agent_runtime_shutdown_without_callback_marks_shutdown() -> None:
+    app = FastAPI()
+    app.state.agent_runtime_exit_code = 0
+    app.state.agent_runtime_shutdown_triggered = False
+
+    trigger_agent_runtime_shutdown(app, exit_code=1, reason="unhandled_exception")
+
+    assert app.state.agent_runtime_exit_code == 1
+    assert app.state.agent_runtime_shutdown_triggered is True
+
+
+@pytest.mark.asyncio
+async def test_agent_runtime_middleware_handles_unhandled_exception_flag_directly() -> None:
+    app = FastAPI()
+    shutdown_calls: list[tuple[int, str]] = []
+    app.state.agent_runtime_exit_code = 0
+    app.state.agent_runtime_shutdown_triggered = False
+    app.state.agent_runtime_shutdown_callback = lambda exit_code, reason: shutdown_calls.append(
+        (exit_code, reason)
+    )
+    middleware = AgentRuntimeMiddleware(app, exit_after_requests=5, shutdown_on_error=True)
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/boom",
+            "headers": [],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+            "app": app,
+        }
+    )
+    request.state._agent_unhandled_exception = True
+
+    async def call_next(_request: Request) -> Response:
+        return Response(status_code=204)
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 204
+    assert shutdown_calls == [(1, "unhandled_exception")]
+
+
+@pytest.mark.asyncio
+async def test_agent_runtime_middleware_clamps_request_limit_when_shutdown_on_error_disabled() -> (
+    None
+):
+    app = FastAPI()
+    shutdown_calls: list[tuple[int, str]] = []
+    app.state.agent_runtime_exit_code = 0
+    app.state.agent_runtime_shutdown_triggered = False
+    app.state.agent_runtime_shutdown_callback = lambda exit_code, reason: shutdown_calls.append(
+        (exit_code, reason)
+    )
+    middleware = AgentRuntimeMiddleware(app, exit_after_requests=0, shutdown_on_error=False)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/ok",
+            "headers": [],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+            "app": app,
+        }
+    )
+    request.state._agent_unhandled_exception = True
+
+    async def call_next(_request: Request) -> Response:
+        return Response(status_code=200)
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 200
     assert shutdown_calls == [(0, "request_limit_reached")]

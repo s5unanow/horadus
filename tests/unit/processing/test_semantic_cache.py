@@ -5,6 +5,7 @@ from typing import Any
 
 import pytest
 
+import src.processing.semantic_cache as semantic_cache_module
 from src.processing.semantic_cache import LLMSemanticCache
 
 pytestmark = pytest.mark.unit
@@ -147,6 +148,22 @@ def test_build_cache_key_changes_for_model_and_prompt_versions() -> None:
     assert prompt_changed != base_key
 
 
+def test_semantic_cache_initialization_normalizes_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_ENABLED", True)
+    monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_TTL_SECONDS", 0)
+    monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_MAX_ENTRIES", 0)
+    monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_REDIS_PREFIX", " ")
+    monkeypatch.setattr(semantic_cache_module.settings, "REDIS_URL", "redis://runtime")
+
+    cache = LLMSemanticCache(redis_prefix=" ", redis_url=" ")
+
+    assert cache.enabled is True
+    assert cache.ttl_seconds == 1
+    assert cache.max_entries == 1
+    assert cache.redis_prefix == "horadus:llm_semantic_cache"
+    assert cache.redis_url == ""
+
+
 def test_semantic_cache_get_set_and_eviction() -> None:
     fake_redis = _FakeRedisClient()
     cache = LLMSemanticCache(
@@ -203,3 +220,138 @@ def test_semantic_cache_get_set_and_eviction() -> None:
     )
     assert evicted is None
     assert second_hit == '{"items":[{"item_id":"2"}]}'
+
+
+def test_semantic_cache_handles_disabled_and_backend_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    lookup_events: list[tuple[str, str]] = []
+
+    class _ExplodingRedisClient(_FakeRedisClient):
+        def get(self, key: str) -> str | None:
+            _ = key
+            raise RuntimeError("boom")
+
+        def pipeline(self, transaction: bool = True) -> _FakeRedisPipeline:
+            _ = transaction
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(
+        semantic_cache_module,
+        "record_llm_semantic_cache_lookup",
+        lambda *, stage, result: lookup_events.append((stage, result)),
+    )
+
+    disabled_cache = LLMSemanticCache(enabled=False, redis_client=_FakeRedisClient())
+    assert (
+        disabled_cache.get(
+            stage="tier1",
+            model="gpt",
+            prompt_template="prompt",
+            payload={"x": 1},
+        )
+        is None
+    )
+    disabled_cache.set(
+        stage="tier1",
+        model="gpt",
+        prompt_template="prompt",
+        payload={"x": 1},
+        value="cached",
+    )
+
+    wall_clock = {"now": 100.0}
+    cache = LLMSemanticCache(
+        enabled=True,
+        redis_client=_ExplodingRedisClient(),
+        wall_time_fn=lambda: wall_clock["now"],
+    )
+
+    assert (
+        cache.get(
+            stage="tier2",
+            model="gpt",
+            prompt_template="prompt",
+            payload={"x": 1},
+        )
+        is None
+    )
+    assert cache._backend_unavailable_until == 130.0
+    wall_clock["now"] = 110.0
+    assert (
+        cache.get(
+            stage="tier2",
+            model="gpt",
+            prompt_template="prompt",
+            payload={"x": 1},
+        )
+        is None
+    )
+    cache.set(
+        stage="tier2",
+        model="gpt",
+        prompt_template="prompt",
+        payload={"x": 1},
+        value="cached",
+    )
+
+    assert lookup_events == [("tier2", "miss")]
+
+
+def test_semantic_cache_builds_redis_client_on_demand(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_redis = _FakeRedisClient()
+    monkeypatch.setattr(
+        semantic_cache_module.redis, "from_url", lambda *_args, **_kwargs: fake_redis
+    )
+
+    cache = LLMSemanticCache(enabled=True, redis_client=None, redis_url="redis://cache")
+
+    assert cache._get_redis_client() is fake_redis
+
+
+def test_semantic_cache_set_handles_empty_evictions_and_write_failures() -> None:
+    class _NoEvictRedis(_FakeRedisClient):
+        def zrange(self, key: str, start: int, end: int) -> list[str]:
+            _ = key, start, end
+            return []
+
+    class _ExplodingPipelineRedis(_FakeRedisClient):
+        def pipeline(self, transaction: bool = True) -> _FakeRedisPipeline:
+            _ = transaction
+            raise RuntimeError("boom")
+
+    no_evict = LLMSemanticCache(
+        enabled=True,
+        max_entries=1,
+        redis_prefix="cache",
+        redis_client=_NoEvictRedis(),
+    )
+    no_evict.set(
+        stage="tier1",
+        model="gpt",
+        prompt_template="prompt",
+        payload={"x": 1},
+        value="cached",
+    )
+    no_evict.set(
+        stage="tier1",
+        model="gpt",
+        prompt_template="prompt",
+        payload={"x": 2},
+        value="cached-2",
+    )
+
+    failing = LLMSemanticCache(
+        enabled=True,
+        redis_client=_ExplodingPipelineRedis(),
+        wall_time_fn=lambda: 10.0,
+    )
+    failing.set(
+        stage="tier1",
+        model="gpt",
+        prompt_template="prompt",
+        payload={"x": 1},
+        value="cached",
+    )
+
+    assert failing._backend_unavailable_until == 40.0

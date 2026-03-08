@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 import src.processing.event_clusterer as event_clusterer_module
 from src.processing.event_clusterer import EventClusterer
@@ -401,3 +404,281 @@ async def test_cluster_item_skips_merge_for_suppressed_event(mock_db_session, mo
     merge_into_event.assert_not_called()
     add_event_link.assert_not_called()
     assert suppression_metric_calls == [("invalidate", "clusterer_pre_merge")]
+
+
+@pytest.mark.asyncio
+async def test_cluster_item_requires_item_id(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(item_id=uuid4())
+    item.id = None
+
+    with pytest.raises(ValueError, match="RawItem must have an id"):
+        await clusterer.cluster_item(item)
+
+
+@pytest.mark.asyncio
+async def test_cluster_item_creates_event_when_embedding_is_missing(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=None)
+    clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
+    clusterer._add_event_link = AsyncMock(return_value=True)
+
+    result = await clusterer.cluster_item(item)
+
+    assert result.created is True
+    assert result.merged is False
+    clusterer._add_event_link.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cluster_item_treats_blank_embedding_model_as_missing(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.1, 0.2, 0.3])
+    item.embedding_model = "   "
+    clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
+    clusterer._find_matching_event = AsyncMock()
+    clusterer._add_event_link = AsyncMock(return_value=True)
+
+    result = await clusterer.cluster_item(item)
+
+    assert result.created is True
+    assert result.merged is False
+    clusterer._find_matching_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_cluster_unlinked_items_clusters_each_result_and_flushes(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    items = [_build_item(), _build_item()]
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: items)
+    clusterer.cluster_item = AsyncMock(
+        side_effect=[
+            SimpleNamespace(item_id=items[0].id),
+            SimpleNamespace(item_id=items[1].id),
+        ]
+    )
+
+    results = await clusterer.cluster_unlinked_items(limit=2)
+
+    assert [result.item_id for result in results] == [items[0].id, items[1].id]
+    assert mock_db_session.flush.await_count >= 1
+
+
+@pytest.mark.asyncio
+async def test_create_event_assigns_id_and_uses_item_timestamp(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    published_at = datetime(2026, 3, 1, tzinfo=UTC)
+    item = _build_item(title=None, raw_content="  body  ", embedding=[0.1])
+    item.published_at = published_at
+
+    event = await clusterer._create_event(item)
+
+    assert event.id is not None
+    assert event.first_seen_at == published_at
+    assert event.last_mention_at == published_at
+    assert event.canonical_summary == "body"
+
+
+@pytest.mark.asyncio
+async def test_create_event_preserves_preexisting_event_id(
+    mock_db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    existing_id = uuid4()
+
+    class FakeEvent:
+        def __init__(self, **kwargs):
+            self.__dict__.update(kwargs)
+            self.id = existing_id
+
+    monkeypatch.setattr(event_clusterer_module, "Event", FakeEvent)
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item()
+
+    event = await clusterer._create_event(item)
+
+    assert event.id == existing_id
+
+
+@pytest.mark.asyncio
+async def test_merge_into_event_populates_embedding_and_preserves_summary_when_primary_unchanged(
+    mock_db_session,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.5, 0.6], title="new summary")
+    item.embedding_model = "text-embedding-3-small"
+    item.embedding_generated_at = datetime(2026, 3, 1, tzinfo=UTC)
+    item.fetched_at = datetime(2026, 3, 2, tzinfo=UTC)
+    event = Event(
+        canonical_summary="old summary",
+        source_count=1,
+        unique_source_count=1,
+        primary_item_id=uuid4(),
+        embedding=None,
+    )
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+    clusterer._count_unique_sources = AsyncMock(return_value=2)
+    clusterer.lifecycle_manager.on_event_mention = MagicMock()
+
+    await clusterer._merge_into_event(event, item)
+
+    assert event.embedding == [0.5, 0.6]
+    assert event.embedding_model == "text-embedding-3-small"
+    assert event.embedding_generated_at == item.embedding_generated_at
+    assert event.canonical_summary == "old summary"
+    clusterer.lifecycle_manager.on_event_mention.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_merge_into_event_preserves_existing_embedding(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=None, title="irrelevant")
+    item.fetched_at = datetime(2026, 3, 2, tzinfo=UTC)
+    event = Event(
+        canonical_summary="summary",
+        source_count=1,
+        unique_source_count=1,
+        primary_item_id=uuid4(),
+        embedding=[0.1, 0.2],
+        embedding_model="old-model",
+    )
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+    clusterer._count_unique_sources = AsyncMock(return_value=1)
+    clusterer.lifecycle_manager.on_event_mention = MagicMock()
+
+    await clusterer._merge_into_event(event, item)
+
+    assert event.embedding == [0.1, 0.2]
+    assert event.embedding_model == "old-model"
+
+
+@pytest.mark.asyncio
+async def test_find_matching_event_returns_similarity(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event = Event(canonical_summary="match")
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: (event, 0.2))
+
+    matched = await clusterer._find_matching_event(
+        item_embedding=[0.1, 0.2],
+        embedding_model="text-embedding-3-small",
+        reference_time=datetime(2026, 3, 2, tzinfo=UTC),
+    )
+
+    assert matched is not None
+    matched_event, similarity = matched
+    assert matched_event is event
+    assert similarity == pytest.approx(0.8)
+
+
+@pytest.mark.asyncio
+async def test_find_existing_event_id_for_item_returns_scalar_value(mock_db_session) -> None:
+    event_id = uuid4()
+    mock_db_session.scalar.return_value = event_id
+    clusterer = EventClusterer(session=mock_db_session)
+
+    assert await clusterer._find_existing_event_id_for_item(uuid4()) == event_id
+
+
+@pytest.mark.asyncio
+async def test_event_suppression_action_normalizes_and_filters_values(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    mock_db_session.scalar.side_effect = [None, " archive ", " mark_noise "]
+
+    assert await clusterer._event_suppression_action(event_id=uuid4()) is None
+    assert await clusterer._event_suppression_action(event_id=uuid4()) is None
+    assert await clusterer._event_suppression_action(event_id=uuid4()) == "mark_noise"
+
+
+@pytest.mark.asyncio
+async def test_add_event_link_returns_true_on_insert_and_false_on_conflict(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event_id = uuid4()
+    item_id = uuid4()
+
+    @asynccontextmanager
+    async def ok_nested():
+        yield
+
+    @asynccontextmanager
+    async def fail_nested():
+        raise IntegrityError("stmt", "params", "orig")
+        yield
+
+    mock_db_session.begin_nested.side_effect = [ok_nested(), fail_nested()]
+
+    assert await clusterer._add_event_link(event_id, item_id) is True
+    assert await clusterer._add_event_link(event_id, item_id) is False
+
+
+@pytest.mark.asyncio
+async def test_count_unique_sources_uses_fallback_when_query_returns_empty(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    fallback_source_id = uuid4()
+    mock_db_session.scalar.side_effect = [None, 0, 3]
+
+    assert await clusterer._count_unique_sources(uuid4(), fallback_source_id) == 1
+    assert await clusterer._count_unique_sources(uuid4(), None) == 0
+    assert await clusterer._count_unique_sources(uuid4(), fallback_source_id) == 3
+
+
+@pytest.mark.asyncio
+async def test_update_primary_item_uses_candidate_when_event_has_no_primary(
+    mock_db_session,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    candidate = uuid4()
+    event = Event(canonical_summary="x", primary_item_id=None)
+
+    changed = await clusterer._update_primary_item(event, candidate)
+
+    assert changed is True
+    assert event.primary_item_id == candidate
+
+
+@pytest.mark.asyncio
+async def test_source_credibility_for_item_handles_none_and_bad_values(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    mock_db_session.scalar.side_effect = [None, "bad-value", Decimal("0.8")]
+
+    assert await clusterer._source_credibility_for_item(uuid4()) == 0.0
+    assert await clusterer._source_credibility_for_item(uuid4()) == 0.0
+    assert await clusterer._source_credibility_for_item(uuid4()) == pytest.approx(0.8)
+
+
+def test_build_canonical_summary_prefers_title_and_truncates_content() -> None:
+    title_item = _build_item(title="  canonical title  ", raw_content="ignored")
+    long_content_item = _build_item(title=None, raw_content="x" * 500)
+
+    assert EventClusterer._build_canonical_summary(title_item) == "canonical title"
+    assert len(EventClusterer._build_canonical_summary(long_content_item)) == 400
+
+
+def test_item_timestamp_prefers_published_then_fetched_then_now(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    published_at = datetime(2026, 3, 1, tzinfo=UTC)
+    fetched_at = datetime(2026, 3, 2, tzinfo=UTC)
+    fallback_now = datetime(2026, 3, 3, tzinfo=UTC)
+
+    class FixedDatetime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            _ = tz
+            return fallback_now
+
+    published_item = _build_item()
+    published_item.published_at = published_at
+    published_item.fetched_at = fetched_at
+
+    fetched_item = _build_item()
+    fetched_item.published_at = None
+    fetched_item.fetched_at = fetched_at
+
+    missing_item = _build_item()
+    missing_item.published_at = None
+    missing_item.fetched_at = None
+
+    monkeypatch.setattr(event_clusterer_module, "datetime", FixedDatetime)
+
+    assert EventClusterer._item_timestamp(published_item) == published_at
+    assert EventClusterer._item_timestamp(fetched_item) == fetched_at
+    assert EventClusterer._item_timestamp(missing_item) == fallback_now

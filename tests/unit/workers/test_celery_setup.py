@@ -159,6 +159,30 @@ def test_build_beat_schedule_supports_six_hour_profile(
     assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=15)
 
 
+def test_build_beat_schedule_can_disable_degraded_replay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", False)
+    monkeypatch.setattr(celery_app_module.settings, "LLM_DEGRADED_REPLAY_ENABLED", False)
+    monkeypatch.setattr(celery_app_module.settings, "RETENTION_CLEANUP_ENABLED", False)
+    monkeypatch.setattr(celery_app_module.settings, "CLUSTER_DRIFT_SENTINEL_ENABLED", False)
+    monkeypatch.setattr(celery_app_module.settings, "TREND_SNAPSHOT_INTERVAL_MINUTES", 90)
+    monkeypatch.setattr(celery_app_module.settings, "PROCESSING_REAPER_INTERVAL_MINUTES", 10)
+    monkeypatch.setattr(celery_app_module.settings, "SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES", 30)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_DAY_OF_WEEK", 1)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_HOUR_UTC", 7)
+    monkeypatch.setattr(celery_app_module.settings, "WEEKLY_REPORT_MINUTE_UTC", 0)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_DAY_OF_MONTH", 1)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_HOUR_UTC", 8)
+    monkeypatch.setattr(celery_app_module.settings, "MONTHLY_REPORT_MINUTE_UTC", 0)
+
+    schedule = celery_app_module._build_beat_schedule()
+
+    assert "replay-degraded-events" not in schedule
+
+
 def test_celery_routes_include_processing_queue() -> None:
     routes = celery_app_module.celery_app.conf.task_routes
     assert routes["workers.process_pending_items"]["queue"] == "processing"

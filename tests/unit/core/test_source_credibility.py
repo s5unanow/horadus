@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import pytest
+from sqlalchemy import column
 
 from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     effective_source_credibility,
     reporting_multiplier,
+    source_multiplier_expression,
     tier_multiplier,
 )
 from src.storage.models import ReportingType, SourceTier
@@ -52,3 +54,41 @@ def test_effective_source_credibility_falls_back_for_invalid_base_value() -> Non
         reporting_type=ReportingType.FIRSTHAND.value,
     )
     assert value == pytest.approx(DEFAULT_SOURCE_CREDIBILITY * 0.95)
+
+
+def test_effective_source_credibility_clamps_to_bounds() -> None:
+    assert (
+        effective_source_credibility(
+            base_credibility=-1,
+            source_tier=SourceTier.PRIMARY.value,
+            reporting_type=ReportingType.FIRSTHAND.value,
+        )
+        == 0.0
+    )
+    assert (
+        effective_source_credibility(
+            base_credibility=2,
+            source_tier=SourceTier.PRIMARY.value,
+            reporting_type=ReportingType.FIRSTHAND.value,
+        )
+        == 1.0
+    )
+
+
+def test_none_tier_and_reporting_default_to_no_penalty() -> None:
+    assert tier_multiplier(None) == pytest.approx(1.0)
+    assert reporting_multiplier(None) == pytest.approx(1.0)
+
+
+def test_source_multiplier_expression_builds_case_expression() -> None:
+    expression = source_multiplier_expression(
+        source_tier_col=column("source_tier"),
+        reporting_type_col=column("reporting_type"),
+    )
+
+    compiled = str(expression.compile(compile_kwargs={"literal_binds": True}))
+
+    assert "source_tier" in compiled
+    assert "reporting_type" in compiled
+    assert "primary" in compiled.lower()
+    assert "firsthand" in compiled.lower()

@@ -8,6 +8,7 @@ import pytest
 from fastapi import HTTPException
 
 from src.api.routes.reports import (
+    _normalize_top_events,
     get_calibration_dashboard,
     get_latest_monthly,
     get_latest_weekly,
@@ -51,6 +52,14 @@ def _build_report(*, trend_id: object | None = None, report_type: str = "weekly"
     )
 
 
+def test_normalize_top_events_accepts_lists_and_rejects_invalid_shapes() -> None:
+    event_id = str(uuid4())
+
+    assert _normalize_top_events([{"event_id": event_id}, "skip"]) == [{"event_id": event_id}]
+    assert _normalize_top_events({"events": "not-a-list"}) is None
+    assert _normalize_top_events("invalid") is None
+
+
 @pytest.mark.asyncio
 async def test_list_reports_returns_summaries(mock_db_session) -> None:
     trend_id = uuid4()
@@ -68,6 +77,35 @@ async def test_list_reports_returns_summaries(mock_db_session) -> None:
     assert result[0].id == report.id
     assert result[0].report_type == "weekly"
     assert result[0].trend_name == "EU-Russia"
+
+
+@pytest.mark.asyncio
+async def test_list_reports_supports_individual_filters(mock_db_session) -> None:
+    trend_id = uuid4()
+    report = _build_report(trend_id=trend_id)
+
+    mock_db_session.execute.return_value = SimpleNamespace(all=lambda: [(report, "EU-Russia")])
+    by_type = await list_reports(
+        report_type="weekly",
+        trend_id=None,
+        limit=10,
+        session=mock_db_session,
+    )
+    by_type_query = str(mock_db_session.execute.await_args.args[0])
+
+    mock_db_session.execute.return_value = SimpleNamespace(all=lambda: [(report, "EU-Russia")])
+    by_trend = await list_reports(
+        report_type=None,
+        trend_id=trend_id,
+        limit=10,
+        session=mock_db_session,
+    )
+    by_trend_query = str(mock_db_session.execute.await_args.args[0])
+
+    assert by_type[0].id == report.id
+    assert "reports.report_type" in by_type_query
+    assert by_trend[0].id == report.id
+    assert "reports.trend_id" in by_trend_query
 
 
 @pytest.mark.asyncio
@@ -121,6 +159,19 @@ async def test_get_latest_weekly_returns_report(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_get_latest_weekly_filters_by_trend(mock_db_session) -> None:
+    trend_id = uuid4()
+    report = _build_report(trend_id=trend_id, report_type="weekly")
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: (report, "EU-Russia"))
+
+    result = await get_latest_weekly(trend_id=trend_id, session=mock_db_session)
+
+    assert result.id == report.id
+    query_text = str(mock_db_session.execute.await_args.args[0])
+    assert "reports.trend_id" in query_text
+
+
+@pytest.mark.asyncio
 async def test_get_latest_monthly_returns_404_when_missing(mock_db_session) -> None:
     mock_db_session.execute.return_value = SimpleNamespace(first=lambda: None)
 
@@ -140,6 +191,19 @@ async def test_get_latest_monthly_returns_report(mock_db_session) -> None:
     assert result.id == report.id
     assert result.report_type == "monthly"
     assert result.trend_name == "EU-Russia"
+
+
+@pytest.mark.asyncio
+async def test_get_latest_monthly_filters_by_trend(mock_db_session) -> None:
+    trend_id = uuid4()
+    report = _build_report(trend_id=trend_id, report_type="monthly")
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: (report, "EU-Russia"))
+
+    result = await get_latest_monthly(trend_id=trend_id, session=mock_db_session)
+
+    assert result.id == report.id
+    query_text = str(mock_db_session.execute.await_args.args[0])
+    assert "reports.trend_id" in query_text
 
 
 @pytest.mark.asyncio

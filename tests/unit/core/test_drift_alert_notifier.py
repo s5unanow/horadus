@@ -25,6 +25,60 @@ def _build_alerts() -> list[dict[str, object]]:
     ]
 
 
+def test_from_settings_uses_runtime_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "src.core.drift_alert_notifier.settings.CALIBRATION_DRIFT_WEBHOOK_URL",
+        "https://example.test/webhook",
+    )
+    monkeypatch.setattr(
+        "src.core.drift_alert_notifier.settings.CALIBRATION_DRIFT_WEBHOOK_TIMEOUT_SECONDS",
+        7.5,
+    )
+    monkeypatch.setattr(
+        "src.core.drift_alert_notifier.settings.CALIBRATION_DRIFT_WEBHOOK_MAX_RETRIES",
+        4,
+    )
+    monkeypatch.setattr(
+        "src.core.drift_alert_notifier.settings.CALIBRATION_DRIFT_WEBHOOK_BACKOFF_SECONDS",
+        0.75,
+    )
+
+    notifier = DriftAlertWebhookNotifier.from_settings()
+
+    assert notifier.webhook_url == "https://example.test/webhook"
+    assert notifier.timeout_seconds == 7.5
+    assert notifier.max_retries == 4
+    assert notifier.backoff_seconds == 0.75
+
+
+@pytest.mark.asyncio
+async def test_notify_returns_false_without_webhook_or_alerts() -> None:
+    notifier = DriftAlertWebhookNotifier(
+        webhook_url=None,
+        timeout_seconds=5.0,
+        max_retries=1,
+        backoff_seconds=0.1,
+    )
+
+    assert (
+        await notifier.notify(
+            trend_scope="all_trends",
+            generated_at=datetime(2026, 2, 9, 0, 0, tzinfo=UTC),
+            alerts=_build_alerts(),
+        )
+        is False
+    )
+    notifier.webhook_url = "https://example.test/drift-alerts"
+    assert (
+        await notifier.notify(
+            trend_scope="all_trends",
+            generated_at=datetime(2026, 2, 9, 0, 0, tzinfo=UTC),
+            alerts=[],
+        )
+        is False
+    )
+
+
 @pytest.mark.asyncio
 async def test_notify_posts_payload_when_configured() -> None:
     requests: list[httpx.Request] = []
@@ -155,3 +209,19 @@ async def test_notify_retries_network_errors_until_limit(
     assert delivered is False
     assert attempt_counter["count"] == 3
     assert delays == [0.25, 0.5]
+
+
+def test_backoff_seconds_and_retryable_status_helpers() -> None:
+    notifier = DriftAlertWebhookNotifier(
+        webhook_url="https://example.test/drift-alerts",
+        timeout_seconds=5.0,
+        max_retries=2,
+        backoff_seconds=0.0,
+    )
+
+    assert notifier._backoff_seconds(0) == 0.0
+    notifier.backoff_seconds = 20.0
+    assert notifier._backoff_seconds(2) == 60.0
+    assert notifier._is_retryable_status(429) is True
+    assert notifier._is_retryable_status(503) is True
+    assert notifier._is_retryable_status(400) is False

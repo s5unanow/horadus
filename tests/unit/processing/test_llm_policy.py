@@ -10,7 +10,9 @@ import pytest
 from src.processing.llm_failover import LLMChatRoute
 from src.processing.llm_policy import (
     build_safe_payload_content,
+    extract_usage_tokens,
     invoke_with_policy,
+    is_strict_schema_unsupported_error,
 )
 
 pytestmark = pytest.mark.unit
@@ -20,6 +22,12 @@ class _StrictSchemaUnsupportedError(Exception):
     def __init__(self):
         super().__init__("response_format json_schema strict mode is not supported")
         self.status_code = 400
+
+
+class _OtherError(Exception):
+    def __init__(self, message: str, *, status_code: int):
+        super().__init__(message)
+        self.status_code = status_code
 
 
 @dataclass(slots=True)
@@ -40,6 +48,24 @@ def _response(*, prompt_tokens: int, completion_tokens: int) -> SimpleNamespace:
     return SimpleNamespace(
         choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps({"ok": True})))],
         usage=SimpleNamespace(prompt_tokens=prompt_tokens, completion_tokens=completion_tokens),
+    )
+
+
+def test_extract_usage_tokens_defaults_to_zero() -> None:
+    assert extract_usage_tokens(SimpleNamespace()) == (0, 0)
+
+
+def test_is_strict_schema_unsupported_error_requires_matching_status_and_message() -> None:
+    assert is_strict_schema_unsupported_error(_StrictSchemaUnsupportedError()) is True
+    assert (
+        is_strict_schema_unsupported_error(
+            _OtherError("response_format unsupported", status_code=500)
+        )
+        is False
+    )
+    assert (
+        is_strict_schema_unsupported_error(_OtherError("plain bad request", status_code=400))
+        is False
     )
 
 
@@ -152,3 +178,54 @@ def test_build_safe_payload_content_wraps_and_truncates() -> None:
     assert content.startswith("<UNTRUSTED_TEST>")
     assert content.endswith("</UNTRUSTED_TEST>")
     assert "[TRUNCATED]" in content
+
+
+@pytest.mark.asyncio
+async def test_invoke_with_policy_records_failover_without_budget_tracking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    primary_route = LLMChatRoute(provider="openai", model="gpt-4.1-mini", client=SimpleNamespace())
+    secondary_route = LLMChatRoute(
+        provider="openai", model="gpt-4.1-nano", client=SimpleNamespace()
+    )
+    failovers: list[str] = []
+
+    class _FakeInvoker:
+        @staticmethod
+        def _extract_status_code(exc: Exception) -> int | None:
+            return getattr(exc, "status_code", None)
+
+        def __init__(self, **_: object) -> None:
+            pass
+
+        async def create_chat_completion(
+            self,
+            *,
+            messages: list[dict[str, str]],
+            temperature: float,
+            response_format: dict[str, object] | None,
+        ) -> tuple[SimpleNamespace, LLMChatRoute]:
+            assert messages
+            assert temperature == 0
+            assert response_format == {"type": "json_object"}
+            return _response(prompt_tokens=4, completion_tokens=2), secondary_route
+
+    monkeypatch.setattr("src.processing.llm_policy.LLMChatFailoverInvoker", _FakeInvoker)
+    monkeypatch.setattr(
+        "src.processing.llm_policy.record_llm_failover", lambda *, stage: failovers.append(stage)
+    )
+
+    result = await invoke_with_policy(
+        stage="tier2",
+        messages=[{"role": "user", "content": "{}"}],
+        primary_route=primary_route,
+        secondary_route=secondary_route,
+        temperature=0,
+        fallback_response_format={"type": "json_object"},
+        cost_tracker=None,
+        budget_tier=None,
+    )
+
+    assert result.used_secondary_route is True
+    assert result.active_model == "gpt-4.1-nano"
+    assert failovers == ["tier2"]

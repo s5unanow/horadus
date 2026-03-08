@@ -169,11 +169,8 @@ class LLMChatFailoverInvoker:
                 )
                 if backoff_seconds > 0:
                     await asyncio.sleep(backoff_seconds)
-        return (
-            None,
-            self.retry_policy.max_attempts,
-            RuntimeError("LLM route retry loop exhausted"),
-        )
+        # retry_policy guarantees max_attempts >= 1, so the loop always returns above.
+        raise AssertionError("LLM route retry loop exhausted")  # pragma: no cover
 
     async def _create_for_route(
         self,
@@ -239,10 +236,6 @@ class LLMChatFailoverInvoker:
                 retryable=True,
                 status_code=status_code_optional,
             )
-        if isinstance(exc, TimeoutError):
-            return LLMInvocationError(code=LLMInvocationErrorCode.TIMEOUT, retryable=True)
-        if isinstance(exc, ConnectionError):
-            return LLMInvocationError(code=LLMInvocationErrorCode.CONNECTION, retryable=True)
         return LLMInvocationError(code=LLMInvocationErrorCode.NON_RETRYABLE, retryable=False)
 
     @staticmethod

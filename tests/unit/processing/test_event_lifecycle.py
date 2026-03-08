@@ -48,6 +48,16 @@ def test_on_event_mention_revives_fading_event(mock_db_session) -> None:
     assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
 
 
+def test_on_event_mention_keeps_emerging_event_when_under_threshold(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    event = _build_event(unique_source_count=1, lifecycle_status=EventLifecycle.EMERGING.value)
+
+    changed = manager.on_event_mention(event)
+
+    assert changed is False
+    assert event.lifecycle_status == EventLifecycle.EMERGING.value
+
+
 @pytest.mark.asyncio
 async def test_run_decay_check_returns_transition_counts(mock_db_session) -> None:
     manager = EventLifecycleManager(mock_db_session)

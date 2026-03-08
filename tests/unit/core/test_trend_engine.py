@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
@@ -21,6 +22,7 @@ from src.core.trend_engine import (
     EvidenceFactors,
     TrendEngine,
     TrendUpdate,
+    _as_utc,
     calculate_evidence_delta,
     calculate_recency_novelty,
     format_direction,
@@ -76,6 +78,10 @@ class TestProbToLogodds:
         assert prob_to_logodds(0.1) == pytest.approx(-2.197, rel=0.01)
         # p=0.9 -> log(0.9/0.1) = log(9) ≈ 2.197
         assert prob_to_logodds(0.9) == pytest.approx(2.197, rel=0.01)
+
+    def test_as_utc_adds_timezone_to_naive_datetimes(self):
+        naive = datetime(2026, 3, 8, 12, 0, tzinfo=UTC).replace(tzinfo=None)
+        assert _as_utc(naive) == naive.replace(tzinfo=UTC)
 
 
 class TestLogoddsToProb:
@@ -617,6 +623,140 @@ class TestTrendEngine:
         assert result.direction == "unchanged"
 
     @pytest.mark.asyncio
+    async def test_apply_evidence_reports_down_and_unchanged_directions(
+        self, mock_session, mock_trend, sample_factors
+    ):
+        engine = TrendEngine(mock_session)
+
+        @asynccontextmanager
+        async def _begin_nested():
+            yield
+
+        mock_session.begin_nested = MagicMock(side_effect=lambda: _begin_nested())
+
+        down_result = await engine.apply_evidence(
+            trend=mock_trend,
+            delta=-0.01,
+            event_id=uuid4(),
+            signal_type="test-down",
+            factors=sample_factors,
+            reasoning="down",
+        )
+        assert down_result.direction == "down"
+
+        unchanged_result = await engine.apply_evidence(
+            trend=mock_trend,
+            delta=0.0005,
+            event_id=uuid4(),
+            signal_type="test-flat",
+            factors=sample_factors,
+            reasoning="flat",
+        )
+        assert unchanged_result.direction == "unchanged"
+
+    @pytest.mark.asyncio
+    async def test_apply_log_odds_delta_handles_atomic_and_fallback_paths(
+        self, mock_session, mock_trend
+    ):
+        engine = TrendEngine(mock_session)
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = 1.2
+        mock_session.execute = AsyncMock(return_value=execute_result)
+
+        previous_lo, new_lo = await engine.apply_log_odds_delta(
+            trend_id=mock_trend.id,
+            delta=0.2,
+            reason="test",
+            fallback_current_log_odds=0.8,
+        )
+
+        assert previous_lo == pytest.approx(1.0)
+        assert new_lo == pytest.approx(1.2)
+
+        execute_result.scalar_one_or_none.return_value = None
+        previous_lo, new_lo = await engine.apply_log_odds_delta(
+            trend_id=mock_trend.id,
+            delta=0.2,
+            reason="test",
+            fallback_current_log_odds=0.8,
+        )
+        assert previous_lo == pytest.approx(0.8)
+        assert new_lo == pytest.approx(1.0)
+
+        with pytest.raises(ValueError, match="not found"):
+            await engine.apply_log_odds_delta(
+                trend_id=mock_trend.id,
+                delta=0.2,
+                reason="test",
+            )
+
+    @pytest.mark.asyncio
+    async def test_apply_log_odds_delta_awaits_scalar_result(self, mock_session, mock_trend):
+        engine = TrendEngine(mock_session)
+
+        async def scalar_value() -> float:
+            return 1.2
+
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = scalar_value()
+        mock_session.execute = AsyncMock(return_value=execute_result)
+
+        previous_lo, new_lo = await engine.apply_log_odds_delta(
+            trend_id=mock_trend.id,
+            delta=0.2,
+            reason="test",
+            fallback_current_log_odds=0.8,
+        )
+
+        assert previous_lo == pytest.approx(1.0)
+        assert new_lo == pytest.approx(1.2)
+
+    @pytest.mark.asyncio
+    async def test_apply_decay_uses_locked_row_state_when_available(self, mock_session, mock_trend):
+        engine = TrendEngine(mock_session)
+        row = SimpleNamespace(
+            _mapping={
+                "current_log_odds": 0.0,
+                "baseline_log_odds": prob_to_logodds(0.2),
+                "updated_at": datetime.now(UTC) - timedelta(days=30),
+                "decay_half_life_days": 30,
+            }
+        )
+        execute_result = MagicMock()
+        execute_result.one_or_none.return_value = row
+        mock_session.execute = AsyncMock(return_value=execute_result)
+
+        new_prob = await engine.apply_decay(mock_trend)
+
+        assert new_prob < 0.5
+        assert mock_session.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_apply_decay_awaits_locked_row_and_returns_early_when_not_elapsed(
+        self, mock_session, mock_trend
+    ):
+        engine = TrendEngine(mock_session)
+
+        async def locked_row():
+            return SimpleNamespace(
+                _mapping={
+                    "current_log_odds": 0.25,
+                    "baseline_log_odds": prob_to_logodds(0.2),
+                    "updated_at": datetime.now(UTC),
+                    "decay_half_life_days": None,
+                }
+            )
+
+        execute_result = MagicMock()
+        execute_result.one_or_none.return_value = locked_row()
+        mock_session.execute = AsyncMock(return_value=execute_result)
+
+        new_prob = await engine.apply_decay(mock_trend)
+
+        assert new_prob == pytest.approx(logodds_to_prob(0.25))
+        assert mock_trend.current_log_odds == pytest.approx(0.25)
+
+    @pytest.mark.asyncio
     async def test_apply_decay_moves_toward_baseline(self, mock_session, mock_trend):
         """Test that decay moves probability toward baseline."""
         engine = TrendEngine(mock_session)
@@ -688,6 +828,40 @@ class TestTrendEngine:
 
         # Should be unchanged
         assert mock_trend.current_log_odds == pytest.approx(original_lo, rel=0.001)
+
+    @pytest.mark.asyncio
+    async def test_get_probability_at_direction_change_and_top_evidence(
+        self, mock_session, mock_trend
+    ):
+        engine = TrendEngine(mock_session)
+
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = prob_to_logodds(0.4)
+        mock_session.execute = AsyncMock(return_value=execute_result)
+        probability = await engine.get_probability_at(mock_trend.id, datetime.now(UTC))
+        assert probability == pytest.approx(0.4, rel=0.01)
+
+        execute_result.scalar_one_or_none.return_value = None
+        assert await engine.get_probability_at(mock_trend.id, datetime.now(UTC)) is None
+
+        engine.get_probability_at = AsyncMock(side_effect=[0.3, 0.48, 0.52, 0.56, 0.495, None])
+        mock_trend.current_log_odds = prob_to_logodds(0.5)
+        assert await engine.get_direction(mock_trend, days=7) == "rising_fast"
+        assert await engine.get_direction(mock_trend, days=7) == "rising"
+        assert await engine.get_direction(mock_trend, days=7) == "falling"
+        assert await engine.get_direction(mock_trend, days=7) == "falling_fast"
+        assert await engine.get_direction(mock_trend, days=7) == "stable"
+        assert await engine.get_direction(mock_trend, days=7) == "stable"
+
+        engine.get_probability_at = AsyncMock(side_effect=[0.45, None])
+        assert await engine.get_change(mock_trend, days=7) == pytest.approx(0.05, rel=0.01)
+        assert await engine.get_change(mock_trend, days=7) is None
+
+        scalars_result = MagicMock()
+        scalars_result.all.return_value = ["evidence"]
+        execute_result.scalars.return_value = scalars_result
+        mock_session.execute = AsyncMock(return_value=execute_result)
+        assert await engine.get_top_evidence(mock_trend.id, days=3, limit=2) == ["evidence"]
 
 
 # =============================================================================

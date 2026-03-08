@@ -18,6 +18,7 @@ from src.core.calibration_dashboard import (
 from src.core.dashboard_export import (
     build_calibration_dashboard_payload,
     export_calibration_dashboard,
+    render_calibration_dashboard_html,
 )
 
 pytestmark = pytest.mark.unit
@@ -108,6 +109,18 @@ def test_build_payload_serializes_datetimes_and_limits_rows() -> None:
     assert payload["drift_alerts"][0]["alert_type"] == "mean_brier_drift"
 
 
+def test_build_payload_enforces_minimum_trend_limit() -> None:
+    payload = build_calibration_dashboard_payload(_build_dashboard_report(), trend_limit=0)
+
+    assert len(payload["trend_movements"]) == 1
+
+
+def test_build_payload_leaves_rows_unbounded_without_limit() -> None:
+    payload = build_calibration_dashboard_payload(_build_dashboard_report())
+
+    assert len(payload["trend_movements"]) == 2
+
+
 def test_export_dashboard_writes_timestamped_and_latest_files(tmp_path: Path) -> None:
     result = export_calibration_dashboard(
         _build_dashboard_report(),
@@ -124,3 +137,23 @@ def test_export_dashboard_writes_timestamped_and_latest_files(tmp_path: Path) ->
     exported_payload = json.loads(result.latest_json_path.read_text(encoding="utf-8"))
     assert exported_payload["resolved_predictions"] == 12
     assert len(exported_payload["trend_movements"]) == 2
+
+
+def test_render_dashboard_html_uses_empty_state_fallbacks() -> None:
+    html = render_calibration_dashboard_html(
+        {
+            "generated_at": "2026-02-20T00:00:00Z",
+            "total_predictions": 0,
+            "resolved_predictions": 0,
+            "mean_brier_score": None,
+            "drift_alerts": ["invalid"],
+            "trend_movements": ["invalid"],
+            "calibration_curve": ["invalid"],
+        }
+    )
+
+    assert "Generated at 2026-02-20T00:00:00Z" in html
+    assert ">n/a<" in html
+    assert "No active drift alerts." in html
+    assert "No trend movement rows available." in html
+    assert "No calibration data available." in html

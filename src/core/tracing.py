@@ -244,12 +244,12 @@ def _task_prerun_trace(*, task: Any = None, **_: Any) -> None:
 
 def _task_postrun_trace(*, task: Any = None, **_: Any) -> None:
     request = getattr(task, "request", None)
+    if request is None:
+        return
     token = getattr(request, "_otel_trace_token", None)
     if token is None:
         return
     detach_trace_context(token)
-    if request is None:
-        return
     request._otel_trace_token = None
 
 

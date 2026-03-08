@@ -55,11 +55,47 @@ async def test_list_sources_returns_response_models(mock_db_session) -> None:
         all=lambda: [first_source, second_source]
     )
 
-    result = await list_sources(session=mock_db_session)
+    result = await list_sources(source_type=None, active_only=True, session=mock_db_session)
 
     assert [source.name for source in result] == ["First", "Second"]
     assert result[0].type == SourceType.RSS
     assert mock_db_session.scalars.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_list_sources_supports_type_filter_without_active_only(mock_db_session) -> None:
+    source = _build_source(source_type=SourceType.GDELT, is_active=False)
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [source])
+
+    result = await list_sources(
+        source_type=SourceType.GDELT,
+        active_only=False,
+        session=mock_db_session,
+    )
+
+    assert [row.type for row in result] == [SourceType.GDELT]
+    query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
+    where_clause = query_text.split("where", 1)[1]
+    assert "sources.type" in where_clause
+    assert "sources.is_active is true" not in where_clause
+
+
+@pytest.mark.asyncio
+async def test_list_sources_supports_type_filter_with_active_only(mock_db_session) -> None:
+    source = _build_source(source_type=SourceType.GDELT, is_active=True)
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [source])
+
+    result = await list_sources(
+        source_type=SourceType.GDELT,
+        active_only=True,
+        session=mock_db_session,
+    )
+
+    assert [row.type for row in result] == [SourceType.GDELT]
+    query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
+    where_clause = query_text.split("where", 1)[1]
+    assert "sources.type" in where_clause
+    assert "sources.is_active is true" in where_clause
 
 
 @pytest.mark.asyncio
@@ -130,6 +166,26 @@ async def test_update_source_updates_fields(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_update_source_normalizes_enum_fields(mock_db_session) -> None:
+    source = _build_source(name="Old Name")
+    mock_db_session.get.return_value = source
+
+    result = await update_source(
+        source_id=source.id,
+        source=SourceUpdate(
+            source_tier="wire",
+            reporting_type="aggregator",
+        ),
+        session=mock_db_session,
+    )
+
+    assert source.source_tier == "wire"
+    assert source.reporting_type == "aggregator"
+    assert result.source_tier == "wire"
+    assert result.reporting_type == "aggregator"
+
+
+@pytest.mark.asyncio
 async def test_delete_source_deactivates_source(mock_db_session) -> None:
     source = _build_source(is_active=True)
     mock_db_session.get.return_value = source
@@ -191,3 +247,75 @@ async def test_get_source_freshness_returns_report(
     assert len(result.rows) == 1
     assert result.rows[0].source_name == "Stale RSS"
     assert result.rows[0].is_stale is True
+
+
+@pytest.mark.asyncio
+async def test_get_source_freshness_omits_disabled_collectors_and_negative_budget(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_at = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
+    report = SourceFreshnessReport(
+        checked_at=checked_at,
+        stale_multiplier=2.0,
+        rows=(
+            SourceFreshnessRow(
+                source_id=uuid4(),
+                source_name="Stale RSS",
+                collector="rss",
+                last_fetched_at=checked_at,
+                age_seconds=7201,
+                stale_after_seconds=7200,
+                is_stale=True,
+            ),
+            SourceFreshnessRow(
+                source_id=uuid4(),
+                source_name="Stale GDELT",
+                collector="gdelt",
+                last_fetched_at=checked_at,
+                age_seconds=7201,
+                stale_after_seconds=7200,
+                is_stale=True,
+            ),
+        ),
+    )
+    monkeypatch.setattr(sources_route.settings, "ENABLE_RSS_INGESTION", False)
+    monkeypatch.setattr(sources_route.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(sources_route.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", -1)
+    monkeypatch.setattr(
+        sources_route,
+        "build_source_freshness_report",
+        AsyncMock(return_value=report),
+    )
+
+    result = await get_source_freshness(session=mock_db_session)
+
+    assert result.stale_collectors == ["gdelt", "rss"]
+    assert result.catchup_dispatch_budget == 0
+    assert result.catchup_candidates == []
+
+
+@pytest.mark.asyncio
+async def test_get_source_freshness_works_when_all_collectors_disabled(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checked_at = datetime(2026, 2, 16, 12, 0, tzinfo=UTC)
+    report = SourceFreshnessReport(
+        checked_at=checked_at,
+        stale_multiplier=1.0,
+        rows=(),
+    )
+    monkeypatch.setattr(sources_route.settings, "ENABLE_RSS_INGESTION", False)
+    monkeypatch.setattr(sources_route.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(sources_route.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
+    monkeypatch.setattr(
+        sources_route,
+        "build_source_freshness_report",
+        AsyncMock(return_value=report),
+    )
+
+    result = await get_source_freshness(session=mock_db_session)
+
+    assert result.stale_collectors == []
+    assert result.catchup_candidates == []

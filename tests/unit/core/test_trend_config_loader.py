@@ -43,3 +43,138 @@ indicators:
         "Force repositioning without direct hostile contact."
     )
     assert indicators["military_incident"]["description"] is None
+
+
+def test_load_trends_from_config_dir_rejects_missing_directory(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="Trend config directory not found"):
+        load_trends_from_config_dir(config_dir=tmp_path / "missing")
+
+
+def test_load_trends_from_config_dir_rejects_empty_directory(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+
+    with pytest.raises(ValueError, match="No trend config YAML files found"):
+        load_trends_from_config_dir(config_dir=config_dir)
+
+
+def test_load_trends_from_config_dir_rejects_non_mapping_yaml(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "invalid.yaml").write_text("- item\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="must be a mapping"):
+        load_trends_from_config_dir(config_dir=config_dir)
+
+
+def test_load_trends_from_config_dir_rejects_invalid_yaml(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "invalid.yaml").write_text("id: [\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match=r"Failed to load trend config invalid\.yaml"):
+        load_trends_from_config_dir(config_dir=config_dir)
+
+
+def test_load_trends_from_config_dir_rejects_validation_errors(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "invalid.yaml").write_text(
+        """
+id: "eu-russia"
+name: "EU-Russia"
+indicators: {}
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"TrendConfig validation failed for invalid\.yaml"):
+        load_trends_from_config_dir(config_dir=config_dir)
+
+
+def test_load_trends_from_config_dir_rejects_blank_trend_id(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "blank-id.yaml").write_text(
+        """
+id: "   "
+name: "Blank"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="missing required trend id"):
+        load_trends_from_config_dir(config_dir=config_dir)
+
+
+def test_load_trends_from_config_dir_rejects_duplicate_ids_and_sorts_results(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "b.yaml").write_text(
+        """
+id: "beta"
+name: "Beta"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    (config_dir / "a.yml").write_text(
+        """
+id: "alpha"
+name: "Alpha"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    trends = load_trends_from_config_dir(config_dir=config_dir)
+
+    assert [trend.definition["id"] for trend in trends] == ["alpha", "beta"]
+
+    (config_dir / "dup.yaml").write_text(
+        """
+id: "alpha"
+name: "Duplicate"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="Duplicate trend id in config dir: alpha"):
+        load_trends_from_config_dir(config_dir=config_dir)

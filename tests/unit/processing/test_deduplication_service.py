@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -82,6 +83,24 @@ async def test_find_duplicate_matches_embedding_similarity(mock_db_session) -> N
     assert mock_db_session.execute.await_count == 1
     query = mock_db_session.execute.await_args.args[0]
     assert "raw_items.embedding_model =" in str(query)
+
+
+@pytest.mark.asyncio
+async def test_find_duplicate_strips_embedding_model_before_similarity_lookup(
+    mock_db_session,
+) -> None:
+    service = DeduplicationService(session=mock_db_session, similarity_threshold=0.92)
+    mock_db_session.scalar.side_effect = [None, None, None]
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: None)
+
+    result = await service.find_duplicate(
+        embedding=[0.1, 0.2, 0.3],
+        embedding_model=" text-embedding-3-small ",
+    )
+
+    assert result.is_duplicate is False
+    query = mock_db_session.execute.await_args.args[0]
+    assert query.compile().params["embedding_model_1"] == "text-embedding-3-small"
 
 
 @pytest.mark.asyncio
@@ -168,4 +187,67 @@ async def test_find_duplicate_excludes_current_item_id(mock_db_session) -> None:
 
     assert result.is_duplicate is False
     query = mock_db_session.scalar.await_args.args[0]
+    assert "raw_items.id !=" in str(query)
+
+
+@pytest.mark.asyncio
+async def test_is_duplicate_wrapper_and_internal_helpers(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    mock_db_session.scalar.side_effect = [uuid4()]
+
+    assert await service.is_duplicate(external_id="item-1") is True
+    assert await service._find_exact_match(SimpleNamespace(), None, datetime.now(tz=UTC)) is None
+
+    with pytest.raises(ValueError, match="must not be empty"):
+        await service._find_embedding_match(
+            embedding=[],
+            embedding_model="text-embedding-3-small",
+            window_start=datetime.now(tz=UTC),
+            similarity_threshold=0.9,
+        )
+
+
+def test_normalize_url_handles_invalid_urls_and_non_default_ports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "DEDUP_URL_QUERY_MODE", "keep_non_tracking")
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAM_PREFIXES", ["utm_"])
+    monkeypatch.setattr(settings, "DEDUP_URL_TRACKING_PARAMS", ["fbclid"])
+
+    assert DeduplicationService.normalize_url(None) is None
+    assert DeduplicationService.normalize_url("not-a-url") is None
+    original_urlsplit = DeduplicationService.normalize_url.__globals__["urlsplit"]
+    monkeypatch.setattr(
+        "src.processing.deduplication_service.urlsplit",
+        lambda _url: (_ for _ in ()).throw(ValueError("bad")),
+    )
+    assert DeduplicationService.normalize_url("https://example.com") is None
+    monkeypatch.setattr("src.processing.deduplication_service.urlsplit", original_urlsplit)
+    assert (
+        DeduplicationService.normalize_url("https://www.example.com:8443/path/?=x&utm_source=a&b=2")
+        == "https://example.com:8443/path?b=2"
+    )
+    assert (
+        DeduplicationService.normalize_url("https://www.example.com:443/path/?b=2")
+        == "https://example.com/path?b=2"
+    )
+
+
+@pytest.mark.asyncio
+async def test_find_embedding_match_excludes_current_item_id(mock_db_session) -> None:
+    service = DeduplicationService(session=mock_db_session)
+    mock_db_session.execute.return_value = SimpleNamespace(first=lambda: None)
+    excluded_id = uuid4()
+
+    assert (
+        await service._find_embedding_match(
+            embedding=[0.1, 0.2],
+            embedding_model="text-embedding-3-small",
+            window_start=datetime.now(tz=UTC),
+            similarity_threshold=0.9,
+            exclude_item_id=excluded_id,
+        )
+        is None
+    )
+    query = mock_db_session.execute.await_args.args[0]
     assert "raw_items.id !=" in str(query)

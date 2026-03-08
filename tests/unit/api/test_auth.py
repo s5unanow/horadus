@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import Response
 from fastapi.testclient import TestClient
 
 import src.api.routes.auth as auth_module
@@ -77,6 +79,41 @@ def test_health_route_bypasses_auth() -> None:
     assert response.json() == {"status": "ok"}
 
 
+@pytest.mark.asyncio
+async def test_auth_disabled_bypasses_protected_route() -> None:
+    middleware = APIKeyAuthMiddleware(FastAPI(), manager=SimpleNamespace(auth_required=False))
+
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/protected",
+            "headers": [],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+    async def call_next(_request: Request) -> Response:
+        return Response(status_code=204)
+
+    response = await middleware.dispatch(request, call_next)
+
+    assert response.status_code == 204
+
+
+def test_invalid_api_key_returns_401() -> None:
+    manager, _credential = _build_manager()
+    client = TestClient(_build_app(manager))
+
+    response = client.get("/api/v1/protected", headers={"X-API-Key": "invalid"})
+
+    assert response.status_code == 401
+    assert response.json()["message"] == "Invalid API key"
+
+
 def test_rate_limit_returns_429() -> None:
     manager, credential = _build_manager(rate_limit_per_minute=1)
     client = TestClient(_build_app(manager))
@@ -88,6 +125,20 @@ def test_rate_limit_returns_429() -> None:
     assert first.status_code == 200
     assert second.status_code == 429
     assert "Retry-After" in second.headers
+
+
+def test_rate_limit_without_retry_after_omits_header(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    client = TestClient(_build_app(manager))
+    record = manager.authenticate(credential)
+    assert record is not None
+    monkeypatch.setattr(manager, "check_rate_limit", lambda _record_id: (False, None))
+
+    response = client.get("/api/v1/protected", headers={"X-API-Key": credential})
+
+    assert response.status_code == 429
+    assert "Retry-After" not in response.headers
+    assert response.json()["message"] == "Rate limit exceeded"
 
 
 def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -157,6 +208,72 @@ def test_admin_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -> Non
     last_log = audit_logger.info.call_args_list[-1]
     assert last_log.kwargs["action"] == "list_keys"
     assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_create_key_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+
+    response = client.post(
+        "/api/v1/auth/keys",
+        headers={"X-API-Key": credential},
+        json={"name": "dashboard", "rate_limit_per_minute": 50},
+    )
+
+    assert response.status_code == 403
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "create_key"
+    assert last_log.kwargs["outcome"] == "denied"
+    assert last_log.kwargs["requested_name"] == "dashboard"
+    assert last_log.kwargs["requested_rate_limit"] == 50
+
+
+def test_revoke_and_rotate_missing_keys_are_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+    headers = {
+        "X-API-Key": credential,
+        "X-Admin-API-Key": "admin-secret",
+    }
+
+    revoked = client.delete("/api/v1/auth/keys/missing-key", headers=headers)
+    rotated = client.post("/api/v1/auth/keys/missing-key/rotate", headers=headers)
+
+    assert revoked.status_code == 404
+    assert rotated.status_code == 404
+    actions = [
+        (call.kwargs["action"], call.kwargs["outcome"]) for call in audit_logger.info.call_args_list
+    ]
+    assert ("revoke_key", "not_found") in actions
+    assert ("rotate_key", "not_found") in actions
+
+
+def test_revoke_and_rotate_denied_attempts_are_audited(monkeypatch: pytest.MonkeyPatch) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
+    monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+
+    revoked = client.delete("/api/v1/auth/keys/missing-key", headers={"X-API-Key": credential})
+    rotated = client.post("/api/v1/auth/keys/missing-key/rotate", headers={"X-API-Key": credential})
+
+    assert revoked.status_code == 403
+    assert rotated.status_code == 403
+    actions = [
+        (call.kwargs["action"], call.kwargs["outcome"]) for call in audit_logger.info.call_args_list
+    ]
+    assert ("revoke_key", "denied") in actions
+    assert ("rotate_key", "denied") in actions
 
 
 def test_key_management_rejects_invalid_admin_header_value(

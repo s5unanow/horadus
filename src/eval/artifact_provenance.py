@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import json
 import subprocess  # nosec
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, cast
 
@@ -59,11 +59,17 @@ def build_directory_provenance(
     *,
     directory: str | Path,
     patterns: tuple[str, ...] = ("*.yaml", "*.yml"),
+    files: Sequence[str | Path] | None = None,
+    recursive: bool = False,
 ) -> dict[str, Any]:
-    resolved_directory = Path(directory)
-    discovered_files: list[Path] = []
-    for pattern in patterns:
-        discovered_files.extend(resolved_directory.rglob(pattern))
+    resolved_directory = Path(directory).resolve()
+    if files is None:
+        discovered_files: list[Path] = []
+        for pattern in patterns:
+            matcher = resolved_directory.rglob if recursive else resolved_directory.glob
+            discovered_files.extend(matcher(pattern))
+    else:
+        discovered_files = [Path(path) for path in files]
     unique_files = sorted({path.resolve() for path in discovered_files})
 
     file_payloads: list[dict[str, str]] = []
@@ -71,8 +77,12 @@ def build_directory_provenance(
     for path in unique_files:
         raw_text = path.read_text(encoding="utf-8")
         content_hash = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
-        file_payloads.append({"path": str(path), "sha256": content_hash})
-        digest_inputs.append(f"{path}:{content_hash}")
+        try:
+            display_path = path.relative_to(resolved_directory).as_posix()
+        except ValueError:
+            display_path = str(path)
+        file_payloads.append({"path": display_path, "sha256": content_hash})
+        digest_inputs.append(f"{display_path}:{content_hash}")
 
     fingerprint_source = "\n".join(digest_inputs)
     fingerprint = hashlib.sha256(fingerprint_source.encode("utf-8")).hexdigest()

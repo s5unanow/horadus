@@ -1864,6 +1864,29 @@ def test_ensure_docker_ready_reports_unsupported_auto_start_environment(
     )
 
 
+def test_ensure_docker_ready_reports_invalid_env_override_without_crashing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HORADUS_DOCKER_START_CMD", "echo starting-docker")
+    monkeypatch.setenv("DOCKER_READY_TIMEOUT_SECONDS", "not-an-int")
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_docker_info_result",
+        lambda: _completed(["docker", "info"], returncode=1, stderr="daemon down"),
+    )
+
+    result = task_commands_module.ensure_docker_ready(reason="integration gate")
+
+    assert result.ready is False
+    assert result.attempted_start is False
+    assert result.lines == [
+        "Docker readiness failed: DOCKER_READY_TIMEOUT_SECONDS must be an integer."
+    ]
+
+
 def test_local_gate_data_dry_run_reports_canonical_steps(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2309,6 +2332,53 @@ def test_finish_task_data_blocks_when_push_gate_docker_is_not_ready(
     assert "Docker is not ready for the next required push gate." in lines[0]
     assert "git push -u origin codex/task-261-docker-readiness" in lines[1]
     assert lines[-1] == "Docker auto-start did not make the daemon ready before timeout."
+
+
+def test_finish_task_data_dry_run_does_not_attempt_docker_auto_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-261-docker-readiness",
+            branch_task_id="TASK-261",
+            task_id="TASK-261",
+        ),
+    )
+    docker_calls: list[str] = []
+    monkeypatch.setattr(
+        task_commands_module,
+        "ensure_docker_ready",
+        lambda **_kwargs: (
+            docker_calls.append("called")
+            or task_commands_module.DockerReadiness(
+                ready=True,
+                attempted_start=False,
+                supported_auto_start=True,
+                lines=["Docker is ready."],
+            )
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, returncode=1, stderr="no pull requests found")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-261", dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert docker_calls == []
+    assert data["branch_name"] == "codex/task-261-docker-readiness"
+    assert "git push -u origin codex/task-261-docker-readiness" in lines[1]
 
 
 def test_finish_task_data_blocks_when_required_checks_do_not_pass(

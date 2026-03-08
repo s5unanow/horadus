@@ -477,6 +477,18 @@ def ensure_docker_ready(*, reason: str) -> DockerReadiness:
         f"Docker daemon is not reachable for {reason}.",
         f"Attempting Docker auto-start via {plan.description}.",
     ]
+    try:
+        timeout_seconds = _docker_ready_timeout_seconds()
+        poll_seconds = _docker_ready_poll_seconds()
+    except ValueError as exc:
+        return DockerReadiness(
+            ready=False,
+            attempted_start=False,
+            supported_auto_start=True,
+            lines=[
+                f"Docker readiness failed: {exc}",
+            ],
+        )
     if plan.shell_command is not None:
         start_result = _run_shell(plan.shell_command)
     else:
@@ -494,8 +506,7 @@ def ensure_docker_ready(*, reason: str) -> DockerReadiness:
             ],
         )
 
-    deadline = time.time() + _docker_ready_timeout_seconds()
-    poll_seconds = _docker_ready_poll_seconds()
+    deadline = time.time() + timeout_seconds
     while True:
         info_result = _docker_info_result()
         if info_result.returncode == 0:
@@ -1228,7 +1239,7 @@ def finish_task_data(
     pr_url_result = _run_command([config.gh_bin, "pr", "view", "--json", "url", "--jq", ".url"])
     pr_url = pr_url_result.stdout.strip()
     if pr_url_result.returncode != 0 or not pr_url:
-        if not remote_branch_exists:
+        if not remote_branch_exists and not dry_run:
             docker_readiness = ensure_docker_ready(
                 reason="the next required `git push` pre-push integration gate"
             )

@@ -201,6 +201,7 @@ Tasks that have been completed and verified.
 - TASK-262: Enforce No Early Completion Claims in Agent Workflow Guidance ✅
 - TASK-263: Route Repo Workflow Automation Through Horadus CLI and Skill ✅
 - TASK-264: Enforce Horadus CLI, Skill, and Docs Drift Consistency ✅
+- TASK-265: Add Structured Horadus CLI Friction Logging ✅
 - TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅
 - TASK-165: Make `horadus agent smoke` robust across auth/environment settings ✅
 - TASK-166: Add fast agent gate target (`make agent-check`) ✅

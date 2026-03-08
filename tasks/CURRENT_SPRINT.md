@@ -34,9 +34,7 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 workflow-centralization hardening follow-up intake
-  (remaining recommended sequencing: `TASK-265` → `TASK-266`; one task per
-  branch/PR):
-  - `TASK-265` Add Structured Horadus CLI Friction Logging
+  (remaining recommended sequencing: `TASK-266`; one task per branch/PR):
   - `TASK-266` Add Daily Horadus Friction Summary Automation
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
@@ -162,3 +160,9 @@
   unless the user asked for a checkpoint, and require locally solvable blockers
   to be resolved before reporting blocked; docs freshness now enforces that
   guidance across the canonical docs.
+- `TASK-265` Add Structured Horadus CLI Friction Logging ✅
+  completion note: `horadus tasks record-friction` now appends structured
+  gitignored JSONL entries under `artifacts/agent/horadus-cli-feedback/` for
+  real Horadus workflow gaps or forced fallback only, while AGENTS/runbook/skill
+  guidance explicitly keeps that log out of routine task flow and out of
+  versioned source-of-truth planning records.

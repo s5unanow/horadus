@@ -22,6 +22,10 @@ from src.core.docs_freshness import (
     _record_issue,
     run_docs_freshness_check,
 )
+from src.core.repo_workflow import (
+    WORKFLOW_ESCAPE_HATCH_TEXT,
+    canonical_task_workflow_command_templates,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -29,9 +33,16 @@ pytestmark = pytest.mark.unit
 def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     (repo_root / "docs").mkdir(parents=True, exist_ok=True)
     (repo_root / "docs" / "adr").mkdir(parents=True, exist_ok=True)
+    (repo_root / "ops" / "skills" / "horadus-cli" / "references").mkdir(
+        parents=True,
+        exist_ok=True,
+    )
     (repo_root / "src" / "api").mkdir(parents=True, exist_ok=True)
     (repo_root / "src" / "core").mkdir(parents=True, exist_ok=True)
     (repo_root / "tasks").mkdir(parents=True, exist_ok=True)
+
+    workflow_commands = canonical_task_workflow_command_templates()
+    workflow_reference_block = "\n".join([*workflow_commands, WORKFLOW_ESCAPE_HATCH_TEXT, ""])
 
     (repo_root / "PROJECT_STATUS.md").write_text(
         (
@@ -50,7 +61,28 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         encoding="utf-8",
     )
     (repo_root / "AGENTS.md").write_text(
-        "## Canonical Source-of-Truth Hierarchy\n",
+        "\n".join(
+            [
+                "## Canonical Source-of-Truth Hierarchy",
+                "",
+                "## Development Commands",
+                workflow_reference_block.strip(),
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (repo_root / "README.md").write_text(workflow_reference_block, encoding="utf-8")
+    (repo_root / "docs" / "AGENT_RUNBOOK.md").write_text(
+        workflow_reference_block,
+        encoding="utf-8",
+    )
+    (repo_root / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
+        workflow_reference_block,
+        encoding="utf-8",
+    )
+    (repo_root / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(
+        workflow_reference_block,
         encoding="utf-8",
     )
     (repo_root / "docs" / "ARCHITECTURE.md").write_text(
@@ -195,6 +227,38 @@ def test_docs_freshness_flags_missing_hierarchy_heading(tmp_path: Path) -> None:
     )
 
     assert any(issue.rule_id == "hierarchy_policy_heading_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_workflow_command_reference(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "README.md").write_text(
+        WORKFLOW_ESCAPE_HATCH_TEXT + "\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "workflow_command_reference_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_workflow_escape_hatch_guidance(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "AGENT_RUNBOOK.md").write_text(
+        "\n".join([*canonical_task_workflow_command_templates(), ""]),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "workflow_escape_hatch_missing" for issue in result.errors)
 
 
 def test_docs_freshness_flags_missing_hierarchy_reference_link(tmp_path: Path) -> None:

@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
+from src.core.repo_workflow import canonical_task_workflow_commands_for_task
 from src.horadus_cli.result import CommandResult, ExitCode
 from src.horadus_cli.task_repo import (
     active_section_text,
@@ -1766,6 +1767,14 @@ def handle_context_pack(args: Any) -> CommandResult:
     lines.extend(
         [
             "",
+            "## Suggested Workflow Commands",
+        ]
+    )
+    workflow_commands = list(canonical_task_workflow_commands_for_task(task_id))
+    lines.extend(workflow_commands)
+    lines.extend(
+        [
+            "",
             "## Suggested Validation Commands",
             "make agent-check",
             "uv run --no-sync horadus tasks local-gate --full",
@@ -1777,6 +1786,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             "task": _task_record_payload(record),
             "sprint_lines": record.sprint_lines,
             "spec_paths": record.spec_paths,
+            "suggested_workflow_commands": workflow_commands,
             "suggested_validation_commands": [
                 "make agent-check",
                 "uv run --no-sync horadus tasks local-gate --full",

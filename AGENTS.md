@@ -135,9 +135,18 @@ After completing work:
 ## Development Commands
 
 - Repo workflow CLI:
+  - `uv run --no-sync horadus tasks preflight`
+  - `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
+  - `uv run --no-sync horadus tasks context-pack TASK-XXX`
+  - `make agent-check`
+  - `uv run --no-sync horadus tasks local-gate --full`
+  - `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
+  - `uv run --no-sync horadus tasks finish TASK-XXX`
   - `uv run --no-sync horadus tasks list-active --format json`
-  - `uv run --no-sync horadus tasks context-pack TASK-XXX --format json`
   - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
+- Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
+  needed workflow step yet, or when the CLI explicitly tells you a manual
+  recovery step is required.
 - Tests: `pytest tests/ -v`
 - Dev API: `uvicorn src.api.main:app --reload`
 - Format/lint: `ruff format src/ tests/` and `ruff check src/ tests/`

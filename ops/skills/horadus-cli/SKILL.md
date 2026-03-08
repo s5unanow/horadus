@@ -13,25 +13,27 @@ Use this skill for repo workflow operations in this project.
   the workflow.
 - Prefer `--format json` for agent use.
 - Prefer `--dry-run` before any branch-creating command.
+- Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
+  needed workflow step yet, or when the CLI explicitly tells you a manual
+  recovery step is required.
 - Fall back to repo files or legacy scripts only when the CLI does not expose
   the needed surface.
 
 ## Canonical commands
 
+- Start preflight: `uv run --no-sync horadus tasks preflight`
+- Canonical autonomous start: `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
+- Context pack: `uv run --no-sync horadus tasks context-pack TASK-XXX`
+- Fast iteration gate: `make agent-check`
+- Canonical local gate: `uv run --no-sync horadus tasks local-gate --full`
+- Lifecycle verifier: `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
+- Finish: `uv run --no-sync horadus tasks finish TASK-XXX`
 - Task list: `uv run --no-sync horadus tasks list-active --format json`
 - Task record: `uv run --no-sync horadus tasks show TASK-XXX --format json`
 - Task search: `uv run --no-sync horadus tasks search "query" --format json`
-- Context pack: `uv run --no-sync horadus tasks context-pack TASK-XXX --format json`
-- Start preflight: `uv run --no-sync horadus tasks preflight --format json`
-- Canonical autonomous start dry-run:
-  `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name --dry-run --format json`
-- Lower-level eligibility check:
-  `uv run --no-sync horadus tasks eligibility TASK-XXX --format json`
+- Lower-level eligibility check: `uv run --no-sync horadus tasks eligibility TASK-XXX --format json`
 - Lower-level branch start dry-run:
   `uv run --no-sync horadus tasks start TASK-XXX --name short-name --dry-run --format json`
-- Local gate: `uv run --no-sync horadus tasks local-gate --full --format json`
-- Lifecycle verifier: `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict --format json`
-- Finish: `uv run --no-sync horadus tasks finish TASK-XXX --format json`
 - Triage bundle:
   `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 

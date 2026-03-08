@@ -10,6 +10,12 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
 
+from src.core.repo_workflow import (
+    WORKFLOW_ESCAPE_HATCH_TEXT,
+    WORKFLOW_REFERENCE_PATHS,
+    canonical_task_workflow_command_templates,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class DocsFreshnessIssue:
@@ -161,6 +167,10 @@ def _extract_h2_section(content: str, heading: str) -> str | None:
 
     section_end = section_start + next_heading_match.start()
     return content[section_start:section_end]
+
+
+def _normalize_whitespace(text: str) -> str:
+    return " ".join(text.split())
 
 
 def _extract_task_ids(content: str) -> set[str]:
@@ -422,6 +432,48 @@ def run_docs_freshness_check(
                 path=reference_path,
             )
         )
+
+    workflow_command_templates = canonical_task_workflow_command_templates()
+    for reference_path in WORKFLOW_REFERENCE_PATHS:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_reference_file_missing",
+                    message=f"Missing workflow reference file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+            continue
+
+        content = file_path.read_text(encoding="utf-8")
+        for command_template in workflow_command_templates:
+            if command_template in content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_command_reference_missing",
+                    message=(
+                        f"{reference_path} must document canonical workflow command: "
+                        f"{command_template}"
+                    ),
+                    path=reference_path,
+                )
+            )
+        if _normalize_whitespace(WORKFLOW_ESCAPE_HATCH_TEXT) not in _normalize_whitespace(content):
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_escape_hatch_missing",
+                    message=(
+                        f"{reference_path} must include the canonical raw git/gh escape-hatch "
+                        "guidance."
+                    ),
+                    path=reference_path,
+                )
+            )
 
     current_sprint_path = repo_root / "tasks" / "CURRENT_SPRINT.md"
     project_status_path = repo_root / "PROJECT_STATUS.md"

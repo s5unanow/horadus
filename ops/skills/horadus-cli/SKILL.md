@@ -16,6 +16,22 @@ Use this skill for repo workflow operations in this project.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.
+- Treat repo-facing work as incomplete until requested deliverables, required
+  repo updates, and required verification/gate runs are finished or
+  explicitly reported blocked.
+- Implementation, required tests/gates, and required task/doc/status updates
+  remain part of the same task unless they are explicitly blocked.
+- If a task is blocked, report the exact missing item, the blocker causing it,
+  and the furthest completed lifecycle step rather than a vague
+  partial-completion claim.
+- Do not claim a task is complete, done, or finished until
+  `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
+  `horadus tasks finish TASK-XXX` completes successfully.
+- Local commits, local tests, and a clean working tree are checkpoints, not
+  completion.
+- Do not stop at a local commit boundary unless the user explicitly asked for
+  a checkpoint.
+- Resolve locally solvable environment blockers before reporting blocked.
 - If Horadus is insufficient or forces a fallback, record one structured
   friction entry via `horadus tasks record-friction`; do not log routine
   success cases or treat the friction log as required reading during normal

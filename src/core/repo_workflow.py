@@ -65,10 +65,26 @@ COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
     "AGENTS.md",
     "README.md",
     "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
     "tasks/BACKLOG.md",
 )
 
 COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
+    (
+        "Treat repo-facing work as incomplete until requested deliverables, "
+        "required repo updates, and required verification/gate runs are "
+        "finished or explicitly reported blocked."
+    ),
+    (
+        "Implementation, required tests/gates, and required task/doc/status "
+        "updates remain part of the same task unless they are explicitly "
+        "blocked."
+    ),
+    (
+        "If a task is blocked, report the exact missing item, the blocker "
+        "causing it, and the furthest completed lifecycle step rather than a "
+        "vague partial-completion claim."
+    ),
     (
         "Do not claim a task is complete, done, or finished until "
         "`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or "

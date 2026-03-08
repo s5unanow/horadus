@@ -45,6 +45,13 @@
 - Newly queued from 2026-03-08 workflow-consistency intake
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
+- Newly queued from 2026-03-08 workflow/prompt contract hardening intake
+  (remaining recommended sequencing: `TASK-278` -> `TASK-279` -> `TASK-280`
+  -> `TASK-281`; one task per branch/PR):
+  - `TASK-278` Add Dependency-Aware Tool Persistence Rules to Repo Workflow Guidance
+  - `TASK-279` Add Empty-Result Recovery and Friction-Logging Fallback Rules
+  - `TASK-280` Add a Bounded Research Mode for Triage and Review Workflows
+  - `TASK-281` Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -189,3 +196,8 @@
   completion note: the finish review gate now waits the full timeout window,
   blocks actionable current-head Codex comments, and allows merge when the
   window expires silently without forcing a manual merge fallback.
+- `TASK-277` Make Agent Workflow Completeness and Verification Explicit ✅
+  completion note: the repo now defines one explicit completeness contract for
+  repo-facing agents, keeps that contract sourced from `repo_workflow`, and
+  extends docs-freshness coverage to the Horadus skill so the contract cannot
+  quietly drift across workflow surfaces.

@@ -8,6 +8,25 @@ Read and follow:
 Assess project state from a product standpoint. Identify gaps and propose up to
 3 improvements that materially improve end-user/operator value.
 
+## Bounded Research Mode
+
+Use a bounded three-pass workflow for this assessment:
+
+1. Plan
+   - Identify the product and operator questions that must be answered before
+     proposing work.
+2. Retrieve
+   - Gather only the repo evidence needed to answer those questions.
+   - Prefer authoritative repo files and command output over broad summaries.
+   - If evidence conflicts, call out the contradiction instead of resolving it
+     implicitly.
+3. Synthesize
+   - Keep every recommendation grounded in the retrieved evidence.
+   - Label inference versus directly supported fact when a recommendation
+     extends beyond the literal repo record.
+   - Cite the exact file path, task id, proposal id, or command result that
+     supports each proposal; do not invent sources.
+
 ## Output
 
 - Write final output to: `artifacts/assessments/po/daily/YYYY-MM-DD.md`

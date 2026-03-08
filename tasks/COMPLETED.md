@@ -290,6 +290,11 @@ Tasks that have been completed and verified.
   results as recovery problems first, requires sensible retry paths before
   concluding that nothing exists, and keeps friction logging limited to real
   forced fallbacks rather than routine success or expected empty results.
+- TASK-280: Add a Bounded Research Mode for Triage and Review Workflows ✅
+  The triage and assessment automations now use a bounded `plan -> retrieve ->
+  synthesize` research mode with contradiction handling, inference-vs-fact
+  labeling, and explicit repo citation rules, while ordinary implementation
+  guidance remains lighter-weight.
 ## Archive
 
 (Older sprints will be archived here)

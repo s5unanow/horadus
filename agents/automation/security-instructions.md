@@ -8,6 +8,25 @@ Read and follow:
 Assess security posture for gaps and likely foot-guns (auth, network exposure,
 secrets handling, rate limiting, logging leaks). Propose up to 3 improvements.
 
+## Bounded Research Mode
+
+Use a bounded three-pass workflow for this assessment:
+
+1. Plan
+   - Identify the security questions that need direct evidence before you make
+     a finding or proposal.
+2. Retrieve
+   - Gather only the repo evidence needed to answer those questions.
+   - Prefer authoritative repo files, runtime code paths, and explicit command
+     output.
+   - If evidence conflicts, call out the contradiction and its security impact.
+3. Synthesize
+   - Keep every finding or proposal grounded in the retrieved evidence.
+   - Label inference versus directly supported fact when the conclusion goes
+     beyond the literal repo record.
+   - Cite the exact file path, task id, proposal id, or command result that
+     supports each proposal; do not invent sources.
+
 ## Output
 
 - Write final output to: `artifacts/assessments/security/daily/YYYY-MM-DD.md`

@@ -1881,6 +1881,85 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
     assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
 
 
+def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "body" in args:
+                return _completed(args, stdout="Primary-Task: TASK-258\n")
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-258\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/258"]:
+            if "--auto" in args:
+                return _completed(args)
+            return _completed(
+                args,
+                returncode=1,
+                stderr="the base branch policy prohibits the merge. add the `--auto` flag.",
+            )
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-258-canonical-finish",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+    assert any("Base branch policy requires auto-merge" in line for line in lines)
+    assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
+
+
 def test_handle_show_returns_not_found_for_unknown_task() -> None:
     result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-999"))
 

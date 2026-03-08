@@ -267,6 +267,26 @@ def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[boo
             time.sleep(config.checks_poll_seconds)
 
 
+def _wait_for_pr_state(
+    *, pr_url: str, expected_state: str, config: FinishConfig
+) -> tuple[bool, list[str]]:
+    deadline = time.time() + config.checks_timeout_seconds
+    while True:
+        result = _run_command(
+            [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
+        )
+        if result.returncode == 0 and result.stdout.strip() == expected_state:
+            return (True, [])
+        if time.time() >= deadline:
+            return (
+                False,
+                _output_lines(result)
+                or [f"PR did not reach state {expected_state!r} before timeout."],
+            )
+        if config.checks_poll_seconds:
+            time.sleep(config.checks_poll_seconds)
+
+
 def _ensure_required_hooks() -> tuple[bool, list[str]]:
     hooks_dir = repo_root() / ".git" / "hooks"
     required = ("pre-commit", "pre-push", "commit-msg")
@@ -729,17 +749,80 @@ def finish_task_data(
                 state_after_result.stdout.strip() if state_after_result.returncode == 0 else ""
             )
             if state_after != "MERGED":
-                return _task_blocked(
-                    "merge failed.",
-                    next_action="Resolve the merge blocker in GitHub, then re-run `horadus tasks finish`.",
-                    data={
-                        "task_id": context.task_id,
-                        "branch_name": context.branch_name,
-                        "pr_url": pr_url,
-                    },
-                    exit_code=ExitCode.ENVIRONMENT_ERROR,
-                    extra_lines=_output_lines(merge_result),
-                )
+                merge_lines = _output_lines(merge_result)
+                merge_message = "\n".join(merge_lines)
+                if "--auto" in merge_message or "prohibits the merge" in merge_message:
+                    lines.append(
+                        "Base branch policy requires auto-merge; enabling auto-merge and waiting for merge completion."
+                    )
+                    auto_merge_result = _run_command(
+                        [
+                            config.gh_bin,
+                            "pr",
+                            "merge",
+                            pr_url,
+                            "--auto",
+                            "--squash",
+                            "--delete-branch",
+                        ]
+                    )
+                    if auto_merge_result.returncode != 0:
+                        auto_state_after_result = _run_command(
+                            [
+                                config.gh_bin,
+                                "pr",
+                                "view",
+                                pr_url,
+                                "--json",
+                                "state",
+                                "--jq",
+                                ".state",
+                            ]
+                        )
+                        auto_state_after = (
+                            auto_state_after_result.stdout.strip()
+                            if auto_state_after_result.returncode == 0
+                            else ""
+                        )
+                        if auto_state_after != "MERGED":
+                            return _task_blocked(
+                                "merge failed.",
+                                next_action="Resolve the merge blocker in GitHub, then re-run `horadus tasks finish`.",
+                                data={
+                                    "task_id": context.task_id,
+                                    "branch_name": context.branch_name,
+                                    "pr_url": pr_url,
+                                },
+                                exit_code=ExitCode.ENVIRONMENT_ERROR,
+                                extra_lines=_output_lines(auto_merge_result),
+                            )
+                    merged_ok, merged_lines = _wait_for_pr_state(
+                        pr_url=pr_url, expected_state="MERGED", config=config
+                    )
+                    if not merged_ok:
+                        return _task_blocked(
+                            "auto-merge did not complete before timeout.",
+                            next_action="Wait for the PR to merge in GitHub, then re-run `horadus tasks finish`.",
+                            data={
+                                "task_id": context.task_id,
+                                "branch_name": context.branch_name,
+                                "pr_url": pr_url,
+                            },
+                            exit_code=ExitCode.ENVIRONMENT_ERROR,
+                            extra_lines=merged_lines,
+                        )
+                else:
+                    return _task_blocked(
+                        "merge failed.",
+                        next_action="Resolve the merge blocker in GitHub, then re-run `horadus tasks finish`.",
+                        data={
+                            "task_id": context.task_id,
+                            "branch_name": context.branch_name,
+                            "pr_url": pr_url,
+                        },
+                        exit_code=ExitCode.ENVIRONMENT_ERROR,
+                        extra_lines=merge_lines,
+                    )
             lines.append("Merge step reported failure, but PR is already MERGED; continuing.")
 
     merge_commit_result = _run_command(

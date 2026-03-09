@@ -272,15 +272,19 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-268`, `TASK-269`, `TASK-270`, `TASK-273`, `TASK-271`, `TASK-272`
 - Workflow-consistency follow-up queue added to Sprint 3:
   `TASK-274`
+- Agent-context retrieval RFC follow-up queued in Sprint 3:
+  `TASK-288`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
+- `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]`
 
 ## Blocked
 
 - `TASK-080` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 - `TASK-189` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 - `TASK-190` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
+- `TASK-288` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
 
 ## Human Blocker SLA
 
@@ -300,7 +304,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 
 ## Next Up (Priority Order)
 
-1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`)
+1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`, `TASK-288`)
 
 ## Expert Feedback Integration ✅
 

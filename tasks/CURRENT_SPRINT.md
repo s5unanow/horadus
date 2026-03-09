@@ -47,6 +47,9 @@
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - Newly queued from 2026-03-08 finish-timeout follow-up intake
   (one task per branch/PR):
+- Newly queued from 2026-03-09 agent-context retrieval spike intake
+  (one task per branch/PR):
+  - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (postponed at Sprint 2 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
@@ -56,6 +59,7 @@
 - TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
 - TASK-189 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
 - TASK-190 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-288 | owner=human-operator | last_touched=2026-03-09 | next_action=2026-03-10 | escalate_after_days=7
 
 ## Telegram Launch Scope
 
@@ -240,3 +244,8 @@
   current-head/current-window semantics for review signals across the
   canonical workflow surfaces, while docs-freshness tests enforce the narrow
   guardrail text against drift.
+- `TASK-287` Spike Markdown-First Context Retrieval for Agent Workflow ✅
+  completion note: captured RFC-001 for markdown-first agent-context
+  retrieval, documented the phased schema/chunking/retrieval design, added
+  a reusable RFC authoring/review checklist, and queued a human-gated
+  follow-up task to turn the RFC into an approved implementation backlog.

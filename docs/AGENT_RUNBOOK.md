@@ -1,8 +1,11 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-08
+**Last Verified**: 2026-03-09
 
 Short command index for day-to-day agent/operator work.
+
+For RFC/design work, use the review checklist in `docs/rfc/README.md` before
+circulating a proposal for implementation planning.
 
 ## Canonical Commands
 

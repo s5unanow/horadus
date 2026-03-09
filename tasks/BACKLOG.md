@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-287`.
+- Next available task IDs start at `TASK-289`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5327,6 +5327,49 @@ local review against unpushed branch diffs without relying on GitHub PR state.
 - [ ] The command can review the current branch diff against a configured base branch without requiring a remote PR
 - [ ] Agent-facing docs and skill surfaces describe when to use the local Codex review step versus remote PR review
 - [ ] Tests cover the happy path plus the missing-`codex` or invalid-context blocker path
+
+---
+
+### TASK-287: Spike Markdown-First Context Retrieval for Agent Workflow
+**Priority**: P1 (High)
+**Estimate**: 1-3 hours
+**Spec**: `tasks/specs/287-context-retrieval-spike.md`
+
+The current agent context surface mixes implementation-critical material with
+bookkeeping and historical ledgers, which increases noise and makes it easier
+to carry stale or low-value context into implementation work. Run a focused
+spike to determine how far Horadus can go with Markdown-first retrieval,
+metadata, and narrower task context packs before introducing heavier context
+infrastructure.
+
+**Files**: `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`, `tasks/specs/287-context-retrieval-spike.md`, `docs/rfc/001-agent-context-retrieval.md`
+
+**Acceptance Criteria**:
+- [ ] The spike documents the current context-noise problem in the Horadus task workflow and distinguishes high-signal inputs from bookkeeping noise
+- [ ] The spike evaluates whether existing Markdown docs are sufficient for precise retrieval and identifies any minimal metadata or structure additions needed
+- [ ] The spike compares multiple implementation options (narrower context-pack output, repo-local Markdown indexing, retrieval/file-search style approaches, and optional MCP/resource integration) with explicit tradeoffs
+- [ ] The spike recommends a preferred near-term path for Horadus, including document schema, chunking/indexing rules, retrieval modes, and validation/guardrails
+- [ ] The spike output is captured in a repo document intended for follow-up implementation planning rather than remaining only in chat history
+
+---
+
+### TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
+**Priority**: P1 (High)
+**Estimate**: 1-2 hours
+**Spec**: `tasks/specs/288-rfc-001-implementation-breakdown.md`
+
+Convert `docs/rfc/001-agent-context-retrieval.md` into an approved set of
+implementation tasks with clear sequencing, but require explicit human review
+before finalizing that execution queue. This task is human-gated because it
+decides how the RFC becomes actual repo work and may change scope boundaries,
+priorities, and rollout order.
+
+**Files**: `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`, `tasks/specs/288-rfc-001-implementation-breakdown.md`, `docs/rfc/001-agent-context-retrieval.md`
+
+**Acceptance Criteria**:
+- [ ] RFC-001 is decomposed into concrete implementation-task candidates with clear scope boundaries
+- [ ] The proposed breakdown identifies any human decisions needed for sequencing or scope cuts
+- [ ] The task stops for human review/approval before finalizing the follow-up execution queue
 
 ---
 

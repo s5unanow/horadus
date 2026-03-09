@@ -321,6 +321,11 @@ Tasks that have been completed and verified.
   unaffected-caller regression coverage, and current-head/current-window
   semantics for review signals across the canonical workflow surfaces, with
   docs-freshness tests enforcing the narrow guardrail text against drift.
+- TASK-287: Spike Markdown-First Context Retrieval for Agent Workflow ✅
+  Captured RFC-001 for markdown-first agent-context retrieval, documented the
+  phased schema/chunking/retrieval design, added a reusable RFC
+  authoring/review checklist, and queued a human-gated follow-up task to turn
+  the RFC into an approved implementation backlog.
 ## Archive
 
 (Older sprints will be archived here)

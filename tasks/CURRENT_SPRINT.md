@@ -34,11 +34,9 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 closed-PR review follow-up intake
-  (recommended sequencing: `TASK-273` -> `TASK-271` -> `TASK-272`; one task
-  per branch/PR):
+  (recommended sequencing: `TASK-271` -> `TASK-272`; one task per branch/PR):
   - `TASK-271` Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In
   - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
-  - `TASK-273` Constrain Tier-2 Trend Payloads to the Safe Input Budget
 - Newly queued from 2026-03-08 workflow-consistency intake
   (one task per branch/PR):
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
@@ -197,6 +195,10 @@
   completion note: eval provenance fingerprints now stay checkout-root stable,
   match the trend loader's effective config discovery scope, and stop reporting
   false config drift from unrelated nested YAML files.
+- `TASK-273` Constrain Tier-2 Trend Payloads to the Safe Input Budget ✅
+  completion note: Tier-2 trend payload construction now keeps deterministic
+  headroom inside the safe input budget, trims content in a fixed order, and
+  fails closed instead of relying on provider-side truncation.
 - `TASK-275` Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
   completion note: `horadus tasks finish` now requires a positive review-gate
   timeout and blocks zero-time bypass attempts while keeping the CLI as the

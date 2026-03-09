@@ -136,6 +136,7 @@ After completing work:
 - Do not proactively suggest changing the `horadus tasks finish` review timeout; wait the canonical 10-minute window unless the human explicitly asked otherwise.
 - A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts as a positive review-gate signal, but the gate still waits the full timeout window and still blocks actionable current-head review comments.
 - `horadus tasks finish` must always wait a positive review-gate timeout; actionable current-head review feedback blocks completion, while a silent timeout after the full wait window may continue inside the CLI flow without bypassing to raw `gh pr merge`.
+- If a prior `horadus tasks finish TASK-XXX` run leaves you back on `main` before the PR lifecycle is actually complete, re-run the same command with the explicit task id before treating the CLI as unavailable or falling back to raw `gh pr merge`.
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
 - Resolve locally solvable environment blockers before reporting blocked.

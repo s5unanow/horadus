@@ -2748,6 +2748,56 @@ def test_resolve_finish_context_rejects_task_mismatch(
     assert "maps to TASK-258, not TASK-259" in lines[0]
 
 
+def test_resolve_finish_context_allows_explicit_task_id_from_main(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="fail",
+    )
+    snapshot = _task_snapshot(
+        current_branch="main",
+        branch_name="codex/task-289-finish-branch-context-recovery",
+        pr=task_commands_module.TaskPullRequest(
+            number=289,
+            url="https://example.invalid/pr/289",
+            state="OPEN",
+            is_draft=False,
+            head_ref_name="codex/task-289-finish-branch-context-recovery",
+            head_ref_oid="head-sha-289",
+            merge_commit_oid=None,
+            check_state="pass",
+        ),
+    )
+    snapshot.task_id = "TASK-289"
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="main\n"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: snapshot,
+    )
+
+    result = task_commands_module._resolve_finish_context("TASK-289", config)
+
+    assert isinstance(result, task_commands_module.FinishContext)
+    assert result.branch_name == "codex/task-289-finish-branch-context-recovery"
+    assert result.branch_task_id == "TASK-289"
+    assert result.task_id == "TASK-289"
+    assert result.current_branch == "main"
+
+
 def test_finish_task_data_blocks_when_branch_not_pushed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2777,7 +2827,13 @@ def test_finish_task_data_blocks_when_branch_not_pushed(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args, returncode=2)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, returncode=1, stderr="no pull requests found")
         raise AssertionError(args)
 
@@ -2820,7 +2876,13 @@ def test_finish_task_data_blocks_when_push_gate_docker_is_not_ready(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args, returncode=2)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, returncode=1, stderr="no pull requests found")
         raise AssertionError(args)
 
@@ -2868,7 +2930,13 @@ def test_finish_task_data_dry_run_does_not_attempt_docker_auto_start(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args, returncode=2)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, returncode=1, stderr="no pull requests found")
         raise AssertionError(args)
 
@@ -2913,7 +2981,13 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
             if "--json" in args and "title,body" in args:
@@ -3022,7 +3096,13 @@ def test_finish_task_data_allows_review_timeout_override_with_human_approval(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/283\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/283"]:
             if "--json" in args and "title,body" in args:
@@ -3179,7 +3259,13 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/275\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/275"]:
             if "--json" in args and "title,body" in args:
@@ -3222,6 +3308,115 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     assert lines[-1] == "Task finish passed: merged merge-commit-275 and synced main."
 
 
+def test_finish_task_data_resumes_from_main_with_explicit_task_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-289-finish-branch-context-recovery",
+            branch_task_id="TASK-289",
+            task_id="TASK-289",
+            current_branch="main",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-289 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, []),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            stdout=(
+                "review gate timeout: no actionable current-head review feedback from "
+                "chatgpt-codex-connector[bot] for head-sha-289 within 600s. "
+                "Continuing due to timeout policy=allow."
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-289", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:4]
+            == [
+                "gh",
+                "pr",
+                "view",
+                "codex/task-289-finish-branch-context-recovery",
+            ]
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/289\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/289"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-289: finish branch context recovery","body":"Primary-Task: TASK-289\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-289\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/289"]:
+            return _completed(args)
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-289-finish-branch-context-recovery",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-289", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["pr_url"] == "https://example.invalid/pr/289"
+    assert data["merge_commit"] == "merge-commit-289"
+    assert data["lifecycle"]["lifecycle_state"] == "local-main-synced"
+    assert lines[0] == (
+        "Resuming TASK-289 from main using task branch codex/task-289-finish-branch-context-recovery."
+    )
+    assert any("review gate timeout:" in line for line in lines)
+    assert lines[-1] == "Task finish passed: merged merge-commit-289 and synced main."
+
+
 def test_finish_task_data_blocks_when_review_gate_process_hangs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3259,7 +3454,13 @@ def test_finish_task_data_blocks_when_review_gate_process_hangs(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/284\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/284"]:
             if "--json" in args and "title,body" in args:
@@ -3329,7 +3530,13 @@ def test_finish_task_data_blocks_when_merge_command_hangs_after_review_gate_pass
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/284\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/284"]:
             if "--json" in args and "title,body" in args:
@@ -3412,7 +3619,13 @@ def test_finish_task_data_blocks_when_review_gate_finds_actionable_comments(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/276\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/276"]:
             if "--json" in args and "title,body" in args:
@@ -3468,7 +3681,13 @@ def test_finish_task_data_blocks_when_pr_title_or_body_is_invalid(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/274\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/274"]:
             if "--json" in args and "title,body" in args:
@@ -3538,7 +3757,13 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args, returncode=2)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
             if "--json" in args and "title,body" in args:
@@ -3622,7 +3847,13 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/258\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
             if "--json" in args and "title,body" in args:
@@ -3710,7 +3941,13 @@ def test_finish_task_data_blocks_when_completion_verifier_fails_after_merge(
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
             return _completed(args, returncode=2)
-        if args[:5] == ["gh", "pr", "view", "--json", "url"]:
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
             return _completed(args, stdout="https://example.invalid/pr/259\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/259"]:
             if "--json" in args and "title,body" in args:

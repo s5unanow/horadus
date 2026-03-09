@@ -41,6 +41,9 @@
   - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - Newly queued from 2026-03-08 finish-timeout follow-up intake
   (one task per branch/PR):
+- Newly queued from 2026-03-09 finish-flow recovery intake
+  (one task per branch/PR):
+  - `TASK-289` Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts
 - Newly queued from 2026-03-09 agent-context retrieval spike intake
   (one task per branch/PR):
   - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized

@@ -135,6 +135,7 @@ class FinishContext:
     branch_name: str
     branch_task_id: str
     task_id: str
+    current_branch: str | None = None
 
 
 @dataclass(slots=True)
@@ -787,10 +788,54 @@ def _resolve_finish_context(
             next_action="Check out the task branch you want to finish, then re-run `horadus tasks finish`.",
             data={"current_branch": current_branch},
         )
+    requested_task_id: str | None = None
+    if task_input is not None:
+        requested_task_id = normalize_task_id(task_input)
     if current_branch == "main":
+        if requested_task_id is not None:
+            lifecycle_result = resolve_task_lifecycle(requested_task_id, config=config)
+            if isinstance(lifecycle_result, tuple):
+                exit_code, data, lines = lifecycle_result
+                return _task_blocked(
+                    "unable to recover task context from 'main'.",
+                    next_action=(
+                        f"Restore the branch or PR state for {requested_task_id}, then re-run "
+                        f"`horadus tasks finish {requested_task_id}`."
+                    ),
+                    data={"current_branch": current_branch, "task_id": requested_task_id, **data},
+                    exit_code=exit_code,
+                    extra_lines=lines,
+                )
+            if not lifecycle_result.working_tree_clean:
+                return _task_blocked(
+                    "working tree must be clean.",
+                    next_action=(
+                        "Commit or stash local changes, then re-run "
+                        f"`horadus tasks finish {requested_task_id}`."
+                    ),
+                    data={"current_branch": current_branch, "task_id": requested_task_id},
+                )
+            if lifecycle_result.branch_name is None:
+                return _task_blocked(
+                    f"unable to resolve a task branch for {requested_task_id} from 'main'.",
+                    next_action=(
+                        f"Restore the task branch or open PR for {requested_task_id}, then re-run "
+                        f"`horadus tasks finish {requested_task_id}`."
+                    ),
+                    data={"current_branch": current_branch, "task_id": requested_task_id},
+                )
+            return FinishContext(
+                branch_name=lifecycle_result.branch_name,
+                branch_task_id=requested_task_id,
+                task_id=requested_task_id,
+                current_branch=current_branch,
+            )
         return _task_blocked(
             "refusing to run on 'main'.",
-            next_action="Switch to the task branch that owns the PR lifecycle you want to finish.",
+            next_action=(
+                "Re-run `horadus tasks finish TASK-XXX` with an explicit task id, or switch to "
+                "the task branch that owns the PR lifecycle you want to finish."
+            ),
             data={"current_branch": current_branch},
         )
 
@@ -845,6 +890,7 @@ def _resolve_finish_context(
         branch_name=current_branch,
         branch_task_id=branch_task_id,
         task_id=requested_task_id,
+        current_branch=current_branch,
     )
 
 
@@ -1837,7 +1883,9 @@ def finish_task_data(
     )
     remote_branch_exists = remote_branch_result.returncode == 0
 
-    pr_url_result = _run_command([config.gh_bin, "pr", "view", "--json", "url", "--jq", ".url"])
+    pr_url_result = _run_command(
+        [config.gh_bin, "pr", "view", context.branch_name, "--json", "url", "--jq", ".url"]
+    )
     pr_url = pr_url_result.stdout.strip()
     if pr_url_result.returncode != 0 or not pr_url:
         if not remote_branch_exists and not dry_run:
@@ -1910,7 +1958,12 @@ def finish_task_data(
             extra_lines=_output_lines(scope_result),
         )
 
-    lines = [f"Finishing {context.task_id} from {context.branch_name}", f"PR: {pr_url}"]
+    lines = []
+    if context.current_branch is not None and context.current_branch != context.branch_name:
+        lines.append(
+            f"Resuming {context.task_id} from {context.current_branch} using task branch {context.branch_name}."
+        )
+    lines.extend([f"Finishing {context.task_id} from {context.branch_name}", f"PR: {pr_url}"])
 
     pr_state_result = _run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]

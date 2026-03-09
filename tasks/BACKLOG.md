@@ -5373,6 +5373,30 @@ priorities, and rollout order.
 
 ---
 
+### TASK-289: Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Recent task-closure runs showed that `horadus tasks finish` can leave the repo
+on `main` while the task PR is still open, merge-clean, and waiting only on the
+remaining finish lifecycle. A follow-up invocation then refuses to continue
+because it sees `main` instead of the task branch, forcing a manual branch
+switch and sometimes a raw `gh pr merge` fallback even though the CLI is
+supposed to own the completion path. Harden the finish flow so branch-context
+drift is either recovered automatically or surfaced as a concrete blocker
+without abandoning the PR lifecycle mid-flight.
+
+**Files**: `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks finish` does not switch away from the active task branch before the PR lifecycle is complete, or it restores/resumes the correct task context before continuing
+- [ ] If a prior finish attempt leaves the repo on `main` while the task PR is still open, a rerun with the explicit task id can resume safely instead of failing immediately with `refusing to run on 'main'`
+- [ ] Finish either merges/syncs cleanly after the review/check gates are satisfied or exits with a concrete blocker naming the step that prevented completion
+- [ ] Agent-facing workflow guidance reflects the corrected recovery behavior and keeps raw `gh pr merge` limited to genuine forced fallback scenarios
+- [ ] Tests cover the reproduced branch-drift scenario end to end, including the rerun path from `main`
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] WebSocket for real-time trend updates

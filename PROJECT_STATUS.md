@@ -277,6 +277,8 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-272`
 - Workflow-consistency follow-up queue added to Sprint 3:
   `TASK-274`
+- Finish-flow recovery follow-up queued in Sprint 3:
+  `TASK-289`
 - Agent-context retrieval RFC follow-up queued in Sprint 3:
   `TASK-288`
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)

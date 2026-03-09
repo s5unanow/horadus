@@ -34,9 +34,8 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 closed-PR review follow-up intake
-  (recommended sequencing: `TASK-268` -> `TASK-269` -> `TASK-270` ->
-  `TASK-273` -> `TASK-271` -> `TASK-272`; one task per branch/PR):
-  - `TASK-268` Permit Explicit Task Lifecycle Verification from Detached HEAD
+  (recommended sequencing: `TASK-269` -> `TASK-270` -> `TASK-273` ->
+  `TASK-271` -> `TASK-272`; one task per branch/PR):
   - `TASK-269` Respect `UV_BIN` Across Full Local Gate Build Steps
   - `TASK-270` Make Eval Directory Provenance Repo-Stable and Loader-Scoped
   - `TASK-271` Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In
@@ -187,6 +186,11 @@
   repo-owned automation desired state is versioned under `ops/automations/`,
   and follow-up task ideas remain human-review suggestions rather than auto-
   created backlog records.
+- `TASK-268` Permit Explicit Task Lifecycle Verification from Detached HEAD ✅
+  completion note: `horadus tasks lifecycle TASK-XXX --strict` now accepts an
+  explicit task id from detached `HEAD` checkouts while still failing closed
+  when no task id is supplied, and the detached-checkout behavior is covered in
+  unit tests plus the agent runbook.
 - `TASK-275` Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
   completion note: `horadus tasks finish` now requires a positive review-gate
   timeout and blocks zero-time bypass attempts while keeping the CLI as the

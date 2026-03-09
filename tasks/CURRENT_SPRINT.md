@@ -34,8 +34,7 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 closed-PR review follow-up intake
-  (recommended sequencing: `TASK-271` -> `TASK-272`; one task per branch/PR):
-  - `TASK-271` Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In
+  (recommended sequencing: `TASK-272`; one task per branch/PR):
   - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
 - Newly queued from 2026-03-08 workflow-consistency intake
   (one task per branch/PR):
@@ -199,6 +198,10 @@
   completion note: Tier-2 trend payload construction now keeps deterministic
   headroom inside the safe input budget, trims content in a fixed order, and
   fails closed instead of relying on provider-side truncation.
+- `TASK-271` Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In ✅
+  completion note: default benchmark runs now stay on the baseline config set,
+  while GPT-5 candidate configs remain available only through explicit
+  `--config` selection in the CLI and docs.
 - `TASK-275` Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
   completion note: `horadus tasks finish` now requires a positive review-gate
   timeout and blocks zero-time bypass attempts while keeping the CLI as the

@@ -251,6 +251,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-163` now standardizes promotion via staging with fail-closed `make release-gate`, explicit dev/staging/prod release semantics in `docs/RELEASING.md`, and aligned staging rollout/cross-link guidance across deployment/environment/readme docs
 - [x] `TASK-266` now adds `horadus tasks summarize-friction`, a repo-owned daily automation spec synced through `ops/automations/`, and compact human-triaged workflow friction reports under `artifacts/agent/horadus-cli-feedback/daily/`
 - [x] `TASK-268` now allows `horadus tasks lifecycle TASK-XXX --strict` to verify an explicit task id from detached `HEAD` checkouts while still failing closed when no task id is supplied
+- [x] `TASK-269` now keeps `horadus tasks local-gate --full` on one consistent `UV_BIN` contract across every `uv`/`uvx`-backed step, including package-build validation and dry-run command output
 - [x] `TASK-283` now hardens `horadus tasks finish` so review-timeout overrides require explicit human approval, recognizes the configured reviewer's PR-summary `THUMBS_UP` as a positive review-gate signal, and keeps that policy aligned across repo workflow docs and skill surfaces
 - [x] `TASK-284` now bounds `horadus tasks finish` review-gate and merge subprocesses with explicit timeouts so the command exits with a concrete blocker instead of idling indefinitely after the silent-timeout allow path
 - [x] `TASK-285` now adds narrow shared-workflow guardrails that require caller audits, unaffected-caller regression coverage, and explicit current-head/current-window semantics before changing workflow policy behavior, with docs-freshness enforcement across the canonical agent-facing surfaces
@@ -270,7 +271,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - Workflow/coverage hardening queue remains active in Sprint 3:
   `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`, `TASK-257`
 - Closed-PR review follow-up queue added to Sprint 3 with recommended sequencing:
-  `TASK-269`, `TASK-270`, `TASK-273`, `TASK-271`, `TASK-272`
+  `TASK-270`, `TASK-273`, `TASK-271`, `TASK-272`
 - Workflow-consistency follow-up queue added to Sprint 3:
   `TASK-274`
 - Agent-context retrieval RFC follow-up queued in Sprint 3:

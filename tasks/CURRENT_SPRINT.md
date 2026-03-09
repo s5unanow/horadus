@@ -34,9 +34,8 @@
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
   - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 closed-PR review follow-up intake
-  (recommended sequencing: `TASK-269` -> `TASK-270` -> `TASK-273` ->
-  `TASK-271` -> `TASK-272`; one task per branch/PR):
-  - `TASK-269` Respect `UV_BIN` Across Full Local Gate Build Steps
+  (recommended sequencing: `TASK-270` -> `TASK-273` -> `TASK-271` ->
+  `TASK-272`; one task per branch/PR):
   - `TASK-270` Make Eval Directory Provenance Repo-Stable and Loader-Scoped
   - `TASK-271` Keep GPT-5 Benchmark Candidate Configs Explicitly Opt-In
   - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
@@ -191,6 +190,10 @@
   explicit task id from detached `HEAD` checkouts while still failing closed
   when no task id is supplied, and the detached-checkout behavior is covered in
   unit tests plus the agent runbook.
+- `TASK-269` Respect `UV_BIN` Across Full Local Gate Build Steps ✅
+  completion note: the canonical full local gate now honors the configured
+  absolute `UV_BIN` consistently across every `uv`/`uvx`-backed step, including
+  package-build validation and dry-run command rendering.
 - `TASK-275` Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
   completion note: `horadus tasks finish` now requires a positive review-gate
   timeout and blocks zero-time bypass attempts while keeping the CLI as the

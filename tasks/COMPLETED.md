@@ -204,6 +204,7 @@ Tasks that have been completed and verified.
 - TASK-265: Add Structured Horadus CLI Friction Logging ✅
 - TASK-266: Add Daily Horadus Friction Summary Automation ✅
 - TASK-268: Permit Explicit Task Lifecycle Verification from Detached HEAD ✅
+- TASK-269: Respect `UV_BIN` Across Full Local Gate Build Steps ✅
 - TASK-164: Add one-shot agent smoke run target (serve -> smoke -> exit) ✅
 - TASK-165: Make `horadus agent smoke` robust across auth/environment settings ✅
 - TASK-166: Add fast agent gate target (`make agent-check`) ✅

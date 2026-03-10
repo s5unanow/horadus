@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -415,6 +415,28 @@ def archived_task_record(task_id: str) -> TaskRecord | None:
     return archived_task_records().get(normalized)
 
 
+def _enrich_task_record(record: TaskRecord) -> TaskRecord:
+    enriched = replace(
+        record,
+        description=list(record.description),
+        files=list(record.files),
+        acceptance_criteria=list(record.acceptance_criteria),
+        assessment_refs=list(record.assessment_refs),
+        sprint_lines=[],
+        spec_paths=[],
+    )
+    normalized = enriched.task_id
+    enriched.sprint_lines = sprint_lines_for_task(normalized)
+    enriched.spec_paths = spec_paths_for_task(normalized)
+    if is_task_completed(normalized):
+        enriched.status = "completed"
+    elif enriched.sprint_lines:
+        enriched.status = "active"
+    else:
+        enriched.status = "backlog"
+    return enriched
+
+
 def task_record(task_id: str, *, include_archive: bool = False) -> TaskRecord | None:
     normalized = normalize_task_id(task_id)
     record = backlog_task_records().get(normalized)
@@ -422,13 +444,7 @@ def task_record(task_id: str, *, include_archive: bool = False) -> TaskRecord | 
         record = archived_task_record(normalized)
     if record is None:
         return None
-    record.sprint_lines = sprint_lines_for_task(normalized)
-    record.spec_paths = spec_paths_for_task(normalized)
-    if is_task_completed(normalized):
-        record.status = "completed"
-    elif record.sprint_lines:
-        record.status = "active"
-    return record
+    return _enrich_task_record(record)
 
 
 def search_task_records(
@@ -455,8 +471,8 @@ def search_task_records(
             ]
         ).lower()
         if normalized in haystack:
-            enriched = task_record(record.task_id, include_archive=include_archive)
-            if enriched is not None and (status == "all" or enriched.status == status):
+            enriched = _enrich_task_record(record)
+            if status == "all" or enriched.status == status:
                 matches.append(enriched)
     matches.sort(
         key=lambda record: (

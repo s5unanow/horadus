@@ -20,11 +20,17 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_task_context_pack_prints_task_context() -> None:
-    result = _run("TASK-164")
+    result = _run("TASK-292")
     assert result.returncode == 0
-    assert "# Context Pack: TASK-164" in result.stdout
+    assert "# Context Pack: TASK-292" in result.stdout
     assert "## Suggested Validation Commands" in result.stdout
     assert "make agent-check" in result.stdout
+
+
+def test_task_context_pack_supports_explicit_archive_lookup() -> None:
+    result = _run("TASK-164", "--include-archive")
+    assert result.returncode == 0
+    assert "# Context Pack: TASK-164" in result.stdout
 
 
 def test_task_context_pack_rejects_invalid_task_id() -> None:

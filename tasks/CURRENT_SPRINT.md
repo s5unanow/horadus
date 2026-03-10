@@ -51,3 +51,4 @@
 ## Completed This Sprint
 
 - `TASK-292` Right-Size Live Task Ledgers and Archive Historical Planning Surfaces ✅
+- `TASK-294` Preserve Closed Task Bodies in Quarterly Archive Shards ✅

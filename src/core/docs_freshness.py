@@ -123,7 +123,9 @@ _PROJECT_STATUS_STUB_REQUIRED_POINTERS: tuple[str, ...] = (
     "tasks/CURRENT_SPRINT.md",
     "tasks/BACKLOG.md",
     "tasks/COMPLETED.md",
-    "archive/2026-03-10-sprint-3-close/PROJECT_STATUS.md",
+)
+_PROJECT_STATUS_ARCHIVE_POINTER_PATTERN = re.compile(
+    r"archive/\d{4}-\d{2}-\d{2}-[a-z0-9-]+/PROJECT_STATUS\.md"
 )
 _PROJECT_STATUS_ARCHIVE_GUIDANCE = (
     "Do not read `archive/` during normal implementation flow unless a user "
@@ -643,6 +645,18 @@ def run_docs_freshness_check(
                 message=(
                     "PROJECT_STATUS.md missing required live/archive pointers: "
                     + ", ".join(missing_project_status_pointers)
+                ),
+                path="PROJECT_STATUS.md",
+            )
+        if _PROJECT_STATUS_ARCHIVE_POINTER_PATTERN.search(project_status_text) is None:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_stub_archive_pointer_missing",
+                message=(
+                    "PROJECT_STATUS.md must point to a dated archived status snapshot "
+                    "(archive/YYYY-MM-DD-.../PROJECT_STATUS.md)."
                 ),
                 path="PROJECT_STATUS.md",
             )

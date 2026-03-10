@@ -624,7 +624,9 @@ def test_docs_freshness_flags_missing_project_status_archive_pointer(
         override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
     )
 
-    assert any(issue.rule_id == "project_status_stub_pointer_missing" for issue in result.errors)
+    assert any(
+        issue.rule_id == "project_status_stub_archive_pointer_missing" for issue in result.errors
+    )
 
 
 def test_docs_freshness_flags_missing_project_status_archive_guidance(
@@ -656,6 +658,41 @@ def test_docs_freshness_flags_missing_project_status_archive_guidance(
 
     assert any(
         issue.rule_id == "project_status_archive_guidance_missing" for issue in result.errors
+    )
+
+
+def test_docs_freshness_accepts_newer_project_status_archive_pointer(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                "# Project Status",
+                "",
+                "**Status**: Archived pointer stub (non-authoritative)",
+                "**Archived Detailed Status On**: 2026-03-24",
+                "",
+                "- `tasks/CURRENT_SPRINT.md`",
+                "- `tasks/BACKLOG.md`",
+                "- `tasks/COMPLETED.md`",
+                "- `archive/2026-03-24-sprint-4-close/PROJECT_STATUS.md`",
+                "",
+                "Do not read `archive/` during normal implementation flow unless a user explicitly asks for historical context or an archive-aware CLI flag is used.",
+                "",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert not any(
+        issue.rule_id == "project_status_stub_archive_pointer_missing" for issue in result.errors
     )
 
 

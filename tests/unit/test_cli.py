@@ -7735,6 +7735,26 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     )
 
 
+def test_handle_context_pack_propagates_archive_flag_to_suggested_commands() -> None:
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id="TASK-164", include_archive=True)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "uv run --no-sync horadus tasks context-pack TASK-164 --include-archive" in result.lines
+    assert "uv run --no-sync horadus tasks context-pack TASK-164" not in (
+        "\n".join(result.lines).replace(
+            "uv run --no-sync horadus tasks context-pack TASK-164 --include-archive", ""
+        )
+    )
+    assert result.data is not None
+    assert (
+        "uv run --no-sync horadus tasks context-pack TASK-164 --include-archive"
+        in result.data["suggested_workflow_commands"]
+    )
+
+
 def test_handle_show_requires_explicit_archive_flag_for_archived_task() -> None:
     result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-164"))
 

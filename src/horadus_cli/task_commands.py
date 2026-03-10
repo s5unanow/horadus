@@ -2738,6 +2738,24 @@ def handle_search(args: Any) -> CommandResult:
     )
 
 
+def _workflow_commands_for_context_pack(
+    task_id: str,
+    *,
+    include_archive: bool,
+    archived: bool,
+) -> list[str]:
+    commands = list(canonical_task_workflow_commands_for_task(task_id))
+    if not (include_archive and archived):
+        return commands
+
+    default_context_pack = f"uv run --no-sync horadus tasks context-pack {task_id}"
+    archived_context_pack = f"{default_context_pack} --include-archive"
+    return [
+        archived_context_pack if command == default_context_pack else command
+        for command in commands
+    ]
+
+
 def handle_context_pack(args: Any) -> CommandResult:
     try:
         task_id = normalize_task_id(args.task_id)
@@ -2791,7 +2809,11 @@ def handle_context_pack(args: Any) -> CommandResult:
             "## Suggested Workflow Commands",
         ]
     )
-    workflow_commands = list(canonical_task_workflow_commands_for_task(task_id))
+    workflow_commands = _workflow_commands_for_context_pack(
+        task_id,
+        include_archive=include_archive,
+        archived=record.archived,
+    )
     lines.extend(workflow_commands)
     lines.extend(
         [

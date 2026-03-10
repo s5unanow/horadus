@@ -180,6 +180,18 @@ def _working_tree_text_for_path(path: str) -> str:
         return ""
 
 
+def _diff_texts_for_path(path: str) -> list[str]:
+    texts: list[str] = []
+    for args in (
+        ["git", "diff", "--unified=20", "--", path],
+        ["git", "diff", "--cached", "--unified=20", "--", path],
+    ):
+        result = _run_command(args)
+        if result.returncode == 0 and result.stdout.strip():
+            texts.append(result.stdout)
+    return texts
+
+
 def _changed_line_numbers(diff_text: str) -> tuple[list[int], list[int]]:
     old_lines: list[int] = []
     new_lines: list[int] = []
@@ -225,30 +237,33 @@ def _backlog_task_id_for_line(text: str, line_number: int) -> str | None:
 
 
 def _dirty_task_refs_for_path(path: str) -> set[str]:
-    diff_result = _run_command(["git", "diff", "--unified=20", "--", path])
-    if diff_result.returncode != 0:
+    diff_texts = _diff_texts_for_path(path)
+    if not diff_texts:
         return set()
     if path == "tasks/BACKLOG.md":
         head_text = _head_text_for_path(path)
         working_text = _working_tree_text_for_path(path)
-        old_lines, new_lines = _changed_line_numbers(diff_result.stdout)
         refs: set[str] = set()
-        refs.update(
-            task_id
-            for line_number in old_lines
-            if (task_id := _backlog_task_id_for_line(head_text, line_number)) is not None
-        )
-        refs.update(
-            task_id
-            for line_number in new_lines
-            if (task_id := _backlog_task_id_for_line(working_text, line_number)) is not None
-        )
+        for diff_text in diff_texts:
+            old_lines, new_lines = _changed_line_numbers(diff_text)
+            refs.update(
+                task_id
+                for line_number in old_lines
+                if (task_id := _backlog_task_id_for_line(head_text, line_number)) is not None
+            )
+            refs.update(
+                task_id
+                for line_number in new_lines
+                if (task_id := _backlog_task_id_for_line(working_text, line_number)) is not None
+            )
         return refs
     diff_refs: set[str] = set()
-    for raw_line in diff_result.stdout.splitlines():
-        if raw_line.startswith(("diff --git", "index ", "---", "+++", "@@")):
-            continue
-        diff_refs.update(re.findall(r"TASK-\d{3}", raw_line))
+    for diff_text in diff_texts:
+        for raw_line in diff_text.splitlines():
+            if (raw_line.startswith("+") and not raw_line.startswith("+++")) or (
+                raw_line.startswith("-") and not raw_line.startswith("---")
+            ):
+                diff_refs.update(re.findall(r"TASK-\d{3}", raw_line))
     return diff_refs
 
 

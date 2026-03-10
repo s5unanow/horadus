@@ -2798,6 +2798,40 @@ def test_changed_line_numbers_ignores_non_content_hunk_lines() -> None:
     assert new_lines == []
 
 
+def test_diff_texts_for_path_collects_staged_and_unstaged(monkeypatch: pytest.MonkeyPatch) -> None:
+    responses = iter(
+        [
+            _completed(["git", "diff"], stdout="unstaged"),
+            _completed(["git", "diff", "--cached"], stdout="staged"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    texts = task_commands_module._diff_texts_for_path("tasks/BACKLOG.md")
+
+    assert texts == ["unstaged", "staged"]
+
+
+def test_diff_texts_for_path_skips_empty_or_failed_diffs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        [
+            _completed(["git", "diff"], stdout=""),
+            _completed(["git", "diff", "--cached"], returncode=1, stdout="staged"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    texts = task_commands_module._diff_texts_for_path("tasks/BACKLOG.md")
+
+    assert texts == []
+
+
 def test_backlog_task_id_for_line_returns_nearest_header() -> None:
     text = "\n".join(
         [
@@ -2832,11 +2866,8 @@ def test_dirty_task_refs_for_path_uses_changed_line_mapping_for_backlog(
     )
     monkeypatch.setattr(
         task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: _completed(
-            args,
-            stdout="@@ -1,2 +1,2 @@\n-old\n+new\n",
-        ),
+        "_diff_texts_for_path",
+        lambda _path: ["@@ -1,2 +1,2 @@\n-old\n+new\n"],
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
@@ -2857,19 +2888,8 @@ def test_dirty_task_refs_for_path_parses_diff_output(monkeypatch: pytest.MonkeyP
     )
     monkeypatch.setattr(
         task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: _completed(
-            args,
-            stdout=(
-                "diff --git a/tasks/BACKLOG.md b/tasks/BACKLOG.md\n"
-                "index 123..456 100644\n"
-                "--- a/tasks/BACKLOG.md\n"
-                "+++ b/tasks/BACKLOG.md\n"
-                "@@ -1,2 +1,2 @@\n"
-                "-old\n"
-                "+new\n"
-            ),
-        ),
+        "_diff_texts_for_path",
+        lambda _path: ["@@ -1,2 +1,2 @@\n-old\n+new\n"],
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
@@ -2882,16 +2902,17 @@ def test_dirty_task_refs_for_path_parses_non_backlog_diff_output(
 ) -> None:
     monkeypatch.setattr(
         task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: _completed(
-            args,
-            stdout=(
-                "diff --git a/tasks/CURRENT_SPRINT.md b/tasks/CURRENT_SPRINT.md\n"
-                "@@ -1 +1 @@\n"
-                "- `TASK-253` Coverage\n"
-                "+ `TASK-254` Coverage\n"
-            ),
-        ),
+        "_diff_texts_for_path",
+        lambda _path: [
+            "\n".join(
+                [
+                    "@@ -1 +1 @@",
+                    "  `TASK-999` Context only",
+                    "- `TASK-253` Coverage",
+                    "+ `TASK-254` Coverage",
+                ]
+            )
+        ],
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/CURRENT_SPRINT.md")
@@ -2904,8 +2925,8 @@ def test_dirty_task_refs_for_path_returns_empty_on_diff_failure(
 ) -> None:
     monkeypatch.setattr(
         task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: _completed(args, returncode=1),
+        "_diff_texts_for_path",
+        lambda _path: [],
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")

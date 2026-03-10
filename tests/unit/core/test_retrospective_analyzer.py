@@ -331,13 +331,21 @@ def test_create_client_optional_handles_empty_and_base_url(monkeypatch: pytest.M
         api_key="unit-test-key",  # pragma: allowlist secret
         base_url=" https://api.example.test/v1 ",
     )
+    default_client = RetrospectiveAnalyzer._create_client_optional(
+        api_key="unit-test-key-no-base",  # pragma: allowlist secret
+    )
 
     assert isinstance(client, FakeClient)
+    assert isinstance(default_client, FakeClient)
     assert created == [
         {
             "token_value": "unit-test-key",
             "base_url": "https://api.example.test/v1",
-        }
+        },
+        {
+            "token_value": "unit-test-key-no-base",
+            "base_url": "",
+        },
     ]
 
 

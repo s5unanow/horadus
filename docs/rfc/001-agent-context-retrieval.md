@@ -371,7 +371,8 @@ compact orientation metadata rather than the whole document.
 Exclude by default:
 
 - `tasks/COMPLETED.md`
-- `PROJECT_STATUS.md`
+- `PROJECT_STATUS.md` beyond its pointer-stub metadata
+- `archive/`
 - superseded specs
 - archived docs
 - broad sprint history

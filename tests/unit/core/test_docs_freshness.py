@@ -38,6 +38,7 @@ pytestmark = pytest.mark.unit
 def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     (repo_root / "docs").mkdir(parents=True, exist_ok=True)
     (repo_root / "docs" / "adr").mkdir(parents=True, exist_ok=True)
+    (repo_root / "archive" / "2026-03-10-sprint-3-close").mkdir(parents=True, exist_ok=True)
     (repo_root / "ops" / "skills" / "horadus-cli" / "references").mkdir(
         parents=True,
         exist_ok=True,
@@ -55,10 +56,23 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     workflow_guardrail_block = "\n".join([*workflow_policy_guardrail_statements(), ""])
 
     (repo_root / "PROJECT_STATUS.md").write_text(
-        (
-            f"**Last Updated**: {marker_date}\n"
-            "**Source-of-truth policy**: "
-            "See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`\n"
+        "\n".join(
+            [
+                "# Project Status",
+                "",
+                "**Status**: Archived pointer stub (non-authoritative)",
+                "**Archived Detailed Status On**: 2026-03-10",
+                "",
+                "- `tasks/CURRENT_SPRINT.md`",
+                "- `tasks/BACKLOG.md`",
+                "- `tasks/COMPLETED.md`",
+                "- `archive/2026-03-10-sprint-3-close/PROJECT_STATUS.md`",
+                "",
+                "Do not read `archive/` during normal implementation flow unless a user explicitly asks for historical context or an archive-aware CLI flag is used.",
+                "",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "",
+            ]
         ),
         encoding="utf-8",
     )
@@ -192,8 +206,9 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         "\n".join(
             [
                 "**Status**: Archived historical snapshot (superseded)",
-                "Use `tasks/CURRENT_SPRINT.md`, `tasks/BACKLOG.md`, and `PROJECT_STATUS.md`",
+                "Use `tasks/CURRENT_SPRINT.md`, `tasks/BACKLOG.md`, `tasks/COMPLETED.md`, and `PROJECT_STATUS.md`",
                 "as the authoritative current trackers.",
+                "Do not read `archive/` by default unless a user explicitly requests historical context.",
                 "",
             ]
         ),
@@ -557,31 +572,14 @@ def test_docs_freshness_allows_override_for_new_rules(tmp_path: Path) -> None:
     assert any(issue.rule_id == "docs_freshness_override_applied" for issue in result.warnings)
 
 
-def test_docs_freshness_flags_dual_listed_in_progress_and_completed_task(tmp_path: Path) -> None:
+def test_docs_freshness_flags_missing_project_status_stub_status(tmp_path: Path) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
-        "\n".join(
-            [
-                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## Active Tasks",
-                "- `TASK-113` Recovery follow-up",
-                "## Completed This Sprint",
-                "- `TASK-112` Prior work",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
     (tmp_path / "PROJECT_STATUS.md").write_text(
         "\n".join(
             [
-                f"**Last Updated**: {marker_date}",
+                "# Project Status",
                 "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## In Progress",
-                "- `TASK-113` Recovery follow-up",
-                "## Blocked",
-                "- none",
                 "",
             ]
         ),
@@ -597,34 +595,24 @@ def test_docs_freshness_flags_dual_listed_in_progress_and_completed_task(tmp_pat
         override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
     )
 
-    assert any(issue.rule_id == "task_status_dual_listing" for issue in result.errors)
+    assert any(issue.rule_id == "project_status_stub_status_missing" for issue in result.errors)
 
 
-def test_docs_freshness_flags_active_sprint_task_missing_from_project_status_in_progress(
+def test_docs_freshness_flags_missing_project_status_archive_pointer(
     tmp_path: Path,
 ) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
-        "\n".join(
-            [
-                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## Active Tasks",
-                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
     (tmp_path / "PROJECT_STATUS.md").write_text(
         "\n".join(
             [
-                f"**Last Updated**: {marker_date}",
+                "# Project Status",
+                "",
+                "**Status**: Archived pointer stub (non-authoritative)",
                 "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## In Progress",
-                "- `TASK-126` Taxonomy Drift Guardrails",
-                "## Blocked",
-                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "- `tasks/CURRENT_SPRINT.md`",
+                "- `tasks/BACKLOG.md`",
+                "- `tasks/COMPLETED.md`",
                 "",
             ]
         ),
@@ -637,35 +625,26 @@ def test_docs_freshness_flags_active_sprint_task_missing_from_project_status_in_
     )
 
     assert any(
-        issue.rule_id == "project_status_missing_active_sprint_task" for issue in result.errors
+        issue.rule_id == "project_status_stub_archive_pointer_missing" for issue in result.errors
     )
 
 
-def test_docs_freshness_flags_human_gated_sprint_task_missing_from_project_status_blocked(
+def test_docs_freshness_flags_missing_project_status_archive_guidance(
     tmp_path: Path,
 ) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
-        "\n".join(
-            [
-                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## Active Tasks",
-                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
     (tmp_path / "PROJECT_STATUS.md").write_text(
         "\n".join(
             [
-                f"**Last Updated**: {marker_date}",
+                "# Project Status",
+                "",
+                "**Status**: Archived pointer stub (non-authoritative)",
                 "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## In Progress",
-                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
-                "## Blocked",
-                "- none",
+                "- `tasks/CURRENT_SPRINT.md`",
+                "- `tasks/BACKLOG.md`",
+                "- `tasks/COMPLETED.md`",
+                "- `archive/2026-03-10-sprint-3-close/PROJECT_STATUS.md`",
                 "",
             ]
         ),
@@ -678,7 +657,42 @@ def test_docs_freshness_flags_human_gated_sprint_task_missing_from_project_statu
     )
 
     assert any(
-        issue.rule_id == "project_status_missing_blocked_human_task" for issue in result.errors
+        issue.rule_id == "project_status_archive_guidance_missing" for issue in result.errors
+    )
+
+
+def test_docs_freshness_accepts_newer_project_status_archive_pointer(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "\n".join(
+            [
+                "# Project Status",
+                "",
+                "**Status**: Archived pointer stub (non-authoritative)",
+                "**Archived Detailed Status On**: 2026-03-24",
+                "",
+                "- `tasks/CURRENT_SPRINT.md`",
+                "- `tasks/BACKLOG.md`",
+                "- `tasks/COMPLETED.md`",
+                "- `archive/2026-03-24-sprint-4-close/PROJECT_STATUS.md`",
+                "",
+                "Do not read `archive/` during normal implementation flow unless a user explicitly asks for historical context or an archive-aware CLI flag is used.",
+                "",
+                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert not any(
+        issue.rule_id == "project_status_stub_archive_pointer_missing" for issue in result.errors
     )
 
 
@@ -802,42 +816,29 @@ def test_docs_freshness_accepts_present_human_blocker_metadata(tmp_path: Path) -
     assert not any(issue.rule_id == "telegram_launch_scope_missing" for issue in result.errors)
 
 
-def test_docs_freshness_flags_stale_project_status_during_active_sprint(tmp_path: Path) -> None:
+def test_docs_freshness_accepts_project_status_stub_without_freshness_sla(tmp_path: Path) -> None:
     marker_date = (datetime.now(tz=UTC) - timedelta(days=9)).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
-        "\n".join(
-            [
-                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## Active Tasks",
-                "- `TASK-164` Agent smoke run",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (tmp_path / "PROJECT_STATUS.md").write_text(
-        "\n".join(
-            [
-                f"**Last Updated**: {marker_date}",
-                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "## In Progress",
-                "- `TASK-164` Agent smoke run",
-                "## Blocked",
-                "- none",
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-
     result = run_docs_freshness_check(
         repo_root=tmp_path,
         override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
         project_status_max_age_days=7,
     )
 
-    assert any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)
+    assert not any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)
+
+
+def test_docs_freshness_skips_current_sprint_rules_when_sprint_file_missing(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").unlink()
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert not any(issue.rule_id.startswith("human_blocker_metadata_") for issue in result.errors)
 
 
 def test_docs_freshness_allows_project_status_at_sla_boundary(tmp_path: Path) -> None:

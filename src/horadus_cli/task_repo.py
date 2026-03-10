@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +12,7 @@ TASK_HEADER_PATTERN = re.compile(
 )
 TASK_REF_PATTERN = re.compile(r"TASK-\d{3}")
 TASK_STATUS_ORDER = {"active": 0, "backlog": 1, "completed": 2}
+COMPLETED_TASK_LINE_PATTERN = re.compile(r"^-\s+(TASK-\d{3}):\s+(.+?)\s+✅(?:\s|$)")
 
 
 @dataclass(slots=True)
@@ -68,6 +69,8 @@ class TaskRecord:
     status: str
     sprint_lines: list[str]
     spec_paths: list[str]
+    source_path: str = ""
+    archived: bool = False
 
 
 def repo_root() -> Path:
@@ -84,6 +87,17 @@ def current_sprint_path() -> Path:
 
 def completed_path() -> Path:
     return repo_root() / "tasks" / "COMPLETED.md"
+
+
+def archive_root() -> Path:
+    return repo_root() / "archive"
+
+
+def archive_backlog_paths() -> list[Path]:
+    archive_dir = archive_root()
+    if not archive_dir.exists():
+        return []
+    return sorted(archive_dir.glob("*/tasks/BACKLOG.md"), reverse=True)
 
 
 def normalize_task_id(value: str) -> str:
@@ -138,6 +152,8 @@ def parse_active_tasks(path: Path | None = None) -> list[ActiveTask]:
     tasks: list[ActiveTask] = []
     for raw_line in section.splitlines():
         line = raw_line.strip()
+        if not line.startswith("- "):
+            continue
         match = TASK_REF_PATTERN.search(line)
         if match is None:
             continue
@@ -338,17 +354,22 @@ def _parse_task_block(task_id: str, title: str, raw_block: str) -> TaskRecord:
         status="backlog",
         sprint_lines=[],
         spec_paths=[],
+        source_path=str(backlog_path().relative_to(repo_root())),
     )
 
 
-def backlog_task_records() -> dict[str, TaskRecord]:
+def backlog_task_records(path: Path | None = None) -> dict[str, TaskRecord]:
     records: dict[str, TaskRecord] = {}
-    backlog_text = read_text(backlog_path())
+    selected_path = path or backlog_path()
+    backlog_text = read_text(selected_path)
     for match in TASK_HEADER_PATTERN.finditer(backlog_text):
         task_id = match.group("task_id")
         title = match.group("title").strip()
         raw_block = match.group(0)
-        records[task_id] = _parse_task_block(task_id, title, raw_block)
+        record = _parse_task_block(task_id, title, raw_block)
+        record.source_path = str(selected_path.relative_to(repo_root()))
+        record.archived = selected_path != backlog_path()
+        records[task_id] = record
     return records
 
 
@@ -365,23 +386,65 @@ def spec_paths_for_task(task_id: str) -> list[str]:
     )
 
 
+def completed_task_ids(path: Path | None = None) -> set[str]:
+    selected_path = path or completed_path()
+    if not selected_path.exists():
+        return set()
+    task_ids: set[str] = set()
+    for line in read_text(selected_path).splitlines():
+        match = COMPLETED_TASK_LINE_PATTERN.match(line.strip())
+        if match is not None:
+            task_ids.add(match.group(1))
+    return task_ids
+
+
 def is_task_completed(task_id: str) -> bool:
-    completed_text = read_text(completed_path())
-    return task_id in completed_text
+    return task_id in completed_task_ids()
 
 
-def task_record(task_id: str) -> TaskRecord | None:
+def archived_task_records() -> dict[str, TaskRecord]:
+    records: dict[str, TaskRecord] = {}
+    for path in archive_backlog_paths():
+        for task_id, record in backlog_task_records(path).items():
+            records.setdefault(task_id, record)
+    return records
+
+
+def archived_task_record(task_id: str) -> TaskRecord | None:
+    normalized = normalize_task_id(task_id)
+    return archived_task_records().get(normalized)
+
+
+def _enrich_task_record(record: TaskRecord) -> TaskRecord:
+    enriched = replace(
+        record,
+        description=list(record.description),
+        files=list(record.files),
+        acceptance_criteria=list(record.acceptance_criteria),
+        assessment_refs=list(record.assessment_refs),
+        sprint_lines=[],
+        spec_paths=[],
+    )
+    normalized = enriched.task_id
+    enriched.sprint_lines = sprint_lines_for_task(normalized)
+    enriched.spec_paths = spec_paths_for_task(normalized)
+    if is_task_completed(normalized):
+        enriched.status = "completed"
+    elif enriched.sprint_lines:
+        enriched.status = "active"
+    else:
+        enriched.status = "backlog"
+    return enriched
+
+
+def task_record(task_id: str, *, include_archive: bool = False) -> TaskRecord | None:
     normalized = normalize_task_id(task_id)
     record = backlog_task_records().get(normalized)
+    if record is None and include_archive:
+        record = archived_task_record(normalized)
     if record is None:
         return None
-    record.sprint_lines = sprint_lines_for_task(normalized)
-    record.spec_paths = spec_paths_for_task(normalized)
-    if is_task_completed(normalized):
-        record.status = "completed"
-    elif record.sprint_lines:
-        record.status = "active"
-    return record
+    return _enrich_task_record(record)
 
 
 def search_task_records(
@@ -389,10 +452,15 @@ def search_task_records(
     *,
     status: str = "all",
     limit: int | None = None,
+    include_archive: bool = False,
 ) -> list[TaskRecord]:
     normalized = query.strip().lower()
     matches: list[TaskRecord] = []
-    for record in backlog_task_records().values():
+    records = backlog_task_records()
+    if include_archive:
+        for task_id, record in archived_task_records().items():
+            records.setdefault(task_id, record)
+    for record in records.values():
         haystack = "\n".join(
             [
                 record.task_id,
@@ -403,8 +471,8 @@ def search_task_records(
             ]
         ).lower()
         if normalized in haystack:
-            enriched = task_record(record.task_id)
-            if enriched is not None and (status == "all" or enriched.status == status):
+            enriched = _enrich_task_record(record)
+            if status == "all" or enriched.status == status:
                 matches.append(enriched)
     matches.sort(
         key=lambda record: (

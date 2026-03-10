@@ -424,7 +424,8 @@ horadus/
 ├── AGENTS.md              # Canonical agent instructions (all CLIs)
 ├── CLAUDE.md              # Agent instructions (for Claude CLI)
 ├── README.md              # This file
-├── PROJECT_STATUS.md      # Development progress
+├── PROJECT_STATUS.md      # Non-authoritative archive pointer stub
+├── archive/               # Historical planning ledgers (opt-in only)
 ├── pyproject.toml         # Python project config
 ├── docker-compose.yml     # Local infrastructure
 ├── docker-compose.prod.yml # Production deployment stack
@@ -447,6 +448,7 @@ horadus/
 │
 ├── tasks/                 # Task tracking
 │   ├── BACKLOG.md
+│   ├── COMPLETED.md
 │   ├── CURRENT_SPRINT.md
 │   └── specs/
 │

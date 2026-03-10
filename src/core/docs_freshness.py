@@ -65,7 +65,6 @@ class _Override:
 
 
 _REQUIRED_MARKERS: tuple[_MarkerRequirement, ...] = (
-    _MarkerRequirement(path="PROJECT_STATUS.md", label="Last Updated"),
     _MarkerRequirement(path="docs/ARCHITECTURE.md", label="Last Verified"),
     _MarkerRequirement(path="docs/DEPLOYMENT.md", label="Last Verified"),
     _MarkerRequirement(path="docs/ENVIRONMENT.md", label="Last Verified"),
@@ -104,13 +103,13 @@ _ARCHIVED_DOC_STATUS_LINE = "**Status**: Archived historical snapshot (supersede
 _ARCHIVED_DOC_REQUIRED_POINTERS: tuple[str, ...] = (
     "tasks/CURRENT_SPRINT.md",
     "tasks/BACKLOG.md",
+    "tasks/COMPLETED.md",
     "PROJECT_STATUS.md",
+    "archive/",
 )
 _TASK_ID_PATTERN = re.compile(r"\bTASK-(\d{3})\b")
 _CURRENT_SPRINT_ACTIVE_HEADING = "Active Tasks"
 _CURRENT_SPRINT_COMPLETED_HEADING = "Completed This Sprint"
-_PROJECT_STATUS_IN_PROGRESS_HEADING = "In Progress"
-_PROJECT_STATUS_BLOCKED_HEADING = "Blocked"
 _HUMAN_BLOCKER_METADATA_HEADING = "Human Blocker Metadata"
 _TELEGRAM_SCOPE_HEADING = "Telegram Launch Scope"
 _REQUIRED_HUMAN_BLOCKER_METADATA_FIELDS: tuple[str, ...] = (
@@ -118,6 +117,19 @@ _REQUIRED_HUMAN_BLOCKER_METADATA_FIELDS: tuple[str, ...] = (
     "last_touched",
     "next_action",
     "escalate_after_days",
+)
+_PROJECT_STATUS_STUB_STATUS_LINE = "**Status**: Archived pointer stub (non-authoritative)"
+_PROJECT_STATUS_STUB_REQUIRED_POINTERS: tuple[str, ...] = (
+    "tasks/CURRENT_SPRINT.md",
+    "tasks/BACKLOG.md",
+    "tasks/COMPLETED.md",
+)
+_PROJECT_STATUS_ARCHIVE_POINTER_PATTERN = re.compile(
+    r"archive/\d{4}-\d{2}-\d{2}-[a-z0-9-]+/PROJECT_STATUS\.md"
+)
+_PROJECT_STATUS_ARCHIVE_GUIDANCE = (
+    "Do not read `archive/` during normal implementation flow unless a user "
+    "explicitly asks for historical context or an archive-aware CLI flag is used."
 )
 
 
@@ -303,6 +315,7 @@ def run_docs_freshness_check(
     max_age_days: int = 45,
     project_status_max_age_days: int = 7,
 ) -> DocsFreshnessResult:
+    _ = project_status_max_age_days
     now = datetime.now(tz=UTC).date()
     checked_override_path = (
         override_path
@@ -604,93 +617,66 @@ def run_docs_freshness_check(
 
     current_sprint_path = repo_root / "tasks" / "CURRENT_SPRINT.md"
     project_status_path = repo_root / "PROJECT_STATUS.md"
-    completed_ledger_path = repo_root / "tasks" / "COMPLETED.md"
-    if current_sprint_path.exists() and project_status_path.exists():
-        current_sprint = current_sprint_path.read_text(encoding="utf-8")
+    if project_status_path.exists():
         project_status_text = project_status_path.read_text(encoding="utf-8")
+        if _PROJECT_STATUS_STUB_STATUS_LINE not in project_status_text:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_stub_status_missing",
+                message=(
+                    "PROJECT_STATUS.md must be the non-authoritative archive-pointer stub "
+                    f"('{_PROJECT_STATUS_STUB_STATUS_LINE}')."
+                ),
+                path="PROJECT_STATUS.md",
+            )
+        missing_project_status_pointers = [
+            pointer
+            for pointer in _PROJECT_STATUS_STUB_REQUIRED_POINTERS
+            if pointer not in project_status_text
+        ]
+        if missing_project_status_pointers:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_stub_pointer_missing",
+                message=(
+                    "PROJECT_STATUS.md missing required live/archive pointers: "
+                    + ", ".join(missing_project_status_pointers)
+                ),
+                path="PROJECT_STATUS.md",
+            )
+        if _PROJECT_STATUS_ARCHIVE_POINTER_PATTERN.search(project_status_text) is None:
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_stub_archive_pointer_missing",
+                message=(
+                    "PROJECT_STATUS.md must point to a dated archived status snapshot "
+                    "(archive/YYYY-MM-DD-.../PROJECT_STATUS.md)."
+                ),
+                path="PROJECT_STATUS.md",
+            )
+        if _normalize_whitespace(_PROJECT_STATUS_ARCHIVE_GUIDANCE) not in _normalize_whitespace(
+            project_status_text
+        ):
+            _record_issue(
+                errors=errors,
+                warnings=warnings,
+                active_override_map=active_override_map,
+                rule_id="project_status_archive_guidance_missing",
+                message="PROJECT_STATUS.md must say that archive access is opt-in only.",
+                path="PROJECT_STATUS.md",
+            )
 
+    if current_sprint_path.exists():
+        current_sprint = current_sprint_path.read_text(encoding="utf-8")
         active_sprint_tasks, active_requires_human_tasks = _extract_current_sprint_active_tasks(
             current_sprint
         )
-        project_status_in_progress_tasks = _extract_section_task_ids(
-            project_status_text,
-            _PROJECT_STATUS_IN_PROGRESS_HEADING,
-        )
-        project_status_blocked_tasks = _extract_section_task_ids(
-            project_status_text,
-            _PROJECT_STATUS_BLOCKED_HEADING,
-        )
-
-        completed_tasks = _extract_section_task_ids(
-            current_sprint, _CURRENT_SPRINT_COMPLETED_HEADING
-        )
-        if completed_ledger_path.exists():
-            completed_tasks.update(
-                _extract_completed_task_ids(completed_ledger_path.read_text(encoding="utf-8"))
-            )
-
-        dual_listed_tasks = sorted(
-            (active_sprint_tasks | project_status_in_progress_tasks) & completed_tasks
-        )
-        if dual_listed_tasks:
-            _record_issue(
-                errors=errors,
-                warnings=warnings,
-                active_override_map=active_override_map,
-                rule_id="task_status_dual_listing",
-                message=(
-                    "Tasks listed as both in-progress and completed across ledgers: "
-                    + ", ".join(dual_listed_tasks)
-                ),
-                path="PROJECT_STATUS.md",
-            )
-
-        missing_in_progress_tasks = sorted(active_sprint_tasks - project_status_in_progress_tasks)
-        if missing_in_progress_tasks:
-            _record_issue(
-                errors=errors,
-                warnings=warnings,
-                active_override_map=active_override_map,
-                rule_id="project_status_missing_active_sprint_task",
-                message=(
-                    "Active sprint tasks missing from PROJECT_STATUS In Progress: "
-                    + ", ".join(missing_in_progress_tasks)
-                ),
-                path="PROJECT_STATUS.md",
-            )
-
-        missing_blocked_human_tasks = sorted(
-            active_requires_human_tasks - project_status_blocked_tasks
-        )
-        if missing_blocked_human_tasks:
-            _record_issue(
-                errors=errors,
-                warnings=warnings,
-                active_override_map=active_override_map,
-                rule_id="project_status_missing_blocked_human_task",
-                message=(
-                    "Active [REQUIRES_HUMAN] sprint tasks missing from PROJECT_STATUS Blocked: "
-                    + ", ".join(missing_blocked_human_tasks)
-                ),
-                path="PROJECT_STATUS.md",
-            )
-
-        if active_sprint_tasks:
-            last_updated = _parse_marker_date(project_status_text, "Last Updated")
-            if last_updated is not None:
-                age_days = (now - last_updated).days
-                if age_days > max(1, project_status_max_age_days):
-                    _record_issue(
-                        errors=errors,
-                        warnings=warnings,
-                        active_override_map=active_override_map,
-                        rule_id="project_status_freshness_sla",
-                        message=(
-                            "update PROJECT_STATUS.md Last Updated to today and reconcile "
-                            "changed sprint sets"
-                        ),
-                        path="PROJECT_STATUS.md",
-                    )
 
         if active_requires_human_tasks:
             blocker_metadata = _extract_human_blocker_metadata(current_sprint)

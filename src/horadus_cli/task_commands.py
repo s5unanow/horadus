@@ -19,6 +19,7 @@ from src.core.repo_workflow import canonical_task_workflow_commands_for_task
 from src.horadus_cli.result import CommandResult, ExitCode
 from src.horadus_cli.task_repo import (
     active_section_text,
+    archived_task_record,
     backlog_path,
     current_sprint_path,
     normalize_task_id,
@@ -2598,9 +2599,21 @@ def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, 
     payload = asdict(record)
     if not include_raw:
         payload.pop("raw_block", None)
-    payload["backlog_path"] = str(backlog_path().relative_to(repo_root()))
+    payload["backlog_path"] = payload.get("source_path") or str(
+        backlog_path().relative_to(repo_root())
+    )
     payload["current_sprint_path"] = str(current_sprint_path().relative_to(repo_root()))
     return payload
+
+
+def _archived_task_blocked_result(task_id: str) -> CommandResult:
+    return CommandResult(
+        exit_code=ExitCode.NOT_FOUND,
+        error_lines=[
+            f"{task_id} is archived; re-run with --include-archive to inspect its history"
+        ],
+        data={"task_id": task_id, "archived": True},
+    )
 
 
 def handle_list_active(_args: Any) -> CommandResult:
@@ -2647,8 +2660,11 @@ def handle_show(args: Any) -> CommandResult:
     except ValueError as exc:
         return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
 
-    record = task_record(task_id)
+    include_archive = bool(getattr(args, "include_archive", False))
+    record = task_record(task_id, include_archive=include_archive)
     if record is None:
+        if not include_archive and archived_task_record(task_id) is not None:
+            return _archived_task_blocked_result(task_id)
         return CommandResult(
             exit_code=ExitCode.NOT_FOUND,
             error_lines=[f"{task_id} not found in tasks/BACKLOG.md"],
@@ -2684,11 +2700,17 @@ def handle_search(args: Any) -> CommandResult:
         )
 
     query = " ".join(args.query).strip()
-    matches = search_task_records(query, status=args.status, limit=args.limit)
+    include_archive = bool(getattr(args, "include_archive", False))
+    matches = search_task_records(
+        query,
+        status=args.status,
+        limit=args.limit,
+        include_archive=include_archive,
+    )
     lines = [f"Task search: {query}"]
     lines.append(
         f"- status={args.status}, limit={args.limit if args.limit is not None else 'none'}, "
-        f"results={len(matches)}"
+        f"include_archive={'yes' if include_archive else 'no'}, results={len(matches)}"
     )
     if not matches:
         lines.append("(no matches)")
@@ -2707,6 +2729,7 @@ def handle_search(args: Any) -> CommandResult:
             "query": query,
             "status_filter": args.status,
             "limit": args.limit,
+            "include_archive": include_archive,
             "include_raw": bool(args.include_raw),
             "matches": [
                 _task_record_payload(item, include_raw=bool(args.include_raw)) for item in matches
@@ -2715,14 +2738,35 @@ def handle_search(args: Any) -> CommandResult:
     )
 
 
+def _workflow_commands_for_context_pack(
+    task_id: str,
+    *,
+    include_archive: bool,
+    archived: bool,
+) -> list[str]:
+    commands = list(canonical_task_workflow_commands_for_task(task_id))
+    if not (include_archive and archived):
+        return commands
+
+    default_context_pack = f"uv run --no-sync horadus tasks context-pack {task_id}"
+    archived_context_pack = f"{default_context_pack} --include-archive"
+    return [
+        archived_context_pack if command == default_context_pack else command
+        for command in commands
+    ]
+
+
 def handle_context_pack(args: Any) -> CommandResult:
     try:
         task_id = normalize_task_id(args.task_id)
     except ValueError as exc:
         return CommandResult(exit_code=ExitCode.VALIDATION_ERROR, error_lines=[str(exc)])
 
-    record = task_record(task_id)
+    include_archive = bool(getattr(args, "include_archive", False))
+    record = task_record(task_id, include_archive=include_archive)
     if record is None:
+        if not include_archive and archived_task_record(task_id) is not None:
+            return _archived_task_blocked_result(task_id)
         return CommandResult(
             exit_code=ExitCode.NOT_FOUND,
             error_lines=[f"{task_id} not found in tasks/BACKLOG.md"],
@@ -2765,7 +2809,11 @@ def handle_context_pack(args: Any) -> CommandResult:
             "## Suggested Workflow Commands",
         ]
     )
-    workflow_commands = list(canonical_task_workflow_commands_for_task(task_id))
+    workflow_commands = _workflow_commands_for_context_pack(
+        task_id,
+        include_archive=include_archive,
+        archived=record.archived,
+    )
     lines.extend(workflow_commands)
     lines.extend(
         [
@@ -2962,12 +3010,17 @@ def register_task_commands(subparsers: Any) -> None:
     add_leaf_cli_options(list_active_parser)
     list_active_parser.set_defaults(handler=handle_list_active)
 
-    show_parser = tasks_subparsers.add_parser("show", help="Show a backlog task record.")
+    show_parser = tasks_subparsers.add_parser("show", help="Show a live or archived task record.")
     add_leaf_cli_options(show_parser)
     show_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
+    show_parser.add_argument(
+        "--include-archive",
+        action="store_true",
+        help="Allow lookup in archived backlog snapshots when the task is no longer live.",
+    )
     show_parser.set_defaults(handler=handle_show)
 
-    search_parser = tasks_subparsers.add_parser("search", help="Search backlog tasks by text.")
+    search_parser = tasks_subparsers.add_parser("search", help="Search live backlog tasks by text.")
     add_leaf_cli_options(search_parser)
     search_parser.add_argument("query", nargs="+", help="Query text.")
     search_parser.add_argument(
@@ -2986,6 +3039,11 @@ def register_task_commands(subparsers: Any) -> None:
         action="store_true",
         help="Include the raw backlog block for each matching task.",
     )
+    search_parser.add_argument(
+        "--include-archive",
+        action="store_true",
+        help="Include archived backlog snapshots in the search results.",
+    )
     search_parser.set_defaults(handler=handle_search)
 
     context_pack_parser = tasks_subparsers.add_parser(
@@ -2994,6 +3052,11 @@ def register_task_commands(subparsers: Any) -> None:
     )
     add_leaf_cli_options(context_pack_parser)
     context_pack_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
+    context_pack_parser.add_argument(
+        "--include-archive",
+        action="store_true",
+        help="Allow archived backlog lookup when the task is no longer live.",
+    )
     context_pack_parser.set_defaults(handler=handle_context_pack)
 
     preflight_parser = tasks_subparsers.add_parser(

@@ -4,11 +4,24 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import sys
 from pathlib import Path
 
-import src.horadus_cli.task_repo as task_repo_module
-from src.horadus_cli.task_repo import TaskClosureState, normalize_task_id, task_closure_state
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+TASK_REPO_PATH = REPO_ROOT / "src" / "horadus_cli" / "task_repo.py"
+TASK_REPO_SPEC = importlib.util.spec_from_file_location("horadus_task_repo_script", TASK_REPO_PATH)
+if TASK_REPO_SPEC is None or TASK_REPO_SPEC.loader is None:
+    raise RuntimeError(f"Unable to load task repo module from {TASK_REPO_PATH}")
+task_repo_module = importlib.util.module_from_spec(TASK_REPO_SPEC)
+sys.modules[TASK_REPO_SPEC.name] = task_repo_module
+TASK_REPO_SPEC.loader.exec_module(task_repo_module)
+TaskClosureState = task_repo_module.TaskClosureState
+normalize_task_id = task_repo_module.normalize_task_id
+task_closure_state = task_repo_module.task_closure_state
 
 
 def _blocker_lines(closure_state: TaskClosureState) -> list[str]:

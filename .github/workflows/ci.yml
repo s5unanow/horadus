@@ -12,6 +12,7 @@ on:
     branches: [main, develop]
   pull_request:
     branches: [main, develop]
+    types: [opened, reopened, synchronize, ready_for_review]
 
 env:
   PYTHON_VERSION: "3.12"
@@ -37,6 +38,18 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: ./scripts/check_pr_task_scope.sh
+
+      - name: Validate task closure state on ready PRs
+        if: github.event.pull_request.draft == false
+        env:
+          PR_BRANCH: ${{ github.head_ref }}
+        run: |
+          task_id="$(printf '%s\n' "$PR_BRANCH" | sed -nE 's%^codex/task-([0-9]{3})-.*$%TASK-\1%p')"
+          if [ -z "$task_id" ]; then
+            echo "Unable to derive task id from PR branch: $PR_BRANCH" >&2
+            exit 1
+          fi
+          python3 ./scripts/check_pr_closure_state.py --task-id "$task_id"
 
   # ---------------------------------------------------------------------------
   # Code Quality: Linting and Formatting

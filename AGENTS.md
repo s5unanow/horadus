@@ -120,6 +120,7 @@ After completing work:
 - Open one PR per task branch and merge only after required checks are green.
 - Every task PR title must be `TASK-XXX: short summary` matching the branch task ID.
 - Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX` matching the branch task ID.
+- Before merge, the PR head must already contain the task-close state: remove the primary task from live `tasks/BACKLOG.md` and `tasks/CURRENT_SPRINT.md`, add it to `tasks/COMPLETED.md`, and archive the full task body under `archive/closed_tasks/YYYY-QN.md`.
 - After merge, delete the task branch to avoid stale branch drift.
 - Task start sequence is mandatory: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.
@@ -139,6 +140,7 @@ After completing work:
 - Do not proactively suggest changing the `horadus tasks finish` review timeout; wait the canonical 10-minute window unless the human explicitly asked otherwise.
 - A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts as a positive review-gate signal, but the gate still waits the full timeout window and still blocks actionable current-head review comments.
 - `horadus tasks finish` must always wait a positive review-gate timeout; actionable current-head review feedback blocks completion, while a silent timeout after the full wait window may continue inside the CLI flow only when current-head required checks are still green and no unresolved review threads still block the PR. If CI is already red or unresolved review comments still block merge, the command must report that blocker instead of waiting out a later merge/timeout path or bypassing to raw `gh pr merge`; on the unresolved-thread timeout path it should also request a fresh `@codex review` automatically.
+- `horadus tasks finish` blocks before merge if the task-close state is missing on the PR head or if the local task branch head, pushed branch head, and PR head differ; outdated or already-resolved review threads do not count as blockers.
 - If a prior `horadus tasks finish TASK-XXX` run leaves you back on `main` before the PR lifecycle is actually complete, re-run the same command with the explicit task id before treating the CLI as unavailable or falling back to raw `gh pr merge`.
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.

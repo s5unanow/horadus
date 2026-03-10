@@ -271,7 +271,9 @@
 - `TASK-290` Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout ✅
   completion note: the finish flow now re-checks required CI after the review
   gate clears, reports current-head red or still-pending required checks
-  immediately instead of drifting into a later timeout path, and preserves the
+  immediately instead of drifting into a later timeout path, reports unresolved
+  review threads as blockers before merge polling, auto-requests a fresh
+  `@codex review` on the unresolved-thread timeout path, and preserves the
   unaffected green merge paths with dedicated regression coverage.
 - `TASK-287` Spike Markdown-First Context Retrieval for Agent Workflow ✅
   completion note: captured RFC-001 for markdown-first agent-context

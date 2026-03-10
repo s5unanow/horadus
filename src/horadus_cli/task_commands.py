@@ -1018,6 +1018,111 @@ def _current_required_checks_blocker(
     return None
 
 
+def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> list[str]:
+    repo_result = _run_command(
+        [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
+    )
+    repo_name = repo_result.stdout.strip() if repo_result.returncode == 0 else ""
+    if "/" not in repo_name:
+        return []
+    owner, repo = repo_name.split("/", 1)
+
+    pr_number_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "number", "--jq", ".number"]
+    )
+    pr_number_raw = pr_number_result.stdout.strip() if pr_number_result.returncode == 0 else ""
+    if not pr_number_raw.isdigit():
+        return []
+
+    query = (
+        "query($owner:String!, $repo:String!, $number:Int!){"
+        "repository(owner:$owner,name:$repo){"
+        "pullRequest(number:$number){"
+        "reviewThreads(first:100){"
+        "nodes{"
+        "isResolved "
+        "comments(first:20){"
+        "nodes{author{login} body path line originalLine url}"
+        "}"
+        "}"
+        "}"
+        "}"
+        "}"
+        "}"
+    )
+    threads_result = _run_command(
+        [
+            config.gh_bin,
+            "api",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"repo={repo}",
+            "-F",
+            f"number={pr_number_raw}",
+        ]
+    )
+    if threads_result.returncode != 0:
+        return []
+    try:
+        payload = json.loads(threads_result.stdout or "{}")
+    except json.JSONDecodeError:
+        return []
+
+    threads = (
+        payload.get("data", {})
+        .get("repository", {})
+        .get("pullRequest", {})
+        .get("reviewThreads", {})
+        .get("nodes", [])
+    )
+    if not isinstance(threads, list):
+        return []
+
+    lines: list[str] = []
+    for thread in threads:
+        if not isinstance(thread, dict) or thread.get("isResolved") is True:
+            continue
+        comments = thread.get("comments", {}).get("nodes", [])
+        if not isinstance(comments, list):
+            continue
+        comment = next((entry for entry in reversed(comments) if isinstance(entry, dict)), None)
+        if comment is None:
+            continue
+        path = str(comment.get("path") or "<unknown>")
+        line = comment.get("line") or comment.get("originalLine") or "?"
+        url = str(comment.get("url") or "").strip()
+        author = ""
+        if isinstance(comment.get("author"), dict):
+            author = str(comment["author"].get("login") or "").strip()
+        header = f"- {path}:{line}"
+        if url:
+            header = f"{header} {url}"
+        if author:
+            header = f"{header} ({author})"
+        lines.append(header)
+        body = " ".join(str(comment.get("body") or "").strip().split())
+        if body:
+            lines.append(f"  {body}")
+    return lines
+
+
+def _maybe_request_fresh_review(*, pr_url: str, config: FinishConfig) -> list[str]:
+    if config.review_bot_login != "chatgpt-codex-connector[bot]":
+        return []
+    request_comment = "@codex review"
+    result = _run_command([config.gh_bin, "pr", "comment", pr_url, "--body", request_comment])
+    if result.returncode != 0:
+        return [
+            f"Failed to request a fresh review from `{config.review_bot_login}` automatically.",
+            *_output_lines(result),
+        ]
+    return [f"Requested a fresh review from `{config.review_bot_login}` with `{request_comment}`."]
+
+
 def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str], str]:
     deadline = time.time() + config.checks_timeout_seconds
     while True:
@@ -2166,7 +2271,31 @@ def finish_task_data(
                 exit_code=review_result.returncode,
                 extra_lines=review_lines,
             )
-        lines.extend(_output_lines(review_result))
+        review_lines = _output_lines(review_result)
+        review_timed_out = any(line.startswith("review gate timeout:") for line in review_lines)
+        lines.extend(review_lines)
+
+        unresolved_review_lines = _unresolved_review_thread_lines(pr_url=pr_url, config=config)
+        if unresolved_review_lines:
+            extra_lines = [*review_lines, *unresolved_review_lines]
+            if review_timed_out:
+                extra_lines.extend(_maybe_request_fresh_review(pr_url=pr_url, config=config))
+            return _task_blocked(
+                "PR is blocked by unresolved review comments.",
+                next_action=(
+                    "Resolve the unresolved review threads in GitHub and wait for a fresh "
+                    "current-head review, then re-run `horadus tasks finish`."
+                    if review_timed_out
+                    else "Resolve the unresolved review threads in GitHub, then re-run "
+                    "`horadus tasks finish`."
+                ),
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                extra_lines=extra_lines,
+            )
 
         post_review_blocker = _current_required_checks_blocker(pr_url=pr_url, config=config)
         if post_review_blocker is not None:

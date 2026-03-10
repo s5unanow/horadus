@@ -5408,7 +5408,11 @@ checks were already failing on the current head. That delays feedback, wastes
 operator time, and can leave the impression that the finish flow is hung when
 the real blocker is simply "CI is red". Harden the finish flow so once the
 review gate has cleared, failed required checks are surfaced immediately as the
-blocking reason instead of waiting for an unrelated timeout path.
+blocking reason instead of waiting for an unrelated timeout path. The same
+incident also showed two adjacent workflow gaps on the timeout path: unresolved
+review threads can keep GitHub branch policy blocked even after the current
+head is fixed, and the finish flow does not automatically request a fresh Codex
+review when that happens.
 
 **Files**: `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tasks/CURRENT_SPRINT.md`, `tasks/exec_plans/`
 
@@ -5416,6 +5420,8 @@ blocking reason instead of waiting for an unrelated timeout path.
 - [ ] After the review gate clears or silently times out under the allow policy, `horadus tasks finish` re-checks required-check state for the current PR head before waiting on merge completion
 - [ ] If required GitHub checks are already failing on the current head, the command exits promptly with a concrete blocker that names failed CI/check state rather than waiting for the review timeout or merge timeout path
 - [ ] The blocker message tells the operator to inspect/fix failed checks and re-run `horadus tasks finish`, without suggesting a raw merge fallback while CI is red
+- [ ] If unresolved review threads still block the PR after the review gate wait window, `horadus tasks finish` reports that blocker explicitly instead of disappearing into a later merge/auto-merge timeout
+- [ ] On the unresolved-thread timeout path, the finish flow automatically requests a fresh Codex review and tells the operator that re-review was requested
 - [ ] Existing success paths remain intact for green-check merges, silent-timeout allow merges, and already-merged recovery flows
 - [ ] Regression tests cover at least one red-CI path after review timeout plus one unaffected green path so the shared finish workflow behavior does not silently regress elsewhere
 

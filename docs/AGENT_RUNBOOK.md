@@ -91,8 +91,11 @@ changing it unless a human explicitly asked for a different timeout. A
 a positive review-gate signal, but the gate still waits the full timeout
 window. A silent timeout after the full wait window is allowed to continue
 inside the CLI flow only when the current PR head still has green required
-checks; red CI is reported immediately as a blocker. If a prior finish attempt
-already left the repo on `main` before completion, re-run
+checks and no unresolved review threads still block merge; red CI or
+unresolved review comments are reported immediately as blockers, and the
+unresolved-thread timeout path requests a fresh `@codex review`
+automatically. If a prior finish attempt already left the repo on `main`
+before completion, re-run
 `uv run --no-sync horadus tasks finish TASK-XXX` with the explicit task id so
 the CLI can resume the task PR lifecycle. Do not bypass the CLI with raw
 `gh pr merge` unless the CLI still cannot recover and you need the documented

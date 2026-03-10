@@ -2085,7 +2085,21 @@ def _extract_sprint_number(content: str) -> str:
 
 
 def _remove_task_lines(section_body: str, task_id: str) -> str:
-    kept_lines = [line for line in section_body.splitlines() if task_id not in line]
+    task_prefix_patterns = (
+        re.compile(r"^-\s+`(?P<task_id>TASK-\d+)`(?:\s|$)"),
+        re.compile(r"^-\s+(?P<task_id>TASK-\d+)(?:\s|\||$)"),
+    )
+    kept_lines = []
+    for line in section_body.splitlines():
+        stripped = line.strip()
+        matched_task_id = None
+        for pattern in task_prefix_patterns:
+            match = pattern.match(stripped)
+            if match is not None:
+                matched_task_id = match.group("task_id")
+                break
+        if matched_task_id != task_id:
+            kept_lines.append(line)
     return "\n".join(kept_lines).strip("\n")
 
 
@@ -2232,13 +2246,16 @@ def close_ledgers_task_data(
             live_record.title,
         ),
     )
-    updated_sprint = _replace_h2_section(
-        updated_sprint,
-        "Human Blocker Metadata",
-        _remove_task_lines(
-            _extract_h2_section_body(updated_sprint, "Human Blocker Metadata"), task_id
-        ),
-    )
+    try:
+        human_blocker_body = _extract_h2_section_body(updated_sprint, "Human Blocker Metadata")
+    except ValueError:
+        human_blocker_body = None
+    if human_blocker_body is not None:
+        updated_sprint = _replace_h2_section(
+            updated_sprint,
+            "Human Blocker Metadata",
+            _remove_task_lines(human_blocker_body, task_id),
+        )
     sprint_number = _extract_sprint_number(updated_sprint)
     updated_completed = _upsert_completed_ledger_entry(
         completed_text,

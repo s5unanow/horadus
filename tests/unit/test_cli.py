@@ -8412,6 +8412,88 @@ def test_close_ledgers_task_data_supports_dry_run(
     )
 
 
+def test_close_ledgers_task_data_removes_only_exact_task_lines(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_close_ledgers_repo(tmp_path)
+    sprint_path = tmp_path / "tasks" / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "**Sprint Number**: 4",
+                "",
+                "## Active Tasks",
+                "- `TASK-294` Archive closure",
+                "- `TASK-295` Keep me live (blocked by TASK-294 handoff)",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-294 | owner=ops | last_touched=2026-03-10 | next_action=2026-03-11 | escalate_after_days=7",
+                "- TASK-295 | owner=ops | note=depends on TASK-294 archive landing",
+                "",
+                "## Completed This Sprint",
+                "- Sprint opened on 2026-03-10 with carry-over work only; no Sprint 4 tasks are complete yet.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(task_commands_module, "current_date", lambda: date(2026, 3, 10))
+
+    exit_code, _, _ = task_commands_module.close_ledgers_task_data("TASK-294", dry_run=False)
+
+    sprint_text = sprint_path.read_text(encoding="utf-8")
+    active_section = task_repo_module.active_section_text(sprint_path)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert "- `TASK-294` Archive closure" not in active_section
+    assert "- `TASK-295` Keep me live (blocked by TASK-294 handoff)" in active_section
+    assert "- TASK-294 | owner=ops" not in sprint_text
+    assert "- TASK-295 | owner=ops | note=depends on TASK-294 archive landing" in sprint_text
+
+
+def test_close_ledgers_task_data_tolerates_missing_human_blocker_section(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_close_ledgers_repo(tmp_path)
+    sprint_path = tmp_path / "tasks" / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "**Sprint Number**: 4",
+                "",
+                "## Active Tasks",
+                "- `TASK-294` Archive closure",
+                "- `TASK-295` Keep me live",
+                "",
+                "## Completed This Sprint",
+                "- Sprint opened on 2026-03-10 with carry-over work only; no Sprint 4 tasks are complete yet.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(task_commands_module, "current_date", lambda: date(2026, 3, 10))
+
+    exit_code, _, _ = task_commands_module.close_ledgers_task_data("TASK-294", dry_run=False)
+
+    sprint_text = sprint_path.read_text(encoding="utf-8")
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert "## Completed This Sprint" in sprint_text
+    assert "- `TASK-294` Archive closure ✅" in sprint_text
+
+
 def test_close_ledgers_task_data_rejects_already_archived_task(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

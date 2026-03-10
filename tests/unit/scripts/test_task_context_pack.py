@@ -20,9 +20,9 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def test_task_context_pack_prints_task_context() -> None:
-    result = _run("TASK-292")
+    result = _run("TASK-291")
     assert result.returncode == 0
-    assert "# Context Pack: TASK-292" in result.stdout
+    assert "# Context Pack: TASK-291" in result.stdout
     assert "## Suggested Validation Commands" in result.stdout
     assert "make agent-check" in result.stdout
 

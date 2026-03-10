@@ -931,25 +931,6 @@ still open.
 
 ---
 
-### TASK-292: Right-Size Live Task Ledgers and Archive Historical Planning Surfaces
-**Priority**: P1 (High)
-**Estimate**: 1d
-
-Close Sprint 3 on 2026-03-10, archive the large historical planning ledgers, and reduce the live planning context to a compact current sprint, a backlog of only open tasks, a compact completed index, and a non-authoritative `PROJECT_STATUS.md` pointer stub. Update the Horadus CLI, docs-freshness rules, and agent guidance so archive access is explicit rather than implicit.
-
-**Files**: `tasks/CURRENT_SPRINT.md`, `tasks/BACKLOG.md`, `tasks/COMPLETED.md`, `PROJECT_STATUS.md`, `archive/`, `AGENTS.md`, `README.md`, `docs/AGENT_RUNBOOK.md`, `docs/ASSESSMENTS.md`, `docs/rfc/001-agent-context-retrieval.md`, `scripts/check_docs_freshness.py`, `src/core/docs_freshness.py`, `src/horadus_cli/task_repo.py`, `src/horadus_cli/task_commands.py`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Sprint 3 is archived under `archive/2026-03-10-sprint-3-close/` together with the pre-reset backlog, completed ledger, detailed project status, and prior sprint archive files
-- [ ] Live `tasks/CURRENT_SPRINT.md` becomes Sprint 4 with only open carried-over tasks plus `TASK-292`, and the active-task format is concise enough for reliable parser consumption
-- [ ] Live `tasks/BACKLOG.md` contains only unfinished task entries, and live `tasks/COMPLETED.md` becomes a compact completion index
-- [ ] `PROJECT_STATUS.md` becomes a non-authoritative stub that points operators to the live ledgers and the dated archive root
-- [ ] `horadus tasks show`, `search`, and `context-pack` require explicit `--include-archive` access for archived/completed task details and explain that requirement clearly when a task is archived
-- [ ] Docs-freshness stops enforcing detailed `PROJECT_STATUS.md` parity/freshness rules and instead enforces the new stub/archive-pointer contract without regressing current-sprint blocker validation
-- [ ] Regression tests cover archive-aware CLI lookup, live-only default behavior, active-task parsing, and the new docs-freshness stub/archive rules
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

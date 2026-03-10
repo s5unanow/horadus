@@ -1047,8 +1047,109 @@ def _task_closure_blocker_lines(closure_state: TaskClosureState) -> list[str]:
     return lines
 
 
-def _pre_merge_task_closure_blocker(task_id: str) -> tuple[str, dict[str, Any], list[str]] | None:
-    closure_state = task_closure_state(task_id)
+def _git_file_text_at_ref(
+    *, git_ref: str, relative_path: str, config: FinishConfig
+) -> tuple[bool, str]:
+    result = _run_command([config.git_bin, "show", f"{git_ref}:{relative_path}"])
+    if result.returncode != 0:
+        return (False, "")
+    return (True, result.stdout)
+
+
+def _task_closure_state_for_ref(
+    *, task_id: str, git_ref: str, config: FinishConfig
+) -> TaskClosureState:
+    normalized = normalize_task_id(task_id)
+    backlog_exists, backlog_text = _git_file_text_at_ref(
+        git_ref=git_ref,
+        relative_path="tasks/BACKLOG.md",
+        config=config,
+    )
+    sprint_exists, sprint_text = _git_file_text_at_ref(
+        git_ref=git_ref,
+        relative_path="tasks/CURRENT_SPRINT.md",
+        config=config,
+    )
+    completed_exists, completed_text = _git_file_text_at_ref(
+        git_ref=git_ref,
+        relative_path="tasks/COMPLETED.md",
+        config=config,
+    )
+
+    present_in_backlog = (
+        backlog_exists
+        and re.search(rf"^###\s+{re.escape(normalized)}:\s+", backlog_text, re.MULTILINE)
+        is not None
+    )
+
+    active_sprint_lines: list[str] = []
+    if sprint_exists:
+        try:
+            active_body = _extract_h2_section_body(sprint_text, "Active Tasks")
+        except ValueError:
+            active_body = ""
+        active_pattern = re.compile(rf"^-\s+`{re.escape(normalized)}`(?:\s|$)")
+        active_sprint_lines = [
+            line.strip()
+            for line in active_body.splitlines()
+            if active_pattern.match(line.strip()) is not None
+        ]
+
+    present_in_completed = (
+        completed_exists
+        and re.search(
+            rf"^-\s+{re.escape(normalized)}:\s+.+?\s+✅(?:\s|$)",
+            completed_text,
+            re.MULTILINE,
+        )
+        is not None
+    )
+
+    archive_listing_result = _run_command(
+        [config.git_bin, "ls-tree", "-r", "--name-only", git_ref, "archive/closed_tasks"]
+    )
+    archive_paths = [
+        line.strip()
+        for line in archive_listing_result.stdout.splitlines()
+        if line.strip().endswith(".md")
+    ]
+    closed_archive_path: str | None = None
+    for archive_path in archive_paths:
+        archive_exists, archive_text = _git_file_text_at_ref(
+            git_ref=git_ref,
+            relative_path=archive_path,
+            config=config,
+        )
+        if not archive_exists:
+            continue
+        if (
+            re.search(rf"^###\s+{re.escape(normalized)}:\s+", archive_text, re.MULTILINE)
+            is not None
+        ):
+            closed_archive_path = archive_path
+            break
+
+    return TaskClosureState(
+        task_id=normalized,
+        present_in_backlog=present_in_backlog,
+        active_sprint_lines=active_sprint_lines,
+        present_in_completed=present_in_completed,
+        present_in_closed_archive=closed_archive_path is not None,
+        closed_archive_path=closed_archive_path,
+    )
+
+
+def _pre_merge_task_closure_blocker(
+    task_id: str,
+    *,
+    branch_name: str | None = None,
+    config: FinishConfig | None = None,
+) -> tuple[str, dict[str, Any], list[str]] | None:
+    closure_state = (
+        _task_closure_state_for_ref(task_id=task_id, git_ref=branch_name, config=config)
+        if branch_name is not None and config is not None
+        else task_closure_state(task_id)
+    )
     if closure_state.ready_for_merge:
         return None
     return (
@@ -2521,25 +2622,6 @@ def finish_task_data(
             data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
         )
 
-    closure_blocker = _pre_merge_task_closure_blocker(context.task_id)
-    if closure_blocker is not None:
-        blocker_message, blocker_data, blocker_lines = closure_blocker
-        return _task_blocked(
-            blocker_message,
-            next_action=(
-                f"Run `uv run --no-sync horadus tasks close-ledgers {context.task_id}`, commit and "
-                f"push the ledger/archive updates on `{context.branch_name}`, then re-run "
-                "`horadus tasks finish`."
-            ),
-            data={
-                "task_id": context.task_id,
-                "branch_name": context.branch_name,
-                "pr_url": pr_url,
-                **blocker_data,
-            },
-            extra_lines=blocker_lines,
-        )
-
     head_alignment_blocker = _branch_head_alignment_blocker(
         branch_name=context.branch_name,
         pr_url=pr_url,
@@ -2555,6 +2637,29 @@ def finish_task_data(
                 "`horadus tasks finish`."
             ),
             data={"task_id": context.task_id, "pr_url": pr_url, **blocker_data},
+            extra_lines=blocker_lines,
+        )
+
+    closure_blocker = _pre_merge_task_closure_blocker(
+        context.task_id,
+        branch_name=context.branch_name,
+        config=config,
+    )
+    if closure_blocker is not None:
+        blocker_message, blocker_data, blocker_lines = closure_blocker
+        return _task_blocked(
+            blocker_message,
+            next_action=(
+                f"Run `uv run --no-sync horadus tasks close-ledgers {context.task_id}`, commit and "
+                f"push the ledger/archive updates on `{context.branch_name}`, then re-run "
+                "`horadus tasks finish`."
+            ),
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                **blocker_data,
+            },
             extra_lines=blocker_lines,
         )
 

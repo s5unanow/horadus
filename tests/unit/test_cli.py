@@ -50,7 +50,7 @@ def _default_task_closure_guards(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         task_commands_module,
         "_pre_merge_task_closure_blocker",
-        lambda _task_id: None,
+        lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -2212,6 +2212,200 @@ def test_task_closure_blocker_lines_omit_archive_warning_when_archive_exists() -
 
     assert "- tasks/COMPLETED.md is missing the compact completion entry." in lines
     assert all("archive/closed_tasks" not in line for line in lines)
+
+
+def test_task_closure_state_for_ref_reads_task_branch_instead_of_worktree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["git", "show", "codex/task-295:tasks/BACKLOG.md"]:
+            return _completed(args, stdout="# Backlog\n\n### TASK-296: Keep me live\n")
+        if args[:3] == ["git", "show", "codex/task-295:tasks/CURRENT_SPRINT.md"]:
+            return _completed(
+                args,
+                stdout=(
+                    "# Current Sprint\n\n**Sprint Number**: 4\n\n## Active Tasks\n"
+                    "- `TASK-296` Keep me live\n"
+                ),
+            )
+        if args[:3] == ["git", "show", "codex/task-295:tasks/COMPLETED.md"]:
+            return _completed(
+                args,
+                stdout="# Completed Tasks\n\n## Sprint 4\n- TASK-295: Enforce closure ✅\n",
+            )
+        if args[:6] == [
+            "git",
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "codex/task-295",
+            "archive/closed_tasks",
+        ]:
+            return _completed(args, stdout="archive/closed_tasks/2026-Q1.md\n")
+        if args[:3] == ["git", "show", "codex/task-295:archive/closed_tasks/2026-Q1.md"]:
+            return _completed(
+                args,
+                stdout="### TASK-295: Enforce closure\n**Priority**: P1\n**Estimate**: 1d\n",
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_closure_state",
+        lambda _task_id: task_repo_module.TaskClosureState(
+            task_id="TASK-295",
+            present_in_backlog=True,
+            active_sprint_lines=["- `TASK-295` Still open on main"],
+            present_in_completed=False,
+            present_in_closed_archive=False,
+            closed_archive_path=None,
+        ),
+    )
+
+    closure_state = task_commands_module._task_closure_state_for_ref(
+        task_id="TASK-295",
+        git_ref="codex/task-295",
+        config=config,
+    )
+
+    assert closure_state.ready_for_merge is True
+    assert closure_state.closed_archive_path == "archive/closed_tasks/2026-Q1.md"
+
+
+def test_git_file_text_at_ref_reports_missing_file(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "show"], returncode=128),
+    )
+
+    assert task_commands_module._git_file_text_at_ref(
+        git_ref="codex/task-295",
+        relative_path="tasks/BACKLOG.md",
+        config=config,
+    ) == (False, "")
+
+
+def test_task_closure_state_for_ref_handles_sparse_branch_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["git", "show", "codex/task-295:tasks/BACKLOG.md"]:
+            return _completed(args, returncode=128)
+        if args[:3] == ["git", "show", "codex/task-295:tasks/CURRENT_SPRINT.md"]:
+            return _completed(args, stdout="# Current Sprint\n\n## Completed This Sprint\n- none\n")
+        if args[:3] == ["git", "show", "codex/task-295:tasks/COMPLETED.md"]:
+            return _completed(args, returncode=128)
+        if args[:6] == [
+            "git",
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "codex/task-295",
+            "archive/closed_tasks",
+        ]:
+            return _completed(
+                args,
+                stdout="archive/closed_tasks/2026-Q1.md\narchive/closed_tasks/2026-Q2.md\n",
+            )
+        if args[:3] == ["git", "show", "codex/task-295:archive/closed_tasks/2026-Q1.md"]:
+            return _completed(args, stdout="### TASK-296: Different task\n")
+        if args[:3] == ["git", "show", "codex/task-295:archive/closed_tasks/2026-Q2.md"]:
+            return _completed(args, returncode=128)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    closure_state = task_commands_module._task_closure_state_for_ref(
+        task_id="TASK-295",
+        git_ref="codex/task-295",
+        config=config,
+    )
+
+    assert closure_state.present_in_backlog is False
+    assert closure_state.active_sprint_lines == []
+    assert closure_state.present_in_completed is False
+    assert closure_state.present_in_closed_archive is False
+
+
+def test_task_closure_state_for_ref_handles_missing_sprint_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["git", "show", "codex/task-295:tasks/BACKLOG.md"]:
+            return _completed(args, stdout="# Backlog\n")
+        if args[:3] == ["git", "show", "codex/task-295:tasks/CURRENT_SPRINT.md"]:
+            return _completed(args, returncode=128)
+        if args[:3] == ["git", "show", "codex/task-295:tasks/COMPLETED.md"]:
+            return _completed(args, stdout="# Completed Tasks\n")
+        if args[:6] == [
+            "git",
+            "ls-tree",
+            "-r",
+            "--name-only",
+            "codex/task-295",
+            "archive/closed_tasks",
+        ]:
+            return _completed(args, stdout="")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    closure_state = task_commands_module._task_closure_state_for_ref(
+        task_id="TASK-295",
+        git_ref="codex/task-295",
+        config=config,
+    )
+
+    assert closure_state.active_sprint_lines == []
 
 
 def test_branch_head_alignment_blocker_ignores_matching_shas_and_reports_drift(
@@ -5208,7 +5402,7 @@ def test_finish_task_data_blocks_when_task_closure_state_is_not_on_pr_head(
     monkeypatch.setattr(
         task_commands_module,
         "_pre_merge_task_closure_blocker",
-        lambda _task_id: (
+        lambda *_args, **_kwargs: (
             "primary task closure state is not present on the PR head.",
             {
                 "task_closure": {

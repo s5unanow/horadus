@@ -24,6 +24,11 @@ from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
+pytest_plugins = ("tests.unit.task_repo_fixtures",)
+
+LIVE_TASK_ID = "TASK-301"
+ARCHIVED_TASK_ID = "TASK-302"
+BACKLOG_ONLY_TASK_ID = "TASK-303"
 
 _REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER = task_commands_module._pre_merge_task_closure_blocker
 _REAL_BRANCH_HEAD_ALIGNMENT_BLOCKER = task_commands_module._branch_head_alignment_blocker
@@ -766,13 +771,16 @@ def test_run_doctor_returns_failure_on_safety_refusal(
     assert result == 2
 
 
-def test_main_tasks_context_pack_json_output(capsys: pytest.CaptureFixture[str]) -> None:
-    result = cli_module.main(["tasks", "context-pack", "TASK-291", "--format", "json"])
+def test_main_tasks_context_pack_json_output(
+    synthetic_task_repo: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    result = cli_module.main(["tasks", "context-pack", LIVE_TASK_ID, "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
-    assert payload["data"]["task"]["task_id"] == "TASK-291"
+    assert payload["data"]["task"]["task_id"] == LIVE_TASK_ID
     assert "suggested_validation_commands" in payload["data"]
 
 
@@ -8286,35 +8294,27 @@ def test_handle_show_rejects_invalid_task_id() -> None:
     assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
 
 
-def test_handle_show_returns_task_details() -> None:
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-291"))
+def test_handle_show_returns_task_details(synthetic_task_repo: Path) -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id=LIVE_TASK_ID))
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
-    assert result.lines[0].startswith("# TASK-291:")
+    assert result.lines[0].startswith(f"# {LIVE_TASK_ID}:")
     assert "Acceptance Criteria:" in result.lines
 
 
-def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    record = task_repo_module.task_record("TASK-291")
-    assert record is not None
-    record.spec_paths = ["tasks/specs/253-coverage.md"]
-    monkeypatch.setattr(
-        task_commands_module,
-        "task_record",
-        lambda _task_id, **_kwargs: record,
-    )
+def test_handle_show_includes_spec_paths_when_present(synthetic_task_repo: Path) -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id=LIVE_TASK_ID))
 
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-291"))
-
+    assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
     assert "Specs:" in result.lines
-    assert "- tasks/specs/253-coverage.md" in result.lines
+    assert "- tasks/specs/301-stable-live-fixture.md" in result.lines
 
 
 def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     record = task_repo_module.TaskRecord(
-        task_id="TASK-292",
+        task_id="TASK-304",
         title="Coverage",
         priority="P0",
         estimate="2d",
@@ -8324,7 +8324,7 @@ def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPat
         assessment_refs=[],
         raw_block="raw",
         status="active",
-        sprint_lines=["- `TASK-292` Coverage"],
+        sprint_lines=["- `TASK-304` Coverage"],
         spec_paths=[],
     )
     monkeypatch.setattr(
@@ -8333,7 +8333,7 @@ def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPat
         lambda _task_id, **_kwargs: record,
     )
 
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-292"))
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-304"))
 
     assert result.lines is not None
     assert "Description:" not in result.lines
@@ -8370,36 +8370,32 @@ def test_handle_context_pack_returns_not_found_for_unknown_task() -> None:
     assert result.error_lines == ["TASK-999 not found in tasks/BACKLOG.md"]
 
 
-def test_handle_context_pack_requires_explicit_archive_flag_for_archived_task() -> None:
-    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-164"))
+def test_handle_context_pack_requires_explicit_archive_flag_for_archived_task(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id=ARCHIVED_TASK_ID))
 
     assert result.exit_code == task_commands_module.ExitCode.NOT_FOUND
     assert result.error_lines == [
-        "TASK-164 is archived; re-run with --include-archive to inspect its history"
+        f"{ARCHIVED_TASK_ID} is archived; re-run with --include-archive to inspect its history"
     ]
 
 
 def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
-    monkeypatch: pytest.MonkeyPatch,
+    synthetic_task_repo: Path,
 ) -> None:
-    record = task_repo_module.task_record("TASK-291")
-    assert record is not None
-    monkeypatch.setattr(
-        task_commands_module,
-        "task_record",
-        lambda _task_id, **_kwargs: record,
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id=BACKLOG_ONLY_TASK_ID)
     )
-
-    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-291"))
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
-    assert "(not listed in current sprint)" not in result.lines
+    assert "(not listed in current sprint)" in result.lines
     assert "## Spec Contract Template" in result.lines
     assert "tasks/specs/TEMPLATE.md" in result.lines
     assert "## Suggested Workflow Commands" in result.lines
-    assert "uv run --no-sync horadus tasks context-pack TASK-291" in result.lines
-    assert "uv run --no-sync horadus tasks finish TASK-291" in result.lines
+    assert f"uv run --no-sync horadus tasks context-pack {BACKLOG_ONLY_TASK_ID}" in result.lines
+    assert f"uv run --no-sync horadus tasks finish {BACKLOG_ONLY_TASK_ID}" in result.lines
     assert "## Suggested Validation Commands" in result.lines
     assert result.data is not None
     assert result.data["spec_template_path"] == "tasks/specs/TEMPLATE.md"
@@ -8408,43 +8404,45 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     )
 
 
-def test_handle_context_pack_propagates_archive_flag_to_suggested_commands() -> None:
+def test_handle_context_pack_propagates_archive_flag_to_suggested_commands(
+    synthetic_task_repo: Path,
+) -> None:
     result = task_commands_module.handle_context_pack(
-        argparse.Namespace(task_id="TASK-164", include_archive=True)
+        argparse.Namespace(task_id=ARCHIVED_TASK_ID, include_archive=True)
     )
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
-    assert "uv run --no-sync horadus tasks context-pack TASK-164 --include-archive" in result.lines
-    assert "uv run --no-sync horadus tasks context-pack TASK-164" not in (
-        "\n".join(result.lines).replace(
-            "uv run --no-sync horadus tasks context-pack TASK-164 --include-archive", ""
-        )
+    expected = f"uv run --no-sync horadus tasks context-pack {ARCHIVED_TASK_ID} --include-archive"
+    assert expected in result.lines
+    assert f"uv run --no-sync horadus tasks context-pack {ARCHIVED_TASK_ID}" not in (
+        "\n".join(result.lines).replace(expected, "")
     )
     assert result.data is not None
-    assert (
-        "uv run --no-sync horadus tasks context-pack TASK-164 --include-archive"
-        in result.data["suggested_workflow_commands"]
-    )
+    assert expected in result.data["suggested_workflow_commands"]
 
 
-def test_handle_show_requires_explicit_archive_flag_for_archived_task() -> None:
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-164"))
+def test_handle_show_requires_explicit_archive_flag_for_archived_task(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id=ARCHIVED_TASK_ID))
 
     assert result.exit_code == task_commands_module.ExitCode.NOT_FOUND
     assert result.error_lines == [
-        "TASK-164 is archived; re-run with --include-archive to inspect its history"
+        f"{ARCHIVED_TASK_ID} is archived; re-run with --include-archive to inspect its history"
     ]
 
 
-def test_handle_show_can_resolve_archived_task_with_include_archive() -> None:
+def test_handle_show_can_resolve_archived_task_with_include_archive(
+    synthetic_task_repo: Path,
+) -> None:
     result = task_commands_module.handle_show(
-        argparse.Namespace(task_id="TASK-164", include_archive=True)
+        argparse.Namespace(task_id=ARCHIVED_TASK_ID, include_archive=True)
     )
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
-    assert result.lines[0].startswith("# TASK-164:")
+    assert result.lines[0].startswith(f"# {ARCHIVED_TASK_ID}:")
 
 
 def test_handle_preflight_returns_wrapped_result(monkeypatch: pytest.MonkeyPatch) -> None:

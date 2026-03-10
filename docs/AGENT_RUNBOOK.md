@@ -6,8 +6,9 @@ Short command index for day-to-day agent/operator work.
 
 Default live planning surfaces are `tasks/CURRENT_SPRINT.md`,
 `tasks/BACKLOG.md`, and `tasks/COMPLETED.md`. Treat `PROJECT_STATUS.md` as a
-pointer stub only, and do not read `archive/` unless the user explicitly asks
-for historical context or you pass an archive-aware CLI flag.
+pointer stub only, and do not read `archive/` or `archive/closed_tasks/`
+unless the user explicitly asks for historical context or you pass an
+archive-aware CLI flag.
 
 For RFC/design work, use the review checklist in `docs/rfc/README.md` before
 circulating a proposal for implementation planning.
@@ -34,10 +35,15 @@ acceptance criteria.
 Use `--include-archive` only when the task is no longer live and the user
 explicitly needs archived history.
 
-4. `make agent-check`
+4. `uv run --no-sync horadus tasks close-ledgers TASK-XXX`
+When: move a completed task out of the live ledgers, append its full task block
+to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
+`tasks/COMPLETED.md` before merge.
+
+5. `make agent-check`
 When: fast local quality gate (lint + typecheck + unit tests).
 
-5. `uv run --no-sync horadus tasks local-gate --full`
+6. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
 local validation sequence without replacing the fast iteration gate.
 The unit-coverage step fails closed at `100%` measured coverage for `src/`
@@ -59,22 +65,22 @@ Compatibility wrapper:
   - Use the `term-missing` output to inspect the missing files/lines/branches
     before re-running the full gate
 
-6. `make agent-smoke-run`
+7. `make agent-smoke-run`
 When: one-shot API serve + smoke + exit without orphan processes.
 
-7. `make doctor`
+8. `make doctor`
 When: diagnose local config/DB/Redis readiness quickly.
 
-8. `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
+9. `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 When: collect current sprint/backlog/completed/assessment inputs for backlog triage.
 
-9. `uv run horadus pipeline dry-run --fixture-path ai/eval/fixtures/pipeline_dry_run_items.jsonl`
+10. `uv run horadus pipeline dry-run --fixture-path ai/eval/fixtures/pipeline_dry_run_items.jsonl`
 When: deterministic no-network/no-LLM regression exercise.
 
-10. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
+11. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
 When: full pre-release checks before promotion.
 
-11. `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
+12. `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
 When: inspect machine-checkable task lifecycle state.
 Use the strict form to verify repo-policy completion; success requires state
 `local-main-synced`.
@@ -82,7 +88,7 @@ When running from detached `HEAD` (for example in CI or a throwaway worktree),
 pass the task id explicitly; branch inference is only supported on canonical
 task branches.
 
-12. `uv run --no-sync horadus tasks finish TASK-XXX`
+13. `uv run --no-sync horadus tasks finish TASK-XXX`
 When: canonical task-completion command; finishes the current task PR lifecycle
 (branch/task verification -> pushed branch/PR checks -> current-head review gate
 -> merge -> local `main` sync -> strict lifecycle verification).
@@ -172,21 +178,21 @@ needed workflow step yet, or when the CLI explicitly tells you a manual
 recovery step is required. A review-gate timeout from `horadus tasks finish`
 that completes silently inside the CLI is not a manual-recovery signal.
 
-13. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
+14. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 When: record a real Horadus workflow gap or forced fallback in a structured
 local friction log under `artifacts/agent/horadus-cli-feedback/`.
 Use this only for genuine friction or forced fallback after sensible recovery
 attempts, not routine success cases or expected empty results, and do not
 treat the log as required reading during normal task flow.
 
-14. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
+15. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
 When: generate the compact daily friction report at
 `artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`.
 The report groups duplicate patterns, highlights candidate CLI/skill
 improvements, and keeps follow-up work in human-review-only form. Do not
 auto-create backlog tasks from the report.
 
-15. `make test-integration-docker`
+16. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

@@ -426,6 +426,7 @@ horadus/
 ├── README.md              # This file
 ├── PROJECT_STATUS.md      # Non-authoritative archive pointer stub
 ├── archive/               # Historical planning ledgers (opt-in only)
+│   └── closed_tasks/      # Quarterly closed-task body archive shards (opt-in only)
 ├── pyproject.toml         # Python project config
 ├── docker-compose.yml     # Local infrastructure
 ├── docker-compose.prod.yml # Production deployment stack

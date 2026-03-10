@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-293`.
+- Next available task IDs start at `TASK-297`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -51,7 +51,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 ---
 
 ## Open Task Ledger
-
 
 ### TASK-080: Telegram Collector Task Wiring [REQUIRES_HUMAN]
 **Priority**: P2 (Medium)
@@ -902,6 +901,7 @@ without abandoning the PR lifecycle mid-flight.
 - [ ] `horadus tasks finish` does not switch away from the active task branch before the PR lifecycle is complete, or it restores/resumes the correct task context before continuing
 - [ ] If a prior finish attempt leaves the repo on `main` while the task PR is still open, a rerun with the explicit task id can resume safely instead of failing immediately with `refusing to run on 'main'`
 - [ ] Finish either merges/syncs cleanly after the review/check gates are satisfied or exits with a concrete blocker naming the step that prevented completion
+- [ ] During long-running review/check wait phases, `horadus tasks finish` emits periodic progress lines that name the active gate and latest known state so operators do not need manual GitHub polling to understand whether it is waiting or stuck
 - [ ] Agent-facing workflow guidance reflects the corrected recovery behavior and keeps raw `gh pr merge` limited to genuine forced fallback scenarios
 - [ ] Tests cover the reproduced branch-drift scenario end to end, including the rerun path from `main`
 
@@ -928,6 +928,73 @@ still open.
 - [ ] If the PR is merged remotely but local sync/verification then fails, the command reports that exact local blocker instead of silently staying alive
 - [ ] Regression tests cover at least one path where the PR transitions to `MERGED` while the finish flow is waiting and one unaffected path where an open PR still follows the normal wait behavior
 - [ ] Agent-facing workflow docs make it explicit that a merged PR is a terminal state the finish command must converge on immediately
+
+---
+
+### TASK-293: Decouple CLI Tests from Live Task IDs
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Several Horadus CLI tests still read task data from the live repository ledgers
+using real open task ids. That makes them fragile: closing or archiving a task
+can break unrelated tests even when CLI behavior is still correct. Replace that
+coupling with stable test fixtures so task closure/archive operations do not
+invalidate the CLI test suite.
+
+**Files**: `tests/unit/test_cli.py`, `tests/unit/scripts/test_task_context_pack.py`, `tests/`, `src/horadus_cli/task_repo.py`, `src/horadus_cli/task_commands.py`
+
+**Acceptance Criteria**:
+- [ ] CLI tests that validate task lookup, show, and context-pack behavior no longer depend on whichever task ids are currently open in `tasks/BACKLOG.md` or `tasks/CURRENT_SPRINT.md`
+- [ ] Repo-backed parser/integration coverage uses stable synthetic fixtures (for example a temp repo layout or dedicated fixture markdown files) instead of mutable live task records
+- [ ] Any remaining tests that intentionally exercise the real repo state are reduced to explicit smoke coverage and documented as such, rather than serving as the primary behavior contract
+- [ ] Closing or archiving a live task does not require rewriting unrelated CLI tests to keep the suite green
+- [ ] Regression tests still cover both live-task lookup and archive-gated lookup behavior after the fixture strategy is changed
+
+---
+
+### TASK-295: Enforce Pre-Merge Task Closure State
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+`TASK-292` exposed a workflow gap: a task PR can merge before the branch
+contains the final backlog/current-sprint/completed cleanup, which then forces a
+follow-up PR for bookkeeping that should have been part of the original task.
+Add mechanical enforcement so `horadus tasks finish`, strict lifecycle
+verification, and repo checks refuse to merge a task PR unless the primary
+task's closure state is already present on the PR head.
+
+**Files**: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/test_cli.py`, `tests/`, `.github/workflows/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `README.md`, `tasks/CURRENT_SPRINT.md`, `tasks/BACKLOG.md`, `tasks/COMPLETED.md`, `archive/closed_tasks/`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks finish TASK-XXX` blocks before merge when the primary task still appears open in live `tasks/BACKLOG.md` or `tasks/CURRENT_SPRINT.md`
+- [ ] Strict lifecycle verification fails when the primary task is not yet recorded in `tasks/COMPLETED.md` and, after task-archive support lands, not yet preserved in the appropriate `archive/closed_tasks/*.md` shard
+- [ ] The finish flow verifies that local HEAD, pushed branch HEAD, and PR head all match before merge so post-review local commits cannot be silently omitted from the merged task state
+- [ ] The review gate distinguishes actionable current-head review feedback from stale, outdated, or already-resolved review threads so obsolete comments do not block merge completion
+- [ ] A repo-side check (CI or equivalent) guards the same closure invariant so manual GitHub merges cannot bypass the requirement
+- [ ] Regression tests cover both the blocking path (task still open, actionable current-head review feedback, or branch/PR head drift) and the pass path where ledger/archive closure is already on the PR head and stale/outdated review threads are ignored
+
+---
+
+### TASK-296: Let Guarded Task Start Handle Task-Ledger Intake Safely
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+Current `horadus tasks preflight` / `safe-start` flow is too rigid when the
+only dirty files are task-ledger intake edits such as `tasks/BACKLOG.md`,
+`tasks/CURRENT_SPRINT.md`, or `PROJECT_STATUS.md`. That forces stash tricks or
+manual overrides even though defining a new task and starting work on it are
+part of one legitimate workflow. Improve guarded task start so it can handle
+task-ledger-only intake state safely without weakening the broader clean-tree
+protection for unrelated code changes.
+
+**Files**: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/test_cli.py`, `tests/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `README.md`, `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`
+
+**Acceptance Criteria**:
+- [ ] Guarded task start still blocks unrelated dirty working-tree changes by default, but it no longer hard-stops on task-ledger-only intake edits when those edits can be carried forward safely into the new task branch
+- [ ] Starting a newly added task does not require the task definition to be committed on `main` first when the only pending changes are the relevant task-ledger intake edits
+- [ ] The workflow either automatically preserves/reapplies eligible task-ledger edits onto the new task branch or provides an explicit first-class intake/start command that does so without ad hoc stash hacks
+- [ ] The command reports clearly which pending files were treated as eligible task-ledger intake state versus which files still block branch creation
+- [ ] Regression tests cover both the allowed path (task-ledger-only dirtiness for the target task) and the blocked path (unrelated dirty files or conflicting task-ledger state)
 
 ---
 

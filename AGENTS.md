@@ -26,7 +26,7 @@ Execution precedence:
 3. Task scope records: `tasks/BACKLOG.md` and `tasks/COMPLETED.md`
 4. Design/ops docs: `docs/`
 5. Pointer-only status surface: `PROJECT_STATUS.md`
-6. Historical snapshots: `archive/` and `docs/POTENTIAL_ISSUES.md` (non-authoritative; do not read unless explicitly requested)
+6. Historical snapshots: `archive/`, `archive/closed_tasks/`, and `docs/POTENTIAL_ISSUES.md` (non-authoritative; do not read unless explicitly requested)
 
 Status precedence:
 1. `tasks/CURRENT_SPRINT.md` for what is active now
@@ -64,7 +64,7 @@ Before starting work:
 
 Execution context policy (keep it small):
 - For implementation work, prefer `tasks/CURRENT_SPRINT.md` plus the specific task spec it references; avoid reading all of `tasks/BACKLOG.md` unless you are doing triage/planning.
-- Do not read `archive/` during normal implementation flow unless the user explicitly asks for historical context.
+- Do not read `archive/` or `archive/closed_tasks/` during normal implementation flow unless the user explicitly asks for historical context.
 - For tasks with high complexity (estimate >2 hours, touches >5 files, involves migrations, LLM/pipeline changes, or probability math/ops guardrails), maintain a living execution plan at `tasks/exec_plans/TASK-XXX.md` using `tasks/exec_plans/TEMPLATE.md`.
 - Apply these guardrails only when changing shared workflow helpers, shared workflow config, or review/merge policy behavior; do not inflate unrelated tasks with generic process boilerplate.
 - Before changing shared workflow helpers or shared workflow config, enumerate every caller that depends on the shared behavior.
@@ -74,6 +74,7 @@ Execution context policy (keep it small):
 After completing work:
 - Update `tasks/CURRENT_SPRINT.md` (mark DONE) and move finished tasks to `tasks/COMPLETED.md`.
 - Keep `PROJECT_STATUS.md` as a non-authoritative stub that points to the active ledgers and archive; do not rebuild it into a live status ledger.
+- Preserve full closed-task bodies in `archive/closed_tasks/YYYY-QN.md`; keep that archive opt-in only and out of normal implementation context.
 - Add/adjust ADRs under `docs/adr/` for major decisions.
 - Ensure formatting/linting/tests pass.
 

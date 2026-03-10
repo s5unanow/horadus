@@ -13,6 +13,10 @@ TASK_HEADER_PATTERN = re.compile(
 TASK_REF_PATTERN = re.compile(r"TASK-\d{3}")
 TASK_STATUS_ORDER = {"active": 0, "backlog": 1, "completed": 2}
 COMPLETED_TASK_LINE_PATTERN = re.compile(r"^-\s+(TASK-\d{3}):\s+(.+?)\s+✅(?:\s|$)")
+CLOSED_TASK_ARCHIVE_GUIDANCE = (
+    "Do not read `archive/closed_tasks/` during normal implementation flow unless "
+    "a user explicitly asks for historical context or an archive-aware CLI flag is used."
+)
 
 
 @dataclass(slots=True)
@@ -91,6 +95,33 @@ def completed_path() -> Path:
 
 def archive_root() -> Path:
     return repo_root() / "archive"
+
+
+def closed_tasks_archive_dir() -> Path:
+    return archive_root() / "closed_tasks"
+
+
+def archive_quarter_label(at_date: date | None = None) -> str:
+    selected_date = at_date or current_date()
+    quarter = ((selected_date.month - 1) // 3) + 1
+    return f"{selected_date.year}-Q{quarter}"
+
+
+def closed_tasks_archive_path(at_date: date | None = None) -> Path:
+    return closed_tasks_archive_dir() / f"{archive_quarter_label(at_date)}.md"
+
+
+def closed_tasks_archive_paths() -> list[Path]:
+    archive_dir = closed_tasks_archive_dir()
+    if not archive_dir.exists():
+        return []
+    return sorted(archive_dir.glob("*.md"), reverse=True)
+
+
+def archived_task_paths() -> list[Path]:
+    snapshot_paths = archive_backlog_paths()
+    closed_task_paths = closed_tasks_archive_paths()
+    return [*closed_task_paths, *snapshot_paths]
 
 
 def archive_backlog_paths() -> list[Path]:
@@ -373,6 +404,15 @@ def backlog_task_records(path: Path | None = None) -> dict[str, TaskRecord]:
     return records
 
 
+def task_block_match(task_id: str, path: Path | None = None) -> re.Match[str] | None:
+    normalized = normalize_task_id(task_id)
+    selected_path = path or backlog_path()
+    for match in TASK_HEADER_PATTERN.finditer(read_text(selected_path)):
+        if match.group("task_id") == normalized:
+            return match
+    return None
+
+
 def sprint_lines_for_task(task_id: str, path: Path | None = None) -> list[str]:
     sprint_text = read_text(path or current_sprint_path())
     return [line for line in sprint_text.splitlines() if task_id in line]
@@ -404,7 +444,7 @@ def is_task_completed(task_id: str) -> bool:
 
 def archived_task_records() -> dict[str, TaskRecord]:
     records: dict[str, TaskRecord] = {}
-    for path in archive_backlog_paths():
+    for path in archived_task_paths():
         for task_id, record in backlog_task_records(path).items():
             records.setdefault(task_id, record)
     return records

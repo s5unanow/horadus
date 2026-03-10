@@ -931,27 +931,6 @@ still open.
 
 ---
 
-### TASK-293: Decouple CLI Tests from Live Task IDs
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-Several Horadus CLI tests still read task data from the live repository ledgers
-using real open task ids. That makes them fragile: closing or archiving a task
-can break unrelated tests even when CLI behavior is still correct. Replace that
-coupling with stable test fixtures so task closure/archive operations do not
-invalidate the CLI test suite.
-
-**Files**: `tests/unit/test_cli.py`, `tests/unit/scripts/test_task_context_pack.py`, `tests/`, `src/horadus_cli/task_repo.py`, `src/horadus_cli/task_commands.py`
-
-**Acceptance Criteria**:
-- [ ] CLI tests that validate task lookup, show, and context-pack behavior no longer depend on whichever task ids are currently open in `tasks/BACKLOG.md` or `tasks/CURRENT_SPRINT.md`
-- [ ] Repo-backed parser/integration coverage uses stable synthetic fixtures (for example a temp repo layout or dedicated fixture markdown files) instead of mutable live task records
-- [ ] Any remaining tests that intentionally exercise the real repo state are reduced to explicit smoke coverage and documented as such, rather than serving as the primary behavior contract
-- [ ] Closing or archiving a live task does not require rewriting unrelated CLI tests to keep the suite green
-- [ ] Regression tests still cover both live-task lookup and archive-gated lookup behavior after the fixture strategy is changed
-
----
-
 ### TASK-296: Let Guarded Task Start Handle Task-Ledger Intake Safely
 **Priority**: P1 (High)
 **Estimate**: 3-5 hours

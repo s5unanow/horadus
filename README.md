@@ -274,6 +274,9 @@ checks before creating the canonical `codex/task-XXX-short-name` branch.
 `horadus tasks finish` is the canonical task-completion command. It does not
 report success unless the branch is pushed, the PR exists, required checks are
 green, the review gate passes, the PR is merged, and local `main` is synced.
+If the review gate clears or silently times out under the allow policy but the
+current PR head already has failing required checks, the command exits promptly
+with a CI blocker instead of waiting for a later merge/timeout path.
 `make task-finish` is a compatibility wrapper to the same CLI flow.
 
 `horadus tasks lifecycle [TASK-XXX] [--strict]` is the mechanical verifier for

@@ -327,6 +327,11 @@ Tasks that have been completed and verified.
   unaffected-caller regression coverage, and current-head/current-window
   semantics for review signals across the canonical workflow surfaces, with
   docs-freshness tests enforcing the narrow guardrail text against drift.
+- TASK-290: Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout ✅
+  The finish flow now re-checks current-head required CI after the review gate
+  clears, reports red or still-pending required checks immediately instead of
+  drifting into a later timeout path, and keeps the unaffected green merge
+  paths covered by regression tests.
 - TASK-287: Spike Markdown-First Context Retrieval for Agent Workflow ✅
   Captured RFC-001 for markdown-first agent-context retrieval, documented the
   phased schema/chunking/retrieval design, added a reusable RFC

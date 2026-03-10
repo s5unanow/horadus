@@ -9,7 +9,7 @@ Tasks are organized by phase and priority.
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-289`.
+- Next available task IDs start at `TASK-291`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in
   `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
@@ -5394,6 +5394,30 @@ without abandoning the PR lifecycle mid-flight.
 - [ ] Finish either merges/syncs cleanly after the review/check gates are satisfied or exits with a concrete blocker naming the step that prevented completion
 - [ ] Agent-facing workflow guidance reflects the corrected recovery behavior and keeps raw `gh pr merge` limited to genuine forced fallback scenarios
 - [ ] Tests cover the reproduced branch-drift scenario end to end, including the rerun path from `main`
+
+---
+
+### TASK-290: Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+Recent `horadus tasks finish` runs showed a bad post-review behavior: after the
+required review timeout elapsed with no actionable review comments, the command
+kept waiting until the full timeout window even when the PR's required GitHub
+checks were already failing on the current head. That delays feedback, wastes
+operator time, and can leave the impression that the finish flow is hung when
+the real blocker is simply "CI is red". Harden the finish flow so once the
+review gate has cleared, failed required checks are surfaced immediately as the
+blocking reason instead of waiting for an unrelated timeout path.
+
+**Files**: `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tasks/CURRENT_SPRINT.md`, `tasks/exec_plans/`
+
+**Acceptance Criteria**:
+- [ ] After the review gate clears or silently times out under the allow policy, `horadus tasks finish` re-checks required-check state for the current PR head before waiting on merge completion
+- [ ] If required GitHub checks are already failing on the current head, the command exits promptly with a concrete blocker that names failed CI/check state rather than waiting for the review timeout or merge timeout path
+- [ ] The blocker message tells the operator to inspect/fix failed checks and re-run `horadus tasks finish`, without suggesting a raw merge fallback while CI is red
+- [ ] Existing success paths remain intact for green-check merges, silent-timeout allow merges, and already-merged recovery flows
+- [ ] Regression tests cover at least one red-CI path after review timeout plus one unaffected green path so the shared finish workflow behavior does not silently regress elsewhere
 
 ---
 

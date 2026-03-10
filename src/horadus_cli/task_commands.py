@@ -935,17 +935,100 @@ def _run_review_gate(*, pr_url: str, config: FinishConfig) -> subprocess.Complet
     )
 
 
-def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str]]:
+def _required_checks_state(*, pr_url: str, config: FinishConfig) -> tuple[str, list[str]]:
+    result = _run_command(
+        [
+            config.gh_bin,
+            "pr",
+            "checks",
+            pr_url,
+            "--required",
+            "--json",
+            "bucket,name,link,workflow",
+        ]
+    )
+    lines = _output_lines(result)
+    try:
+        payload = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        if result.returncode == 0:
+            return ("pass", [])
+        return ("pending", lines)
+
+    if not isinstance(payload, list):
+        if result.returncode == 0:
+            return ("pass", [])
+        return ("pending", lines)
+
+    failed_checks: list[str] = []
+    pending_checks: list[str] = []
+    saw_checks = False
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        saw_checks = True
+        bucket = str(entry.get("bucket") or "").strip().lower()
+        name = str(entry.get("name") or "").strip() or "unnamed-check"
+        workflow = str(entry.get("workflow") or "").strip()
+        label = f"{workflow} / {name}" if workflow and workflow != name else name
+        link = str(entry.get("link") or "").strip()
+        detail = f"{label}: {bucket}"
+        if link:
+            detail = f"{detail} ({link})"
+        if bucket in {"fail", "cancel"}:
+            failed_checks.append(detail)
+        elif bucket == "pending":
+            pending_checks.append(detail)
+
+    if failed_checks:
+        return ("fail", failed_checks)
+    if pending_checks:
+        return ("pending", pending_checks)
+    if result.returncode == 0 or saw_checks:
+        return ("pass", [])
+    return ("pending", lines)
+
+
+def _coerce_wait_for_required_checks_result(
+    result: tuple[bool, list[str]] | tuple[bool, list[str], str],
+) -> tuple[bool, list[str], str]:
+    if len(result) == 2:
+        checks_ok, check_lines = result
+        return (checks_ok, check_lines, "pass" if checks_ok else "timeout")
+    checks_ok, check_lines, reason = result
+    return (checks_ok, check_lines, reason)
+
+
+def _current_required_checks_blocker(
+    *, pr_url: str, config: FinishConfig
+) -> tuple[str, list[str]] | None:
+    check_state, check_lines = _required_checks_state(pr_url=pr_url, config=config)
+    if check_state == "fail":
+        return (
+            "required PR checks are failing on the current head.",
+            check_lines,
+        )
+    if check_state == "pending":
+        return (
+            "required PR checks are still pending on the current head.",
+            check_lines,
+        )
+    return None
+
+
+def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str], str]:
     deadline = time.time() + config.checks_timeout_seconds
     while True:
-        result = _run_command([config.gh_bin, "pr", "checks", pr_url, "--required"])
-        if result.returncode == 0:
-            return (True, [])
+        check_state, check_lines = _required_checks_state(pr_url=pr_url, config=config)
+        if check_state == "pass":
+            return (True, [], "pass")
+        if check_state == "fail":
+            return (False, check_lines, "fail")
         if time.time() >= deadline:
             return (
                 False,
-                _output_lines(result)
-                or ["`gh pr checks --required` did not report success before timeout."],
+                check_lines or ["`gh pr checks --required` did not report success before timeout."],
+                "timeout",
             )
         if config.checks_poll_seconds:
             time.sleep(config.checks_poll_seconds)
@@ -2017,10 +2100,16 @@ def finish_task_data(
         lines.append("PR already merged; skipping merge step.")
     else:
         lines.append(f"Waiting for PR checks to pass (timeout={config.checks_timeout_seconds}s)...")
-        checks_ok, check_lines = _wait_for_required_checks(pr_url=pr_url, config=config)
+        checks_ok, check_lines, check_reason = _coerce_wait_for_required_checks_result(
+            _wait_for_required_checks(pr_url=pr_url, config=config)
+        )
         if not checks_ok:
             return _task_blocked(
-                "required PR checks did not pass before timeout.",
+                (
+                    "required PR checks are failing on the current head."
+                    if check_reason == "fail"
+                    else "required PR checks did not pass before timeout."
+                ),
                 next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
                 data={
                     "task_id": context.task_id,
@@ -2076,6 +2165,20 @@ def finish_task_data(
                 extra_lines=review_lines,
             )
         lines.extend(_output_lines(review_result))
+
+        post_review_blocker = _current_required_checks_blocker(pr_url=pr_url, config=config)
+        if post_review_blocker is not None:
+            blocker_message, blocker_lines = post_review_blocker
+            return _task_blocked(
+                blocker_message,
+                next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                extra_lines=[*_output_lines(review_result), *blocker_lines],
+            )
 
         lines.append("Merging PR (squash, delete branch)...")
         try:

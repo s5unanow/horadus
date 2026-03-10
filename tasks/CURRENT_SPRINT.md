@@ -43,6 +43,8 @@
 - Newly queued from 2026-03-09 finish-flow recovery intake
   (one task per branch/PR):
   - `TASK-289` Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts
+- Newly queued from 2026-03-10 finish-flow failed-CI reporting intake
+  (one task per branch/PR):
 - Newly queued from 2026-03-09 agent-context retrieval spike intake
   (one task per branch/PR):
   - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
@@ -266,6 +268,11 @@
   current-head/current-window semantics for review signals across the
   canonical workflow surfaces, while docs-freshness tests enforce the narrow
   guardrail text against drift.
+- `TASK-290` Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout ✅
+  completion note: the finish flow now re-checks required CI after the review
+  gate clears, reports current-head red or still-pending required checks
+  immediately instead of drifting into a later timeout path, and preserves the
+  unaffected green merge paths with dedicated regression coverage.
 - `TASK-287` Spike Markdown-First Context Retrieval for Agent Workflow ✅
   completion note: captured RFC-001 for markdown-first agent-context
   retrieval, documented the phased schema/chunking/retrieval design, added

@@ -1387,7 +1387,7 @@ def test_wait_helpers_cover_timeout_paths(monkeypatch: pytest.MonkeyPatch) -> No
         lambda *_args, **_kwargs: _completed(["gh"], returncode=1, stderr="still pending"),
     )
 
-    checks_ok, check_lines = task_commands_module._wait_for_required_checks(
+    checks_ok, check_lines, check_reason = task_commands_module._wait_for_required_checks(
         pr_url="https://example.invalid/pr/257",
         config=config,
     )
@@ -1399,6 +1399,7 @@ def test_wait_helpers_cover_timeout_paths(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert checks_ok is False
     assert check_lines == ["still pending"]
+    assert check_reason == "timeout"
     assert state_ok is False
     assert state_lines == ["still pending"]
 
@@ -1441,7 +1442,7 @@ def test_wait_helpers_retry_until_checks_and_state_succeed(
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
     monkeypatch.setattr(task_commands_module.time, "sleep", sleep_calls.append)
 
-    checks_ok, check_lines = task_commands_module._wait_for_required_checks(
+    checks_ok, check_lines, check_reason = task_commands_module._wait_for_required_checks(
         pr_url="https://example.invalid/pr/257",
         config=config,
     )
@@ -1453,6 +1454,7 @@ def test_wait_helpers_retry_until_checks_and_state_succeed(
 
     assert checks_ok is True
     assert check_lines == []
+    assert check_reason == "pass"
     assert state_ok is True
     assert state_lines == []
     assert sleep_calls == [2, 2]
@@ -1494,7 +1496,7 @@ def test_wait_helpers_retry_without_sleep_when_polling_is_disabled(
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
-    checks_ok, check_lines = task_commands_module._wait_for_required_checks(
+    checks_ok, check_lines, check_reason = task_commands_module._wait_for_required_checks(
         pr_url="https://example.invalid/pr/257",
         config=config,
     )
@@ -1506,8 +1508,222 @@ def test_wait_helpers_retry_without_sleep_when_polling_is_disabled(
 
     assert checks_ok is True
     assert check_lines == []
+    assert check_reason == "pass"
     assert state_ok is True
     assert state_lines == []
+
+
+def test_required_checks_state_reports_failed_required_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            returncode=1,
+            stdout=json.dumps(
+                [
+                    {
+                        "bucket": "fail",
+                        "name": "Test",
+                        "workflow": "CI",
+                        "link": "https://example.invalid/checks/test",
+                    },
+                    {"bucket": "pending", "name": "Build", "workflow": "CI", "link": ""},
+                ]
+            ),
+        ),
+    )
+
+    state, lines = task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+    checks_ok, check_lines, check_reason = task_commands_module._wait_for_required_checks(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+
+    assert state == "fail"
+    assert lines == ["CI / Test: fail (https://example.invalid/checks/test)"]
+    assert checks_ok is False
+    assert check_lines == lines
+    assert check_reason == "fail"
+
+
+def test_required_checks_state_handles_unexpected_json_shapes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            stdout="{not-json",
+        ),
+    )
+    assert task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == ("pass", [])
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            returncode=1,
+            stdout="still pending",
+        ),
+    )
+    assert task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == ("pending", ["still pending"])
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            stdout='"pass"',
+        ),
+    )
+    assert task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == ("pass", [])
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            returncode=1,
+            stdout='"pending"',
+        ),
+    )
+    assert task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == ("pending", ['"pending"'])
+
+
+def test_required_checks_state_reports_pending_required_ci(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            returncode=1,
+            stdout=json.dumps(
+                [
+                    "ignore-me",
+                    {
+                        "bucket": "pending",
+                        "name": "Build",
+                        "workflow": "CI",
+                        "link": "https://example.invalid/checks/build",
+                    },
+                    {"bucket": "pass", "name": "Lint", "workflow": "CI", "link": ""},
+                ]
+            ),
+        ),
+    )
+
+    state, lines = task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+
+    assert state == "pending"
+    assert lines == ["CI / Build: pending (https://example.invalid/checks/build)"]
+
+
+def test_current_required_checks_blocker_maps_check_states(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_required_checks_state",
+        lambda **_kwargs: ("fail", ["CI / Test: fail"]),
+    )
+    assert task_commands_module._current_required_checks_blocker(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == ("required PR checks are failing on the current head.", ["CI / Test: fail"])
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_required_checks_state",
+        lambda **_kwargs: ("pending", ["CI / Build: pending"]),
+    )
+    assert task_commands_module._current_required_checks_blocker(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == ("required PR checks are still pending on the current head.", ["CI / Build: pending"])
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_required_checks_state",
+        lambda **_kwargs: ("pass", []),
+    )
+    assert (
+        task_commands_module._current_required_checks_blocker(
+            pr_url="https://example.invalid/pr/257",
+            config=config,
+        )
+        is None
+    )
 
 
 def test_ensure_required_hooks_reports_missing_hooks(
@@ -4439,7 +4655,7 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     monkeypatch.setattr(
         task_commands_module,
         "_wait_for_required_checks",
-        lambda **_kwargs: (False, ["required-check failure details"]),
+        lambda **_kwargs: (False, ["required-check failure details"], "timeout"),
     )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -4474,6 +4690,149 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     assert "required PR checks did not pass before timeout" in lines[0]
     assert "Inspect the failing required checks" in lines[1]
     assert lines[-1] == "required-check failure details"
+
+
+def test_finish_task_data_blocks_immediately_when_required_checks_are_failing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (False, ["CI / Test: fail"], "fail"),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert lines[0] == "Task finish blocked: required PR checks are failing on the current head."
+    assert lines[-1] == "CI / Test: fail"
+
+
+def test_finish_task_data_blocks_when_checks_turn_red_after_review_gate_clears(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-275-enforce-finish-review-timeout",
+            branch_task_id="TASK-275",
+            task_id="TASK-275",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-275 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            stdout=(
+                "review gate timeout: no actionable current-head review feedback from "
+                "chatgpt-codex-connector[bot] for head-sha-275 within 600s. "
+                "Continuing due to timeout policy=allow."
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: (
+            "required PR checks are failing on the current head.",
+            ["CI / Test: fail"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/275\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/275"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-275: enforce finish timeout","body":"Primary-Task: TASK-275\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-275", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/275"
+    assert lines[0] == "Task finish blocked: required PR checks are failing on the current head."
+    assert any("review gate timeout:" in line for line in lines)
+    assert lines[-1] == "CI / Test: fail"
 
 
 def test_finish_task_data_blocks_when_pr_metadata_query_fails(
@@ -4856,6 +5215,11 @@ def test_finish_task_data_allows_review_timeout_override_with_human_approval(
     )
     monkeypatch.setattr(
         task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
         "task_lifecycle_data",
         lambda *_args, **_kwargs: (
             task_commands_module.ExitCode.OK,
@@ -5019,6 +5383,11 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     )
     monkeypatch.setattr(
         task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
         "task_lifecycle_data",
         lambda *_args, **_kwargs: (
             task_commands_module.ExitCode.OK,
@@ -5118,6 +5487,11 @@ def test_finish_task_data_resumes_from_main_with_explicit_task_id(
                 "Continuing due to timeout policy=allow."
             ),
         ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -5294,6 +5668,11 @@ def test_finish_task_data_blocks_when_merge_command_hangs_after_review_gate_pass
                 "Continuing due to timeout policy=allow."
             ),
         ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
     )
 
     real_run_command_with_timeout = task_commands_module._run_command_with_timeout
@@ -5517,6 +5896,11 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
     )
     monkeypatch.setattr(
         task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
         "task_lifecycle_data",
         lambda *_args, **_kwargs: (
             task_commands_module.ExitCode.OK,
@@ -5603,6 +5987,11 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
         task_commands_module,
         "_run_review_gate",
         lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
     )
     monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
     monkeypatch.setattr(
@@ -5701,6 +6090,11 @@ def test_finish_task_data_continues_when_merge_timeout_or_failure_still_results_
         task_commands_module,
         "_run_review_gate",
         lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -5824,6 +6218,11 @@ def test_finish_task_data_covers_auto_merge_timeout_and_failure_paths(
         task_commands_module,
         "_run_review_gate",
         lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -6036,6 +6435,11 @@ def test_finish_task_data_blocks_when_merge_fails_without_auto_merge_hint(
         task_commands_module,
         "_run_review_gate",
         lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
     )
 
     state_calls = 0

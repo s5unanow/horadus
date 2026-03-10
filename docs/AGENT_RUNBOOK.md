@@ -96,6 +96,10 @@ Task PRs must be titled `TASK-XXX: short summary` and include exactly one
 `Primary-Task: TASK-XXX` line in the body.
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
+Before merge, the CLI also requires the primary task to already be removed from
+live `tasks/BACKLOG.md` / `tasks/CURRENT_SPRINT.md`, recorded in
+`tasks/COMPLETED.md`, archived in `archive/closed_tasks/YYYY-QN.md`, and pushed
+so the local task-branch head, remote branch head, and PR head all match.
 The finish flow always waits a positive review-gate timeout. Actionable
 current-head review feedback blocks completion. The default review-gate
 timeout is 600 seconds (10 minutes), and agents must not override or suggest
@@ -107,7 +111,8 @@ inside the CLI flow only when the current PR head still has green required
 checks and no unresolved review threads still block merge; red CI or
 unresolved review comments are reported immediately as blockers, and the
 unresolved-thread timeout path requests a fresh `@codex review`
-automatically. If a prior finish attempt already left the repo on `main`
+automatically. Outdated or already-resolved review threads are ignored. If a
+prior finish attempt already left the repo on `main`
 before completion, re-run
 `uv run --no-sync horadus tasks finish TASK-XXX` with the explicit task id so
 the CLI can resume the task PR lifecycle. Do not bypass the CLI with raw

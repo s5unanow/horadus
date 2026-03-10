@@ -77,6 +77,29 @@ class TaskRecord:
     archived: bool = False
 
 
+@dataclass(slots=True)
+class TaskClosureState:
+    task_id: str
+    present_in_backlog: bool
+    active_sprint_lines: list[str]
+    present_in_completed: bool
+    present_in_closed_archive: bool
+    closed_archive_path: str | None
+
+    @property
+    def present_in_active_sprint(self) -> bool:
+        return bool(self.active_sprint_lines)
+
+    @property
+    def ready_for_merge(self) -> bool:
+        return (
+            not self.present_in_backlog
+            and not self.present_in_active_sprint
+            and self.present_in_completed
+            and self.present_in_closed_archive
+        )
+
+
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -453,6 +476,31 @@ def archived_task_records() -> dict[str, TaskRecord]:
 def archived_task_record(task_id: str) -> TaskRecord | None:
     normalized = normalize_task_id(task_id)
     return archived_task_records().get(normalized)
+
+
+def closed_task_archive_record(task_id: str) -> TaskRecord | None:
+    normalized = normalize_task_id(task_id)
+    for path in closed_tasks_archive_paths():
+        record = backlog_task_records(path).get(normalized)
+        if record is not None:
+            return record
+    return None
+
+
+def task_closure_state(task_id: str) -> TaskClosureState:
+    normalized = normalize_task_id(task_id)
+    active_lines = [task.raw_line for task in parse_active_tasks() if task.task_id == normalized]
+    closed_archive_record = closed_task_archive_record(normalized)
+    return TaskClosureState(
+        task_id=normalized,
+        present_in_backlog=task_block_match(normalized) is not None,
+        active_sprint_lines=active_lines,
+        present_in_completed=normalized in completed_task_ids(),
+        present_in_closed_archive=closed_archive_record is not None,
+        closed_archive_path=(
+            closed_archive_record.source_path if closed_archive_record is not None else None
+        ),
+    )
 
 
 def _enrich_task_record(record: TaskRecord) -> TaskRecord:

@@ -30,6 +30,7 @@
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - `TASK-289` Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts
 - `TASK-291` Make `horadus tasks finish` Exit When the PR Has Already Merged
+- `TASK-295` Enforce Pre-Merge Task Closure State
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (carried from Sprint 3 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`

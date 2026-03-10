@@ -25,6 +25,39 @@ from src.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
 
+_REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER = task_commands_module._pre_merge_task_closure_blocker
+_REAL_BRANCH_HEAD_ALIGNMENT_BLOCKER = task_commands_module._branch_head_alignment_blocker
+
+
+def _closed_task_closure_state(task_id: str) -> task_repo_module.TaskClosureState:
+    return task_repo_module.TaskClosureState(
+        task_id=task_repo_module.normalize_task_id(task_id),
+        present_in_backlog=False,
+        active_sprint_lines=[],
+        present_in_completed=True,
+        present_in_closed_archive=True,
+        closed_archive_path="archive/closed_tasks/2026-Q1.md",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _default_task_closure_guards(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_closure_state",
+        lambda task_id: _closed_task_closure_state(task_id),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_pre_merge_task_closure_blocker",
+        lambda _task_id: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_branch_head_alignment_blocker",
+        lambda **_kwargs: None,
+    )
+
 
 def test_change_arrow_maps_signs() -> None:
     assert _change_arrow(0.1) == "^"
@@ -1865,6 +1898,73 @@ def test_unresolved_review_thread_lines_reports_unresolved_threads(
     ]
 
 
+def test_unresolved_review_thread_lines_ignores_outdated_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "nodes": [
+                                            {
+                                                "isResolved": False,
+                                                "isOutdated": True,
+                                                "comments": {
+                                                    "nodes": [
+                                                        {
+                                                            "author": {"login": "reviewer"},
+                                                            "body": "Old comment.",
+                                                            "path": "README.md",
+                                                            "line": 10,
+                                                            "originalLine": 10,
+                                                            "url": "https://example.invalid/comment/stale",
+                                                        }
+                                                    ]
+                                                },
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    assert (
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+        == []
+    )
+
+
 def test_unresolved_review_thread_lines_handles_invalid_payloads(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2042,6 +2142,159 @@ def test_unresolved_review_thread_lines_handles_sparse_threads(
         pr_url="https://example.invalid/pr/290",
         config=config,
     ) == ["- README.md:?"]
+
+
+def test_pre_merge_task_closure_blocker_reports_open_ledger_entries(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_pre_merge_task_closure_blocker",
+        _REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_closure_state",
+        lambda _task_id: task_repo_module.TaskClosureState(
+            task_id="TASK-295",
+            present_in_backlog=True,
+            active_sprint_lines=["- `TASK-295` Enforce Pre-Merge Task Closure State"],
+            present_in_completed=False,
+            present_in_closed_archive=False,
+            closed_archive_path=None,
+        ),
+    )
+
+    blocker = task_commands_module._pre_merge_task_closure_blocker("TASK-295")
+
+    assert blocker is not None
+    message, data, lines = blocker
+    assert message == "primary task closure state is not present on the PR head."
+    assert data["task_closure"]["present_in_backlog"] is True
+    assert "- tasks/BACKLOG.md still contains the task as open." in lines
+
+
+def test_pre_merge_task_closure_blocker_returns_none_when_task_is_ready(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_pre_merge_task_closure_blocker",
+        _REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_closure_state",
+        lambda _task_id: task_repo_module.TaskClosureState(
+            task_id="TASK-295",
+            present_in_backlog=False,
+            active_sprint_lines=[],
+            present_in_completed=True,
+            present_in_closed_archive=True,
+            closed_archive_path="archive/closed_tasks/2026-Q1.md",
+        ),
+    )
+
+    assert task_commands_module._pre_merge_task_closure_blocker("TASK-295") is None
+
+
+def test_task_closure_blocker_lines_omit_archive_warning_when_archive_exists() -> None:
+    lines = task_commands_module._task_closure_blocker_lines(
+        task_repo_module.TaskClosureState(
+            task_id="TASK-295",
+            present_in_backlog=False,
+            active_sprint_lines=[],
+            present_in_completed=False,
+            present_in_closed_archive=True,
+            closed_archive_path="archive/closed_tasks/2026-Q1.md",
+        )
+    )
+
+    assert "- tasks/COMPLETED.md is missing the compact completion entry." in lines
+    assert all("archive/closed_tasks" not in line for line in lines)
+
+
+def test_branch_head_alignment_blocker_ignores_matching_shas_and_reports_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_branch_head_alignment_blocker",
+        _REAL_BRANCH_HEAD_ALIGNMENT_BLOCKER,
+    )
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="same-sha\n"),
+            _completed(["git", "ls-remote"], stdout="same-sha\trefs/heads/codex/task-295\n"),
+            _completed(["gh", "pr", "view"], stdout="same-sha\n"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    assert (
+        task_commands_module._branch_head_alignment_blocker(
+            branch_name="codex/task-295-enforce-pre-merge-task-closure",
+            pr_url="https://example.invalid/pr/295",
+            config=config,
+        )
+        is None
+    )
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="local-sha\n"),
+            _completed(["git", "ls-remote"], stdout="remote-sha\trefs/heads/codex/task-295\n"),
+            _completed(["gh", "pr", "view"], stdout="pr-sha\n"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    blocker = task_commands_module._branch_head_alignment_blocker(
+        branch_name="codex/task-295-enforce-pre-merge-task-closure",
+        pr_url="https://example.invalid/pr/295",
+        config=config,
+    )
+
+    assert blocker is not None
+    message, data, lines = blocker
+    assert message == "task branch head, pushed branch head, and PR head are not aligned."
+    assert data["local_branch_head"] == "local-sha"
+    assert lines[-1] == "- PR head: pr-sha"
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="local-sha\n"),
+            _completed(["git", "ls-remote"], returncode=2),
+            _completed(["gh", "pr", "view"], stdout="pr-sha\n"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    blocker = task_commands_module._branch_head_alignment_blocker(
+        branch_name="codex/task-295-enforce-pre-merge-task-closure",
+        pr_url="https://example.invalid/pr/295",
+        config=config,
+    )
+
+    assert blocker is not None
+    assert blocker[2][1] == "- remote branch head: <missing>"
 
 
 def test_maybe_request_fresh_review_posts_codex_comment(
@@ -3923,7 +4176,7 @@ def test_task_lifecycle_data_strict_mode_fails_before_local_main_sync(
     assert data["lifecycle_state"] == "merged"
     assert data["strict_complete"] is False
     assert lines[-1] == (
-        "Strict verification failed: repo-policy completion requires state `local-main-synced`."
+        "Strict verification failed: repo-policy completion requires state `local-main-synced` with the task removed from live ledgers and recorded in tasks/COMPLETED.md plus archive/closed_tasks/."
     )
 
 
@@ -3963,6 +4216,57 @@ def test_task_lifecycle_data_strict_mode_passes_when_repo_policy_is_fully_comple
     assert data["lifecycle_state"] == "local-main-synced"
     assert data["strict_complete"] is True
     assert lines[-1] == "- strict complete: yes"
+
+
+def test_task_lifecycle_data_strict_mode_requires_closed_ledgers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(
+            current_branch="main",
+            pr=task_commands_module.TaskPullRequest(
+                number=295,
+                url="https://example.invalid/pr/295",
+                state="MERGED",
+                is_draft=False,
+                head_ref_name="codex/task-295-enforce-pre-merge-task-closure",
+                head_ref_oid="head-sha",
+                merge_commit_oid="merge-sha",
+                check_state="pass",
+            ),
+            local_main_synced=True,
+            merge_commit_on_main=True,
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_closure_state",
+        lambda _task_id: task_repo_module.TaskClosureState(
+            task_id="TASK-295",
+            present_in_backlog=False,
+            active_sprint_lines=[],
+            present_in_completed=True,
+            present_in_closed_archive=False,
+            closed_archive_path=None,
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-295",
+        strict=True,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["lifecycle_state"] == "local-main-synced"
+    assert data["strict_complete"] is False
+    assert data["task_closure"]["present_in_closed_archive"] is False
+    assert "- archive/closed_tasks/*.md is missing the full archived task body." in lines
 
 
 def test_task_lifecycle_data_reports_missing_required_command(
@@ -4879,6 +5183,85 @@ def test_finish_task_data_propagates_finish_context_blockers(
     assert task_commands_module.finish_task_data("TASK-257", dry_run=False) == expected
 
 
+def test_finish_task_data_blocks_when_task_closure_state_is_not_on_pr_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-295-enforce-pre-merge-task-closure",
+            branch_task_id="TASK-295",
+            task_id="TASK-295",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-295 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_pre_merge_task_closure_blocker",
+        lambda _task_id: (
+            "primary task closure state is not present on the PR head.",
+            {
+                "task_closure": {
+                    "present_in_backlog": True,
+                    "active_sprint_lines": ["- `TASK-295` Enforce Pre-Merge Task Closure State"],
+                    "present_in_completed": False,
+                    "present_in_closed_archive": False,
+                }
+            },
+            [
+                "- tasks/BACKLOG.md still contains the task as open.",
+                "- tasks/CURRENT_SPRINT.md still lists the task under Active Tasks:",
+                "  - `TASK-295` Enforce Pre-Merge Task Closure State",
+            ],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/295\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/295"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-295: closure guard","body":"Primary-Task: TASK-295\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-295", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["task_closure"]["present_in_backlog"] is True
+    assert (
+        lines[0] == "Task finish blocked: primary task closure state is not present on the PR head."
+    )
+    assert "horadus tasks close-ledgers TASK-295" in lines[1]
+    assert "- tasks/BACKLOG.md still contains the task as open." in lines
+
+
 def test_finish_task_data_blocks_when_branch_not_pushed(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -4926,6 +5309,84 @@ def test_finish_task_data_blocks_when_branch_not_pushed(
     assert data["branch_name"] == "codex/task-258-canonical-finish"
     assert "unable to locate a PR" in lines[0]
     assert "git push -u origin codex/task-258-canonical-finish" in lines[1]
+
+
+def test_finish_task_data_blocks_when_local_remote_pr_heads_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-295-enforce-pre-merge-task-closure",
+            branch_task_id="TASK-295",
+            task_id="TASK-295",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-295 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_branch_head_alignment_blocker",
+        lambda **_kwargs: (
+            "task branch head, pushed branch head, and PR head are not aligned.",
+            {
+                "branch_name": "codex/task-295-enforce-pre-merge-task-closure",
+                "local_branch_head": "local-sha",
+                "remote_branch_head": "remote-sha",
+                "pr_head": "pr-sha",
+            },
+            [
+                "- local branch head: local-sha",
+                "- remote branch head: remote-sha",
+                "- PR head: pr-sha",
+            ],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/295\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/295"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-295: head alignment","body":"Primary-Task: TASK-295\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-295", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["local_branch_head"] == "local-sha"
+    assert (
+        lines[0]
+        == "Task finish blocked: task branch head, pushed branch head, and PR head are not aligned."
+    )
+    assert "local branch, origin branch, and PR head all match" in lines[1]
+    assert lines[-1] == "- PR head: pr-sha"
 
 
 def test_finish_task_data_blocks_when_push_gate_docker_is_not_ready(
@@ -8219,6 +8680,110 @@ def test_archive_backlog_paths_returns_empty_when_archive_root_missing(
     monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
 
     assert task_repo_module.archive_backlog_paths() == []
+
+
+def test_task_closure_state_reports_live_open_and_archived_closed_variants(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_close_ledgers_repo(tmp_path)
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
+
+    live_state = task_repo_module.task_closure_state("TASK-294")
+
+    assert live_state.present_in_backlog is True
+    assert live_state.present_in_active_sprint is True
+    assert live_state.present_in_completed is False
+    assert live_state.present_in_closed_archive is False
+    assert live_state.ready_for_merge is False
+
+    archive_path = tmp_path / "archive" / "closed_tasks" / "2026-Q1.md"
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    archive_path.write_text(
+        "\n".join(
+            [
+                "# Closed Task Archive",
+                "",
+                "**Status**: Archived closed-task ledger (non-authoritative)",
+                "**Quarter**: 2026-Q1",
+                "",
+                "Do not read `archive/closed_tasks/` during normal implementation flow unless a user explicitly asks for historical context or an archive-aware CLI flag is used.",
+                "",
+                "---",
+                "",
+                "### TASK-294: Archive closure",
+                "**Priority**: P1",
+                "**Estimate**: 1d",
+                "",
+                "Archived.",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+        "# Backlog\n\n### TASK-295: Keep me live\n**Priority**: P1\n**Estimate**: 1d\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "# Current Sprint\n\n**Sprint Number**: 4\n\n## Active Tasks\n- `TASK-295` Keep me live\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "COMPLETED.md").write_text(
+        "# Completed Tasks\n\n## Sprint 4\n- TASK-294: Archive closure ✅\n",
+        encoding="utf-8",
+    )
+
+    closed_state = task_repo_module.task_closure_state("TASK-294")
+
+    assert closed_state.present_in_backlog is False
+    assert closed_state.present_in_active_sprint is False
+    assert closed_state.present_in_completed is True
+    assert closed_state.present_in_closed_archive is True
+    assert closed_state.closed_archive_path == "archive/closed_tasks/2026-Q1.md"
+    assert closed_state.ready_for_merge is True
+
+
+def test_closed_task_archive_record_scans_multiple_quarter_shards(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archive_dir = tmp_path / "archive" / "closed_tasks"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tasks" / "BACKLOG.md").write_text("# Backlog\n", encoding="utf-8")
+    (tmp_path / "tasks" / "CURRENT_SPRINT.md").write_text(
+        "# Current Sprint\n\n**Sprint Number**: 4\n\n## Active Tasks\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "COMPLETED.md").write_text("# Completed Tasks\n", encoding="utf-8")
+    (archive_dir / "2026-Q2.md").write_text(
+        "# Closed Task Archive\n\n**Status**: Archived closed-task ledger (non-authoritative)\n",
+        encoding="utf-8",
+    )
+    (archive_dir / "2026-Q1.md").write_text(
+        "\n".join(
+            [
+                "# Closed Task Archive",
+                "",
+                "**Status**: Archived closed-task ledger (non-authoritative)",
+                "",
+                "### TASK-295: Enforce closure",
+                "**Priority**: P1",
+                "**Estimate**: 1d",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
+
+    record = task_repo_module.closed_task_archive_record("TASK-295")
+
+    assert record is not None
+    assert record.source_path == "archive/closed_tasks/2026-Q1.md"
 
 
 def _seed_close_ledgers_repo(tmp_path: Path) -> None:

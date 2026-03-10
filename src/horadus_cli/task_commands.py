@@ -19,6 +19,7 @@ from src.core.repo_workflow import canonical_task_workflow_commands_for_task
 from src.horadus_cli.result import CommandResult, ExitCode
 from src.horadus_cli.task_repo import (
     CLOSED_TASK_ARCHIVE_GUIDANCE,
+    TaskClosureState,
     active_section_text,
     archived_task_record,
     backlog_path,
@@ -33,6 +34,7 @@ from src.horadus_cli.task_repo import (
     search_task_records,
     slugify_name,
     task_block_match,
+    task_closure_state,
     task_record,
 )
 
@@ -1031,6 +1033,67 @@ def _current_required_checks_blocker(
     return None
 
 
+def _task_closure_blocker_lines(closure_state: TaskClosureState) -> list[str]:
+    lines: list[str] = []
+    if closure_state.present_in_backlog:
+        lines.append("- tasks/BACKLOG.md still contains the task as open.")
+    if closure_state.present_in_active_sprint:
+        lines.append("- tasks/CURRENT_SPRINT.md still lists the task under Active Tasks:")
+        lines.extend(f"  {line}" for line in closure_state.active_sprint_lines)
+    if not closure_state.present_in_completed:
+        lines.append("- tasks/COMPLETED.md is missing the compact completion entry.")
+    if not closure_state.present_in_closed_archive:
+        lines.append("- archive/closed_tasks/*.md is missing the full archived task body.")
+    return lines
+
+
+def _pre_merge_task_closure_blocker(task_id: str) -> tuple[str, dict[str, Any], list[str]] | None:
+    closure_state = task_closure_state(task_id)
+    if closure_state.ready_for_merge:
+        return None
+    return (
+        "primary task closure state is not present on the PR head.",
+        {"task_closure": asdict(closure_state)},
+        _task_closure_blocker_lines(closure_state),
+    )
+
+
+def _branch_head_alignment_blocker(
+    *, branch_name: str, pr_url: str, config: FinishConfig
+) -> tuple[str, dict[str, Any], list[str]] | None:
+    local_head_result = _run_command([config.git_bin, "rev-parse", branch_name])
+    remote_head_result = _run_command(
+        [config.git_bin, "ls-remote", "--heads", "origin", branch_name]
+    )
+    pr_head_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "headRefOid", "--jq", ".headRefOid"]
+    )
+
+    local_head = local_head_result.stdout.strip() if local_head_result.returncode == 0 else ""
+    remote_head = ""
+    if remote_head_result.returncode == 0:
+        remote_head = remote_head_result.stdout.split(maxsplit=1)[0].strip()
+    pr_head = pr_head_result.stdout.strip() if pr_head_result.returncode == 0 else ""
+
+    if local_head and remote_head and pr_head and local_head == remote_head == pr_head:
+        return None
+
+    return (
+        "task branch head, pushed branch head, and PR head are not aligned.",
+        {
+            "branch_name": branch_name,
+            "local_branch_head": local_head or None,
+            "remote_branch_head": remote_head or None,
+            "pr_head": pr_head or None,
+        },
+        [
+            f"- local branch head: {local_head or '<missing>'}",
+            f"- remote branch head: {remote_head or '<missing>'}",
+            f"- PR head: {pr_head or '<missing>'}",
+        ],
+    )
+
+
 def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> list[str]:
     repo_result = _run_command(
         [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
@@ -1053,7 +1116,7 @@ def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> lis
         "pullRequest(number:$number){"
         "reviewThreads(first:100){"
         "nodes{"
-        "isResolved "
+        "isResolved isOutdated "
         "comments(first:20){"
         "nodes{author{login} body path line originalLine url}"
         "}"
@@ -1097,7 +1160,11 @@ def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> lis
 
     lines: list[str] = []
     for thread in threads:
-        if not isinstance(thread, dict) or thread.get("isResolved") is True:
+        if (
+            not isinstance(thread, dict)
+            or thread.get("isResolved") is True
+            or thread.get("isOutdated") is True
+        ):
             continue
         comments = thread.get("comments", {}).get("nodes", [])
         if not isinstance(comments, list):
@@ -2454,6 +2521,43 @@ def finish_task_data(
             data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
         )
 
+    closure_blocker = _pre_merge_task_closure_blocker(context.task_id)
+    if closure_blocker is not None:
+        blocker_message, blocker_data, blocker_lines = closure_blocker
+        return _task_blocked(
+            blocker_message,
+            next_action=(
+                f"Run `uv run --no-sync horadus tasks close-ledgers {context.task_id}`, commit and "
+                f"push the ledger/archive updates on `{context.branch_name}`, then re-run "
+                "`horadus tasks finish`."
+            ),
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                **blocker_data,
+            },
+            extra_lines=blocker_lines,
+        )
+
+    head_alignment_blocker = _branch_head_alignment_blocker(
+        branch_name=context.branch_name,
+        pr_url=pr_url,
+        config=config,
+    )
+    if head_alignment_blocker is not None:
+        blocker_message, blocker_data, blocker_lines = head_alignment_blocker
+        return _task_blocked(
+            blocker_message,
+            next_action=(
+                f"Checkout `{context.branch_name}`, ensure the intended task-close commits are pushed so "
+                "the local branch, origin branch, and PR head all match, then re-run "
+                "`horadus tasks finish`."
+            ),
+            data={"task_id": context.task_id, "pr_url": pr_url, **blocker_data},
+            extra_lines=blocker_lines,
+        )
+
     if dry_run:
         lines.append(
             "Dry run: scope and PR preconditions passed; would wait for checks, merge, and sync main."
@@ -3198,8 +3302,11 @@ def task_lifecycle_data(
     snapshot = resolve_task_lifecycle(task_input, config=config)
     if not isinstance(snapshot, TaskLifecycleSnapshot):
         return snapshot
+    closure_state = task_closure_state(snapshot.task_id)
     snapshot.lifecycle_state = task_lifecycle_state(snapshot)
-    snapshot.strict_complete = snapshot.lifecycle_state == "local-main-synced"
+    snapshot.strict_complete = (
+        snapshot.lifecycle_state == "local-main-synced" and closure_state.ready_for_merge
+    )
 
     lines = [
         f"Task lifecycle: {snapshot.task_id}",
@@ -3225,6 +3332,16 @@ def task_lifecycle_data(
             "- local main contains merge commit: "
             f"{'yes' if snapshot.merge_commit_on_main else 'no'}"
         )
+    lines.append(f"- closure backlog open: {'yes' if closure_state.present_in_backlog else 'no'}")
+    lines.append(
+        f"- closure active sprint open: {'yes' if closure_state.present_in_active_sprint else 'no'}"
+    )
+    lines.append(
+        f"- closure completed ledger: {'yes' if closure_state.present_in_completed else 'no'}"
+    )
+    lines.append(
+        f"- closure archived body: {'yes' if closure_state.present_in_closed_archive else 'no'}"
+    )
     lines.append(f"- strict complete: {'yes' if snapshot.strict_complete else 'no'}")
     if dry_run:
         lines.append("Dry run: lifecycle inspection is read-only; returned live state.")
@@ -3232,11 +3349,13 @@ def task_lifecycle_data(
     exit_code = ExitCode.OK
     if strict and not snapshot.strict_complete:
         exit_code = ExitCode.VALIDATION_ERROR
+        if not closure_state.ready_for_merge:
+            lines.extend(_task_closure_blocker_lines(closure_state))
         lines.append(
-            "Strict verification failed: repo-policy completion requires state `local-main-synced`."
+            "Strict verification failed: repo-policy completion requires state `local-main-synced` with the task removed from live ledgers and recorded in tasks/COMPLETED.md plus archive/closed_tasks/."
         )
 
-    return (exit_code, asdict(snapshot), lines)
+    return (exit_code, {**asdict(snapshot), "task_closure": asdict(closure_state)}, lines)
 
 
 def handle_lifecycle(args: Any) -> CommandResult:

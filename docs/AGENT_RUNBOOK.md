@@ -4,6 +4,11 @@
 
 Short command index for day-to-day agent/operator work.
 
+Default live planning surfaces are `tasks/CURRENT_SPRINT.md`,
+`tasks/BACKLOG.md`, and `tasks/COMPLETED.md`. Treat `PROJECT_STATUS.md` as a
+pointer stub only, and do not read `archive/` unless the user explicitly asks
+for historical context or you pass an archive-aware CLI flag.
+
 For RFC/design work, use the review checklist in `docs/rfc/README.md` before
 circulating a proposal for implementation planning.
 
@@ -26,6 +31,8 @@ When: collect backlog/spec/sprint context for an implementation task.
 Use `tasks/specs/TEMPLATE.md` when a task needs a new or refreshed spec; keep
 the contract explicit around problem statement, inputs, outputs, non-goals, and
 acceptance criteria.
+Use `--include-archive` only when the task is no longer live and the user
+explicitly needs archived history.
 
 4. `make agent-check`
 When: fast local quality gate (lint + typecheck + unit tests).

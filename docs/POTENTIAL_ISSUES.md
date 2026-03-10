@@ -5,11 +5,12 @@
 
 > This document is retained for historical context from early scaffolding.
 > Many items below are resolved. Use `tasks/CURRENT_SPRINT.md`,
-> `tasks/BACKLOG.md`, and `PROJECT_STATUS.md` as the authoritative current
-> status/risk trackers.
+> `tasks/BACKLOG.md`, `tasks/COMPLETED.md`, and the `PROJECT_STATUS.md` pointer
+> stub as the authoritative current tracker surfaces.
 >
 > Non-authoritative archive: do not use this file as launch-readiness or
-> implementation source-of-truth.
+> implementation source-of-truth. Do not read `archive/` by default unless a
+> user explicitly requests historical context.
 
 This document tracks identified issues, vulnerabilities, and technical debt that require attention before production readiness.
 

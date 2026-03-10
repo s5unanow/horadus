@@ -1,0 +1,389 @@
+# Project Status
+
+**Last Updated**: 2026-03-10
+**Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
+**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
+
+## Progress Overview
+
+```
+Phase 0: Setup & Foundation  [████████████████████] 100%  ✅ COMPLETE
+Phase 1: Data Ingestion      [████████████████████] 100%  ✅ COMPLETE
+Phase 2: Processing Layer    [████████████████████] 100%  ✅ COMPLETE
+Phase 3: Trend Engine        [████████████████████] 100%  ✅ COMPLETE
+Phase 4: Reporting           [████████████████████] 100%  ✅ COMPLETE
+Phase 5: Polish & Deploy     [████████████████████] 100%  ✅ COMPLETE
+Phase 6: Calibration (NEW)   [████████████████████] 100%  ✅ COMPLETE
+Phase 8: Hardening (NEW)     [████████████████████]  99%  🚧 IN PROGRESS
+```
+
+## What's Working
+
+- [x] Project structure created (src/, tests/, docs/, config/)
+- [x] Documentation framework (ARCHITECTURE, DATA_MODEL, GLOSSARY)
+- [x] Task tracking system (BACKLOG, CURRENT_SPRINT, specs)
+- [x] pyproject.toml with all dependencies
+- [x] docker-compose.yml (PostgreSQL + TimescaleDB + Redis)
+- [x] Database models (all entities including expert recommendations)
+- [x] Alembic configuration
+- [x] Initial Alembic migration created (schema + extensions + hypertable)
+- [x] FastAPI skeleton with route stubs
+- [x] Core config module (Pydantic Settings)
+- [x] Trend engine core (log-odds math, evidence calculation)
+- [x] EU-Russia trend config with enhanced schema
+- [x] Makefile for common workflows
+- [x] RSS collector foundation (config load, fetch/parse, extraction, dedup, persistence)
+- [x] RSS integration test path (no external network calls)
+- [x] GDELT client foundation (querying, filters, mapping, pagination, dedup, persistence)
+- [x] GDELT integration test path (no external network calls)
+- [x] Source management API CRUD endpoints with unit tests
+- [x] Celery worker app with beat scheduling + ingestion task routing
+- [x] RSS/GDELT periodic Celery tasks with retry/backoff + dead-letter capture
+- [x] Telegram harvester baseline (collect, backfill, stream polling, media fallback)
+- [x] Telegram integration test path (no external network calls)
+- [x] Embedding service baseline (OpenAI wrapper, strict validation, batching, cache)
+- [x] `raw_items.embedding` pgvector column + ivfflat index migration (`0002`)
+- [x] Embedding unit test coverage (batching/cache/validation/persistence)
+- [x] Deduplication service baseline (URL/hash/external-id + optional embedding similarity)
+- [x] Ingestion collectors wired to shared deduplication service
+- [x] Event clusterer baseline (time-window similarity create/merge)
+- [x] Event metadata updates on merge (source counts, summary, primary source)
+- [x] Tier 1 classifier baseline (batch scoring + strict JSON validation)
+- [x] Tier 1 routing updates (`noise` vs Tier 2-ready `processing`) and usage metrics
+- [x] Tier 2 classifier baseline (structured extraction + per-trend impacts)
+- [x] Tier 2 strict output validation (including trend id safeguards) and usage metrics
+- [x] Processing pipeline orchestrator (dedup → tier1 → embed → cluster → tier2)
+- [x] Celery processing task auto-triggered by new ingested items
+- [x] Pipeline run metrics and end-to-end integration coverage
+- [x] Trend management API CRUD endpoints (`/api/v1/trends`)
+- [x] Trend YAML sync/load path for `config/trends/*.yaml`
+- [x] Trend API unit coverage for CRUD + config sync
+- [x] Pipeline-to-trend orchestration for applying Tier 2 trend impacts
+- [x] Trend evidence persistence wired through idempotent trend engine updates
+- [x] Pipeline metrics now include trend impacts seen and trend updates applied
+- [x] End-to-end tests covering trend impact application in processing pipeline
+- [x] Trend evidence API endpoint (`GET /api/v1/trends/{id}/evidence`)
+- [x] Evidence date-range querying (`start_at`, `end_at`) with validation
+- [x] Trend evidence API unit tests for retrieval and filtering behavior
+- [x] Trend snapshot worker task + beat schedule wiring (`workers.snapshot_trends`)
+- [x] Trend history API endpoint (`GET /api/v1/trends/{id}/history`)
+- [x] History date-range filters with interval downsampling (hourly/daily/weekly)
+- [x] Unit tests for snapshot scheduling and history API responses
+- [x] Trend decay worker task (`workers.apply_trend_decay`) wired into Celery
+- [x] Daily decay schedule to fade stale evidence toward baseline
+- [x] Decay worker metrics/logging and unit test coverage
+- [x] Weekly report generation service for active trends with top-event attribution
+- [x] Weekly report worker task + schedule wiring (`workers.generate_weekly_reports`)
+- [x] Report API endpoints (`GET /api/v1/reports`, `/api/v1/reports/{id}`, `/api/v1/reports/latest/weekly`)
+- [x] Weekly reporting prompt template and report API unit test coverage
+- [x] Monthly report generation service with monthly deltas + prior-week rollups
+- [x] Category/source breakdown aggregation for monthly intelligence summaries
+- [x] Monthly report worker task + schedule wiring (`workers.generate_monthly_reports`)
+- [x] Monthly report API endpoint (`GET /api/v1/reports/latest/monthly`)
+- [x] Retrospective analysis service with pivotal-event and predictive-signal ranking
+- [x] Retrospective API endpoint (`GET /api/v1/trends/{id}/retrospective`)
+- [x] Retrospective narrative generation via LLM with deterministic fallback
+- [x] OpenAPI docs metadata refreshed with richer tags and descriptions
+- [x] API key auth scheme documented in OpenAPI (`X-API-Key`, forward-compatible)
+- [x] Request/response examples added for core API models
+- [x] API reference guide with endpoint examples (`docs/API.md`)
+- [x] API key auth middleware with opt-in enforcement and key validation
+- [x] Per-key request throttling (`429` + `Retry-After`) for API traffic
+- [x] API key management endpoints (`/api/v1/auth/keys`) for list/create/revoke
+- [x] Auth/rate-limit unit test coverage for middleware and key manager
+- [x] Structured logging bootstrap with JSON/console output modes
+- [x] Prometheus metrics endpoint (`GET /metrics`)
+- [x] Observability counters for ingestion throughput, worker errors, and LLM usage
+- [x] Worker instrumentation for collector and pipeline metrics
+- [x] Production API container image definition (`docker/api/Dockerfile`)
+- [x] Production worker/beat container image definition (`docker/worker/Dockerfile`)
+- [x] Production deployment stack (`docker-compose.prod.yml`)
+- [x] Deployment runbook and environment variable reference docs
+- [x] Calibration service for trend outcomes and Brier scoring (`src/core/calibration.py`)
+- [x] Trend outcome recording endpoint (`POST /api/v1/trends/{id}/outcomes`)
+- [x] Trend calibration report endpoint (`GET /api/v1/trends/{id}/calibration`)
+- [x] Calibration bucket analysis over historical predictions
+- [x] Risk level mapping and confidence rating for trend presentation
+- [x] Probability bands derived from evidence volume/recency/corroboration
+- [x] Trend responses now include top movers for the last 7 days
+- [x] Trend config schema validation for disqualifiers and falsification criteria
+- [x] Indicator type validation (`leading`/`lagging`) in YAML config sync
+- [x] Event lifecycle transition manager (emerging/confirmed/fading/archived)
+- [x] Hourly lifecycle decay worker task (`workers.check_event_lifecycles`)
+- [x] Events API now supports lifecycle filtering and event detail retrieval
+- [x] Source tier/reporting multipliers applied to effective source credibility
+- [x] Daily LLM budget enforcement (tier1/tier2/embedding) with usage persistence
+- [x] Budget-safe pipeline behavior keeps items pending when limits are exceeded
+- [x] Budget visibility endpoint (`GET /api/v1/budget`)
+- [x] Contradiction detection metadata persisted on events (`has_contradictions`, `contradiction_notes`)
+- [x] Events API contradiction filter (`GET /api/v1/events?contradicted=true`)
+- [x] Human feedback API endpoints for events/trends (`/api/v1/events/{id}/feedback`, `/api/v1/trends/{id}/override`)
+- [x] Gold-set benchmark path now runs against current sparse Tier-1 labels and current runtime model defaults
+- [x] Tier-1 runtime now defaults to single-item safe batching, while benchmark batch mode is marked as diagnostic-only in eval artifacts
+- [x] Benchmark artifacts now include per-item Tier-1/Tier-2 diagnostics with best-effort raw model output capture
+- [x] Tier-1 prompt now includes explicit score bands and calibration examples for fiction/history/current-event distinctions
+- [x] Tier-2 trend payloads now include human-readable indicator descriptions and prompt guidance for choosing the most specific supported signal type or abstaining
+- [x] Benchmark harness now supports stage-specific GPT-5 candidate overrides (`reasoning_effort`, `temperature`), disables semantic cache for fair model comparisons, and records per-config elapsed seconds
+- [x] Tier-1/Tier-2 runtime and benchmark routes now expose first-class reasoning-effort controls with GPT-5-safe omission of unsupported reasoning/temperature params and active reasoning metadata in eval artifacts/telemetry
+- [x] Benchmark and audit artifacts now include source-control provenance, prompt/config fingerprints, dataset fingerprints, and normalized invocation metadata, while the repo-managed promotion path stays limited to committed baselines/history artifacts
+- [x] Feedback audit endpoint (`GET /api/v1/feedback`)
+- [x] Event invalidation support that reverts trend contributions
+- [x] Processing suppression for events marked as noise/invalidated
+- [x] Calibration dashboard endpoint (`GET /api/v1/reports/calibration`)
+- [x] Cross-trend reliability statements ("When we said X%, it happened Y%")
+- [x] Brier score timeline series for drift visibility
+- [x] `horadus trends status` CLI for quick movement checks
+- [x] `horadus tasks ...` repo workflow CLI with JSON/text output, dry-run support, and explicit validation/environment exit codes
+- [x] `horadus tasks finish` is now the canonical task-completion lifecycle command, with `make task-finish` and `scripts/finish_task_pr.sh` reduced to thin compatibility wrappers
+- [x] `horadus tasks finish` now re-checks current-head required CI after the review gate clears, reports red CI or unresolved review-thread blockers promptly instead of drifting into later timeout paths, and auto-requests a fresh `@codex review` when timeout leaves unresolved review threads blocking merge
+- [x] `horadus tasks safe-start TASK-XXX --name short-name` is now the canonical guarded autonomous task-start command, with `make agent-safe-start` reduced to a thin compatibility wrapper
+- [x] `horadus tasks local-gate --full` is now the canonical post-task CI-parity local validation command, with `make local-gate` reduced to a thin compatibility wrapper
+- [x] `horadus tasks lifecycle [TASK-XXX] [--strict]` now provides mechanical lifecycle-state verification, and repo-policy completion is defined by the `local-main-synced` verifier state
+- [x] Canonical workflow gates now auto-check Docker readiness, attempt supported local auto-start when needed, and fail closed with an explicit blocker when Docker still cannot be made ready
+- [x] Canonical task-workflow commands and raw `git`/`gh` escape-hatch guidance now come from one shared source, and docs freshness fails when AGENTS/README/runbook/Horadus skill surfaces drift away from that policy
+- [x] Agent-facing completion guidance now explicitly forbids claiming local commits/tests/clean working trees as done states and requires locally solvable blockers to be resolved before reporting blocked
+- [x] `horadus tasks record-friction` now captures real Horadus workflow gaps or forced fallback as structured gitignored JSONL under `artifacts/agent/horadus-cli-feedback/`, with low-noise guidance that keeps feedback out of normal task flow and out of versioned planning records
+- [x] `horadus triage collect` structured backlog/assessment input bundle for agent triage workflows
+- [x] Repo-owned Horadus CLI Codex skill plus local install target (`make install-horadus-cli-skill`)
+- [x] Measured runtime coverage for `src/` now reaches `100%` with behavior-focused unit tests across CLI, API, workers, ingestion, eval, and processing/runtime edge cases (`1294 passed` in the validating unit coverage run)
+- [x] File-based secret loading via `*_FILE` settings for production runtimes
+- [x] Explicit SQL logging safety toggle (`SQL_ECHO=false` default)
+- [x] Production backup/restore scripts and `make backup-db` / `make restore-db` operations
+- [x] Deployment runbook coverage for TLS proxying and backup drills
+- [x] API key metadata persistence support (`API_KEYS_PERSIST_PATH`)
+- [x] API key rotation endpoint (`POST /api/v1/auth/keys/{id}/rotate`)
+- [x] Weekly/monthly report contradiction-resolution analytics (`contradiction_analytics`)
+- [x] Calibration drift alerts with thresholded notifications (`drift_alerts`)
+- [x] Calibration coverage guardrails and low-sample alerts (`coverage`)
+- [x] Calibration drift webhook delivery channel with retry/backoff controls
+- [x] Calibration operations runbook (triage playbook, checklist, decision tree)
+- [x] Tier-1/Tier-2 LLM provider failover (429/5xx/timeout) with secondary model routing
+- [x] Tier-1/Tier-2 gold-set benchmark workflow with 200-item evaluation dataset (`ai/eval/gold_set.jsonl`)
+
+- [x] Benchmark queue-accuracy now uses runtime Tier-1 threshold + label provenance metadata
+- [x] Gold-set audit workflow (`horadus eval audit`) with provenance/diversity warning gates
+- [x] CI workflow aligned to uv-only dependency/tool execution (no pip install paths)
+- [x] Release governance runbook (`docs/RELEASING.md`) with versioning/tagging/rollback workflow
+- [x] CI integration/security gates now fail-closed (no permissive masking fallbacks)
+- [x] Docs consistency cleanup for repo naming, cross-links, and freshness process
+- [x] Tier-2/reporting defaults upgraded to `gpt-4.1-mini` with updated cost constants
+- [x] API key storage hardened to salted memory-hard `scrypt-v1` hashes with legacy migration path
+- [x] Stale processing reaper worker with timed recovery and observability metrics
+- [x] Bounded embedding cache with configurable LRU eviction (`EMBEDDING_CACHE_MAX_SIZE`)
+- [x] Hardened weekly/monthly/retrospective narrative prompts with anti-injection and uncertainty guardrails
+- [x] Gold-set update governance policy with baseline supersession + history archival workflow
+- [x] Benchmark artifacts now include dataset fingerprint metadata for comparison integrity
+- [x] Benchmark runs now record per-item Tier-1/Tier-2 alignment failures without aborting entire evaluation runs
+- [x] Pinned benchmark baseline artifact committed at `ai/eval/baselines/current.json`
+- [x] Distributed Redis-backed API rate limiting with deterministic Retry-After semantics
+- [x] Structured admin auth audit logs for key-management operations (list/create/revoke/rotate)
+- [x] Atomic budget check-and-record enforcement under concurrency with denial telemetry (`llm_budget_denials_total`)
+- [x] Tier1/Tier2 input safety guardrails (untrusted-content delimiters + token prechecks + safe truncation markers)
+- [x] Runtime resilience guardrails (worker heartbeat health, Timescale retention/compression policy, DB pool timeout, production resource limits)
+- [x] Static calibration dashboard export + hosting path (`horadus dashboard export`)
+- [x] Managed cloud secret backend references (`docs/SECRETS_BACKENDS.md`)
+- [x] Backup verification automation + retention enforcement (`make verify-backups`)
+- [x] Container secret provisioning + rotation + rollback runbook (`docs/SECRETS_RUNBOOK.md`) with deployment/environment cross-links
+- [x] Counterfactual simulation API (`POST /api/v1/trends/{id}/simulate`) for side-effect-free remove/inject what-if projections
+- [x] Recency-aware novelty scoring + per-indicator temporal decay with explicit trend-evidence provenance factors
+- [x] Hermetic integration parity: CI now uses repo Postgres image with verified `timescaledb` + `vector`, unified integration URLs, and deterministic integration DB setup/teardown fixtures
+- [x] Advisory source/source-tier reliability diagnostics in calibration dashboard output with sparse-sample confidence gating (read-only)
+- [x] Historical replay champion/challenger harness with quality/cost/latency comparison artifacts and documented promotion gates
+- [x] Independence-aware corroboration using claim-graph support/contradiction links and source-cluster-weighted corroboration scoring
+- [x] Active-learning review queue endpoint (`GET /api/v1/review-queue`) with deterministic uncertainty/delta/contradiction ranking
+- [x] Vector retrieval strategy benchmark harness (exact vs IVFFlat vs HNSW) with tuned IVFFlat index profile (`lists=64`) and migration path
+- [x] Migration drift quality gates (`scripts/check_migration_drift.sh`) wired into Makefile integration flow and CI integration checks with strict autogenerate parity enabled by default
+- [x] Runtime migration parity checks in `/health` (`checks.migrations`) and startup strict mode (`MIGRATION_PARITY_STRICT_STARTUP`)
+- [x] Alembic baseline parity cleanup completed (`alembic check` now clean after `alembic upgrade head`)
+- [x] Trend taxonomy contract validator (`horadus eval validate-taxonomy`) with Tier-1/Tier-2 drift checks, unit coverage, and CI/local integration
+- [x] Orchestrator now uses batched Tier-1 classification with deterministic mapping and per-item fallback on batch failure
+- [x] Periodic pending-processing beat schedule (`process-pending-items`) with config toggle and cadence control (`PROCESS_PENDING_INTERVAL_MINUTES`)
+- [x] Readiness probe now returns HTTP 503 on dependency failure with stable non-ready payload
+- [x] Vector index metadata parity aligned to migration profile (`lists=64`) with regression tests
+- [x] Architecture/OpenAPI/docs drift cleanup with operational last-verified timestamps and archived stale risk snapshot doc
+- [x] Decay baseline source-of-truth unified to `Trend.baseline_log_odds` with synced `definition.baseline_probability` metadata + one-time backfill migration
+- [x] Task delivery guardrails enforced: mandatory `main` sync workflow, one-task-per-branch/PR policy, PR task-scope CI guard, local branch-name commit/push hook, and main-branch protection automation (`make protect-main`)
+- [x] Stranded `TASK-086..TASK-107` recovery from `task-061` applied on `main` lineage with deterministic recovery matrix (`tasks/assessments/TASK-112-recovery-matrix.md`)
+- [x] Reconstructed missing adapter/tracing/lineage/grounding modules and migrations required for recovered runtime paths
+- [x] Status-ledger reconciliation across `CURRENT_SPRINT`, `COMPLETED`, and `PROJECT_STATUS` for active vs done task parity
+- [x] Docs freshness consistency gate now enforces cross-ledger task parity (in-progress vs completed dual-listing, active sprint task coverage in `PROJECT_STATUS` in-progress, and blocked coverage for active `[REQUIRES_HUMAN]` tasks)
+- [x] Delivery workflow guidance now explicitly requires full lifecycle closure (commit/push/PR/merge/local-sync) with blocker reporting, and PR scope guard handles escaped-newline PR bodies
+- [x] Runtime taxonomy-gap guardrails added: unknown trend/signal impacts are captured into triage queue (`taxonomy_gaps`) with observability + analyst resolution tracking, while scoring safety remains fail-closed
+- [x] Benchmark taxonomy source-of-truth aligned to `config/trends/*.yaml` (`TrendConfig`) with strict fail-fast preflight on gold-set mismatch
+- [x] `TASK-066` multi-trend baseline expansion completed with human reviewer sign-off captured in sprint assessment/checklist records
+- [x] `TASK-044` human-curated gold set completed (`human_verified=325`) with quality and taxonomy validation passing without warnings
+- [x] `TASK-118` launch-readiness assessment completed with explicit human sign-off (`Approved`) and launch decision recorded as `No-Go` pending remaining backlog hardening
+- [x] `TASK-070` baseline prior review/sign-off completed with human approval for all active trends
+- [x] `TASK-077` cost-first ordering completed with human sign-off (`Approved`); Tier-1 now gates embedding/clustering
+- [x] `TASK-084` production security guardrails completed with human sign-off (`Approved`); production now rejects weak/short secret-key values
+- [x] `TASK-140` codified human-gated sequencing and in-branch backlog-capture exceptions in `AGENTS.md` to reduce process drift
+- [x] `TASK-085` explicit admin-key requirement completed with human sign-off (`Approved`); key-management endpoints reject missing/invalid admin credentials
+- [x] `TASK-128` corroboration scoring now supports SQLAlchemy `Row` mappings with fallback-path observability (`processing_corroboration_path_total`) and regression tests
+- [x] `TASK-129` trend updates now use atomic SQL delta applies (evidence + manual paths) with decay row-lock serialization and concurrency race-test coverage
+- [x] `TASK-130` suppression checks now run before merge/lifecycle touches, preventing suppressed-event reactivation while preserving suppression logs/metrics (`processing_event_suppressions_total`)
+- [x] `TASK-131` GDELT now uses forward-only persisted watermarks independent of backward page cursors, with monotonic multi-page/partial-page checkpoint tests and clarified ingestion checkpoint docs
+- [x] `TASK-132` `/events` trend filters now use correlated `EXISTS` semantics to eliminate duplicate event rows under multi-evidence matches while preserving order/limit behavior
+- [x] `TASK-133` event invalidation now preserves trend-evidence lineage via invalidation markers/feedback linkage while reversing only active deltas and excluding invalidated evidence from operational reporting paths
+- [x] `TASK-134` external assessment intake governance is now preserved in backlog docs with explicit overlap mapping to human-gated `TASK-080` and no duplicate implementation tasks
+- [x] `TASK-135` four external-review trend descriptions now explicitly define what baseline probability measures, with `elite-mass-polarization` reframed to acceleration semantics
+- [x] `TASK-136` `ai-control` trend now includes `ai_safety_incident` as a leading escalatory indicator, with taxonomy validation passing in subset mode
+- [x] `TASK-137` vague falsification criteria were tightened into measurable thresholds for `elite-mass-polarization` and `fertility-decline-acceleration`
+- [x] `TASK-138` keyword specificity was improved for three vague indicators (`governance_capture_signals`, `mainstream_positive_framing`, `institutional_trust_collapse`) with measurement/media/survey-specific terms
+- [x] `TASK-139` embedding inputs now enforce deterministic pre-check token guardrails (`truncate`/`chunk`) with structured cut-input logs, truncation metrics, persisted embedding audit metadata, and weekly ops-query/alert guidance
+- [x] `TASK-141` production defaults now run API traffic through Caddy TLS ingress with HTTP→HTTPS redirect, edge security headers, and deployment runbook validation/fallback workflow while removing default direct API host-port exposure
+- [x] `TASK-142` production network exposure is now hardened with explicit edge/private network segmentation, no default host-published API/DB/Redis ports, and documented allowlisting/firewall plus outside-host reachability verification policy
+- [x] `TASK-145` concurrency-safe trend log-odds update hardening is now reconciled as complete via existing `TASK-129` implementation coverage (atomic SQL delta apply, idempotency, concurrency tests, and update-strategy logging)
+- [x] `TASK-146` merge ordering now links `event_items` before unique-source recount/lifecycle transition to prevent confirmation off-by-one drift, with regression coverage for threshold-order and duplicate-link race handling
+- [x] `TASK-147` now enforces one-event-per-item at the DB layer (`event_items.item_id` unique) with migration duplicate-preflight and deterministic clusterer handling for uniqueness conflicts
+- [x] `TASK-148` canonical summary semantics now align with `primary_item_id`: merge updates only rewrite `canonical_summary` when the primary item changes, preserving primary-aligned summaries over merely newest mentions
+- [x] `TASK-149` retention cleanup policy now covers `raw_items`/`trend_evidence`/`events` with configurable windows, scheduled dry-run-first worker task and metrics, FK-safe lifecycle gating, and deployment workflow for tuning + DB-size trend validation
+- [x] `TASK-150` `docs/DATA_MODEL.md` is now reconciled with runtime schema for `sources`/`raw_items`/`events` and ERD scope is explicitly marked core-table-only to prevent misleading completeness assumptions
+- [x] `TASK-151` trend definition writes now produce append-only version history (`trend_definition_versions`) with deterministic hashes, material-change-only inserts across API/config-sync paths, and read access via `GET /api/v1/trends/{trend_id}/definition-history`
+- [x] `TASK-153` integration DB reset safety now enforces test-scoped target/localhost defaults with explicit override flags and actionable refusal messages, reducing accidental non-test truncation risk in integration fixtures
+- [x] `TASK-154` Tier-2 response validation now allows multiple impacts for one trend when `signal_type` differs, rejects duplicate `(trend_id, signal_type)` pairs, and includes prompt/test coverage for multi-signal-per-trend extraction
+- [x] `TASK-155` Tier-1/Tier-2 async paths now offload semantic-cache I/O via threadpool (`asyncio.to_thread`) to prevent event-loop blocking while preserving cache key/eviction behavior, with thread-offload regression coverage
+- [x] `TASK-156` source/event categorical dimensions now have DB-enforced allowed-value constraints (`source_tier`, `reporting_type`, `lifecycle_status`) with migration preflight diagnostics for invalid legacy values and added constraint/filter regression coverage
+- [x] `TASK-157` trend evidence now stores scoring-time `base_weight`, `direction_multiplier`, and `trend_definition_hash` with migration-defined legacy backfill/nullability behavior, plus reconstruction-focused test coverage and data-model documentation updates
+- [x] `TASK-158` claim-graph contradiction heuristics are now language-aware for `en`/`uk`/`ru` with per-language stopwords/polarity markers and safe no-link behavior for mixed/unsupported languages, with prompt/policy docs and non-English regression tests
+- [x] `TASK-159` token pricing is now configurable via `LLM_TOKEN_PRICING_USD_PER_1M` (`provider:model` keyed rates with prefix matching), budget checks validate active route pricing pre-call, and usage accounting applies model/provider-aware pricing with fail-closed behavior on missing/invalid pricing configuration
+- [x] `TASK-160` dedup URL normalization now keeps non-tracking query params by default (stable-sorted), strips configured tracking params/prefixes, supports strict `strip_all` override mode, and is shared across RSS/GDELT normalization paths with policy regression tests
+- [x] `TASK-161` environment semantics are now explicit and validated (`development|staging|production`), staging now shares production-like guardrails via `is_production_like`, runtime DB behavior remains NullPool-only in development, and environment/deployment guidance now includes `.env.staging.example` plus ADR `007`
+- [x] `TASK-162` introduces an independent agent runtime profile with production/loopback guardrails, request-limit and unhandled-error shutdown signaling, low-noise default log level behavior, and deterministic `horadus agent smoke` local endpoint checks
+- [x] `TASK-163` now standardizes promotion via staging with fail-closed `make release-gate`, explicit dev/staging/prod release semantics in `docs/RELEASING.md`, and aligned staging rollout/cross-link guidance across deployment/environment/readme docs
+- [x] `TASK-266` now adds `horadus tasks summarize-friction`, a repo-owned daily automation spec synced through `ops/automations/`, and compact human-triaged workflow friction reports under `artifacts/agent/horadus-cli-feedback/daily/`
+- [x] `TASK-268` now allows `horadus tasks lifecycle TASK-XXX --strict` to verify an explicit task id from detached `HEAD` checkouts while still failing closed when no task id is supplied
+- [x] `TASK-269` now keeps `horadus tasks local-gate --full` on one consistent `UV_BIN` contract across every `uv`/`uvx`-backed step, including package-build validation and dry-run command output
+- [x] `TASK-270` now keeps eval provenance fingerprints stable across relocated checkouts while limiting trend-config hashing to the same discovery scope used by the runtime loader
+- [x] `TASK-271` now keeps GPT-5 benchmark candidate configs explicitly opt-in so default benchmark runs do not silently expand cost or access requirements
+- [x] `TASK-273` now keeps Tier-2 taxonomy payloads inside the declared safe input budget using deterministic reductions and explicit fail-closed overflow behavior
+- [x] `TASK-257` now makes `100%` measured unit coverage a hard failure across the canonical local gate, pre-push workflow, and CI using one shared repo-owned coverage script plus behavior-focused regression tests for the last live coverage gaps
+- [x] `TASK-283` now hardens `horadus tasks finish` so review-timeout overrides require explicit human approval, recognizes the configured reviewer's PR-summary `THUMBS_UP` as a positive review-gate signal, and keeps that policy aligned across repo workflow docs and skill surfaces
+- [x] `TASK-284` now bounds `horadus tasks finish` review-gate and merge subprocesses with explicit timeouts so the command exits with a concrete blocker instead of idling indefinitely after the silent-timeout allow path
+- [x] `TASK-285` now adds narrow shared-workflow guardrails that require caller audits, unaffected-caller regression coverage, and explicit current-head/current-window semantics before changing workflow policy behavior, with docs-freshness enforcement across the canonical agent-facing surfaces
+
+## Current Focus
+
+- Prompt/model evaluation quality remains below promotion threshold despite the benchmark path now being runnable.
+- No new accepted eval baseline was promoted from the latest candidate runs.
+- Follow-up sprint work is queued for Tier-1 batching stability, per-item eval diagnostics, scoring rubric improvements, Tier-2 signal conditioning, GPT-5 evaluation, reasoning-effort controls, and stricter eval-artifact provenance.
+
+## In Progress
+
+- External architecture intake queue added to Sprint 3 for follow-up sequencing:
+  `TASK-227`, `TASK-228`, `TASK-229`, `TASK-230`, `TASK-231`, `TASK-232`,
+  `TASK-233`, `TASK-234`, `TASK-235`, `TASK-236`, `TASK-237`, `TASK-238`
+- Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
+- Workflow/coverage hardening queue remains active in Sprint 3:
+  `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`
+- Closed-PR review follow-up queue added to Sprint 3 with recommended sequencing:
+  `TASK-272`
+- Workflow-consistency follow-up queue added to Sprint 3:
+  `TASK-274`
+- Finish-flow recovery follow-up queued in Sprint 3:
+  `TASK-289`
+- Finish-flow stale-merged-PR follow-up queued in Sprint 3:
+  `TASK-291`
+- Agent-context retrieval RFC follow-up queued in Sprint 3:
+  `TASK-288`
+- `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` (manual execution/approval pending)
+- `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
+- `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
+- `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]`
+
+## Blocked
+
+- `TASK-080` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
+- `TASK-189` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
+- `TASK-190` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
+- `TASK-288` is explicitly marked `[REQUIRES_HUMAN]` and is blocked for autonomous completion.
+
+## Human Blocker SLA
+
+- Required metadata for each active `[REQUIRES_HUMAN]` task (source in `tasks/CURRENT_SPRINT.md`):
+  - `owner`
+  - `last_touched` (`YYYY-MM-DD`)
+  - `next_action` (`YYYY-MM-DD`)
+  - `escalate_after_days` (integer)
+- Docs freshness gate fails when metadata is missing or malformed.
+- Operational expectation: update blocker metadata every touch and at least once per escalation window.
+
+## Telegram Launch Scope
+
+- launch_scope: excluded_until_task_080_done
+- decision_date: 2026-03-03
+- rationale: Telegram collector wiring remains human-gated and is explicitly excluded from launch scope until `TASK-080` is closed.
+
+## Next Up (Priority Order)
+
+1. Resolve human-gated blockers (`TASK-080`, `TASK-189`, `TASK-190`, `TASK-288`)
+
+## Expert Feedback Integration ✅
+
+Based on expert review, added 9 new tasks:
+
+| Task | Description | Priority |
+|------|-------------|----------|
+| TASK-028 | Risk levels + probability bands | P1 |
+| TASK-029 | Enhanced trend definitions | P2 |
+| TASK-030 | Event lifecycle tracking | P1 |
+| TASK-031 | Source tier and reporting type | P2 |
+| TASK-032 | Trend outcomes for calibration | P1 |
+| TASK-033 | Contradiction detection | P2 |
+| TASK-034 | Human feedback API | P2 |
+| TASK-035 | Calibration dashboard | P2 |
+| TASK-036 | Cost protection & budget limits | P1 |
+
+### Key Additions
+- **Risk levels**: Low / Guarded / Elevated / High / Severe
+- **Event lifecycle**: emerging → confirmed → fading → archived
+- **Source tiers**: primary / wire / major / regional / aggregator
+- **Calibration**: Brier scores, outcome tracking
+- **Cost protection**: Kill switch for API spend
+- **Trend config**: disqualifiers, falsification criteria
+
+## Milestones
+
+| Milestone | Target Date | Status |
+|-----------|-------------|--------|
+| M1: Basic API + DB running | Week 1 | ✅ Complete |
+| M2: RSS ingestion working | Week 2 | ✅ Complete |
+| M3: GDELT integration | Week 3 | ✅ Complete |
+| M3.5: Telegram integration | Week 3 | ✅ Complete |
+| M4: LLM classification pipeline | Week 4 | ✅ Complete |
+| M5: Trend engine operational | Week 5 | ✅ Complete |
+| M6: Weekly reports generating | Week 6 | ✅ Complete |
+| M7: Reporting APIs operational | Week 7 | ✅ Complete |
+| M8: Full system operational | Week 8 | 🚧 In Progress |
+
+## Known Issues
+
+- Human-gated hardening task (`TASK-080`) remains the main completion bottleneck, and launch stays `No-Go` until it is resolved.
+
+## Architecture Validated ✅
+
+Expert confirmed core design:
+- ✅ Events as core unit (not articles)
+- ✅ Log-odds for probability tracking
+- ✅ LLM extracts signals; code computes deltas
+- ✅ Two-tier LLM processing (Tier 1 → Tier 2)
+- ✅ Evidence ledger with full provenance
+
+## Recent Decisions
+
+- Project bootstrapped with agent-friendly structure
+- Using log-odds for probability tracking (ADR-003)
+- Two-tier LLM processing (Tier 1 → Tier 2) (ADR-005)
+- Risk levels instead of single probability numbers (expert feedback)
+- Event lifecycle to reduce noise (expert feedback)
+- Calibration infrastructure for long-term accuracy (expert feedback)
+
+## Technical Debt
+
+- None currently requiring immediate autonomous remediation.
+
+## Notes
+
+- MVP path: Ingest → Cluster → Score → Report (Phases 0-4)
+- Calibration meaningful after 2+ months of data
+- Knowledge graph deferred (PostgreSQL sufficient for MVP)
+- Remember to update this file when completing milestones

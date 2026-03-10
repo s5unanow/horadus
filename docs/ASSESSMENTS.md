@@ -55,6 +55,8 @@ Current-sprint grounding policy for task references:
 
 - Treat `tasks/CURRENT_SPRINT.md` as the only source of truth for live
   `TASK-###` references in daily assessments.
+- Treat `archive/` as historical-only context; do not consult it during normal
+  assessment publishing unless a human explicitly asks for archived history.
 - Before publishing a current-sprint artifact, run
   `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding`.
 - If you need to mention a no-longer-active or already completed task, mark it

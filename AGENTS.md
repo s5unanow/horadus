@@ -10,8 +10,8 @@ This repo is a hobby “geopolitical intelligence” backend (not enterprise sca
 ## Where To Look First (Fast Orientation)
 
 1. `tasks/CURRENT_SPRINT.md` — active execution queue (authoritative for in-progress work)
-2. `PROJECT_STATUS.md` — phase-level summary and milestone narrative
-3. `tasks/BACKLOG.md` — canonical task specifications and acceptance criteria (triage/planning; not required for most execution)
+2. `tasks/BACKLOG.md` — canonical open task specifications and acceptance criteria (triage/planning; not required for most execution)
+3. `tasks/COMPLETED.md` — compact completion index
 4. `docs/ARCHITECTURE.md` — system design and runtime flow
 5. `docs/DATA_MODEL.md` — schema and entity definitions
 6. `docs/AGENT_RUNBOOK.md` — canonical day-to-day command index
@@ -24,14 +24,15 @@ Execution precedence:
 1. Runtime truth: `src/`, `alembic/`, and `tests/`
 2. Active execution plan: `tasks/CURRENT_SPRINT.md`
 3. Task scope records: `tasks/BACKLOG.md` and `tasks/COMPLETED.md`
-4. Phase/status summary: `PROJECT_STATUS.md`
-5. Design/ops docs: `docs/`
-6. Historical snapshots: `docs/POTENTIAL_ISSUES.md` and `tasks/sprints/` (non-authoritative)
+4. Design/ops docs: `docs/`
+5. Pointer-only status surface: `PROJECT_STATUS.md`
+6. Historical snapshots: `archive/` and `docs/POTENTIAL_ISSUES.md` (non-authoritative; do not read unless explicitly requested)
 
 Status precedence:
 1. `tasks/CURRENT_SPRINT.md` for what is active now
 2. `tasks/COMPLETED.md` for what is done
-3. `PROJECT_STATUS.md` for high-level progress narrative
+3. `tasks/BACKLOG.md` for open task definitions
+4. `PROJECT_STATUS.md` only as a pointer to archived history
 
 ## Repo Map
 
@@ -63,6 +64,7 @@ Before starting work:
 
 Execution context policy (keep it small):
 - For implementation work, prefer `tasks/CURRENT_SPRINT.md` plus the specific task spec it references; avoid reading all of `tasks/BACKLOG.md` unless you are doing triage/planning.
+- Do not read `archive/` during normal implementation flow unless the user explicitly asks for historical context.
 - For tasks with high complexity (estimate >2 hours, touches >5 files, involves migrations, LLM/pipeline changes, or probability math/ops guardrails), maintain a living execution plan at `tasks/exec_plans/TASK-XXX.md` using `tasks/exec_plans/TEMPLATE.md`.
 - Apply these guardrails only when changing shared workflow helpers, shared workflow config, or review/merge policy behavior; do not inflate unrelated tasks with generic process boilerplate.
 - Before changing shared workflow helpers or shared workflow config, enumerate every caller that depends on the shared behavior.
@@ -71,7 +73,7 @@ Execution context policy (keep it small):
 
 After completing work:
 - Update `tasks/CURRENT_SPRINT.md` (mark DONE) and move finished tasks to `tasks/COMPLETED.md`.
-- Update `PROJECT_STATUS.md` when a milestone meaningfully changes.
+- Keep `PROJECT_STATUS.md` as a non-authoritative stub that points to the active ledgers and archive; do not rebuild it into a live status ledger.
 - Add/adjust ADRs under `docs/adr/` for major decisions.
 - Ensure formatting/linting/tests pass.
 

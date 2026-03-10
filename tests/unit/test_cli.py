@@ -734,12 +734,12 @@ def test_run_doctor_returns_failure_on_safety_refusal(
 
 
 def test_main_tasks_context_pack_json_output(capsys: pytest.CaptureFixture[str]) -> None:
-    result = cli_module.main(["tasks", "context-pack", "TASK-164", "--format", "json"])
+    result = cli_module.main(["tasks", "context-pack", "TASK-292", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
-    assert payload["data"]["task"]["task_id"] == "TASK-164"
+    assert payload["data"]["task"]["task_id"] == "TASK-292"
     assert "suggested_validation_commands" in payload["data"]
 
 
@@ -7614,21 +7614,25 @@ def test_handle_show_rejects_invalid_task_id() -> None:
 
 
 def test_handle_show_returns_task_details() -> None:
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-292"))
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
-    assert result.lines[0].startswith("# TASK-253:")
+    assert result.lines[0].startswith("# TASK-292:")
     assert "Acceptance Criteria:" in result.lines
 
 
 def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    record = task_repo_module.task_record("TASK-253")
+    record = task_repo_module.task_record("TASK-292")
     assert record is not None
     record.spec_paths = ["tasks/specs/253-coverage.md"]
-    monkeypatch.setattr(task_commands_module, "task_record", lambda _task_id: record)
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_record",
+        lambda _task_id, **_kwargs: record,
+    )
 
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-292"))
 
     assert result.lines is not None
     assert "Specs:" in result.lines
@@ -7637,7 +7641,7 @@ def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.Monkey
 
 def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
     record = task_repo_module.TaskRecord(
-        task_id="TASK-253",
+        task_id="TASK-292",
         title="Coverage",
         priority="P0",
         estimate="2d",
@@ -7647,12 +7651,16 @@ def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPat
         assessment_refs=[],
         raw_block="raw",
         status="active",
-        sprint_lines=["- `TASK-253` Coverage"],
+        sprint_lines=["- `TASK-292` Coverage"],
         spec_paths=[],
     )
-    monkeypatch.setattr(task_commands_module, "task_record", lambda _task_id: record)
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_record",
+        lambda _task_id, **_kwargs: record,
+    )
 
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-253"))
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-292"))
 
     assert result.lines is not None
     assert "Description:" not in result.lines
@@ -7689,14 +7697,27 @@ def test_handle_context_pack_returns_not_found_for_unknown_task() -> None:
     assert result.error_lines == ["TASK-999 not found in tasks/BACKLOG.md"]
 
 
+def test_handle_context_pack_requires_explicit_archive_flag_for_archived_task() -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-164"))
+
+    assert result.exit_code == task_commands_module.ExitCode.NOT_FOUND
+    assert result.error_lines == [
+        "TASK-164 is archived; re-run with --include-archive to inspect its history"
+    ]
+
+
 def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record = task_repo_module.task_record("TASK-253")
+    record = task_repo_module.task_record("TASK-292")
     assert record is not None
-    monkeypatch.setattr(task_commands_module, "task_record", lambda _task_id: record)
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_record",
+        lambda _task_id, **_kwargs: record,
+    )
 
-    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-253"))
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-292"))
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
@@ -7704,14 +7725,33 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     assert "## Spec Contract Template" in result.lines
     assert "tasks/specs/TEMPLATE.md" in result.lines
     assert "## Suggested Workflow Commands" in result.lines
-    assert "uv run --no-sync horadus tasks context-pack TASK-253" in result.lines
-    assert "uv run --no-sync horadus tasks finish TASK-253" in result.lines
+    assert "uv run --no-sync horadus tasks context-pack TASK-292" in result.lines
+    assert "uv run --no-sync horadus tasks finish TASK-292" in result.lines
     assert "## Suggested Validation Commands" in result.lines
     assert result.data is not None
     assert result.data["spec_template_path"] == "tasks/specs/TEMPLATE.md"
     assert (
         result.data["suggested_workflow_commands"][0] == "uv run --no-sync horadus tasks preflight"
     )
+
+
+def test_handle_show_requires_explicit_archive_flag_for_archived_task() -> None:
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-164"))
+
+    assert result.exit_code == task_commands_module.ExitCode.NOT_FOUND
+    assert result.error_lines == [
+        "TASK-164 is archived; re-run with --include-archive to inspect its history"
+    ]
+
+
+def test_handle_show_can_resolve_archived_task_with_include_archive() -> None:
+    result = task_commands_module.handle_show(
+        argparse.Namespace(task_id="TASK-164", include_archive=True)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert result.lines[0].startswith("# TASK-164:")
 
 
 def test_handle_preflight_returns_wrapped_result(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -8128,6 +8168,83 @@ def test_parse_human_blockers_ignores_non_bullet_lines(tmp_path: Path) -> None:
     blockers = task_repo_module.parse_human_blockers(sprint_path)
 
     assert [blocker.task_id for blocker in blockers] == ["TASK-254"]
+
+
+def test_parse_active_tasks_ignores_non_task_lines(tmp_path: Path) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "Narrative line",
+                "- sequencing note without a task id",
+                "- `TASK-292` Ledger reset",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    tasks = task_repo_module.parse_active_tasks(sprint_path)
+
+    assert [task.task_id for task in tasks] == ["TASK-292"]
+
+
+def test_archive_backlog_paths_returns_empty_when_archive_root_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
+
+    assert task_repo_module.archive_backlog_paths() == []
+
+
+def test_completed_task_ids_returns_empty_when_completed_file_missing(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    missing_completed = tmp_path / "COMPLETED.md"
+    monkeypatch.setattr(task_repo_module, "completed_path", lambda: missing_completed)
+
+    assert task_repo_module.completed_task_ids() == set()
+
+
+def test_search_task_records_can_include_archive_without_matching_status(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archived_record = task_repo_module.TaskRecord(
+        task_id="TASK-164",
+        title="Agent smoke run",
+        priority="P1",
+        estimate="1d",
+        description=["smoke"],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="completed",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="archive/2026-03-10-sprint-3-close/tasks/BACKLOG.md",
+        archived=True,
+    )
+    monkeypatch.setattr(task_repo_module, "backlog_task_records", lambda _path=None: {})
+    monkeypatch.setattr(
+        task_repo_module,
+        "archived_task_records",
+        lambda: {"TASK-164": archived_record},
+    )
+    monkeypatch.setattr(
+        task_repo_module,
+        "task_record",
+        lambda task_id, **_kwargs: archived_record if task_id == "TASK-164" else None,
+    )
+
+    assert (
+        task_repo_module.search_task_records("smoke", status="active", include_archive=True) == []
+    )
 
 
 def test_parse_task_block_stops_description_at_unknown_heading() -> None:

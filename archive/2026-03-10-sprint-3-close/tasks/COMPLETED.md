@@ -1,5 +1,11 @@
 # Completed Tasks
+
+Tasks that have been completed and verified.
+
+---
+
 ## Sprint 1
+
 - TASK-001: Python Project Setup ✅
 - TASK-002: Docker Environment ✅
 - TASK-003: Database Schema & Migrations ✅
@@ -83,18 +89,18 @@
 - TASK-088: Remove or Integrate Legacy `_process_item` Pipeline Path ✅
 - TASK-089: Adopt Strict Structured Outputs for Tier-1/Tier-2 ✅
 - TASK-090: Responses API Migration Plan and Pilot ✅
-- TASK-091: Batch/Flex Evaluation and Backfill Cost Mode ✅
-- TASK-092: End-to-End OpenTelemetry Tracing ✅
-- TASK-093: Vector Strategy Revalidation Cadence and Gate ✅
+- TASK-091: Batch/Flex Evaluation and Backfill Cost Mode ✅ (partial recovery; follow-up `TASK-113`)
+- TASK-092: End-to-End OpenTelemetry Tracing ✅ (partial recovery; follow-up `TASK-115`)
+- TASK-093: Vector Strategy Revalidation Cadence and Gate ✅ (partial recovery; follow-up `TASK-113`)
 - TASK-094: Pipeline Cost Metrics Parity in Observability ✅
-- TASK-095: CI Docs Freshness and Drift Guard ✅
+- TASK-095: CI Docs Freshness and Drift Guard ✅ (deferred recovery; follow-up `TASK-114`)
 - TASK-096: Unified LLM Invocation Policy Layer ✅
 - TASK-097: Rate Limiter Smoothing Strategy (Token/Sliding Window) ✅
 - TASK-098: Cross-Worker Semantic Cache for Tier-1/Tier-2 ✅
 - TASK-099: Backpressure-Aware Processing Scheduling ✅
-- TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅
+- TASK-100: Embedding Lineage and Re-Embedding Safety Gate ✅ (partial recovery; follow-up `TASK-115`)
 - TASK-101: Multilingual Coverage Policy and Processing Guardrails ✅
-- TASK-102: Deterministic Grounding Verification for Narratives ✅
+- TASK-102: Deterministic Grounding Verification for Narratives ✅ (partial recovery; follow-up `TASK-115`)
 - TASK-103: Six-Hour Polling Operating Profile and Defaults ✅
 - TASK-104: Ingestion Completeness Watermark and Overlap Guard ✅
 - TASK-105: Source Freshness SLO and Automatic Catch-Up Dispatch ✅
@@ -110,7 +116,18 @@
 - TASK-115: Finish Partial Recovery for Tracing/Lineage/Grounding ✅
 - TASK-117: Enforce Task Sequencing Guards End-to-End ✅
 - TASK-116: Backlog Continuity Restoration for TASK-086..TASK-108 ✅
+- TASK-027 Follow-up: Deployment Hardening (secrets/tls/backups) ✅
+- TASK-025 Follow-up: Auth Key Persistence & Rotation ✅
+- TASK-033 Follow-up: Contradiction-Resolution Analytics in Reports ✅
+- TASK-035 Follow-up: Calibration Drift Alerts & Notifications ✅
+- TASK-035 Follow-up: Operational Dashboard Export & Hosting Path ✅
+- TASK-027 Follow-up: Cloud Secret Backend References ✅
+- TASK-027 Follow-up: Backup Verification & Retention Enforcement ✅
+
+---
+
 ## Sprint 2
+
 - TASK-183: Weekly backlog triage intake (2026-03-02) ✅
 - TASK-182: Reconcile sprint/task ledgers after TASK-180/TASK-181 merges ✅
 - TASK-181: Make `make task-finish` idempotent for already-merged PRs ✅
@@ -155,12 +172,12 @@
 - TASK-128: Corroboration Row-Parsing Runtime Fix ✅
 - TASK-126: Taxonomy Drift Guardrails (Runtime Gap Queue + Benchmark Alignment) ✅
 - TASK-127: Cross-Ledger Drift Reconciliation and Dependency Hygiene ✅
-- TASK-085: Require Explicit Admin Key for Key Management ✅
+- TASK-085: Require Explicit Admin Key for Key Management ✅ (Approved)
 - TASK-140: In-Branch Backlog Capture Rule and Guard ✅
-- TASK-084: Production Security Default Guardrails ✅
-- TASK-077: Cost-First Pipeline Ordering ✅
-- TASK-070: Trend Baseline Prior Review and Sign-Off ✅
-- TASK-118: Launch Readiness and Guidance Drift Assessment ✅
+- TASK-084: Production Security Default Guardrails ✅ (Approved)
+- TASK-077: Cost-First Pipeline Ordering ✅ (Approved)
+- TASK-070: Trend Baseline Prior Review and Sign-Off ✅ (Approved)
+- TASK-118: Launch Readiness and Guidance Drift Assessment ✅ (Approved, Launch = No-Go)
 - TASK-044: Curated Human-Verified Gold Dataset ✅
 - TASK-066: Expand Trend Catalog to Multi-Trend Baseline ✅
 - TASK-125: Delivery Lifecycle Clarification and PR Scope Guard Hardening ✅
@@ -172,7 +189,11 @@
 - TASK-122: Launch-Critical Production Guardrails Hardening ✅
 - TASK-144: Runtime Review Findings Backlog Intake Preservation ✅
 - TASK-152: Highest-Risk Review Backlog Intake Preservation ✅
+
+---
+
 ## Sprint 3
+
 - TASK-257: Fail Pre-Commit and CI When Coverage Drops Below 100% ✅
 - TASK-258: Add a Canonical Horadus Task Completion Command ✅
 - TASK-259: Add a Mechanical Done-State Verifier and Explicit Lifecycle States ✅
@@ -240,19 +261,84 @@
 - TASK-224: Surface human-blocker urgency in task and triage outputs ✅
 - TASK-240: Keep `docs-freshness` from dropping dev dependencies ✅
 - TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
+  Restored runnable benchmark preflight for the current sparse Tier-1 gold set.
+  Aligned benchmark default config with current runtime model defaults.
+  Generated candidate benchmark artifacts without promoting a new baseline because quality remained unacceptable.
+  Queued the identified follow-up fixes into the sprint backlog.
 - TASK-243: Stabilize Tier-1 Routing Quality Under Eval and Runtime Load ✅
+  Changed runtime Tier-1 default batching to single-item requests.
+  Kept benchmark batch mode as an explicit diagnostic path with recorded batch-policy metadata.
+  Captured fresh realtime-vs-batch evidence showing diagnostic batch mode still underperforms realtime on the current 10-item human-verified slice.
 - TASK-244: Persist Per-Item Benchmark Failure Diagnostics ✅
+  Added per-item benchmark artifact results for Tier-1 and Tier-2 under each config.
+  Failure rows now capture stage-specific error category/message plus best-effort raw model output.
+  Successful rows now include compact predicted summaries so operators can debug without replaying the model.
 - TASK-245: Add Explicit Tier-1 Scoring Rubric and Calibration Examples ✅
+  Added explicit Tier-1 score bands around the runtime threshold plus targeted examples for current-event positives and media/history negatives.
+  Added prompt regression tests to keep the rubric and examples from drifting.
+  Evaluated the updated prompt against the gold set before promotion and did not promote a new baseline.
 - TASK-275: Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
+  `horadus tasks finish` now requires a positive review-gate timeout, rejects zero-time bypass attempts, and keeps the CLI as the canonical completion path.
 - TASK-276: Allow Finish Merge After Silent Review Timeout ✅
+  The finish review gate now waits the full review window, blocks actionable current-head Codex feedback, and allows merge when the timeout expires silently with no actionable comments.
 - TASK-277: Make Agent Workflow Completeness and Verification Explicit ✅
+  The repo now defines one explicit completeness contract for repo-facing work,
+  keeps it sourced from `src/core/repo_workflow.py`, and extends docs-freshness
+  enforcement to the Horadus skill so completion guidance cannot silently
+  drift.
 - TASK-278: Add Dependency-Aware Tool Persistence Rules to Repo Workflow Guidance ✅
+  The workflow guidance now forbids skipping prerequisite Horadus steps when
+  the likely outcome seems obvious, frames CLI commands as dependency-aware
+  policy surfaces, and enforces that shared wording across AGENTS, the
+  runbook, the Horadus skill, and the command reference.
 - TASK-279: Add Empty-Result Recovery and Friction-Logging Fallback Rules ✅
+  The workflow guidance now treats empty or suspiciously narrow workflow
+  results as recovery problems first, requires sensible retry paths before
+  concluding that nothing exists, and keeps friction logging limited to real
+  forced fallbacks rather than routine success or expected empty results.
 - TASK-280: Add a Bounded Research Mode for Triage and Review Workflows ✅
+  The triage and assessment automations now use a bounded `plan -> retrieve ->
+  synthesize` research mode with contradiction handling, inference-vs-fact
+  labeling, and explicit repo citation rules, while ordinary implementation
+  guidance remains lighter-weight.
 - TASK-281: Tighten Narrative Synthesis Prompts Around Evidence and Uncertainty ✅
+  The weekly, monthly, and retrospective narrative prompts now require every
+  claim to stay payload-grounded or explicitly provisional, forbid unsupported
+  causal/confidence/location details, and are covered by prompt-text
+  regression tests.
 - TASK-282: Validate Dependency Guidance Against Its Own Path Set ✅
+  Docs freshness now validates dependency-aware guidance inside the correct
+  path loop, and a divergence-focused unit test keeps dependency-only and
+  fallback-only path sets from silently being validated against the wrong
+  statement set.
 - TASK-283: Forbid Agent-Initiated Review Timeout Overrides in `horadus tasks finish` ✅
+  `horadus tasks finish` now rejects review-timeout overrides unless
+  explicit human approval is declared, treats the configured reviewer's
+  PR-summary `THUMBS_UP` as a positive review-gate signal while still
+  waiting the full review window, and keeps that policy aligned across the
+  CLI docs and Horadus skill surfaces.
 - TASK-284: Make `horadus tasks finish` Exit Cleanly After Silent Review Timeout ✅
+  The finish flow now bounds the review-gate helper and merge commands with
+  explicit subprocess timeouts, reports concrete blockers when those steps
+  fail to exit cleanly, and includes regression coverage for both the stuck
+  review-gate and stuck-merge paths.
 - TASK-285: Add Shared-Workflow Change Guardrails for Caller Audits and Review-State Semantics ✅
+  Shared workflow/policy changes now require explicit caller audits,
+  unaffected-caller regression coverage, and current-head/current-window
+  semantics for review signals across the canonical workflow surfaces, with
+  docs-freshness tests enforcing the narrow guardrail text against drift.
 - TASK-290: Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout ✅
+  The finish flow now re-checks current-head required CI after the review gate
+  clears, reports red or still-pending required checks immediately instead of
+  drifting into a later timeout path, reports unresolved review threads before
+  merge polling, auto-requests a fresh `@codex review` on the unresolved-thread
+  timeout path, and keeps the unaffected green merge paths covered by
+  regression tests.
 - TASK-287: Spike Markdown-First Context Retrieval for Agent Workflow ✅
+  Captured RFC-001 for markdown-first agent-context retrieval, documented the
+  phased schema/chunking/retrieval design, added a reusable RFC
+  authoring/review checklist, and queued a human-gated follow-up task to turn
+  the RFC into an approved implementation backlog.
+## Archive
+
+(Older sprints will be archived here)

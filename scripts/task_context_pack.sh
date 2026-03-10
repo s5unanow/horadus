@@ -14,7 +14,7 @@ if [[ "${HORADUS_CLI_WRAPPER_SILENT:-0}" != "1" ]]; then
 fi
 
 set +e
-output="$(uv run --no-sync horadus tasks context-pack "$1" 2>&1)"
+output="$(uv run --no-sync horadus tasks context-pack "$1" --include-archive 2>&1)"
 status=$?
 set -e
 printf '%s\n' "${output}"

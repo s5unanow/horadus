@@ -2766,6 +2766,28 @@ def test_working_tree_text_for_path_returns_empty_when_missing(
     assert task_commands_module._working_tree_text_for_path("tasks/BACKLOG.md") == ""
 
 
+def test_index_text_for_path_returns_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, stdout="index text"),
+    )
+
+    assert task_commands_module._index_text_for_path("tasks/BACKLOG.md") == "index text"
+
+
+def test_index_text_for_path_returns_empty_on_missing_ref(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1),
+    )
+
+    assert task_commands_module._index_text_for_path("tasks/BACKLOG.md") == ""
+
+
 def test_changed_line_numbers_tracks_context_adds_and_deletes() -> None:
     old_lines, new_lines = task_commands_module._changed_line_numbers(
         "\n".join(
@@ -2811,7 +2833,7 @@ def test_diff_texts_for_path_collects_staged_and_unstaged(monkeypatch: pytest.Mo
 
     texts = task_commands_module._diff_texts_for_path("tasks/BACKLOG.md")
 
-    assert texts == ["unstaged", "staged"]
+    assert texts == [("unstaged", "unstaged"), ("staged", "staged")]
 
 
 def test_diff_texts_for_path_skips_empty_or_failed_diffs(
@@ -2861,13 +2883,18 @@ def test_dirty_task_refs_for_path_uses_changed_line_mapping_for_backlog(
     )
     monkeypatch.setattr(
         task_commands_module,
+        "_index_text_for_path",
+        lambda _path: "### TASK-253: Coverage\nold\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
         "_working_tree_text_for_path",
         lambda _path: "### TASK-253: Coverage\nnew\n",
     )
     monkeypatch.setattr(
         task_commands_module,
         "_diff_texts_for_path",
-        lambda _path: ["@@ -1,2 +1,2 @@\n-old\n+new\n"],
+        lambda _path: [("unstaged", "@@ -1,2 +1,2 @@\n-old\n+new\n")],
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
@@ -2883,13 +2910,18 @@ def test_dirty_task_refs_for_path_parses_diff_output(monkeypatch: pytest.MonkeyP
     )
     monkeypatch.setattr(
         task_commands_module,
+        "_index_text_for_path",
+        lambda _path: "### TASK-254: Coverage\nnew\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
         "_working_tree_text_for_path",
         lambda _path: "### TASK-254: Coverage\nnew\n",
     )
     monkeypatch.setattr(
         task_commands_module,
         "_diff_texts_for_path",
-        lambda _path: ["@@ -1,2 +1,2 @@\n-old\n+new\n"],
+        lambda _path: [("staged", "@@ -1,2 +1,2 @@\n-old\n+new\n")],
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
@@ -2904,13 +2936,16 @@ def test_dirty_task_refs_for_path_parses_non_backlog_diff_output(
         task_commands_module,
         "_diff_texts_for_path",
         lambda _path: [
-            "\n".join(
-                [
-                    "@@ -1 +1 @@",
-                    "  `TASK-999` Context only",
-                    "- `TASK-253` Coverage",
-                    "+ `TASK-254` Coverage",
-                ]
+            (
+                "unstaged",
+                "\n".join(
+                    [
+                        "@@ -1 +1 @@",
+                        "  `TASK-999` Context only",
+                        "- `TASK-253` Coverage",
+                        "+ `TASK-254` Coverage",
+                    ]
+                ),
             )
         ],
     )
@@ -2932,6 +2967,64 @@ def test_dirty_task_refs_for_path_returns_empty_on_diff_failure(
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
 
     assert refs == set()
+
+
+def test_dirty_task_refs_for_path_maps_unstaged_backlog_hunks_against_index_and_worktree(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_head_text_for_path",
+        lambda _path: "### TASK-252: Head\nold\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_index_text_for_path",
+        lambda _path: "### TASK-253: Index\nold\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_working_tree_text_for_path",
+        lambda _path: "### TASK-254: Working\nnew\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_diff_texts_for_path",
+        lambda _path: [("unstaged", "@@ -1,2 +1,2 @@\n-old\n+new\n")],
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-253", "TASK-254"}
+
+
+def test_dirty_task_refs_for_path_maps_staged_backlog_hunks_against_head_and_index(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_head_text_for_path",
+        lambda _path: "### TASK-252: Head\nold\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_index_text_for_path",
+        lambda _path: "### TASK-253: Index\nnew\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_working_tree_text_for_path",
+        lambda _path: "### TASK-254: Working\nnewer\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_diff_texts_for_path",
+        lambda _path: [("staged", "@@ -1,2 +1,2 @@\n-old\n+new\n")],
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-252", "TASK-253"}
 
 
 def test_task_ledger_intake_state_reports_missing_backlog_and_sprint_parse_error(

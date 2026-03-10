@@ -180,15 +180,22 @@ def _working_tree_text_for_path(path: str) -> str:
         return ""
 
 
-def _diff_texts_for_path(path: str) -> list[str]:
-    texts: list[str] = []
-    for args in (
-        ["git", "diff", "--unified=20", "--", path],
-        ["git", "diff", "--cached", "--unified=20", "--", path],
+def _index_text_for_path(path: str) -> str:
+    result = _run_command(["git", "show", f":{path}"])
+    if result.returncode != 0:
+        return ""
+    return result.stdout
+
+
+def _diff_texts_for_path(path: str) -> list[tuple[str, str]]:
+    texts: list[tuple[str, str]] = []
+    for diff_kind, args in (
+        ("unstaged", ["git", "diff", "--unified=20", "--", path]),
+        ("staged", ["git", "diff", "--cached", "--unified=20", "--", path]),
     ):
         result = _run_command(args)
         if result.returncode == 0 and result.stdout.strip():
-            texts.append(result.stdout)
+            texts.append((diff_kind, result.stdout))
     return texts
 
 
@@ -242,23 +249,26 @@ def _dirty_task_refs_for_path(path: str) -> set[str]:
         return set()
     if path == "tasks/BACKLOG.md":
         head_text = _head_text_for_path(path)
+        index_text = _index_text_for_path(path)
         working_text = _working_tree_text_for_path(path)
         refs: set[str] = set()
-        for diff_text in diff_texts:
+        for diff_kind, diff_text in diff_texts:
+            old_text = index_text if diff_kind == "unstaged" else head_text
+            new_text = working_text if diff_kind == "unstaged" else index_text
             old_lines, new_lines = _changed_line_numbers(diff_text)
             refs.update(
                 task_id
                 for line_number in old_lines
-                if (task_id := _backlog_task_id_for_line(head_text, line_number)) is not None
+                if (task_id := _backlog_task_id_for_line(old_text, line_number)) is not None
             )
             refs.update(
                 task_id
                 for line_number in new_lines
-                if (task_id := _backlog_task_id_for_line(working_text, line_number)) is not None
+                if (task_id := _backlog_task_id_for_line(new_text, line_number)) is not None
             )
         return refs
     diff_refs: set[str] = set()
-    for diff_text in diff_texts:
+    for _diff_kind, diff_text in diff_texts:
         for raw_line in diff_text.splitlines():
             if (raw_line.startswith("+") and not raw_line.startswith("+++")) or (
                 raw_line.startswith("-") and not raw_line.startswith("---")

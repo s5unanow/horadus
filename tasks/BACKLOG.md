@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-297`.
+- Next available task IDs start at `TASK-298`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -904,6 +904,148 @@ without abandoning the PR lifecycle mid-flight.
 - [ ] During long-running review/check wait phases, `horadus tasks finish` emits periodic progress lines that name the active gate and latest known state so operators do not need manual GitHub polling to understand whether it is waiting or stuck
 - [ ] Agent-facing workflow guidance reflects the corrected recovery behavior and keeps raw `gh pr merge` limited to genuine forced fallback scenarios
 - [ ] Tests cover the reproduced branch-drift scenario end to end, including the rerun path from `main`
+
+---
+
+### TASK-297: Split `task_commands.py` Into Focused Workflow Modules
+**Priority**: P2 (Medium)
+**Estimate**: 1-2 days
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+`src/horadus_cli/task_commands.py` has grown into a nearly 4k-line file that
+mixes subprocess helpers, git/PR orchestration, preflight/start logic,
+ledger/archive mutation, lifecycle verification, friction reporting, and CLI
+handler wiring. That size and coupling now create real maintenance costs:
+small workflow changes require loading unrelated code paths into context, test
+coverage is concentrated in one oversized module, and review churn around task
+workflow changes is harder to reason about safely. Refactor the file into
+smaller, isolated modules with explicit responsibility boundaries while
+preserving the current public CLI behavior.
+
+**Problem Statement**:
+- `src/horadus_cli/task_commands.py` currently centralizes unrelated workflow
+  concerns in one module, increasing context load and making safe edits harder.
+- Shared helpers for finish, preflight, ledger closure, and lifecycle checks
+  are not isolated, so changes in one area create review/testing noise in
+  others.
+- The repo needs a maintainable internal structure for future task-workflow
+  work without changing the `horadus tasks ...` user interface.
+
+**Inputs**:
+- Existing task CLI behavior and command surfaces under `horadus tasks ...`
+- Current tests covering task start, finish, lifecycle, archive lookup, and
+  review-gate behavior
+- Existing docs/runbooks that reference current workflow commands
+
+**Outputs**:
+- A smaller top-level CLI facade module that mostly wires handlers/parsers
+- New internal modules with focused responsibilities and stable imports
+- Preserved CLI behavior and regression coverage across unaffected workflows
+- A checked-in compatibility artifact with concrete command, caller, and
+  fallback baseline rows populated before the first extraction commit
+
+**Non-Goals**:
+- Redesigning the task workflow UX or changing command names/options
+- Relaxing workflow policy just to make the split easier
+- Rewriting task storage formats or archive semantics
+- Moving all workflow code in one giant mechanical sweep without tests proving
+  equivalence
+
+**Files**: `src/horadus_cli/task_commands.py`, `src/horadus_cli/`, `tests/unit/test_cli.py`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+
+**Acceptance Criteria**:
+- [ ] Extract focused internal modules for at least these responsibility groups:
+  subprocess/runtime helpers, preflight/start logic, ledger/archive mutation,
+  finish/review-gate orchestration, lifecycle/closure verification, and
+  workflow friction reporting
+- [ ] Leave `src/horadus_cli/task_commands.py` as a thin CLI-oriented facade
+  that only owns argparse registration, trivial argument-to-command adapters,
+  and result emission wiring; it must not retain workflow policy branching,
+  subprocess orchestration, repo mutation, or multi-domain command composition
+- [ ] Define clear import boundaries so shared helpers are not duplicated and
+  cyclic imports are avoided
+- [ ] Preserve the current public CLI interface and command semantics for all
+  existing `horadus tasks ...` commands currently wired by
+  `register_task_commands`, including command names, supported options, exit
+  code behavior, and operator-facing output/error shape unless an explicitly
+  scoped behavior change is documented and regression-tested
+- [ ] Maintain an explicit command-compatibility inventory covering every
+  `horadus tasks ...` subcommand/flag family touched directly or indirectly by
+  the split, keep it in
+  `tasks/exec_plans/TASK-297-compatibility.md`, and use it as the review
+  checklist for refactor completeness; every inventory row must name its
+  planned owner, current symbol group, validating scenario ids, and caller /
+  coverage ids before code moves begin
+- [ ] Characterize and preserve observable CLI behavior for touched command
+  families, including parser failure paths, `--help` output reachability,
+  stdout/stderr routing expectations, and exit-code/error-shape compatibility
+  unless an explicitly scoped behavior change is documented and regression-
+  tested; compatibility is defined as preserving command names/options, JSON
+  field contracts, required blocker/recovery hint content, exit codes, and
+  stream routing rather than byte-for-byte text identity
+- [ ] Add or update regression tests proving unaffected callers still work
+  after the split, especially across start/preflight, finish/review-gate, and
+  archive-aware task lookup paths
+- [ ] Keep `horadus tasks finish` / lifecycle / archive lookup behavior
+  functionally equivalent unless a separately scoped bug fix is explicitly
+  included and documented
+- [ ] Update developer-facing docs only where module ownership or contributor
+  guidance changed; do not create doc drift against the refactored structure
+- [ ] The refactor ends with all required local gates passing and no newly
+  introduced forced-fallback path in the task workflow compared with the
+  pre-refactor command set for equivalent scenarios, using a checked-in
+  baseline scenario inventory captured before extraction begins in
+  `tasks/exec_plans/TASK-297-compatibility.md`; each baseline scenario must
+  record command/preconditions, expected blocker or success class, fallback
+  trigger expectations, friction-record expectation, exit code, required
+  recovery guidance, and explicit mapping back to covered command inventory
+  rows
+
+**Suggested Module Shape**:
+- `task_process.py`: subprocess execution, timeout handling, output helpers
+- `task_query.py`: read-oriented task queries (`list-active`, `show`,
+  `search`, `context-pack`) built on `task_repo.py`
+- `task_preflight.py`: dirty-tree parsing, intake-state logic, eligibility,
+  and single-domain start helpers
+- `task_ledgers.py`: sprint/backlog/completed/archive mutation helpers
+- `task_finish.py`: finish config, PR lookup, review-gate/check waiting, merge
+  orchestration
+- `task_lifecycle.py`: lifecycle snapshot/state resolution and strict closure
+  verification
+- `task_friction.py`: workflow friction recording, summaries, and report helpers
+- `task_shared.py` (or equivalent): shared dataclasses, config/result models,
+  and cross-cutting helper types used by multiple workflow domains
+- `task_workflow.py` (or equivalent): explicit owner for command flows that
+  compose multiple workflow domains; this is where cross-domain orchestration
+  lives instead of `task_commands.py` or `task_shared.py`
+- `task_commands.py`: CLI handlers and parser registration only
+
+**Refactor Guardrails**:
+- [ ] Adopt and preserve a one-way dependency graph:
+  `task_commands.py` -> `task_workflow.py` and single-domain modules ->
+  `task_process.py` / `task_shared.py` / `task_repo.py`; single-domain modules
+  must not depend on each other, and any cross-domain composition must live in
+  `task_workflow.py` (or the explicitly named equivalent) rather than
+  backsliding into the CLI facade
+- [ ] Keep `task_repo.py` as the owner of task/backlog/archive read-side path
+  resolution and parsing concerns; keep `task_ledgers.py` as the owner of
+  write-side sprint/backlog/completed/archive mutation concerns
+- [ ] Restrict `task_shared.py` (or equivalent) to shared dataclasses,
+  exceptions, config/result envelopes, and helper types referenced by multiple
+  workflow domains; it must not become a holder for workflow logic or repo I/O
+- [ ] Enumerate every caller/import site that depends on the extracted helpers
+  before moving shared behavior, and keep that inventory in a checked-in task
+  artifact during implementation and review; command inventory completion is
+  blocked until each caller/import inventory row maps to one or more command
+  rows or is explicitly marked `internal-only`
+- [ ] Preserve existing test intent by moving tests toward module-specific
+  coverage where appropriate, but keep end-to-end CLI behavior checks for
+  unaffected command paths
+- [ ] Prefer incremental extraction commits over one opaque move-only diff so
+  review can validate behavioral equivalence
+- [ ] If a helper’s behavior changes during extraction, treat that as an
+  explicit behavior change with dedicated regression tests, not as incidental
+  refactor fallout
 
 ---
 

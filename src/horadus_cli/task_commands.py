@@ -984,8 +984,10 @@ def _required_checks_state(*, pr_url: str, config: FinishConfig) -> tuple[str, l
         return ("fail", failed_checks)
     if pending_checks:
         return ("pending", pending_checks)
-    if result.returncode == 0 or saw_checks:
+    if result.returncode == 0:
         return ("pass", [])
+    if saw_checks:
+        return ("pending", lines)
     return ("pending", lines)
 
 

@@ -1677,6 +1677,53 @@ def test_required_checks_state_reports_pending_required_ci(
     assert lines == ["CI / Build: pending (https://example.invalid/checks/build)"]
 
 
+def test_required_checks_state_does_not_treat_unknown_nonzero_status_as_pass(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(
+            ["gh", "pr", "checks"],
+            returncode=1,
+            stdout=json.dumps(
+                [
+                    {
+                        "bucket": "neutral",
+                        "name": "Build",
+                        "workflow": "CI",
+                        "link": "https://example.invalid/checks/build",
+                    }
+                ]
+            ),
+        ),
+    )
+
+    assert task_commands_module._required_checks_state(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == (
+        "pending",
+        [
+            (
+                '[{"bucket": "neutral", "name": "Build", "workflow": "CI", "link": '
+                '"https://example.invalid/checks/build"}]'
+            )
+        ],
+    )
+
+
 def test_current_required_checks_blocker_maps_check_states(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

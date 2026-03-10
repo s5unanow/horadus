@@ -166,16 +166,90 @@ def _git_status_dirty_paths(status_output: str) -> list[str]:
     return paths
 
 
+def _head_text_for_path(path: str) -> str:
+    result = _run_command(["git", "show", f"HEAD:{path}"])
+    if result.returncode != 0:
+        return ""
+    return result.stdout
+
+
+def _working_tree_text_for_path(path: str) -> str:
+    try:
+        return (repo_root() / path).read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return ""
+
+
+def _changed_line_numbers(diff_text: str) -> tuple[list[int], list[int]]:
+    old_lines: list[int] = []
+    new_lines: list[int] = []
+    old_line = 0
+    new_line = 0
+    in_hunk = False
+    hunk_pattern = re.compile(
+        r"^@@ -(?P<old_start>\d+)(?:,(?P<old_count>\d+))? \+(?P<new_start>\d+)(?:,(?P<new_count>\d+))? @@"
+    )
+    for raw_line in diff_text.splitlines():
+        match = hunk_pattern.match(raw_line)
+        if match is not None:
+            old_line = int(match.group("old_start"))
+            new_line = int(match.group("new_start"))
+            in_hunk = True
+            continue
+        if not in_hunk:
+            continue
+        if raw_line.startswith("-") and not raw_line.startswith("---"):
+            old_lines.append(old_line)
+            old_line += 1
+            continue
+        if raw_line.startswith("+") and not raw_line.startswith("+++"):
+            new_lines.append(new_line)
+            new_line += 1
+            continue
+        if raw_line.startswith(" "):
+            old_line += 1
+            new_line += 1
+    return (old_lines, new_lines)
+
+
+def _backlog_task_id_for_line(text: str, line_number: int) -> str | None:
+    lines = text.splitlines()
+    if not lines:
+        return None
+    bounded_line = min(line_number, len(lines))
+    for index in range(bounded_line - 1, -1, -1):
+        match = re.match(r"^###\s+(TASK-\d{3}):", lines[index])
+        if match is not None:
+            return match.group(1)
+    return None
+
+
 def _dirty_task_refs_for_path(path: str) -> set[str]:
     diff_result = _run_command(["git", "diff", "--unified=20", "--", path])
     if diff_result.returncode != 0:
         return set()
-    refs: set[str] = set()
+    if path == "tasks/BACKLOG.md":
+        head_text = _head_text_for_path(path)
+        working_text = _working_tree_text_for_path(path)
+        old_lines, new_lines = _changed_line_numbers(diff_result.stdout)
+        refs: set[str] = set()
+        refs.update(
+            task_id
+            for line_number in old_lines
+            if (task_id := _backlog_task_id_for_line(head_text, line_number)) is not None
+        )
+        refs.update(
+            task_id
+            for line_number in new_lines
+            if (task_id := _backlog_task_id_for_line(working_text, line_number)) is not None
+        )
+        return refs
+    diff_refs: set[str] = set()
     for raw_line in diff_result.stdout.splitlines():
         if raw_line.startswith(("diff --git", "index ", "---", "+++", "@@")):
             continue
-        refs.update(re.findall(r"TASK-\d{3}", raw_line))
-    return refs
+        diff_refs.update(re.findall(r"TASK-\d{3}", raw_line))
+    return diff_refs
 
 
 def _task_ledger_intake_state(
@@ -187,7 +261,12 @@ def _task_ledger_intake_state(
     blocking_paths = [path for path in dirty_paths if path not in _TASK_LEDGER_INTAKE_PATHS]
     consistency_errors: list[str] = []
     if task_id is not None:
-        if task_block_match(task_id) is None:
+        try:
+            backlog_match = task_block_match(task_id)
+        except FileNotFoundError:
+            backlog_match = None
+            consistency_errors.append("tasks/BACKLOG.md is missing in the working tree.")
+        if backlog_match is None:
             consistency_errors.append(
                 f"{task_id} is not present in tasks/BACKLOG.md in the working tree."
             )
@@ -203,7 +282,7 @@ def _task_ledger_intake_state(
         if "tasks/CURRENT_SPRINT.md" in eligible_paths:
             try:
                 active_tasks = parse_active_tasks()
-            except ValueError as exc:
+            except (FileNotFoundError, ValueError) as exc:
                 consistency_errors.append(str(exc))
             else:
                 if not any(task.task_id == task_id for task in active_tasks):

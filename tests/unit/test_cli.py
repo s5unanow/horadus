@@ -2725,7 +2725,136 @@ def test_git_status_dirty_paths_handles_blank_rename_and_quoted_paths() -> None:
     assert paths == ["tasks/BACKLOG.md", "PROJECT_STATUS.md"]
 
 
+def test_head_text_for_path_returns_stdout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, stdout="head text"),
+    )
+
+    assert task_commands_module._head_text_for_path("tasks/BACKLOG.md") == "head text"
+
+
+def test_head_text_for_path_returns_empty_on_missing_ref(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1),
+    )
+
+    assert task_commands_module._head_text_for_path("tasks/BACKLOG.md") == ""
+
+
+def test_working_tree_text_for_path_returns_file_text(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "tasks" / "BACKLOG.md"
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    file_path.write_text("working tree", encoding="utf-8")
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    assert task_commands_module._working_tree_text_for_path("tasks/BACKLOG.md") == "working tree"
+
+
+def test_working_tree_text_for_path_returns_empty_when_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    assert task_commands_module._working_tree_text_for_path("tasks/BACKLOG.md") == ""
+
+
+def test_changed_line_numbers_tracks_context_adds_and_deletes() -> None:
+    old_lines, new_lines = task_commands_module._changed_line_numbers(
+        "\n".join(
+            [
+                "diff --git a/tasks/BACKLOG.md b/tasks/BACKLOG.md",
+                "@@ -3,2 +3,3 @@",
+                " context",
+                "-removed",
+                "+added",
+                "+added-two",
+            ]
+        )
+    )
+
+    assert old_lines == [4]
+    assert new_lines == [4, 5]
+
+
+def test_changed_line_numbers_ignores_non_content_hunk_lines() -> None:
+    old_lines, new_lines = task_commands_module._changed_line_numbers(
+        "\n".join(
+            [
+                "@@ -1 +1 @@",
+                "\\ No newline at end of file",
+            ]
+        )
+    )
+
+    assert old_lines == []
+    assert new_lines == []
+
+
+def test_backlog_task_id_for_line_returns_nearest_header() -> None:
+    text = "\n".join(
+        [
+            "# Backlog",
+            "",
+            "### TASK-253: Coverage",
+            "Detail",
+            "",
+            "### TASK-254: Other",
+            "Other detail",
+        ]
+    )
+
+    assert task_commands_module._backlog_task_id_for_line(text, 4) == "TASK-253"
+    assert task_commands_module._backlog_task_id_for_line(text, 7) == "TASK-254"
+    assert task_commands_module._backlog_task_id_for_line("", 1) is None
+    assert task_commands_module._backlog_task_id_for_line("No task header\nDetail", 2) is None
+
+
+def test_dirty_task_refs_for_path_uses_changed_line_mapping_for_backlog(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_head_text_for_path",
+        lambda _path: "### TASK-253: Coverage\nold\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_working_tree_text_for_path",
+        lambda _path: "### TASK-253: Coverage\nnew\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(
+            args,
+            stdout="@@ -1,2 +1,2 @@\n-old\n+new\n",
+        ),
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-253"}
+
+
 def test_dirty_task_refs_for_path_parses_diff_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_head_text_for_path",
+        lambda _path: "### TASK-253: Coverage\nold\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_working_tree_text_for_path",
+        lambda _path: "### TASK-254: Coverage\nnew\n",
+    )
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
@@ -2737,13 +2866,35 @@ def test_dirty_task_refs_for_path_parses_diff_output(monkeypatch: pytest.MonkeyP
                 "--- a/tasks/BACKLOG.md\n"
                 "+++ b/tasks/BACKLOG.md\n"
                 "@@ -1,2 +1,2 @@\n"
-                " ### TASK-253: Coverage\n"
-                "+Depends on TASK-254\n"
+                "-old\n"
+                "+new\n"
             ),
         ),
     )
 
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-253", "TASK-254"}
+
+
+def test_dirty_task_refs_for_path_parses_non_backlog_diff_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(
+            args,
+            stdout=(
+                "diff --git a/tasks/CURRENT_SPRINT.md b/tasks/CURRENT_SPRINT.md\n"
+                "@@ -1 +1 @@\n"
+                "- `TASK-253` Coverage\n"
+                "+ `TASK-254` Coverage\n"
+            ),
+        ),
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/CURRENT_SPRINT.md")
 
     assert refs == {"TASK-253", "TASK-254"}
 
@@ -2805,6 +2956,36 @@ def test_task_ledger_intake_state_requires_target_task_in_dirty_diff(
     assert state.consistency_errors == [
         "tasks/BACKLOG.md does not include TASK-253 in its dirty diff.",
         "tasks/BACKLOG.md contains edits for other tasks: TASK-254",
+    ]
+
+
+def test_task_ledger_intake_state_handles_missing_backlog_and_sprint_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_block_match",
+        lambda _task_id: (_ for _ in ()).throw(FileNotFoundError("missing backlog")),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_dirty_task_refs_for_path", lambda _path: {"TASK-253"}
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "parse_active_tasks",
+        lambda: (_ for _ in ()).throw(FileNotFoundError("missing sprint")),
+    )
+
+    state = task_commands_module._task_ledger_intake_state(
+        task_id="TASK-253",
+        dirty_paths=["tasks/BACKLOG.md", "tasks/CURRENT_SPRINT.md"],
+    )
+
+    assert state.ready is False
+    assert state.consistency_errors == [
+        "tasks/BACKLOG.md is missing in the working tree.",
+        "TASK-253 is not present in tasks/BACKLOG.md in the working tree.",
+        "missing sprint",
     ]
 
 

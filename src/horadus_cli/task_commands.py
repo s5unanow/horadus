@@ -236,7 +236,14 @@ def _backlog_task_id_for_line(text: str, line_number: int) -> str | None:
     if not lines:
         return None
     bounded_line = min(line_number, len(lines))
+    if bounded_line <= 0:
+        return None
+    current_match = re.match(r"^###\s+(TASK-\d{3}):", lines[bounded_line - 1])
+    if current_match is not None:
+        return current_match.group(1)
     for index in range(bounded_line - 1, -1, -1):
+        if re.match(r"^\s*---\s*$", lines[index]):
+            break
         match = re.match(r"^###\s+(TASK-\d{3}):", lines[index])
         if match is not None:
             return match.group(1)

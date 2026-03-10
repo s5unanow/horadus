@@ -2869,8 +2869,28 @@ def test_backlog_task_id_for_line_returns_nearest_header() -> None:
 
     assert task_commands_module._backlog_task_id_for_line(text, 4) == "TASK-253"
     assert task_commands_module._backlog_task_id_for_line(text, 7) == "TASK-254"
+    assert task_commands_module._backlog_task_id_for_line(text, 0) is None
     assert task_commands_module._backlog_task_id_for_line("", 1) is None
     assert task_commands_module._backlog_task_id_for_line("No task header\nDetail", 2) is None
+
+
+def test_backlog_task_id_for_line_does_not_cross_separator_boundaries() -> None:
+    text = "\n".join(
+        [
+            "# Backlog",
+            "",
+            "### TASK-291: Existing",
+            "Body",
+            "---",
+            "",
+            "### TASK-296: New",
+            "More",
+        ]
+    )
+
+    assert task_commands_module._backlog_task_id_for_line(text, 5) is None
+    assert task_commands_module._backlog_task_id_for_line(text, 6) is None
+    assert task_commands_module._backlog_task_id_for_line(text, 7) == "TASK-296"
 
 
 def test_dirty_task_refs_for_path_uses_changed_line_mapping_for_backlog(
@@ -3025,6 +3045,50 @@ def test_dirty_task_refs_for_path_maps_staged_backlog_hunks_against_head_and_ind
     refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
 
     assert refs == {"TASK-252", "TASK-253"}
+
+
+def test_dirty_task_refs_for_path_does_not_attribute_new_task_boundary_lines_to_prior_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_head_text_for_path",
+        lambda _path: "### TASK-291: Existing\nBody\n---\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_index_text_for_path",
+        lambda _path: "### TASK-291: Existing\nBody\n---\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_working_tree_text_for_path",
+        lambda _path: "### TASK-291: Existing\nBody\n---\n\n### TASK-296: New\nMore\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_diff_texts_for_path",
+        lambda _path: [
+            (
+                "unstaged",
+                "\n".join(
+                    [
+                        "@@ -1,3 +1,6 @@",
+                        " ### TASK-291: Existing",
+                        " Body",
+                        " ---",
+                        "+",
+                        "+### TASK-296: New",
+                        "+More",
+                    ]
+                ),
+            )
+        ],
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-296"}
 
 
 def test_task_ledger_intake_state_reports_missing_backlog_and_sprint_parse_error(

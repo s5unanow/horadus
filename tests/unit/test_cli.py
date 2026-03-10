@@ -2725,10 +2725,50 @@ def test_git_status_dirty_paths_handles_blank_rename_and_quoted_paths() -> None:
     assert paths == ["tasks/BACKLOG.md", "PROJECT_STATUS.md"]
 
 
+def test_dirty_task_refs_for_path_parses_diff_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(
+            args,
+            stdout=(
+                "diff --git a/tasks/BACKLOG.md b/tasks/BACKLOG.md\n"
+                "index 123..456 100644\n"
+                "--- a/tasks/BACKLOG.md\n"
+                "+++ b/tasks/BACKLOG.md\n"
+                "@@ -1,2 +1,2 @@\n"
+                " ### TASK-253: Coverage\n"
+                "+Depends on TASK-254\n"
+            ),
+        ),
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-253", "TASK-254"}
+
+
+def test_dirty_task_refs_for_path_returns_empty_on_diff_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1),
+    )
+
+    refs = task_commands_module._dirty_task_refs_for_path("tasks/BACKLOG.md")
+
+    assert refs == set()
+
+
 def test_task_ledger_intake_state_reports_missing_backlog_and_sprint_parse_error(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(task_commands_module, "task_block_match", lambda _task_id: None)
+    monkeypatch.setattr(
+        task_commands_module, "_dirty_task_refs_for_path", lambda _path: {"TASK-253"}
+    )
     monkeypatch.setattr(
         task_commands_module,
         "parse_active_tasks",
@@ -2745,6 +2785,26 @@ def test_task_ledger_intake_state_reports_missing_backlog_and_sprint_parse_error
     assert state.consistency_errors == [
         "TASK-253 is not present in tasks/BACKLOG.md in the working tree.",
         "bad sprint section",
+    ]
+
+
+def test_task_ledger_intake_state_requires_target_task_in_dirty_diff(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "task_block_match", lambda _task_id: object())
+    monkeypatch.setattr(
+        task_commands_module, "_dirty_task_refs_for_path", lambda _path: {"TASK-254"}
+    )
+
+    state = task_commands_module._task_ledger_intake_state(
+        task_id="TASK-253",
+        dirty_paths=["tasks/BACKLOG.md"],
+    )
+
+    assert state.ready is False
+    assert state.consistency_errors == [
+        "tasks/BACKLOG.md does not include TASK-253 in its dirty diff.",
+        "tasks/BACKLOG.md contains edits for other tasks: TASK-254",
     ]
 
 
@@ -2843,6 +2903,9 @@ def test_task_preflight_data_allows_task_ledger_intake_for_target_task(
 ) -> None:
     _seed_task_start_intake_repo(tmp_path)
     monkeypatch.setattr(
+        task_commands_module, "_dirty_task_refs_for_path", lambda _path: {"TASK-253"}
+    )
+    monkeypatch.setattr(
         task_commands_module,
         "current_sprint_path",
         lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
@@ -2897,6 +2960,9 @@ def test_task_preflight_data_blocks_unrelated_dirty_paths_even_with_task_ledger_
 ) -> None:
     _seed_task_start_intake_repo(tmp_path)
     monkeypatch.setattr(
+        task_commands_module, "_dirty_task_refs_for_path", lambda _path: {"TASK-253"}
+    )
+    monkeypatch.setattr(
         task_commands_module,
         "current_sprint_path",
         lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
@@ -2947,6 +3013,9 @@ def test_task_preflight_data_blocks_conflicting_task_ledger_intake_state(
 ) -> None:
     _seed_task_start_intake_repo(tmp_path, include_task_in_sprint=False)
     monkeypatch.setattr(
+        task_commands_module, "_dirty_task_refs_for_path", lambda _path: {"TASK-253"}
+    )
+    monkeypatch.setattr(
         task_commands_module,
         "current_sprint_path",
         lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
@@ -2987,6 +3056,59 @@ def test_task_preflight_data_blocks_conflicting_task_ledger_intake_state(
 
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert "TASK-253 is not listed in Active Tasks" in "\n".join(lines)
+
+
+def test_task_preflight_data_blocks_task_ledger_intake_for_other_task_refs(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _seed_task_start_intake_repo(tmp_path)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_dirty_task_refs_for_path",
+        lambda path: {"TASK-253", "TASK-254"} if path == "tasks/BACKLOG.md" else {"TASK-253"},
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "current_sprint_path",
+        lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_block_match",
+        lambda task_id: task_repo_module.task_block_match(
+            task_id, tmp_path / "tasks" / "BACKLOG.md"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "parse_active_tasks",
+        lambda _path=None: task_repo_module.parse_active_tasks(
+            tmp_path / "tasks" / "CURRENT_SPRINT.md"
+        ),
+    )
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(
+                ["git", "status"], stdout=" M tasks/BACKLOG.md\n M tasks/CURRENT_SPRINT.md\n"
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    exit_code, _data, lines = task_commands_module.task_preflight_data(
+        task_id="TASK-253",
+        allow_task_ledger_intake=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert "tasks/BACKLOG.md contains edits for other tasks: TASK-254" in "\n".join(lines)
 
 
 def test_task_preflight_data_fails_when_fetch_fails(monkeypatch: pytest.MonkeyPatch) -> None:

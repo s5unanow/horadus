@@ -166,6 +166,18 @@ def _git_status_dirty_paths(status_output: str) -> list[str]:
     return paths
 
 
+def _dirty_task_refs_for_path(path: str) -> set[str]:
+    diff_result = _run_command(["git", "diff", "--unified=20", "--", path])
+    if diff_result.returncode != 0:
+        return set()
+    refs: set[str] = set()
+    for raw_line in diff_result.stdout.splitlines():
+        if raw_line.startswith(("diff --git", "index ", "---", "+++", "@@")):
+            continue
+        refs.update(re.findall(r"TASK-\d{3}", raw_line))
+    return refs
+
+
 def _task_ledger_intake_state(
     *,
     task_id: str | None,
@@ -179,6 +191,15 @@ def _task_ledger_intake_state(
             consistency_errors.append(
                 f"{task_id} is not present in tasks/BACKLOG.md in the working tree."
             )
+        for path in eligible_paths:
+            task_refs = _dirty_task_refs_for_path(path)
+            if task_id not in task_refs:
+                consistency_errors.append(f"{path} does not include {task_id} in its dirty diff.")
+            other_refs = sorted(ref for ref in task_refs if ref != task_id)
+            if other_refs:
+                consistency_errors.append(
+                    f"{path} contains edits for other tasks: {', '.join(other_refs)}"
+                )
         if "tasks/CURRENT_SPRINT.md" in eligible_paths:
             try:
                 active_tasks = parse_active_tasks()

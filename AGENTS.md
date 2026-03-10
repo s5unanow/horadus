@@ -111,12 +111,12 @@ After completing work:
 - Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
 - Before creating a task branch, run sequencing preflight: `uv run --no-sync horadus tasks preflight`.
 - Start task branches via lower-level guarded command: `uv run --no-sync horadus tasks start TASK-XXX --name short-name`.
-- Canonical agent start command is `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name` (enforces sprint eligibility + sequencing guard).
+- Canonical agent start command is `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name` (enforces sprint eligibility + sequencing guard, and can carry forward task-ledger-only intake edits for the target task).
 - `make task-preflight`, `make task-start`, and `make agent-safe-start` remain compatibility wrappers when a Make target is more convenient.
 - Prefer `horadus` for repo workflow operations when an equivalent command
   exists (for example `horadus tasks ...` and `horadus triage collect`), and
   prefer `--format json` for agent consumption where appropriate.
-- Task start is blocked unless `main` is clean/synced and there is no open non-merged task PR for the current operator.
+- Task start is blocked unless `main` is synced and there is no open non-merged task PR for the current operator. Dirty working trees remain blocked by default; only task-ledger-only intake edits for the target task may carry forward through `horadus tasks start` / `safe-start`.
 - Open one PR per task branch and merge only after required checks are green.
 - Every task PR title must be `TASK-XXX: short summary` matching the branch task ID.
 - Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX` matching the branch task ID.

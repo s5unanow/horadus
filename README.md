@@ -268,7 +268,9 @@ Primary-Task: TASK-XXX
 
 `horadus tasks safe-start TASK-XXX --name short-name` is the canonical guarded
 task-start command for agents. It enforces sprint eligibility plus sequencing
-checks before creating the canonical `codex/task-XXX-short-name` branch.
+checks before creating the canonical `codex/task-XXX-short-name` branch, and
+it can carry forward task-ledger-only intake edits for the target task instead
+of forcing a stash or commit on `main`.
 `make agent-safe-start` is a compatibility wrapper to the same CLI flow.
 
 `horadus tasks finish` is the canonical task-completion command. It does not

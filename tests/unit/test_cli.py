@@ -734,12 +734,12 @@ def test_run_doctor_returns_failure_on_safety_refusal(
 
 
 def test_main_tasks_context_pack_json_output(capsys: pytest.CaptureFixture[str]) -> None:
-    result = cli_module.main(["tasks", "context-pack", "TASK-292", "--format", "json"])
+    result = cli_module.main(["tasks", "context-pack", "TASK-291", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
-    assert payload["data"]["task"]["task_id"] == "TASK-292"
+    assert payload["data"]["task"]["task_id"] == "TASK-291"
     assert "suggested_validation_commands" in payload["data"]
 
 
@@ -7614,16 +7614,16 @@ def test_handle_show_rejects_invalid_task_id() -> None:
 
 
 def test_handle_show_returns_task_details() -> None:
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-292"))
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-291"))
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
-    assert result.lines[0].startswith("# TASK-292:")
+    assert result.lines[0].startswith("# TASK-291:")
     assert "Acceptance Criteria:" in result.lines
 
 
 def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.MonkeyPatch) -> None:
-    record = task_repo_module.task_record("TASK-292")
+    record = task_repo_module.task_record("TASK-291")
     assert record is not None
     record.spec_paths = ["tasks/specs/253-coverage.md"]
     monkeypatch.setattr(
@@ -7632,7 +7632,7 @@ def test_handle_show_includes_spec_paths_when_present(monkeypatch: pytest.Monkey
         lambda _task_id, **_kwargs: record,
     )
 
-    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-292"))
+    result = task_commands_module.handle_show(argparse.Namespace(task_id="TASK-291"))
 
     assert result.lines is not None
     assert "Specs:" in result.lines
@@ -7709,7 +7709,7 @@ def test_handle_context_pack_requires_explicit_archive_flag_for_archived_task() 
 def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    record = task_repo_module.task_record("TASK-292")
+    record = task_repo_module.task_record("TASK-291")
     assert record is not None
     monkeypatch.setattr(
         task_commands_module,
@@ -7717,7 +7717,7 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
         lambda _task_id, **_kwargs: record,
     )
 
-    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-292"))
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id="TASK-291"))
 
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
@@ -7725,8 +7725,8 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     assert "## Spec Contract Template" in result.lines
     assert "tasks/specs/TEMPLATE.md" in result.lines
     assert "## Suggested Workflow Commands" in result.lines
-    assert "uv run --no-sync horadus tasks context-pack TASK-292" in result.lines
-    assert "uv run --no-sync horadus tasks finish TASK-292" in result.lines
+    assert "uv run --no-sync horadus tasks context-pack TASK-291" in result.lines
+    assert "uv run --no-sync horadus tasks finish TASK-291" in result.lines
     assert "## Suggested Validation Commands" in result.lines
     assert result.data is not None
     assert result.data["spec_template_path"] == "tasks/specs/TEMPLATE.md"

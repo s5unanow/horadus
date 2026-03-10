@@ -935,17 +935,207 @@ def _run_review_gate(*, pr_url: str, config: FinishConfig) -> subprocess.Complet
     )
 
 
-def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str]]:
+def _required_checks_state(*, pr_url: str, config: FinishConfig) -> tuple[str, list[str]]:
+    result = _run_command(
+        [
+            config.gh_bin,
+            "pr",
+            "checks",
+            pr_url,
+            "--required",
+            "--json",
+            "bucket,name,link,workflow",
+        ]
+    )
+    lines = _output_lines(result)
+    try:
+        payload = json.loads(result.stdout or "[]")
+    except json.JSONDecodeError:
+        if result.returncode == 0:
+            return ("pass", [])
+        return ("pending", lines)
+
+    if not isinstance(payload, list):
+        if result.returncode == 0:
+            return ("pass", [])
+        return ("pending", lines)
+
+    failed_checks: list[str] = []
+    pending_checks: list[str] = []
+    saw_checks = False
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        saw_checks = True
+        bucket = str(entry.get("bucket") or "").strip().lower()
+        name = str(entry.get("name") or "").strip() or "unnamed-check"
+        workflow = str(entry.get("workflow") or "").strip()
+        label = f"{workflow} / {name}" if workflow and workflow != name else name
+        link = str(entry.get("link") or "").strip()
+        detail = f"{label}: {bucket}"
+        if link:
+            detail = f"{detail} ({link})"
+        if bucket in {"fail", "cancel"}:
+            failed_checks.append(detail)
+        elif bucket == "pending":
+            pending_checks.append(detail)
+
+    if failed_checks:
+        return ("fail", failed_checks)
+    if pending_checks:
+        return ("pending", pending_checks)
+    if result.returncode == 0:
+        return ("pass", [])
+    if saw_checks:
+        return ("pending", lines)
+    return ("pending", lines)
+
+
+def _coerce_wait_for_required_checks_result(
+    result: tuple[bool, list[str]] | tuple[bool, list[str], str],
+) -> tuple[bool, list[str], str]:
+    if len(result) == 2:
+        checks_ok, check_lines = result
+        return (checks_ok, check_lines, "pass" if checks_ok else "timeout")
+    checks_ok, check_lines, reason = result
+    return (checks_ok, check_lines, reason)
+
+
+def _current_required_checks_blocker(
+    *, pr_url: str, config: FinishConfig, block_pending: bool = True
+) -> tuple[str, list[str]] | None:
+    check_state, check_lines = _required_checks_state(pr_url=pr_url, config=config)
+    if check_state == "fail":
+        return (
+            "required PR checks are failing on the current head.",
+            check_lines,
+        )
+    if check_state == "pending" and block_pending:
+        return (
+            "required PR checks are still pending on the current head.",
+            check_lines,
+        )
+    return None
+
+
+def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> list[str]:
+    repo_result = _run_command(
+        [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
+    )
+    repo_name = repo_result.stdout.strip() if repo_result.returncode == 0 else ""
+    if "/" not in repo_name:
+        return []
+    owner, repo = repo_name.split("/", 1)
+
+    pr_number_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "number", "--jq", ".number"]
+    )
+    pr_number_raw = pr_number_result.stdout.strip() if pr_number_result.returncode == 0 else ""
+    if not pr_number_raw.isdigit():
+        return []
+
+    query = (
+        "query($owner:String!, $repo:String!, $number:Int!){"
+        "repository(owner:$owner,name:$repo){"
+        "pullRequest(number:$number){"
+        "reviewThreads(first:100){"
+        "nodes{"
+        "isResolved "
+        "comments(first:20){"
+        "nodes{author{login} body path line originalLine url}"
+        "}"
+        "}"
+        "}"
+        "}"
+        "}"
+        "}"
+    )
+    threads_result = _run_command(
+        [
+            config.gh_bin,
+            "api",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"repo={repo}",
+            "-F",
+            f"number={pr_number_raw}",
+        ]
+    )
+    if threads_result.returncode != 0:
+        return []
+    try:
+        payload = json.loads(threads_result.stdout or "{}")
+    except json.JSONDecodeError:
+        return []
+
+    threads = (
+        payload.get("data", {})
+        .get("repository", {})
+        .get("pullRequest", {})
+        .get("reviewThreads", {})
+        .get("nodes", [])
+    )
+    if not isinstance(threads, list):
+        return []
+
+    lines: list[str] = []
+    for thread in threads:
+        if not isinstance(thread, dict) or thread.get("isResolved") is True:
+            continue
+        comments = thread.get("comments", {}).get("nodes", [])
+        if not isinstance(comments, list):
+            continue
+        comment = next((entry for entry in reversed(comments) if isinstance(entry, dict)), None)
+        if comment is None:
+            continue
+        path = str(comment.get("path") or "<unknown>")
+        line = comment.get("line") or comment.get("originalLine") or "?"
+        url = str(comment.get("url") or "").strip()
+        author = ""
+        if isinstance(comment.get("author"), dict):
+            author = str(comment["author"].get("login") or "").strip()
+        header = f"- {path}:{line}"
+        if url:
+            header = f"{header} {url}"
+        if author:
+            header = f"{header} ({author})"
+        lines.append(header)
+        body = " ".join(str(comment.get("body") or "").strip().split())
+        if body:
+            lines.append(f"  {body}")
+    return lines
+
+
+def _maybe_request_fresh_review(*, pr_url: str, config: FinishConfig) -> list[str]:
+    if config.review_bot_login != "chatgpt-codex-connector[bot]":
+        return []
+    request_comment = "@codex review"
+    result = _run_command([config.gh_bin, "pr", "comment", pr_url, "--body", request_comment])
+    if result.returncode != 0:
+        return [
+            f"Failed to request a fresh review from `{config.review_bot_login}` automatically.",
+            *_output_lines(result),
+        ]
+    return [f"Requested a fresh review from `{config.review_bot_login}` with `{request_comment}`."]
+
+
+def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str], str]:
     deadline = time.time() + config.checks_timeout_seconds
     while True:
-        result = _run_command([config.gh_bin, "pr", "checks", pr_url, "--required"])
-        if result.returncode == 0:
-            return (True, [])
+        check_state, check_lines = _required_checks_state(pr_url=pr_url, config=config)
+        if check_state == "pass":
+            return (True, [], "pass")
+        if check_state == "fail":
+            return (False, check_lines, "fail")
         if time.time() >= deadline:
             return (
                 False,
-                _output_lines(result)
-                or ["`gh pr checks --required` did not report success before timeout."],
+                check_lines or ["`gh pr checks --required` did not report success before timeout."],
+                "timeout",
             )
         if config.checks_poll_seconds:
             time.sleep(config.checks_poll_seconds)
@@ -2017,10 +2207,16 @@ def finish_task_data(
         lines.append("PR already merged; skipping merge step.")
     else:
         lines.append(f"Waiting for PR checks to pass (timeout={config.checks_timeout_seconds}s)...")
-        checks_ok, check_lines = _wait_for_required_checks(pr_url=pr_url, config=config)
+        checks_ok, check_lines, check_reason = _coerce_wait_for_required_checks_result(
+            _wait_for_required_checks(pr_url=pr_url, config=config)
+        )
         if not checks_ok:
             return _task_blocked(
-                "required PR checks did not pass before timeout.",
+                (
+                    "required PR checks are failing on the current head."
+                    if check_reason == "fail"
+                    else "required PR checks did not pass before timeout."
+                ),
                 next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
                 data={
                     "task_id": context.task_id,
@@ -2075,7 +2271,47 @@ def finish_task_data(
                 exit_code=review_result.returncode,
                 extra_lines=review_lines,
             )
-        lines.extend(_output_lines(review_result))
+        review_lines = _output_lines(review_result)
+        review_timed_out = any(line.startswith("review gate timeout:") for line in review_lines)
+        lines.extend(review_lines)
+
+        unresolved_review_lines = _unresolved_review_thread_lines(pr_url=pr_url, config=config)
+        if unresolved_review_lines:
+            extra_lines = [*review_lines, *unresolved_review_lines]
+            if review_timed_out:
+                extra_lines.extend(_maybe_request_fresh_review(pr_url=pr_url, config=config))
+            return _task_blocked(
+                "PR is blocked by unresolved review comments.",
+                next_action=(
+                    "Resolve the unresolved review threads in GitHub and wait for a fresh "
+                    "current-head review, then re-run `horadus tasks finish`."
+                    if review_timed_out
+                    else "Resolve the unresolved review threads in GitHub, then re-run "
+                    "`horadus tasks finish`."
+                ),
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                extra_lines=extra_lines,
+            )
+
+        post_review_blocker = _current_required_checks_blocker(
+            pr_url=pr_url, config=config, block_pending=False
+        )
+        if post_review_blocker is not None:
+            blocker_message, blocker_lines = post_review_blocker
+            return _task_blocked(
+                blocker_message,
+                next_action="Inspect the failing required checks, fix them, and re-run `horadus tasks finish`.",
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                },
+                extra_lines=[*_output_lines(review_result), *blocker_lines],
+            )
 
         lines.append("Merging PR (squash, delete branch)...")
         try:

@@ -1,6 +1,6 @@
 # Project Status
 
-**Last Updated**: 2026-03-09
+**Last Updated**: 2026-03-10
 **Current Phase**: Phase 8 - Assessment-Driven Hardening (in progress)
 **Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
@@ -135,6 +135,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `horadus trends status` CLI for quick movement checks
 - [x] `horadus tasks ...` repo workflow CLI with JSON/text output, dry-run support, and explicit validation/environment exit codes
 - [x] `horadus tasks finish` is now the canonical task-completion lifecycle command, with `make task-finish` and `scripts/finish_task_pr.sh` reduced to thin compatibility wrappers
+- [x] `horadus tasks finish` now re-checks current-head required CI after the review gate clears, reports red CI or unresolved review-thread blockers promptly instead of drifting into later timeout paths, and auto-requests a fresh `@codex review` when timeout leaves unresolved review threads blocking merge
 - [x] `horadus tasks safe-start TASK-XXX --name short-name` is now the canonical guarded autonomous task-start command, with `make agent-safe-start` reduced to a thin compatibility wrapper
 - [x] `horadus tasks local-gate --full` is now the canonical post-task CI-parity local validation command, with `make local-gate` reduced to a thin compatibility wrapper
 - [x] `horadus tasks lifecycle [TASK-XXX] [--strict]` now provides mechanical lifecycle-state verification, and repo-policy completion is defined by the `local-main-synced` verifier state

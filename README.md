@@ -274,6 +274,9 @@ checks before creating the canonical `codex/task-XXX-short-name` branch.
 `horadus tasks finish` is the canonical task-completion command. It does not
 report success unless the branch is pushed, the PR exists, required checks are
 green, the review gate passes, the PR is merged, and local `main` is synced.
+If the review gate clears or silently times out under the allow policy but the
+current PR head already has failing required checks, the command exits promptly
+with a CI blocker instead of waiting for a later merge/timeout path.
 `make task-finish` is a compatibility wrapper to the same CLI flow.
 
 `horadus tasks lifecycle [TASK-XXX] [--strict]` is the mechanical verifier for
@@ -315,7 +318,10 @@ timeout; wait the canonical 10-minute window unless the human explicitly
 asked otherwise.
 A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts
 as a positive review-gate signal, but the gate still waits the full timeout
-window and still blocks actionable current-head review comments.
+window and still blocks actionable current-head review comments. If the wait
+window expires while unresolved review threads still block the PR, the command
+reports that blocker explicitly and requests a fresh `@codex review` instead
+of drifting into a later merge/auto-merge timeout.
 Local commits, local tests, and a clean working tree are checkpoints, not
 completion.
 Do not stop at a local commit boundary unless the user explicitly asked for a

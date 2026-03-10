@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-03-10
-- Current state: In progress
+- Current state: Completed
 
 ## Goal (1-3 lines)
 
@@ -95,6 +95,7 @@ CLI surface.
 - 2026-03-10: Prefer incremental extraction commits over a single mechanical move so each responsibility seam can be reviewed with behavior-preserving tests.
 - 2026-03-10: Treat text compatibility as contract compatibility, not byte-for-byte stability; preserve command names/options, JSON fields, exit codes, stream routing, blocker classes, and recovery guidance while allowing harmless formatting drift.
 - 2026-03-10: Use a dedicated cross-domain orchestration module (`task_workflow.py` or an explicitly named equivalent) so command composition does not remain in `task_commands.py` and does not leak into `task_shared.py` or `task_repo.py`.
+- 2026-03-10: Preserve the exact pre-refactor workflow implementation in `task_workflow_core.py` and extract focused wrapper modules around it first, because the CLI test suite relies on the old helper surface as a compatibility boundary in addition to the public parser surface.
 
 ## Risks / Foot-guns
 
@@ -130,3 +131,25 @@ CLI surface.
   - `src/horadus_cli/task_repo.py`
   - `tests/unit/test_cli.py`
   - `tests/unit/scripts/`
+
+## Outcome
+
+- `src/horadus_cli/task_commands.py` now owns parser registration and handler wiring only.
+- Focused workflow modules now own the extracted command domains:
+  - `task_query.py`
+  - `task_preflight.py`
+  - `task_ledgers.py`
+  - `task_finish.py`
+  - `task_lifecycle.py`
+  - `task_friction.py`
+  - `task_workflow.py`
+  - `task_process.py`
+  - `task_shared.py`
+- `task_workflow_core.py` preserves the pre-split workflow implementation so existing helper-heavy tests and callers keep exercising the established command behavior during the transition.
+- CLI/parser compatibility remained stable while the facade shrank substantially and the compatibility inventory stayed checked in.
+
+## Final Validation
+
+- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/unit/scripts/ -q`
+- `uv run --no-sync horadus tasks local-gate --full`

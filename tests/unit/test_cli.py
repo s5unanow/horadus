@@ -17,8 +17,9 @@ import pytest
 import src.cli as cli_module
 import src.horadus_cli.app as cli_app_module
 import src.horadus_cli.result as result_module
-import src.horadus_cli.task_commands as task_commands_module
+import src.horadus_cli.task_process as task_process_module
 import src.horadus_cli.task_repo as task_repo_module
+import src.horadus_cli.task_workflow_core as task_commands_module
 import src.horadus_cli.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
@@ -124,6 +125,49 @@ def test_build_parser_accepts_task_search_filters() -> None:
     assert args.status == "active"
     assert args.limit == 2
     assert args.include_raw is True
+
+
+def test_task_workflow_core_register_task_commands_wires_all_task_subcommands() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+
+    task_commands_module.register_task_commands(subparsers)
+    args = parser.parse_args(
+        [
+            "tasks",
+            "record-friction",
+            "TASK-297",
+            "--command-attempted",
+            "uv run --no-sync horadus tasks finish TASK-297",
+            "--fallback-used",
+            "none",
+            "--friction-type",
+            "forced_fallback",
+            "--note",
+            "coverage gap",
+            "--suggested-improvement",
+            "add wrapper coverage",
+            "--format",
+            "json",
+            "--dry-run",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "record-friction"
+    assert args.task_id == "TASK-297"
+    assert args.output_format == "json"
+    assert args.dry_run is True
+    assert args.handler is task_commands_module.handle_record_friction
+
+
+def test_task_process_wrapper_reexports_workflow_core_helpers() -> None:
+    assert task_process_module._run_command is task_commands_module._run_command
+    assert task_process_module._run_command_with_timeout is (
+        task_commands_module._run_command_with_timeout
+    )
+    assert task_process_module.ensure_docker_ready is task_commands_module.ensure_docker_ready
+    assert "CommandTimeoutError" in task_process_module.__all__
 
 
 def test_build_parser_accepts_task_finish_command() -> None:

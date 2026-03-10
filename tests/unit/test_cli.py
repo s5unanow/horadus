@@ -2713,7 +2713,280 @@ def test_task_preflight_data_fails_for_dirty_worktree(monkeypatch: pytest.Monkey
 
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert data["working_tree_clean"] is False
-    assert "Working tree must be clean" in lines[-1]
+    assert data["dirty_paths"] == ["tasks/BACKLOG.md"]
+    assert "Working tree must be clean" in lines[1]
+
+
+def test_git_status_dirty_paths_handles_blank_rename_and_quoted_paths() -> None:
+    paths = task_commands_module._git_status_dirty_paths(
+        '\nR  tasks/OLD.md -> tasks/BACKLOG.md\n M "PROJECT_STATUS.md"\n??\n'
+    )
+
+    assert paths == ["tasks/BACKLOG.md", "PROJECT_STATUS.md"]
+
+
+def test_task_ledger_intake_state_reports_missing_backlog_and_sprint_parse_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "task_block_match", lambda _task_id: None)
+    monkeypatch.setattr(
+        task_commands_module,
+        "parse_active_tasks",
+        lambda: (_ for _ in ()).throw(ValueError("bad sprint section")),
+    )
+
+    state = task_commands_module._task_ledger_intake_state(
+        task_id="TASK-253",
+        dirty_paths=["tasks/CURRENT_SPRINT.md"],
+    )
+
+    assert state.ready is False
+    assert state.eligible_paths == ["tasks/CURRENT_SPRINT.md"]
+    assert state.consistency_errors == [
+        "TASK-253 is not present in tasks/BACKLOG.md in the working tree.",
+        "bad sprint section",
+    ]
+
+
+def _seed_task_start_intake_repo(tmp_path: Path, *, include_task_in_sprint: bool = True) -> None:
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "BACKLOG.md").write_text(
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "### TASK-253: Coverage",
+                "**Priority**: P1",
+                "**Estimate**: 1d",
+                "",
+                "Exercise intake-aware task start.",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    sprint_lines = [
+        "# Current Sprint",
+        "",
+        "## Active Tasks",
+    ]
+    if include_task_in_sprint:
+        sprint_lines.append("- `TASK-253` Coverage")
+    (tasks_dir / "CURRENT_SPRINT.md").write_text(
+        "\n".join([*sprint_lines, ""]),
+        encoding="utf-8",
+    )
+    (tmp_path / "PROJECT_STATUS.md").write_text(
+        "# Project Status\n\n**Status**: Archived pointer stub (non-authoritative)\n",
+        encoding="utf-8",
+    )
+
+
+def test_task_preflight_data_reports_safe_start_hint_for_task_ledger_only_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(
+                ["git", "status"], stdout=" M tasks/BACKLOG.md\n M tasks/CURRENT_SPRINT.md\n"
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["eligible_dirty_paths"] == ["tasks/BACKLOG.md", "tasks/CURRENT_SPRINT.md"]
+    assert "safe-start TASK-XXX --name short-name" in "\n".join(lines)
+
+
+def test_task_preflight_data_blocks_mixed_dirty_paths_without_safe_start_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(
+                ["git", "status"], stdout=" M tasks/BACKLOG.md\n M src/core/trend_engine.py\n"
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    exit_code, data, lines = task_commands_module.task_preflight_data()
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["eligible_dirty_paths"] == ["tasks/BACKLOG.md"]
+    assert data["blocking_dirty_paths"] == ["src/core/trend_engine.py"]
+    assert "safe-start TASK-XXX --name short-name" not in "\n".join(lines)
+    assert "Blocking dirty files: src/core/trend_engine.py" in lines
+
+
+def test_task_preflight_data_allows_task_ledger_intake_for_target_task(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _seed_task_start_intake_repo(tmp_path)
+    monkeypatch.setattr(
+        task_commands_module,
+        "current_sprint_path",
+        lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_block_match",
+        lambda task_id: task_repo_module.task_block_match(
+            task_id, tmp_path / "tasks" / "BACKLOG.md"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "parse_active_tasks",
+        lambda _path=None: task_repo_module.parse_active_tasks(
+            tmp_path / "tasks" / "CURRENT_SPRINT.md"
+        ),
+    )
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    monkeypatch.setattr(task_commands_module, "_open_task_prs", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(
+                ["git", "status"], stdout=" M tasks/BACKLOG.md\n M tasks/CURRENT_SPRINT.md\n"
+            ),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+            _completed(["git", "rev-parse"], stdout="abc\n"),
+        ]
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    exit_code, data, lines = task_commands_module.task_preflight_data(
+        task_id="TASK-253",
+        allow_task_ledger_intake=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["working_tree_clean"] is False
+    assert data["eligible_dirty_paths"] == ["tasks/BACKLOG.md", "tasks/CURRENT_SPRINT.md"]
+    assert lines[1].startswith("Eligible task-ledger intake files will carry onto the new branch")
+
+
+def test_task_preflight_data_blocks_unrelated_dirty_paths_even_with_task_ledger_intake(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _seed_task_start_intake_repo(tmp_path)
+    monkeypatch.setattr(
+        task_commands_module,
+        "current_sprint_path",
+        lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_block_match",
+        lambda task_id: task_repo_module.task_block_match(
+            task_id, tmp_path / "tasks" / "BACKLOG.md"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "parse_active_tasks",
+        lambda _path=None: task_repo_module.parse_active_tasks(
+            tmp_path / "tasks" / "CURRENT_SPRINT.md"
+        ),
+    )
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(
+                ["git", "status"], stdout=" M tasks/BACKLOG.md\n M src/core/trend_engine.py\n"
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    exit_code, data, lines = task_commands_module.task_preflight_data(
+        task_id="TASK-253",
+        allow_task_ledger_intake=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["eligible_dirty_paths"] == ["tasks/BACKLOG.md"]
+    assert data["blocking_dirty_paths"] == ["src/core/trend_engine.py"]
+    assert "Blocking dirty files: src/core/trend_engine.py" in lines
+
+
+def test_task_preflight_data_blocks_conflicting_task_ledger_intake_state(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _seed_task_start_intake_repo(tmp_path, include_task_in_sprint=False)
+    monkeypatch.setattr(
+        task_commands_module,
+        "current_sprint_path",
+        lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_block_match",
+        lambda task_id: task_repo_module.task_block_match(
+            task_id, tmp_path / "tasks" / "BACKLOG.md"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "parse_active_tasks",
+        lambda _path=None: task_repo_module.parse_active_tasks(
+            tmp_path / "tasks" / "CURRENT_SPRINT.md"
+        ),
+    )
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda _name: "/usr/bin/gh")
+    monkeypatch.setattr(task_commands_module, "_ensure_required_hooks", lambda: (True, []))
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(
+                ["git", "status"], stdout=" M tasks/BACKLOG.md\n M tasks/CURRENT_SPRINT.md\n"
+            ),
+        ]
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    exit_code, _data, lines = task_commands_module.task_preflight_data(
+        task_id="TASK-253",
+        allow_task_ledger_intake=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert "TASK-253 is not listed in Active Tasks" in "\n".join(lines)
 
 
 def test_task_preflight_data_fails_when_fetch_fails(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2885,7 +3158,7 @@ def test_preflight_result_wraps_preflight_data(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {"ok": True}, ["passed"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["passed"]),
     )
 
     result = task_commands_module._preflight_result()
@@ -3009,7 +3282,7 @@ def test_eligibility_data_succeeds_for_active_non_human_task(
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {"ok": True}, ["passed"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["passed"]),
     )
 
     exit_code, data, lines = task_commands_module.eligibility_data("TASK-253")
@@ -3032,7 +3305,7 @@ def test_eligibility_data_propagates_preflight_failures(
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (
+        lambda **_kwargs: (
             task_commands_module.ExitCode.VALIDATION_ERROR,
             {"reason": "dirty"},
             ["preflight failed"],
@@ -3050,7 +3323,7 @@ def test_start_task_data_rejects_existing_local_branch(monkeypatch: pytest.Monke
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {}, ["ok"]),
     )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -3071,7 +3344,7 @@ def test_start_task_data_returns_preflight_failure(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (
+        lambda **_kwargs: (
             task_commands_module.ExitCode.VALIDATION_ERROR,
             {"reason": "dirty"},
             ["preflight failed"],
@@ -3091,7 +3364,7 @@ def test_start_task_data_rejects_existing_remote_branch(monkeypatch: pytest.Monk
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {}, ["ok"]),
     )
 
     def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -3116,7 +3389,7 @@ def test_start_task_data_dry_run_reports_branch(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {}, ["ok"]),
     )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -3137,7 +3410,7 @@ def test_start_task_data_reports_git_switch_failure(monkeypatch: pytest.MonkeyPa
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {}, ["ok"]),
     )
 
     def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -3162,7 +3435,7 @@ def test_start_task_data_switches_to_new_branch(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(
         task_commands_module,
         "task_preflight_data",
-        lambda: (task_commands_module.ExitCode.OK, {}, ["ok"]),
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {}, ["ok"]),
     )
 
     def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -3180,7 +3453,48 @@ def test_start_task_data_switches_to_new_branch(monkeypatch: pytest.MonkeyPatch)
 
     assert exit_code == task_commands_module.ExitCode.OK
     assert data["branch_name"] == "codex/task-253-coverage-100"
+    assert lines[0] == "ok"
     assert "Created task branch: codex/task-253-coverage-100" in lines[-1]
+
+
+def test_start_task_data_carries_task_ledger_intake_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_preflight_data",
+        lambda **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {
+                "working_tree_clean": False,
+                "eligible_dirty_paths": ["tasks/BACKLOG.md", "tasks/CURRENT_SPRINT.md"],
+            },
+            [
+                "Task sequencing guard passed: main is synced and no open task PRs.",
+                "Eligible task-ledger intake files will carry onto the new branch for TASK-253: tasks/BACKLOG.md, tasks/CURRENT_SPRINT.md",
+            ],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        if "show-ref" in args or "ls-remote" in args:
+            return _completed(args, returncode=1)
+        if args[:2] == ["git", "switch"]:
+            return _completed(args)
+        return _completed(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.start_task_data(
+        "TASK-253", "coverage-100", dry_run=False
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["branch_name"] == "codex/task-253-coverage-100"
+    assert any(
+        "Eligible task-ledger intake files will carry onto the new branch" in line for line in lines
+    )
+    assert "Created task branch: codex/task-253-coverage-100" in lines
 
 
 def test_safe_start_task_data_propagates_eligibility_failure(

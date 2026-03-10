@@ -931,29 +931,6 @@ still open.
 
 ---
 
-### TASK-296: Let Guarded Task Start Handle Task-Ledger Intake Safely
-**Priority**: P1 (High)
-**Estimate**: 3-5 hours
-
-Current `horadus tasks preflight` / `safe-start` flow is too rigid when the
-only dirty files are task-ledger intake edits such as `tasks/BACKLOG.md`,
-`tasks/CURRENT_SPRINT.md`, or `PROJECT_STATUS.md`. That forces stash tricks or
-manual overrides even though defining a new task and starting work on it are
-part of one legitimate workflow. Improve guarded task start so it can handle
-task-ledger-only intake state safely without weakening the broader clean-tree
-protection for unrelated code changes.
-
-**Files**: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/test_cli.py`, `tests/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `README.md`, `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`
-
-**Acceptance Criteria**:
-- [ ] Guarded task start still blocks unrelated dirty working-tree changes by default, but it no longer hard-stops on task-ledger-only intake edits when those edits can be carried forward safely into the new task branch
-- [ ] Starting a newly added task does not require the task definition to be committed on `main` first when the only pending changes are the relevant task-ledger intake edits
-- [ ] The workflow either automatically preserves/reapplies eligible task-ledger edits onto the new task branch or provides an explicit first-class intake/start command that does so without ad hoc stash hacks
-- [ ] The command reports clearly which pending files were treated as eligible task-ledger intake state versus which files still block branch creation
-- [ ] Regression tests cover both the allowed path (task-ledger-only dirtiness for the target task) and the blocked path (unrelated dirty files or conflicting task-ledger state)
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

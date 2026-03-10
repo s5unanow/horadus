@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-292` Right-Size Live Task Ledgers and Archive Historical Planning Surfaces
 - `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware
 - `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics
 - `TASK-229` Add a Novelty Lane Outside the Active Trend List
@@ -51,4 +50,4 @@
 
 ## Completed This Sprint
 
-- Sprint opened on 2026-03-10 with carry-over work only; no Sprint 4 tasks are complete yet.
+- `TASK-292` Right-Size Live Task Ledgers and Archive Historical Planning Surfaces ✅

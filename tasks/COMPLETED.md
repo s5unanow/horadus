@@ -256,3 +256,5 @@
 - TASK-285: Add Shared-Workflow Change Guardrails for Caller Audits and Review-State Semantics ✅
 - TASK-290: Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout ✅
 - TASK-287: Spike Markdown-First Context Retrieval for Agent Workflow ✅
+## Sprint 4
+- TASK-292: Right-Size Live Task Ledgers and Archive Historical Planning Surfaces ✅

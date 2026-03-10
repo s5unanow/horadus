@@ -33,6 +33,9 @@ When: fast local quality gate (lint + typecheck + unit tests).
 5. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
 local validation sequence without replacing the fast iteration gate.
+The unit-coverage step fails closed at `100%` measured coverage for `src/`
+using the same repo-owned coverage gate script that CI and the pre-push hook
+call, so local and remote enforcement stay aligned.
 If the gate reaches the Docker-backed integration step and the daemon is not
 ready, it attempts best-effort local auto-start on supported environments
 before failing with a specific blocker.
@@ -43,6 +46,11 @@ Compatibility wrapper:
 - `make local-gate`
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks local-gate --full` flow.
+- Coverage debug path:
+  - `make test-unit-cov` for the same hard-fail unit coverage gate outside the
+    full workflow
+  - Use the `term-missing` output to inspect the missing files/lines/branches
+    before re-running the full gate
 
 6. `make agent-smoke-run`
 When: one-shot API serve + smoke + exit without orphan processes.

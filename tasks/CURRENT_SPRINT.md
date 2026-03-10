@@ -32,7 +32,6 @@
   - `TASK-254` Refine and Unify Agent-Facing Context Entry Points
   - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
   - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
-  - `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100%
 - Newly queued from 2026-03-08 closed-PR review follow-up intake
   (recommended sequencing: `TASK-272`; one task per branch/PR):
   - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
@@ -130,6 +129,11 @@
   in the unit coverage run (`1294 passed`) using behavior-focused tests across
   CLI, API, workers, ingestion, eval, and processing/runtime edge cases rather
   than new omit rules or snapshot padding.
+- `TASK-257` Fail Pre-Commit and CI When Coverage Drops Below 100% ✅
+  completion note: the canonical unit-coverage invocation now hard-fails at
+  `100%` across `horadus tasks local-gate --full`, pre-push hooks, and CI via
+  one shared repo-owned script, with behavior-focused regression tests raising
+  the live repo baseline back to a passing `100%`.
 - `TASK-258` Add a Canonical Horadus Task Completion Command ✅
   completion note: `horadus tasks finish` now owns the task-completion lifecycle
   end to end, `make task-finish` delegates to the CLI as a thin compatibility

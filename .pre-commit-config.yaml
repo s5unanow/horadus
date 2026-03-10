@@ -27,6 +27,12 @@ repos:
         language: system
         pass_filenames: false
         stages: [pre-push]
+      - id: unit-coverage-guard
+        name: unit-coverage-guard
+        entry: ./scripts/run_unit_coverage_gate.sh
+        language: system
+        pass_filenames: false
+        stages: [pre-push]
 
   # -------------------------------------------------------------------------
   # General file checks

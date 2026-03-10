@@ -194,6 +194,7 @@ Tasks that have been completed and verified.
 
 ## Sprint 3
 
+- TASK-257: Fail Pre-Commit and CI When Coverage Drops Below 100% ✅
 - TASK-258: Add a Canonical Horadus Task Completion Command ✅
 - TASK-259: Add a Mechanical Done-State Verifier and Explicit Lifecycle States ✅
 - TASK-260: Add a Full Local CI-Parity Gate in Horadus CLI ✅

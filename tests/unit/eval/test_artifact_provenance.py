@@ -87,6 +87,26 @@ def test_build_directory_provenance_is_checkout_stable_and_non_recursive_by_defa
     assert left_provenance["fingerprint_sha256"] == right_provenance["fingerprint_sha256"]
 
 
+def test_build_directory_provenance_supports_explicit_files_and_external_paths(
+    tmp_path: Path,
+) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    inside = config_dir / "alpha.yaml"
+    outside = tmp_path / "external.yaml"
+    inside.write_text("id: alpha\n", encoding="utf-8")
+    outside.write_text("id: external\n", encoding="utf-8")
+
+    directory = provenance.build_directory_provenance(
+        directory=config_dir,
+        files=[outside, inside],
+    )
+
+    assert directory["file_count"] == 2
+    assert directory["files"][0]["path"] == str(outside.resolve())
+    assert directory["files"][1]["path"] == "alpha.yaml"
+
+
 def test_normalize_request_overrides_and_gold_set_fingerprints() -> None:
     assert provenance.normalize_request_overrides(None) is None
     assert provenance.normalize_request_overrides({"b": 2, "a": [3, 1]}) == {

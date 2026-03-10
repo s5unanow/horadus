@@ -5,6 +5,7 @@ import asyncio
 import json
 import os
 import runpy
+import shutil
 import subprocess
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -1207,6 +1208,308 @@ def test_run_command_and_shell_execute_locally() -> None:
     assert shell_result.stdout == "shell-ok"
 
 
+def test_run_command_raises_wrapped_timeout_error_with_captured_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(
+            ["git", "status"],
+            5,
+            output="partial-out",
+            stderr="partial-err",
+        )
+
+    monkeypatch.setattr(task_commands_module.subprocess, "run", raise_timeout)
+
+    with pytest.raises(task_commands_module.CommandTimeoutError) as excinfo:
+        task_commands_module._run_command(["git", "status"], timeout_seconds=5)
+
+    assert excinfo.value.stdout == "partial-out"
+    assert excinfo.value.stderr == "partial-err"
+    assert excinfo.value.output_lines() == ["partial-out", "partial-err"]
+
+
+def test_run_command_requires_explicit_timeout_value_when_subprocess_times_out(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def raise_timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(["git", "status"], 5)
+
+    monkeypatch.setattr(task_commands_module.subprocess, "run", raise_timeout)
+
+    with pytest.raises(
+        RuntimeError,
+        match="subprocess timed out without an explicit timeout value",
+    ):
+        task_commands_module._run_command(["git", "status"])
+
+
+def test_task_command_helper_parsers_cover_fallback_branches(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    assert task_commands_module._result_message(_completed(["x"]), "fallback") == "fallback"
+    assert task_commands_module._output_lines(
+        _completed(["x"], stdout=" one \n", stderr=" two ")
+    ) == ["one", "two"]
+    assert task_commands_module._parse_report_date(None) == datetime.now(tz=UTC).date()
+    assert task_commands_module._parse_recorded_at("2026-03-08T10:00:00").tzinfo == UTC
+    assert task_commands_module._parse_recorded_at("2026-03-08T10:00:00Z").tzinfo == UTC
+
+    outside = tmp_path.parent / "outside.txt"
+    assert task_commands_module._relative_display_path(outside) == str(outside)
+
+
+def test_task_command_branch_and_rollup_helpers_cover_edge_cases() -> None:
+    assert task_commands_module._parse_git_branch_lines("  main\n\n* codex/task-257-x\n") == [
+        "main",
+        "codex/task-257-x",
+    ]
+    assert task_commands_module._parse_remote_branch_lines(
+        "bad-line\nabc refs/heads/codex/task-257-x\nabc refs/tags/v1\n"
+    ) == ["codex/task-257-x"]
+    assert task_commands_module._check_rollup_state(None) == "none"
+    assert task_commands_module._check_rollup_state([{"status": "IN_PROGRESS"}]) == "pending"
+    assert (
+        task_commands_module._check_rollup_state([{"status": "COMPLETED", "conclusion": "FAILURE"}])
+        == "fail"
+    )
+    assert (
+        task_commands_module._check_rollup_state(
+            ["not-a-dict", {"status": "COMPLETED", "conclusion": ""}]
+        )
+        == "pending"
+    )
+    assert (
+        task_commands_module._check_rollup_state(
+            [
+                {"status": "COMPLETED", "conclusion": "SUCCESS"},
+                {"status": "COMPLETED", "conclusion": "SKIPPED"},
+            ]
+        )
+        == "pass"
+    )
+    assert task_commands_module._task_id_from_branch_name("codex/task-257-coverage-hard-fail") == (
+        "TASK-257"
+    )
+    assert task_commands_module._task_id_from_branch_name("main") is None
+
+
+def test_task_command_env_and_output_helpers_cover_validation_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("TASK_COMMAND_TEST_INT", raising=False)
+    monkeypatch.setenv("REVIEW_TIMEOUT_POLICY", " allow ")
+    monkeypatch.setattr(task_commands_module.shutil, "which", lambda name: f"/usr/bin/{name}")
+
+    assert task_commands_module._read_int_env("TASK_COMMAND_TEST_INT", 7) == 7
+    assert task_commands_module._read_review_timeout_policy_env() == "allow"
+    assert task_commands_module._summarize_output_lines(["one", "two"], max_lines=5) == [
+        "one",
+        "two",
+    ]
+    assert task_commands_module._ensure_command_available("git") == "/usr/bin/git"
+
+    monkeypatch.setenv("TASK_COMMAND_TEST_INT", "-1")
+    with pytest.raises(ValueError, match="must be non-negative"):
+        task_commands_module._read_int_env("TASK_COMMAND_TEST_INT", 7)
+
+
+def test_run_pr_scope_guard_and_review_gate_use_expected_invocations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_subprocess_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["args"] = args
+        captured["env"] = kwargs["env"]
+        return _completed(args)
+
+    monkeypatch.setattr(task_commands_module.subprocess, "run", fake_subprocess_run)
+
+    scope_result = task_commands_module._run_pr_scope_guard(
+        branch_name="codex/task-257-coverage-hard-fail",
+        pr_title="TASK-257: coverage hard fail",
+        pr_body="Primary-Task: TASK-257\n",
+    )
+
+    assert scope_result.returncode == 0
+    assert captured["args"] == ["./scripts/check_pr_task_scope.sh"]
+    assert captured["env"]["PR_BRANCH"] == "codex/task-257-coverage-hard-fail"
+
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=30,
+        checks_poll_seconds=0,
+        review_timeout_seconds=5,
+        review_poll_seconds=2,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    gate_calls: dict[str, object] = {}
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        lambda args, **kwargs: (
+            gate_calls.update({"args": args, "kwargs": kwargs}) or _completed(args)
+        ),
+    )
+
+    gate_result = task_commands_module._run_review_gate(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+
+    assert gate_result.returncode == 0
+    assert gate_calls["args"][:2] == ["python3", "./scripts/check_pr_review_gate.py"]
+    assert gate_calls["kwargs"]["timeout_seconds"] == 37
+
+
+def test_wait_helpers_cover_timeout_paths(monkeypatch: pytest.MonkeyPatch) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=0,
+        checks_poll_seconds=0,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["gh"], returncode=1, stderr="still pending"),
+    )
+
+    checks_ok, check_lines = task_commands_module._wait_for_required_checks(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+    state_ok, state_lines = task_commands_module._wait_for_pr_state(
+        pr_url="https://example.invalid/pr/257",
+        expected_state="MERGED",
+        config=config,
+    )
+
+    assert checks_ok is False
+    assert check_lines == ["still pending"]
+    assert state_ok is False
+    assert state_lines == ["still pending"]
+
+
+def test_wait_helpers_retry_until_checks_and_state_succeed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=2,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    check_results = iter(
+        [
+            _completed(["gh", "pr", "checks"], returncode=1, stderr="still pending"),
+            _completed(["gh", "pr", "checks"]),
+        ]
+    )
+    state_results = iter(
+        [
+            _completed(["gh", "pr", "view"], returncode=1, stderr="still pending"),
+            _completed(["gh", "pr", "view"], stdout="MERGED\n"),
+        ]
+    )
+    sleep_calls: list[int] = []
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["gh", "pr", "checks"]:
+            return next(check_results)
+        if args[:3] == ["gh", "pr", "view"]:
+            return next(state_results)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(task_commands_module.time, "sleep", sleep_calls.append)
+
+    checks_ok, check_lines = task_commands_module._wait_for_required_checks(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+    state_ok, state_lines = task_commands_module._wait_for_pr_state(
+        pr_url="https://example.invalid/pr/257",
+        expected_state="MERGED",
+        config=config,
+    )
+
+    assert checks_ok is True
+    assert check_lines == []
+    assert state_ok is True
+    assert state_lines == []
+    assert sleep_calls == [2, 2]
+
+
+def test_wait_helpers_retry_without_sleep_when_polling_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=0,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    check_results = iter(
+        [
+            _completed(["gh", "pr", "checks"], returncode=1, stderr="still pending"),
+            _completed(["gh", "pr", "checks"]),
+        ]
+    )
+    state_results = iter(
+        [
+            _completed(["gh", "pr", "view"], returncode=1, stderr="still pending"),
+            _completed(["gh", "pr", "view"], stdout="MERGED\n"),
+        ]
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:3] == ["gh", "pr", "checks"]:
+            return next(check_results)
+        if args[:3] == ["gh", "pr", "view"]:
+            return next(state_results)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    checks_ok, check_lines = task_commands_module._wait_for_required_checks(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+    state_ok, state_lines = task_commands_module._wait_for_pr_state(
+        pr_url="https://example.invalid/pr/257",
+        expected_state="MERGED",
+        config=config,
+    )
+
+    assert checks_ok is True
+    assert check_lines == []
+    assert state_ok is True
+    assert state_lines == []
+
+
 def test_ensure_required_hooks_reports_missing_hooks(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -1969,6 +2272,126 @@ def test_record_friction_data_reports_filesystem_write_failures(
     ).exists()
 
 
+def test_record_friction_data_rejects_invalid_friction_type() -> None:
+    exit_code, data, lines = task_commands_module.record_friction_data(
+        task_input="TASK-265",
+        command_attempted="uv run --no-sync horadus tasks finish TASK-265",
+        fallback_used="gh pr merge 199 --squash",
+        friction_type="not-valid",
+        note="Needed manual recovery.",
+        suggested_improvement="Validate friction types.",
+        dry_run=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["friction_type"] == "not-valid"
+    assert lines[0] == "Workflow friction logging failed."
+
+
+def test_load_workflow_friction_entries_rejects_invalid_json_and_missing_fields(
+    tmp_path: Path,
+) -> None:
+    log_path = tmp_path / "entries.jsonl"
+    log_path.write_text("{bad json}\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid workflow friction JSON"):
+        task_commands_module._load_workflow_friction_entries(log_path)
+
+    log_path.write_text(json.dumps({"task_id": "TASK-265"}) + "\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="missing fields"):
+        task_commands_module._load_workflow_friction_entries(log_path)
+
+    log_path.write_text('["not-an-object"]\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="expected a JSON object"):
+        task_commands_module._load_workflow_friction_entries(log_path)
+
+
+def test_load_workflow_friction_entries_skip_blank_lines_and_empty_day_reports_no_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    log_path = tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "entries.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text(
+        "\n"
+        + json.dumps(
+            {
+                "recorded_at": "2026-03-07T09:00:00Z",
+                "task_id": "TASK-265",
+                "command_attempted": "uv run --no-sync horadus tasks finish TASK-265",
+                "fallback_used": "gh pr merge 199 --squash",
+                "friction_type": "forced_fallback",
+                "note": "Older entry outside the report window.",
+                "suggested_improvement": "Surface GitHub review blockers more clearly.",
+            },
+            sort_keys=True,
+        )
+        + "\n\n",
+        encoding="utf-8",
+    )
+
+    entries = task_commands_module._load_workflow_friction_entries(log_path)
+    assert len(entries) == 1
+
+    exit_code, data, lines = task_commands_module.summarize_friction_data(
+        report_date_input="2026-03-08",
+        output_path_input=None,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["entry_count"] == 0
+    assert lines[-1] == "Wrote grouped workflow friction summary."
+    report_path = (
+        tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "daily" / "2026-03-08.md"
+    )
+    assert (
+        "- No workflow friction entries were recorded for this UTC day."
+        in report_path.read_text(encoding="utf-8")
+    )
+
+
+def test_summarize_workflow_friction_deduplicates_nonblank_notes() -> None:
+    entries = [
+        task_commands_module.WorkflowFrictionEntry(
+            recorded_at="2026-03-08T08:00:00Z",
+            task_id="TASK-265",
+            command_attempted="finish",
+            fallback_used="merge",
+            friction_type="forced_fallback",
+            note="Repeated note",
+            suggested_improvement="Improve merge recovery",
+        ),
+        task_commands_module.WorkflowFrictionEntry(
+            recorded_at="2026-03-08T09:00:00Z",
+            task_id="TASK-266",
+            command_attempted="finish",
+            fallback_used="merge",
+            friction_type="forced_fallback",
+            note="Repeated note",
+            suggested_improvement="Improve merge recovery",
+        ),
+        task_commands_module.WorkflowFrictionEntry(
+            recorded_at="2026-03-08T10:00:00Z",
+            task_id="TASK-267",
+            command_attempted="finish",
+            fallback_used="merge",
+            friction_type="forced_fallback",
+            note="",
+            suggested_improvement="Improve merge recovery",
+        ),
+    ]
+
+    patterns, _improvements, counts = task_commands_module._summarize_workflow_friction(entries)
+
+    assert counts["forced_fallback"] == 3
+    assert len(patterns) == 1
+    assert patterns[0].notes == ["Repeated note"]
+
+
 def test_summarize_friction_data_writes_grouped_daily_report(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -2048,6 +2471,40 @@ def test_summarize_friction_data_writes_grouped_daily_report(
     )
 
 
+def test_summarize_friction_data_rejects_invalid_report_date() -> None:
+    exit_code, data, lines = task_commands_module.summarize_friction_data(
+        report_date_input="2026-99-99",
+        output_path_input=None,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data == {}
+    assert lines == ["Invalid report date '2026-99-99'. Expected YYYY-MM-DD."]
+
+
+def test_summarize_friction_data_reports_invalid_log_entries(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    log_path = tmp_path / "artifacts" / "agent" / "horadus-cli-feedback" / "entries.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path.write_text("{bad json}\n", encoding="utf-8")
+
+    exit_code, data, lines = task_commands_module.summarize_friction_data(
+        report_date_input="2026-03-08",
+        output_path_input=None,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["log_path"] == "artifacts/agent/horadus-cli-feedback/entries.jsonl"
+    assert lines == [
+        "Workflow friction summary failed: Invalid workflow friction JSON at line 1: Expecting property name enclosed in double quotes."
+    ]
+
+
 def test_summarize_friction_data_creates_empty_daily_checkpoint_when_log_missing(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -2107,6 +2564,52 @@ def test_summarize_friction_data_reports_filesystem_read_failures(
     ]
 
 
+def test_summarize_friction_data_dry_run_skips_writing_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    exit_code, data, lines = task_commands_module.summarize_friction_data(
+        report_date_input="2026-03-08",
+        output_path_input="artifacts/custom-report.md",
+        dry_run=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["dry_run"] is True
+    assert lines[-1] == "Dry run: would write grouped workflow friction summary."
+    assert not (tmp_path / "artifacts" / "custom-report.md").exists()
+
+
+def test_summarize_friction_data_reports_filesystem_write_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    original_mkdir = Path.mkdir
+
+    def fail_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        if self == tmp_path / "artifacts":
+            raise OSError("disk full")
+        return original_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", fail_mkdir)
+
+    exit_code, data, lines = task_commands_module.summarize_friction_data(
+        report_date_input="2026-03-08",
+        output_path_input="artifacts/report.md",
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["error"] == "disk full"
+    assert lines[-2:] == [
+        "Workflow friction summary failed while writing the report artifact.",
+        "Filesystem error: disk full",
+    ]
+
+
 def test_handle_record_friction_rejects_invalid_task_id() -> None:
     result = task_commands_module.handle_record_friction(
         argparse.Namespace(
@@ -2121,6 +2624,76 @@ def test_handle_record_friction_rejects_invalid_task_id() -> None:
 
     assert result.exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert result.error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_command_handlers_wrap_data_functions_and_validation_errors(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_finish_task_data(
+        task_input: str | None, *, dry_run: bool
+    ) -> tuple[int, dict[str, object], list[str]]:
+        return (
+            task_commands_module.ExitCode.OK,
+            {"task_id": task_input, "dry_run": dry_run},
+            ["finish"],
+        )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "finish_task_data",
+        fake_finish_task_data,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "record_friction_data",
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["record"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "summarize_friction_data",
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["summary"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["lifecycle"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "local_gate_data",
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["gate"]),
+    )
+
+    assert task_commands_module.handle_finish(
+        argparse.Namespace(task_id="257", dry_run=False)
+    ).lines == ["finish"]
+    assert task_commands_module.handle_record_friction(
+        argparse.Namespace(
+            task_id="257",
+            command_attempted="cmd",
+            fallback_used="fallback",
+            friction_type="forced_fallback",
+            note="note",
+            suggested_improvement="improve",
+            dry_run=False,
+        )
+    ).lines == ["record"]
+    assert task_commands_module.handle_summarize_friction(
+        argparse.Namespace(date="2026-03-08", output=None, dry_run=False)
+    ).lines == ["summary"]
+    assert task_commands_module.handle_lifecycle(
+        argparse.Namespace(task_id="257", strict=False, dry_run=False)
+    ).lines == ["lifecycle"]
+    assert task_commands_module.handle_local_gate(
+        argparse.Namespace(full=True, dry_run=False)
+    ).lines == ["gate"]
+
+    assert task_commands_module.handle_finish(
+        argparse.Namespace(task_id="bad-task", dry_run=False)
+    ).error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+    assert task_commands_module.handle_lifecycle(
+        argparse.Namespace(task_id="bad-task", strict=False, dry_run=False)
+    ).error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
 
 
 def test_full_local_gate_steps_match_expected_ci_parity_commands(
@@ -2147,14 +2720,27 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert steps[1].command == "uv run --no-sync python scripts/check_docs_freshness.py"
     assert steps[2].command == "uv run --no-sync ruff format src/ tests/ --check"
     assert steps[5].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
-    assert steps[6].command.endswith("--cov=src --cov-report=term-missing:skip-covered")
-    assert "-m unit" not in steps[6].command
+    assert steps[6].command == "./scripts/run_unit_coverage_gate.sh"
     assert steps[9].command == "./scripts/test_integration_docker.sh"
     assert steps[10].command == (
         "rm -rf dist build *.egg-info && "
         "uv run --no-sync --with build python -m build && "
         "uv run --no-sync --with twine twine check dist/*"
     )
+
+
+def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    precommit = (repo_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
+    ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
+
+    assert "./scripts/run_unit_coverage_gate.sh" in precommit
+    assert "stages: [pre-push]" in precommit
+    assert "./scripts/run_unit_coverage_gate.sh" in ci_workflow
+    assert "--cov-fail-under=100" in ci_workflow
+    assert "test-unit-cov: deps-dev" in makefile
+    assert "./scripts/run_unit_coverage_gate.sh" in makefile
 
 
 def test_local_gate_data_dry_run_reports_custom_absolute_uv_bin_for_build_steps(
@@ -2188,6 +2774,18 @@ def test_local_gate_data_requires_full_mode() -> None:
     assert lines[-1] == (
         "Use `horadus tasks local-gate --full` for the canonical post-task local gate."
     )
+
+
+def test_local_gate_data_reports_missing_uv_binary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "_ensure_command_available", lambda _name: None)
+
+    exit_code, data, lines = task_commands_module.local_gate_data(full=True, dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["missing_command"] == "uv"
+    assert lines == ["Local gate failed: uv is required to run the canonical full local gate."]
 
 
 def test_ensure_docker_ready_returns_immediately_when_daemon_is_reachable(
@@ -2287,6 +2885,142 @@ def test_ensure_docker_ready_reports_invalid_env_override_without_crashing(
     assert result.lines == [
         "Docker readiness failed: DOCKER_READY_TIMEOUT_SECONDS must be an integer."
     ]
+
+
+def test_ensure_docker_ready_reports_missing_docker_cli(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_which = shutil.which
+
+    def fake_which(name: str) -> str | None:
+        if name == "docker":
+            return None
+        return original_which(name)
+
+    monkeypatch.setattr(task_commands_module, "_ensure_command_available", fake_which)
+
+    result = task_commands_module.ensure_docker_ready(reason="integration gate")
+
+    assert result.ready is False
+    assert result.lines == ["Docker readiness failed: docker CLI is required for integration gate."]
+
+
+def test_ensure_docker_ready_reports_auto_start_command_failure_via_argv(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module.sys, "platform", "linux")
+
+    def fake_which(name: str) -> str | None:
+        if name in {"docker", "docker-desktop"}:
+            return f"/bin/{name}"
+        return None
+
+    monkeypatch.setattr(task_commands_module, "_ensure_command_available", fake_which)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_docker_info_result",
+        lambda: _completed(["docker", "info"], returncode=1, stderr="daemon down"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1, stderr="start failed"),
+    )
+
+    result = task_commands_module.ensure_docker_ready(reason="integration gate")
+
+    assert result.ready is False
+    assert result.attempted_start is True
+    assert result.lines[-2:] == ["Docker auto-start command failed.", "start failed"]
+
+
+def test_docker_helper_functions_cover_macos_auto_start_and_timeout_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("HORADUS_DOCKER_START_CMD", raising=False)
+    monkeypatch.setattr(task_commands_module.sys, "platform", "darwin")
+    monkeypatch.setattr(
+        task_commands_module,
+        "_ensure_command_available",
+        lambda name: "/usr/bin/open" if name in {"docker", "open"} else None,
+    )
+
+    plan = task_commands_module._docker_start_plan()
+    assert plan is not None
+    assert plan.argv == ["open", "-a", "Docker"]
+
+    run_calls: list[list[str]] = []
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: run_calls.append(args) or _completed(args, stdout="docker ok\n"),
+    )
+    info_result = task_commands_module._docker_info_result()
+    assert info_result.stdout == "docker ok\n"
+    assert run_calls == [["docker", "info"]]
+
+    monkeypatch.setenv("HORADUS_DOCKER_START_CMD", "echo starting-docker")
+    monkeypatch.setenv("DOCKER_READY_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("DOCKER_READY_POLL_SECONDS", "2")
+    info_results = iter(
+        [
+            _completed(["docker", "info"], returncode=1, stderr="daemon down"),
+            _completed(["docker", "info"], returncode=1, stderr="still down"),
+            _completed(["docker", "info"], returncode=1, stderr="still down"),
+        ]
+    )
+    time_values = iter([0.0, 0.5, 1.5])
+    sleep_calls: list[int] = []
+    monkeypatch.setattr(task_commands_module, "_docker_info_result", lambda: next(info_results))
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_shell",
+        lambda command: _completed(["bash", "-lc", command], stdout="started\n"),
+    )
+    monkeypatch.setattr(task_commands_module.time, "time", lambda: next(time_values))
+    monkeypatch.setattr(task_commands_module.time, "sleep", sleep_calls.append)
+
+    result = task_commands_module.ensure_docker_ready(reason="integration gate")
+
+    assert result.ready is False
+    assert result.attempted_start is True
+    assert result.lines[-2:] == [
+        "Docker auto-start did not make the daemon ready before timeout.",
+        "still down",
+    ]
+    assert sleep_calls == [2]
+
+
+def test_ensure_docker_ready_retries_without_sleep_when_polling_is_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("HORADUS_DOCKER_START_CMD", "echo starting-docker")
+    monkeypatch.setenv("DOCKER_READY_TIMEOUT_SECONDS", "1")
+    monkeypatch.setenv("DOCKER_READY_POLL_SECONDS", "0")
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    info_results = iter(
+        [
+            _completed(["docker", "info"], returncode=1, stderr="daemon down"),
+            _completed(["docker", "info"], returncode=1, stderr="still down"),
+            _completed(["docker", "info"], stdout="Server Version: test\n"),
+        ]
+    )
+    time_values = iter([0.0, 0.5, 0.6])
+    monkeypatch.setattr(task_commands_module, "_docker_info_result", lambda: next(info_results))
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_shell",
+        lambda command: _completed(["bash", "-lc", command], stdout="started\n"),
+    )
+    monkeypatch.setattr(task_commands_module.time, "time", lambda: next(time_values))
+
+    result = task_commands_module.ensure_docker_ready(reason="integration gate")
+
+    assert result.ready is True
+    assert result.attempted_start is True
+    assert result.lines[-1] == "Docker became ready after auto-start."
 
 
 def test_local_gate_data_dry_run_reports_canonical_steps(
@@ -2614,6 +3348,46 @@ def test_task_lifecycle_data_strict_mode_passes_when_repo_policy_is_fully_comple
     assert lines[-1] == "- strict complete: yes"
 
 
+def test_task_lifecycle_data_reports_missing_required_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "_ensure_command_available", lambda _name: None)
+
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-259",
+        strict=False,
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["missing_command"] == "gh"
+    assert lines == ["Task lifecycle failed: missing required command 'gh'."]
+
+
+def test_task_lifecycle_data_dry_run_reports_live_state_without_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(pr=None),
+    )
+
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-259",
+        strict=False,
+        dry_run=True,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["lifecycle_state"] == "local-only"
+    assert "- PR: none" in lines
+    assert lines[-1] == "Dry run: lifecycle inspection is read-only; returned live state."
+
+
 def test_task_lifecycle_state_allows_detached_head_when_main_is_synced() -> None:
     snapshot = _task_snapshot(
         current_branch="HEAD",
@@ -2632,6 +3406,41 @@ def test_task_lifecycle_state_allows_detached_head_when_main_is_synced() -> None
     )
 
     assert task_commands_module.task_lifecycle_state(snapshot) == "local-main-synced"
+
+
+def test_task_lifecycle_state_keeps_open_prs_without_green_checks_in_pr_open() -> None:
+    snapshot = _task_snapshot(
+        pr=task_commands_module.TaskPullRequest(
+            number=259,
+            url="https://example.invalid/pr/259",
+            state="OPEN",
+            is_draft=True,
+            head_ref_name="codex/task-259-done-state-verifier",
+            head_ref_oid="head-sha",
+            merge_commit_oid=None,
+            check_state="pass",
+        )
+    )
+
+    assert task_commands_module.task_lifecycle_state(snapshot) == "pr-open"
+
+
+def test_task_lifecycle_state_treats_closed_prs_as_pushed_when_remote_branch_exists() -> None:
+    snapshot = _task_snapshot(
+        remote_branch_exists=True,
+        pr=task_commands_module.TaskPullRequest(
+            number=259,
+            url="https://example.invalid/pr/259",
+            state="CLOSED",
+            is_draft=False,
+            head_ref_name="codex/task-259-done-state-verifier",
+            head_ref_oid="head-sha",
+            merge_commit_oid=None,
+            check_state="fail",
+        ),
+    )
+
+    assert task_commands_module.task_lifecycle_state(snapshot) == "pushed"
 
 
 def test_resolve_task_lifecycle_allows_explicit_task_id_from_detached_head(
@@ -2679,6 +3488,264 @@ def test_resolve_task_lifecycle_allows_explicit_task_id_from_detached_head(
     assert snapshot.current_branch == "HEAD"
     assert snapshot.branch_name == "codex/task-268-detached-head-lifecycle"
     assert snapshot.local_main_synced is True
+
+
+def test_resolve_task_lifecycle_reports_environment_and_lookup_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], returncode=1),
+    )
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to determine current branch."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="main\n"),
+    )
+    result = task_commands_module.resolve_task_lifecycle("bad-task", config=config)
+    assert isinstance(result, tuple)
+    assert "Invalid task id" in result[2][0]
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(["git", "ls-remote"], stdout=""),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_find_task_pull_request",
+        lambda **_kwargs: (
+            task_commands_module.ExitCode.ENVIRONMENT_ERROR,
+            {"task_id": "TASK-257"},
+            ["Task lifecycle failed.", "Unable to query GitHub pull requests."],
+        ),
+    )
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to query GitHub pull requests."]
+
+
+def test_resolve_task_lifecycle_covers_branch_lookup_and_git_failure_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], returncode=1),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to inspect local task branches."]
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(["git", "ls-remote"], returncode=1),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to inspect remote task branches."]
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(["git", "ls-remote"], stdout=""),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    monkeypatch.setattr(task_commands_module, "_find_task_pull_request", lambda **_kwargs: None)
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == ["No local, remote, or PR lifecycle state found for TASK-257."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="feature/misc\n"),
+    )
+    result = task_commands_module.resolve_task_lifecycle(None, config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == [
+        "Task lifecycle failed.",
+        "A task id is required when the current branch is not a canonical task branch.",
+    ]
+
+
+def test_resolve_task_lifecycle_covers_status_fetch_and_merge_commit_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    pr = task_commands_module.TaskPullRequest(
+        number=257,
+        url="https://example.invalid/pr/257",
+        state="MERGED",
+        is_draft=False,
+        head_ref_name="codex/task-257-coverage-hard-fail",
+        head_ref_oid="head-sha",
+        merge_commit_oid="merge-sha",
+        check_state="pass",
+    )
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(
+                ["git", "ls-remote"], stdout="abc\trefs/heads/codex/task-257-coverage-hard-fail\n"
+            ),
+            _completed(["git", "status"], returncode=1),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    monkeypatch.setattr(task_commands_module, "_find_task_pull_request", lambda **_kwargs: pr)
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to inspect working tree state."]
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(
+                ["git", "ls-remote"], stdout="abc\trefs/heads/codex/task-257-coverage-hard-fail\n"
+            ),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"], returncode=1),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    result = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(result, tuple)
+    assert result[2] == [
+        "Task lifecycle failed.",
+        "Unable to refresh origin/main before verification.",
+    ]
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(
+                ["git", "ls-remote"], stdout="abc\trefs/heads/codex/task-257-coverage-hard-fail\n"
+            ),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="main-sha\n"),
+            _completed(["git", "rev-parse"], stdout="main-sha\n"),
+            _completed(["git", "cat-file"], stdout=""),
+            _completed(["git", "merge-base"], returncode=0),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    snapshot = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(snapshot, task_commands_module.TaskLifecycleSnapshot)
+    assert snapshot.branch_name == "codex/task-257-coverage-hard-fail"
+    assert snapshot.merge_commit_available_locally is True
+    assert snapshot.merge_commit_on_main is True
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="codex/task-257-coverage-hard-fail\n"),
+            _completed(
+                ["git", "branch"],
+                stdout="* codex/task-257-coverage-hard-fail\n  codex/task-257-other\n",
+            ),
+            _completed(["git", "ls-remote"], stdout=""),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], returncode=1),
+            _completed(["git", "rev-parse"], stdout="remote-main-sha\n"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    monkeypatch.setattr(task_commands_module, "_find_task_pull_request", lambda **_kwargs: None)
+    snapshot = task_commands_module.resolve_task_lifecycle(None, config=config)
+    assert isinstance(snapshot, task_commands_module.TaskLifecycleSnapshot)
+    assert snapshot.branch_name == "codex/task-257-coverage-hard-fail"
+    assert snapshot.local_main_synced is None
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="main\n"),
+            _completed(["git", "branch"], stdout=""),
+            _completed(
+                ["git", "ls-remote"],
+                stdout="abc\trefs/heads/codex/task-257-coverage-hard-fail\n",
+            ),
+            _completed(["git", "status"], stdout=""),
+            _completed(["git", "fetch"]),
+            _completed(["git", "rev-parse"], stdout="main-sha\n"),
+            _completed(["git", "rev-parse"], stdout="remote-main-sha\n"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    snapshot = task_commands_module.resolve_task_lifecycle("TASK-257", config=config)
+    assert isinstance(snapshot, task_commands_module.TaskLifecycleSnapshot)
+    assert snapshot.branch_name == "codex/task-257-coverage-hard-fail"
 
 
 def test_resolve_task_lifecycle_requires_explicit_task_id_from_detached_head(
@@ -2748,6 +3815,104 @@ def test_resolve_finish_context_rejects_task_mismatch(
     assert "maps to TASK-258, not TASK-259" in lines[0]
 
 
+def test_resolve_finish_context_blocks_for_branch_query_error_and_detached_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], returncode=1, stderr="boom"),
+    )
+
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: boom"
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="HEAD\n"),
+    )
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: detached HEAD is not allowed."
+
+
+def test_resolve_finish_context_blocks_for_main_recovery_edge_cases(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="main\n"),
+    )
+
+    result = task_commands_module._resolve_finish_context(None, config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: refusing to run on 'main'."
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.NOT_FOUND,
+            {"task_id": "TASK-257"},
+            ["not found"],
+        ),
+    )
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: unable to recover task context from 'main'."
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(
+            current_branch="main",
+            branch_name=None,
+            working_tree_clean=False,
+        ),
+    )
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: working tree must be clean."
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(
+            current_branch="main",
+            branch_name=None,
+            working_tree_clean=True,
+        ),
+    )
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert "unable to resolve a task branch for TASK-257 from 'main'" in result[2][0]
+
+
 def test_resolve_finish_context_allows_explicit_task_id_from_main(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -2796,6 +3961,305 @@ def test_resolve_finish_context_allows_explicit_task_id_from_main(
     assert result.branch_task_id == "TASK-289"
     assert result.task_id == "TASK-289"
     assert result.current_branch == "main"
+
+
+def test_resolve_finish_context_blocks_for_noncanonical_or_dirty_branch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["git", "rev-parse"], stdout="feature/misc\n"),
+    )
+
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert "branch does not match the required task pattern" in result[2][0]
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="codex/task-257-coverage-hard-fail\n"),
+            _completed(["git", "status"], returncode=1, stderr="status failed"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: status failed"
+
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="codex/task-257-coverage-hard-fail\n"),
+            _completed(["git", "status"], stdout=" M file.py\n"),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+    result = task_commands_module._resolve_finish_context("TASK-257", config)
+    assert isinstance(result, tuple)
+    assert result[2][0] == "Task finish blocked: working tree must be clean."
+
+
+def test_resolve_finish_context_accepts_canonical_branch_without_explicit_task_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="codex/task-257-coverage-hard-fail\n"),
+            _completed(["git", "status"], stdout=""),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    result = task_commands_module._resolve_finish_context(None, config)
+
+    assert isinstance(result, task_commands_module.FinishContext)
+    assert result.branch_name == "codex/task-257-coverage-hard-fail"
+    assert result.branch_task_id == "TASK-257"
+    assert result.task_id == "TASK-257"
+
+
+def test_find_task_pull_request_handles_search_and_view_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["gh", "pr", "list"], returncode=1),
+    )
+
+    result = task_commands_module._find_task_pull_request(task_id="TASK-259", config=config)
+
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to query GitHub pull requests."]
+
+    responses = iter(
+        [
+            _completed(["gh", "pr", "list"], stdout='[{"number":259}]'),
+            _completed(["gh", "pr", "view"], returncode=1),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    result = task_commands_module._find_task_pull_request(task_id="TASK-259", config=config)
+
+    assert isinstance(result, tuple)
+    assert result[2] == ["Task lifecycle failed.", "Unable to read GitHub PR #259."]
+
+
+def test_find_task_pull_request_parses_rollup_and_optional_merge_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["gh", "pr", "list"], stdout='[{"number":259},{"number":258}]'),
+            _completed(
+                ["gh", "pr", "view"],
+                stdout=json.dumps(
+                    {
+                        "number": 259,
+                        "url": "https://example.invalid/pr/259",
+                        "state": "OPEN",
+                        "isDraft": False,
+                        "headRefName": "codex/task-259-done-state-verifier",
+                        "headRefOid": "head-sha",
+                        "mergeCommit": {},
+                        "statusCheckRollup": [{"status": "IN_PROGRESS", "conclusion": ""}],
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    result = task_commands_module._find_task_pull_request(task_id="TASK-259", config=config)
+
+    assert isinstance(result, task_commands_module.TaskPullRequest)
+    assert result.number == 259
+    assert result.merge_commit_oid is None
+    assert result.check_state == "pending"
+
+
+def test_find_task_pull_request_handles_empty_results_and_merge_commit_oid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: _completed(["gh", "pr", "list"], stdout="[]"),
+    )
+    assert task_commands_module._find_task_pull_request(task_id="TASK-259", config=config) is None
+
+    responses = iter(
+        [
+            _completed(["gh", "pr", "list"], stdout='[{"number":259}]'),
+            _completed(
+                ["gh", "pr", "view"],
+                stdout=json.dumps(
+                    {
+                        "number": 259,
+                        "url": "https://example.invalid/pr/259",
+                        "state": "MERGED",
+                        "isDraft": False,
+                        "headRefName": "codex/task-259-done-state-verifier",
+                        "headRefOid": "head-sha",
+                        "mergeCommit": {"oid": "merge-sha"},
+                        "statusCheckRollup": ["ignored", {"status": "COMPLETED", "conclusion": ""}],
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    result = task_commands_module._find_task_pull_request(task_id="TASK-259", config=config)
+
+    assert isinstance(result, task_commands_module.TaskPullRequest)
+    assert result.merge_commit_oid == "merge-sha"
+    assert result.check_state == "pending"
+
+
+def test_find_task_pull_request_ignores_non_dict_merge_commit_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["gh", "pr", "list"], stdout='[{"number":259}]'),
+            _completed(
+                ["gh", "pr", "view"],
+                stdout=json.dumps(
+                    {
+                        "number": 259,
+                        "url": "https://example.invalid/pr/259",
+                        "state": "OPEN",
+                        "isDraft": False,
+                        "headRefName": "codex/task-259-done-state-verifier",
+                        "headRefOid": "head-sha",
+                        "mergeCommit": "merge-sha",
+                        "statusCheckRollup": [{"status": "COMPLETED", "conclusion": "SUCCESS"}],
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    result = task_commands_module._find_task_pull_request(task_id="TASK-259", config=config)
+
+    assert isinstance(result, task_commands_module.TaskPullRequest)
+    assert result.merge_commit_oid is None
+
+
+def test_finish_task_data_blocks_for_missing_required_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_ensure_command_available",
+        lambda name: None if name == "gh" else "/bin/fake",
+    )
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["missing_command"] == "gh"
+    assert lines[0] == "Task finish blocked: missing required command 'gh'."
+
+
+def test_finish_task_data_propagates_finish_context_blockers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    expected = task_commands_module._task_blocked(
+        "working tree must be clean.",
+        next_action="Commit or stash local changes, then re-run `horadus tasks finish TASK-257`.",
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_resolve_finish_context", lambda *_args, **_kwargs: expected
+    )
+
+    assert task_commands_module.finish_task_data("TASK-257", dry_run=False) == expected
 
 
 def test_finish_task_data_blocks_when_branch_not_pushed(
@@ -3010,6 +4474,313 @@ def test_finish_task_data_blocks_when_required_checks_do_not_pass(
     assert "required PR checks did not pass before timeout" in lines[0]
     assert "Inspect the failing required checks" in lines[1]
     assert lines[-1] == "required-check failure details"
+
+
+def test_finish_task_data_blocks_when_pr_metadata_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            return _completed(args, returncode=1, stderr="metadata failed")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/257"
+    assert lines[0] == "Task finish blocked: metadata failed"
+
+
+def test_finish_task_data_blocks_when_pr_metadata_is_invalid_json(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            return _completed(args, stdout="{bad")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/257"
+    assert lines[0] == "Task finish blocked: Unable to parse the PR title/body."
+
+
+def test_finish_task_data_blocks_when_pr_state_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-257 (Primary-Task)"
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-257: coverage hard fail","body":"Primary-Task: TASK-257\\n"}',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, returncode=1, stderr="state failed")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/257"
+    assert lines[0] == "Task finish blocked: state failed"
+
+
+def test_finish_task_data_blocks_when_branch_is_not_pushed_after_pr_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-257 (Primary-Task)"
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-257: coverage hard fail","body":"Primary-Task: TASK-257\\n"}',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    exit_code, _data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert (
+        lines[0]
+        == "Task finish blocked: branch `codex/task-257-coverage-hard-fail` is not pushed to origin."
+    )
+
+
+def test_finish_task_data_blocks_when_pr_draft_status_query_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-257 (Primary-Task)"
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-257: coverage hard fail","body":"Primary-Task: TASK-257\\n"}',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, returncode=1, stderr="draft failed")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    exit_code, _data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert lines[0] == "Task finish blocked: draft failed"
+
+
+def test_finish_task_data_blocks_when_pr_is_draft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-257 (Primary-Task)"
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-257: coverage hard fail","body":"Primary-Task: TASK-257\\n"}',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="true\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    exit_code, _data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert lines[0] == "Task finish blocked: PR is draft; refusing to merge."
+
+
+def test_finish_task_data_dry_run_reports_merge_and_sync_plan(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-257-coverage-hard-fail",
+            branch_task_id="TASK-257",
+            task_id="TASK-257",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-257 (Primary-Task)"
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:4] == ["gh", "pr", "view", "codex/task-257-coverage-hard-fail"]:
+            return _completed(args, stdout="https://example.invalid/pr/257\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/257"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-257: coverage hard fail","body":"Primary-Task: TASK-257\\n"}',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-257", dry_run=True)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["dry_run"] is True
+    assert (
+        lines[-1]
+        == "Dry run: scope and PR preconditions passed; would wait for checks, merge, and sync main."
+    )
 
 
 def test_finish_task_data_rejects_zero_review_timeout_override(
@@ -3901,6 +5672,416 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
     assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
 
 
+def test_finish_task_data_continues_when_merge_timeout_or_failure_still_results_in_merged_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-258", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def make_fake_run_command(state_outputs: list[str]):
+        state_calls = 0
+
+        def fake_run_command(
+            args: list[str], **_kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            nonlocal state_calls
+            if args[:2] == ["git", "ls-remote"]:
+                return _completed(args)
+            if (
+                args[:3] == ["gh", "pr", "view"]
+                and len(args) >= 6
+                and args[3].startswith("codex/task-")
+                and "--json" in args
+                and "url" in args
+            ):
+                return _completed(args, stdout="https://example.invalid/pr/258\n")
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+                if "--json" in args and "title,body" in args:
+                    return _completed(
+                        args,
+                        stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                    )
+                if "--json" in args and "state" in args:
+                    output = state_outputs[min(state_calls, len(state_outputs) - 1)]
+                    state_calls += 1
+                    return _completed(args, stdout=output)
+                if "--json" in args and "isDraft" in args:
+                    return _completed(args, stdout="false\n")
+                if "--json" in args and "mergeCommit" in args:
+                    return _completed(args, stdout="merge-commit-258\n")
+            if args[:3] == ["git", "switch", "main"]:
+                return _completed(args)
+            if args[:3] == ["git", "pull", "--ff-only"]:
+                return _completed(args, stdout="Already up to date.\n")
+            if args[:3] == ["git", "cat-file", "-e"]:
+                return _completed(args)
+            if args[:4] == [
+                "git",
+                "show-ref",
+                "--verify",
+                "refs/heads/codex/task-258-canonical-finish",
+            ]:
+                return _completed(args, returncode=1)
+            raise AssertionError(args)
+
+        return fake_run_command
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", make_fake_run_command(["OPEN\n", "MERGED\n"])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        lambda args, **_kwargs: (_ for _ in ()).throw(
+            task_commands_module.CommandTimeoutError(args, 120)
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+    assert "Merge command timed out, but PR is already MERGED; continuing." in lines
+
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", make_fake_run_command(["OPEN\n", "MERGED\n"])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        lambda args, **_kwargs: _completed(
+            args, returncode=1, stderr="merge exited after server-side completion"
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+    assert "Merge step reported failure, but PR is already MERGED; continuing." in lines
+
+
+def test_finish_task_data_covers_auto_merge_timeout_and_failure_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-258", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def make_fake_run_command(stage: str):
+        state_calls = 0
+
+        def fake_run_command(
+            args: list[str], **_kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            nonlocal state_calls
+            if args[:2] == ["git", "ls-remote"]:
+                return _completed(args)
+            if (
+                args[:3] == ["gh", "pr", "view"]
+                and len(args) >= 6
+                and args[3].startswith("codex/task-")
+                and "--json" in args
+                and "url" in args
+            ):
+                return _completed(args, stdout="https://example.invalid/pr/258\n")
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+                if "--json" in args and "title,body" in args:
+                    return _completed(
+                        args,
+                        stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                    )
+                if "--json" in args and "state" in args:
+                    state_calls += 1
+                    if stage == "auto-timeout-success":
+                        if state_calls <= 2:
+                            return _completed(args, stdout="OPEN\n")
+                        return _completed(args, stdout="MERGED\n")
+                    if stage == "auto-failure-merged":
+                        if state_calls <= 2:
+                            return _completed(args, stdout="OPEN\n")
+                        return _completed(args, stdout="MERGED\n")
+                    if stage == "auto-timeout-blocked":
+                        return _completed(args, stdout="OPEN\n")
+                    return _completed(args, stdout="OPEN\n")
+                if "--json" in args and "isDraft" in args:
+                    return _completed(args, stdout="false\n")
+                if "--json" in args and "mergeCommit" in args:
+                    return _completed(args, stdout="merge-commit-258\n")
+            if args[:3] == ["git", "switch", "main"]:
+                return _completed(args)
+            if args[:3] == ["git", "pull", "--ff-only"]:
+                return _completed(args, stdout="Already up to date.\n")
+            if args[:3] == ["git", "cat-file", "-e"]:
+                return _completed(args)
+            if args[:4] == [
+                "git",
+                "show-ref",
+                "--verify",
+                "refs/heads/codex/task-258-canonical-finish",
+            ]:
+                return _completed(args, returncode=1)
+            raise AssertionError(args)
+
+        return fake_run_command
+
+    def make_fake_run_command_with_timeout(stage: str):
+        def fake_run_command_with_timeout(
+            args: list[str], **_kwargs: object
+        ) -> subprocess.CompletedProcess[str]:
+            if "--auto" not in args:
+                return _completed(
+                    args,
+                    returncode=1,
+                    stderr="the base branch policy prohibits the merge. add the `--auto` flag.",
+                )
+            if stage == "auto-timeout-success":
+                raise task_commands_module.CommandTimeoutError(args, 120)
+            if stage == "auto-timeout-blocked":
+                raise task_commands_module.CommandTimeoutError(args, 120)
+            if stage == "auto-failure-merged":
+                return _completed(args, returncode=1, stderr="auto merge finished server-side")
+            if stage == "auto-failure-blocked":
+                return _completed(args, returncode=1, stderr="auto merge still blocked")
+            if stage == "auto-merge-wait-timeout":
+                return _completed(args)
+            raise AssertionError(stage)
+
+        return fake_run_command_with_timeout
+
+    monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        make_fake_run_command("auto-timeout-success"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        make_fake_run_command_with_timeout("auto-timeout-success"),
+    )
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+    assert "Auto-merge command timed out, but PR is already MERGED; continuing." in lines
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        make_fake_run_command("auto-timeout-blocked"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        make_fake_run_command_with_timeout("auto-timeout-blocked"),
+    )
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert (
+        lines[0]
+        == "Task finish blocked: auto-merge command did not exit cleanly after the review gate passed."
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        make_fake_run_command("auto-failure-merged"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        make_fake_run_command_with_timeout("auto-failure-merged"),
+    )
+    monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        make_fake_run_command("auto-failure-blocked"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        make_fake_run_command_with_timeout("auto-failure-blocked"),
+    )
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert lines[0] == "Task finish blocked: merge failed."
+    assert lines[-1] == "auto merge still blocked"
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        make_fake_run_command("auto-merge-wait-timeout"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        make_fake_run_command_with_timeout("auto-merge-wait-timeout"),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (False, ["still waiting"])
+    )
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert lines[0] == "Task finish blocked: auto-merge did not complete before timeout."
+    assert lines[-1] == "still waiting"
+
+
+def test_finish_task_data_blocks_when_merge_fails_without_auto_merge_hint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+
+    state_calls = 0
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal state_calls
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                state_calls += 1
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command_with_timeout",
+        lambda args, **_kwargs: _completed(
+            args, returncode=1, stderr="merge failed for another reason"
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert lines[0] == "Task finish blocked: merge failed."
+    assert lines[-1] == "merge failed for another reason"
+
+
 def test_finish_task_data_blocks_when_completion_verifier_fails_after_merge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3984,6 +6165,267 @@ def test_finish_task_data_blocks_when_completion_verifier_fails_after_merge(
     assert data["lifecycle"]["lifecycle_state"] == "merged"
     assert "completion verifier did not pass after merge" in lines[0]
     assert "horadus tasks lifecycle TASK-259 --strict" in lines[1]
+
+
+@pytest.mark.parametrize(
+    ("stage", "expected_first_line", "expected_last_line"),
+    [
+        (
+            "merge-commit",
+            "Task finish blocked: could not determine merge commit.",
+            "Next action: Inspect the merged PR state in GitHub, then re-run `horadus tasks finish`.",
+        ),
+        (
+            "switch-main",
+            "Task finish blocked: switch failed",
+            "Next action: Resolve the local git state and switch to `main`, then re-run `horadus tasks finish`.",
+        ),
+        (
+            "pull-main",
+            "Task finish blocked: pull failed",
+            "Next action: Resolve the local `main` sync issue and re-run `horadus tasks finish`.",
+        ),
+        (
+            "cat-file",
+            "Task finish blocked: merge commit merge-commit-258 is not available locally after syncing main.",
+            "Next action: Fetch/pull `main` successfully, then re-run `horadus tasks finish`.",
+        ),
+        (
+            "delete-branch",
+            "Task finish blocked: merged branch `codex/task-258-canonical-finish` still exists locally and could not be deleted.",
+            "Next action: Delete `codex/task-258-canonical-finish` locally after syncing main, then re-run `horadus tasks finish`.",
+        ),
+    ],
+)
+def test_finish_task_data_blocks_on_post_merge_sync_edge_cases(
+    monkeypatch: pytest.MonkeyPatch,
+    stage: str,
+    expected_first_line: str,
+    expected_last_line: str,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="MERGED\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                if stage == "merge-commit":
+                    return _completed(args, returncode=1, stderr="merge commit unavailable")
+                return _completed(args, stdout="merge-commit-258\n")
+        if args[:3] == ["git", "switch", "main"]:
+            if stage == "switch-main":
+                return _completed(args, returncode=1, stderr="switch failed")
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            if stage == "pull-main":
+                return _completed(args, returncode=1, stderr="pull failed")
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            if stage == "cat-file":
+                return _completed(args, returncode=1)
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-258-canonical-finish",
+        ]:
+            return _completed(args, returncode=0 if stage == "delete-branch" else 1)
+        if args[:3] == ["git", "branch", "-d"]:
+            return _completed(args, returncode=1, stderr="delete failed")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/258"
+    assert lines[0] == expected_first_line
+    assert lines[1] == expected_last_line
+
+
+def test_finish_task_data_deletes_local_branch_when_it_still_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-258-canonical-finish",
+            branch_task_id="TASK-258",
+            task_id="TASK-258",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-258", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/258\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/258"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-258: canonical finish","body":"Primary-Task: TASK-258\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="MERGED\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-258\n")
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-258-canonical-finish",
+        ]:
+            return _completed(args)
+        if args[:3] == ["git", "branch", "-d"]:
+            return _completed(args, stdout="Deleted branch.\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-258"
+    assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
+
+
+def test_task_lifecycle_data_handles_finish_config_and_resolution_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_finish_config",
+        lambda **_kwargs: (_ for _ in ()).throw(ValueError("bad config")),
+    )
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-259",
+        strict=False,
+        dry_run=False,
+    )
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data == {}
+    assert lines == ["bad config"]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_finish_config",
+        lambda **_kwargs: task_commands_module.FinishConfig(
+            gh_bin="gh",
+            git_bin="git",
+            python_bin="python3",
+            checks_timeout_seconds=1,
+            checks_poll_seconds=0,
+            review_timeout_seconds=1,
+            review_poll_seconds=0,
+            review_bot_login="bot",
+            review_timeout_policy="allow",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    expected = (
+        task_commands_module.ExitCode.NOT_FOUND,
+        {"task_id": "TASK-259"},
+        ["No local, remote, or PR lifecycle state found for TASK-259."],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: expected,
+    )
+
+    assert (
+        task_commands_module.task_lifecycle_data("TASK-259", strict=False, dry_run=False)
+        == expected
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "resolve_task_lifecycle",
+        lambda *_args, **_kwargs: _task_snapshot(branch_name=None, pr=None),
+    )
+    exit_code, data, lines = task_commands_module.task_lifecycle_data(
+        "TASK-259",
+        strict=False,
+        dry_run=False,
+    )
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["branch_name"] is None
+    assert "- task branch:" not in "\n".join(lines)
 
 
 def test_handle_show_returns_not_found_for_unknown_task() -> None:

@@ -329,7 +329,11 @@ daemon, the CLI attempts best-effort local auto-start on supported
 environments before failing with a specific blocker. If `UV_BIN` points to a
 specific `uv` executable, that same binary is used for every `uv`-backed full-
 gate step, including package-build validation. `make local-gate` is a
-compatibility wrapper to the same CLI flow.
+compatibility wrapper to the same CLI flow. Its unit-coverage step fails closed
+at `100%` measured coverage for `src/`, matching the repo pre-push hook and CI.
+When the coverage gate fails, use `make test-unit-cov` to reproduce the same
+check locally and inspect the `term-missing` report for missing files, lines,
+or branches before re-running the full gate.
 
 `horadus tasks finish` uses the same Docker-readiness logic when the next
 required action is a Docker-gated push. Unsupported environments fail closed
@@ -365,7 +369,10 @@ make verify-backups
 # All tests
 make test
 
-# With coverage
+# Unit coverage gate used by the workflow
+make test-unit-cov
+
+# Full test suite with coverage
 make test-cov
 ```
 

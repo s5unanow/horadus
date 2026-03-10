@@ -6,7 +6,7 @@
 # =============================================================================
 
 .PHONY: help venv deps deps-dev hooks install install-dev setup clean \
-        format lint typecheck test test-unit test-integration test-cov \
+        format lint typecheck test test-unit test-unit-cov test-integration test-cov \
         test-integration-docker \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
@@ -178,6 +178,9 @@ test: deps-dev ## Run all tests
 test-unit: deps-dev ## Run unit tests only
 	$(UV_RUN) pytest tests/unit/ -v -m unit
 
+test-unit-cov: deps-dev ## Run unit tests with the hard 100% coverage gate
+	./scripts/run_unit_coverage_gate.sh
+
 test-integration: deps-dev ## Run integration tests only
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" $(UV_RUN) alembic upgrade head
 	DATABASE_URL="$(INTEGRATION_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)" ./scripts/check_migration_drift.sh
@@ -186,8 +189,8 @@ test-integration: deps-dev ## Run integration tests only
 test-integration-docker: deps-dev ## Run integration tests in an ephemeral Docker stack (safe defaults)
 	./scripts/test_integration_docker.sh
 
-test-cov: deps-dev ## Run tests with coverage report
-	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html --allow-hosts=127.0.0.1,localhost
+test-cov: deps-dev ## Run tests with the hard 100% coverage gate and HTML report
+	$(UV_RUN) pytest tests/ --cov=src --cov-report=term-missing --cov-report=html --cov-fail-under=100 --allow-hosts=127.0.0.1,localhost
 	@echo "$(GREEN)Coverage report: htmlcov/index.html$(RESET)"
 
 # =============================================================================

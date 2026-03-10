@@ -255,6 +255,7 @@ Phase 8: Hardening (NEW)     [████████████████�
 - [x] `TASK-270` now keeps eval provenance fingerprints stable across relocated checkouts while limiting trend-config hashing to the same discovery scope used by the runtime loader
 - [x] `TASK-271` now keeps GPT-5 benchmark candidate configs explicitly opt-in so default benchmark runs do not silently expand cost or access requirements
 - [x] `TASK-273` now keeps Tier-2 taxonomy payloads inside the declared safe input budget using deterministic reductions and explicit fail-closed overflow behavior
+- [x] `TASK-257` now makes `100%` measured unit coverage a hard failure across the canonical local gate, pre-push workflow, and CI using one shared repo-owned coverage script plus behavior-focused regression tests for the last live coverage gaps
 - [x] `TASK-283` now hardens `horadus tasks finish` so review-timeout overrides require explicit human approval, recognizes the configured reviewer's PR-summary `THUMBS_UP` as a positive review-gate signal, and keeps that policy aligned across repo workflow docs and skill surfaces
 - [x] `TASK-284` now bounds `horadus tasks finish` review-gate and merge subprocesses with explicit timeouts so the command exits with a concrete blocker instead of idling indefinitely after the silent-timeout allow path
 - [x] `TASK-285` now adds narrow shared-workflow guardrails that require caller audits, unaffected-caller regression coverage, and explicit current-head/current-window semantics before changing workflow policy behavior, with docs-freshness enforcement across the canonical agent-facing surfaces
@@ -272,7 +273,7 @@ Phase 8: Hardening (NEW)     [████████████████�
   `TASK-233`, `TASK-234`, `TASK-235`, `TASK-236`, `TASK-237`, `TASK-238`
 - Prompt/model evaluation follow-up queue added to Sprint 3 for sequencing:
 - Workflow/coverage hardening queue remains active in Sprint 3:
-  `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`, `TASK-257`
+  `TASK-251`, `TASK-252`, `TASK-254`, `TASK-255`, `TASK-256`
 - Closed-PR review follow-up queue added to Sprint 3 with recommended sequencing:
   `TASK-272`
 - Workflow-consistency follow-up queue added to Sprint 3:

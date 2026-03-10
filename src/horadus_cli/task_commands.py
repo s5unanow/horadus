@@ -1438,10 +1438,7 @@ def full_local_gate_steps() -> list[LocalGateStep]:
         ),
         LocalGateStep(
             name="pytest-unit-cov",
-            command=(
-                f"{uv_bin} run --no-sync pytest tests/unit/ -v "
-                "--cov=src --cov-report=term-missing:skip-covered"
-            ),
+            command="./scripts/run_unit_coverage_gate.sh",
         ),
         LocalGateStep(
             name="bandit",

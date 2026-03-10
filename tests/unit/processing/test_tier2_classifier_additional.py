@@ -267,6 +267,109 @@ def test_build_payload_budget_and_indicator_fallbacks(
     assert payload["context_chunks"] == ["one"]
 
 
+def test_build_payload_raises_when_wrapped_context_pushes_payload_over_budget(
+    mock_db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    classifier = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="summary")
+    trend = _build_trend()
+    estimates = iter([1, classifier._MAX_REQUEST_INPUT_TOKENS + 1])
+    monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
+
+    with pytest.raises(ValueError, match="exceeds safe input budget"):
+        classifier._build_payload(
+            event=event,
+            trends=[trend],
+            context_chunks=["context"],
+        )
+
+
+def test_enforce_payload_budget_raises_when_truncation_still_cannot_fit(
+    mock_db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    classifier = _build_classifier(mock_db_session)
+    classifier._MAX_REQUEST_INPUT_TOKENS = 10
+    classifier._PAYLOAD_HEADROOM_TOKENS = 0
+    payload = {"context_chunks": ["one", "two"], "trends": []}
+    estimates = iter([999, 999, 999, 999, 999])
+    monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
+
+    with pytest.raises(ValueError, match="exceeds safe input budget"):
+        classifier._enforce_payload_budget(payload)
+
+
+def test_trim_trend_payload_for_budget_tolerates_malformed_entries(
+    mock_db_session,
+) -> None:
+    classifier = _build_classifier(mock_db_session)
+    payload = {
+        "trends": [
+            "bad-trend",
+            {"indicators": "bad-indicators"},
+            {"indicators": ["bad-indicator"]},
+            {
+                "trend_id": "eu-russia",
+                "name": "EU Russia",
+                "indicators": [
+                    {"keywords": ["x"], "description": None},
+                    {
+                        "keywords": ["y"],
+                        "description": "  short description  ",
+                    },
+                ],
+            },
+        ]
+    }
+
+    classifier._trim_trend_payload_for_budget(payload, budget_limit=0)
+
+    trend_payload = payload["trends"][3]
+    assert trend_payload["name"] == "eu-russia"
+    assert trend_payload["indicators"][0]["keywords"] == []
+    assert trend_payload["indicators"][1]["description"] == "short description"
+
+
+def test_enforce_payload_budget_returns_when_context_chunks_is_not_a_list(
+    mock_db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    classifier = _build_classifier(mock_db_session)
+    classifier._MAX_REQUEST_INPUT_TOKENS = 10
+    classifier._PAYLOAD_HEADROOM_TOKENS = 0
+    payload = {"context_chunks": "bad", "trends": []}
+    monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: 999)
+
+    classifier._enforce_payload_budget(payload)
+
+    assert payload["context_chunks"] == "bad"
+
+
+def test_trim_trend_payload_returns_after_description_compaction_fits_budget(
+    mock_db_session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    classifier = _build_classifier(mock_db_session)
+    payload = {
+        "trends": [
+            {
+                "trend_id": "eu-russia",
+                "name": "EU Russia",
+                "indicators": [
+                    {
+                        "keywords": [],
+                        "description": "x" * 200,
+                    }
+                ],
+            }
+        ]
+    }
+    estimates = iter([1])
+    monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
+
+    classifier._trim_trend_payload_for_budget(payload, budget_limit=10)
+
+    assert payload["trends"][0]["name"] == "EU Russia"
+    assert payload["trends"][0]["indicators"][0]["description"].endswith("...")
+
+
 def test_build_payload_current_taxonomy_stays_within_safe_budget(mock_db_session) -> None:
     classifier = _build_classifier(mock_db_session)
     trends = load_trends_from_config_dir(config_dir=Path("config/trends"))

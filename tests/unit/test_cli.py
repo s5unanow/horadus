@@ -9,6 +9,7 @@ import shutil
 import subprocess
 from datetime import UTC, date, datetime
 from pathlib import Path
+from unittest import mock
 from uuid import uuid4
 
 import pytest
@@ -1758,6 +1759,14 @@ def test_current_required_checks_blocker_maps_check_states(
         pr_url="https://example.invalid/pr/257",
         config=config,
     ) == ("required PR checks are still pending on the current head.", ["CI / Build: pending"])
+    assert (
+        task_commands_module._current_required_checks_blocker(
+            pr_url="https://example.invalid/pr/257",
+            config=config,
+            block_pending=False,
+        )
+        is None
+    )
 
     monkeypatch.setattr(
         task_commands_module,
@@ -5417,6 +5426,135 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
     assert lines[0] == "Task finish blocked: PR is blocked by unresolved review comments."
     assert any("review gate passed:" in line for line in lines)
     assert lines[-1] == "  Please resolve this thread."
+
+
+def test_finish_task_data_uses_non_blocking_pending_check_mode_after_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-290-finish-ci-failure-reporting",
+            branch_task_id="TASK-290",
+            task_id="TASK-290",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-290 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(
+            ["review"],
+            stdout=(
+                "review gate timeout: no actionable current-head review feedback from "
+                "chatgpt-codex-connector[bot] for head-sha-290 within 600s. "
+                "Continuing due to timeout policy=allow."
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-290", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    blocker_calls: list[dict[str, object]] = []
+
+    def fake_current_required_checks_blocker(**kwargs: object) -> tuple[str, list[str]] | None:
+        blocker_calls.append(dict(kwargs))
+        return None
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        fake_current_required_checks_blocker,
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/290\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-290: finish CI failure reporting","body":"Primary-Task: TASK-290\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-290\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/290"]:
+            if "--auto" in args:
+                return _completed(args)
+            return _completed(
+                args,
+                returncode=1,
+                stderr="the base branch policy prohibits the merge. add the `--auto` flag.",
+            )
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-290-finish-ci-failure-reporting",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-290", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-290"
+    assert blocker_calls == [
+        {
+            "pr_url": "https://example.invalid/pr/290",
+            "config": mock.ANY,
+            "block_pending": False,
+        }
+    ]
+    assert any("Base branch policy requires auto-merge" in line for line in lines)
 
 
 def test_finish_task_data_blocks_when_pr_metadata_query_fails(

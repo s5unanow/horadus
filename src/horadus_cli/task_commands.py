@@ -1002,7 +1002,7 @@ def _coerce_wait_for_required_checks_result(
 
 
 def _current_required_checks_blocker(
-    *, pr_url: str, config: FinishConfig
+    *, pr_url: str, config: FinishConfig, block_pending: bool = True
 ) -> tuple[str, list[str]] | None:
     check_state, check_lines = _required_checks_state(pr_url=pr_url, config=config)
     if check_state == "fail":
@@ -1010,7 +1010,7 @@ def _current_required_checks_blocker(
             "required PR checks are failing on the current head.",
             check_lines,
         )
-    if check_state == "pending":
+    if check_state == "pending" and block_pending:
         return (
             "required PR checks are still pending on the current head.",
             check_lines,
@@ -2297,7 +2297,9 @@ def finish_task_data(
                 extra_lines=extra_lines,
             )
 
-        post_review_blocker = _current_required_checks_blocker(pr_url=pr_url, config=config)
+        post_review_blocker = _current_required_checks_blocker(
+            pr_url=pr_url, config=config, block_pending=False
+        )
         if post_review_blocker is not None:
             blocker_message, blocker_lines = post_review_blocker
             return _task_blocked(

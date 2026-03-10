@@ -2622,46 +2622,47 @@ def finish_task_data(
             data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
         )
 
-    head_alignment_blocker = _branch_head_alignment_blocker(
-        branch_name=context.branch_name,
-        pr_url=pr_url,
-        config=config,
-    )
-    if head_alignment_blocker is not None:
-        blocker_message, blocker_data, blocker_lines = head_alignment_blocker
-        return _task_blocked(
-            blocker_message,
-            next_action=(
-                f"Checkout `{context.branch_name}`, ensure the intended task-close commits are pushed so "
-                "the local branch, origin branch, and PR head all match, then re-run "
-                "`horadus tasks finish`."
-            ),
-            data={"task_id": context.task_id, "pr_url": pr_url, **blocker_data},
-            extra_lines=blocker_lines,
+    if pr_state != "MERGED":
+        head_alignment_blocker = _branch_head_alignment_blocker(
+            branch_name=context.branch_name,
+            pr_url=pr_url,
+            config=config,
         )
+        if head_alignment_blocker is not None:
+            blocker_message, blocker_data, blocker_lines = head_alignment_blocker
+            return _task_blocked(
+                blocker_message,
+                next_action=(
+                    f"Checkout `{context.branch_name}`, ensure the intended task-close commits are pushed so "
+                    "the local branch, origin branch, and PR head all match, then re-run "
+                    "`horadus tasks finish`."
+                ),
+                data={"task_id": context.task_id, "pr_url": pr_url, **blocker_data},
+                extra_lines=blocker_lines,
+            )
 
-    closure_blocker = _pre_merge_task_closure_blocker(
-        context.task_id,
-        branch_name=context.branch_name,
-        config=config,
-    )
-    if closure_blocker is not None:
-        blocker_message, blocker_data, blocker_lines = closure_blocker
-        return _task_blocked(
-            blocker_message,
-            next_action=(
-                f"Run `uv run --no-sync horadus tasks close-ledgers {context.task_id}`, commit and "
-                f"push the ledger/archive updates on `{context.branch_name}`, then re-run "
-                "`horadus tasks finish`."
-            ),
-            data={
-                "task_id": context.task_id,
-                "branch_name": context.branch_name,
-                "pr_url": pr_url,
-                **blocker_data,
-            },
-            extra_lines=blocker_lines,
+        closure_blocker = _pre_merge_task_closure_blocker(
+            context.task_id,
+            branch_name=context.branch_name,
+            config=config,
         )
+        if closure_blocker is not None:
+            blocker_message, blocker_data, blocker_lines = closure_blocker
+            return _task_blocked(
+                blocker_message,
+                next_action=(
+                    f"Run `uv run --no-sync horadus tasks close-ledgers {context.task_id}`, commit and "
+                    f"push the ledger/archive updates on `{context.branch_name}`, then re-run "
+                    "`horadus tasks finish`."
+                ),
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                    **blocker_data,
+                },
+                extra_lines=blocker_lines,
+            )
 
     if dry_run:
         lines.append(

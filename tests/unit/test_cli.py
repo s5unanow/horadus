@@ -7310,6 +7310,24 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
             ["Task lifecycle: TASK-258", "- state: local-main-synced", "- strict complete: yes"],
         ),
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_branch_head_alignment_blocker",
+        lambda **_kwargs: (
+            "task branch head, pushed branch head, and PR head are not aligned.",
+            {},
+            ["- local branch head: missing"],
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_pre_merge_task_closure_blocker",
+        lambda *_args, **_kwargs: (
+            "primary task closure state is not present on the PR head.",
+            {},
+            ["- tasks/BACKLOG.md still contains the task as open."],
+        ),
+    )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:

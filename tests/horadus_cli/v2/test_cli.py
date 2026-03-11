@@ -16,20 +16,20 @@ import pytest
 
 import src.cli as cli_module
 import src.horadus_cli.app as cli_app_module
-import src.horadus_cli.v1.triage_commands as triage_commands_module
 import src.horadus_cli.v2.result as result_module
 import src.horadus_cli.v2.task_process as task_process_module
 import src.horadus_cli.v2.task_repo as task_repo_module
 import src.horadus_cli.v2.task_workflow_core as task_commands_module
+import src.horadus_cli.v2.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
-from src.core.calibration_dashboard import TrendMovement
+from src.horadus_cli.v2.runtime.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
 pytest_plugins = ("tests.horadus_cli.v2.task_repo_fixtures",)
 
-LIVE_TASK_ID = "TASK-301"
-ARCHIVED_TASK_ID = "TASK-302"
-BACKLOG_ONLY_TASK_ID = "TASK-303"
+LIVE_TASK_ID = "TASK-901"
+ARCHIVED_TASK_ID = "TASK-902"
+BACKLOG_ONLY_TASK_ID = "TASK-903"
 
 _REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER = task_commands_module._pre_merge_task_closure_blocker
 _REAL_BRANCH_HEAD_ALIGNMENT_BLOCKER = task_commands_module._branch_head_alignment_blocker
@@ -604,7 +604,7 @@ def test_build_parser_accepts_triage_collect_command() -> None:
     assert args.output_format == "json"
 
 
-def test_build_parser_preserves_root_flags_for_legacy_command() -> None:
+def test_build_parser_preserves_root_flags_for_ops_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(["--format", "json", "--dry-run", "pipeline", "dry-run"])
 
@@ -9185,7 +9185,7 @@ def test_handle_show_includes_spec_paths_when_present(synthetic_task_repo: Path)
     assert result.exit_code == task_commands_module.ExitCode.OK
     assert result.lines is not None
     assert "Specs:" in result.lines
-    assert "- tasks/specs/301-stable-live-fixture.md" in result.lines
+    assert "- tasks/specs/901-stable-live-fixture.md" in result.lines
 
 
 def test_handle_show_skips_empty_optional_sections(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -9538,7 +9538,6 @@ def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> 
     assert "keyword_hits" in payload["data"]["searches"]
 
 
-@pytest.mark.skip(reason="triage remains on the legacy v1 surface during TASK-299")
 def test_main_triage_collect_includes_overdue_blockers(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
@@ -9558,7 +9557,6 @@ def test_main_triage_collect_includes_overdue_blockers(
     assert overdue[0]["urgency"]["state"] == "overdue"
 
 
-@pytest.mark.skip(reason="triage remains on the legacy v1 surface during TASK-299")
 def test_main_triage_collect_ignores_stale_metadata_rows(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
@@ -9597,7 +9595,6 @@ def test_main_triage_collect_ignores_stale_metadata_rows(
     assert [item["task_id"] for item in overdue] == ["TASK-189"]
 
 
-@pytest.mark.skip(reason="triage remains on the legacy v1 surface during TASK-299")
 def test_main_triage_collect_text_highlights_overdue_blockers(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,

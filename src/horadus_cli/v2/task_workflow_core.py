@@ -15,7 +15,6 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from src.core.repo_workflow import canonical_task_workflow_commands_for_task
 from src.horadus_cli.v2.result import CommandResult, ExitCode
 from src.horadus_cli.v2.task_repo import (
     CLOSED_TASK_ARCHIVE_GUIDANCE,
@@ -37,6 +36,7 @@ from src.horadus_cli.v2.task_repo import (
     task_closure_state,
     task_record,
 )
+from src.horadus_cli.v2.task_workflow_policy import canonical_task_workflow_commands_for_task
 
 TASK_BRANCH_PATTERN = re.compile(r"^codex/task-(?P<number>\d{3})-[a-z0-9][a-z0-9._-]*$")
 DEFAULT_CHECKS_TIMEOUT_SECONDS = 1800

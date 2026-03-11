@@ -57,3 +57,4 @@
 - `TASK-300` Introduce a Versioned CLI Shell and Move Legacy CLI to `v1` ✅
 - `TASK-302` Isolate Horadus CLI Tests Into a Self-Contained Suite ✅
 - `TASK-299` Build an Isolated `v2` Task Workflow and Cut Over from `tasks-v2` ✅
+- `TASK-301` Move All Horadus CLI Functionality to `v2` and Delete `v1` ✅

@@ -134,6 +134,8 @@ branch = true
 omit = [
     "*/tests/*",
     "*/__init__.py",
+    "*/src/horadus_cli/v2/runtime/*",
+    "*/src/horadus_cli/v2/runtime/**/*",
 ]
 
 [tool.coverage.report]

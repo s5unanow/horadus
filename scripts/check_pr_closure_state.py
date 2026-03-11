@@ -6,25 +6,45 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-TASK_REPO_PATH = REPO_ROOT / "src" / "horadus_cli" / "v1" / "task_repo.py"
+
+class _TaskClosureState(Protocol):
+    present_in_backlog: bool
+    present_in_active_sprint: bool
+    active_sprint_lines: list[str]
+    present_in_completed: bool
+    present_in_closed_archive: bool
+    ready_for_merge: bool
+    closed_archive_path: str | None
+
+
+class _TaskRepoModule(Protocol):
+    TaskClosureState: type[_TaskClosureState]
+    normalize_task_id: Callable[[str], str]
+    task_closure_state: Callable[[str], _TaskClosureState]
+    repo_root: Callable[[], Path]
+
+
+TASK_REPO_PATH = REPO_ROOT / "src" / "horadus_cli" / "v2" / "task_repo.py"
 TASK_REPO_SPEC = importlib.util.spec_from_file_location("horadus_task_repo_script", TASK_REPO_PATH)
 if TASK_REPO_SPEC is None or TASK_REPO_SPEC.loader is None:
     raise RuntimeError(f"Unable to load task repo module from {TASK_REPO_PATH}")
-task_repo_module = importlib.util.module_from_spec(TASK_REPO_SPEC)
-sys.modules[TASK_REPO_SPEC.name] = task_repo_module
-TASK_REPO_SPEC.loader.exec_module(task_repo_module)
-TaskClosureState = task_repo_module.TaskClosureState
+task_repo_runtime_module = importlib.util.module_from_spec(TASK_REPO_SPEC)
+sys.modules[TASK_REPO_SPEC.name] = task_repo_runtime_module
+TASK_REPO_SPEC.loader.exec_module(task_repo_runtime_module)
+task_repo_module = cast(_TaskRepoModule, task_repo_runtime_module)
 normalize_task_id = task_repo_module.normalize_task_id
 task_closure_state = task_repo_module.task_closure_state
 
 
-def _blocker_lines(closure_state: TaskClosureState) -> list[str]:
+def _blocker_lines(closure_state: _TaskClosureState) -> list[str]:
     lines: list[str] = []
     if closure_state.present_in_backlog:
         lines.append("- tasks/BACKLOG.md still contains the task as open.")

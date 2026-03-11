@@ -26,15 +26,21 @@ from src.horadus_cli.v2.task_repo import (
     completed_path,
     current_date,
     current_sprint_path,
+    exec_plan_paths_for_task,
     normalize_task_id,
     parse_active_tasks,
     parse_human_blockers,
+    planning_gates_required,
+    planning_gates_value_from_text,
     repo_root,
     search_task_records,
     slugify_name,
+    spec_paths_for_task,
     task_block_match,
     task_closure_state,
+    task_planning_gates_value,
     task_record,
+    task_requires_exec_plan,
 )
 from src.horadus_cli.v2.task_workflow_policy import canonical_task_workflow_commands_for_task
 
@@ -72,6 +78,11 @@ _TASK_LEDGER_INTAKE_PATHS = (
     "tasks/CURRENT_SPRINT.md",
     "PROJECT_STATUS.md",
 )
+_CANONICAL_PLANNING_EXAMPLE_PATH = "tasks/specs/275-finish-review-gate-timeout.md"
+_PLANNING_STATE_PRESENT = "applicable_with_authoritative_artifact_present"
+_PLANNING_STATE_SPEC_ONLY = "applicable_spec_backed_without_exec_plan"
+_PLANNING_STATE_MISSING = "applicable_backlog_only_missing_artifact"
+_PLANNING_STATE_QUIET = "non_applicable"
 
 
 class CommandTimeoutError(RuntimeError):
@@ -3482,6 +3493,101 @@ def _workflow_commands_for_context_pack(
     ]
 
 
+def _planning_marker_from_relative_path(relative_path: str) -> tuple[str | None, str | None]:
+    path = repo_root() / relative_path
+    if not path.exists():
+        return None, None
+    value = planning_gates_value_from_text(path.read_text(encoding="utf-8"))
+    return value, relative_path
+
+
+def _planning_context(task_id: str, record: Any) -> dict[str, Any]:
+    spec_paths = list(record.spec_paths or spec_paths_for_task(task_id))
+    exec_plan_paths = exec_plan_paths_for_task(task_id)
+
+    explicit_value = None
+    marker_source = None
+    for relative_path in [*exec_plan_paths, *spec_paths]:
+        explicit_value, marker_source = _planning_marker_from_relative_path(relative_path)
+        if explicit_value is not None:
+            break
+    if explicit_value is None:
+        explicit_value = task_planning_gates_value(record)
+        if explicit_value is not None:
+            marker_source = record.source_path or str(backlog_path().relative_to(repo_root()))
+
+    required = planning_gates_required(explicit_value)
+    if required is None:
+        required = task_requires_exec_plan(record) or bool(exec_plan_paths)
+
+    if not required:
+        return {
+            "required": False,
+            "state": _PLANNING_STATE_QUIET,
+            "marker_value": explicit_value,
+            "marker_source": marker_source,
+            "authoritative_artifact_path": None,
+            "gate_home_path": None,
+            "waiver_home_path": None,
+            "missing_artifact_notice": None,
+            "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
+            "spec_paths": spec_paths,
+            "exec_plan_paths": exec_plan_paths,
+        }
+
+    if exec_plan_paths:
+        gate_home_path = spec_paths[0] if spec_paths else exec_plan_paths[0]
+        return {
+            "required": True,
+            "state": _PLANNING_STATE_PRESENT,
+            "marker_value": explicit_value,
+            "marker_source": marker_source,
+            "authoritative_artifact_path": exec_plan_paths[0],
+            "gate_home_path": gate_home_path,
+            "waiver_home_path": exec_plan_paths[0],
+            "missing_artifact_notice": None,
+            "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
+            "spec_paths": spec_paths,
+            "exec_plan_paths": exec_plan_paths,
+        }
+
+    if spec_paths:
+        return {
+            "required": True,
+            "state": _PLANNING_STATE_SPEC_ONLY,
+            "marker_value": explicit_value,
+            "marker_source": marker_source or spec_paths[0],
+            "authoritative_artifact_path": spec_paths[0],
+            "gate_home_path": spec_paths[0],
+            "waiver_home_path": spec_paths[0],
+            "missing_artifact_notice": None,
+            "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
+            "spec_paths": spec_paths,
+            "exec_plan_paths": exec_plan_paths,
+        }
+
+    notice = (
+        f"{task_id} requires planning gates, but no spec or exec plan exists yet. "
+        "Add a task spec or exec plan before implementation; backlog markers do not "
+        "replace the Phase -1 gates or Gate Outcomes / Waivers sections."
+    )
+    return {
+        "required": True,
+        "state": _PLANNING_STATE_MISSING,
+        "marker_value": explicit_value,
+        "marker_source": marker_source
+        or record.source_path
+        or str(backlog_path().relative_to(repo_root())),
+        "authoritative_artifact_path": None,
+        "gate_home_path": None,
+        "waiver_home_path": None,
+        "missing_artifact_notice": notice,
+        "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
+        "spec_paths": spec_paths,
+        "exec_plan_paths": exec_plan_paths,
+    }
+
+
 def handle_context_pack(args: Any) -> CommandResult:
     try:
         task_id = normalize_task_id(args.task_id)
@@ -3499,6 +3605,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             data={"task_id": task_id},
         )
 
+    planning = _planning_context(task_id, record)
     lines = [
         f"# Context Pack: {task_id}",
         "",
@@ -3520,8 +3627,33 @@ def handle_context_pack(args: Any) -> CommandResult:
             "",
             "## Spec Contract Template",
             "tasks/specs/TEMPLATE.md",
+            _CANONICAL_PLANNING_EXAMPLE_PATH,
         ]
     )
+    if planning["required"]:
+        lines.extend(
+            [
+                "",
+                "## Planning Gates",
+                "Applicability: required",
+                f"State: {planning['state']}",
+            ]
+        )
+        if planning["marker_value"] is not None:
+            lines.append(
+                f"Marker: {planning['marker_value']} ({planning['marker_source'] or 'unknown source'})"
+            )
+        if planning["authoritative_artifact_path"] is not None:
+            lines.append(
+                f"Authoritative planning artifact: {planning['authoritative_artifact_path']}"
+            )
+        if planning["gate_home_path"] is not None:
+            lines.append(f"Phase -1 gates home: {planning['gate_home_path']}")
+        if planning["waiver_home_path"] is not None:
+            lines.append(f"Gate Outcomes / Waivers home: {planning['waiver_home_path']}")
+        if planning["missing_artifact_notice"] is not None:
+            lines.append(f"Missing artifact notice: {planning['missing_artifact_notice']}")
+        lines.append(f"Canonical example: {planning['canonical_example_path']}")
     lines.extend(
         [
             "",
@@ -3556,6 +3688,8 @@ def handle_context_pack(args: Any) -> CommandResult:
             "sprint_lines": record.sprint_lines,
             "spec_paths": record.spec_paths,
             "spec_template_path": "tasks/specs/TEMPLATE.md",
+            "canonical_spec_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
+            "planning_gates": planning,
             "suggested_workflow_commands": workflow_commands,
             "suggested_validation_commands": [
                 "make agent-check",

@@ -22,6 +22,7 @@
 - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
 - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - `TASK-251` Normalize Task Specs Around Explicit Input/Output Contracts
+- `TASK-298` Add Phase -1 Planning Gates Without Heavy Process Overhead
 - `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
 - `TASK-254` Refine and Unify Agent-Facing Context Entry Points
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces

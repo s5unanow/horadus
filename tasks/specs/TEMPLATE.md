@@ -25,6 +25,35 @@ What is wrong, missing, or risky today? State the operator/runtime impact in
 - Explicitly excluded follow-ups or adjacent work
 - Any human-gated/manual steps not covered by this task
 
+**Planning Gates**: `Required` | `Not Required` — short reason
+
+Use `Required` when the task has `Exec Plan: Required`, when the task changes
+shared workflow/policy behavior, or when the author explicitly opts in.
+Use `Not Required` only for the quiet-path small-task case and include a short
+reason. The authoritative marker lives on the exec plan when one exists,
+otherwise on the spec, otherwise on the backlog entry. If the backlog entry is
+the only artifact and planning gates are required, `context-pack` and the
+warn-only validator should surface that as a missing planning artifact rather
+than treating the backlog body as the permanent gate/waiver home.
+
+## Phase -1 / Pre-Implementation Gates (Only If `Planning Gates: Required`)
+
+- `Simplicity Gate`: What existing surface is being extended, and why is that
+  the smallest safe change instead of a new top-level surface?
+- `Anti-Abstraction Gate`: What concrete duplication, provider boundary, or
+  test seam justifies any new wrapper/adapter/manager/repository?
+- `Integration-First Gate`:
+  - Validation target:
+  - Exercises:
+- `Determinism Gate`: Triggered | Not applicable — short reason
+- `LLM Budget/Safety Gate`: Triggered | Not applicable — short reason
+- `Observability Gate`: Triggered | Not applicable — short reason
+
+Keep the answers short and decision-shaped. If an exec plan also exists, keep
+the gate answers here compact and record rejected simpler alternatives or
+justified waivers in that plan’s `Gate Outcomes / Waivers` section. Reuse the
+canonical example at `tasks/specs/275-finish-review-gate-timeout.md`.
+
 ## Shared Workflow/Policy Change Checklist (Only If Applicable)
 
 - Apply these guardrails only when changing shared workflow helpers, shared

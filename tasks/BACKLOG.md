@@ -683,6 +683,8 @@ depends too much on author judgment. Tighten the task/spec template so new work
 is consistently framed in terms of inputs, outputs, non-goals, and acceptance
 criteria that an agent can execute against without inflating scope.
 
+**Canonical Example**: `tasks/specs/275-finish-review-gate-timeout.md`
+
 **Files**: `tasks/BACKLOG.md`, `tasks/specs/`, `tasks/exec_plans/TEMPLATE.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/`, `tests/unit/`
 
 **Scope Boundary**:
@@ -925,6 +927,8 @@ shell and isolated `v2` modules.
 **Priority**: P2 (Medium)
 **Estimate**: 4-6 hours
 **Exec Plan**: Required (`tasks/exec_plans/README.md`)
+**Planning Gates**: Required — planning-process hardening task with an exec plan and shared workflow surfacing changes
+**Canonical Example**: `tasks/specs/275-finish-review-gate-timeout.md`
 
 The repo already has strong execution and completion gates, but planning still
 depends too much on author judgment. Recent work on `TASK-297` showed the main

@@ -5,6 +5,7 @@
 - Owner:
 - Started:
 - Current state: Not started | In progress | Blocked | Done
+- Planning Gates: Required | Not Required — short reason
 
 ## Goal (1-3 lines)
 
@@ -27,6 +28,13 @@
 
 - In scope:
 - Out of scope:
+
+## Gate Outcomes / Waivers
+
+- Accepted design / smallest safe shape:
+- Rejected simpler alternative:
+- First integration proof:
+- Waivers:
 
 ## Plan (Keep Updated)
 
@@ -51,3 +59,4 @@
 
 - Spec:
 - Relevant modules:
+- Canonical example: `tasks/specs/275-finish-review-gate-timeout.md`

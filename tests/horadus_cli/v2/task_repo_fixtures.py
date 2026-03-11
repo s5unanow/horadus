@@ -10,6 +10,9 @@ import src.horadus_cli.v2.task_workflow_core as task_commands_module
 LIVE_TASK_ID = "TASK-901"
 ARCHIVED_TASK_ID = "TASK-902"
 BACKLOG_ONLY_TASK_ID = "TASK-903"
+NON_APPLICABLE_TASK_ID = "TASK-904"
+EXEC_PLAN_TASK_ID = "TASK-905"
+EXEC_PLAN_NO_MARKER_TASK_ID = "TASK-906"
 
 
 def seed_task_repo_layout(repo_root: Path) -> Path:
@@ -28,6 +31,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "### TASK-901: Stable live fixture",
                 "**Priority**: P1",
                 "**Estimate**: 2h",
+                "**Planning Gates**: Required — spec-backed workflow fixture",
                 "",
                 "Exercise live task lookups without depending on the repo backlog.",
                 "",
@@ -41,6 +45,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "### TASK-903: Backlog-only fixture",
                 "**Priority**: P2",
                 "**Estimate**: 1h",
+                "**Planning Gates**: Required — backlog-only applicable fixture",
                 "",
                 "Exercise placeholder paths when a task is not in the active sprint.",
                 "",
@@ -48,6 +53,47 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "",
                 "**Acceptance Criteria**:",
                 "- [ ] backlog-only lookup works",
+                "",
+                "---",
+                "",
+                "### TASK-904: Quiet-path fixture",
+                "**Priority**: P3",
+                "**Estimate**: 15m",
+                "",
+                "Exercise the non-applicable planning quiet path.",
+                "",
+                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] non-applicable context pack stays quiet",
+                "",
+                "---",
+                "",
+                "### TASK-905: Exec-plan fixture",
+                "**Priority**: P1",
+                "**Estimate**: 3h",
+                "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+                "",
+                "Exercise exec-plan-backed planning applicability.",
+                "",
+                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] exec-plan context pack surfaces planning homes",
+                "",
+                "---",
+                "",
+                "### TASK-906: Exec-plan fallback fixture",
+                "**Priority**: P1",
+                "**Estimate**: 2h",
+                "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+                "",
+                "Exercise required planning surfacing when no explicit marker exists.",
+                "",
+                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] required planning output omits marker when none is declared",
                 "",
                 "---",
                 "",
@@ -79,7 +125,82 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         encoding="utf-8",
     )
     (tasks_dir / "specs" / "901-stable-live-fixture.md").write_text(
-        "# TASK-901 fixture spec\n",
+        "\n".join(
+            [
+                "# TASK-901 fixture spec",
+                "",
+                "**Planning Gates**: Required — spec-backed fixture",
+                "",
+                "## Phase -1 / Pre-Implementation Gates",
+                "",
+                "- `Simplicity Gate`: Extend the existing fixture layout.",
+                "- `Anti-Abstraction Gate`: Reuse the shared synthetic task repo.",
+                "- `Integration-First Gate`:",
+                "  - Validation target: `pytest tests/horadus_cli/v2/test_cli.py`",
+                "  - Exercises: context-pack planning surfacing.",
+                "- `Determinism Gate`: Not applicable — fixture-only task.",
+                "- `LLM Budget/Safety Gate`: Not applicable — no LLM path.",
+                "- `Observability Gate`: Not applicable — no runtime behavior.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tasks_dir / "exec_plans").mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "exec_plans" / "TASK-905.md").write_text(
+        "\n".join(
+            [
+                "# TASK-905: Exec-plan fixture",
+                "",
+                "## Status",
+                "",
+                "- Owner: Fixture",
+                "- Started: 2026-03-11",
+                "- Current state: In progress",
+                "- Planning Gates: Required — exec-plan-backed fixture",
+                "",
+                "## Goal (1-3 lines)",
+                "",
+                "Exercise exec-plan-backed planning surfacing.",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: use one exec plan file.",
+                "- Rejected simpler alternative: omit the planning section entirely.",
+                "- First integration proof: context-pack output for TASK-905.",
+                "- Waivers: none.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tasks_dir / "exec_plans" / "TASK-906.md").write_text(
+        "\n".join(
+            [
+                "# TASK-906: Exec-plan fallback fixture",
+                "",
+                "## Status",
+                "",
+                "- Owner: Fixture",
+                "- Started: 2026-03-11",
+                "- Current state: In progress",
+                "",
+                "## Goal (1-3 lines)",
+                "",
+                "Exercise required planning surfacing without an explicit marker.",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: rely on exec-plan-required fallback.",
+                "- Rejected simpler alternative: adding a redundant planning marker line.",
+                "- First integration proof: context-pack output for TASK-906.",
+                "- Waivers: none.",
+                "",
+            ]
+        )
+        + "\n",
         encoding="utf-8",
     )
     (repo_root / "archive" / "closed_tasks" / "2026-Q1.md").write_text(

@@ -30,6 +30,9 @@ pytest_plugins = ("tests.horadus_cli.v2.task_repo_fixtures",)
 LIVE_TASK_ID = "TASK-901"
 ARCHIVED_TASK_ID = "TASK-902"
 BACKLOG_ONLY_TASK_ID = "TASK-903"
+NON_APPLICABLE_TASK_ID = "TASK-904"
+EXEC_PLAN_TASK_ID = "TASK-905"
+EXEC_PLAN_NO_MARKER_TASK_ID = "TASK-906"
 
 _REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER = task_commands_module._pre_merge_task_closure_blocker
 _REAL_BRANCH_HEAD_ALIGNMENT_BLOCKER = task_commands_module._branch_head_alignment_blocker
@@ -918,6 +921,50 @@ def test_task_repo_helper_functions_cover_validation_edges(
     assert urgency.days_since_last_touched is None
 
 
+def test_task_repo_planning_helpers_cover_marker_and_path_edges(tmp_path: Path) -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-905",
+        title="fixture",
+        priority=None,
+        estimate=None,
+        description=[],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="**Planning Gates**: Required — fixture\n**Exec Plan**: Required (`tasks/exec_plans/README.md`)\n",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
+    repo_tasks = tmp_path / "tasks" / "exec_plans"
+    repo_tasks.mkdir(parents=True)
+    (repo_tasks / "TASK-905.md").write_text("# plan\n", encoding="utf-8")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: tmp_path)
+    try:
+        assert task_repo_module.exec_plan_paths_for_task("TASK-905") == [
+            "tasks/exec_plans/TASK-905.md"
+        ]
+    finally:
+        monkeypatch.undo()
+
+    assert task_repo_module.planning_gates_value_from_text(record.raw_block) == "Required — fixture"
+    assert task_repo_module.planning_gates_value_from_text("no marker") is None
+    assert task_repo_module.planning_gates_required("Required — reason") is True
+    assert task_repo_module.planning_gates_required("Not Required — reason") is False
+    assert task_repo_module.planning_gates_required("Maybe") is None
+    assert task_repo_module.task_planning_gates_value(record) == "Required — fixture"
+    assert task_repo_module.task_requires_exec_plan(record) is True
+    assert task_repo_module.task_id_from_spec_path("tasks/specs/275-example.md") == "TASK-275"
+    assert task_repo_module.task_id_from_spec_path("tasks/specs/bad.md") is None
+    assert (
+        task_repo_module.task_id_from_exec_plan_path("tasks/exec_plans/TASK-905.md") == "TASK-905"
+    )
+    assert task_repo_module.task_id_from_exec_plan_path("tasks/exec_plans/bad.md") is None
+
+
 def test_parse_human_blockers_skips_malformed_rows(tmp_path: Path) -> None:
     sprint_path = tmp_path / "CURRENT_SPRINT.md"
     sprint_path.write_text(
@@ -942,6 +989,82 @@ def test_parse_human_blockers_skips_malformed_rows(tmp_path: Path) -> None:
     assert len(blockers) == 1
     assert blockers[0].task_id == "TASK-253"
     assert blockers[0].escalate_after_days == 0
+
+
+def test_parse_task_block_ignores_metadata_lines_in_description() -> None:
+    raw_block = "\n".join(
+        [
+            "### TASK-905: Fixture",
+            "**Priority**: P1",
+            "**Estimate**: 2h",
+            "**Planning Gates**: Required — fixture",
+            "**Canonical Example**: `tasks/specs/275-finish-review-gate-timeout.md`",
+            "",
+            "Description line.",
+            "",
+            "**Files**: `src/example.py`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] works",
+        ]
+    )
+
+    record = task_repo_module._parse_task_block("TASK-905", "Fixture", raw_block)
+
+    assert record.description == ["Description line."]
+
+
+def test_planning_marker_from_relative_path_returns_none_for_missing_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+
+    assert task_commands_module._planning_marker_from_relative_path("tasks/specs/missing.md") == (
+        None,
+        None,
+    )
+
+
+def test_planning_context_uses_later_marker_when_earlier_artifact_has_none(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-999",
+        title="Fixture",
+        priority="P1",
+        estimate="1h",
+        description=["fixture"],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=["tasks/specs/999-fixture.md"],
+        source_path="tasks/BACKLOG.md",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "exec_plan_paths_for_task",
+        lambda _task_id: ["tasks/exec_plans/TASK-999.md"],
+    )
+    monkeypatch.setattr(task_commands_module, "task_planning_gates_value", lambda _: None)
+
+    def fake_marker(relative_path: str) -> tuple[str | None, str | None]:
+        if relative_path == "tasks/exec_plans/TASK-999.md":
+            return None, None
+        return "Required — later spec marker", relative_path
+
+    monkeypatch.setattr(task_commands_module, "_planning_marker_from_relative_path", fake_marker)
+
+    planning = task_commands_module._planning_context("TASK-999", record)
+
+    assert planning["required"] is True
+    assert planning["marker_value"] == "Required — later spec marker"
+    assert planning["marker_source"] == "tasks/specs/999-fixture.md"
+    assert planning["authoritative_artifact_path"] == "tasks/exec_plans/TASK-999.md"
 
 
 def test_main_tasks_list_active_json_includes_blocker_urgency(
@@ -9278,6 +9401,80 @@ def test_handle_context_pack_uses_placeholder_when_task_not_in_sprint(
     assert (
         result.data["suggested_workflow_commands"][0] == "uv run --no-sync horadus tasks preflight"
     )
+
+
+def test_handle_context_pack_surfaces_missing_planning_artifact_notice(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id=BACKLOG_ONLY_TASK_ID)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Planning Gates" in result.lines
+    assert "Applicability: required" in result.lines
+    assert "State: applicable_backlog_only_missing_artifact" in result.lines
+    assert any(line.startswith("Missing artifact notice:") for line in result.lines)
+    assert result.data is not None
+    planning = result.data["planning_gates"]
+    assert planning["required"] is True
+    assert planning["state"] == "applicable_backlog_only_missing_artifact"
+    assert planning["authoritative_artifact_path"] is None
+    assert planning["canonical_example_path"] == "tasks/specs/275-finish-review-gate-timeout.md"
+
+
+def test_handle_context_pack_stays_quiet_for_non_applicable_task(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id=NON_APPLICABLE_TASK_ID)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Planning Gates" not in result.lines
+    assert result.data is not None
+    assert result.data["planning_gates"]["state"] == "non_applicable"
+    assert result.data["planning_gates"]["required"] is False
+
+
+def test_handle_context_pack_surfaces_exec_plan_planning_homes(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id=EXEC_PLAN_TASK_ID))
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "State: applicable_with_authoritative_artifact_present" in result.lines
+    assert "Authoritative planning artifact: tasks/exec_plans/TASK-905.md" in result.lines
+    assert "Phase -1 gates home: tasks/exec_plans/TASK-905.md" in result.lines
+    assert "Gate Outcomes / Waivers home: tasks/exec_plans/TASK-905.md" in result.lines
+    assert result.data is not None
+    planning = result.data["planning_gates"]
+    assert planning["authoritative_artifact_path"] == "tasks/exec_plans/TASK-905.md"
+    assert planning["marker_source"] == "tasks/exec_plans/TASK-905.md"
+    assert planning["waiver_home_path"] == "tasks/exec_plans/TASK-905.md"
+
+
+def test_handle_context_pack_omits_marker_line_when_exec_plan_requires_gates_without_marker(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id=EXEC_PLAN_NO_MARKER_TASK_ID)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Planning Gates" in result.lines
+    assert "State: applicable_with_authoritative_artifact_present" in result.lines
+    assert not any(line.startswith("Marker: ") for line in result.lines)
+    assert "Authoritative planning artifact: tasks/exec_plans/TASK-906.md" in result.lines
+    assert result.data is not None
+    planning = result.data["planning_gates"]
+    assert planning["required"] is True
+    assert planning["marker_value"] is None
+    assert planning["authoritative_artifact_path"] == "tasks/exec_plans/TASK-906.md"
 
 
 def test_handle_context_pack_propagates_archive_flag_to_suggested_commands(

@@ -6,11 +6,18 @@ from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 TASK_ID_PATTERN = re.compile(r"^TASK-(\d{3})$")
+SPEC_TASK_ID_PATTERN = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
+EXEC_PLAN_TASK_ID_PATTERN = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
 TASK_HEADER_PATTERN = re.compile(
     r"^### (?P<task_id>TASK-\d{3}): (?P<title>.+?)\n(?P<body>.*?)(?=^---\n|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 TASK_REF_PATTERN = re.compile(r"TASK-\d{3}")
+PLANNING_GATES_PATTERN = re.compile(
+    r"^(?:-\s+)?(?:\*\*)?Planning Gates(?:\*\*)?:\s*(?P<value>.+)$",
+    re.MULTILINE,
+)
+EXEC_PLAN_LINE_PATTERN = re.compile(r"^\*\*Exec Plan\*\*:\s*(?P<value>.+)$", re.MULTILINE)
 TASK_STATUS_ORDER = {"active": 0, "backlog": 1, "completed": 2}
 COMPLETED_TASK_LINE_PATTERN = re.compile(r"^-\s+(TASK-\d{3}):\s+(.+?)\s+✅(?:\s|$)")
 CLOSED_TASK_ARCHIVE_GUIDANCE = (
@@ -381,6 +388,10 @@ def _parse_task_block(task_id: str, title: str, raw_block: str) -> TaskRecord:
             in_acceptance = True
             in_assessment_refs = False
             continue
+        if stripped.startswith("**") and ":" in stripped:
+            in_assessment_refs = False
+            in_acceptance = False
+            continue
         if stripped.startswith("**") and stripped.endswith("**"):
             in_description = False
             in_assessment_refs = False
@@ -447,6 +458,57 @@ def spec_paths_for_task(task_id: str) -> list[str]:
         str(path.relative_to(repo_root()))
         for path in (repo_root() / "tasks" / "specs").glob(spec_glob)
     )
+
+
+def exec_plan_paths_for_task(task_id: str) -> list[str]:
+    candidate = repo_root() / "tasks" / "exec_plans" / f"{task_id}.md"
+    if not candidate.exists():
+        return []
+    return [str(candidate.relative_to(repo_root()))]
+
+
+def planning_gates_value_from_text(content: str) -> str | None:
+    match = PLANNING_GATES_PATTERN.search(content)
+    if match is None:
+        return None
+    value = match.group("value").strip()
+    return value or None
+
+
+def planning_gates_required(value: str | None) -> bool | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if normalized.startswith("required"):
+        return True
+    if normalized.startswith("not required"):
+        return False
+    return None
+
+
+def task_planning_gates_value(record: TaskRecord) -> str | None:
+    return planning_gates_value_from_text(record.raw_block)
+
+
+def task_requires_exec_plan(record: TaskRecord) -> bool:
+    match = EXEC_PLAN_LINE_PATTERN.search(record.raw_block)
+    if match is None:
+        return False
+    return match.group("value").strip().lower().startswith("required")
+
+
+def task_id_from_spec_path(relative_path: str) -> str | None:
+    match = SPEC_TASK_ID_PATTERN.match(Path(relative_path).name)
+    if match is None:
+        return None
+    return f"TASK-{match.group('task_num')}"
+
+
+def task_id_from_exec_plan_path(relative_path: str) -> str | None:
+    match = EXEC_PLAN_TASK_ID_PATTERN.match(Path(relative_path).name)
+    if match is None:
+        return None
+    return match.group("task_id")
 
 
 def completed_task_ids(path: Path | None = None) -> set[str]:

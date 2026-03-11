@@ -1383,3 +1383,677 @@ def test_docs_freshness_handles_missing_adr_dir_without_references(tmp_path: Pat
     result = run_docs_freshness_check(repo_root=tmp_path)
 
     assert not any(issue.rule_id == "adr_reference_target_missing" for issue in result.errors)
+
+
+def test_docs_freshness_warns_for_missing_backlog_only_planning_artifact(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "### TASK-298: Planning fixture",
+                "**Priority**: P2",
+                "**Estimate**: 1h",
+                "**Planning Gates**: Required — backlog-only fixture",
+                "",
+                "Planning fixture body.",
+                "",
+                "**Files**: `tasks/BACKLOG.md`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] planning warning appears",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        planning_artifact_paths=("tasks/BACKLOG.md",),
+    )
+
+    warning_ids = [issue.rule_id for issue in result.warnings]
+    assert "planning_artifact_missing" in warning_ids
+    assert not any(issue.rule_id == "planning_artifact_missing" for issue in result.errors)
+
+
+def test_docs_freshness_warns_for_incomplete_planning_spec(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "### TASK-275: Planning fixture",
+                "**Priority**: P2",
+                "**Estimate**: 1h",
+                "**Planning Gates**: Required — spec fixture",
+                "",
+                "Planning fixture body.",
+                "",
+                "**Files**: `tasks/specs/275-planning-fixture.md`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] planning warning appears",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "specs" / "275-planning-fixture.md").write_text(
+        "\n".join(
+            [
+                "# TASK-275: Planning fixture",
+                "",
+                "**Planning Gates**: Required — spec fixture",
+                "",
+                "## Phase -1 / Pre-Implementation Gates",
+                "",
+                "- `Simplicity Gate`: Extend the fixture.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        planning_artifact_paths=("tasks/specs/275-planning-fixture.md",),
+    )
+
+    warning_ids = {issue.rule_id for issue in result.warnings}
+    assert "planning_core_gate_missing" in warning_ids
+    assert "planning_conditional_gate_missing" in warning_ids
+    assert "planning_integration_proof_incomplete" in warning_ids
+
+
+def test_docs_freshness_accepts_complete_planning_exec_plan(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "exec_plans").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "### TASK-298: Planning fixture",
+                "**Priority**: P2",
+                "**Estimate**: 1h",
+                "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+                "",
+                "Planning fixture body.",
+                "",
+                "**Files**: `tasks/exec_plans/TASK-298.md`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] planning warning stays quiet",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "exec_plans" / "TASK-298.md").write_text(
+        "\n".join(
+            [
+                "# TASK-298: Planning fixture",
+                "",
+                "## Status",
+                "- Planning Gates: Required — exec-plan fixture",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: keep the fixture small.",
+                "- Rejected simpler alternative: omit the section.",
+                "- First integration proof: run docs freshness with an explicit planning artifact override.",
+                "- Waivers: none.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        planning_artifact_paths=("tasks/exec_plans/TASK-298.md",),
+    )
+
+    assert not any(issue.path == "tasks/exec_plans/TASK-298.md" for issue in result.warnings)
+
+
+def test_planning_helper_functions_cover_marker_state_and_git_diff_edges(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "exec_plans").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "### TASK-275: Spec-backed fixture",
+                "**Priority**: P2",
+                "**Estimate**: 1h",
+                "**Planning Gates**: Required — spec fixture",
+                "",
+                "Body.",
+                "",
+                "**Files**: `tasks/specs/275-example.md`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] ok",
+                "",
+                "---",
+                "",
+                "### TASK-298: Exec-plan fixture",
+                "**Priority**: P2",
+                "**Estimate**: 1h",
+                "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+                "",
+                "Body.",
+                "",
+                "**Files**: `tasks/exec_plans/TASK-298.md`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] ok",
+                "",
+                "---",
+                "",
+                "### TASK-299: Quiet fixture",
+                "**Priority**: P3",
+                "**Estimate**: 15m",
+                "**Planning Gates**: Not Required — tiny docs-only follow-up",
+                "",
+                "Body.",
+                "",
+                "**Files**: `docs/AGENT_RUNBOOK.md`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] ok",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "specs" / "275-example.md").write_text(
+        "**Planning Gates**: Required — spec fixture\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "exec_plans" / "TASK-298.md").write_text(
+        "- Planning Gates: Required — exec plan fixture\n",
+        encoding="utf-8",
+    )
+    backlog_text = (tmp_path / "tasks" / "BACKLOG.md").read_text(encoding="utf-8")
+
+    assert docs_freshness_module._planning_marker_value(
+        "x\n**Planning Gates**: Required — yes\n"
+    ) == ("Required — yes")
+    assert docs_freshness_module._planning_marker_value("no marker") is None
+    assert docs_freshness_module._planning_required_from_value("Required — yes") is True
+    assert docs_freshness_module._planning_required_from_value("Not Required — no") is False
+    assert docs_freshness_module._planning_required_from_value("unclear") is None
+    assert (
+        docs_freshness_module._exec_plan_required_from_backlog(
+            "**Exec Plan**: Required (`tasks/exec_plans/README.md`)"
+        )
+        is True
+    )
+    assert docs_freshness_module._exec_plan_required_from_backlog("no") is False
+    assert (
+        docs_freshness_module._task_id_from_planning_artifact_path("tasks/specs/275-example.md")
+        == "TASK-275"
+    )
+    assert (
+        docs_freshness_module._task_id_from_planning_artifact_path("tasks/exec_plans/TASK-298.md")
+        == "TASK-298"
+    )
+    assert (
+        docs_freshness_module._task_id_from_planning_artifact_path("tasks/specs/not-a-spec.md")
+        is None
+    )
+    assert (
+        docs_freshness_module._task_id_from_planning_artifact_path("tasks/exec_plans/not-a-plan.md")
+        is None
+    )
+    assert docs_freshness_module._task_id_from_planning_artifact_path("README.md") is None
+    assert docs_freshness_module._extract_task_block(backlog_text, "TASK-275") is not None
+    assert docs_freshness_module._extract_task_block(backlog_text, "TASK-999") is None
+    assert docs_freshness_module._task_spec_paths(tmp_path, "TASK-275") == (
+        "tasks/specs/275-example.md",
+    )
+    assert docs_freshness_module._task_exec_plan_paths(tmp_path, "TASK-298") == (
+        "tasks/exec_plans/TASK-298.md",
+    )
+    assert docs_freshness_module._task_exec_plan_paths(tmp_path, "TASK-299") == ()
+
+    spec_state = docs_freshness_module._planning_state_for_task(
+        tmp_path,
+        task_id="TASK-275",
+        backlog_text=backlog_text,
+    )
+    exec_state = docs_freshness_module._planning_state_for_task(
+        tmp_path,
+        task_id="TASK-298",
+        backlog_text=backlog_text,
+    )
+    quiet_state = docs_freshness_module._planning_state_for_task(
+        tmp_path,
+        task_id="TASK-299",
+        backlog_text=backlog_text,
+    )
+
+    assert spec_state["state"] == "applicable_spec_backed_without_exec_plan"
+    assert exec_state["state"] == "applicable_with_authoritative_artifact_present"
+    assert quiet_state["state"] == "non_applicable"
+
+    monkeypatch.setattr(docs_freshness_module.shutil, "which", lambda _name: None)
+    assert docs_freshness_module._changed_planning_artifact_paths(tmp_path) == ()
+
+    monkeypatch.setattr(docs_freshness_module.shutil, "which", lambda _name: "/usr/bin/git")
+
+    class _CompletedProcess:
+        def __init__(self, returncode: int, stdout: str) -> None:
+            self.returncode = returncode
+            self.stdout = stdout
+
+    merge_fail_calls: list[list[str]] = []
+
+    def _merge_fail(cmd: list[str], **_kwargs: object) -> _CompletedProcess:
+        merge_fail_calls.append(cmd)
+        return _CompletedProcess(1, "")
+
+    monkeypatch.setattr(docs_freshness_module.subprocess, "run", _merge_fail)
+    assert docs_freshness_module._changed_planning_artifact_paths(tmp_path) == ()
+    assert merge_fail_calls
+
+    def _empty_merge_base(cmd: list[str], **_kwargs: object) -> _CompletedProcess:
+        if cmd[1] == "merge-base":
+            return _CompletedProcess(0, "")
+        return _CompletedProcess(0, "")
+
+    monkeypatch.setattr(docs_freshness_module.subprocess, "run", _empty_merge_base)
+    assert docs_freshness_module._changed_planning_artifact_paths(tmp_path) == ()
+
+    def _diff_failure(cmd: list[str], **_kwargs: object) -> _CompletedProcess:
+        if cmd[1] == "merge-base":
+            return _CompletedProcess(0, "abc123\n")
+        return _CompletedProcess(1, "")
+
+    monkeypatch.setattr(docs_freshness_module.subprocess, "run", _diff_failure)
+    assert docs_freshness_module._changed_planning_artifact_paths(tmp_path) == ()
+
+    def _raise_file_not_found(_cmd: list[str], **_kwargs: object) -> _CompletedProcess:
+        raise FileNotFoundError
+
+    monkeypatch.setattr(docs_freshness_module.subprocess, "run", _raise_file_not_found)
+    assert docs_freshness_module._changed_planning_artifact_paths(tmp_path) == ()
+
+    def _successful_diff(cmd: list[str], **_kwargs: object) -> _CompletedProcess:
+        if cmd[1] == "merge-base":
+            return _CompletedProcess(0, "abc123\n")
+        return _CompletedProcess(
+            0,
+            "\n".join(
+                [
+                    "tasks/specs/TEMPLATE.md",
+                    "",
+                    "tasks/specs/275-example.md",
+                    "tasks/exec_plans/TEMPLATE.md",
+                    "tasks/exec_plans/TASK-298.md",
+                    "tasks/BACKLOG.md",
+                    "README.md",
+                    "tasks/specs/275-example.md",
+                ]
+            ),
+        )
+
+    monkeypatch.setattr(docs_freshness_module.subprocess, "run", _successful_diff)
+    assert docs_freshness_module._changed_planning_artifact_paths(tmp_path) == (
+        "tasks/specs/TEMPLATE.md",
+        "tasks/specs/275-example.md",
+        "tasks/exec_plans/TEMPLATE.md",
+        "tasks/exec_plans/TASK-298.md",
+        "tasks/BACKLOG.md",
+    )
+
+
+def test_validate_planning_artifact_covers_template_and_exec_plan_paths(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "exec_plans").mkdir(parents=True, exist_ok=True)
+    backlog_text = "\n".join(
+        [
+            "# Backlog",
+            "",
+            "### TASK-275: Spec fixture",
+            "**Priority**: P2",
+            "**Estimate**: 1h",
+            "**Planning Gates**: Required — spec fixture",
+            "",
+            "Body.",
+            "",
+            "**Files**: `tasks/specs/275-example.md`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] ok",
+            "",
+            "---",
+            "",
+            "### TASK-298: Exec fixture",
+            "**Priority**: P2",
+            "**Estimate**: 1h",
+            "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+            "",
+            "Body.",
+            "",
+            "**Files**: `tasks/exec_plans/TASK-298.md`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] ok",
+            "",
+            "---",
+            "",
+        ]
+    )
+    (tmp_path / "tasks" / "BACKLOG.md").write_text(backlog_text, encoding="utf-8")
+    (tmp_path / "tasks" / "specs" / "275-example.md").write_text(
+        "\n".join(
+            [
+                "# spec",
+                "",
+                "**Planning Gates**: Required — spec fixture",
+                "",
+                "## Phase -1 / Pre-Implementation Gates",
+                "",
+                "- `Simplicity Gate`: ok",
+                "- `Anti-Abstraction Gate`: ok",
+                "- `Integration-First Gate`:",
+                "  - Validation target: ok",
+                "  - Exercises: ok",
+                "- `Determinism Gate`: Not applicable — fixture",
+                "- `LLM Budget/Safety Gate`: Not applicable — fixture",
+                "- `Observability Gate`: Not applicable — fixture",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "exec_plans" / "TASK-298.md").write_text(
+        "\n".join(
+            [
+                "# plan",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: ok",
+                "- Rejected simpler alternative: ok",
+                "- First integration proof: ok",
+                "- Waivers: none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    missing_template = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/specs/TEMPLATE.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in missing_template} == {
+        "planning_marker_missing",
+        "planning_spec_section_missing",
+    }
+
+    (tmp_path / "tasks" / "specs" / "TEMPLATE.md").write_text(
+        "**Planning Gates**: Required\n## Phase -1 / Pre-Implementation Gates\n",
+        encoding="utf-8",
+    )
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/specs/TEMPLATE.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+    (tmp_path / "tasks" / "exec_plans" / "TEMPLATE.md").write_text("", encoding="utf-8")
+    missing_exec_template = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TEMPLATE.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in missing_exec_template} == {
+        "planning_marker_missing",
+        "planning_gate_outcomes_missing",
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TEMPLATE.md").write_text(
+        "Planning Gates: Required\n## Gate Outcomes / Waivers\n",
+        encoding="utf-8",
+    )
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/exec_plans/TEMPLATE.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/specs/275-example.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/exec_plans/TASK-298.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+    backlog_issue_set = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/BACKLOG.md",
+        backlog_text=backlog_text,
+    )
+    assert backlog_issue_set == ()
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/specs/missing.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+    (tmp_path / "tasks" / "specs" / "276-not-required.md").write_text(
+        "\n".join(
+            [
+                "# spec",
+                "",
+                "**Planning Gates**: Not Required — tiny follow-up",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    backlog_with_quiet = backlog_text + "\n".join(
+        [
+            "### TASK-276: Quiet fixture",
+            "**Priority**: P3",
+            "**Estimate**: 15m",
+            "**Planning Gates**: Not Required — tiny follow-up",
+            "",
+            "Body.",
+            "",
+            "**Files**: `tasks/specs/276-not-required.md`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] ok",
+            "",
+            "---",
+            "",
+        ]
+    )
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/specs/276-not-required.md",
+            backlog_text=backlog_with_quiet,
+        )
+        == ()
+    )
+
+    (tmp_path / "tasks" / "specs" / "277-incomplete.md").write_text(
+        "\n".join(
+            [
+                "# spec",
+                "",
+                "## Phase -1 / Pre-Implementation Gates",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    backlog_with_incomplete = backlog_with_quiet + "\n".join(
+        [
+            "### TASK-277: Incomplete spec fixture",
+            "**Priority**: P2",
+            "**Estimate**: 1h",
+            "**Planning Gates**: Required — spec fixture",
+            "",
+            "Body.",
+            "",
+            "**Files**: `tasks/specs/277-incomplete.md`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] ok",
+            "",
+            "---",
+            "",
+        ]
+    )
+    incomplete_spec_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/specs/277-incomplete.md",
+        backlog_text=backlog_with_incomplete,
+    )
+    assert {issue.rule_id for issue in incomplete_spec_issues} >= {
+        "planning_marker_missing",
+        "planning_core_gate_missing",
+        "planning_conditional_gate_missing",
+        "planning_integration_proof_incomplete",
+    }
+
+    (tmp_path / "tasks" / "specs" / "278-no-section.md").write_text(
+        "\n".join(
+            [
+                "# spec",
+                "",
+                "**Planning Gates**: Required — spec fixture",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    backlog_with_no_section = backlog_with_incomplete + "\n".join(
+        [
+            "### TASK-278: Missing section fixture",
+            "**Priority**: P2",
+            "**Estimate**: 1h",
+            "**Planning Gates**: Required — spec fixture",
+            "",
+            "Body.",
+            "",
+            "**Files**: `tasks/specs/278-no-section.md`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] ok",
+            "",
+            "---",
+            "",
+        ]
+    )
+    missing_section_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/specs/278-no-section.md",
+        backlog_text=backlog_with_no_section,
+    )
+    assert {issue.rule_id for issue in missing_section_issues} == {"planning_spec_section_missing"}
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-299.md").write_text("# plan\n", encoding="utf-8")
+    backlog_with_missing_exec = backlog_with_incomplete + "\n".join(
+        [
+            "### TASK-299: Incomplete exec fixture",
+            "**Priority**: P2",
+            "**Estimate**: 1h",
+            "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+            "",
+            "Body.",
+            "",
+            "**Files**: `tasks/exec_plans/TASK-299.md`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] ok",
+            "",
+            "---",
+            "",
+        ]
+    )
+    incomplete_exec_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-299.md",
+        backlog_text=backlog_with_missing_exec,
+    )
+    assert {issue.rule_id for issue in incomplete_exec_issues} >= {
+        "planning_gate_outcomes_missing",
+        "planning_gate_outcome_field_missing",
+    }
+
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="README.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+    (tmp_path / "tasks" / "notes.md").write_text("notes\n", encoding="utf-8")
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/notes.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+
+def test_docs_freshness_handles_missing_backlog_file_for_planning_scan(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "BACKLOG.md").unlink()
+
+    result = run_docs_freshness_check(repo_root=tmp_path)
+
+    assert result.errors

@@ -15,8 +15,8 @@ accepted.
 
 - Canonical workflow policy in `AGENTS.md`
 - Operator guidance in `docs/AGENT_RUNBOOK.md`
-- Finish-flow implementation in `src/horadus_cli/task_commands.py`
-- Existing finish/review-gate unit coverage in `tests/horadus_cli/v1/test_cli.py` and `tests/unit/scripts/`
+- Finish-flow implementation in `src/horadus_cli/v2/task_workflow_core.py`
+- Existing finish/review-gate unit coverage in `tests/horadus_cli/v2/test_cli.py` and `tests/unit/scripts/`
 
 ## Outputs
 
@@ -29,6 +29,25 @@ accepted.
 - Changing the underlying review policy or removing the review gate
 - Adding a second completion workflow outside `horadus tasks finish`
 - Auto-merging on timeout
+
+**Planning Gates**: Required — shared workflow completion policy change
+
+## Phase -1 / Pre-Implementation Gates
+
+- `Simplicity Gate`: Extend the existing `horadus tasks finish` flow instead of
+  adding a second completion path or a new policy subsystem.
+- `Anti-Abstraction Gate`: Keep the review-timeout enforcement in the existing
+  CLI policy and tests; a new wrapper around GitHub review state would add
+  indirection without a provider-boundary payoff.
+- `Integration-First Gate`:
+  - Validation target: finish-path regression coverage plus the local gate run.
+  - Exercises: the current-head review-gate contract, timeout handling, and the
+    invariant that normal completion stays on the Horadus CLI path.
+- `Determinism Gate`: Not applicable — no trend math, persisted-factor, or
+  concurrency semantics change.
+- `LLM Budget/Safety Gate`: Not applicable — no LLM/reporting path is touched.
+- `Observability Gate`: Triggered — completion output and blocker messages must
+  make the timeout path and next action explicit to operators.
 
 ## Acceptance Criteria
 

@@ -4,7 +4,8 @@
 
 - Owner: Codex
 - Started: 2026-03-10
-- Current state: Not started
+- Current state: Done
+- Planning Gates: Required — this task changes shared workflow guidance, `context-pack`, and warn-only validation policy
 
 ## Goal (1-3 lines)
 
@@ -21,7 +22,7 @@ defined set of changed planning artifacts.
   - `tasks/specs/TEMPLATE.md`
   - `tasks/exec_plans/TEMPLATE.md`
   - `docs/AGENT_RUNBOOK.md`
-  - `src/horadus_cli/task_commands.py`
+  - `src/horadus_cli/v2/task_workflow_core.py`
   - existing workflow/doc validation helpers under `src/core/` and `scripts/`
 - Preconditions/dependencies:
   - preserve the repo’s lightweight planning posture for trivial work
@@ -79,6 +80,20 @@ defined set of changed planning artifacts.
   - retrofitting every old spec/plan in the repo
   - building a multi-file planning artifact tree per task
   - hard-fail enforcement on day one
+
+## Gate Outcomes / Waivers
+
+- Accepted design / smallest safe shape: extend the existing task template,
+  runbook, `context-pack`, and docs-freshness validator instead of creating a
+  second planning subsystem or a separate planning CLI.
+- Rejected simpler alternative: template-only guidance with no CLI or validator
+  surfacing would leave the repo in the same “author judgment only” failure
+  mode that `TASK-297` exposed.
+- First integration proof: `horadus tasks context-pack TASK-298` must surface
+  the new planning state correctly, and the docs-freshness path must emit
+  warn-only planning feedback for touched artifacts without failing the run.
+- Waivers: no historical backfill; warn-only scope is limited to changed
+  planning artifacts.
 
 ## Plan (Keep Updated)
 
@@ -203,7 +218,7 @@ defined set of changed planning artifacts.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v2/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/core/ -q`
 - `uv run --no-sync horadus tasks context-pack TASK-298`
 - `uv run --no-sync horadus tasks local-gate --full`
@@ -217,4 +232,6 @@ defined set of changed planning artifacts.
   - `tasks/specs/TEMPLATE.md`
   - `tasks/exec_plans/TEMPLATE.md`
   - `docs/AGENT_RUNBOOK.md`
-  - `src/horadus_cli/task_commands.py`
+  - `src/horadus_cli/v2/task_workflow_core.py`
+  - `src/core/docs_freshness.py`
+  - `tasks/specs/275-finish-review-gate-timeout.md`

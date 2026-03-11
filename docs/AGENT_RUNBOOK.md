@@ -39,6 +39,26 @@ When: collect backlog/spec/sprint context for an implementation task.
 Use `tasks/specs/TEMPLATE.md` when a task needs a new or refreshed spec; keep
 the contract explicit around problem statement, inputs, outputs, non-goals, and
 acceptance criteria.
+For planning-gate applicability, use one marker scheme everywhere:
+- `**Planning Gates**: Required — reason`
+- `**Planning Gates**: Not Required — reason`
+Marker precedence is deterministic:
+- exec plan marker when an exec plan exists
+- otherwise spec marker
+- otherwise backlog-entry marker
+- if no explicit marker exists, `Exec Plan: Required` means planning gates are
+  required by default
+Shared workflow/policy changes should opt into the same marker scheme rather
+than relying on narrative-only guidance.
+`context-pack` now surfaces the planning state automatically for applicable
+tasks:
+- authoritative artifact present
+- spec-backed without exec plan
+- backlog-only / missing artifact
+Non-applicable tasks stay on the quiet path with no planning banner.
+If planning gates are required but the backlog entry is still the only artifact,
+create the missing spec or exec plan before implementation and use
+`tasks/specs/275-finish-review-gate-timeout.md` as the canonical example.
 Use `--include-archive` only when the task is no longer live and the user
 explicitly needs archived history.
 

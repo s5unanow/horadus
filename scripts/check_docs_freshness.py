@@ -34,6 +34,15 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Treat warnings (e.g., active overrides) as CI failures.",
     )
+    parser.add_argument(
+        "--planning-artifact",
+        action="append",
+        default=[],
+        help=(
+            "Explicit planning artifact path to validate in warn-only mode. "
+            "When omitted, changed planning artifacts are detected from the merge-base diff with main."
+        ),
+    )
     return parser
 
 
@@ -45,6 +54,7 @@ def main() -> int:
         repo_root=repo_root,
         override_path=override_path,
         max_age_days=max(1, args.max_age_days),
+        planning_artifact_paths=tuple(args.planning_artifact) or None,
     )
 
     if result.warnings:

@@ -28,7 +28,6 @@
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
-- `TASK-300` Introduce a Versioned CLI Shell and Move Legacy CLI to `v1`
 - `TASK-299` Build an Isolated `v2` Task Workflow and Cut Over from `tasks-v2`
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (carried from Sprint 3 close)
@@ -56,3 +55,4 @@
 - `TASK-293` Decouple CLI Tests from Live Task IDs ✅
 - `TASK-296` Let Guarded Task Start Handle Task-Ledger Intake Safely ✅
 - `TASK-297` Split `task_commands.py` Into Focused Workflow Modules ✅
+- `TASK-300` Introduce a Versioned CLI Shell and Move Legacy CLI to `v1` ✅

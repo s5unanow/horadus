@@ -1,47 +1,8 @@
-from __future__ import annotations
+import sys
 
-from src.horadus_cli.task_workflow_core import (
-    TaskLedgerIntakeState,
-    _backlog_task_id_for_line,
-    _changed_line_numbers,
-    _diff_texts_for_path,
-    _dirty_task_refs_for_path,
-    _ensure_required_hooks,
-    _git_status_dirty_paths,
-    _head_text_for_path,
-    _index_text_for_path,
-    _open_task_prs,
-    _preflight_result,
-    _task_ledger_intake_state,
-    _working_tree_text_for_path,
-    eligibility_data,
-    getenv,
-    handle_eligibility,
-    handle_preflight,
-    handle_start,
-    start_task_data,
-    task_preflight_data,
-)
+from src.horadus_cli.v1 import task_preflight as _module
 
-__all__ = [
-    "TaskLedgerIntakeState",
-    "_backlog_task_id_for_line",
-    "_changed_line_numbers",
-    "_diff_texts_for_path",
-    "_dirty_task_refs_for_path",
-    "_ensure_required_hooks",
-    "_git_status_dirty_paths",
-    "_head_text_for_path",
-    "_index_text_for_path",
-    "_open_task_prs",
-    "_preflight_result",
-    "_task_ledger_intake_state",
-    "_working_tree_text_for_path",
-    "eligibility_data",
-    "getenv",
-    "handle_eligibility",
-    "handle_preflight",
-    "handle_start",
-    "start_task_data",
-    "task_preflight_data",
-]
+_legacy_name = __name__
+globals().update(_module.__dict__)
+
+sys.modules[_legacy_name] = _module

@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-298`.
+- Next available task IDs start at `TASK-302`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -683,7 +683,17 @@ depends too much on author judgment. Tighten the task/spec template so new work
 is consistently framed in terms of inputs, outputs, non-goals, and acceptance
 criteria that an agent can execute against without inflating scope.
 
-**Files**: `tasks/BACKLOG.md`, `tasks/specs/`, `tasks/exec_plans/TEMPLATE.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/task_commands.py`, `tests/unit/`
+**Files**: `tasks/BACKLOG.md`, `tasks/specs/`, `tasks/exec_plans/TEMPLATE.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/`, `tests/unit/`
+
+**Scope Boundary**:
+- `TASK-251` owns the baseline task/spec contract:
+  problem statement, inputs, outputs, non-goals, acceptance criteria, and one
+  canonical repo-owned example/reference for that baseline structure.
+- `TASK-298` owns the added Phase -1 planning gates, Gate Outcomes / Waivers,
+  applicability rules, warn-only planning validation, and any `context-pack` /
+  runbook surfacing specific to those gates, including any gate-specific
+  example overlays built on top of the same baseline example rather than a
+  second canonical example.
 
 **Acceptance Criteria**:
 - [ ] Define a canonical task/spec shape for new implementation work: problem statement, inputs, outputs, non-goals, and acceptance criteria
@@ -703,7 +713,7 @@ that fast path and add a separate canonical post-task local gate so agents have
 one command for “done with this task locally” checks without blurring the
 current fast/full split.
 
-**Files**: `Makefile`, `scripts/run_with_backpressure.sh`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/task_commands.py`, `tests/unit/scripts/`, `tests/unit/test_cli.py`
+**Files**: `Makefile`, `scripts/run_with_backpressure.sh`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/`, `tests/unit/`
 
 **Acceptance Criteria**:
 - [ ] Keep `make agent-check` positioned as the fast local iteration gate
@@ -725,7 +735,7 @@ runtime code, and existing runbook/context-pack entry points. Refine those
 entrypoints into a more coherent agent-facing navigation layer without creating
 another canonical project summary to keep in sync.
 
-**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/task_commands.py`, `scripts/check_docs_freshness.py`, `src/core/docs_freshness.py`, `tests/unit/core/test_docs_freshness.py`, `tests/unit/test_cli.py`
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/`, `scripts/check_docs_freshness.py`, `src/core/docs_freshness.py`, `tests/unit/core/test_docs_freshness.py`, `tests/unit/`
 
 **Acceptance Criteria**:
 - [ ] Refine or unify the existing agent-facing entrypoints (`AGENTS.md`, runbook, context-pack guidance) into a clearer navigation path
@@ -765,7 +775,7 @@ still partly social. Make the “task is done” rules more explicit in tooling 
 agents reliably add tests, rerun local gates, and update docs when behavior or
 workflow changes.
 
-**Files**: `AGENTS.md`, `Makefile`, `scripts/finish_task_pr.sh`, `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `tests/unit/scripts/`, `tests/unit/test_cli.py`
+**Files**: `AGENTS.md`, `Makefile`, `scripts/finish_task_pr.sh`, `src/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `tests/unit/`
 
 **Acceptance Criteria**:
 - [ ] Task-finish guidance or tooling explicitly requires relevant tests for code changes unless a documented N/A condition applies
@@ -830,7 +840,7 @@ oriented surfaces. Standardize the PR title convention on
 `TASK-XXX: short summary` and add enforcement so branch/task scope, PR body
 metadata, and PR title stay aligned.
 
-**Files**: `AGENTS.md`, `README.md`, `.github/pull_request_template.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/task_commands.py`, `scripts/`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
+**Files**: `AGENTS.md`, `README.md`, `.github/pull_request_template.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/`, `scripts/`, `tests/unit/`
 
 **Acceptance Criteria**:
 - [ ] Canonical repo workflow docs explicitly require task PR titles in the form `TASK-XXX: short summary`
@@ -851,11 +861,16 @@ no first-class repo workflow step for running a separate Codex review against
 local branch changes before push. Add a repo-owned pre-push review command
 that wraps the local Codex CLI review flow so agents and humans can request a
 local review against unpushed branch diffs without relying on GitHub PR state.
+Implement this on the canonical `horadus tasks ...` workflow surface after
+`TASK-299` lands the isolated `v2` implementation behind that command, rather
+than reopening the frozen legacy `v1` task CLI files directly.
 
-**Files**: `src/horadus_cli/task_commands.py`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `tests/unit/test_cli.py`
+**Files**: `src/horadus_cli/`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `tests/unit/`
 
 **Acceptance Criteria**:
-- [ ] The repo exposes a canonical command for local pre-push review via Codex CLI (for example under `horadus tasks ...`), with clear failure behavior when `codex` is unavailable
+- [ ] The repo exposes a canonical command for local pre-push review via Codex
+  CLI under `horadus tasks ...`, with clear failure behavior when `codex` is
+  unavailable
 - [ ] The command can review the current branch diff against a configured base branch without requiring a remote PR
 - [ ] Agent-facing docs and skill surfaces describe when to use the local Codex review step versus remote PR review
 - [ ] Tests cover the happy path plus the missing-`codex` or invalid-context blocker path
@@ -885,49 +900,379 @@ priorities, and rollout order.
 ### TASK-289: Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours
+**Status**: Behavior already shipped; preserve during `TASK-299`
 
-Recent task-closure runs showed that `horadus tasks finish` can leave the repo
-on `main` while the task PR is still open, merge-clean, and waiting only on the
-remaining finish lifecycle. A follow-up invocation then refuses to continue
-because it sees `main` instead of the task branch, forcing a manual branch
-switch and sometimes a raw `gh pr merge` fallback even though the CLI is
-supposed to own the completion path. Harden the finish flow so branch-context
-drift is either recovered automatically or surfaced as a concrete blocker
-without abandoning the PR lifecycle mid-flight.
-
-**Files**: `src/horadus_cli/task_commands.py`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tests/unit/test_cli.py`, `tests/unit/scripts/`
-
-**Acceptance Criteria**:
-- [ ] `horadus tasks finish` does not switch away from the active task branch before the PR lifecycle is complete, or it restores/resumes the correct task context before continuing
-- [ ] If a prior finish attempt leaves the repo on `main` while the task PR is still open, a rerun with the explicit task id can resume safely instead of failing immediately with `refusing to run on 'main'`
-- [ ] Finish either merges/syncs cleanly after the review/check gates are satisfied or exits with a concrete blocker naming the step that prevented completion
-- [ ] During long-running review/check wait phases, `horadus tasks finish` emits periodic progress lines that name the active gate and latest known state so operators do not need manual GitHub polling to understand whether it is waiting or stuck
-- [ ] Agent-facing workflow guidance reflects the corrected recovery behavior and keeps raw `gh pr merge` limited to genuine forced fallback scenarios
-- [ ] Tests cover the reproduced branch-drift scenario end to end, including the rerun path from `main`
+The current `horadus tasks finish` implementation already supports rerunning
+from `main` with an explicit task id. Keep that behavior as part of the
+canonical baseline while `TASK-300` / `TASK-299` migrate the implementation
+onto the versioned shell and isolated `v2` modules.
 
 ---
 
 ### TASK-291: Make `horadus tasks finish` Exit When the PR Has Already Merged
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours
+**Status**: Behavior already shipped; preserve during `TASK-299`
 
-Recent `horadus tasks finish` runs showed another stale lifecycle bug: the
-command can remain alive even after GitHub already reports the task PR as
-`MERGED`. When that happens the operator gets no completion message, the repo
-stays on the task branch, and local `main` is not synced even though the PR has
-already reached its terminal remote state. Harden the finish flow so any
-already-merged PR state is detected promptly and converges to the normal local
-sync/completion path instead of continuing to poll as if the lifecycle were
-still open.
+The current `horadus tasks finish` implementation already converges when the
+PR has reached `MERGED`. Keep that behavior as part of the canonical baseline
+while `TASK-300` / `TASK-299` migrate the implementation onto the versioned
+shell and isolated `v2` modules.
 
-**Files**: `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`, `PROJECT_STATUS.md`, `tasks/CURRENT_SPRINT.md`
+---
+
+### TASK-298: Add Phase -1 Planning Gates Without Heavy Process Overhead
+**Priority**: P2 (Medium)
+**Estimate**: 4-6 hours
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+The repo already has strong execution and completion gates, but planning still
+depends too much on author judgment. Recent work on `TASK-297` showed the main
+failure mode clearly: the first-pass technical direction was reasonable, but
+the spec and exec plan left verification contracts, ownership boundaries, and
+proof artifacts too loose. Tighten the repo’s planning process so shared
+workflow refactors and other non-trivial tasks must answer the “why this is
+the simplest safe design” questions before implementation starts, without
+turning Horadus into heavy process theater.
+
+This task is a concrete follow-up to `TASK-251`. Keep `TASK-251` as the broad
+task/spec normalization parent, but use this task to add the missing Phase -1
+planning gates, surfaced workflow guidance, and lightweight warn-only
+validation that the current templates still lack.
+
+`TASK-251` owns the baseline task/spec shape only:
+- problem statement
+- inputs
+- outputs
+- non-goals
+- acceptance criteria
+- one canonical repo-owned example/reference
+- any additional gate-specific annotations or overlays on that example belong
+  to `TASK-298`, not `TASK-251`, and must reuse the same canonical example
+
+`TASK-298` owns only the additional pre-implementation planning layer:
+- core vs conditional Phase -1 gates
+- Gate Outcomes / Waivers
+- authoritative applicability rules
+- warn-only validation for changed planning artifacts
+- `context-pack` / runbook surfacing of those gates
+
+**Problem Statement**:
+- Current task/spec templates are good at describing problem, inputs, outputs,
+  and non-goals, but they do not yet force pre-implementation gate decisions
+  around simplicity, abstraction, or first real integration proof.
+- Exec plans start at “preflight / implement / validate / ship” without first
+  recording why the chosen design is the simplest safe one or what complexity
+  was consciously rejected.
+- Workflow docs and context tooling surface execution commands well, but they
+  do not yet automatically push agents through a short planning checklist
+  before implementation on non-trivial work.
+- The repo needs stronger planning gates for medium/high-complexity work,
+  especially shared workflow changes, without making trivial tasks pay a heavy
+  process tax.
+
+**Inputs**:
+- `TASK-251` and the existing task/spec normalization guidance
+- Current templates: `tasks/specs/TEMPLATE.md` and
+  `tasks/exec_plans/TEMPLATE.md`
+- Agent workflow docs and task context entry points, including
+  `docs/AGENT_RUNBOOK.md` and `horadus tasks context-pack`
+- Existing workflow/doc tooling that can host warn-only validation without
+  adding a new subsystem
+
+**Outputs**:
+- A repo-owned Phase -1 planning gate shape for non-trivial tasks/specs and
+  other tasks whose existing repo metadata clearly marks them applicable
+- Updated spec and exec-plan templates that record gate decisions and waivers
+- Agent-facing workflow guidance and context-pack output that surface the
+  planning gates before implementation begins
+- One canonical “good spec” reference or example path that future tasks can
+  emulate
+- Lightweight warn-only validation for newly added or touched specs/plans so
+  missing gate sections are visible early
+- A repo-visible, reviewable source of truth for:
+  applicability, quiet-path behavior, and validator scope
+
+**Non-Goals**:
+- Importing the full external spec-kit document tree or creating a multi-file
+  planning subsystem for every task
+- Making heavy planning gates mandatory for trivial doc-only or very small
+  single-file changes
+- Rewriting old historical specs purely for conformance unless they are being
+  touched for active work
+- Using planning gates as a back door for unrelated workflow-policy changes
+
+**Files**: `tasks/BACKLOG.md`, `tasks/specs/TEMPLATE.md`, `tasks/exec_plans/TEMPLATE.md`, `tasks/specs/`, `tasks/exec_plans/`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/`, `src/core/docs_freshness.py`, `scripts/`, `tests/unit/`
 
 **Acceptance Criteria**:
-- [ ] If the PR reaches `MERGED` while `horadus tasks finish` is still running, the command detects that terminal state promptly and proceeds to the local `main` sync/verification path instead of continuing to wait
-- [ ] The command reports a successful completion message when the PR is already merged and local sync succeeds, rather than requiring a human to notice the remote merge manually
-- [ ] If the PR is merged remotely but local sync/verification then fails, the command reports that exact local blocker instead of silently staying alive
-- [ ] Regression tests cover at least one path where the PR transitions to `MERGED` while the finish flow is waiting and one unaffected path where an open PR still follows the normal wait behavior
-- [ ] Agent-facing workflow docs make it explicit that a merged PR is a terminal state the finish command must converge on immediately
+- [ ] Extend `tasks/specs/TEMPLATE.md` with a Phase -1 / Pre-Implementation
+  Gates section with:
+  core gates required for every applicable task
+  and conditional gates only when the task shape triggers them
+- [ ] Extend `tasks/exec_plans/TEMPLATE.md` with a Gate Outcomes / Waivers
+  section so plans record accepted complexity, rejected simpler alternatives,
+  and any justified gate exceptions before implementation starts
+- [ ] Define one authoritative applicability rule using repo-visible signals,
+  not author intuition alone. At minimum it must specify:
+  one canonical repo-owned marker scheme and precedence rule,
+  that tasks with `Exec Plan: Required` are applicable by default unless the
+  explicit marker says otherwise,
+  that shared workflow/policy changes and explicit opt-in resolve into that
+  same marker scheme rather than separate ad hoc rules,
+  when the core gates are required,
+  when conditional gates become required,
+  how backlog-authored tasks are covered,
+  and how a task is represented when the gates are not required
+- [ ] Update `docs/AGENT_RUNBOOK.md` and `horadus tasks context-pack` so the
+  planning checklist is surfaced automatically for applicable tasks before
+  implementation guidance, with a quiet path for non-applicable tasks
+- [ ] Reuse the single canonical example/reference owned by `TASK-251` for any
+  “good spec” / planning-artifact guidance added here, and point the template
+  or runbook at that same example instead of creating a second canonical one
+- [ ] Add lightweight warn-only validation for new or touched specs/plans that
+  checks:
+  applicable backlog task entries when they are the active planning surface,
+  required gate headings exist for applicable artifacts,
+  omitted conditional gates are marked not applicable with a short reason,
+  Gate Outcomes / Waivers is present in its authoritative home when required,
+  and the Integration-First Gate names at least one concrete validation target
+  plus the contract/dependency/invariant it exercises
+- [ ] Reuse existing workflow/doc tooling for that validation where reasonable;
+  do not introduce a separate planning-validation subsystem
+- [ ] Define the validator scope operationally. “New or touched” must resolve
+  to a concrete file-selection rule, for example merge-base-with-`main` diff,
+  with any local override path documented explicitly
+- [ ] Make `context-pack` behavior reviewable by specifying:
+  one exhaustive state model covering:
+  applicable with authoritative artifact present,
+  applicable backlog-only / missing artifact,
+  applicable spec-backed without exec plan,
+  and non-applicable,
+  what minimum fields it must show for each applicable state,
+  what explicit missing-artifact notice is shown when a task is applicable but
+  the authoritative planning artifact is absent,
+  and what quiet-path behavior is expected for non-applicable tasks
+- [ ] Partition `TASK-251` and `TASK-298` explicitly so the backlog leaves no
+  ambiguous overlap about which task owns baseline task-shape work versus
+  Phase -1 gate/process work
+
+**Suggested Planning Gates**:
+- Core gates for every applicable task:
+  - `Simplicity Gate`: Can this be done by extending an existing
+  module/command/model? If a new top-level module, worker, service, or CLI
+  command is proposed, why is the existing surface insufficient?
+  - `Anti-Abstraction Gate`: Are we using the framework/runtime surfaces directly
+  enough? If a new wrapper/repository/manager/adapter is proposed, what
+  concrete duplication or provider boundary justifies it?
+  - `Integration-First Gate`: What is the first real contract or integration
+  proof, and which real dependency/invariant does it exercise?
+- Conditional gates:
+  - `Determinism Gate`: For trend math / pipeline work, what are the idempotency,
+  persisted-factor, concurrency, and fail-closed rules?
+  - `LLM Budget/Safety Gate`: For LLM/reporting work, what is the budget impact,
+  degraded-mode behavior, taxonomy-gap behavior, and no-network validation
+  path?
+  - `Observability Gate`: For runtime-meaningful behavior changes, what metric,
+  log, health signal, or report proves the feature works in production?
+  The template should make it clear that conditional gates are included only
+  when their repo-visible trigger applies, not as mandatory `N/A` boilerplate.
+  Those trigger rules must themselves be defined in repo-owned guidance so the
+  validator can distinguish a valid omission from a missed gate.
+
+**Process Guardrails**:
+- [ ] Keep the planning gates short and decision-oriented, not essay-shaped
+- [ ] Prefer repo-native examples over abstract methodology language
+- [ ] Warn-only validation must not fail implementation work by default in the
+  first iteration
+- [ ] Any new automated checks must limit themselves to newly added or touched
+  planning artifacts, rather than mass-failing historical backlog/spec debt
+- [ ] Backlog-defined tasks must not become a bypass path; if a task is
+  applicable before a separate spec exists, the workflow guidance must still
+  make the missing planning artifact visible and the warn-only validator must
+  still inspect the backlog entry when it is the authoritative planning surface
+- [ ] Backlog-only applicable tasks must follow one authoritative rule:
+  they may carry the applicability marker in the backlog entry, but detailed
+  gates/waivers must live in the authoritative spec or exec plan; until that
+  artifact exists, `context-pack` and warn-only validation must emit the same
+  missing-artifact notice rather than treating the backlog body as an alternate
+  waiver/gate home
+- [ ] `context-pack` must stay quiet for non-applicable tasks rather than
+  emitting generic planning banners everywhere
+
+---
+
+### TASK-299: Build an Isolated `v2` Task Workflow and Cut Over from `tasks-v2`
+**Priority**: P1 (High)
+**Estimate**: 1-2 days
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+After `TASK-300` introduces a versioned CLI shell and moves the current
+implementation under `v1`, build a real `v2` task-workflow implementation
+under the same shell, expose it temporarily as `horadus tasks-v2 ...` for
+parity validation, then cut canonical `horadus tasks ...` routing over to `v2`
+and remove the temporary `tasks-v2` surface.
+
+**Problem Statement**:
+- `TASK-300` creates the versioned CLI shell, but the repo still needs a real
+  `v2` task-workflow implementation after that compatibility move lands.
+- The current task workflow still depends on a giant legacy implementation,
+  which keeps maintenance and review cost high.
+- The repo needs a clean `v2` task-workflow surface plus a temporary public
+  migration seam so `v1` and `v2` behavior can be compared safely before the
+  canonical router flips.
+
+**Inputs**:
+- Review findings against `TASK-297`
+- `TASK-300` versioned-shell and `v1` migration work
+- Current `horadus tasks ...` behavior as the parity baseline
+- The currently shipped `horadus tasks finish` recovery behavior captured by
+  `TASK-289` and `TASK-291`, which must remain intact after the `v2` cutover
+- Existing task workflow docs, fixtures, and repo-policy expectations
+
+**Outputs**:
+- A temporary public `horadus tasks-v2 ...` workflow surface backed by the
+  isolated `v2` implementation
+- The canonical `horadus tasks ...` workflow routed through the isolated `v2`
+  implementation after the cutover
+- New `src/horadus_cli/v2/` task workflow modules with real ownership
+  boundaries
+- Separate `v2` tests that do not rely on the legacy compatibility core
+- A scoped 300-line cap enforced for new `v2` Python files
+- An explicit parity contract naming which canonical `horadus tasks`
+  subcommands must preserve current behavior across the `v1` -> `tasks-v2` ->
+  canonical `v2` cutover
+
+**Non-Goals**:
+- Introducing the versioned CLI shell itself; `TASK-300` owns that packaging move
+- Repackaging the legacy CLI into `v1`; `TASK-300` owns that compatibility move
+- Deleting `v1` in this task
+- Enforcing a repo-wide 300-line file cap
+- Regressing the currently shipped `finish` recovery behavior during the `v2`
+  cutover
+
+**Files**: `src/horadus_cli/app.py`, `src/horadus_cli/v2/`, `tests/unit/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+
+**Scope Boundary**:
+- `TASK-300` owns only the compatibility-preserving packaging move:
+  top-level router, explicit `v1`, and versioned shell layout.
+- `TASK-299` owns the new isolated `v2` implementation, the temporary
+  `tasks-v2` migration surface, the canonical cutover, and the removal of the
+  temporary `tasks-v2` surface once parity is proven.
+- The recovery behavior described by `TASK-289` and `TASK-291` is already part
+  of the shipped canonical baseline and must be preserved, not deferred to a
+  new public surface.
+
+**Acceptance Criteria**:
+- [ ] Build the isolated `v2` task-workflow implementation on the versioned
+  CLI shell introduced by `TASK-300` without reopening the `v1` packaging move
+  for unrelated behavior changes
+- [ ] Expose the new implementation temporarily as `horadus tasks-v2 ...`
+  while canonical `horadus tasks ...` continues to route to `v1`
+- [ ] Add parity-oriented regression coverage for representative `tasks` vs
+  `tasks-v2` scenarios using stable fixtures before the canonical cutover
+- [ ] Cut canonical `horadus tasks ...` routing over to `v2` after parity is
+  proven and then remove the temporary public `tasks-v2` command family in the
+  same task
+- [ ] Define one explicit parity boundary for canonical `horadus tasks ...`:
+  `preflight`, `start`, `safe-start`, `context-pack`, `close-ledgers`,
+  `local-gate`, `lifecycle`, `record-friction`, and `summarize-friction`
+  must preserve the corresponding currently shipped command semantics, exit
+  codes, and operator-facing output shape across the `v1` -> `tasks-v2` ->
+  canonical `v2` cutover
+- [ ] Implement the new workflow under `src/horadus_cli/v2/` using real owner
+  modules rather than a large shared compatibility core or pure re-export
+  shims
+- [ ] `src/horadus_cli/v2/` must not import runtime behavior directly from
+  `src/horadus_cli/v1/`; shared helpers must either remain version-neutral or
+  be re-owned under `v2`
+- [ ] Preserve current shipped `finish` behavior across the cutover:
+  rerun from `main` with an explicit task id still resumes safely, and an
+  already-`MERGED` PR still converges to the normal local sync/verification
+  path
+- [ ] Add regression coverage for both the branch-drift rerun path and the
+  already-merged finish path on canonical `horadus tasks finish` after the
+  cutover
+- [ ] Keep every new `v2` Python file created for this task at or under 300
+  physical lines
+- [ ] Leave `src/horadus_cli/app.py` routing canonical `horadus tasks ...` to
+  `src/horadus_cli/v2/` by the end of the task
+- [ ] Finish with the required local gates passing and no direct imports of a
+  new `v2` monolith-style compatibility module from tests or other `v2`
+  modules
+- [ ] Agent-facing docs continue to describe only `horadus tasks ...` as the
+  canonical task-workflow surface after the cutover
+
+---
+
+### TASK-301: Retire `v1` and Leave the App Router Pointing at `v2`
+**Priority**: P2 (Medium)
+**Estimate**: 1 day
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+After `TASK-299` proves parity, cuts canonical `horadus tasks ...` over to
+`v2`, and removes the temporary `tasks-v2` surface, remove the now-obsolete
+`src/horadus_cli/v1/` package and leave the top-level app router targeting
+`v2` for the task workflow with no remaining runtime dependence on `v1`.
+
+**Problem Statement**:
+- `TASK-300` introduces `src/horadus_cli/v1/` as a compatibility container,
+  but that package should remain temporary migration scaffolding rather than a
+  permanent extra layer.
+- `TASK-299` moves the task workflow to `v2`, but the repo still needs an
+  explicit cleanup pass that removes `v1` and any dead routing branches left
+  after the cutover.
+- Because `TASK-300` versions the whole CLI package, deleting `v1` may also
+  require re-homing any still-supported non-task command families that remain
+  parked there after the task-workflow migration.
+
+**Inputs**:
+- `TASK-300` versioned shell and `v1` packaging move
+- `TASK-299` `v2` task-workflow cutover
+- The current post-cutover `horadus` CLI routing and command inventory
+- Tests/docs that still mention or import `src/horadus_cli/v1/`
+
+**Outputs**:
+- `src/horadus_cli/v1/` deleted from the runtime package
+- `src/horadus_cli/app.py` routing canonical `horadus tasks ...` to
+  `src/horadus_cli/v2/`
+- Any still-supported non-task CLI surfaces re-homed out of `v1` so the app
+  router no longer imports runtime behavior from that package
+- Tests/docs updated to reflect the post-`v1` layout
+
+**Non-Goals**:
+- Reintroducing `tasks-v2`; `TASK-299` must already have removed it
+- Changing the canonical `horadus tasks ...` behavior after the `TASK-299`
+  cutover
+- Starting new task-workflow feature work in this cleanup task
+- Enforcing a repo-wide 300-line file cap
+
+**Files**: `src/horadus_cli/`, `src/cli.py`, `tests/unit/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+
+**Scope Boundary**:
+- `TASK-299` owns proving parity, exposing/removing temporary `tasks-v2`, and
+  cutting canonical `tasks` over to `v2`.
+- `TASK-301` owns the post-cutover cleanup: removing `v1`, simplifying the app
+  router, and re-homing any remaining supported CLI surfaces that still depend
+  on `v1`.
+
+**Acceptance Criteria**:
+- [ ] Verify `TASK-299` already left canonical `horadus tasks ...` routed to
+  `src/horadus_cli/v2/` and removed the temporary public `tasks-v2` command
+  family before `TASK-301` starts deleting `v1`
+- [ ] Inventory every command family still routed through
+  `src/horadus_cli/v1/` and either remove dead paths or re-home supported
+  runtime behavior out of `v1` as part of this task
+- [ ] Delete `src/horadus_cli/v1/` and leave no runtime imports from that
+  package in `src/horadus_cli/app.py` or other shipped CLI modules
+- [ ] Leave `src/horadus_cli/app.py` routing canonical `horadus tasks ...` to
+  `src/horadus_cli/v2/` by the end of the task
+- [ ] Preserve externally visible `horadus` behavior for any command families
+  that remain supported after the cleanup
+- [ ] Add regression coverage proving the router no longer depends on `v1`
+  and that canonical `horadus tasks ...` still dispatches through `v2`
+- [ ] Update agent-facing docs to describe the post-`v1` layout and remove
+  obsolete references to the transitional `v1` package
+- [ ] Finish with the required local gates passing
 
 ---
 

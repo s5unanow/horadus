@@ -1,21 +1,8 @@
-from __future__ import annotations
+import sys
 
-from src.horadus_cli.task_workflow_core import (
-    _archived_task_blocked_result,
-    _task_record_payload,
-    _workflow_commands_for_context_pack,
-    handle_context_pack,
-    handle_list_active,
-    handle_search,
-    handle_show,
-)
+from src.horadus_cli.v1 import task_query as _module
 
-__all__ = [
-    "_archived_task_blocked_result",
-    "_task_record_payload",
-    "_workflow_commands_for_context_pack",
-    "handle_context_pack",
-    "handle_list_active",
-    "handle_search",
-    "handle_show",
-]
+_legacy_name = __name__
+globals().update(_module.__dict__)
+
+sys.modules[_legacy_name] = _module

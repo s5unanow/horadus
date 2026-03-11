@@ -263,3 +263,4 @@
 - TASK-293: Decouple CLI Tests from Live Task IDs ✅
 - TASK-296: Let Guarded Task Start Handle Task-Ledger Intake Safely ✅
 - TASK-297: Split `task_commands.py` Into Focused Workflow Modules ✅
+- TASK-300: Introduce a Versioned CLI Shell and Move Legacy CLI to `v1` ✅

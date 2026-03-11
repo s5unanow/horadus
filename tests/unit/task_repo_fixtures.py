@@ -4,8 +4,8 @@ from pathlib import Path
 
 import pytest
 
-import src.horadus_cli.task_repo as task_repo_module
-import src.horadus_cli.task_workflow_core as task_commands_module
+import src.horadus_cli.v1.task_repo as task_repo_module
+import src.horadus_cli.v1.task_workflow_core as task_commands_module
 
 LIVE_TASK_ID = "TASK-301"
 ARCHIVED_TASK_ID = "TASK-302"

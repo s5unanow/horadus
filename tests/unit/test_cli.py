@@ -16,11 +16,11 @@ import pytest
 
 import src.cli as cli_module
 import src.horadus_cli.app as cli_app_module
-import src.horadus_cli.result as result_module
-import src.horadus_cli.task_process as task_process_module
-import src.horadus_cli.task_repo as task_repo_module
-import src.horadus_cli.task_workflow_core as task_commands_module
-import src.horadus_cli.triage_commands as triage_commands_module
+import src.horadus_cli.v1.result as result_module
+import src.horadus_cli.v1.task_process as task_process_module
+import src.horadus_cli.v1.task_repo as task_repo_module
+import src.horadus_cli.v1.task_workflow_core as task_commands_module
+import src.horadus_cli.v1.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 

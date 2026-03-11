@@ -12,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-TASK_REPO_PATH = REPO_ROOT / "src" / "horadus_cli" / "task_repo.py"
+TASK_REPO_PATH = REPO_ROOT / "src" / "horadus_cli" / "v1" / "task_repo.py"
 TASK_REPO_SPEC = importlib.util.spec_from_file_location("horadus_task_repo_script", TASK_REPO_PATH)
 if TASK_REPO_SPEC is None or TASK_REPO_SPEC.loader is None:
     raise RuntimeError(f"Unable to load task repo module from {TASK_REPO_PATH}")

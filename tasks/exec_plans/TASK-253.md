@@ -56,7 +56,7 @@ orchestration, CLI, observability, and worker paths.
 ## Validation Commands
 
 - `uv run --no-sync pytest tests/unit/ -v --cov=src --cov-report=term-missing:skip-covered`
-- `uv run --no-sync pytest tests/unit/test_cli.py tests/unit/scripts/ -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py tests/unit/scripts/ -v`
 - `uv run --no-sync pytest tests/unit/core/ tests/unit/processing/ tests/unit/workers/ -v`
 - `make test-integration-docker`
 

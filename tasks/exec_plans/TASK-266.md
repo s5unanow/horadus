@@ -47,7 +47,7 @@ desired state that syncs into local `$CODEX_HOME/automations/`.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k 'summarize_friction or summarize-friction' -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k 'summarize_friction or summarize-friction' -v`
 - `uv run --no-sync pytest tests/unit/scripts/test_sync_automations.py -v`
 - `uv run --no-sync horadus tasks summarize-friction --date 2026-03-08 --dry-run --format json`
 - `make automations-apply`

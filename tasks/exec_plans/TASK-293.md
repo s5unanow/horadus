@@ -38,7 +38,7 @@ instead of mutable `tasks/BACKLOG.md` state on `main`.
 
 - In scope:
   - shared test helper(s) for synthetic task ledgers
-  - migrating fragile tests in `tests/unit/test_cli.py`
+  - migrating fragile tests in `tests/horadus_cli/v1/test_cli.py`
   - decoupling `scripts/task_context_pack.sh` wrapper tests from live repo state
 - Out of scope:
   - broader fixture rewrites outside the Horadus task CLI surfaces
@@ -62,7 +62,7 @@ instead of mutable `tasks/BACKLOG.md` state on `main`.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/scripts/test_task_context_pack.py -q`
 - `uv run --no-sync horadus tasks local-gate --full`
 

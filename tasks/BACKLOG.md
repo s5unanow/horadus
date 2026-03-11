@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-302`.
+- Next available task IDs start at `TASK-303`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -1150,7 +1150,7 @@ and remove the temporary `tasks-v2` surface.
 - Regressing the currently shipped `finish` recovery behavior during the `v2`
   cutover
 
-**Files**: `src/horadus_cli/app.py`, `src/horadus_cli/v2/`, `tests/unit/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+**Files**: `src/horadus_cli/app.py`, `src/horadus_cli/v2/`, `tests/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
 
 **Scope Boundary**:
 - `TASK-300` owns only the compatibility-preserving packaging move:
@@ -1246,7 +1246,7 @@ After `TASK-299` proves parity, cuts canonical `horadus tasks ...` over to
 - Starting new task-workflow feature work in this cleanup task
 - Enforcing a repo-wide 300-line file cap
 
-**Files**: `src/horadus_cli/`, `src/cli.py`, `tests/unit/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+**Files**: `src/horadus_cli/`, `src/cli.py`, `tests/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
 
 **Scope Boundary**:
 - `TASK-299` owns proving parity, exposing/removing temporary `tasks-v2`, and

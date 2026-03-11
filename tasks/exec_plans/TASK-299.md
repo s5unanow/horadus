@@ -26,7 +26,7 @@ implementation under `src/horadus_cli/v2/`, expose it temporarily as
 - Runtime/code touchpoints:
   - `src/horadus_cli/app.py`
   - new `src/horadus_cli/v2/` modules
-  - new `tests/unit/*v2*.py` coverage
+  - new `tests/horadus_cli/v2/` coverage
   - task workflow docs that mention command entrypoints
 - Preconditions/dependencies:
   - `TASK-300` must land first
@@ -187,7 +187,7 @@ implementation under `src/horadus_cli/v2/`, expose it temporarily as
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit -q -k "task_workflow_v2 or horadus_cli"`
+- `uv run --no-sync pytest tests/horadus_cli -q -k "task_workflow_v2 or horadus_cli"`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links
@@ -197,4 +197,4 @@ implementation under `src/horadus_cli/v2/`, expose it temporarily as
 - Relevant modules:
   - `src/horadus_cli/app.py`
   - new `src/horadus_cli/v2/`
-  - new `tests/unit/*v2*.py`
+  - new `tests/horadus_cli/v2/`

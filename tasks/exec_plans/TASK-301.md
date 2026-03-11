@@ -24,7 +24,7 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
   - `src/horadus_cli/v1/`
   - `src/horadus_cli/v2/`
   - `src/cli.py`
-  - CLI-related tests under `tests/unit/`
+  - CLI-related tests under `tests/horadus_cli/`
   - task workflow docs that mention CLI entrypoints
 - Preconditions/dependencies:
   - `TASK-299` must land first
@@ -114,7 +114,7 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit -q -k "cli or horadus_cli"`
+- `uv run --no-sync pytest tests/horadus_cli -q -k "cli or horadus_cli"`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links
@@ -126,4 +126,4 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
   - `src/horadus_cli/v1/`
   - `src/horadus_cli/v2/`
   - `src/cli.py`
-  - `tests/unit/`
+  - `tests/horadus_cli/`

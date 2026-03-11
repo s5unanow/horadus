@@ -87,7 +87,7 @@ wrappers where appropriate.
 ## Validation Commands
 
 - `python -m py_compile src/cli.py src/horadus_cli/*.py`
-- `uv run --no-sync pytest tests/unit/test_cli.py tests/unit/scripts/test_task_context_pack.py tests/unit/scripts/test_check_agent_task_eligibility.py -v -m unit`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py tests/unit/scripts/test_task_context_pack.py tests/unit/scripts/test_check_agent_task_eligibility.py -v -m unit`
 
 ## Notes / Links
 

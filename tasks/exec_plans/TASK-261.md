@@ -45,11 +45,11 @@ when Docker cannot be made ready.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -v`
 - `make agent-check`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links
 
 - Spec: `tasks/BACKLOG.md` (`TASK-261`)
-- Relevant modules: `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`
+- Relevant modules: `src/horadus_cli/task_commands.py`, `tests/horadus_cli/v1/test_cli.py`

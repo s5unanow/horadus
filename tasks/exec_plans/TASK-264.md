@@ -48,9 +48,9 @@ gate when the key agent-facing docs or skill drift away from that set.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k 'context_pack or workflow' -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k 'context_pack or workflow' -v`
 - `uv run --no-sync pytest tests/unit/core/test_docs_freshness.py -k 'workflow' -v`
-- `uv run --no-sync pytest tests/unit/test_cli.py -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -v`
 - `uv run --no-sync pytest tests/unit/core/test_docs_freshness.py -v`
 - `make agent-check`
 - `uv run --no-sync horadus tasks local-gate --full`
@@ -61,5 +61,5 @@ gate when the key agent-facing docs or skill drift away from that set.
 - Relevant modules:
   - `src/horadus_cli/task_commands.py`
   - `src/core/docs_freshness.py`
-  - `tests/unit/test_cli.py`
+  - `tests/horadus_cli/v1/test_cli.py`
   - `tests/unit/core/test_docs_freshness.py`

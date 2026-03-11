@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-03-10
-- Current state: In progress
+- Current state: Done
 - Planning Gates: Required — this task changes shared workflow guidance, `context-pack`, and warn-only validation policy
 
 ## Goal (1-3 lines)

@@ -6,19 +6,41 @@ from __future__ import annotations
 import argparse
 import importlib
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import Protocol, cast
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-task_repo_module = importlib.import_module("src.horadus_cli.task_repo")
-TaskClosureState = task_repo_module.TaskClosureState
+
+class _TaskClosureState(Protocol):
+    present_in_backlog: bool
+    present_in_active_sprint: bool
+    active_sprint_lines: list[str]
+    present_in_completed: bool
+    present_in_closed_archive: bool
+    ready_for_merge: bool
+    closed_archive_path: str | None
+
+
+class _TaskRepoModule(Protocol):
+    TaskClosureState: type[_TaskClosureState]
+    normalize_task_id: Callable[[str], str]
+    task_closure_state: Callable[[str], _TaskClosureState]
+    repo_root: Callable[[], Path]
+
+
+task_repo_module = cast(
+    _TaskRepoModule,
+    importlib.import_module("src.horadus_cli.task_repo"),
+)
 normalize_task_id = task_repo_module.normalize_task_id
 task_closure_state = task_repo_module.task_closure_state
 
 
-def _blocker_lines(closure_state: TaskClosureState) -> list[str]:
+def _blocker_lines(closure_state: _TaskClosureState) -> list[str]:
     lines: list[str] = []
     if closure_state.present_in_backlog:
         lines.append("- tasks/BACKLOG.md still contains the task as open.")

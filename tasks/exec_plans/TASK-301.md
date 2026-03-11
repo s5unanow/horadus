@@ -1,4 +1,4 @@
-# TASK-301: Retire `v1` and Leave the App Router Pointing at `v2`
+# TASK-301: Move All Horadus CLI Functionality to `v2` and Delete `v1`
 
 ## Status
 
@@ -8,10 +8,10 @@
 
 ## Goal (1-3 lines)
 
-After `TASK-299` cuts canonical `horadus tasks ...` over to `v2`, remove the
-temporary `src/horadus_cli/v1/` package and leave the top-level app router
-pointing at `v2` for the task workflow with no remaining runtime dependence on
-`v1`.
+After `TASK-299` cuts canonical `horadus tasks ...` over to `v2`, migrate the
+remaining Horadus CLI surfaces to `src/horadus_cli/v2/`, remove
+`src/horadus_cli/v1/` entirely, and leave the top-level shell depending only
+on `v2`.
 
 ## Inputs
 
@@ -21,7 +21,6 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
   - `TASK-299` `v2` task-workflow cutover
 - Runtime/code touchpoints:
   - `src/horadus_cli/app.py`
-  - `src/horadus_cli/v1/`
   - `src/horadus_cli/v2/`
   - `src/cli.py`
   - CLI-related tests under `tests/horadus_cli/`
@@ -35,8 +34,8 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
 
 - Expected behavior/artifacts:
   - `src/horadus_cli/v1/` removed from the runtime package
-  - `src/horadus_cli/app.py` routing canonical `horadus tasks ...` to `v2`
-  - any still-supported non-task CLI surfaces re-homed out of `v1`
+  - every shipped Horadus CLI command family implemented under `v2`
+  - `src/horadus_cli/app.py` and `src/cli.py` with no runtime dependency on `v1`
   - docs/tests updated to the post-`v1` layout
 - Validation evidence:
   - router coverage proving no runtime path still imports from `v1`
@@ -57,9 +56,9 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
 
 - In scope:
   - inventory command families still routed through `v1`
-  - re-home supported runtime behavior out of `v1` where required
+  - re-home every supported CLI surface out of `v1`
   - delete `src/horadus_cli/v1/`
-  - simplify `src/horadus_cli/app.py` so it no longer depends on `v1`
+  - simplify `src/horadus_cli/app.py` and `src/cli.py` so they no longer depend on `v1`
   - update tests/docs for the post-`v1` layout
 - Out of scope:
   - rebuilding the `v2` task workflow
@@ -69,25 +68,24 @@ pointing at `v2` for the task workflow with no remaining runtime dependence on
 ## Plan (Keep Updated)
 
 1. Preflight (branch, tests, context)
-   - verify `TASK-299` already left canonical `tasks` on `v2` and removed
-     `tasks-v2`
+   - verify `TASK-299` already left canonical `tasks` on `v2`
    - inventory every remaining runtime import or command family that still
      depends on `v1`
-   - decide which supported surfaces must be re-homed before `v1` can be
-     deleted cleanly
+   - identify the remaining legacy/triage/result shell surfaces that must move
+     before `v1` can be deleted cleanly
 2. Implement
    - move or re-home any still-supported CLI behavior that remains in `v1`
    - delete `src/horadus_cli/v1/`
-   - simplify `src/horadus_cli/app.py` so the router points to `v2` for task
-     workflow and has no runtime dependency on `v1`
+   - simplify `src/horadus_cli/app.py`, `src/cli.py`, and top-level wrappers
+     so they route exclusively through `v2`
    - remove dead compatibility branches and stale `v1` references
 3. Validate
-   - add regression coverage that canonical `horadus tasks ...` dispatches to
-     `v2`
+   - add regression coverage that canonical Horadus command families dispatch
+     through `v2`
    - add regression coverage or architecture checks proving there are no
-     shipped runtime imports from `src/horadus_cli/v1/`
-   - rerun CLI regression coverage for any non-task command families re-homed
-     during the cleanup
+     shipped runtime or active-test imports from `src/horadus_cli/v1/`
+   - rerun CLI regression coverage for legacy, triage, and task command
+     families after the cleanup
    - verify docs describe the post-`v1` layout accurately
 4. Ship (PR, checks, merge, main sync)
    - update task/docs surfaces required by repo policy

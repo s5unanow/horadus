@@ -3,8 +3,8 @@ Horadus command-line interface compatibility module.
 """
 
 from src.core.config import settings
+from src.horadus_cli import legacy as _legacy
 from src.horadus_cli.app import _build_parser, main
-from src.horadus_cli.v1 import legacy as _legacy
 
 _change_arrow = _legacy._change_arrow
 _format_trend_status_lines = _legacy._format_trend_status_lines

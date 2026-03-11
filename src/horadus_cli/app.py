@@ -3,10 +3,10 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from src.horadus_cli.v1.legacy import register_legacy_commands
-from src.horadus_cli.v1.result import emit_result
-from src.horadus_cli.v1.triage_commands import register_triage_commands
+from src.horadus_cli.v2.legacy import register_legacy_commands
+from src.horadus_cli.v2.result import emit_result
 from src.horadus_cli.v2.task_commands import register_task_commands
+from src.horadus_cli.v2.triage_commands import register_triage_commands
 
 
 def _build_parser() -> argparse.ArgumentParser:

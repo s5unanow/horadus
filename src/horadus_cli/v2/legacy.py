@@ -11,7 +11,7 @@ from urllib import request as urllib_request
 from uuid import UUID
 
 from src.core.config import settings
-from src.horadus_cli.v1.result import CommandResult, ExitCode
+from src.horadus_cli.v2.result import CommandResult, ExitCode
 
 
 def _change_arrow(change: float) -> str:

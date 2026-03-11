@@ -5,9 +5,9 @@ from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
-from src.horadus_cli.v1.result import CommandResult
-from src.horadus_cli.v1.task_commands import add_leaf_cli_options
-from src.horadus_cli.v1.task_repo import (
+from src.horadus_cli.v2.result import CommandResult
+from src.horadus_cli.v2.task_commands import add_leaf_cli_options
+from src.horadus_cli.v2.task_repo import (
     completed_path,
     current_sprint_path,
     line_search,

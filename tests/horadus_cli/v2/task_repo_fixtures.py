@@ -7,9 +7,9 @@ import pytest
 import src.horadus_cli.v2.task_repo as task_repo_module
 import src.horadus_cli.v2.task_workflow_core as task_commands_module
 
-LIVE_TASK_ID = "TASK-301"
-ARCHIVED_TASK_ID = "TASK-302"
-BACKLOG_ONLY_TASK_ID = "TASK-303"
+LIVE_TASK_ID = "TASK-901"
+ARCHIVED_TASK_ID = "TASK-902"
+BACKLOG_ONLY_TASK_ID = "TASK-903"
 
 
 def seed_task_repo_layout(repo_root: Path) -> Path:
@@ -25,7 +25,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "",
                 "## Open Task Ledger",
                 "",
-                "### TASK-301: Stable live fixture",
+                "### TASK-901: Stable live fixture",
                 "**Priority**: P1",
                 "**Estimate**: 2h",
                 "",
@@ -38,7 +38,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "",
                 "---",
                 "",
-                "### TASK-303: Backlog-only fixture",
+                "### TASK-903: Backlog-only fixture",
                 "**Priority**: P2",
                 "**Estimate**: 1h",
                 "",
@@ -64,10 +64,10 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "**Sprint Number**: 4",
                 "",
                 "## Active Tasks",
-                "- `TASK-301` Stable live fixture",
+                "- `TASK-901` Stable live fixture",
                 "",
                 "## Completed This Sprint",
-                "- `TASK-302` Stable archived fixture ✅",
+                "- `TASK-902` Stable archived fixture ✅",
                 "",
             ]
         )
@@ -75,11 +75,11 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         encoding="utf-8",
     )
     (tasks_dir / "COMPLETED.md").write_text(
-        "# Completed Tasks\n\n## Sprint 4\n- TASK-302: Stable archived fixture ✅\n",
+        "# Completed Tasks\n\n## Sprint 4\n- TASK-902: Stable archived fixture ✅\n",
         encoding="utf-8",
     )
-    (tasks_dir / "specs" / "301-stable-live-fixture.md").write_text(
-        "# TASK-301 fixture spec\n",
+    (tasks_dir / "specs" / "901-stable-live-fixture.md").write_text(
+        "# TASK-901 fixture spec\n",
         encoding="utf-8",
     )
     (repo_root / "archive" / "closed_tasks" / "2026-Q1.md").write_text(
@@ -94,7 +94,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "",
                 "---",
                 "",
-                "### TASK-302: Stable archived fixture",
+                "### TASK-902: Stable archived fixture",
                 "**Priority**: P1",
                 "**Estimate**: 2h",
                 "",

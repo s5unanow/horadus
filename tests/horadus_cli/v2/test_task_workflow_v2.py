@@ -7,23 +7,42 @@ from types import SimpleNamespace
 
 import pytest
 
-import src.horadus_cli.v1.task_commands as v1_task_commands_module
-import src.horadus_cli.v1.task_query as v1_task_query_module
-import src.horadus_cli.v1.task_repo as v1_task_repo_module
-import src.horadus_cli.v1.task_workflow_core as v1_task_workflow_core_module
+import src.horadus_cli.task_commands as top_level_task_commands_module
+import src.horadus_cli.task_query as top_level_task_query_module
+import src.horadus_cli.task_repo as top_level_task_repo_module
+import src.horadus_cli.task_workflow_core as top_level_task_workflow_core_module
 import src.horadus_cli.v2.task_commands as v2_task_commands_module
 import src.horadus_cli.v2.task_query as v2_task_query_module
 import src.horadus_cli.v2.task_repo as v2_task_repo_module
 import src.horadus_cli.v2.task_workflow_core as v2_task_workflow_core_module
 from src.horadus_cli.v2.result import CommandResult, emit_result
-from tests.horadus_cli.v1.task_repo_fixtures import seed_task_repo_layout
+from tests.horadus_cli.v2.task_repo_fixtures import seed_task_repo_layout
 
 pytestmark = pytest.mark.unit
 
+EXPECTED_TASK_SUBCOMMANDS = sorted(
+    [
+        "close-ledgers",
+        "context-pack",
+        "eligibility",
+        "finish",
+        "lifecycle",
+        "list-active",
+        "local-gate",
+        "preflight",
+        "record-friction",
+        "safe-start",
+        "search",
+        "show",
+        "start",
+        "summarize-friction",
+    ]
+)
+
 
 def _patch_repo_roots(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
-    monkeypatch.setattr(v1_task_repo_module, "repo_root", lambda: repo_root)
-    monkeypatch.setattr(v1_task_workflow_core_module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(top_level_task_repo_module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(top_level_task_workflow_core_module, "repo_root", lambda: repo_root)
     monkeypatch.setattr(v2_task_repo_module, "repo_root", lambda: repo_root)
     monkeypatch.setattr(v2_task_workflow_core_module, "repo_root", lambda: repo_root)
 
@@ -48,17 +67,16 @@ def _tasks_subcommand_names(register_module: object) -> list[str]:
     return sorted(tasks_action.choices)
 
 
-def test_v2_task_parser_matches_v1_shape() -> None:
-    assert _tasks_subcommand_names(v2_task_commands_module) == _tasks_subcommand_names(
-        v1_task_commands_module
-    )
+def test_task_parser_matches_expected_shape() -> None:
+    assert _tasks_subcommand_names(v2_task_commands_module) == EXPECTED_TASK_SUBCOMMANDS
+    assert _tasks_subcommand_names(top_level_task_commands_module) == EXPECTED_TASK_SUBCOMMANDS
 
 
 @pytest.mark.parametrize(
     ("handler_name", "args"),
     [
         ("handle_list_active", SimpleNamespace()),
-        ("handle_show", SimpleNamespace(task_id="TASK-301", include_archive=False)),
+        ("handle_show", SimpleNamespace(task_id="TASK-901", include_archive=False)),
         (
             "handle_search",
             SimpleNamespace(
@@ -69,29 +87,35 @@ def test_v2_task_parser_matches_v1_shape() -> None:
                 include_archive=False,
             ),
         ),
-        ("handle_context_pack", SimpleNamespace(task_id="TASK-301", include_archive=False)),
+        ("handle_context_pack", SimpleNamespace(task_id="TASK-901", include_archive=False)),
     ],
 )
-def test_v2_query_handlers_match_v1(
+def test_top_level_task_query_handlers_match_v2(
     synthetic_task_repo_v2: Path, handler_name: str, args: SimpleNamespace
 ) -> None:
-    v1_result = getattr(v1_task_query_module, handler_name)(args)
+    top_level_result = getattr(top_level_task_query_module, handler_name)(args)
     v2_result = getattr(v2_task_query_module, handler_name)(args)
-    assert v2_result.exit_code == v1_result.exit_code
-    assert v2_result.data == v1_result.data
-    assert v2_result.lines == v1_result.lines
+    assert top_level_result.exit_code == v2_result.exit_code
+    assert top_level_result.data == v2_result.data
+    assert top_level_result.lines == v2_result.lines
 
 
-def test_v2_runtime_does_not_import_v1_modules() -> None:
-    v2_root = Path("src/horadus_cli/v2")
-    for path in sorted(v2_root.glob("*.py")):
+def test_runtime_does_not_import_v1_modules() -> None:
+    legacy_import = "src.horadus_cli." + "v1"
+    runtime_paths = [
+        Path("src/cli.py"),
+        Path("src/horadus_cli/app.py"),
+        *sorted(Path("src/horadus_cli").glob("*.py")),
+        *sorted(Path("src/horadus_cli/v2").glob("*.py")),
+    ]
+    for path in runtime_paths:
         text = path.read_text(encoding="utf-8")
-        assert "src.horadus_cli.v1" not in text, path.name
+        assert legacy_import not in text, path.name
 
 
 def test_v2_emit_result_includes_lines_in_json(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = emit_result(
-        CommandResult(exit_code=0, data={"task": "TASK-299"}, lines=["line-one"]),
+        CommandResult(exit_code=0, data={"task": "TASK-901"}, lines=["line-one"]),
         "json",
     )
 

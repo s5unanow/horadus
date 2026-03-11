@@ -65,7 +65,7 @@ stale review threads do not block completion once they are outdated or resolved.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/scripts/test_check_pr_review_gate.py -q`
 - `uv run --no-sync horadus tasks local-gate --full`
 

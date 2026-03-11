@@ -99,7 +99,7 @@ check: format lint typecheck ## Run all code quality checks
 agent-check: deps-dev ## Fast local gate for agent iteration (ruff, mypy, unit tests)
 	./scripts/run_with_backpressure.sh ruff-check $(UV_RUN) ruff check src/ tests/
 	./scripts/run_with_backpressure.sh mypy $(UV_RUN) mypy src/
-	./scripts/run_with_backpressure.sh pytest-unit $(UV_RUN) pytest tests/unit/ -v -m unit
+	./scripts/run_with_backpressure.sh pytest-unit $(UV_RUN) pytest tests/unit/ tests/horadus_cli/ -v -m unit
 
 pre-commit: ## Run pre-commit on all files
 	$(UV_RUN) pre-commit run --all-files
@@ -176,7 +176,7 @@ test: deps-dev ## Run all tests
 	$(UV_RUN) pytest tests/ -v --allow-hosts=127.0.0.1,localhost
 
 test-unit: deps-dev ## Run unit tests only
-	$(UV_RUN) pytest tests/unit/ -v -m unit
+	$(UV_RUN) pytest tests/unit/ tests/horadus_cli/ -v -m unit
 
 test-unit-cov: deps-dev ## Run unit tests with the hard 100% coverage gate
 	./scripts/run_unit_coverage_gate.sh

@@ -15,7 +15,7 @@ unrelated dirty files and preserving the overall branch-start discipline.
 ## Inputs
 
 - Spec/backlog references: `tasks/BACKLOG.md` (`TASK-296`)
-- Runtime/code touchpoints: `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`
+- Runtime/code touchpoints: `src/horadus_cli/task_commands.py`, `tests/horadus_cli/v1/test_cli.py`
 - Preconditions/dependencies: `TASK-292` made `PROJECT_STATUS.md` non-authoritative and `TASK-295` tightened completion/merge enforcement, so task start should stay strict on unrelated changes while relaxing only the intake path
 
 ## Outputs
@@ -63,10 +63,10 @@ unrelated dirty files and preserving the overall branch-start discipline.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links
 
 - Spec: `tasks/BACKLOG.md`
-- Relevant modules: `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`
+- Relevant modules: `src/horadus_cli/task_commands.py`, `tests/horadus_cli/v1/test_cli.py`

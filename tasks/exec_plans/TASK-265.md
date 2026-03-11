@@ -48,7 +48,7 @@ or product source-of-truth records.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k 'record_friction or friction' -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k 'record_friction or friction' -v`
 - `make agent-check`
 - `uv run --no-sync horadus tasks local-gate --full`
 
@@ -60,4 +60,4 @@ or product source-of-truth records.
   - `docs/AGENT_RUNBOOK.md`
   - `AGENTS.md`
   - `ops/skills/horadus-cli/SKILL.md`
-  - `tests/unit/test_cli.py`
+  - `tests/horadus_cli/v1/test_cli.py`

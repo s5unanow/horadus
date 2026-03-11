@@ -15,7 +15,7 @@ CLI lookup resolve those records only when explicitly requested.
 ## Inputs
 
 - Spec/backlog references: `tasks/BACKLOG.md` (`TASK-294`)
-- Runtime/code touchpoints: `src/horadus_cli/task_repo.py`, `src/horadus_cli/task_commands.py`, `tests/unit/test_cli.py`, `tests/unit/core/test_docs_freshness.py`
+- Runtime/code touchpoints: `src/horadus_cli/task_repo.py`, `src/horadus_cli/task_commands.py`, `tests/horadus_cli/v1/test_cli.py`, `tests/unit/core/test_docs_freshness.py`
 - Preconditions/dependencies: live backlog/current-sprint/completed ledgers already right-sized by `TASK-292`
 
 ## Outputs
@@ -64,7 +64,7 @@ CLI lookup resolve those records only when explicitly requested.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/core/test_docs_freshness.py -q`
 - `uv run --no-sync python scripts/check_docs_freshness.py`
 

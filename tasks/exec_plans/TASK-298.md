@@ -203,7 +203,7 @@ defined set of changed planning artifacts.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/core/ -q`
 - `uv run --no-sync horadus tasks context-pack TASK-298`
 - `uv run --no-sync horadus tasks local-gate --full`

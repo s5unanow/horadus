@@ -1150,7 +1150,7 @@ and remove the temporary `tasks-v2` surface.
 - Regressing the currently shipped `finish` recovery behavior during the `v2`
   cutover
 
-**Files**: `src/horadus_cli/app.py`, `src/horadus_cli/v2/`, `tests/unit/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+**Files**: `src/horadus_cli/app.py`, `src/horadus_cli/v2/`, `tests/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
 
 **Scope Boundary**:
 - `TASK-300` owns only the compatibility-preserving packaging move:
@@ -1246,7 +1246,7 @@ After `TASK-299` proves parity, cuts canonical `horadus tasks ...` over to
 - Starting new task-workflow feature work in this cleanup task
 - Enforcing a repo-wide 300-line file cap
 
-**Files**: `src/horadus_cli/`, `src/cli.py`, `tests/unit/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+**Files**: `src/horadus_cli/`, `src/cli.py`, `tests/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
 
 **Scope Boundary**:
 - `TASK-299` owns proving parity, exposing/removing temporary `tasks-v2`, and
@@ -1273,6 +1273,63 @@ After `TASK-299` proves parity, cuts canonical `horadus tasks ...` over to
 - [ ] Update agent-facing docs to describe the post-`v1` layout and remove
   obsolete references to the transitional `v1` package
 - [ ] Finish with the required local gates passing
+
+---
+
+### TASK-302: Isolate Horadus CLI Tests Into a Self-Contained Suite
+**Priority**: P1 (High)
+**Estimate**: 1 day
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+The Horadus CLI now has explicit runtime boundaries under `src/horadus_cli/`,
+but its tests still behave like part of the general app-wide unit tree. Move
+the CLI-focused tests into a dedicated `tests/horadus_cli/` suite so the CLI
+package can evolve behind its own self-contained regression surface.
+
+**Problem Statement**:
+- CLI tests are still mixed into the general `tests/unit/` tree even though
+  the runtime package now has explicit CLI-only boundaries.
+- The main CLI regression surface is still a large root-level test module,
+  which makes the CLI suite harder to discover and reason about separately from
+  the rest of the app.
+- Local and CI runner commands currently assume all unit coverage lives under
+  `tests/unit/`, so moving the CLI suite requires explicit runner updates.
+
+**Inputs**:
+- Current `src/horadus_cli/` package layout, especially the `v1` runtime and
+  top-level shell/router boundaries
+- Existing CLI-focused tests and fixtures
+- Current local and CI unit-test / coverage-gate commands
+
+**Outputs**:
+- A dedicated `tests/horadus_cli/` suite for the Horadus CLI package
+- CLI fixtures and package-local test wiring that live with the CLI suite
+- Updated local and CI runners so the isolated CLI suite remains in the
+  canonical validation path
+
+**Non-Goals**:
+- Implementing `v2` runtime behavior; `TASK-299` still owns that work
+- Fully decomposing the legacy `v1` CLI monolith into many smaller test files
+- Moving non-CLI repo-script tests out of `tests/unit/scripts/` when they are
+  still primarily script-level coverage
+- Reorganizing unrelated app-domain tests
+
+**Files**: `tests/horadus_cli/`, `tests/unit/scripts/`, `tests/unit/`, `Makefile`, `.github/workflows/ci.yml`, `scripts/run_unit_coverage_gate.sh`, `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `tasks/exec_plans/`
+
+**Acceptance Criteria**:
+- [ ] Move the Horadus CLI regression tests and shared CLI fixtures out of the
+  generic `tests/unit/` root into a dedicated `tests/horadus_cli/` suite
+- [ ] Keep the isolated CLI suite self-contained around the CLI package
+  boundary, including local fixture wiring and package-level test organization
+- [ ] Allow the legacy `v1` CLI tests to remain monolithic inside the dedicated
+  CLI suite for now, as long as they are no longer mixed into the app-wide
+  unit-test root
+- [ ] Keep non-CLI script tests in place unless they are primarily validating
+  the Horadus CLI package itself
+- [ ] Update local and CI unit-test / coverage-gate commands so
+  `tests/horadus_cli/` remains part of the canonical validation path
+- [ ] Preserve current CLI test coverage and keep all required local gates
+  passing after the move
 
 ---
 

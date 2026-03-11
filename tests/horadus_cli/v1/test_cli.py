@@ -25,7 +25,7 @@ from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
-pytest_plugins = ("tests.unit.task_repo_fixtures",)
+pytest_plugins = ("tests.horadus_cli.v1.task_repo_fixtures",)
 
 LIVE_TASK_ID = "TASK-301"
 ARCHIVED_TASK_ID = "TASK-302"
@@ -4641,7 +4641,7 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
 
 
 def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
+    repo_root = Path(__file__).resolve().parents[3]
     precommit = (repo_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8")

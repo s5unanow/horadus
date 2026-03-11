@@ -19,7 +19,7 @@ path while the current PR head is already red.
   - `tasks/CURRENT_SPRINT.md`
 - Runtime/code touchpoints:
   - `src/horadus_cli/task_commands.py`
-  - `tests/unit/test_cli.py`
+  - `tests/horadus_cli/v1/test_cli.py`
   - `docs/AGENT_RUNBOOK.md`
 - Preconditions/dependencies:
   - `TASK-257` completed and exposed the follow-up bug during finish-time CI
@@ -74,7 +74,7 @@ path while the current PR head is already red.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k "finish_task_data and (review or checks or merge)" -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k "finish_task_data and (review or checks or merge)" -q`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links

@@ -15,6 +15,8 @@ import src.horadus_cli.v1.legacy as v1_legacy_module
 import src.horadus_cli.v1.task_commands as v1_task_commands_module
 import src.horadus_cli.v1.triage_commands as v1_triage_commands_module
 
+pytestmark = pytest.mark.unit
+
 
 def test_top_level_legacy_modules_alias_v1_modules() -> None:
     assert legacy_module.register_legacy_commands is v1_legacy_module.register_legacy_commands

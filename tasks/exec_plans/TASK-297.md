@@ -16,7 +16,7 @@ CLI surface.
 ## Inputs
 
 - Spec/backlog references: `tasks/BACKLOG.md` (`TASK-297`)
-- Runtime/code touchpoints: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/test_cli.py`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
+- Runtime/code touchpoints: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/horadus_cli/v1/test_cli.py`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md`
 - Preconditions/dependencies:
   - `TASK-294` and `TASK-295` already landed archive-aware closure and stricter finish/lifecycle invariants
   - `TASK-296` added more start/preflight intake logic, increasing the value of isolating workflow concerns before future changes pile into the same file
@@ -119,7 +119,7 @@ CLI surface.
   - observable CLI checks for touched flows, including `--help`, parser failures, stdout/stderr routing, and representative exit-code paths where applicable
   - update `tasks/exec_plans/TASK-297-compatibility.md` with any newly discovered indirect command/caller impact before proceeding
   - mark touched command rows with the validating scenario ids or explicit unchanged-by-construction rationale used for that phase
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/scripts/ -q`
 - `uv run --no-sync horadus tasks local-gate --full`
 
@@ -129,7 +129,7 @@ CLI surface.
 - Relevant modules:
   - `src/horadus_cli/task_commands.py`
   - `src/horadus_cli/task_repo.py`
-  - `tests/unit/test_cli.py`
+  - `tests/horadus_cli/v1/test_cli.py`
   - `tests/unit/scripts/`
 
 ## Outcome
@@ -150,6 +150,6 @@ CLI surface.
 
 ## Final Validation
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -q`
 - `uv run --no-sync pytest tests/unit/scripts/ -q`
 - `uv run --no-sync horadus tasks local-gate --full`

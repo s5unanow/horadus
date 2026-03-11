@@ -49,8 +49,8 @@ entrypoint.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k 'safe_start or start' -v`
-- `uv run --no-sync pytest tests/unit/test_cli.py -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k 'safe_start or start' -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -v`
 - `make agent-check`
 - `uv run --no-sync horadus tasks local-gate --full`
 

@@ -46,11 +46,11 @@ PR, CI, and local sync signals.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -v`
 - `make agent-check`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links
 
 - Spec: `tasks/BACKLOG.md` (`TASK-259`)
-- Relevant modules: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/test_cli.py`
+- Relevant modules: `src/horadus_cli/task_commands.py`, `src/horadus_cli/task_repo.py`, `tests/horadus_cli/v1/test_cli.py`

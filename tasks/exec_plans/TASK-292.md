@@ -67,7 +67,7 @@ pointer stub.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k 'show or context_pack or search or triage or active' -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k 'show or context_pack or search or triage or active' -q`
 - `uv run --no-sync pytest tests/unit/core/test_docs_freshness.py -q`
 - `uv run --no-sync python scripts/check_docs_freshness.py`
 

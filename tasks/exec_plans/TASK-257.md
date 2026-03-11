@@ -19,7 +19,7 @@ closed when runtime coverage drops below 100%.
   - `tasks/CURRENT_SPRINT.md`
 - Runtime/code touchpoints:
   - `src/horadus_cli/task_commands.py`
-  - `tests/unit/test_cli.py`
+  - `tests/horadus_cli/v1/test_cli.py`
   - `Makefile`
   - `.github/workflows/ci.yml`
   - `.pre-commit-config.yaml`
@@ -88,7 +88,7 @@ closed when runtime coverage drops below 100%.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py -k "local_gate or coverage" -q`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py -k "local_gate or coverage" -q`
 - `make agent-check`
 - `uv run --no-sync horadus tasks local-gate --full`
 
@@ -97,12 +97,12 @@ closed when runtime coverage drops below 100%.
 - Spec: none; backlog entry is authoritative
 - Relevant modules:
   - `src/horadus_cli/task_commands.py`
-  - `tests/unit/test_cli.py`
+  - `tests/horadus_cli/v1/test_cli.py`
 - Validation evidence:
   - Task-scoped regression tests passed: `248 passed`
   - Canonical full local gate passed end to end, including the hard
     `pytest-unit-cov` step at `100%`
   - The remaining live coverage regressions were closed with behavior-focused
-    tests in `tests/unit/test_cli.py`,
+    tests in `tests/horadus_cli/v1/test_cli.py`,
     `tests/unit/eval/test_artifact_provenance.py`, and
     `tests/unit/processing/test_tier2_classifier_additional.py`

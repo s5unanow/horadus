@@ -100,7 +100,7 @@ Maintain it during implementation and review. It is the source of truth for:
 | --- | --- | --- | --- | --- |
 | CALL-01 | `src/horadus_cli/task_commands.py` | CLI facade dispatches every `handle_*` entrypoint and parser wiring must remain stable | `CMD-01` to `CMD-14` | Direct owner of argparse registration and final `CommandResult` emission only. |
 | CALL-02 | `src/horadus_cli/app.py` | Loads `register_task_commands` and relies on stable subcommand registration | `CMD-01` to `CMD-14` | Keep parser registration stable at the CLI root. |
-| CALL-03 | `tests/unit/test_cli.py` | CLI contract coverage for parser, render, exit-code, and handler integration paths | `CMD-01` to `CMD-14` | Must continue to cover unaffected commands after each phase. |
+| CALL-03 | `tests/horadus_cli/v1/test_cli.py` | CLI contract coverage for parser, render, exit-code, and handler integration paths | `CMD-01` to `CMD-14` | Must continue to cover unaffected commands after each phase. |
 | CALL-04 | `tests/unit/scripts/` | Script-level workflow regression coverage for task-related commands | `CMD-03`, `CMD-04`, `CMD-12`, `CMD-13`, `CMD-14` | Narrow further into concrete test files during implementation. |
 | CALL-05 | `docs/AGENT_RUNBOOK.md`, `README.md`, `AGENTS.md` | Operator-facing docs depend on command names, flags, and recovery guidance remaining stable | `CMD-01` to `CMD-14` | Update only if module-ownership guidance changes, not for internal reshuffling. |
 | CALL-06 | Archive/task-query tests and fixtures under `tests/unit/scripts/` and related task-repo fixtures | Cover live/archive lookup behavior for `show` and `context-pack` | `CMD-02`, `CMD-04` | Keep archive opt-in semantics explicit and regression-tested. |

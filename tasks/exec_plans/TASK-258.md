@@ -48,7 +48,7 @@ repo-defined full delivery lifecycle is actually complete.
 
 ## Validation Commands
 
-- `uv run --no-sync pytest tests/unit/test_cli.py tests/unit/scripts/test_finish_task_pr.py -v`
+- `uv run --no-sync pytest tests/horadus_cli/v1/test_cli.py tests/unit/scripts/test_finish_task_pr.py -v`
 - `make agent-check`
 - `make docs-freshness`
 

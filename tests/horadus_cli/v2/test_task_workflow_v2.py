@@ -15,6 +15,7 @@ import src.horadus_cli.v2.task_commands as v2_task_commands_module
 import src.horadus_cli.v2.task_query as v2_task_query_module
 import src.horadus_cli.v2.task_repo as v2_task_repo_module
 import src.horadus_cli.v2.task_workflow_core as v2_task_workflow_core_module
+import src.horadus_cli.v2.task_workflow_policy as task_workflow_policy_module
 from src.horadus_cli.v2.result import CommandResult, emit_result
 from tests.horadus_cli.v2.task_repo_fixtures import seed_task_repo_layout
 
@@ -122,3 +123,19 @@ def test_v2_emit_result_includes_lines_in_json(capsys: pytest.CaptureFixture[str
     assert exit_code == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["lines"] == ["line-one"]
+
+
+def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> None:
+    first_command = task_workflow_policy_module.CANONICAL_TASK_WORKFLOW_COMMANDS[0]
+
+    assert first_command.render("TASK-999") == "uv run --no-sync horadus tasks preflight"
+    assert task_workflow_policy_module.canonical_task_workflow_command_templates()[0] == (
+        "uv run --no-sync horadus tasks preflight"
+    )
+    assert task_workflow_policy_module.canonical_task_workflow_commands_for_task("TASK-999")[
+        -1
+    ] == ("uv run --no-sync horadus tasks finish TASK-999")
+    assert task_workflow_policy_module.completion_guidance_statements()
+    assert task_workflow_policy_module.dependency_aware_guidance_statements()
+    assert task_workflow_policy_module.fallback_guidance_statements()
+    assert task_workflow_policy_module.workflow_policy_guardrail_statements()

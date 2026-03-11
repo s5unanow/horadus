@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from collections.abc import Sequence
 
-from src.horadus_cli.v2.legacy import register_legacy_commands
+from src.horadus_cli.v2.ops_commands import register_ops_commands
 from src.horadus_cli.v2.result import emit_result
 from src.horadus_cli.v2.task_commands import register_task_commands
 from src.horadus_cli.v2.triage_commands import register_triage_commands
@@ -24,7 +24,7 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Validate and describe the command without making changes.",
     )
     subparsers = parser.add_subparsers(dest="command")
-    register_legacy_commands(subparsers)
+    register_ops_commands(subparsers)
     register_task_commands(subparsers)
     register_triage_commands(subparsers)
     return parser

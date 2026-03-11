@@ -1,0 +1,1537 @@
+"""
+Application configuration using Pydantic Settings.
+
+Loads configuration from environment variables and .env files.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+from functools import lru_cache
+from pathlib import Path
+from typing import Any
+
+from pydantic import Field, field_validator, model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+DEV_SECRET_KEY_DEFAULT = (
+    "dev-secret-key-change-in-production"  # pragma: allowlist secret # nosec B105
+)
+MIN_PRODUCTION_SECRET_KEY_LENGTH = 32
+_PRODUCTION_WEAK_SECRET_KEY_VALUES = frozenset(
+    {
+        "changeme",
+        "change-me",
+        "secret",
+        "default",
+        "password",
+        "admin",
+        "test",
+        "dev",
+    }
+)
+
+_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M = {
+    "openai:gpt-5-nano": (0.05, 0.40),
+    "openai:gpt-5-mini": (0.25, 2.00),
+    "openai:gpt-4.1-nano": (0.10, 0.40),
+    "openai:gpt-4.1-mini": (0.40, 1.60),
+    "openai:gpt-4o-mini": (0.15, 0.60),
+    "openai:text-embedding-3-small": (0.02, 0.00),
+    "openai:text-embedding-3-large": (0.13, 0.00),
+}
+
+_DEFAULT_DEDUP_URL_TRACKING_PARAM_PREFIXES = ("utm_",)
+_DEFAULT_DEDUP_URL_TRACKING_PARAMS = (
+    "utm",
+    "fbclid",
+    "gclid",
+    "dclid",
+    "msclkid",
+    "mc_cid",
+    "mc_eid",
+    "mkt_tok",
+    "igshid",
+)
+_ALLOWED_ENVIRONMENTS = ("development", "staging", "production")
+_ALLOWED_RUNTIME_PROFILES = ("default", "agent")
+_ALLOWED_LOG_LEVELS = ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
+_ALLOWED_REASONING_EFFORTS = ("minimal", "low", "medium", "high")
+
+
+def _normalize_pricing_key(raw_key: str) -> tuple[str, str]:
+    provider, separator, model = raw_key.partition(":")
+    normalized_provider = provider.strip().lower()
+    normalized_model = model.strip().lower()
+    if separator != ":" or not normalized_provider or not normalized_model:
+        msg = (
+            "LLM_TOKEN_PRICING_USD_PER_1M keys must use "
+            "'provider:model' format, e.g. 'openai:gpt-4.1-mini'"
+        )
+        raise ValueError(msg)
+    return (normalized_provider, normalized_model)
+
+
+def _coerce_pricing_rate_pair(
+    raw_value: Any,
+    *,
+    key: str,
+) -> tuple[float, float]:
+    input_rate: Any
+    output_rate: Any
+    if isinstance(raw_value, dict):
+        input_rate = raw_value.get("input")
+        output_rate = raw_value.get("output")
+    elif isinstance(raw_value, list | tuple) and len(raw_value) == 2:
+        input_rate, output_rate = raw_value
+    else:
+        msg = (
+            f"LLM_TOKEN_PRICING_USD_PER_1M value for '{key}' must be "
+            "an object with input/output or a [input, output] pair"
+        )
+        raise ValueError(msg)
+
+    try:
+        normalized_input = float(input_rate)
+        normalized_output = float(output_rate)
+    except (TypeError, ValueError) as exc:
+        msg = f"LLM_TOKEN_PRICING_USD_PER_1M rates for '{key}' must be numeric"
+        raise ValueError(msg) from exc
+
+    if normalized_input < 0 or normalized_output < 0:
+        msg = f"LLM_TOKEN_PRICING_USD_PER_1M rates for '{key}' must be >= 0"
+        raise ValueError(msg)
+    if not math.isfinite(normalized_input) or not math.isfinite(normalized_output):
+        msg = f"LLM_TOKEN_PRICING_USD_PER_1M rates for '{key}' must be finite"
+        raise ValueError(msg)
+
+    return (normalized_input, normalized_output)
+
+
+def resolve_llm_token_pricing(
+    *,
+    pricing_table: dict[str, tuple[float, float]],
+    provider: str,
+    model: str,
+) -> tuple[float, float] | None:
+    normalized_provider = provider.strip().lower()
+    normalized_model = model.strip().lower()
+    if not normalized_provider or not normalized_model:
+        return None
+
+    exact_key = f"{normalized_provider}:{normalized_model}"
+    exact_match = pricing_table.get(exact_key)
+    if exact_match is not None:
+        return exact_match
+
+    prefix_matches: list[tuple[str, tuple[float, float]]] = []
+    for key, rates in pricing_table.items():
+        key_provider, _, key_model = key.partition(":")
+        if key_provider != normalized_provider:
+            continue
+        if normalized_model.startswith(key_model):
+            prefix_matches.append((key_model, rates))
+    if not prefix_matches:
+        return None
+    prefix_matches.sort(key=lambda entry: len(entry[0]), reverse=True)
+    return prefix_matches[0][1]
+
+
+def _read_secret_file(path: str) -> str:
+    try:
+        content = Path(path).expanduser().read_text(encoding="utf-8").strip()
+    except OSError as exc:
+        msg = f"Could not read secret file '{path}'"
+        raise ValueError(msg) from exc
+    if not content:
+        msg = f"Secret file '{path}' is empty"
+        raise ValueError(msg)
+    return content
+
+
+class Settings(BaseSettings):
+    """
+    Application settings.
+
+    All settings can be overridden via environment variables.
+    For example, DATABASE_URL env var sets the database_url field.
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # =========================================================================
+    # Database
+    # =========================================================================
+    DATABASE_URL: str = Field(
+        default="postgresql+asyncpg://postgres@localhost:5432/geoint",
+        description="Async PostgreSQL connection string",
+    )
+    DATABASE_URL_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing DATABASE_URL",
+    )
+    DATABASE_URL_SYNC: str = Field(
+        default="",
+        description="Sync PostgreSQL connection string (for Alembic); derived if empty",
+    )
+    DATABASE_URL_SYNC_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing DATABASE_URL_SYNC",
+    )
+    DATABASE_POOL_SIZE: int = Field(default=10, ge=1, le=100)
+    DATABASE_MAX_OVERFLOW: int = Field(default=20, ge=0, le=100)
+    DATABASE_POOL_TIMEOUT_SECONDS: int = Field(
+        default=30,
+        ge=1,
+        le=600,
+        description="Seconds to wait for a DB connection from pool before timing out",
+    )
+    MIGRATION_PARITY_CHECK_ENABLED: bool = Field(
+        default=True,
+        description="Enable migration parity checks in runtime health/startup paths",
+    )
+    MIGRATION_PARITY_STRICT_STARTUP: bool = Field(
+        default=False,
+        description="Fail API startup when migration parity check is unhealthy",
+    )
+    INTEGRATION_DB_TRUNCATE_ALLOWED: bool = Field(
+        default=False,
+        description="Allow integration-table truncation on databases without explicit test naming",
+    )
+    INTEGRATION_DB_TRUNCATE_ALLOW_REMOTE: bool = Field(
+        default=False,
+        description="Allow integration-table truncation for non-localhost database hosts",
+    )
+
+    @model_validator(mode="after")
+    def _load_secret_file_values(self) -> Settings:
+        secret_mappings = {
+            "DATABASE_URL": self.DATABASE_URL_FILE,
+            "DATABASE_URL_SYNC": self.DATABASE_URL_SYNC_FILE,
+            "REDIS_URL": self.REDIS_URL_FILE,
+            "SECRET_KEY": self.SECRET_KEY_FILE,
+            "API_KEY": self.API_KEY_FILE,
+            "API_ADMIN_KEY": self.API_ADMIN_KEY_FILE,
+            "OPENAI_API_KEY": self.OPENAI_API_KEY_FILE,
+            "LLM_SECONDARY_API_KEY": self.LLM_SECONDARY_API_KEY_FILE,
+            "CELERY_BROKER_URL": self.CELERY_BROKER_URL_FILE,
+            "CELERY_RESULT_BACKEND": self.CELERY_RESULT_BACKEND_FILE,
+        }
+        for target_field, file_path in secret_mappings.items():
+            if not file_path:
+                continue
+            setattr(self, target_field, _read_secret_file(file_path))
+
+        if self.API_KEYS_FILE:
+            raw_keys = _read_secret_file(self.API_KEYS_FILE)
+            parsed_keys: list[str] = []
+            for line in raw_keys.splitlines():
+                for item in line.split(","):
+                    key = item.strip()
+                    if key:
+                        parsed_keys.append(key)
+            self.API_KEYS = parsed_keys
+
+        return self
+
+    @model_validator(mode="after")
+    def _derive_database_url_sync(self) -> Settings:
+        if self.DATABASE_URL.startswith("postgresql://"):
+            # Runtime engines use asyncpg; normalize common sync-style URLs.
+            self.DATABASE_URL = self.DATABASE_URL.replace(
+                "postgresql://",
+                "postgresql+asyncpg://",
+                1,
+            )
+        if not self.DATABASE_URL_SYNC.strip():
+            self.DATABASE_URL_SYNC = self.DATABASE_URL.replace("postgresql+asyncpg", "postgresql")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_calibration_thresholds(self) -> Settings:
+        if (
+            self.CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD
+            > self.CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD
+        ):
+            msg = "CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD must be <= CRITICAL threshold"
+            raise ValueError(msg)
+        if (
+            self.CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD
+            > self.CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD
+        ):
+            msg = "CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD must be <= CRITICAL threshold"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_retention_policy_thresholds(self) -> Settings:
+        if self.RETENTION_TREND_EVIDENCE_DAYS < self.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS:
+            msg = "RETENTION_TREND_EVIDENCE_DAYS must be >= RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS"
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_default_pricing_coverage(self) -> Settings:
+        required_pairs = (
+            ("tier1", self.LLM_PRIMARY_PROVIDER, self.LLM_TIER1_MODEL),
+            ("tier2", self.LLM_PRIMARY_PROVIDER, self.LLM_TIER2_MODEL),
+            ("embedding", self.LLM_PRIMARY_PROVIDER, self.EMBEDDING_MODEL),
+        )
+        for tier, provider, model in required_pairs:
+            resolved = resolve_llm_token_pricing(
+                pricing_table=self.LLM_TOKEN_PRICING_USD_PER_1M,
+                provider=provider,
+                model=model,
+            )
+            if resolved is None:
+                msg = (
+                    "LLM_TOKEN_PRICING_USD_PER_1M must include a price for "
+                    f"{tier} route '{provider}:{model}'"
+                )
+                raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _validate_production_security_guardrails(self) -> Settings:
+        if not self.is_production_like:
+            return self
+
+        validation_errors: list[str] = []
+        secret_key = self.SECRET_KEY.strip()
+
+        if secret_key == DEV_SECRET_KEY_DEFAULT:
+            validation_errors.append(
+                "SECRET_KEY must be explicitly configured in production-like "
+                "environments (staging/production); dev default is not allowed"
+            )
+        elif secret_key.lower() in _PRODUCTION_WEAK_SECRET_KEY_VALUES:
+            validation_errors.append(
+                "SECRET_KEY uses a known weak value and is not allowed in "
+                "production-like environments (staging/production)"
+            )
+        elif len(secret_key) < MIN_PRODUCTION_SECRET_KEY_LENGTH:
+            validation_errors.append(
+                "SECRET_KEY is too short for production-like environments "
+                "(staging/production); use at least 32 characters"
+            )
+
+        if not self.API_AUTH_ENABLED:
+            validation_errors.append(
+                "API_AUTH_ENABLED must be true in production-like environments (staging/production)"
+            )
+
+        has_bootstrap_api_key = bool((self.API_KEY or "").strip()) or bool(self.API_KEYS)
+        has_persisted_key_store = bool((self.API_KEYS_PERSIST_PATH or "").strip())
+        if not has_bootstrap_api_key and not has_persisted_key_store:
+            validation_errors.append(
+                "Production-like auth requires at least one bootstrap key "
+                "(API_KEY/API_KEYS) or API_KEYS_PERSIST_PATH"
+            )
+
+        if not (self.API_ADMIN_KEY or "").strip():
+            validation_errors.append(
+                "API_ADMIN_KEY must be configured in production-like environments "
+                "(staging/production) for key-management endpoints"
+            )
+
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
+
+        return self
+
+    @model_validator(mode="after")
+    def _validate_agent_runtime_profile_guardrails(self) -> Settings:
+        if not self.is_agent_profile:
+            return self
+
+        validation_errors: list[str] = []
+        if self.is_production:
+            validation_errors.append(
+                "Agent runtime profile is not allowed when ENVIRONMENT=production"
+            )
+
+        normalized_host = self.API_HOST.strip().lower()
+        if not self.AGENT_ALLOW_NON_LOOPBACK and normalized_host not in {"127.0.0.1", "localhost"}:
+            validation_errors.append(
+                "Agent runtime profile requires API_HOST to be loopback "
+                "(127.0.0.1/localhost) unless AGENT_ALLOW_NON_LOOPBACK=true"
+            )
+
+        if validation_errors:
+            raise ValueError("; ".join(validation_errors))
+
+        return self
+
+    # =========================================================================
+    # Redis
+    # =========================================================================
+    REDIS_URL: str = Field(
+        default="redis://localhost:6379/0",
+        description="Redis connection URL",
+    )
+    REDIS_URL_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing REDIS_URL",
+    )
+
+    # =========================================================================
+    # API
+    # =========================================================================
+    API_HOST: str = Field(default="0.0.0.0")  # nosec B104
+    API_PORT: int = Field(default=8000, ge=1, le=65535)
+    API_RELOAD: bool = Field(default=True)
+
+    # =========================================================================
+    # Security
+    # =========================================================================
+    SECRET_KEY: str = Field(
+        default=DEV_SECRET_KEY_DEFAULT,
+        description="Secret key for signing tokens",
+    )
+    SECRET_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing SECRET_KEY",
+    )
+    API_KEY: str | None = Field(
+        default=None,
+        description="Optional API key for authentication",
+    )
+    API_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing API_KEY",
+    )
+    API_AUTH_ENABLED: bool = Field(
+        default=False,
+        description="Enforce API key auth when true",
+    )
+    API_KEYS: list[str] = Field(
+        default_factory=list,
+        description="Additional API keys (comma-separated env value supported)",
+    )
+    API_ADMIN_KEY: str | None = Field(
+        default=None,
+        description="Admin key for API key management endpoints",
+    )
+    API_ADMIN_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing API_ADMIN_KEY",
+    )
+    API_KEYS_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing API_KEYS values (newline or comma separated)",
+    )
+    API_RATE_LIMIT_PER_MINUTE: int = Field(
+        default=120,
+        ge=1,
+        description="Default per-key API request limit per minute",
+    )
+    API_RATE_LIMIT_WINDOW_SECONDS: int = Field(
+        default=60,
+        ge=1,
+        le=3600,
+        description="Rolling window size for API rate limiting in seconds",
+    )
+    API_RATE_LIMIT_STRATEGY: str = Field(
+        default="fixed_window",
+        description="API rate limit strategy (`fixed_window` or `sliding_window`)",
+    )
+    API_RATE_LIMIT_REDIS_PREFIX: str = Field(
+        default="horadus:api_rate_limit",
+        description="Redis key prefix used for distributed API rate limiting buckets",
+    )
+    API_KEYS_PERSIST_PATH: str | None = Field(
+        default=None,
+        description="Optional JSON file path for persisting runtime API key metadata",
+    )
+    CORS_ORIGINS: list[str] = Field(
+        default=["http://localhost:3000", "http://localhost:8080"],
+        description="Allowed CORS origins",
+    )
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: Any) -> list[str]:
+        """Parse CORS origins from comma-separated string or list."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return list(v) if v else []
+
+    @field_validator("API_KEYS", mode="before")
+    @classmethod
+    def parse_api_keys(cls, v: Any) -> list[str]:
+        """Parse API keys from comma-separated string or list."""
+        if isinstance(v, str):
+            return [key.strip() for key in v.split(",") if key.strip()]
+        if isinstance(v, list):
+            return [str(key).strip() for key in v if str(key).strip()]
+        return []
+
+    @field_validator("API_RATE_LIMIT_STRATEGY", mode="before")
+    @classmethod
+    def parse_rate_limit_strategy(cls, value: Any) -> str:
+        """Normalize API rate-limit strategy values."""
+        normalized = str(value or "fixed_window").strip().lower()
+        allowed = {"fixed_window", "sliding_window"}
+        if normalized not in allowed:
+            msg = "API_RATE_LIMIT_STRATEGY must be one of: fixed_window, sliding_window"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("ENVIRONMENT", mode="before")
+    @classmethod
+    def parse_environment(cls, value: Any) -> str:
+        """Normalize and validate deployment environment."""
+        normalized = str(value or "development").strip().lower()
+        if normalized not in _ALLOWED_ENVIRONMENTS:
+            allowed_values = ", ".join(_ALLOWED_ENVIRONMENTS)
+            msg = f"ENVIRONMENT must be one of: {allowed_values}"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("RUNTIME_PROFILE", mode="before")
+    @classmethod
+    def parse_runtime_profile(cls, value: Any) -> str:
+        """Normalize and validate runtime profile."""
+        normalized = str(value or "default").strip().lower()
+        if normalized not in _ALLOWED_RUNTIME_PROFILES:
+            allowed_values = ", ".join(_ALLOWED_RUNTIME_PROFILES)
+            msg = f"RUNTIME_PROFILE must be one of: {allowed_values}"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("AGENT_DEFAULT_LOG_LEVEL", mode="before")
+    @classmethod
+    def parse_agent_default_log_level(cls, value: Any) -> str | None:
+        """Normalize optional agent-profile default log level."""
+        if value is None:
+            return None
+        normalized = str(value).strip().upper()
+        if not normalized:
+            return None
+        if normalized not in _ALLOWED_LOG_LEVELS:
+            allowed_values = ", ".join(_ALLOWED_LOG_LEVELS)
+            msg = f"AGENT_DEFAULT_LOG_LEVEL must be one of: {allowed_values}"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("LLM_TOKEN_PRICING_USD_PER_1M", mode="before")
+    @classmethod
+    def parse_llm_token_pricing_table(cls, value: Any) -> dict[str, tuple[float, float]]:
+        """Parse provider/model token-pricing table from mapping or JSON."""
+        if value is None:
+            return dict(_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M)
+
+        raw_table: Any = value
+        if isinstance(value, str):
+            stripped = value.strip()
+            if not stripped:
+                return dict(_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M)
+            try:
+                raw_table = json.loads(stripped)
+            except json.JSONDecodeError as exc:
+                msg = "LLM_TOKEN_PRICING_USD_PER_1M must be valid JSON when provided as a string"
+                raise ValueError(msg) from exc
+
+        if not isinstance(raw_table, dict):
+            msg = "LLM_TOKEN_PRICING_USD_PER_1M must decode to an object"
+            raise ValueError(msg)
+
+        normalized: dict[str, tuple[float, float]] = {}
+        for raw_key, raw_rates in raw_table.items():
+            provider, model = _normalize_pricing_key(str(raw_key))
+            normalized_key = f"{provider}:{model}"
+            normalized[normalized_key] = _coerce_pricing_rate_pair(
+                raw_rates,
+                key=normalized_key,
+            )
+
+        if not normalized:
+            msg = "LLM_TOKEN_PRICING_USD_PER_1M must define at least one provider:model entry"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("DEDUP_URL_QUERY_MODE", mode="before")
+    @classmethod
+    def parse_dedup_url_query_mode(cls, value: Any) -> str:
+        """Normalize URL query normalization strictness policy."""
+        normalized = str(value or "keep_non_tracking").strip().lower()
+        allowed = {"keep_non_tracking", "strip_all"}
+        if normalized not in allowed:
+            msg = "DEDUP_URL_QUERY_MODE must be one of: keep_non_tracking, strip_all"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator(
+        "DEDUP_URL_TRACKING_PARAM_PREFIXES", "DEDUP_URL_TRACKING_PARAMS", mode="before"
+    )
+    @classmethod
+    def parse_dedup_url_param_sets(cls, value: Any) -> list[str]:
+        """Parse and normalize dedup URL query param config lists."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            raw_values = [chunk.strip() for chunk in value.split(",")]
+        elif isinstance(value, list | tuple):
+            raw_values = [str(chunk).strip() for chunk in value]
+        else:
+            raw_values = [str(value).strip()]
+
+        normalized: list[str] = []
+        for raw in raw_values:
+            normalized_value = raw.lower()
+            if normalized_value and normalized_value not in normalized:
+                normalized.append(normalized_value)
+        return normalized
+
+    @field_validator("LANGUAGE_POLICY_SUPPORTED_LANGUAGES", mode="before")
+    @classmethod
+    def parse_supported_languages(cls, value: Any) -> list[str]:
+        """Parse and normalize supported language policy values."""
+        if value is None:
+            return ["en", "uk", "ru"]
+        if isinstance(value, str):
+            raw_values = [chunk.strip() for chunk in value.split(",")]
+        elif isinstance(value, list):
+            raw_values = [str(chunk).strip() for chunk in value]
+        else:
+            raw_values = [str(value).strip()]
+
+        normalized: list[str] = []
+        for raw in raw_values:
+            if not raw:
+                continue
+            code = raw.lower()[:2]
+            if code and code not in normalized:
+                normalized.append(code)
+        return normalized or ["en", "uk", "ru"]
+
+    @field_validator("LANGUAGE_POLICY_UNSUPPORTED_MODE", mode="before")
+    @classmethod
+    def parse_unsupported_language_mode(cls, value: Any) -> str:
+        """Normalize unsupported-language handling mode."""
+        normalized = str(value or "skip").strip().lower()
+        allowed = {"skip", "defer"}
+        if normalized not in allowed:
+            msg = "LANGUAGE_POLICY_UNSUPPORTED_MODE must be one of: skip, defer"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("EMBEDDING_INPUT_POLICY", mode="before")
+    @classmethod
+    def parse_embedding_input_policy(cls, value: Any) -> str:
+        """Normalize embedding input overflow handling policy."""
+        normalized = str(value or "truncate").strip().lower()
+        allowed = {"truncate", "chunk"}
+        if normalized not in allowed:
+            msg = "EMBEDDING_INPUT_POLICY must be one of: truncate, chunk"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator("CALIBRATION_DRIFT_WEBHOOK_URL", mode="before")
+    @classmethod
+    def parse_optional_webhook_url(cls, value: Any) -> str | None:
+        """Normalize optional webhook URL values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value).strip() or None
+
+    @field_validator("LLM_PRIMARY_BASE_URL", "LLM_SECONDARY_BASE_URL", mode="before")
+    @classmethod
+    def parse_optional_llm_base_urls(cls, value: Any) -> str | None:
+        """Normalize optional LLM base URL values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value).strip() or None
+
+    @field_validator("OTEL_EXPORTER_OTLP_ENDPOINT", "OTEL_EXPORTER_OTLP_HEADERS", mode="before")
+    @classmethod
+    def parse_optional_otel_fields(cls, value: Any) -> str | None:
+        """Normalize optional OpenTelemetry config values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip()
+            return normalized or None
+        return str(value).strip() or None
+
+    @field_validator("LLM_REPORT_API_MODE", mode="before")
+    @classmethod
+    def parse_llm_report_api_mode(cls, value: Any) -> str:
+        """Normalize report API mode and enforce supported values."""
+        normalized = str(value or "chat_completions").strip().lower()
+        allowed = {"chat_completions", "responses"}
+        if normalized not in allowed:
+            msg = "LLM_REPORT_API_MODE must be one of: chat_completions, responses"
+            raise ValueError(msg)
+        return normalized
+
+    @field_validator(
+        "LLM_TIER1_REASONING_EFFORT",
+        "LLM_TIER1_SECONDARY_REASONING_EFFORT",
+        "LLM_TIER2_REASONING_EFFORT",
+        "LLM_TIER2_SECONDARY_REASONING_EFFORT",
+        mode="before",
+    )
+    @classmethod
+    def parse_optional_reasoning_effort(cls, value: Any) -> str | None:
+        """Normalize optional reasoning-effort controls."""
+        if value is None:
+            return None
+        normalized = str(value).strip().lower()
+        if not normalized:
+            return None
+        if normalized not in _ALLOWED_REASONING_EFFORTS:
+            msg = "LLM reasoning effort must be one of: minimal, low, medium, high"
+            raise ValueError(msg)
+        return normalized
+
+    # =========================================================================
+    # OpenAI Configuration
+    # =========================================================================
+    OPENAI_API_KEY: str = Field(
+        default="",
+        description="OpenAI API key",
+    )
+    OPENAI_API_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing OPENAI_API_KEY",
+    )
+    LLM_PRIMARY_PROVIDER: str = Field(
+        default="openai",
+        description="Primary LLM provider identifier for logging/routing",
+    )
+    LLM_PRIMARY_BASE_URL: str | None = Field(
+        default=None,
+        description="Optional base URL for OpenAI-compatible primary provider endpoints",
+    )
+    LLM_SECONDARY_PROVIDER: str | None = Field(
+        default=None,
+        description="Secondary LLM provider identifier for failover routing/logging",
+    )
+    LLM_SECONDARY_BASE_URL: str | None = Field(
+        default=None,
+        description="Optional base URL for OpenAI-compatible secondary provider endpoints",
+    )
+    LLM_SECONDARY_API_KEY: str | None = Field(
+        default=None,
+        description="Optional API key override for secondary provider",
+    )
+    LLM_SECONDARY_API_KEY_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing LLM_SECONDARY_API_KEY",
+    )
+    LLM_TIER1_MODEL: str = Field(
+        default="gpt-4.1-nano",
+        description="Model for Tier 1 (fast) classification",
+    )
+    LLM_TIER2_MODEL: str = Field(
+        default="gpt-4.1-mini",
+        description="Model for Tier 2 (thorough) classification",
+    )
+    LLM_TIER1_SECONDARY_MODEL: str | None = Field(
+        default=None,
+        description="Optional secondary model for Tier 1 failover",
+    )
+    LLM_TIER1_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-1 primary route",
+    )
+    LLM_TIER1_SECONDARY_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-1 secondary failover route",
+    )
+    LLM_TIER2_SECONDARY_MODEL: str | None = Field(
+        default=None,
+        description="Optional secondary model for Tier 2 failover",
+    )
+    LLM_TIER2_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-2 primary route",
+    )
+    LLM_TIER2_SECONDARY_REASONING_EFFORT: str | None = Field(
+        default=None,
+        description="Optional reasoning effort for Tier-2 secondary failover route",
+    )
+    LLM_TIER2_EMERGENCY_MODEL: str | None = Field(
+        default=None,
+        description=(
+            "Optional emergency Tier-2 model used when the primary Tier-2 model fails the "
+            "gold-set canary quality gate"
+        ),
+    )
+    LLM_REPORT_MODEL: str = Field(
+        default="gpt-4.1-mini",
+        description="Model for weekly report narrative generation",
+    )
+    LLM_REPORT_API_MODE: str = Field(
+        default="chat_completions",
+        description="Report narrative API mode: chat_completions or responses",
+    )
+    NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Maximum unsupported deterministic claims allowed before grounding fallback",
+    )
+    NARRATIVE_GROUNDING_NUMERIC_TOLERANCE: float = Field(
+        default=0.05,
+        ge=0.0,
+        le=10.0,
+        description="Absolute tolerance for numeric claim grounding checks",
+    )
+    LLM_RETROSPECTIVE_MODEL: str = Field(
+        default="gpt-4.1-mini",
+        description="Model for retrospective analysis narrative generation",
+    )
+    LLM_TOKEN_PRICING_USD_PER_1M: dict[str, tuple[float, float]] = Field(
+        default_factory=lambda: dict(_DEFAULT_LLM_TOKEN_PRICING_USD_PER_1M),
+        description=(
+            "Token pricing table keyed by 'provider:model' with (input, output) USD per 1M tokens"
+        ),
+    )
+    LLM_TIER1_RPM: int = Field(default=500, description="Tier 1 rate limit (req/min)")
+    LLM_TIER2_RPM: int = Field(default=500, description="Tier 2 rate limit (req/min)")
+    LLM_TIER1_BATCH_SIZE: int = Field(
+        default=1,
+        ge=1,
+        le=256,
+        description=(
+            "Maximum raw items per Tier 1 classification API request. "
+            "Default stays at 1 until multi-item batching is re-benchmarked as quality-safe."
+        ),
+    )
+    LLM_ROUTE_RETRY_ATTEMPTS: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        description="Per-route transient retry attempts before failover/terminal failure",
+    )
+    LLM_ROUTE_RETRY_BACKOFF_SECONDS: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=10.0,
+        description="Base retry backoff in seconds (linear by attempt index)",
+    )
+    LLM_SEMANTIC_CACHE_ENABLED: bool = Field(
+        default=False,
+        description="Enable optional Redis-backed semantic cache for Tier-1/Tier-2 outputs",
+    )
+    LLM_SEMANTIC_CACHE_TTL_SECONDS: int = Field(
+        default=21600,
+        ge=1,
+        description="TTL for semantic cache entries in seconds",
+    )
+    LLM_SEMANTIC_CACHE_MAX_ENTRIES: int = Field(
+        default=10000,
+        ge=1,
+        description="Best-effort max semantic cache entries per stage before oldest eviction",
+    )
+    LLM_SEMANTIC_CACHE_REDIS_PREFIX: str = Field(
+        default="horadus:llm_semantic_cache",
+        description="Redis prefix for semantic cache keys/indexes",
+    )
+    LLM_DEGRADED_MODE_ENABLED: bool = Field(
+        default=True,
+        description="Enable degraded-mode policy for sustained Tier-2 failover/quality drift",
+    )
+    LLM_DEGRADED_REDIS_PREFIX: str = Field(
+        default="horadus:llm_degraded",
+        description="Redis key prefix for degraded-mode rolling-window accounting",
+    )
+    LLM_DEGRADED_BUCKET_SECONDS: int = Field(
+        default=600,
+        ge=10,
+        description="Bucket size in seconds for degraded-mode rolling-window accounting",
+    )
+    LLM_DEGRADED_WINDOW_SECONDS: int = Field(
+        default=43200,
+        ge=60,
+        description="Rolling-window size in seconds used for degraded-mode evaluation",
+    )
+    LLM_DEGRADED_ENTER_MIN_FAILOVERS: int = Field(
+        default=3,
+        ge=1,
+        description="Enter degraded mode when this many Tier-2 failovers occur within the window",
+    )
+    LLM_DEGRADED_ENTER_RATIO: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Enter degraded mode when failover ratio exceeds this threshold (with min calls)",
+    )
+    LLM_DEGRADED_ENTER_MIN_CALLS: int = Field(
+        default=6,
+        ge=1,
+        description="Minimum Tier-2 calls required before ratio-based degraded entry can trigger",
+    )
+    LLM_DEGRADED_EXIT_RATIO: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=1.0,
+        description="Exit degraded mode when failover ratio is at or below this threshold",
+    )
+    LLM_DEGRADED_EXIT_MIN_CALLS: int = Field(
+        default=6,
+        ge=1,
+        description="Minimum Tier-2 calls required before ratio-based degraded exit can trigger",
+    )
+    LLM_DEGRADED_MIN_ACTIVE_SECONDS: int = Field(
+        default=3600,
+        ge=0,
+        description="Minimum seconds to remain in degraded mode before allowing exit",
+    )
+    LLM_DEGRADED_CANARY_ENABLED: bool = Field(
+        default=True,
+        description="Run Tier-2 gold-set canary before processing pipeline runs (best-effort)",
+    )
+    LLM_DEGRADED_CANARY_GOLD_SET_PATH: str = Field(
+        default="ai/eval/gold_set.jsonl",
+        description="Path to Tier-2 gold-set JSONL used by degraded-mode canary",
+    )
+    LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS: int = Field(
+        default=12,
+        ge=1,
+        le=200,
+        description="Max Tier-2-labeled gold-set items evaluated by the canary",
+    )
+    LLM_DEGRADED_CANARY_MAX_FAILURE_RATE: float = Field(
+        default=0.10,
+        ge=0.0,
+        le=1.0,
+        description="Max allowed canary failure rate (parse/validation failures) before degraded mode",
+    )
+    LLM_DEGRADED_CANARY_MIN_TREND_MATCH_ACCURACY: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Min canary trend-id match accuracy required to pass",
+    )
+    LLM_DEGRADED_CANARY_MIN_SIGNAL_TYPE_ACCURACY: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Min canary signal-type match accuracy required to pass",
+    )
+    LLM_DEGRADED_CANARY_MIN_DIRECTION_ACCURACY: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        description="Min canary direction match accuracy required to pass",
+    )
+    LLM_DEGRADED_CANARY_MAX_SEVERITY_MAE: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Max canary severity MAE allowed to pass",
+    )
+    LLM_DEGRADED_CANARY_MAX_CONFIDENCE_MAE: float = Field(
+        default=0.30,
+        ge=0.0,
+        le=1.0,
+        description="Max canary confidence MAE allowed to pass",
+    )
+    LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS: int = Field(
+        default=43200,
+        ge=60,
+        description="TTL in seconds for quality-degraded latch after a canary failure",
+    )
+    LLM_DEGRADED_REPLAY_ENABLED: bool = Field(
+        default=True,
+        description="Enable bounded replay of high-impact events after degraded-mode recovery",
+    )
+    LLM_DEGRADED_REPLAY_INTERVAL_MINUTES: int = Field(
+        default=60,
+        ge=1,
+        description="Replay worker schedule interval in minutes (when enabled)",
+    )
+    LLM_DEGRADED_REPLAY_DRAIN_LIMIT: int = Field(
+        default=50,
+        ge=1,
+        description="Max replay queue items drained per replay worker run",
+    )
+    LLM_DEGRADED_REPLAY_MAX_QUEUE: int = Field(
+        default=500,
+        ge=1,
+        description="Best-effort max replay queue size before enqueue begins dropping/skipping",
+    )
+    LLM_DEGRADED_REPLAY_MIN_ABS_DELTA: float = Field(
+        default=0.15,
+        ge=0.0,
+        le=10.0,
+        description="Minimum absolute log-odds delta required to enqueue an event for replay",
+    )
+    EMBEDDING_MODEL: str = Field(
+        default="text-embedding-3-small",
+        description="Model for text embedding generation",
+    )
+    EMBEDDING_DIMENSIONS: int = Field(
+        default=1536,
+        ge=1,
+        description="Expected embedding vector dimensions",
+    )
+    EMBEDDING_BATCH_SIZE: int = Field(
+        default=32,
+        ge=1,
+        le=2048,
+        description="Maximum texts per embedding API request",
+    )
+    EMBEDDING_CACHE_MAX_SIZE: int = Field(
+        default=2048,
+        ge=1,
+        description="Maximum in-memory embedding cache entries before LRU eviction",
+    )
+    EMBEDDING_MAX_INPUT_TOKENS: int = Field(
+        default=8191,
+        ge=1,
+        description="Approximate per-input token guardrail for embedding requests",
+    )
+    EMBEDDING_INPUT_POLICY: str = Field(
+        default="truncate",
+        description="Embedding over-limit handling policy (`truncate` or `chunk`)",
+    )
+    EMBEDDING_TOKEN_ESTIMATE_CHARS_PER_TOKEN: int = Field(
+        default=4,
+        ge=1,
+        le=16,
+        description="Chars-per-token heuristic used for deterministic embedding token estimation",
+    )
+    VECTOR_REVALIDATION_CADENCE_DAYS: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+        description="Target cadence (days) for ANN strategy revalidation benchmark runs",
+    )
+    VECTOR_REVALIDATION_DATASET_GROWTH_PCT: int = Field(
+        default=20,
+        ge=1,
+        le=500,
+        description="Dataset-size growth trigger (%) for early ANN strategy revalidation",
+    )
+
+    # =========================================================================
+    # Telegram
+    # =========================================================================
+    TELEGRAM_API_ID: int | None = Field(default=None)
+    TELEGRAM_API_HASH: str | None = Field(default=None)
+    TELEGRAM_SESSION_NAME: str = Field(default="geoint_session")
+
+    # =========================================================================
+    # Celery
+    # =========================================================================
+    CELERY_BROKER_URL: str = Field(default="redis://localhost:6379/1")
+    CELERY_BROKER_URL_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing CELERY_BROKER_URL",
+    )
+    CELERY_RESULT_BACKEND: str = Field(default="redis://localhost:6379/2")
+    CELERY_RESULT_BACKEND_FILE: str | None = Field(
+        default=None,
+        description="Path to file containing CELERY_RESULT_BACKEND",
+    )
+    WORKER_HEARTBEAT_REDIS_KEY: str = Field(
+        default="horadus:worker:last_activity",
+        description="Redis key storing the latest worker activity heartbeat payload",
+    )
+    WORKER_HEARTBEAT_STALE_SECONDS: int = Field(
+        default=900,
+        ge=30,
+        description="Worker heartbeat age threshold before health reports stale worker activity",
+    )
+    WORKER_HEARTBEAT_TTL_SECONDS: int = Field(
+        default=3600,
+        ge=60,
+        description="Redis TTL for worker heartbeat payload key",
+    )
+
+    # =========================================================================
+    # Feature Flags
+    # =========================================================================
+    ENABLE_RSS_INGESTION: bool = Field(default=True)
+    ENABLE_GDELT_INGESTION: bool = Field(default=True)
+    ENABLE_TELEGRAM_INGESTION: bool = Field(default=False)
+    ENABLE_PROCESSING_PIPELINE: bool = Field(default=True)
+
+    # =========================================================================
+    # Application
+    # =========================================================================
+    ENVIRONMENT: str = Field(
+        default="development",
+        description="Environment: development, staging, production",
+    )
+    RUNTIME_PROFILE: str = Field(
+        default="default",
+        description="Execution profile (`default` or `agent`), independent of ENVIRONMENT",
+    )
+    AGENT_MODE: bool = Field(
+        default=False,
+        description="Legacy boolean toggle for agent runtime profile",
+    )
+    AGENT_EXIT_AFTER_REQUESTS: int = Field(
+        default=1,
+        ge=1,
+        le=10000,
+        description="Request-count threshold before agent runtime requests shutdown",
+    )
+    AGENT_SHUTDOWN_ON_ERROR: bool = Field(
+        default=True,
+        description="Request shutdown when unhandled exceptions occur in agent runtime profile",
+    )
+    AGENT_DEFAULT_LOG_LEVEL: str | None = Field(
+        default=None,
+        description="Optional default LOG_LEVEL override when agent runtime profile is active",
+    )
+    AGENT_ALLOW_NON_LOOPBACK: bool = Field(
+        default=False,
+        description="Allow non-loopback API_HOST while agent runtime profile is active",
+    )
+    SQL_ECHO: bool = Field(
+        default=False,
+        description="Log SQL statements from SQLAlchemy engine",
+    )
+    LOG_LEVEL: str = Field(default="INFO")
+    LOG_FORMAT: str = Field(default="json", description="json or console")
+    OTEL_ENABLED: bool = Field(
+        default=False,
+        description="Enable OpenTelemetry tracing instrumentation",
+    )
+    OTEL_SERVICE_NAME: str = Field(
+        default="horadus-backend",
+        description="OpenTelemetry service.name resource attribute",
+    )
+    OTEL_SERVICE_NAMESPACE: str = Field(
+        default="horadus",
+        description="OpenTelemetry service.namespace resource attribute",
+    )
+    OTEL_TRACES_SAMPLER_RATIO: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description="Trace sampling ratio for OpenTelemetry spans (0.0-1.0)",
+    )
+    OTEL_EXPORTER_OTLP_ENDPOINT: str | None = Field(
+        default=None,
+        description="Optional OTLP/HTTP traces endpoint (e.g., http://localhost:4318/v1/traces)",
+    )
+    OTEL_EXPORTER_OTLP_HEADERS: str | None = Field(
+        default=None,
+        description="Optional OTLP exporter headers as comma-separated key=value pairs",
+    )
+
+    # =========================================================================
+    # Processing
+    # =========================================================================
+    TIER1_RELEVANCE_THRESHOLD: int = Field(
+        default=5,
+        ge=0,
+        le=10,
+        description="Minimum Tier 1 score to proceed to Tier 2",
+    )
+    DEDUP_SIMILARITY_THRESHOLD: float = Field(
+        default=0.92,
+        ge=0,
+        le=1,
+        description="Cosine similarity threshold for deduplication",
+    )
+    DEDUP_URL_QUERY_MODE: str = Field(
+        default="keep_non_tracking",
+        description="URL query normalization mode (`keep_non_tracking` or `strip_all`)",
+    )
+    DEDUP_URL_TRACKING_PARAM_PREFIXES: list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_DEDUP_URL_TRACKING_PARAM_PREFIXES),
+        description="Query param prefixes removed during URL dedup normalization",
+    )
+    DEDUP_URL_TRACKING_PARAMS: list[str] = Field(
+        default_factory=lambda: list(_DEFAULT_DEDUP_URL_TRACKING_PARAMS),
+        description="Exact query params removed during URL dedup normalization",
+    )
+    CLUSTER_SIMILARITY_THRESHOLD: float = Field(
+        default=0.88,
+        ge=0,
+        le=1,
+        description="Cosine similarity threshold for event clustering",
+    )
+    CLUSTER_TIME_WINDOW_HOURS: int = Field(
+        default=48,
+        ge=1,
+        description="Time window for event clustering",
+    )
+    PROCESSING_PIPELINE_BATCH_SIZE: int = Field(
+        default=200,
+        ge=1,
+        description="Max pending items processed per pipeline task run",
+    )
+    PROCESSING_STALE_TIMEOUT_MINUTES: int = Field(
+        default=30,
+        ge=1,
+        description="Age threshold in minutes for resetting stale processing items",
+    )
+    PROCESSING_REAPER_INTERVAL_MINUTES: int = Field(
+        default=15,
+        ge=1,
+        description="Interval in minutes for stale-processing reaper task schedule",
+    )
+    RETENTION_CLEANUP_ENABLED: bool = Field(
+        default=False,
+        description="Enable periodic retention cleanup for high-churn operational tables",
+    )
+    RETENTION_CLEANUP_INTERVAL_HOURS: int = Field(
+        default=24,
+        ge=1,
+        description="Interval in hours for periodic retention cleanup task schedule",
+    )
+    RETENTION_CLEANUP_DRY_RUN: bool = Field(
+        default=True,
+        description="When true, retention cleanup reports eligible rows without deleting them",
+    )
+    RETENTION_CLEANUP_BATCH_SIZE: int = Field(
+        default=500,
+        ge=1,
+        description="Maximum rows selected per table per retention cleanup run",
+    )
+    RETENTION_RAW_ITEM_NOISE_DAYS: int = Field(
+        default=30,
+        ge=1,
+        description="Retention window in days for unlinked raw_items in noise/error status",
+    )
+    RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS: int = Field(
+        default=90,
+        ge=1,
+        description="Retention window in days for raw_items linked to archived events",
+    )
+    RETENTION_EVENT_ARCHIVED_DAYS: int = Field(
+        default=180,
+        ge=1,
+        description="Retention window in days for archived events with no retained evidence",
+    )
+    RETENTION_TREND_EVIDENCE_DAYS: int = Field(
+        default=365,
+        ge=1,
+        description="Retention window in days for trend_evidence rows on archived events",
+    )
+    PROCESS_PENDING_INTERVAL_MINUTES: int = Field(
+        default=15,
+        ge=1,
+        description="Interval in minutes for periodic workers.process_pending_items schedule",
+    )
+    PROCESSING_DISPATCH_MAX_IN_FLIGHT: int = Field(
+        default=1,
+        ge=1,
+        description="Maximum concurrent process_pending_items tasks before ingestion-triggered dispatch is throttled",
+    )
+    PROCESSING_DISPATCH_LOCK_TTL_SECONDS: int = Field(
+        default=30,
+        ge=0,
+        description="Redis lock TTL seconds for deduplicating ingestion-triggered process_pending_items dispatches",
+    )
+    PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT: int = Field(
+        default=10,
+        ge=0,
+        le=100,
+        description="Reduce ingestion-triggered dispatch aggressiveness when remaining daily LLM budget falls below this percent",
+    )
+    PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT: int = Field(
+        default=50,
+        ge=1,
+        description="Maximum ingestion-triggered dispatch task limit while low-budget-headroom throttling is active",
+    )
+    LANGUAGE_POLICY_SUPPORTED_LANGUAGES: list[str] = Field(
+        default_factory=lambda: ["en", "uk", "ru"],
+        description="Supported language codes for launch processing policy",
+    )
+    LANGUAGE_POLICY_UNSUPPORTED_MODE: str = Field(
+        default="skip",
+        description="Unsupported-language handling mode (`skip` or `defer`)",
+    )
+
+    # =========================================================================
+    # Trend Engine
+    # =========================================================================
+    DEFAULT_DECAY_HALF_LIFE_DAYS: int = Field(default=30, ge=1)
+    TREND_SNAPSHOT_INTERVAL_MINUTES: int = Field(default=60, ge=1)
+
+    # =========================================================================
+    # Cost Protection (Kill Switch)
+    # =========================================================================
+    TIER1_MAX_DAILY_CALLS: int = Field(
+        default=1000,
+        ge=0,
+        description="Max Tier 1 LLM calls per day (0 = unlimited)",
+    )
+    TIER2_MAX_DAILY_CALLS: int = Field(
+        default=200,
+        ge=0,
+        description="Max Tier 2 LLM calls per day (0 = unlimited)",
+    )
+    EMBEDDING_MAX_DAILY_CALLS: int = Field(
+        default=500,
+        ge=0,
+        description="Max embedding calls per day (0 = unlimited)",
+    )
+    DAILY_COST_LIMIT_USD: float = Field(
+        default=5.0,
+        ge=0,
+        description="Hard daily cost limit in USD (0 = unlimited)",
+    )
+    COST_ALERT_THRESHOLD_PCT: int = Field(
+        default=80,
+        ge=0,
+        le=100,
+        description="Alert when this % of daily budget is reached",
+    )
+
+    # =========================================================================
+    # Calibration Drift Alerting
+    # =========================================================================
+    CALIBRATION_DRIFT_MIN_RESOLVED_OUTCOMES: int = Field(
+        default=20,
+        ge=0,
+        description="Minimum resolved outcomes before calibration drift alerts are emitted",
+    )
+    CALIBRATION_DRIFT_BRIER_WARN_THRESHOLD: float = Field(
+        default=0.20,
+        ge=0,
+        description="Warning threshold for mean Brier score drift alerts",
+    )
+    CALIBRATION_DRIFT_BRIER_CRITICAL_THRESHOLD: float = Field(
+        default=0.30,
+        ge=0,
+        description="Critical threshold for mean Brier score drift alerts",
+    )
+    CALIBRATION_DRIFT_BUCKET_ERROR_WARN_THRESHOLD: float = Field(
+        default=0.15,
+        ge=0,
+        description="Warning threshold for max bucket calibration error alerts",
+    )
+    CALIBRATION_DRIFT_BUCKET_ERROR_CRITICAL_THRESHOLD: float = Field(
+        default=0.25,
+        ge=0,
+        description="Critical threshold for max bucket calibration error alerts",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_URL: str | None = Field(
+        default=None,
+        description="Optional webhook endpoint for calibration drift alert delivery",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_TIMEOUT_SECONDS: float = Field(
+        default=5.0,
+        gt=0,
+        description="HTTP timeout for calibration drift webhook calls",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_MAX_RETRIES: int = Field(
+        default=3,
+        ge=0,
+        description="Maximum retries for transient calibration drift webhook failures",
+    )
+    CALIBRATION_DRIFT_WEBHOOK_BACKOFF_SECONDS: float = Field(
+        default=1.0,
+        ge=0,
+        description="Initial backoff delay (seconds) for webhook retry attempts",
+    )
+    CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND: int = Field(
+        default=5,
+        ge=0,
+        description="Minimum resolved outcomes per trend in window before coverage is considered sufficient",
+    )
+    CALIBRATION_COVERAGE_MIN_RESOLVED_RATIO: float = Field(
+        default=0.5,
+        ge=0,
+        le=1,
+        description="Minimum resolved/total ratio required for calibration coverage sufficiency",
+    )
+
+    # =========================================================================
+    # Collection
+    # =========================================================================
+    RSS_COLLECTION_INTERVAL: int = Field(default=360, description="Minutes")
+    GDELT_COLLECTION_INTERVAL: int = Field(default=360, description="Minutes")
+    INGESTION_WINDOW_OVERLAP_SECONDS: int = Field(
+        default=300,
+        ge=0,
+        description="Overlap applied between collection windows to avoid uncovered ingestion ranges",
+    )
+    SOURCE_FRESHNESS_ALERT_MULTIPLIER: float = Field(
+        default=2.0,
+        ge=1.0,
+        le=24.0,
+        description="Source freshness SLO multiplier against collector interval before marked stale",
+    )
+    SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES: int = Field(
+        default=30,
+        ge=1,
+        description="Cadence in minutes for stale-source freshness checks",
+    )
+    SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES: int = Field(
+        default=2,
+        ge=0,
+        le=10,
+        description="Maximum collector catch-up dispatches emitted per freshness-check run",
+    )
+    CLUSTER_DRIFT_SENTINEL_ENABLED: bool = Field(
+        default=True,
+        description="Enable scheduled cluster drift sentinel worker task",
+    )
+    CLUSTER_DRIFT_SENTINEL_INTERVAL_HOURS: int = Field(
+        default=24,
+        ge=1,
+        le=168,
+        description="Cadence in hours for cluster drift sentinel runs",
+    )
+    CLUSTER_DRIFT_SENTINEL_LOOKBACK_DAYS: int = Field(
+        default=1,
+        ge=1,
+        le=30,
+        description="Lookback window in days for each cluster drift sentinel run",
+    )
+    CLUSTER_DRIFT_LARGE_CLUSTER_SIZE: int = Field(
+        default=5,
+        ge=2,
+        le=100,
+        description="Minimum event item count considered a large-cluster tail event",
+    )
+    CLUSTER_DRIFT_SINGLETON_RATE_WARN_THRESHOLD: float = Field(
+        default=0.80,
+        ge=0.0,
+        le=1.0,
+        description="Warn when singleton-event rate exceeds this threshold",
+    )
+    CLUSTER_DRIFT_LARGE_CLUSTER_RATE_WARN_THRESHOLD: float = Field(
+        default=0.20,
+        ge=0.0,
+        le=1.0,
+        description="Warn when large-cluster tail rate exceeds this threshold",
+    )
+    CLUSTER_DRIFT_CONTRADICTION_RATE_WARN_THRESHOLD: float = Field(
+        default=0.25,
+        ge=0.0,
+        le=1.0,
+        description="Warn when contradiction incidence exceeds this threshold",
+    )
+    CLUSTER_DRIFT_LANGUAGE_DRIFT_WARN_THRESHOLD: float = Field(
+        default=0.35,
+        ge=0.0,
+        le=1.0,
+        description="Warn when language distribution drift score exceeds this threshold",
+    )
+    CLUSTER_DRIFT_ARTIFACT_DIR: str = Field(
+        default="artifacts/cluster_drift",
+        description="Directory where cluster drift sentinel JSON artifacts are written",
+    )
+    RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        ge=30,
+        le=7200,
+        description="Total timeout budget in seconds for a single RSS feed collection run",
+    )
+    GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
+        default=300,
+        ge=30,
+        le=7200,
+        description="Total timeout budget in seconds for a single GDELT query collection run",
+    )
+    COLLECTOR_TASK_MAX_RETRIES: int = Field(
+        default=3,
+        ge=0,
+        le=10,
+        description="Bounded worker requeue attempts for transient collector task failures",
+    )
+    COLLECTOR_RETRY_BACKOFF_MAX_SECONDS: int = Field(
+        default=300,
+        ge=1,
+        le=7200,
+        description="Maximum retry backoff delay in seconds for collector task retries",
+    )
+    MAX_ITEMS_PER_COLLECTION: int = Field(default=100, ge=1)
+    WEEKLY_REPORT_DAY_OF_WEEK: int = Field(
+        default=1,
+        ge=0,
+        le=6,
+        description="UTC day of week for weekly report task (0=Sun..6=Sat)",
+    )
+    WEEKLY_REPORT_HOUR_UTC: int = Field(
+        default=7,
+        ge=0,
+        le=23,
+        description="UTC hour for weekly report task",
+    )
+    WEEKLY_REPORT_MINUTE_UTC: int = Field(
+        default=0,
+        ge=0,
+        le=59,
+        description="UTC minute for weekly report task",
+    )
+    MONTHLY_REPORT_DAY_OF_MONTH: int = Field(
+        default=1,
+        ge=1,
+        le=28,
+        description="UTC day of month for monthly report task",
+    )
+    MONTHLY_REPORT_HOUR_UTC: int = Field(
+        default=8,
+        ge=0,
+        le=23,
+        description="UTC hour for monthly report task",
+    )
+    MONTHLY_REPORT_MINUTE_UTC: int = Field(
+        default=0,
+        ge=0,
+        le=59,
+        description="UTC minute for monthly report task",
+    )
+
+    # =========================================================================
+    # Computed Properties
+    # =========================================================================
+
+    @property
+    def is_development(self) -> bool:
+        """Check if running in development mode."""
+        return self.ENVIRONMENT == "development"
+
+    @property
+    def is_production(self) -> bool:
+        """Check if running in production mode."""
+        return self.ENVIRONMENT == "production"
+
+    @property
+    def is_production_like(self) -> bool:
+        """Check if running in production-like mode (staging/production)."""
+        return self.ENVIRONMENT in {"staging", "production"}
+
+    @property
+    def is_agent_profile(self) -> bool:
+        """Check if runtime profile is agent-oriented."""
+        return self.RUNTIME_PROFILE == "agent" or self.AGENT_MODE
+
+    @property
+    def effective_log_level(self) -> str:
+        """Resolve effective log level after runtime-profile overrides."""
+        if not self.is_agent_profile:
+            return self.LOG_LEVEL
+        if self.AGENT_DEFAULT_LOG_LEVEL:
+            return self.AGENT_DEFAULT_LOG_LEVEL
+        return "WARNING"
+
+
+@lru_cache
+def get_settings() -> Settings:
+    """
+    Get cached settings instance.
+
+    Uses lru_cache to ensure settings are only loaded once.
+    """
+    return Settings()
+
+
+# Convenience instance
+settings = get_settings()

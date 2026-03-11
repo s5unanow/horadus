@@ -11,44 +11,44 @@ from urllib import error as urllib_error
 
 import pytest
 
-import src.core.calibration_dashboard as calibration_dashboard_module
-import src.core.dashboard_export as dashboard_export_module
-import src.core.embedding_lineage as embedding_lineage_module
-import src.core.migration_parity as migration_parity_module
-import src.core.source_freshness as source_freshness_module
-import src.eval.audit as audit_module
-import src.eval.benchmark as benchmark_module
-import src.eval.replay as replay_module
-import src.eval.taxonomy_validation as taxonomy_validation_module
-import src.eval.vector_benchmark as vector_benchmark_module
-import src.horadus_cli.v2.legacy as legacy_module
-import src.processing.dry_run_pipeline as dry_run_pipeline_module
-import src.storage.database as database_module
+import src.horadus_cli.v2.ops_commands as ops_module
+import src.horadus_cli.v2.runtime.core.calibration_dashboard as calibration_dashboard_module
+import src.horadus_cli.v2.runtime.core.dashboard_export as dashboard_export_module
+import src.horadus_cli.v2.runtime.core.embedding_lineage as embedding_lineage_module
+import src.horadus_cli.v2.runtime.core.migration_parity as migration_parity_module
+import src.horadus_cli.v2.runtime.core.source_freshness as source_freshness_module
+import src.horadus_cli.v2.runtime.eval.audit as audit_module
+import src.horadus_cli.v2.runtime.eval.benchmark as benchmark_module
+import src.horadus_cli.v2.runtime.eval.replay as replay_module
+import src.horadus_cli.v2.runtime.eval.taxonomy_validation as taxonomy_validation_module
+import src.horadus_cli.v2.runtime.eval.vector_benchmark as vector_benchmark_module
+import src.horadus_cli.v2.runtime.processing.dry_run_pipeline as dry_run_pipeline_module
+import src.horadus_cli.v2.runtime.storage.database as database_module
 from src.horadus_cli.v2.result import ExitCode
 
 pytestmark = pytest.mark.unit
 
-_ORIGINAL_HTTP_GET = legacy_module._http_get
-_ORIGINAL_HTTP_GET_JSON = legacy_module._http_get_json
-_ORIGINAL_DOCTOR_CHECK_DATABASE = legacy_module._doctor_check_database
-_ORIGINAL_DOCTOR_CHECK_REDIS = legacy_module._doctor_check_redis
+_ORIGINAL_HTTP_GET = ops_module._http_get
+_ORIGINAL_HTTP_GET_JSON = ops_module._http_get_json
+_ORIGINAL_DOCTOR_CHECK_DATABASE = ops_module._doctor_check_database
+_ORIGINAL_DOCTOR_CHECK_REDIS = ops_module._doctor_check_redis
 
 
 @pytest.fixture(autouse=True)
-def reset_legacy_helpers() -> None:
-    legacy_module._http_get = _ORIGINAL_HTTP_GET
-    legacy_module._http_get_json = _ORIGINAL_HTTP_GET_JSON
-    legacy_module._doctor_check_database = _ORIGINAL_DOCTOR_CHECK_DATABASE
-    legacy_module._doctor_check_redis = _ORIGINAL_DOCTOR_CHECK_REDIS
+def reset_ops_helpers() -> None:
+    ops_module._http_get = _ORIGINAL_HTTP_GET
+    ops_module._http_get_json = _ORIGINAL_HTTP_GET_JSON
+    ops_module._doctor_check_database = _ORIGINAL_DOCTOR_CHECK_DATABASE
+    ops_module._doctor_check_redis = _ORIGINAL_DOCTOR_CHECK_REDIS
 
 
 def test_parse_iso_datetime_and_embedding_count_helpers() -> None:
-    assert legacy_module._parse_iso_datetime(None) is None
-    assert legacy_module._parse_iso_datetime("  ") is None
-    assert legacy_module._parse_iso_datetime("2026-03-08T12:00:00Z") == datetime(
+    assert ops_module._parse_iso_datetime(None) is None
+    assert ops_module._parse_iso_datetime("  ") is None
+    assert ops_module._parse_iso_datetime("2026-03-08T12:00:00Z") == datetime(
         2026, 3, 8, 12, 0, tzinfo=UTC
     )
-    assert legacy_module._parse_iso_datetime("2026-03-08T14:00:00+02:00") == datetime(
+    assert ops_module._parse_iso_datetime("2026-03-08T14:00:00+02:00") == datetime(
         2026, 3, 8, 14, 0, tzinfo=datetime.fromisoformat("2026-03-08T14:00:00+02:00").tzinfo
     )
 
@@ -60,9 +60,9 @@ def test_parse_iso_datetime_and_embedding_count_helpers() -> None:
         ]
     )
 
-    assert legacy_module._format_embedding_model_counts(empty_summary) == "none"
+    assert ops_module._format_embedding_model_counts(empty_summary) == "none"
     assert (
-        legacy_module._format_embedding_model_counts(populated_summary)
+        ops_module._format_embedding_model_counts(populated_summary)
         == "text-embedding-3-large=2, legacy=1"
     )
 
@@ -87,7 +87,7 @@ async def test_collect_trends_status_handles_empty_and_populated_dashboards(
     monkeypatch.setattr(database_module, "async_session_maker", fake_session_maker)
     monkeypatch.setattr(calibration_dashboard_module, "CalibrationDashboardService", FakeService)
 
-    data, lines = await legacy_module._collect_trends_status(limit=3)
+    data, lines = await ops_module._collect_trends_status(limit=3)
 
     assert data == {"trends": []}
     assert lines == ["No active trends found."]
@@ -103,7 +103,7 @@ async def test_collect_trends_status_handles_empty_and_populated_dashboards(
     )
     dashboard.trend_movements = [movement]
 
-    data, lines = await legacy_module._collect_trends_status(limit=3)
+    data, lines = await ops_module._collect_trends_status(limit=3)
 
     assert data["trends"][0]["trend_name"] == "Alpha"
     assert any("Top movers: diplomacy" in line for line in lines)
@@ -141,7 +141,7 @@ async def test_collect_dashboard_export_returns_artifact_paths(
         dashboard_export_module, "export_calibration_dashboard", lambda *_args, **_kwargs: result
     )
 
-    data, lines = await legacy_module._collect_dashboard_export(str(tmp_path), 5)
+    data, lines = await ops_module._collect_dashboard_export(str(tmp_path), 5)
 
     assert data["json_path"].endswith("dashboard.json")
     assert any("Hosting index:" in line for line in lines)
@@ -171,7 +171,7 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
     monkeypatch.setattr(benchmark_module, "run_gold_set_benchmark", fake_benchmark)
     monkeypatch.setattr(replay_module, "run_historical_replay_comparison", fake_replay)
     monkeypatch.setattr(vector_benchmark_module, "run_vector_retrieval_benchmark", fake_vector)
-    monkeypatch.setattr(legacy_module.settings, "OPENAI_API_KEY", "stub")
+    monkeypatch.setattr(ops_module.settings, "OPENAI_API_KEY", "stub")
 
     benchmark_args = SimpleNamespace(
         gold_set="gold.jsonl",
@@ -203,9 +203,9 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
         seed=7,
     )
 
-    _, _, benchmark_exit = await legacy_module._collect_eval_benchmark(benchmark_args)
-    _, _, replay_exit = await legacy_module._collect_eval_replay(replay_args)
-    _, _, vector_exit = await legacy_module._collect_eval_vector_benchmark(vector_args)
+    _, _, benchmark_exit = await ops_module._collect_eval_benchmark(benchmark_args)
+    _, _, replay_exit = await ops_module._collect_eval_replay(replay_args)
+    _, _, vector_exit = await ops_module._collect_eval_vector_benchmark(vector_args)
 
     assert benchmark_calls["max_items"] == 1
     assert replay_calls["trend_id"].hex == "550e8400e29b41d4a716446655440000"
@@ -283,21 +283,21 @@ async def test_collect_embedding_lineage_and_source_freshness(
         "build_source_freshness_report",
         fake_source_freshness_report,
     )
-    monkeypatch.setattr(legacy_module.settings, "ENABLE_RSS_INGESTION", True)
-    monkeypatch.setattr(legacy_module.settings, "ENABLE_GDELT_INGESTION", True)
-    monkeypatch.setattr(legacy_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 1)
+    monkeypatch.setattr(ops_module.settings, "ENABLE_RSS_INGESTION", True)
+    monkeypatch.setattr(ops_module.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(ops_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 1)
 
     lineage_args = SimpleNamespace(target_model="canonical", fail_on_mixed=True)
     freshness_args = SimpleNamespace(stale_multiplier=2.0, fail_on_stale=True)
 
-    lineage_data, lineage_lines, lineage_exit = await legacy_module._collect_eval_embedding_lineage(
+    lineage_data, lineage_lines, lineage_exit = await ops_module._collect_eval_embedding_lineage(
         lineage_args
     )
     (
         freshness_data,
         freshness_lines,
         freshness_exit,
-    ) = await legacy_module._collect_eval_source_freshness(freshness_args)
+    ) = await ops_module._collect_eval_source_freshness(freshness_args)
 
     assert lineage_data["has_mixed_populations"] is True
     assert any("mixed_population=true" in line for line in lineage_lines)
@@ -335,11 +335,11 @@ async def test_collect_source_freshness_without_enabled_collectors_has_no_catchu
         "build_source_freshness_report",
         fake_source_freshness_report,
     )
-    monkeypatch.setattr(legacy_module.settings, "ENABLE_RSS_INGESTION", False)
-    monkeypatch.setattr(legacy_module.settings, "ENABLE_GDELT_INGESTION", False)
-    monkeypatch.setattr(legacy_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
+    monkeypatch.setattr(ops_module.settings, "ENABLE_RSS_INGESTION", False)
+    monkeypatch.setattr(ops_module.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(ops_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
 
-    freshness_data, _lines, _exit = await legacy_module._collect_eval_source_freshness(
+    freshness_data, _lines, _exit = await ops_module._collect_eval_source_freshness(
         SimpleNamespace(stale_multiplier=2.0, fail_on_stale=False)
     )
 
@@ -389,11 +389,11 @@ def test_collect_eval_audit_validate_taxonomy_and_pipeline_dry_run(
         output_path=str(tmp_path / "pipeline.json"),
     )
 
-    audit_data, audit_lines, audit_exit = legacy_module._collect_eval_audit(audit_args)
-    taxonomy_data, taxonomy_lines, taxonomy_exit = legacy_module._collect_eval_validate_taxonomy(
+    audit_data, audit_lines, audit_exit = ops_module._collect_eval_audit(audit_args)
+    taxonomy_data, taxonomy_lines, taxonomy_exit = ops_module._collect_eval_validate_taxonomy(
         taxonomy_args
     )
-    pipeline_data, pipeline_lines, pipeline_exit = legacy_module._collect_pipeline_dry_run(
+    pipeline_data, pipeline_lines, pipeline_exit = ops_module._collect_pipeline_dry_run(
         pipeline_args
     )
 
@@ -427,12 +427,12 @@ def test_collect_eval_audit_and_taxonomy_without_warnings(
         ),
     )
 
-    audit_data, audit_lines, audit_exit = legacy_module._collect_eval_audit(
+    audit_data, audit_lines, audit_exit = ops_module._collect_eval_audit(
         SimpleNamespace(
             gold_set="gold.jsonl", output_dir=str(tmp_path), max_items=0, fail_on_warnings=False
         )
     )
-    taxonomy_data, taxonomy_lines, taxonomy_exit = legacy_module._collect_eval_validate_taxonomy(
+    taxonomy_data, taxonomy_lines, taxonomy_exit = ops_module._collect_eval_validate_taxonomy(
         SimpleNamespace(
             trend_config_dir="config/trends",
             gold_set="gold.jsonl",
@@ -477,13 +477,13 @@ def test_http_helpers_cover_success_and_error_paths(
         return ResponseContext(200, b'{"ok": true}')
 
     monkeypatch.setattr(
-        legacy_module.urllib_request,
+        ops_module.urllib_request,
         "urlopen",
         urlopen_success,
     )
 
-    assert legacy_module._http_get("https://example.com", timeout_seconds=1.0) == 200
-    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (
+    assert ops_module._http_get("https://example.com", timeout_seconds=1.0) == 200
+    assert ops_module._http_get_json("https://example.com", timeout_seconds=1.0) == (
         200,
         {"ok": True},
     )
@@ -501,13 +501,13 @@ def test_http_helpers_cover_success_and_error_paths(
         return (_ for _ in ()).throw(http_error)
 
     monkeypatch.setattr(
-        legacy_module.urllib_request,
+        ops_module.urllib_request,
         "urlopen",
         urlopen_http_error,
     )
 
-    assert legacy_module._http_get("https://example.com", timeout_seconds=1.0) == 404
-    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (
+    assert ops_module._http_get("https://example.com", timeout_seconds=1.0) == 404
+    assert ops_module._http_get_json("https://example.com", timeout_seconds=1.0) == (
         404,
         {"detail": "missing"},
     )
@@ -517,12 +517,12 @@ def test_http_helpers_cover_success_and_error_paths(
         return (_ for _ in ()).throw(urllib_error.URLError("down"))
 
     monkeypatch.setattr(
-        legacy_module.urllib_request,
+        ops_module.urllib_request,
         "urlopen",
         urlopen_url_error,
     )
-    assert legacy_module._http_get("https://example.com", timeout_seconds=1.0) == 0
-    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (0, None)
+    assert ops_module._http_get("https://example.com", timeout_seconds=1.0) == 0
+    assert ops_module._http_get_json("https://example.com", timeout_seconds=1.0) == (0, None)
 
 
 def test_eval_taxonomy_and_http_json_cover_warning_and_non_dict_paths(
@@ -550,7 +550,7 @@ def test_eval_taxonomy_and_http_json_cover_warning_and_non_dict_paths(
         ),
     )
 
-    data, lines, exit_code = legacy_module._collect_eval_validate_taxonomy(args)
+    data, lines, exit_code = ops_module._collect_eval_validate_taxonomy(args)
 
     assert data["warnings"] == ["warn"]
     assert data["errors"] == []
@@ -575,8 +575,8 @@ def test_eval_taxonomy_and_http_json_cover_warning_and_non_dict_paths(
         del timeout
         return ResponseContext(200, b'["not-a-dict"]')
 
-    monkeypatch.setattr(legacy_module.urllib_request, "urlopen", urlopen_list_payload)
-    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (200, None)
+    monkeypatch.setattr(ops_module.urllib_request, "urlopen", urlopen_list_payload)
+    assert ops_module._http_get_json("https://example.com", timeout_seconds=1.0) == (200, None)
 
     invalid_http_error = urllib_error.HTTPError(
         "https://example.com",
@@ -590,17 +590,17 @@ def test_eval_taxonomy_and_http_json_cover_warning_and_non_dict_paths(
         del timeout
         return (_ for _ in ()).throw(invalid_http_error)
 
-    monkeypatch.setattr(legacy_module.urllib_request, "urlopen", urlopen_invalid_http_error)
-    assert legacy_module._http_get_json("https://example.com", timeout_seconds=1.0) == (400, None)
+    monkeypatch.setattr(ops_module.urllib_request, "urlopen", urlopen_invalid_http_error)
+    assert ops_module._http_get_json("https://example.com", timeout_seconds=1.0) == (400, None)
 
 
 def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        legacy_module, "_http_get", lambda url, **_kwargs: 500 if url.endswith("/health") else 0
+        ops_module, "_http_get", lambda url, **_kwargs: 500 if url.endswith("/health") else 0
     )
-    exit_code, lines, data = legacy_module._agent_smoke_checks(
+    exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
         api_key=None,
@@ -613,10 +613,10 @@ def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 401,
     }
-    monkeypatch.setattr(legacy_module, "_http_get", lambda url, **_kwargs: statuses[url])
-    monkeypatch.setattr(legacy_module, "_http_get_json", lambda _url, **_kwargs: (200, None))
+    monkeypatch.setattr(ops_module, "_http_get", lambda url, **_kwargs: statuses[url])
+    monkeypatch.setattr(ops_module, "_http_get_json", lambda _url, **_kwargs: (200, None))
 
-    exit_code, lines, data = legacy_module._agent_smoke_checks(
+    exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
         api_key=None,
@@ -626,9 +626,9 @@ def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
     assert lines[-1].endswith("auth_enforced_without_key (unknown)")
     assert data["auth_hint"] == "unknown"
 
-    monkeypatch.setattr(legacy_module, "_http_get", lambda _url, **_kwargs: 200)
-    monkeypatch.setattr(legacy_module, "_http_get_json", lambda _url, **_kwargs: (0, None))
-    exit_code, lines, data = legacy_module._agent_smoke_checks(
+    monkeypatch.setattr(ops_module, "_http_get", lambda _url, **_kwargs: 200)
+    monkeypatch.setattr(ops_module, "_http_get_json", lambda _url, **_kwargs: (0, None))
+    exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
         api_key=None,
@@ -641,11 +641,11 @@ def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 403,
     }
-    monkeypatch.setattr(legacy_module, "_http_get", lambda url, **_kwargs: statuses[url])
+    monkeypatch.setattr(ops_module, "_http_get", lambda url, **_kwargs: statuses[url])
     monkeypatch.setattr(
-        legacy_module, "_http_get_json", lambda _url, **_kwargs: (200, {"openapi": True})
+        ops_module, "_http_get_json", lambda _url, **_kwargs: (200, {"openapi": True})
     )
-    exit_code, lines, data = legacy_module._agent_smoke_checks(
+    exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
         api_key="stub",  # pragma: allowlist secret
@@ -655,7 +655,7 @@ def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
     assert data["trend_status"] == 403
 
     statuses["http://127.0.0.1:8000/api/v1/trends"] = 0
-    exit_code, lines, data = legacy_module._agent_smoke_checks(
+    exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
         api_key="stub",  # pragma: allowlist secret
@@ -686,14 +686,14 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
 
     monkeypatch.setattr(database_module, "async_session_maker", fake_session_maker)
     monkeypatch.setattr(migration_parity_module, "check_migration_parity", healthy_migration)
-    monkeypatch.setattr(legacy_module.settings, "DATABASE_URL", "postgres://db")
-    assert await legacy_module._doctor_check_database(0.2) == (
+    monkeypatch.setattr(ops_module.settings, "DATABASE_URL", "postgres://db")
+    assert await ops_module._doctor_check_database(0.2) == (
         "PASS",
         "database connectivity ok; migration parity healthy",
     )
 
     monkeypatch.setattr(migration_parity_module, "check_migration_parity", failing_migration)
-    status, message = await legacy_module._doctor_check_database(0.2)
+    status, message = await ops_module._doctor_check_database(0.2)
     assert status == "FAIL"
     assert "drifted" in message
 
@@ -706,7 +706,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
 
     fake_redis_module = ModuleType("redis.asyncio")
     fake_redis_module.from_url = lambda _url: FakeRedisClient()
-    monkeypatch.setattr(legacy_module.settings, "REDIS_URL", "redis://cache")
+    monkeypatch.setattr(ops_module.settings, "REDIS_URL", "redis://cache")
     import builtins
 
     original_import = builtins.__import__
@@ -714,7 +714,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
     fake_redis_package.asyncio = fake_redis_module
     monkeypatch.setitem(sys.modules, "redis", fake_redis_package)
     monkeypatch.setitem(sys.modules, "redis.asyncio", fake_redis_module)
-    assert await legacy_module._doctor_check_redis(0.2) == ("PASS", "redis connectivity ok")
+    assert await ops_module._doctor_check_redis(0.2) == ("PASS", "redis connectivity ok")
 
     def failing_import(name, globals=None, locals=None, fromlist=(), level=0):
         if name == "redis.asyncio":
@@ -722,7 +722,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
         return original_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", failing_import)
-    assert await legacy_module._doctor_check_redis(0.2) == ("FAIL", "redis client is not installed")
+    assert await ops_module._doctor_check_redis(0.2) == ("FAIL", "redis client is not installed")
 
     class BrokenRedisClient:
         async def ping(self) -> None:
@@ -733,7 +733,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
 
     monkeypatch.setattr(builtins, "__import__", original_import)
     fake_redis_module.from_url = lambda _url: BrokenRedisClient()
-    assert await legacy_module._doctor_check_redis(0.2) == ("FAIL", "redis check failed: boom")
+    assert await ops_module._doctor_check_redis(0.2) == ("FAIL", "redis check failed: boom")
 
 
 def test_doctor_helpers_and_command_result_wrappers(
@@ -743,24 +743,24 @@ def test_doctor_helpers_and_command_result_wrappers(
     hooks_dir = tmp_path / ".git" / "hooks"
     hooks_dir.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    assert legacy_module._doctor_check_required_hooks()[0] == "FAIL"
+    assert ops_module._doctor_check_required_hooks()[0] == "FAIL"
 
     for hook_name in ("pre-commit", "pre-push", "commit-msg"):
         path = hooks_dir / hook_name
         path.write_text("#!/bin/sh\n", encoding="utf-8")
         path.chmod(0o755)
 
-    assert legacy_module._doctor_check_required_hooks()[0] == "PASS"
-    assert legacy_module._is_loopback_host("localhost") is True
-    assert legacy_module._is_loopback_host("example.com") is False
+    assert ops_module._doctor_check_required_hooks()[0] == "PASS"
+    assert ops_module._is_loopback_host("localhost") is True
+    assert ops_module._is_loopback_host("example.com") is False
 
-    monkeypatch.setattr(legacy_module.settings, "ENVIRONMENT", "production")
-    monkeypatch.setattr(legacy_module.settings, "RUNTIME_PROFILE", "agent")
-    monkeypatch.setattr(legacy_module.settings, "AGENT_MODE", False)
-    monkeypatch.setattr(legacy_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
-    monkeypatch.setattr(legacy_module.settings, "API_HOST", "0.0.0.0")
-    monkeypatch.setattr(legacy_module.settings, "API_AUTH_ENABLED", False)
-    refusals = legacy_module._doctor_safety_refusals()
+    monkeypatch.setattr(ops_module.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(ops_module.settings, "RUNTIME_PROFILE", "agent")
+    monkeypatch.setattr(ops_module.settings, "AGENT_MODE", False)
+    monkeypatch.setattr(ops_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
+    monkeypatch.setattr(ops_module.settings, "API_HOST", "0.0.0.0")
+    monkeypatch.setattr(ops_module.settings, "API_AUTH_ENABLED", False)
+    refusals = ops_module._doctor_safety_refusals()
     assert "agent profile is not allowed in production" in refusals
     assert any("loopback API_HOST" in refusal for refusal in refusals)
     assert any("API_AUTH_ENABLED=false" in refusal for refusal in refusals)
@@ -771,17 +771,17 @@ def test_doctor_helpers_and_command_result_wrappers(
     async def fake_redis(_timeout: float) -> tuple[str, str]:
         return ("FAIL", "redis down")
 
-    monkeypatch.setattr(legacy_module, "_doctor_check_database", fake_db)
-    monkeypatch.setattr(legacy_module, "_doctor_check_redis", fake_redis)
-    monkeypatch.setattr(legacy_module, "_doctor_safety_refusals", lambda: ["blocked"])
-    monkeypatch.setattr(legacy_module, "_doctor_check_required_hooks", lambda: ("PASS", "hooks ok"))
+    monkeypatch.setattr(ops_module, "_doctor_check_database", fake_db)
+    monkeypatch.setattr(ops_module, "_doctor_check_redis", fake_redis)
+    monkeypatch.setattr(ops_module, "_doctor_safety_refusals", lambda: ["blocked"])
+    monkeypatch.setattr(ops_module, "_doctor_check_required_hooks", lambda: ("PASS", "hooks ok"))
 
-    data, lines, exit_code = legacy_module._collect_doctor(0.2)
+    data, lines, exit_code = ops_module._collect_doctor(0.2)
     assert data["database"]["status"] == "PASS"
     assert any("SAFETY_REFUSALS:" in line for line in lines)
     assert exit_code == ExitCode.VALIDATION_ERROR
 
-    sync_result = legacy_module._sync_result({"ok": True}, ["line"], ExitCode.OK)
+    sync_result = ops_module._sync_result({"ok": True}, ["line"], ExitCode.OK)
     assert sync_result.data == {"ok": True}
 
     async def async_lines():
@@ -790,24 +790,22 @@ def test_doctor_helpers_and_command_result_wrappers(
     async def async_exit():
         return ({"value": 2}, ["line"], ExitCode.VALIDATION_ERROR)
 
-    assert legacy_module._async_result(async_lines()).data == {"value": 1}
-    assert (
-        legacy_module._async_result_with_exit(async_exit()).exit_code == ExitCode.VALIDATION_ERROR
-    )
+    assert ops_module._async_result(async_lines()).data == {"value": 1}
+    assert ops_module._async_result_with_exit(async_exit()).exit_code == ExitCode.VALIDATION_ERROR
 
     monkeypatch.setattr(
-        legacy_module,
+        ops_module,
         "_agent_smoke_checks",
         lambda **_kwargs: (ExitCode.OK, ["ok"], {"health_status": 200}),
     )
-    handled = legacy_module._handle_agent_smoke(
+    handled = ops_module._handle_agent_smoke(
         SimpleNamespace(base_url="http://127.0.0.1", timeout_seconds=0, api_key=" token ")
     )
     assert handled.exit_code == ExitCode.OK
     assert handled.data["health_status"] == 200
 
 
-def test_legacy_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_ops_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         benchmark_module,
         "available_configs",
@@ -826,7 +824,7 @@ def test_legacy_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPat
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
-    legacy_module.register_legacy_commands(subparsers)
+    ops_module.register_ops_commands(subparsers)
 
     args = parser.parse_args(["eval", "benchmark", "--config", "baseline", "--format", "json"])
     assert args.command == "eval"

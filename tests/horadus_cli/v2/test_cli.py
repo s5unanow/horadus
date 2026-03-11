@@ -22,7 +22,7 @@ import src.horadus_cli.v2.task_repo as task_repo_module
 import src.horadus_cli.v2.task_workflow_core as task_commands_module
 import src.horadus_cli.v2.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
-from src.core.calibration_dashboard import TrendMovement
+from src.horadus_cli.v2.runtime.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
 pytest_plugins = ("tests.horadus_cli.v2.task_repo_fixtures",)
@@ -604,7 +604,7 @@ def test_build_parser_accepts_triage_collect_command() -> None:
     assert args.output_format == "json"
 
 
-def test_build_parser_preserves_root_flags_for_legacy_command() -> None:
+def test_build_parser_preserves_root_flags_for_ops_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(["--format", "json", "--dry-run", "pipeline", "dry-run"])
 

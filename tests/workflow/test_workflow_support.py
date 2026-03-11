@@ -85,7 +85,8 @@ def test_workflow_triage_helpers_cover_recent_paths_and_patterns(
 
     class _FakeDatetime(datetime):
         @classmethod
-        def now(cls, _tz: UTC | None = None) -> datetime:
+        def now(cls, tz: UTC | None = None) -> datetime:
+            assert tz is UTC
             return cls(2026, 3, 11, tzinfo=UTC)
 
     daily_dir = tmp_path / "artifacts" / "assessments" / "alpha" / "daily"

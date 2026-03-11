@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# ruff: noqa: E402
 """
 Validate docs freshness and runtime-consistency invariants.
 """
@@ -6,9 +7,16 @@ Validate docs freshness and runtime-consistency invariants.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from src.core.docs_freshness import run_docs_freshness_check
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from tools.horadus.python.horadus_workflow.docs_freshness import (
+    run_docs_freshness_check,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:

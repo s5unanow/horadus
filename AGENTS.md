@@ -42,6 +42,7 @@ Status precedence:
 - `src/ingestion/` — collectors (may be stubbed early)
 - `src/processing/` — LLM + clustering + pipeline (may be stubbed early)
 - `src/workers/` — async/background workers (may be stubbed early)
+- `tools/horadus/python/horadus_workflow/` — repo workflow/tooling ownership (task/PR/docs governance)
 - `config/` — YAML configuration (`trends/`, `sources/`)
 - `ai/` — LLM assets (prompts, evaluation data, benchmark results)
 - `docs/` — architecture, glossary, ADRs (`docs/adr/`)
@@ -183,8 +184,8 @@ After completing work:
   `horadus tasks finish` is not a manual-recovery signal.
 - Tests: `pytest tests/ -v`
 - Dev API: `uvicorn src.api.main:app --reload`
-- Format/lint: `ruff format src/ tests/` and `ruff check src/ tests/`
-- Typecheck: `mypy src/`
+- Format/lint: `ruff format src/ tools/ tests/` and `ruff check src/ tools/ tests/`
+- Typecheck: `mypy src/ tools/horadus/python`
 
 ## Git Conventions
 

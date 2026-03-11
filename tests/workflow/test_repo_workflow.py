@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-import src.core.repo_workflow as repo_workflow_module
+import tools.horadus.python.horadus_workflow.repo_workflow as repo_workflow_module
 
 pytestmark = pytest.mark.unit
 

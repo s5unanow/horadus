@@ -2,26 +2,12 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import date, datetime
-from enum import IntEnum
 from pathlib import Path
 from typing import Any, cast
 
-
-class ExitCode(IntEnum):
-    OK = 0
-    VALIDATION_ERROR = 2
-    NOT_FOUND = 3
-    ENVIRONMENT_ERROR = 4
-
-
-@dataclass(slots=True)
-class CommandResult:
-    exit_code: int = ExitCode.OK
-    lines: list[str] | None = None
-    data: dict[str, Any] | None = None
-    error_lines: list[str] | None = None
+from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
 
 def _json_default(value: object) -> object:
@@ -55,3 +41,10 @@ def emit_result(result: CommandResult | int, output_format: str) -> int:
     for line in result.error_lines or []:
         print(line, file=sys.stderr)
     return int(result.exit_code)
+
+
+__all__ = [
+    "CommandResult",
+    "ExitCode",
+    "emit_result",
+]

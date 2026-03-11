@@ -15,7 +15,7 @@ import src.horadus_cli.v2.task_commands as v2_task_commands_module
 import src.horadus_cli.v2.task_query as v2_task_query_module
 import src.horadus_cli.v2.task_repo as v2_task_repo_module
 import src.horadus_cli.v2.task_workflow_core as v2_task_workflow_core_module
-import src.horadus_cli.v2.task_workflow_policy as task_workflow_policy_module
+import tools.horadus.python.horadus_workflow.task_workflow_policy as task_workflow_policy_module
 from src.horadus_cli.v2.result import CommandResult, emit_result
 from tests.horadus_cli.v2.task_repo_fixtures import seed_task_repo_layout
 

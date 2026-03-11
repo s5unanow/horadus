@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 import re
-from dataclasses import asdict
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from src.horadus_cli.v2.result import CommandResult
 from src.horadus_cli.v2.task_commands import add_leaf_cli_options
-from src.horadus_cli.v2.task_repo import (
-    completed_path,
-    current_sprint_path,
-    line_search,
-    parse_active_tasks,
-    parse_human_blockers,
-    repo_root,
-)
+from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo
+from tools.horadus.python.horadus_workflow import triage as workflow_triage
+
+if TYPE_CHECKING:
+    from tools.horadus.python.horadus_workflow.result import CommandResult
+
+completed_path = workflow_task_repo.completed_path
+current_sprint_path = workflow_task_repo.current_sprint_path
+line_search = workflow_task_repo.line_search
+parse_active_tasks = workflow_task_repo.parse_active_tasks
+parse_human_blockers = workflow_task_repo.parse_human_blockers
+repo_root = workflow_task_repo.repo_root
 
 
 def _recent_assessment_paths(lookback_days: int) -> list[str]:
@@ -38,76 +40,20 @@ def _compile_or_pattern(values: list[str]) -> str | None:
 
 
 def handle_collect(args: Any) -> CommandResult:
-    keyword_pattern = _compile_or_pattern(args.keyword or [])
-    path_pattern = _compile_or_pattern(args.path or [])
-    proposal_pattern = _compile_or_pattern(args.proposal_id or [])
-    recent_paths = _recent_assessment_paths(args.lookback_days)
-
-    keyword_hits = []
-    if keyword_pattern is not None:
-        keyword_hits.extend(line_search(repo_root() / "tasks" / "BACKLOG.md", keyword_pattern))
-        keyword_hits.extend(line_search(completed_path(), keyword_pattern))
-
-    path_hits = []
-    if path_pattern is not None:
-        path_hits.extend(line_search(repo_root() / "tasks" / "BACKLOG.md", path_pattern))
-
-    proposal_hits = []
-    if proposal_pattern is not None:
-        for relative_path in recent_paths:
-            proposal_hits.extend(line_search(repo_root() / relative_path, proposal_pattern))
-
-    active_tasks = parse_active_tasks()
-    active_task_ids = {task.task_id for task in active_tasks}
-    blockers = parse_human_blockers(task_ids=active_task_ids)
-    overdue_blockers = [
-        blocker
-        for blocker in blockers
-        if blocker.urgency is not None and blocker.urgency.is_overdue
-    ]
-
-    lines = [
-        "Triage input bundle",
-        f"- active_tasks={len(active_tasks)}",
-        f"- human_blockers={len(blockers)}",
-        f"- overdue_human_blockers={len(overdue_blockers)}",
-        f"- recent_assessments={len(recent_paths)}",
-        f"- keyword_hits={len(keyword_hits)}",
-        f"- path_hits={len(path_hits)}",
-        f"- proposal_hits={len(proposal_hits)}",
-    ]
-    if args.keyword:
-        lines.append(f"- keywords={', '.join(args.keyword)}")
-    if args.path:
-        lines.append(f"- paths={', '.join(args.path)}")
-    if args.proposal_id:
-        lines.append(f"- proposal_ids={', '.join(args.proposal_id)}")
-    if overdue_blockers:
-        lines.append(
-            f"- overdue_tasks={', '.join(blocker.task_id for blocker in overdue_blockers)}"
-        )
-
-    return CommandResult(
-        lines=lines,
-        data={
-            "current_sprint": {
-                "path": str(current_sprint_path().relative_to(repo_root())),
-                "active_tasks": [asdict(task) for task in active_tasks],
-                "human_blockers": [asdict(blocker) for blocker in blockers],
-                "overdue_human_blockers": [asdict(blocker) for blocker in overdue_blockers],
-            },
-            "searches": {
-                "keywords": args.keyword or [],
-                "paths": args.path or [],
-                "proposal_ids": args.proposal_id or [],
-                "keyword_hits": [asdict(hit) for hit in keyword_hits],
-                "path_hits": [asdict(hit) for hit in path_hits],
-                "proposal_hits": [asdict(hit) for hit in proposal_hits],
-            },
-            "recent_assessments": recent_paths,
-            "lookback_days": args.lookback_days,
-        },
-    )
+    original_repo_root = workflow_task_repo.repo_root
+    workflow_task_repo.repo_root = repo_root
+    workflow_triage.repo_root = repo_root
+    workflow_triage.completed_path = completed_path
+    workflow_triage.current_sprint_path = current_sprint_path
+    workflow_triage.line_search = line_search
+    workflow_triage.parse_active_tasks = parse_active_tasks
+    workflow_triage.parse_human_blockers = parse_human_blockers
+    workflow_triage._recent_assessment_paths = _recent_assessment_paths
+    workflow_triage._compile_or_pattern = _compile_or_pattern
+    try:
+        return workflow_triage.handle_collect(args)
+    finally:
+        workflow_task_repo.repo_root = original_repo_root
 
 
 def register_triage_commands(subparsers: Any) -> None:
@@ -141,3 +87,17 @@ def register_triage_commands(subparsers: Any) -> None:
         help="How many days of assessment artifacts to include.",
     )
     collect_parser.set_defaults(handler=handle_collect)
+
+
+__all__ = [
+    "_compile_or_pattern",
+    "_recent_assessment_paths",
+    "completed_path",
+    "current_sprint_path",
+    "handle_collect",
+    "line_search",
+    "parse_active_tasks",
+    "parse_human_blockers",
+    "register_triage_commands",
+    "repo_root",
+]

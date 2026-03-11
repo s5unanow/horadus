@@ -515,3 +515,11 @@ feeds:
 - `/health` - Full system check
 - `/health/live` - App running (Kubernetes liveness)
 - `/health/ready` - Dependencies available (Kubernetes readiness)
+
+## Repo Workflow Tooling
+
+Repository workflow automation is intentionally separate from application
+runtime code. The stable CLI shell remains under `src/horadus_cli/`, while
+repo task/PR/docs workflow ownership lives under
+`tools/horadus/python/horadus_workflow/`. App/runtime packages under `src/`
+must not depend on that workflow home.

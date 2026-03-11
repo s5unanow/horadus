@@ -29,7 +29,6 @@
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - `TASK-299` Build an Isolated `v2` Task Workflow and Cut Over from `tasks-v2`
-- `TASK-302` Isolate Horadus CLI Tests Into a Self-Contained Suite
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (carried from Sprint 3 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
@@ -57,3 +56,4 @@
 - `TASK-296` Let Guarded Task Start Handle Task-Ledger Intake Safely ✅
 - `TASK-297` Split `task_commands.py` Into Focused Workflow Modules ✅
 - `TASK-300` Introduce a Versioned CLI Shell and Move Legacy CLI to `v1` ✅
+- `TASK-302` Isolate Horadus CLI Tests Into a Self-Contained Suite ✅

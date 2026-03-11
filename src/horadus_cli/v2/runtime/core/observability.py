@@ -13,14 +13,14 @@ from prometheus_client import Gauge as PrometheusGauge
 
 
 def _counter(name: str, documentation: str, labelnames: Any = ()) -> Any:
-    existing = REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
+    existing = REGISTRY._names_to_collectors.get(name)
     if existing is not None:
         return existing
     return PrometheusCounter(name, documentation, labelnames)
 
 
 def _gauge(name: str, documentation: str, labelnames: Any = ()) -> Any:
-    existing = REGISTRY._names_to_collectors.get(name)  # type: ignore[attr-defined]
+    existing = REGISTRY._names_to_collectors.get(name)
     if existing is not None:
         return existing
     return PrometheusGauge(name, documentation, labelnames)

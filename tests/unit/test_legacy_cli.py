@@ -21,10 +21,10 @@ import src.eval.benchmark as benchmark_module
 import src.eval.replay as replay_module
 import src.eval.taxonomy_validation as taxonomy_validation_module
 import src.eval.vector_benchmark as vector_benchmark_module
-import src.horadus_cli.legacy as legacy_module
+import src.horadus_cli.v1.legacy as legacy_module
 import src.processing.dry_run_pipeline as dry_run_pipeline_module
 import src.storage.database as database_module
-from src.horadus_cli.result import ExitCode
+from src.horadus_cli.v1.result import ExitCode
 
 pytestmark = pytest.mark.unit
 

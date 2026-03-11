@@ -25,6 +25,22 @@ def test_top_level_legacy_modules_alias_v1_modules() -> None:
     assert triage_commands_module.handle_collect is v1_triage_commands_module.handle_collect
 
 
+@pytest.mark.parametrize(
+    ("legacy_name", "v1_name"),
+    [
+        ("src.horadus_cli.result", "src.horadus_cli.v1.result"),
+        ("src.horadus_cli.task_process", "src.horadus_cli.v1.task_process"),
+        ("src.horadus_cli.task_repo", "src.horadus_cli.v1.task_repo"),
+        ("src.horadus_cli.task_workflow_core", "src.horadus_cli.v1.task_workflow_core"),
+    ],
+)
+def test_legacy_module_keys_alias_v1_modules(legacy_name: str, v1_name: str) -> None:
+    legacy_alias = importlib.import_module(legacy_name)
+    v1_module = importlib.import_module(v1_name)
+
+    assert legacy_alias is v1_module
+
+
 def test_app_router_uses_v1_registration_functions() -> None:
     assert cli_app_module.register_legacy_commands is v1_legacy_module.register_legacy_commands
     assert cli_app_module.register_task_commands is v1_task_commands_module.register_task_commands

@@ -1,1 +1,1 @@
-"""Placeholder package for the future Horadus CLI v2 implementation."""
+"""Horadus CLI v2 task workflow implementation."""

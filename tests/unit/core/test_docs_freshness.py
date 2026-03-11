@@ -1603,7 +1603,9 @@ def test_planning_helper_functions_cover_marker_state_and_git_diff_edges(
     ) == ("Required — yes")
     assert docs_freshness_module._planning_marker_value("no marker") is None
     assert docs_freshness_module._planning_required_from_value("Required — yes") is True
+    assert docs_freshness_module._planning_required_from_value("`Required` — yes") is True
     assert docs_freshness_module._planning_required_from_value("Not Required — no") is False
+    assert docs_freshness_module._planning_required_from_value("`Not Required` — no") is False
     assert docs_freshness_module._planning_required_from_value("unclear") is None
     assert (
         docs_freshness_module._exec_plan_required_from_backlog(

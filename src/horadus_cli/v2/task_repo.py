@@ -478,7 +478,7 @@ def planning_gates_value_from_text(content: str) -> str | None:
 def planning_gates_required(value: str | None) -> bool | None:
     if value is None:
         return None
-    normalized = value.strip().lower()
+    normalized = value.strip().lstrip("`*_ ").lower()
     if normalized.startswith("required"):
         return True
     if normalized.startswith("not required"):

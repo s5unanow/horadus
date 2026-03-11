@@ -227,7 +227,7 @@ def _planning_marker_value(content: str) -> str | None:
 def _planning_required_from_value(value: str | None) -> bool | None:
     if value is None:
         return None
-    normalized = value.lower()
+    normalized = value.strip().lstrip("`*_ ").lower()
     if normalized.startswith("required"):
         return True
     if normalized.startswith("not required"):

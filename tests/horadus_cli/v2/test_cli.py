@@ -953,7 +953,9 @@ def test_task_repo_planning_helpers_cover_marker_and_path_edges(tmp_path: Path) 
     assert task_repo_module.planning_gates_value_from_text(record.raw_block) == "Required — fixture"
     assert task_repo_module.planning_gates_value_from_text("no marker") is None
     assert task_repo_module.planning_gates_required("Required — reason") is True
+    assert task_repo_module.planning_gates_required("`Required` — reason") is True
     assert task_repo_module.planning_gates_required("Not Required — reason") is False
+    assert task_repo_module.planning_gates_required("`Not Required` — reason") is False
     assert task_repo_module.planning_gates_required("Maybe") is None
     assert task_repo_module.task_planning_gates_value(record) == "Required — fixture"
     assert task_repo_module.task_requires_exec_plan(record) is True

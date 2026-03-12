@@ -62,3 +62,4 @@
 - `TASK-303` Extract Repo Workflow Into a Dedicated Tooling Home ✅
 - `TASK-304` Realign Agent Workflow Docs and Remove Policy Duplication ✅
 - `TASK-305` Let Guarded Task Start Carry Target Planning Intake Files ✅
+- `TASK-306` Unblock Canonical Finish When Only Outdated Review Threads Remain ✅

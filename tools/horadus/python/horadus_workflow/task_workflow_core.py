@@ -1456,6 +1456,11 @@ def _branch_head_alignment_blocker(
 
 
 def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> list[str]:
+    threads = _review_threads(pr_url=pr_url, config=config)
+    return _review_thread_lines(threads, include_outdated=False)
+
+
+def _review_threads(*, pr_url: str, config: FinishConfig) -> list[dict[str, Any]]:
     repo_result = _run_command(
         [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
     )
@@ -1477,7 +1482,7 @@ def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> lis
         "pullRequest(number:$number){"
         "reviewThreads(first:100){"
         "nodes{"
-        "isResolved isOutdated "
+        "id isResolved isOutdated "
         "comments(first:20){"
         "nodes{author{login} body path line originalLine url}"
         "}"
@@ -1518,13 +1523,14 @@ def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> lis
     )
     if not isinstance(threads, list):
         return []
+    return [thread for thread in threads if isinstance(thread, dict)]
 
+
+def _review_thread_lines(threads: list[dict[str, Any]], *, include_outdated: bool) -> list[str]:
     lines: list[str] = []
     for thread in threads:
-        if (
-            not isinstance(thread, dict)
-            or thread.get("isResolved") is True
-            or thread.get("isOutdated") is True
+        if thread.get("isResolved") is True or (
+            not include_outdated and thread.get("isOutdated") is True
         ):
             continue
         comments = thread.get("comments", {}).get("nodes", [])
@@ -1549,6 +1555,52 @@ def _unresolved_review_thread_lines(*, pr_url: str, config: FinishConfig) -> lis
         if body:
             lines.append(f"  {body}")
     return lines
+
+
+def _outdated_unresolved_review_thread_ids(*, pr_url: str, config: FinishConfig) -> list[str]:
+    thread_ids: list[str] = []
+    for thread in _review_threads(pr_url=pr_url, config=config):
+        if thread.get("isResolved") is True or thread.get("isOutdated") is not True:
+            continue
+        thread_id = str(thread.get("id") or "").strip()
+        if thread_id:
+            thread_ids.append(thread_id)
+    return thread_ids
+
+
+def _resolve_review_threads(
+    *, thread_ids: list[str], config: FinishConfig
+) -> tuple[bool, list[str]]:
+    if not thread_ids:
+        return True, []
+
+    lines: list[str] = []
+    for thread_id in thread_ids:
+        mutation = (
+            "mutation($threadId:ID!){"
+            "resolveReviewThread(input:{threadId:$threadId}){"
+            "thread{id isResolved}"
+            "}"
+            "}"
+        )
+        result = _run_command(
+            [
+                config.gh_bin,
+                "api",
+                "graphql",
+                "-f",
+                f"query={mutation}",
+                "-F",
+                f"threadId={thread_id}",
+            ]
+        )
+        if result.returncode != 0:
+            return False, [
+                "Failed to resolve outdated review threads automatically.",
+                *_output_lines(result),
+            ]
+        lines.append(f"Resolved outdated review thread automatically: {thread_id}")
+    return True, lines
 
 
 def _maybe_request_fresh_review(*, pr_url: str, config: FinishConfig) -> list[str]:
@@ -3086,6 +3138,26 @@ def finish_task_data(
                 },
                 extra_lines=extra_lines,
             )
+
+        stale_thread_ids = _outdated_unresolved_review_thread_ids(pr_url=pr_url, config=config)
+        if stale_thread_ids:
+            resolved_ok, stale_thread_lines = _resolve_review_threads(
+                thread_ids=stale_thread_ids,
+                config=config,
+            )
+            if not resolved_ok:
+                return _task_blocked(
+                    "PR still has outdated unresolved review threads that could not be auto-resolved.",
+                    next_action="Re-run `horadus tasks finish`; if the stale-thread blocker persists, inspect GitHub thread state.",
+                    data={
+                        "task_id": context.task_id,
+                        "branch_name": context.branch_name,
+                        "pr_url": pr_url,
+                    },
+                    exit_code=ExitCode.ENVIRONMENT_ERROR,
+                    extra_lines=[*review_lines, *stale_thread_lines],
+                )
+            lines.extend(stale_thread_lines)
 
         post_review_blocker = _current_required_checks_blocker(
             pr_url=pr_url, config=config, block_pending=False

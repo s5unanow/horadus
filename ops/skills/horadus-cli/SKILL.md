@@ -51,8 +51,9 @@ Use this skill for repo workflow operations in this project.
   timeout; wait the canonical 10-minute window unless the human explicitly
   asked otherwise.
 - A `THUMBS_UP` reaction from the configured reviewer on the PR summary
-  counts as a positive review-gate signal, but the gate still waits the full
-  timeout window and still blocks actionable current-head review comments.
+  counts as a positive review-gate signal; once current-head required checks
+  are green, `horadus tasks finish` may continue early on that signal while
+  still blocking actionable current-head review comments.
 - Apply these guardrails only when changing shared workflow helpers, shared
   workflow config, or review/merge policy behavior; do not inflate unrelated
   tasks with generic process boilerplate.

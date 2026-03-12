@@ -325,11 +325,12 @@ Do not proactively suggest changing the `horadus tasks finish` review
 timeout; wait the canonical 10-minute window unless the human explicitly
 asked otherwise.
 A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts
-as a positive review-gate signal, but the gate still waits the full timeout
-window and still blocks actionable current-head review comments. If the wait
-window expires while unresolved review threads still block the PR, the command
-reports that blocker explicitly and requests a fresh `@codex review` instead
-of drifting into a later merge/auto-merge timeout.
+as a positive review-gate signal; once current-head required checks are green,
+`horadus tasks finish` may continue early on that signal while still blocking
+actionable current-head review comments. If the wait window expires while
+unresolved review threads still block the same PR head, the command reports
+that blocker explicitly and requests a fresh `@codex review` instead of
+drifting into a later merge/auto-merge timeout.
 Local commits, local tests, and a clean working tree are checkpoints, not
 completion.
 Do not stop at a local commit boundary unless the user explicitly asked for a

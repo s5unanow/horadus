@@ -129,13 +129,15 @@ Before merge, the CLI also requires the primary task to already be removed from
 live `tasks/BACKLOG.md` / `tasks/CURRENT_SPRINT.md`, recorded in
 `tasks/COMPLETED.md`, archived in `archive/closed_tasks/YYYY-QN.md`, and pushed
 so the local task-branch head, remote branch head, and PR head all match.
-The command waits the required review-gate window, blocks on actionable
-current-head feedback, and resumes cleanly if a prior finish attempt already
-left the repo on `main` before completion. Outdated unresolved review threads
-do not block completion; if GitHub still treats them as merge blockers, the
-CLI resolves them automatically before merge continues. For the full
-completion contract, review-timeout semantics, blocker handling, and
-completion-claim policy, see `AGENTS.md`.
+The command blocks on actionable current-head feedback, may continue early on
+a qualifying `THUMBS_UP` review signal once current-head required checks are
+green, preserves the full-wait silent-timeout-allow path, and resumes cleanly
+if a prior finish attempt already left the repo on `main` before completion.
+Outdated unresolved review threads do not block completion; if GitHub still
+treats them as merge blockers, the CLI resolves them automatically before
+merge continues. For the full completion contract, review-timeout semantics,
+fresh re-review request ownership, blocker handling, and completion-claim
+policy, see `AGENTS.md`.
 
 Compatibility wrapper:
 - `make task-finish`

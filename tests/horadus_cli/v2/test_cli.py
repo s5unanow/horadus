@@ -99,6 +99,44 @@ def _disable_outdated_thread_auto_resolution(monkeypatch: pytest.MonkeyPatch) ->
     )
 
 
+def _review_gate_process(
+    *,
+    status: str = "pass",
+    reason: str = "silent_timeout_allow",
+    reviewed_head_oid: str = "head-sha",
+    current_head_oid: str | None = None,
+    summary: str | None = None,
+    clean_current_head_review: bool = False,
+    summary_thumbs_up: bool = False,
+    actionable_lines: list[str] | None = None,
+    timed_out: bool = False,
+    returncode: int = 0,
+) -> subprocess.CompletedProcess[str]:
+    payload = {
+        "status": status,
+        "reason": reason,
+        "reviewer_login": "chatgpt-codex-connector[bot]",
+        "reviewed_head_oid": reviewed_head_oid,
+        "current_head_oid": current_head_oid or reviewed_head_oid,
+        "clean_current_head_review": clean_current_head_review,
+        "summary_thumbs_up": summary_thumbs_up,
+        "actionable_comment_count": 1 if reason == "actionable_comments" else 0,
+        "actionable_review_count": 1 if reason == "actionable_reviews" else 0,
+        "timeout_seconds": 600,
+        "timed_out": timed_out,
+        "summary": summary
+        or (
+            "review gate timeout: no actionable current-head review feedback from "
+            f"chatgpt-codex-connector[bot] for {reviewed_head_oid} within 600s. "
+            "Continuing due to timeout policy=allow."
+            if reason == "silent_timeout_allow"
+            else "review gate passed"
+        ),
+        "actionable_lines": actionable_lines or [],
+    }
+    return _completed(["review"], returncode=returncode, stdout=json.dumps(payload))
+
+
 def test_change_arrow_maps_signs() -> None:
     assert _change_arrow(0.1) == "^"
     assert _change_arrow(-0.1) == "v"
@@ -1630,6 +1668,7 @@ def test_run_pr_scope_guard_and_review_gate_use_expected_invocations(
 
     assert gate_result.returncode == 0
     assert gate_calls["args"][:2] == ["python3", "./scripts/check_pr_review_gate.py"]
+    assert gate_calls["args"][-2:] == ["--format", "json"]
     assert gate_calls["kwargs"]["timeout_seconds"] == 37
 
 
@@ -1853,7 +1892,7 @@ def test_required_checks_state_handles_unexpected_json_shapes(
     assert task_commands_module._required_checks_state(
         pr_url="https://example.invalid/pr/257",
         config=config,
-    ) == ("pass", [])
+    ) == ("error", ["Unable to parse required-check payload from `gh pr checks`."])
 
     monkeypatch.setattr(
         task_commands_module,
@@ -1880,7 +1919,7 @@ def test_required_checks_state_handles_unexpected_json_shapes(
     assert task_commands_module._required_checks_state(
         pr_url="https://example.invalid/pr/257",
         config=config,
-    ) == ("pass", [])
+    ) == ("error", ["Unable to parse required-check payload from `gh pr checks`."])
 
     monkeypatch.setattr(
         task_commands_module,
@@ -2044,6 +2083,19 @@ def test_current_required_checks_blocker_maps_check_states(
         is None
     )
 
+    monkeypatch.setattr(
+        task_commands_module,
+        "_required_checks_state",
+        lambda **_kwargs: ("error", ["bad payload"]),
+    )
+    assert task_commands_module._current_required_checks_blocker(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    ) == (
+        "required PR checks could not be determined on the current head.",
+        ["bad payload"],
+    )
+
 
 def test_unresolved_review_thread_lines_reports_unresolved_threads(
     monkeypatch: pytest.MonkeyPatch,
@@ -2074,10 +2126,12 @@ def test_unresolved_review_thread_lines_reports_unresolved_threads(
                             "repository": {
                                 "pullRequest": {
                                     "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
                                         "nodes": [
                                             {
                                                 "isResolved": False,
                                                 "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
                                                     "nodes": [
                                                         {
                                                             "author": {
@@ -2089,12 +2143,13 @@ def test_unresolved_review_thread_lines_reports_unresolved_threads(
                                                             "originalLine": 2201,
                                                             "url": "https://example.invalid/comment/290",
                                                         }
-                                                    ]
+                                                    ],
                                                 },
                                             },
                                             {
                                                 "isResolved": True,
                                                 "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
                                                     "nodes": [
                                                         {
                                                             "author": {"login": "reviewer"},
@@ -2104,10 +2159,10 @@ def test_unresolved_review_thread_lines_reports_unresolved_threads(
                                                             "originalLine": 10,
                                                             "url": "https://example.invalid/comment/resolved",
                                                         }
-                                                    ]
+                                                    ],
                                                 },
                                             },
-                                        ]
+                                        ],
                                     }
                                 }
                             }
@@ -2157,11 +2212,13 @@ def test_unresolved_review_thread_lines_ignores_outdated_threads(
                             "repository": {
                                 "pullRequest": {
                                     "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
                                         "nodes": [
                                             {
                                                 "isResolved": False,
                                                 "isOutdated": True,
                                                 "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
                                                     "nodes": [
                                                         {
                                                             "author": {"login": "reviewer"},
@@ -2171,10 +2228,10 @@ def test_unresolved_review_thread_lines_ignores_outdated_threads(
                                                             "originalLine": 10,
                                                             "url": "https://example.invalid/comment/stale",
                                                         }
-                                                    ]
+                                                    ],
                                                 },
                                             }
-                                        ]
+                                        ],
                                     }
                                 }
                             }
@@ -2224,26 +2281,36 @@ def test_outdated_unresolved_review_thread_ids_reports_only_stale_unresolved_thr
                             "repository": {
                                 "pullRequest": {
                                     "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
                                         "nodes": [
                                             {
                                                 "id": "thread-stale-1",
                                                 "isResolved": False,
                                                 "isOutdated": True,
-                                                "comments": {"nodes": []},
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": [],
+                                                },
                                             },
                                             {
                                                 "id": "thread-open-1",
                                                 "isResolved": False,
                                                 "isOutdated": False,
-                                                "comments": {"nodes": []},
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": [],
+                                                },
                                             },
                                             {
                                                 "id": "thread-resolved-1",
                                                 "isResolved": True,
                                                 "isOutdated": True,
-                                                "comments": {"nodes": []},
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": [],
+                                                },
                                             },
-                                        ]
+                                        ],
                                     }
                                 }
                             }
@@ -2276,13 +2343,17 @@ def test_outdated_unresolved_review_thread_ids_reports_only_stale_unresolved_thr
                             "repository": {
                                 "pullRequest": {
                                     "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
                                         "nodes": [
                                             {
                                                 "isResolved": False,
                                                 "isOutdated": True,
-                                                "comments": {"nodes": []},
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": [],
+                                                },
                                             }
-                                        ]
+                                        ],
                                     }
                                 }
                             }
@@ -2410,13 +2481,11 @@ def test_unresolved_review_thread_lines_handles_invalid_payloads(
         raise AssertionError(args)
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_bad_graphql)
-    assert (
+    with pytest.raises(ValueError, match="graphql failed"):
         task_commands_module._unresolved_review_thread_lines(
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
-        == []
-    )
 
     def fake_bad_json(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:4] == ["gh", "repo", "view", "--json"]:
@@ -2428,13 +2497,11 @@ def test_unresolved_review_thread_lines_handles_invalid_payloads(
         raise AssertionError(args)
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_bad_json)
-    assert (
+    with pytest.raises(ValueError, match=r"Unable to parse PR review threads payload\."):
         task_commands_module._unresolved_review_thread_lines(
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
-        == []
-    )
 
     def fake_bad_nodes(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:4] == ["gh", "repo", "view", "--json"]:
@@ -2448,7 +2515,12 @@ def test_unresolved_review_thread_lines_handles_invalid_payloads(
                     {
                         "data": {
                             "repository": {
-                                "pullRequest": {"reviewThreads": {"nodes": "not-a-list"}}
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                        "nodes": "not-a-list",
+                                    }
+                                }
                             }
                         }
                     }
@@ -2457,13 +2529,34 @@ def test_unresolved_review_thread_lines_handles_invalid_payloads(
         raise AssertionError(args)
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_bad_nodes)
-    assert (
+    with pytest.raises(ValueError, match=r"Unexpected PR review threads payload\."):
         task_commands_module._unresolved_review_thread_lines(
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
-        == []
-    )
+
+    def fake_bad_review_threads(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {"data": {"repository": {"pullRequest": {"reviewThreads": "bad"}}}}
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_bad_review_threads)
+    with pytest.raises(ValueError, match=r"Unexpected PR review threads payload\."):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
 
 
 def test_unresolved_review_thread_lines_handles_sparse_threads(
@@ -2495,12 +2588,12 @@ def test_unresolved_review_thread_lines_handles_sparse_threads(
                             "repository": {
                                 "pullRequest": {
                                     "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
                                         "nodes": [
-                                            {"isResolved": False, "comments": {"nodes": "bad"}},
-                                            {"isResolved": False, "comments": {"nodes": ["bad"]}},
                                             {
                                                 "isResolved": False,
                                                 "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
                                                     "nodes": [
                                                         {
                                                             "author": None,
@@ -2510,10 +2603,10 @@ def test_unresolved_review_thread_lines_handles_sparse_threads(
                                                             "originalLine": None,
                                                             "url": "",
                                                         }
-                                                    ]
+                                                    ],
                                                 },
                                             },
-                                        ]
+                                        ],
                                     }
                                 }
                             }
@@ -2529,6 +2622,434 @@ def test_unresolved_review_thread_lines_handles_sparse_threads(
         pr_url="https://example.invalid/pr/290",
         config=config,
     ) == ["- README.md:?"]
+
+
+def test_unresolved_review_thread_lines_fail_closed_on_invalid_comment_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                        "nodes": [
+                                            {
+                                                "isResolved": False,
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": "bad",
+                                                },
+                                            }
+                                        ],
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    with pytest.raises(ValueError, match=r"Unexpected PR review thread comments payload\."):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+
+def test_unresolved_review_thread_lines_fail_closed_on_invalid_thread_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                        "nodes": ["bad"],
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    with pytest.raises(ValueError, match=r"Unexpected PR review thread entry\."):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+
+def test_unresolved_review_thread_lines_fail_closed_on_incomplete_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": True, "endCursor": ""},
+                                        "nodes": [
+                                            {
+                                                "isResolved": False,
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": True},
+                                                    "nodes": [],
+                                                },
+                                            }
+                                        ],
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    with pytest.raises(ValueError, match=r"PR review thread comments pagination is incomplete\."):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+
+def test_outdated_review_thread_ids_fail_closed_on_missing_thread_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": True, "endCursor": ""},
+                                        "nodes": [
+                                            {
+                                                "id": "thread-stale-1",
+                                                "isResolved": False,
+                                                "isOutdated": True,
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": [],
+                                                },
+                                            }
+                                        ],
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    with pytest.raises(ValueError, match=r"PR review thread pagination is incomplete\."):
+        task_commands_module._outdated_unresolved_review_thread_ids(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+
+def test_outdated_review_thread_ids_follow_pagination_cursor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+    graphql_calls = 0
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal graphql_calls
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            graphql_calls += 1
+            if graphql_calls == 1:
+                assert any(arg == "after=" for arg in args)
+                return _completed(
+                    args,
+                    stdout=json.dumps(
+                        {
+                            "data": {
+                                "repository": {
+                                    "pullRequest": {
+                                        "reviewThreads": {
+                                            "pageInfo": {
+                                                "hasNextPage": True,
+                                                "endCursor": "cursor-1",
+                                            },
+                                            "nodes": [
+                                                {
+                                                    "id": "thread-stale-1",
+                                                    "isResolved": False,
+                                                    "isOutdated": True,
+                                                    "comments": {
+                                                        "pageInfo": {"hasNextPage": False},
+                                                        "nodes": [],
+                                                    },
+                                                }
+                                            ],
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    ),
+                )
+            assert any(arg == "after=cursor-1" for arg in args)
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                        "nodes": [
+                                            {
+                                                "id": "thread-stale-2",
+                                                "isResolved": False,
+                                                "isOutdated": True,
+                                                "comments": {
+                                                    "pageInfo": {"hasNextPage": False},
+                                                    "nodes": [],
+                                                },
+                                            }
+                                        ],
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    assert task_commands_module._outdated_unresolved_review_thread_ids(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["thread-stale-1", "thread-stale-2"]
+
+
+def test_unresolved_review_thread_lines_fail_closed_on_non_dict_comments_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "pageInfo": {"hasNextPage": False, "endCursor": None},
+                                        "nodes": [{"isResolved": False, "comments": "bad"}],
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    with pytest.raises(ValueError, match=r"Unexpected PR review thread comments payload\."):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+
+def test_review_thread_lines_skip_non_list_and_non_dict_comments() -> None:
+    assert (
+        task_commands_module._review_thread_lines(
+            [
+                {"isResolved": False, "comments": {"nodes": "bad"}},
+                {"isResolved": False, "comments": {"nodes": ["bad"]}},
+            ],
+            include_outdated=False,
+        )
+        == []
+    )
+
+
+def test_parse_review_gate_result_rejects_invalid_payloads() -> None:
+    with pytest.raises(ValueError, match="Unable to parse review gate payload: Expecting"):
+        task_commands_module._parse_review_gate_result(_completed(["review"], stdout="{bad"))
+
+    with pytest.raises(ValueError, match="expected a JSON object"):
+        task_commands_module._parse_review_gate_result(_completed(["review"], stdout='["bad"]'))
+
+    with pytest.raises(ValueError, match="actionable_lines must be a string list"):
+        task_commands_module._parse_review_gate_result(
+            _completed(
+                ["review"],
+                stdout=json.dumps(
+                    {
+                        "status": "pass",
+                        "reason": "thumbs_up",
+                        "reviewer_login": "bot",
+                        "reviewed_head_oid": "head-a",
+                        "current_head_oid": "head-a",
+                        "summary": "ok",
+                        "actionable_lines": "bad",
+                    }
+                ),
+            )
+        )
+
+    with pytest.raises(ValueError, match="missing status"):
+        task_commands_module._parse_review_gate_result(
+            _completed(["review"], stdout=json.dumps({"reason": "thumbs_up"}))
+        )
+
+    with pytest.raises(ValueError, match="invalid field types"):
+        task_commands_module._parse_review_gate_result(
+            _completed(
+                ["review"],
+                stdout=json.dumps(
+                    {
+                        "status": "pass",
+                        "reason": "thumbs_up",
+                        "reviewer_login": "bot",
+                        "reviewed_head_oid": "head-a",
+                        "current_head_oid": "head-a",
+                        "summary": "ok",
+                        "actionable_lines": [],
+                        "actionable_comment_count": "bad-int",
+                    }
+                ),
+            )
+        )
 
 
 def test_pre_merge_task_closure_blocker_reports_open_ledger_entries(
@@ -2895,6 +3416,12 @@ def test_maybe_request_fresh_review_posts_codex_comment(
     called: dict[str, object] = {}
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
+            return _completed(args, stdout="example/repo\n")
+        if args[:3] == ["gh", "api", "--paginate"]:
+            return _completed(args, stdout="[]\n")
         called["args"] = args
         return _completed(args, stdout="https://example.invalid/comment/trigger\n")
 
@@ -2903,14 +3430,16 @@ def test_maybe_request_fresh_review_posts_codex_comment(
     assert task_commands_module._maybe_request_fresh_review(
         pr_url="https://example.invalid/pr/290",
         config=config,
-    ) == ["Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review`."]
+    ) == [
+        "Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review` for head head-sha-290."
+    ]
     assert called["args"] == [
         "gh",
         "pr",
         "comment",
         "https://example.invalid/pr/290",
         "--body",
-        "@codex review",
+        "@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-290 -->",
     ]
 
 
@@ -2928,13 +3457,35 @@ def test_maybe_request_fresh_review_handles_non_codex_and_failures(
         review_bot_login="other-reviewer",
         review_timeout_policy="allow",
     )
-    assert (
-        task_commands_module._maybe_request_fresh_review(
-            pr_url="https://example.invalid/pr/290",
-            config=non_codex_config,
-        )
-        == []
-    )
+    non_codex_calls: list[list[str]] = []
+
+    def fake_non_codex_run_command(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
+            return _completed(args, stdout="example/repo\n")
+        if args[:3] == ["gh", "api", "--paginate"]:
+            return _completed(args, stdout="[]\n")
+        non_codex_calls.append(args)
+        return _completed(args, stdout="https://example.invalid/comment/trigger\n")
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_non_codex_run_command)
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=non_codex_config,
+    ) == [
+        "Requested a fresh review from `other-reviewer` with `@other-reviewer review` for head head-sha-290."
+    ]
+    assert non_codex_calls[-1] == [
+        "gh",
+        "pr",
+        "comment",
+        "https://example.invalid/pr/290",
+        "--body",
+        "@other-reviewer review\n<!-- horadus:fresh-review reviewer=other-reviewer head=head-sha-290 -->",
+    ]
 
     codex_config = task_commands_module.FinishConfig(
         gh_bin="gh",
@@ -2950,7 +3501,15 @@ def test_maybe_request_fresh_review_handles_non_codex_and_failures(
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
-        lambda args, **_kwargs: _completed(args, returncode=1, stderr="comment failed"),
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout="[]\n")
+            if args[:3] == ["gh", "api", "--paginate"]
+            else _completed(args, returncode=1, stderr="comment failed")
+        ),
     )
     assert task_commands_module._maybe_request_fresh_review(
         pr_url="https://example.invalid/pr/290",
@@ -2959,6 +3518,293 @@ def test_maybe_request_fresh_review_handles_non_codex_and_failures(
         "Failed to request a fresh review from `chatgpt-codex-connector[bot]` automatically.",
         "comment failed",
     ]
+
+
+def test_maybe_request_fresh_review_dedupes_current_head_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(
+                args,
+                stdout='[[{"body":"@codex review\\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-290 -->"}]]\n',
+            )
+        ),
+    )
+
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == [
+        "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
+    ]
+
+
+def test_maybe_request_fresh_review_handles_metadata_and_comment_parse_failures(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1, stderr="boom"),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to determine PR metadata for automatic fresh-review request."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout="{bad")
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to parse PR metadata for automatic fresh-review request."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='["bad"]\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to parse PR metadata for automatic fresh-review request."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":"bad","headRefOid":""}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="not-a-repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout="[]\n")
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to determine PR metadata for automatic fresh-review request."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, returncode=1, stderr="comments failed")
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout='[["ok"], ["bad"]]\n')
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout='{"body":"not-a-list"}\n')
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout="{bad")
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout='["bad"]\n')
+        ),
+    )
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+
+def test_wait_for_required_checks_returns_error_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_required_checks_state",
+        lambda **_kwargs: ("error", ["bad payload"]),
+    )
+
+    checks_ok, check_lines, check_reason = task_commands_module._wait_for_required_checks(
+        pr_url="https://example.invalid/pr/257",
+        config=config,
+    )
+
+    assert checks_ok is False
+    assert check_lines == ["bad payload"]
+    assert check_reason == "error"
+
+
+def test_current_head_finish_blocker_returns_first_blocker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    context = task_commands_module.FinishContext(
+        branch_name="codex/task-307-stateful-review-loop",
+        branch_task_id="TASK-307",
+        task_id="TASK-307",
+    )
+
+    head_blocker = ("heads differ", {"remote_branch_head": "abc"}, ["- local branch head: abc"])
+    monkeypatch.setattr(
+        task_commands_module, "_branch_head_alignment_blocker", lambda **_kwargs: head_blocker
+    )
+    assert (
+        task_commands_module._current_head_finish_blocker(
+            context=context,
+            pr_url="https://example.invalid/pr/307",
+            config=config,
+        )
+        == head_blocker
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_branch_head_alignment_blocker", lambda **_kwargs: None
+    )
+    closure_blocker = (
+        "missing closure",
+        {"task_closure": {}},
+        ["- tasks/BACKLOG.md still contains the task as open."],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_pre_merge_task_closure_blocker",
+        lambda *_args, **_kwargs: closure_blocker,
+    )
+    assert (
+        task_commands_module._current_head_finish_blocker(
+            context=context,
+            pr_url="https://example.invalid/pr/307",
+            config=config,
+        )
+        == closure_blocker
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_pre_merge_task_closure_blocker", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: ("required checks pending", ["CI / build: pending"]),
+    )
+    assert task_commands_module._current_head_finish_blocker(
+        context=context,
+        pr_url="https://example.invalid/pr/307",
+        config=config,
+    ) == ("required checks pending", {}, ["CI / build: pending"])
 
 
 def test_ensure_required_hooks_reports_missing_hooks(
@@ -7312,13 +8158,10 @@ def test_finish_task_data_blocks_when_checks_turn_red_after_review_gate_clears(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate timeout: no actionable current-head review feedback from "
-                "chatgpt-codex-connector[bot] for head-sha-275 within 600s. "
-                "Continuing due to timeout policy=allow."
-            ),
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-275",
+            timed_out=True,
         ),
     )
     monkeypatch.setattr(
@@ -7399,13 +8242,10 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_timeout(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate timeout: no actionable current-head review feedback from "
-                "chatgpt-codex-connector[bot] for head-sha-290 within 600s. "
-                "Continuing due to timeout policy=allow."
-            ),
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-290",
+            timed_out=True,
         ),
     )
     monkeypatch.setattr(
@@ -7496,11 +8336,14 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate passed: chatgpt-codex-connector[bot] reviewed current head "
-                "head-sha-290 with no inline comments during the 600s wait window."
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-290",
+            clean_current_head_review=True,
+            timed_out=True,
+            summary=(
+                "review gate passed: chatgpt-codex-connector[bot] approved current head "
+                "head-sha-290 during the 600s wait window."
             ),
         ),
     )
@@ -7520,7 +8363,9 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
     monkeypatch.setattr(
         task_commands_module,
         "_maybe_request_fresh_review",
-        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("should not request review")),
+        lambda **_kwargs: [
+            "Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review` for head `head-sha-290`."
+        ],
     )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
@@ -7553,7 +8398,10 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert lines[0] == "Task finish blocked: PR is blocked by unresolved review comments."
     assert any("review gate passed:" in line for line in lines)
-    assert lines[-1] == "  Please resolve this thread."
+    assert any(
+        "Requested a fresh review from `chatgpt-codex-connector[bot]`" in line for line in lines
+    )
+    assert "  Please resolve this thread." in lines
 
 
 def test_finish_task_data_uses_non_blocking_pending_check_mode_after_review(
@@ -7587,13 +8435,10 @@ def test_finish_task_data_uses_non_blocking_pending_check_mode_after_review(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate timeout: no actionable current-head review feedback from "
-                "chatgpt-codex-connector[bot] for head-sha-290 within 600s. "
-                "Continuing due to timeout policy=allow."
-            ),
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-290",
+            timed_out=True,
         ),
     )
     monkeypatch.setattr(
@@ -7680,7 +8525,7 @@ def test_finish_task_data_uses_non_blocking_pending_check_mode_after_review(
         {
             "pr_url": "https://example.invalid/pr/290",
             "config": mock.ANY,
-            "block_pending": False,
+            "block_pending": True,
         }
     ]
     assert any("Base branch policy requires auto-merge" in line for line in lines)
@@ -8057,11 +8902,13 @@ def test_finish_task_data_allows_review_timeout_override_with_human_approval(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate passed: chatgpt-codex-connector[bot] reacted THUMBS_UP on the "
-                "PR summary during the 5s wait window."
+        lambda **_kwargs: _review_gate_process(
+            reason="thumbs_up",
+            reviewed_head_oid="head-sha-283",
+            summary_thumbs_up=True,
+            summary=(
+                "review gate passed early: chatgpt-codex-connector[bot] reacted THUMBS_UP on the "
+                "PR summary during the active review window."
             ),
         ),
     )
@@ -8229,14 +9076,10 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            returncode=0,
-            stdout=(
-                "review gate timeout: no actionable current-head review feedback from "
-                "chatgpt-codex-connector[bot] for head-sha-275 within 600s. "
-                "Continuing due to timeout policy=allow."
-            ),
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-275",
+            timed_out=True,
         ),
     )
     monkeypatch.setattr(
@@ -8311,6 +9154,118 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     assert lines[-1] == "Task finish passed: merged merge-commit-275 and synced main."
 
 
+def test_finish_task_data_allows_early_merge_on_pr_summary_thumbs_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-283-finish-review-thumbs-up",
+            branch_task_id="TASK-283",
+            task_id="TASK-283",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-283 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _review_gate_process(
+            reason="thumbs_up",
+            reviewed_head_oid="head-sha-283",
+            summary_thumbs_up=True,
+            summary=(
+                "review gate passed early: chatgpt-codex-connector[bot] reacted THUMBS_UP "
+                "on the PR summary during the active review window."
+            ),
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-283", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/283\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/283"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-283: finish review thumbs up","body":"Primary-Task: TASK-283\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-283\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/283"]:
+            return _completed(args)
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-283-finish-review-thumbs-up",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-283", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-283"
+    assert any("review gate passed early:" in line for line in lines)
+    assert not any("review gate timeout:" in line for line in lines)
+    assert lines[-1] == "Task finish passed: merged merge-commit-283 and synced main."
+
+
 def test_finish_task_data_resumes_from_main_with_explicit_task_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -8343,13 +9298,10 @@ def test_finish_task_data_resumes_from_main_with_explicit_task_id(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate timeout: no actionable current-head review feedback from "
-                "chatgpt-codex-connector[bot] for head-sha-289 within 600s. "
-                "Continuing due to timeout policy=allow."
-            ),
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-289",
+            timed_out=True,
         ),
     )
     monkeypatch.setattr(
@@ -8429,6 +9381,541 @@ def test_finish_task_data_resumes_from_main_with_explicit_task_id(
     )
     assert any("review gate timeout:" in line for line in lines)
     assert lines[-1] == "Task finish passed: merged merge-commit-289 and synced main."
+
+
+def test_finish_task_data_restarts_review_window_after_pr_head_changes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-307-stateful-review-loop",
+            branch_task_id="TASK-307",
+            task_id="TASK-307",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-307 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    gate_results = iter(
+        [
+            _review_gate_process(
+                status="head_changed",
+                reason="head_changed",
+                reviewed_head_oid="head-a",
+                current_head_oid="head-b",
+                returncode=3,
+                summary="review gate deferred: PR head changed from head-a to head-b during the review window.",
+            ),
+            _review_gate_process(
+                reason="silent_timeout_allow",
+                reviewed_head_oid="head-b",
+                current_head_oid="head-b",
+                timed_out=True,
+                summary=(
+                    "review gate timeout: no actionable current-head review feedback from "
+                    "chatgpt-codex-connector[bot] for head-b within 600s. Continuing due to timeout policy=allow."
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: next(gate_results),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_maybe_request_fresh_review",
+        lambda **_kwargs: [
+            "Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review` for head head-b."
+        ],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-307", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/307\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/307"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-307: stateful review loop","body":"Primary-Task: TASK-307\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-307\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/307"]:
+            return _completed(args)
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-307-stateful-review-loop",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-307", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-307"
+    assert any("PR head changed from head-a to head-b" in line for line in lines)
+    assert any("Requested a fresh review" in line for line in lines)
+    assert lines[-1] == "Task finish passed: merged merge-commit-307 and synced main."
+
+
+def test_finish_task_data_blocks_when_review_gate_returns_unreadable_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-307-stateful-review-loop",
+            branch_task_id="TASK-307",
+            task_id="TASK-307",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-307 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="{bad", returncode=0),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/307\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/307"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-307: stateful review loop","body":"Primary-Task: TASK-307\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-307", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/307"
+    assert lines[0] == "Task finish blocked: review gate returned an unreadable result."
+    assert any("Unable to parse review gate payload:" in line for line in lines)
+
+
+def test_finish_task_data_blocks_when_review_thread_query_fails_after_review_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-307-stateful-review-loop",
+            branch_task_id="TASK-307",
+            task_id="TASK-307",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-307 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-307",
+            timed_out=True,
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: (_ for _ in ()).throw(ValueError("graphql failed")),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/307\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/307"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-307: stateful review loop","body":"Primary-Task: TASK-307\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-307", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/307"
+    assert (
+        lines[0]
+        == "Task finish blocked: unable to determine unresolved review thread state on the current head."
+    )
+    assert lines[-1] == "graphql failed"
+
+
+def test_finish_task_data_blocks_when_pr_head_changes_to_non_mergeable_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-307-stateful-review-loop",
+            branch_task_id="TASK-307",
+            task_id="TASK-307",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-307 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _review_gate_process(
+            status="head_changed",
+            reason="head_changed",
+            reviewed_head_oid="head-a",
+            current_head_oid="head-b",
+            returncode=3,
+            summary="review gate deferred: PR head changed from head-a to head-b during the review window.",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_head_finish_blocker",
+        lambda **_kwargs: ("required checks pending", {}, ["CI / build: pending"]),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/307\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/307"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-307: stateful review loop","body":"Primary-Task: TASK-307\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-307", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/307"
+    assert lines[0] == "Task finish blocked: required checks pending"
+    assert any("PR head changed from head-a to head-b" in line for line in lines)
+
+
+def test_finish_task_data_does_not_request_fresh_review_for_non_timeout_thread_block(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-307-stateful-review-loop",
+            branch_task_id="TASK-307",
+            task_id="TASK-307",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-307 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _review_gate_process(
+            reason="thumbs_up",
+            reviewed_head_oid="head-sha-307",
+            current_head_oid="head-sha-307",
+            timed_out=False,
+            summary_thumbs_up=True,
+            summary="review gate passed early: bot reacted THUMBS_UP.",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_current_required_checks_blocker", lambda **_kwargs: None
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: ["- src/file.py:10", "  Please resolve this thread."],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_maybe_request_fresh_review",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("should not request review")),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/307\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/307"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-307: stateful review loop","body":"Primary-Task: TASK-307\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-307", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/307"
+    assert lines[0] == "Task finish blocked: PR is blocked by unresolved review comments."
+
+
+def test_finish_task_data_blocks_when_outdated_review_thread_query_fails_after_review_gate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-307-stateful-review-loop",
+            branch_task_id="TASK-307",
+            task_id="TASK-307",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-307 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_wait_for_required_checks",
+        lambda **_kwargs: (True, [], "pass"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-307",
+            timed_out=True,
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_unresolved_review_thread_lines", lambda **_kwargs: []
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_outdated_unresolved_review_thread_ids",
+        lambda **_kwargs: (_ for _ in ()).throw(ValueError("pagination incomplete")),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/307\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/307"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-307: stateful review loop","body":"Primary-Task: TASK-307\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-307", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/307"
+    assert (
+        lines[0]
+        == "Task finish blocked: unable to determine outdated review thread state on the current head."
+    )
+    assert lines[-1] == "pagination incomplete"
 
 
 def test_finish_task_data_blocks_when_review_gate_process_hangs(
@@ -8530,13 +10017,10 @@ def test_finish_task_data_blocks_when_merge_command_hangs_after_review_gate_pass
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
-            stdout=(
-                "review gate timeout: no actionable current-head review feedback from "
-                "chatgpt-codex-connector[bot] for head-sha-284 within 600s. "
-                "Continuing due to timeout policy=allow."
-            ),
+        lambda **_kwargs: _review_gate_process(
+            reason="silent_timeout_allow",
+            reviewed_head_oid="head-sha-284",
+            timed_out=True,
         ),
     )
     monkeypatch.setattr(
@@ -8630,14 +10114,16 @@ def test_finish_task_data_blocks_when_review_gate_finds_actionable_comments(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(
-            ["review"],
+        lambda **_kwargs: _review_gate_process(
+            status="block",
+            reason="actionable_comments",
+            reviewed_head_oid="head-sha-276",
+            actionable_lines=[
+                "- src/horadus_cli/task_commands.py:1900 https://example.invalid/comment/276",
+                "  Please address this before merge.",
+            ],
             returncode=2,
-            stdout=(
-                "review gate failed: actionable current-head review comments found:\n"
-                "- src/horadus_cli/task_commands.py:1900 https://example.invalid/comment/276\n"
-                "  Please address this before merge."
-            ),
+            summary="review gate failed: actionable current-head review comments found:",
         ),
     )
 
@@ -8767,7 +10253,15 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-258",
+            clean_current_head_review=True,
+            summary=(
+                "review gate passed: "
+                "chatgpt-codex-connector[bot] approved current head head-sha-258 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -8885,7 +10379,15 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-258",
+            clean_current_head_review=True,
+            summary=(
+                "review gate passed: "
+                "chatgpt-codex-connector[bot] approved current head head-sha-258 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -8993,7 +10495,16 @@ def test_finish_task_data_auto_resolves_outdated_threads_before_merge(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-306",
+            clean_current_head_review=True,
+            timed_out=True,
+            summary=(
+                "review gate passed: chatgpt-codex-connector[bot] approved current head "
+                "head-sha-306 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -9116,7 +10627,16 @@ def test_finish_task_data_blocks_when_auto_resolving_outdated_threads_fails(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-306",
+            clean_current_head_review=True,
+            timed_out=True,
+            summary=(
+                "review gate passed: chatgpt-codex-connector[bot] approved current head "
+                "head-sha-306 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -9204,7 +10724,16 @@ def test_finish_task_data_continues_when_merge_timeout_or_failure_still_results_
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-258",
+            clean_current_head_review=True,
+            timed_out=True,
+            summary=(
+                "review gate passed: chatgpt-codex-connector[bot] approved current head "
+                "head-sha-258 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -9338,7 +10867,16 @@ def test_finish_task_data_covers_auto_merge_timeout_and_failure_paths(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-258",
+            clean_current_head_review=True,
+            timed_out=True,
+            summary=(
+                "review gate passed: chatgpt-codex-connector[bot] approved current head "
+                "head-sha-258 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,
@@ -9561,7 +11099,16 @@ def test_finish_task_data_blocks_when_merge_fails_without_auto_merge_hint(
     monkeypatch.setattr(
         task_commands_module,
         "_run_review_gate",
-        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+        lambda **_kwargs: _review_gate_process(
+            reason="clean_review",
+            reviewed_head_oid="head-sha-258",
+            clean_current_head_review=True,
+            timed_out=True,
+            summary=(
+                "review gate passed: chatgpt-codex-connector[bot] approved current head "
+                "head-sha-258 during the 600s wait window."
+            ),
+        ),
     )
     monkeypatch.setattr(
         task_commands_module,

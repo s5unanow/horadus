@@ -118,6 +118,15 @@ def _user_login(payload: dict[str, object]) -> str | None:
     return login if isinstance(login, str) else None
 
 
+def _review_order_key(review: dict[str, object]) -> tuple[datetime, int]:
+    submitted_at = _parse_github_timestamp(review.get("submitted_at"))
+    if submitted_at is None:
+        submitted_at = datetime.min.replace(tzinfo=UTC)
+    review_id = review.get("id")
+    order = review_id if isinstance(review_id, int) else -1
+    return submitted_at, order
+
+
 def _actionable_review_lines(reviews: list[dict[str, object]]) -> list[str]:
     lines: list[str] = []
     for review in reviews:
@@ -156,15 +165,21 @@ def _matching_review_comments(
         and review.get("commit_id") == head_oid
         and _user_login(review) == reviewer_login
     ]
-    actionable_reviews = [
-        review
-        for review in matching_reviews
-        if str(review.get("state") or "").strip().upper() == "CHANGES_REQUESTED"
-        or (
-            bool(str(review.get("body") or "").strip())
-            and str(review.get("state") or "").strip().upper() != "APPROVED"
+    latest_matching_review = (
+        max(matching_reviews, key=_review_order_key) if matching_reviews else None
+    )
+    actionable_reviews = (
+        [latest_matching_review]
+        if latest_matching_review is not None
+        and (
+            str(latest_matching_review.get("state") or "").strip().upper() == "CHANGES_REQUESTED"
+            or (
+                bool(str(latest_matching_review.get("body") or "").strip())
+                and str(latest_matching_review.get("state") or "").strip().upper() != "APPROVED"
+            )
         )
-    ]
+        else []
+    )
     review_ids = {review["id"] for review in matching_reviews if "id" in review}
 
     matching_comments = [

@@ -324,6 +324,50 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
         )
 
 
+def test_pr_review_gate_uses_latest_current_head_review_state_for_summary_feedback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads: dict[tuple[str, ...], object] = {
+        ("repos/example/repo/pulls/1/reviews",): [
+            [
+                {
+                    "id": 11,
+                    "commit_id": "head-sha",
+                    "state": "COMMENTED",
+                    "body": "Please revise",
+                    "submitted_at": "2026-03-12T10:00:00Z",
+                    "user": {"login": "bot"},
+                },
+                {
+                    "id": 12,
+                    "commit_id": "head-sha",
+                    "state": "APPROVED",
+                    "body": "",
+                    "submitted_at": "2026-03-12T10:05:00Z",
+                    "user": {"login": "bot"},
+                },
+            ]
+        ],
+        ("repos/example/repo/pulls/1/comments",): [[]],
+    }
+    monkeypatch.setattr(
+        pr_review_gate_module, "_run_gh_paginated_json", lambda *args: payloads[args]
+    )
+
+    matching_reviews, matching_comments, actionable_reviews = (
+        pr_review_gate_module._matching_review_comments(
+            repo="example/repo",
+            pr_number=1,
+            head_oid="head-sha",
+            reviewer_login="bot",
+        )
+    )
+
+    assert len(matching_reviews) == 2
+    assert matching_comments == []
+    assert actionable_reviews == []
+
+
 def test_pr_review_gate_helper_functions_cover_additional_contract_edges(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

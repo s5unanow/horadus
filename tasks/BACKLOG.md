@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-305`.
+- Next available task IDs start at `TASK-306`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -906,6 +906,27 @@ The current `horadus tasks finish` implementation already converges when the
 PR has reached `MERGED`. Keep that behavior as part of the canonical baseline
 while `TASK-300` / `TASK-299` migrate the implementation onto the versioned
 shell and isolated `v2` modules.
+
+---
+
+### TASK-305: Let Guarded Task Start Carry Target Planning Intake Files
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+The guarded task-start flow already carries forward task-ledger-only intake
+edits for the target task, but it still blocks on an untracked target exec
+plan/spec file. Extend the shared guarded start path behind `horadus tasks
+start` / `safe-start` so task-scoped planning intake can carry forward cleanly
+without weakening the general dirty-tree guard.
+
+**Files**: `tools/horadus/python/horadus_workflow/`, `src/horadus_cli/v2/`, `scripts/check_agent_task_eligibility.sh`, `tests/horadus_cli/`, `tests/workflow/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`
+
+**Acceptance Criteria**:
+- [ ] The guarded `horadus tasks start` / `safe-start` flow accepts dirty or untracked planning-intake files only when they are shared live task ledgers or planning artifacts that belong to `TASK-XXX`
+- [ ] Ineligible dirty/untracked files still block guarded task start with a clear report of which files are eligible versus blocking
+- [ ] The canonical docs describe the carry-forward rule accurately, including untracked target exec plan/spec files
+- [ ] Regression coverage includes at least one eligible untracked target planning artifact and one ineligible unrelated file
 
 ---
 

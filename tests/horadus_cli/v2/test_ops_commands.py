@@ -11,19 +11,19 @@ from urllib import error as urllib_error
 
 import pytest
 
+import src.core.calibration_dashboard as calibration_dashboard_module
+import src.core.dashboard_export as dashboard_export_module
+import src.core.embedding_lineage as embedding_lineage_module
+import src.core.migration_parity as migration_parity_module
+import src.core.source_freshness as source_freshness_module
+import src.eval.audit as audit_module
+import src.eval.benchmark as benchmark_module
+import src.eval.replay as replay_module
+import src.eval.taxonomy_validation as taxonomy_validation_module
+import src.eval.vector_benchmark as vector_benchmark_module
 import src.horadus_cli.v2.ops_commands as ops_module
-import src.horadus_cli.v2.runtime.core.calibration_dashboard as calibration_dashboard_module
-import src.horadus_cli.v2.runtime.core.dashboard_export as dashboard_export_module
-import src.horadus_cli.v2.runtime.core.embedding_lineage as embedding_lineage_module
-import src.horadus_cli.v2.runtime.core.migration_parity as migration_parity_module
-import src.horadus_cli.v2.runtime.core.source_freshness as source_freshness_module
-import src.horadus_cli.v2.runtime.eval.audit as audit_module
-import src.horadus_cli.v2.runtime.eval.benchmark as benchmark_module
-import src.horadus_cli.v2.runtime.eval.replay as replay_module
-import src.horadus_cli.v2.runtime.eval.taxonomy_validation as taxonomy_validation_module
-import src.horadus_cli.v2.runtime.eval.vector_benchmark as vector_benchmark_module
-import src.horadus_cli.v2.runtime.processing.dry_run_pipeline as dry_run_pipeline_module
-import src.horadus_cli.v2.runtime.storage.database as database_module
+import src.processing.dry_run_pipeline as dry_run_pipeline_module
+import src.storage.database as database_module
 from src.horadus_cli.v2.result import ExitCode
 
 pytestmark = pytest.mark.unit

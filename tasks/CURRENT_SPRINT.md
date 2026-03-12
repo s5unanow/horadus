@@ -66,3 +66,4 @@
 - `TASK-307` Make `horadus tasks finish` Behave Like a Stateful Review Loop ✅
 - `TASK-308` Keep Workflow Guidance Thin Outside `AGENTS.md` ✅
 - `TASK-309` Refresh `horadus tasks finish` Immediately After a New PR Head Is Pushed ✅
+- `TASK-310` Remove Duplicated App Runtime Modules from `src/horadus_cli/v2/runtime` ✅

@@ -28,6 +28,10 @@ import src.horadus_cli.v2.triage_commands as v2_triage_commands_module
 
 pytestmark = pytest.mark.unit
 
+_ALLOWED_NON_CLI_SRC_IMPORTS = {
+    Path("src/horadus_cli/v2/ops_commands.py"),
+}
+
 
 def test_top_level_router_modules_use_v2_for_all_cli_surfaces() -> None:
     assert ops_module.register_ops_commands is v2_ops_module.register_ops_commands
@@ -112,7 +116,7 @@ def test_cached_wrapper_files_execute_directly(wrapper_name: str) -> None:
     assert module.__file__ is not None
 
 
-def test_horadus_cli_package_has_no_repo_external_imports() -> None:
+def test_horadus_cli_package_limits_repo_external_imports_to_ops_adapters() -> None:
     package_root = Path("src/horadus_cli")
 
     for path in package_root.rglob("*.py"):
@@ -124,10 +128,24 @@ def test_horadus_cli_package_has_no_repo_external_imports() -> None:
                 and node.module.startswith("src.")
                 and not node.module.startswith("src.horadus_cli")
             ):
+                if path in _ALLOWED_NON_CLI_SRC_IMPORTS:
+                    continue
                 raise AssertionError(f"{path} imports non-CLI module {node.module}")
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     if alias.name.startswith("src.") and not alias.name.startswith(
                         "src.horadus_cli"
                     ):
+                        if path in _ALLOWED_NON_CLI_SRC_IMPORTS:
+                            continue
                         raise AssertionError(f"{path} imports non-CLI module {alias.name}")
+
+
+def test_repo_source_has_no_runtime_mirror_imports() -> None:
+    forbidden = "src.horadus_cli.v2.runtime"
+    for path in Path("src").rglob("*.py"):
+        if forbidden in path.read_text(encoding="utf-8"):
+            raise AssertionError(f"{path} still references {forbidden}")
+
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    assert "src/horadus_cli/v2/runtime" not in pyproject

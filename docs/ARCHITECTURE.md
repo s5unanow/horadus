@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Verified**: 2026-02-18
+**Last Verified**: 2026-03-12
 
 Operational tracing setup and validation steps are documented in `docs/TRACING.md`.
 
@@ -522,4 +522,5 @@ Repository workflow automation is intentionally separate from application
 runtime code. The stable CLI shell remains under `src/horadus_cli/`, while
 repo task/PR/docs workflow ownership lives under
 `tools/horadus/python/horadus_workflow/`. App/runtime packages under `src/`
-must not depend on that workflow home.
+must not depend on that workflow home, and `src/horadus_cli/` must not carry a
+duplicated app-runtime ownership tree under it.

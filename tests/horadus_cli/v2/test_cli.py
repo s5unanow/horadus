@@ -17,6 +17,7 @@ import pytest
 import src.cli as cli_module
 import src.horadus_cli.app as cli_app_module
 import src.horadus_cli.v2.result as result_module
+import src.horadus_cli.v2.task_commands as task_parser_module
 import src.horadus_cli.v2.task_process as task_process_module
 import src.horadus_cli.v2.task_repo as task_repo_module
 import src.horadus_cli.v2.task_workflow_core as task_commands_module
@@ -145,11 +146,11 @@ def test_build_parser_accepts_task_search_filters() -> None:
     assert args.include_raw is True
 
 
-def test_task_workflow_core_register_task_commands_wires_all_task_subcommands() -> None:
+def test_task_commands_register_task_commands_wires_all_task_subcommands() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
 
-    task_commands_module.register_task_commands(subparsers)
+    task_parser_module.register_task_commands(subparsers)
     args = parser.parse_args(
         [
             "tasks",
@@ -4791,7 +4792,7 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     ]
     assert steps[0].command == "./scripts/check_no_tracked_artifacts.sh"
     assert steps[1].command == "uv run --no-sync python scripts/check_docs_freshness.py"
-    assert steps[2].command == "uv run --no-sync ruff format src/ tests/ --check"
+    assert steps[2].command == "uv run --no-sync ruff format src/ tools/ tests/ --check"
     assert steps[5].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
     assert steps[6].command == "./scripts/run_unit_coverage_gate.sh"
     assert steps[9].command == "./scripts/test_integration_docker.sh"

@@ -268,3 +268,4 @@
 - TASK-299: Build an Isolated `v2` Task Workflow and Cut Over from `tasks-v2` ✅
 - TASK-301: Move All Horadus CLI Functionality to `v2` and Delete `v1` ✅
 - TASK-298: Add Phase -1 Planning Gates Without Heavy Process Overhead ✅
+- TASK-303: Extract Repo Workflow Into a Dedicated Tooling Home ✅

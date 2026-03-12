@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-import src.core.docs_freshness as docs_freshness_module
-from src.core.docs_freshness import (
+import tools.horadus.python.horadus_workflow.docs_freshness as docs_freshness_module
+from tools.horadus.python.horadus_workflow.docs_freshness import (
     DocsFreshnessIssue,
     DocsFreshnessResult,
     _extract_completed_task_ids,
@@ -23,7 +23,7 @@ from src.core.docs_freshness import (
     _record_issue,
     run_docs_freshness_check,
 )
-from src.core.repo_workflow import (
+from tools.horadus.python.horadus_workflow.repo_workflow import (
     WORKFLOW_ESCAPE_HATCH_TEXT,
     canonical_task_workflow_command_templates,
     completion_guidance_statements,

@@ -100,7 +100,7 @@ Source = "https://github.com/yourname/geopolitical-intel"
 horadus = "src.cli:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src"]
+packages = ["src", "tools"]
 
 # ============================================================================
 # Tool Configuration
@@ -129,7 +129,7 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src"]
+source = ["src", "tools"]
 branch = true
 omit = [
     "*/tests/*",
@@ -192,7 +192,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.isort]
-known-first-party = ["src"]
+known-first-party = ["src", "tools"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["ARG001", "ARG002"]  # Unused arguments OK in tests

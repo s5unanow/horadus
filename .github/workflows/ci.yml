@@ -77,10 +77,10 @@ jobs:
         run: uv sync --extra dev --frozen
 
       - name: Check formatting
-        run: uv run --no-sync ruff format src/ tests/ --check
+        run: uv run --no-sync ruff format src/ tools/ tests/ --check
 
       - name: Run linter
-        run: uv run --no-sync ruff check src/ tests/
+        run: uv run --no-sync ruff check src/ tools/ tests/
 
   # ---------------------------------------------------------------------------
   # Type Checking
@@ -105,7 +105,7 @@ jobs:
         run: uv sync --extra dev --frozen
 
       - name: Run mypy
-        run: uv run --no-sync mypy src/
+        run: uv run --no-sync mypy src/ tools/horadus/python
 
   # ---------------------------------------------------------------------------
   # Unit Tests
@@ -145,7 +145,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          HORADUS_UNIT_COVERAGE_GATE_CMD="uv run --no-sync pytest tests/unit/ tests/horadus_cli/ -v --cov=src --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=100" \
+          HORADUS_UNIT_COVERAGE_GATE_CMD="uv run --no-sync pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v --cov=src --cov=tools --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=100" \
             ./scripts/run_unit_coverage_gate.sh
 
       - name: Upload coverage to Codecov
@@ -271,7 +271,7 @@ jobs:
         run: uv sync --extra dev --frozen
 
       - name: Run Bandit (code security)
-        run: uv run --no-sync bandit -c pyproject.toml -r src/
+        run: uv run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python
 
       - name: Validate lockfile
         run: uv lock --check

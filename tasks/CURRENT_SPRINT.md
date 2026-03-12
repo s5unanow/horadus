@@ -65,3 +65,4 @@
 - `TASK-306` Unblock Canonical Finish When Only Outdated Review Threads Remain ✅
 - `TASK-307` Make `horadus tasks finish` Behave Like a Stateful Review Loop ✅
 - `TASK-308` Keep Workflow Guidance Thin Outside `AGENTS.md` ✅
+- `TASK-309` Refresh `horadus tasks finish` Immediately After a New PR Head Is Pushed ✅

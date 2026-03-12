@@ -15,6 +15,10 @@ Use this skill for repo workflow operations in this project.
 - Prefer `--dry-run` before any branch-creating command.
 - For canonical workflow policy, completion rules, and merge/review semantics,
   read `AGENTS.md`.
+- If `horadus tasks finish TASK-XXX` is rerun after you push a new PR head,
+  let the CLI refresh stale older-head review state and request fresh
+  current-head review when needed; the agent should fix feedback, push, and
+  rerun `finish`, not post a duplicate manual re-review request.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.

@@ -11,6 +11,10 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
+from tools.horadus.python.horadus_workflow.review_defaults import (
+    DEFAULT_REVIEW_TIMEOUT_SECONDS,
+)
+
 DEFAULT_REVIEWER_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_OUTPUT_FORMAT = "text"
 
@@ -280,7 +284,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--timeout-seconds",
         type=int,
-        default=600,
+        default=DEFAULT_REVIEW_TIMEOUT_SECONDS,
         help="How long to wait for a current-head review before timing out; must be positive.",
     )
     parser.add_argument(

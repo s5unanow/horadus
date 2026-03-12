@@ -311,10 +311,33 @@ def _is_task_start_intake_path(path: str) -> bool:
     return path in _TASK_LEDGER_INTAKE_PATHS or _path_owned_task_start_intake_ref(path) is not None
 
 
+def _path_owned_task_start_intake_refs_from_diff(path: str) -> set[str]:
+    refs: set[str] = set()
+    if (owned_task_id := _path_owned_task_start_intake_ref(path)) is not None:
+        refs.add(owned_task_id)
+    for _diff_kind, diff_text in _diff_texts_for_path(path):
+        for raw_line in diff_text.splitlines():
+            candidate_path: str | None = None
+            if raw_line.startswith("rename from "):
+                candidate_path = raw_line.removeprefix("rename from ").strip()
+            elif raw_line.startswith("rename to "):
+                candidate_path = raw_line.removeprefix("rename to ").strip()
+            elif raw_line.startswith("--- "):
+                candidate_path = raw_line.removeprefix("--- ").strip()
+            elif raw_line.startswith("+++ "):
+                candidate_path = raw_line.removeprefix("+++ ").strip()
+            if candidate_path is None or candidate_path == "/dev/null":
+                continue
+            if candidate_path.startswith(("a/", "b/")):
+                candidate_path = candidate_path[2:]
+            if (task_id := _path_owned_task_start_intake_ref(candidate_path)) is not None:
+                refs.add(task_id)
+    return refs
+
+
 def _task_start_intake_refs_for_path(path: str) -> set[str]:
-    owned_task_id = _path_owned_task_start_intake_ref(path)
-    if owned_task_id is not None:
-        return {owned_task_id}
+    if _path_owned_task_start_intake_ref(path) is not None:
+        return _path_owned_task_start_intake_refs_from_diff(path)
     return _dirty_task_refs_for_path(path)
 
 

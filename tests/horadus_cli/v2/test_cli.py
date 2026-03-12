@@ -3378,6 +3378,82 @@ def test_task_ledger_intake_state_rejects_other_task_exec_plan_by_path(
     ]
 
 
+def test_task_ledger_intake_state_rejects_renamed_spec_with_other_task_endpoint(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(task_commands_module, "task_block_match", lambda _task_id: object())
+    monkeypatch.setattr(
+        task_commands_module,
+        "_diff_texts_for_path",
+        lambda _path: [
+            (
+                "unstaged",
+                "\n".join(
+                    [
+                        "diff --git a/tasks/specs/254-old-name.md b/tasks/specs/253-new-name.md",
+                        "similarity index 100%",
+                        "rename from tasks/specs/254-old-name.md",
+                        "rename to tasks/specs/253-new-name.md",
+                    ]
+                ),
+            )
+        ],
+    )
+
+    state = task_commands_module._task_ledger_intake_state(
+        task_id="TASK-253",
+        dirty_paths=["tasks/specs/253-new-name.md"],
+    )
+
+    assert state.ready is False
+    assert state.eligible_paths == ["tasks/specs/253-new-name.md"]
+    assert state.consistency_errors == [
+        "tasks/specs/253-new-name.md contains edits for other tasks: TASK-254",
+    ]
+
+
+def test_path_owned_task_start_intake_refs_from_diff_handles_diff_path_variants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_diff_texts_for_path",
+        lambda _path: [
+            (
+                "unstaged",
+                "\n".join(
+                    [
+                        "--- a/tasks/exec_plans/TASK-254.md",
+                        "+++ b/tasks/exec_plans/TASK-253.md",
+                        "rename from docs/notes.md",
+                        "rename to /dev/null",
+                    ]
+                ),
+            )
+        ],
+    )
+
+    refs = task_commands_module._path_owned_task_start_intake_refs_from_diff(
+        "tasks/exec_plans/TASK-253.md"
+    )
+
+    assert refs == {"TASK-253", "TASK-254"}
+
+
+def test_path_owned_task_start_intake_refs_from_diff_handles_shared_ledgers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_diff_texts_for_path",
+        lambda _path: [("unstaged", "+++ b/tasks/specs/253-shared-ledger.md")],
+    )
+
+    refs = task_commands_module._path_owned_task_start_intake_refs_from_diff("tasks/BACKLOG.md")
+
+    assert refs == {"TASK-253"}
+
+
 def test_task_ledger_intake_state_handles_missing_backlog_and_sprint_files(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -3585,6 +3661,8 @@ def test_task_preflight_data_allows_untracked_target_exec_plan_for_task_start(
         [
             _completed(["git", "rev-parse"], stdout="main\n"),
             _completed(["git", "status"], stdout="?? tasks/exec_plans/TASK-253.md\n"),
+            _completed(["git", "diff"], stdout=""),
+            _completed(["git", "diff", "--cached"], stdout=""),
             _completed(["git", "fetch"]),
             _completed(["git", "rev-parse"], stdout="abc\n"),
             _completed(["git", "rev-parse"], stdout="abc\n"),
@@ -3636,6 +3714,8 @@ def test_task_preflight_data_allows_untracked_target_spec_for_task_start(
         [
             _completed(["git", "rev-parse"], stdout="main\n"),
             _completed(["git", "status"], stdout="?? tasks/specs/253-some-plan.md\n"),
+            _completed(["git", "diff"], stdout=""),
+            _completed(["git", "diff", "--cached"], stdout=""),
             _completed(["git", "fetch"]),
             _completed(["git", "rev-parse"], stdout="abc\n"),
             _completed(["git", "rev-parse"], stdout="abc\n"),
@@ -3685,6 +3765,8 @@ def test_task_preflight_data_blocks_untracked_unrelated_exec_plan_for_task_start
         [
             _completed(["git", "rev-parse"], stdout="main\n"),
             _completed(["git", "status"], stdout="?? tasks/exec_plans/TASK-254.md\n"),
+            _completed(["git", "diff"], stdout=""),
+            _completed(["git", "diff", "--cached"], stdout=""),
         ]
     )
 

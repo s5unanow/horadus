@@ -37,6 +37,8 @@ from tools.horadus.python.horadus_workflow.task_repo import (
     spec_paths_for_task,
     task_block_match,
     task_closure_state,
+    task_id_from_exec_plan_path,
+    task_id_from_spec_path,
     task_planning_gates_value,
     task_record,
     task_requires_exec_plan,
@@ -77,7 +79,6 @@ _SPRINT_NUMBER_PATTERN = re.compile(r"^\*\*Sprint Number\*\*:\s*(?P<number>\d+)\
 _TASK_LEDGER_INTAKE_PATHS = (
     "tasks/BACKLOG.md",
     "tasks/CURRENT_SPRINT.md",
-    "PROJECT_STATUS.md",
 )
 _CANONICAL_PLANNING_EXAMPLE_PATH = "tasks/specs/275-finish-review-gate-timeout.md"
 _PLANNING_STATE_PRESENT = "applicable_with_authoritative_artifact_present"
@@ -296,13 +297,57 @@ def _dirty_task_refs_for_path(path: str) -> set[str]:
     return diff_refs
 
 
+def _path_owned_task_start_intake_ref(path: str) -> str | None:
+    if path in _TASK_LEDGER_INTAKE_PATHS:
+        return None
+    if path.startswith("tasks/exec_plans/"):
+        return task_id_from_exec_plan_path(path)
+    if path.startswith("tasks/specs/"):
+        return task_id_from_spec_path(path)
+    return None
+
+
+def _is_task_start_intake_path(path: str) -> bool:
+    return path in _TASK_LEDGER_INTAKE_PATHS or _path_owned_task_start_intake_ref(path) is not None
+
+
+def _path_owned_task_start_intake_refs_from_diff(path: str) -> set[str]:
+    refs: set[str] = set()
+    if (owned_task_id := _path_owned_task_start_intake_ref(path)) is not None:
+        refs.add(owned_task_id)
+    for _diff_kind, diff_text in _diff_texts_for_path(path):
+        for raw_line in diff_text.splitlines():
+            candidate_path: str | None = None
+            if raw_line.startswith("rename from "):
+                candidate_path = raw_line.removeprefix("rename from ").strip()
+            elif raw_line.startswith("rename to "):
+                candidate_path = raw_line.removeprefix("rename to ").strip()
+            elif raw_line.startswith("--- "):
+                candidate_path = raw_line.removeprefix("--- ").strip()
+            elif raw_line.startswith("+++ "):
+                candidate_path = raw_line.removeprefix("+++ ").strip()
+            if candidate_path is None or candidate_path == "/dev/null":
+                continue
+            if candidate_path.startswith(("a/", "b/")):
+                candidate_path = candidate_path[2:]
+            if (task_id := _path_owned_task_start_intake_ref(candidate_path)) is not None:
+                refs.add(task_id)
+    return refs
+
+
+def _task_start_intake_refs_for_path(path: str) -> set[str]:
+    if _path_owned_task_start_intake_ref(path) is not None:
+        return _path_owned_task_start_intake_refs_from_diff(path)
+    return _dirty_task_refs_for_path(path)
+
+
 def _task_ledger_intake_state(
     *,
     task_id: str | None,
     dirty_paths: list[str],
 ) -> TaskLedgerIntakeState:
-    eligible_paths = [path for path in dirty_paths if path in _TASK_LEDGER_INTAKE_PATHS]
-    blocking_paths = [path for path in dirty_paths if path not in _TASK_LEDGER_INTAKE_PATHS]
+    eligible_paths = [path for path in dirty_paths if _is_task_start_intake_path(path)]
+    blocking_paths = [path for path in dirty_paths if not _is_task_start_intake_path(path)]
     consistency_errors: list[str] = []
     if task_id is not None:
         try:
@@ -315,9 +360,14 @@ def _task_ledger_intake_state(
                 f"{task_id} is not present in tasks/BACKLOG.md in the working tree."
             )
         for path in eligible_paths:
-            task_refs = _dirty_task_refs_for_path(path)
+            task_refs = _task_start_intake_refs_for_path(path)
             if task_id not in task_refs:
-                consistency_errors.append(f"{path} does not include {task_id} in its dirty diff.")
+                if _path_owned_task_start_intake_ref(path) is not None:
+                    consistency_errors.append(f"{path} does not belong to {task_id}.")
+                else:
+                    consistency_errors.append(
+                        f"{path} does not include {task_id} in its dirty diff."
+                    )
             other_refs = sorted(ref for ref in task_refs if ref != task_id)
             if other_refs:
                 consistency_errors.append(
@@ -2239,12 +2289,13 @@ def task_preflight_data(
         ]
         if allow_task_ledger_intake and intake_state.eligible_paths:
             lines.append(
-                f"Eligible task-ledger intake files for {task_id}: "
+                f"Eligible planning intake files for {task_id}: "
                 f"{', '.join(intake_state.eligible_paths)}"
             )
         elif intake_state.eligible_paths and not intake_state.blocking_paths:
             lines.append(
-                f"Detected task-ledger-only dirty files: {', '.join(intake_state.eligible_paths)}"
+                "Detected planning-intake-only dirty files: "
+                f"{', '.join(intake_state.eligible_paths)}"
             )
             lines.append(
                 "Run `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name` "
@@ -2312,7 +2363,7 @@ def task_preflight_data(
             "Task sequencing guard passed: main is synced and no open task PRs.",
             *(
                 [
-                    f"Eligible task-ledger intake files will carry onto the new branch for {task_id}: "
+                    f"Eligible planning intake files will carry onto the new branch for {task_id}: "
                     f"{', '.join(intake_state.eligible_paths)}"
                 ]
                 if intake_state.eligible_paths

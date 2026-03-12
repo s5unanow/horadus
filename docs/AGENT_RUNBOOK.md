@@ -24,8 +24,9 @@ task-specific guarded start flow instead of forcing guesswork.
 2. `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
 When: canonical autonomous task-start command; enforces sprint eligibility and
 sequencing checks before creating the task branch.
-If the only dirty files are eligible task-ledger intake edits for the target
-task (for example `tasks/BACKLOG.md` and `tasks/CURRENT_SPRINT.md`), the
+If the only dirty files are eligible planning-intake edits for the target
+task (shared live task ledgers plus target-task planning artifacts like
+`tasks/exec_plans/TASK-XXX.md` or a task-owned file under `tasks/specs/`), the
 command carries them onto the new task branch and reports which files were
 treated as eligible versus which files still block branch creation.
 

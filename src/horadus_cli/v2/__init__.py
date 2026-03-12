@@ -1,1 +1,1 @@
-"""Horadus CLI v2 task workflow implementation."""
+"""Compatibility shims for the tooling-home Horadus CLI package."""

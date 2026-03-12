@@ -519,8 +519,9 @@ feeds:
 ## Repo Workflow Tooling
 
 Repository workflow automation is intentionally separate from application
-runtime code. The stable CLI shell remains under `src/horadus_cli/`, while
-repo task/PR/docs workflow ownership lives under
-`tools/horadus/python/horadus_workflow/`. App/runtime packages under `src/`
-must not depend on that workflow home, and `src/horadus_cli/` must not carry a
-duplicated app-runtime ownership tree under it.
+runtime code. Horadus CLI ownership lives under
+`tools/horadus/python/horadus_cli/`, while repo task/PR/docs workflow
+ownership lives under `tools/horadus/python/horadus_workflow/`. The installed
+entrypoint remains `src/cli.py`, and app-backed CLI commands cross the
+explicit runtime bridge at `src/cli_runtime.py` rather than importing
+business-app modules into the tooling package.

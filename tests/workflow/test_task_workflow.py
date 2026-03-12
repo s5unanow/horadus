@@ -11,13 +11,13 @@ import src.horadus_cli.task_commands as top_level_task_commands_module
 import src.horadus_cli.task_query as top_level_task_query_module
 import src.horadus_cli.task_repo as top_level_task_repo_module
 import src.horadus_cli.task_workflow_core as top_level_task_workflow_core_module
-import src.horadus_cli.v2.task_commands as v2_task_commands_module
-import src.horadus_cli.v2.task_query as v2_task_query_module
-import src.horadus_cli.v2.task_repo as v2_task_repo_module
-import src.horadus_cli.v2.task_workflow_core as v2_task_workflow_core_module
+import tools.horadus.python.horadus_cli.task_commands as v2_task_commands_module
+import tools.horadus.python.horadus_cli.task_query as v2_task_query_module
+import tools.horadus.python.horadus_cli.task_repo as v2_task_repo_module
+import tools.horadus.python.horadus_cli.task_workflow_core as v2_task_workflow_core_module
 import tools.horadus.python.horadus_workflow.task_workflow_policy as task_workflow_policy_module
-from src.horadus_cli.v2.result import CommandResult, emit_result
 from tests.horadus_cli.v2.task_repo_fixtures import seed_task_repo_layout
+from tools.horadus.python.horadus_cli.result import CommandResult, emit_result
 
 pytestmark = pytest.mark.unit
 
@@ -108,6 +108,7 @@ def test_runtime_does_not_import_v1_modules() -> None:
         Path("src/horadus_cli/app.py"),
         *sorted(Path("src/horadus_cli").glob("*.py")),
         *sorted(Path("src/horadus_cli/v2").glob("*.py")),
+        *sorted(Path("tools/horadus/python/horadus_cli").glob("*.py")),
     ]
     for path in runtime_paths:
         text = path.read_text(encoding="utf-8")

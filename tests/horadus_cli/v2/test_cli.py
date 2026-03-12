@@ -15,13 +15,13 @@ from uuid import uuid4
 import pytest
 
 import src.cli as cli_module
-import src.horadus_cli.app as cli_app_module
-import src.horadus_cli.v2.result as result_module
-import src.horadus_cli.v2.task_commands as task_parser_module
-import src.horadus_cli.v2.task_process as task_process_module
-import src.horadus_cli.v2.task_repo as task_repo_module
-import src.horadus_cli.v2.task_workflow_core as task_commands_module
-import src.horadus_cli.v2.triage_commands as triage_commands_module
+import tools.horadus.python.horadus_cli.app as cli_app_module
+import tools.horadus.python.horadus_cli.result as result_module
+import tools.horadus.python.horadus_cli.task_commands as task_parser_module
+import tools.horadus.python.horadus_cli.task_process as task_process_module
+import tools.horadus.python.horadus_cli.task_repo as task_repo_module
+import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+import tools.horadus.python.horadus_cli.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
 

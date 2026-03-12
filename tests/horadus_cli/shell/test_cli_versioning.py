@@ -8,29 +8,27 @@ from pathlib import Path
 
 import pytest
 
-import src.horadus_cli.app as cli_app_module
 import src.horadus_cli.ops_commands as ops_module
 import src.horadus_cli.result as result_module
 import src.horadus_cli.task_commands as task_commands_module
 import src.horadus_cli.triage_commands as triage_commands_module
-import src.horadus_cli.v2.ops_commands as v2_ops_module
-import src.horadus_cli.v2.result as v2_result_module
-import src.horadus_cli.v2.task_commands as v2_task_commands_module
-import src.horadus_cli.v2.task_finish as v2_task_finish_module
-import src.horadus_cli.v2.task_friction as v2_task_friction_module
-import src.horadus_cli.v2.task_ledgers as v2_task_ledgers_module
-import src.horadus_cli.v2.task_lifecycle as v2_task_lifecycle_module
-import src.horadus_cli.v2.task_preflight as v2_task_preflight_module
-import src.horadus_cli.v2.task_query as v2_task_query_module
-import src.horadus_cli.v2.task_shared as v2_task_shared_module
-import src.horadus_cli.v2.task_workflow as v2_task_workflow_module
-import src.horadus_cli.v2.triage_commands as v2_triage_commands_module
+import tools.horadus.python.horadus_cli.app as cli_app_module
+import tools.horadus.python.horadus_cli.ops_commands as v2_ops_module
+import tools.horadus.python.horadus_cli.result as v2_result_module
+import tools.horadus.python.horadus_cli.task_commands as v2_task_commands_module
+import tools.horadus.python.horadus_cli.task_finish as v2_task_finish_module
+import tools.horadus.python.horadus_cli.task_friction as v2_task_friction_module
+import tools.horadus.python.horadus_cli.task_ledgers as v2_task_ledgers_module
+import tools.horadus.python.horadus_cli.task_lifecycle as v2_task_lifecycle_module
+import tools.horadus.python.horadus_cli.task_preflight as v2_task_preflight_module
+import tools.horadus.python.horadus_cli.task_query as v2_task_query_module
+import tools.horadus.python.horadus_cli.task_shared as v2_task_shared_module
+import tools.horadus.python.horadus_cli.task_workflow as v2_task_workflow_module
+import tools.horadus.python.horadus_cli.triage_commands as v2_triage_commands_module
 
 pytestmark = pytest.mark.unit
 
-_ALLOWED_NON_CLI_SRC_IMPORTS = {
-    Path("src/horadus_cli/v2/ops_commands.py"),
-}
+_CLI_PACKAGE_ROOT = Path("tools/horadus/python/horadus_cli")
 
 
 def test_top_level_router_modules_use_v2_for_all_cli_surfaces() -> None:
@@ -46,12 +44,15 @@ def test_top_level_router_modules_use_v2_for_all_cli_surfaces() -> None:
 @pytest.mark.parametrize(
     ("module_name", "target_name"),
     [
-        ("src.horadus_cli.ops_commands", "src.horadus_cli.v2.ops_commands"),
-        ("src.horadus_cli.result", "src.horadus_cli.v2.result"),
-        ("src.horadus_cli.task_process", "src.horadus_cli.v2.task_process"),
-        ("src.horadus_cli.task_repo", "src.horadus_cli.v2.task_repo"),
-        ("src.horadus_cli.task_workflow_core", "src.horadus_cli.v2.task_workflow_core"),
-        ("src.horadus_cli.triage_commands", "src.horadus_cli.v2.triage_commands"),
+        ("src.horadus_cli.ops_commands", "tools.horadus.python.horadus_cli.ops_commands"),
+        ("src.horadus_cli.result", "tools.horadus.python.horadus_cli.result"),
+        ("src.horadus_cli.task_process", "tools.horadus.python.horadus_cli.task_process"),
+        ("src.horadus_cli.task_repo", "tools.horadus.python.horadus_cli.task_repo"),
+        (
+            "src.horadus_cli.task_workflow_core",
+            "tools.horadus.python.horadus_cli.task_workflow_core",
+        ),
+        ("src.horadus_cli.triage_commands", "tools.horadus.python.horadus_cli.triage_commands"),
     ],
 )
 def test_top_level_module_keys_alias_expected_versions(module_name: str, target_name: str) -> None:
@@ -117,7 +118,7 @@ def test_cached_wrapper_files_execute_directly(wrapper_name: str) -> None:
 
 
 def test_horadus_cli_package_limits_repo_external_imports_to_ops_adapters() -> None:
-    package_root = Path("src/horadus_cli")
+    package_root = _CLI_PACKAGE_ROOT
 
     for path in package_root.rglob("*.py"):
         tree = ast.parse(path.read_text(), filename=str(path))
@@ -126,18 +127,11 @@ def test_horadus_cli_package_limits_repo_external_imports_to_ops_adapters() -> N
                 isinstance(node, ast.ImportFrom)
                 and node.module is not None
                 and node.module.startswith("src.")
-                and not node.module.startswith("src.horadus_cli")
             ):
-                if path in _ALLOWED_NON_CLI_SRC_IMPORTS:
-                    continue
                 raise AssertionError(f"{path} imports non-CLI module {node.module}")
             if isinstance(node, ast.Import):
                 for alias in node.names:
-                    if alias.name.startswith("src.") and not alias.name.startswith(
-                        "src.horadus_cli"
-                    ):
-                        if path in _ALLOWED_NON_CLI_SRC_IMPORTS:
-                            continue
+                    if alias.name.startswith("src."):
                         raise AssertionError(f"{path} imports non-CLI module {alias.name}")
 
 

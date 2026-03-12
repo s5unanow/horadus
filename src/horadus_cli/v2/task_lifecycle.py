@@ -1,17 +1,8 @@
-from __future__ import annotations
+import sys
 
-from src.horadus_cli.v2.task_workflow_core import (
-    TaskLifecycleSnapshot,
-    handle_lifecycle,
-    resolve_task_lifecycle,
-    task_lifecycle_data,
-    task_lifecycle_state,
-)
+from tools.horadus.python.horadus_cli import task_lifecycle as _module
 
-__all__ = [
-    "TaskLifecycleSnapshot",
-    "handle_lifecycle",
-    "resolve_task_lifecycle",
-    "task_lifecycle_data",
-    "task_lifecycle_state",
-]
+_legacy_name = __name__
+globals().update(_module.__dict__)
+
+sys.modules[_legacy_name] = _module

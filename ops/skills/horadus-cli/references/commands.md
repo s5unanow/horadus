@@ -2,6 +2,12 @@
 
 ## Repo workflow commands
 
+Implementation note:
+- CLI ownership lives under `tools/horadus/python/horadus_cli/`.
+- `src/cli.py` remains the installed entrypoint shim.
+- App-backed commands cross `src/cli_runtime.py` instead of importing
+  business-app modules into the tooling package.
+
 - For canonical workflow policy, blocker handling, and fallback rules, read
   `AGENTS.md`.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the

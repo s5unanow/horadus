@@ -67,3 +67,4 @@
 - `TASK-308` Keep Workflow Guidance Thin Outside `AGENTS.md` ✅
 - `TASK-309` Refresh `horadus tasks finish` Immediately After a New PR Head Is Pushed ✅
 - `TASK-310` Remove Duplicated App Runtime Modules from `src/horadus_cli/v2/runtime` ✅
+- `TASK-311` Move Horadus CLI Into the Tooling Home and Isolate It from App Runtime Imports ✅

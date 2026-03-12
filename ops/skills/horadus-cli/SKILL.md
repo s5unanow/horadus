@@ -7,6 +7,12 @@ description: Use when operating the Horadus repo through task, sprint, triage, o
 
 Use this skill for repo workflow operations in this project.
 
+Implementation note:
+- Canonical CLI ownership lives under `tools/horadus/python/horadus_cli/`.
+- `src/cli.py` is only the installed entrypoint shim.
+- App-backed commands cross `src/cli_runtime.py`; the tooling package should
+  not import business-app modules directly.
+
 ## Default behavior
 
 - Prefer `horadus` over direct `rg`/`awk`/markdown scraping when the CLI covers

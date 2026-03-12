@@ -1,6 +1,6 @@
 import sys
 
-from tools.horadus.python.horadus_cli import task_query as _module
+from tools.horadus.python.horadus_workflow import task_workflow_policy as _module
 
 _legacy_name = __name__
 globals().update(_module.__dict__)

@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-311`.
+- Next available task IDs start at `TASK-312`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -37,22 +37,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 ---
 
 ## Open Task Ledger
-
-### TASK-080: Telegram Collector Task Wiring [REQUIRES_HUMAN]
-**Priority**: P2 (Medium)
-**Estimate**: 3-5 hours
-
-Wire existing Telegram harvester into worker task and scheduler paths.
-
-**Acceptance Criteria**:
-- [ ] Add `workers.collect_telegram` task implementation in worker tasks module
-- [ ] Add Celery routing and beat scheduling for Telegram collection
-- [ ] Gate execution via `ENABLE_TELEGRAM_INGESTION`
-- [ ] Add configurable Telegram collection interval setting
-- [ ] Include Telegram in source-freshness monitoring/reporting and catch-up eligibility when enabled
-- [ ] Add tests for scheduling/task wiring and disabled-mode behavior
-
----
 
 ### TASK-189: Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]
 **Priority**: P1 (High)

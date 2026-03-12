@@ -2,9 +2,9 @@
 
 ## Status
 
-- Owner:
-- Started:
-- Current state: Not started
+- Owner: Codex
+- Started: 2026-03-12
+- Current state: Done
 - Planning Gates: Not Required — targeted finish-path workflow correction on existing review-gate semantics
 
 ## Goal (1-3 lines)

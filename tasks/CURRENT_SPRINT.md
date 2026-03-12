@@ -26,7 +26,6 @@
 - `TASK-254` Refine and Unify Agent-Facing Context Entry Points
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
-- `TASK-306` Unblock Canonical Finish When Only Outdated Review Threads Remain
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
@@ -63,3 +62,4 @@
 - `TASK-303` Extract Repo Workflow Into a Dedicated Tooling Home ✅
 - `TASK-304` Realign Agent Workflow Docs and Remove Policy Duplication ✅
 - `TASK-305` Let Guarded Task Start Carry Target Planning Intake Files ✅
+- `TASK-306` Unblock Canonical Finish When Only Outdated Review Threads Remain ✅

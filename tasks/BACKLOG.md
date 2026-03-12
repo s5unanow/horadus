@@ -909,26 +909,6 @@ shell and isolated `v2` modules.
 
 ---
 
-### TASK-306: Unblock Canonical Finish When Only Outdated Review Threads Remain
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-
-`horadus tasks finish` can currently reach the green auto-merge stage and still
-leave the PR blocked when GitHub treats an outdated unresolved review thread as
-a merge blocker. Fix the canonical finish flow so it handles that stale-thread
-state without requiring a manual GraphQL thread-resolution fallback.
-
-**Files**: `tools/horadus/python/horadus_workflow/`, `scripts/check_pr_review_gate.py`, `tests/horadus_cli/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`
-
-**Acceptance Criteria**:
-- [ ] `horadus tasks finish` handles outdated unresolved review threads on the current PR head without requiring manual thread resolution when the current head is otherwise green
-- [ ] Actionable current-head review feedback still blocks completion normally
-- [ ] The canonical docs describe the final stale-thread behavior accurately
-- [ ] Regression coverage includes at least one outdated-thread pass path and one current-head actionable-thread blocker path
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

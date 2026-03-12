@@ -67,6 +67,21 @@ def _default_task_closure_guards(monkeypatch: pytest.MonkeyPatch) -> None:
         "_branch_head_alignment_blocker",
         lambda **_kwargs: None,
     )
+
+
+def _disable_outdated_thread_auto_resolution(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_outdated_unresolved_review_thread_ids",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_review_threads",
+        lambda **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should not resolve outdated review threads")
+        ),
+    )
     monkeypatch.setattr(
         task_commands_module,
         "task_closure_state",
@@ -2178,6 +2193,163 @@ def test_unresolved_review_thread_lines_ignores_outdated_threads(
         )
         == []
     )
+
+
+def test_outdated_unresolved_review_thread_ids_reports_only_stale_unresolved_threads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "nodes": [
+                                            {
+                                                "id": "thread-stale-1",
+                                                "isResolved": False,
+                                                "isOutdated": True,
+                                                "comments": {"nodes": []},
+                                            },
+                                            {
+                                                "id": "thread-open-1",
+                                                "isResolved": False,
+                                                "isOutdated": False,
+                                                "comments": {"nodes": []},
+                                            },
+                                            {
+                                                "id": "thread-resolved-1",
+                                                "isResolved": True,
+                                                "isOutdated": True,
+                                                "comments": {"nodes": []},
+                                            },
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    assert task_commands_module._outdated_unresolved_review_thread_ids(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["thread-stale-1"]
+
+    def fake_run_command_without_id(
+        args: list[str], **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout="290\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "reviewThreads": {
+                                        "nodes": [
+                                            {
+                                                "isResolved": False,
+                                                "isOutdated": True,
+                                                "comments": {"nodes": []},
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command_without_id)
+    assert (
+        task_commands_module._outdated_unresolved_review_thread_ids(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+        == []
+    )
+
+
+def test_resolve_review_threads_reports_success_and_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    calls: list[list[str]] = []
+
+    def fake_run_command_ok(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        calls.append(args)
+        return _completed(
+            args, stdout='{"data":{"resolveReviewThread":{"thread":{"id":"x","isResolved":true}}}}'
+        )
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command_ok)
+    ok, lines = task_commands_module._resolve_review_threads(
+        thread_ids=["thread-1", "thread-2"],
+        config=config,
+    )
+    assert ok is True
+    assert lines == [
+        "Resolved outdated review thread automatically: thread-1",
+        "Resolved outdated review thread automatically: thread-2",
+    ]
+    assert all(call[:3] == ["gh", "api", "graphql"] for call in calls)
+    assert task_commands_module._resolve_review_threads(thread_ids=[], config=config) == (True, [])
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1, stderr="boom"),
+    )
+    ok, lines = task_commands_module._resolve_review_threads(
+        thread_ids=["thread-3"],
+        config=config,
+    )
+    assert ok is False
+    assert lines[0] == "Failed to resolve outdated review threads automatically."
+    assert lines[-1] == "boom"
 
 
 def test_unresolved_review_thread_lines_handles_invalid_payloads(
@@ -7112,6 +7284,7 @@ def test_finish_task_data_blocks_immediately_when_required_checks_are_failing(
 def test_finish_task_data_blocks_when_checks_turn_red_after_review_gate_clears(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -7386,6 +7559,7 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
 def test_finish_task_data_uses_non_blocking_pending_check_mode_after_review(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -7855,6 +8029,7 @@ def test_finish_task_data_rejects_review_timeout_override_without_human_approval
 def test_finish_task_data_allows_review_timeout_override_with_human_approval(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setenv("REVIEW_TIMEOUT_SECONDS", "5")
     monkeypatch.setenv("HORADUS_HUMAN_APPROVED_REVIEW_TIMEOUT_OVERRIDE", "1")
     monkeypatch.setattr(
@@ -8026,6 +8201,7 @@ def test_finish_task_data_rejects_review_timeout_policy_bypass(
 def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -8138,6 +8314,7 @@ def test_finish_task_data_allows_merge_when_review_gate_times_out_silently(
 def test_finish_task_data_resumes_from_main_with_explicit_task_id(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -8327,6 +8504,7 @@ def test_finish_task_data_blocks_when_review_gate_process_hangs(
 def test_finish_task_data_blocks_when_merge_command_hangs_after_review_gate_passes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -8681,6 +8859,7 @@ def test_finish_task_data_succeeds_when_pr_already_merged_after_remote_branch_de
 def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -8786,9 +8965,220 @@ def test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it(
     assert lines[-1] == "Task finish passed: merged merge-commit-258 and synced main."
 
 
+def test_finish_task_data_auto_resolves_outdated_threads_before_merge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-306-stale-thread-finish",
+            branch_task_id="TASK-306",
+            task_id="TASK-306",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-306 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_outdated_unresolved_review_thread_ids",
+        lambda **_kwargs: ["PRRT_stale_thread_1"],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_review_threads",
+        lambda **_kwargs: (
+            True,
+            ["Resolved outdated review thread automatically: PRRT_stale_thread_1"],
+        ),
+    )
+    monkeypatch.setattr(task_commands_module, "_wait_for_pr_state", lambda **_kwargs: (True, []))
+    monkeypatch.setattr(
+        task_commands_module,
+        "task_lifecycle_data",
+        lambda *_args, **_kwargs: (
+            task_commands_module.ExitCode.OK,
+            {"lifecycle_state": "local-main-synced", "strict_complete": True},
+            ["Task lifecycle: TASK-306", "- state: local-main-synced", "- strict complete: yes"],
+        ),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/306\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/306"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-306: stale thread finish","body":"Primary-Task: TASK-306\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+            if "--json" in args and "mergeCommit" in args:
+                return _completed(args, stdout="merge-commit-306\n")
+        if args[:4] == ["gh", "pr", "merge", "https://example.invalid/pr/306"]:
+            if "--auto" in args:
+                return _completed(args)
+            return _completed(
+                args,
+                returncode=1,
+                stderr="the base branch policy prohibits the merge. add the `--auto` flag.",
+            )
+        if args[:3] == ["git", "switch", "main"]:
+            return _completed(args)
+        if args[:3] == ["git", "pull", "--ff-only"]:
+            return _completed(args, stdout="Already up to date.\n")
+        if args[:3] == ["git", "cat-file", "-e"]:
+            return _completed(args)
+        if args[:4] == [
+            "git",
+            "show-ref",
+            "--verify",
+            "refs/heads/codex/task-306-stale-thread-finish",
+        ]:
+            return _completed(args, returncode=1)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-306", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["merge_commit"] == "merge-commit-306"
+    assert any(
+        line == "Resolved outdated review thread automatically: PRRT_stale_thread_1"
+        for line in lines
+    )
+    assert lines[-1] == "Task finish passed: merged merge-commit-306 and synced main."
+
+
+def test_finish_task_data_blocks_when_auto_resolving_outdated_threads_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: task_commands_module.FinishContext(
+            branch_name="codex/task-306-stale-thread-finish",
+            branch_task_id="TASK-306",
+            task_id="TASK-306",
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-306 (Primary-Task)"
+        ),
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_wait_for_required_checks", lambda **_kwargs: (True, [])
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_review_gate",
+        lambda **_kwargs: _completed(["review"], stdout="review gate passed"),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_current_required_checks_blocker",
+        lambda **_kwargs: None,
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_outdated_unresolved_review_thread_ids",
+        lambda **_kwargs: ["PRRT_stale_thread_2"],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_review_threads",
+        lambda **_kwargs: (False, ["Failed to resolve outdated review threads automatically."]),
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if (
+            args[:3] == ["gh", "pr", "view"]
+            and len(args) >= 6
+            and args[3].startswith("codex/task-")
+            and "--json" in args
+            and "url" in args
+        ):
+            return _completed(args, stdout="https://example.invalid/pr/306\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/306"]:
+            if "--json" in args and "title,body" in args:
+                return _completed(
+                    args,
+                    stdout='{"title":"TASK-306: stale thread finish","body":"Primary-Task: TASK-306\\n"}\n',
+                )
+            if "--json" in args and "state" in args:
+                return _completed(args, stdout="OPEN\n")
+            if "--json" in args and "isDraft" in args:
+                return _completed(args, stdout="false\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-306", dry_run=False)
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["pr_url"] == "https://example.invalid/pr/306"
+    assert (
+        lines[0]
+        == "Task finish blocked: PR still has outdated unresolved review threads that could not be auto-resolved."
+    )
+    assert lines[-1] == "Failed to resolve outdated review threads automatically."
+
+
 def test_finish_task_data_continues_when_merge_timeout_or_failure_still_results_in_merged_pr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -8922,6 +9312,7 @@ def test_finish_task_data_continues_when_merge_timeout_or_failure_still_results_
 def test_finish_task_data_covers_auto_merge_timeout_and_failure_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
@@ -9144,6 +9535,7 @@ def test_finish_task_data_covers_auto_merge_timeout_and_failure_paths(
 def test_finish_task_data_blocks_when_merge_fails_without_auto_merge_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _disable_outdated_thread_auto_resolution(monkeypatch)
     monkeypatch.setattr(
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )

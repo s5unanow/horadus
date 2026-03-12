@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-306`.
+- Next available task IDs start at `TASK-307`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -906,6 +906,26 @@ The current `horadus tasks finish` implementation already converges when the
 PR has reached `MERGED`. Keep that behavior as part of the canonical baseline
 while `TASK-300` / `TASK-299` migrate the implementation onto the versioned
 shell and isolated `v2` modules.
+
+---
+
+### TASK-306: Unblock Canonical Finish When Only Outdated Review Threads Remain
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+`horadus tasks finish` can currently reach the green auto-merge stage and still
+leave the PR blocked when GitHub treats an outdated unresolved review thread as
+a merge blocker. Fix the canonical finish flow so it handles that stale-thread
+state without requiring a manual GraphQL thread-resolution fallback.
+
+**Files**: `tools/horadus/python/horadus_workflow/`, `scripts/check_pr_review_gate.py`, `tests/horadus_cli/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks finish` handles outdated unresolved review threads on the current PR head without requiring manual thread resolution when the current head is otherwise green
+- [ ] Actionable current-head review feedback still blocks completion normally
+- [ ] The canonical docs describe the final stale-thread behavior accurately
+- [ ] Regression coverage includes at least one outdated-thread pass path and one current-head actionable-thread blocker path
 
 ---
 

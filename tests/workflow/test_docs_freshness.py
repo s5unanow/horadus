@@ -517,6 +517,22 @@ def test_docs_freshness_ignores_missing_thin_workflow_surface(tmp_path: Path) ->
     )
 
 
+def test_thin_surface_forbidden_policy_statements_fails_when_marker_drifts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        docs_freshness_module,
+        "_THIN_SURFACE_FORBIDDEN_POLICY_MARKERS",
+        ("marker that does not exist",),
+    )
+
+    with pytest.raises(
+        RuntimeError,
+        match="thin-surface forbidden policy marker no longer matches a canonical statement",
+    ):
+        docs_freshness_module._thin_surface_forbidden_policy_statements()
+
+
 def test_docs_freshness_keeps_dependency_and_fallback_path_sets_independent(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

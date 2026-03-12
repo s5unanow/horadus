@@ -2,6 +2,12 @@
 
 ## Repo workflow commands
 
+- For canonical workflow policy, blocker handling, and fallback rules, read
+  `AGENTS.md`.
+- Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
+  needed workflow step yet, or when the CLI explicitly tells you a manual
+  recovery step is required.
+
 - `uv run --no-sync horadus tasks preflight`
   - Enforces clean/synced `main`, required hooks, GitHub CLI availability, and no open task PRs unless explicitly bypassed.
 - `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
@@ -18,15 +24,10 @@
   - Mechanical repo-policy verifier; success requires `local-main-synced`.
 - `uv run --no-sync horadus tasks finish TASK-XXX`
   - Canonical task-completion lifecycle command.
-  - Uses the default 600-second (10-minute) review gate unless a human
-    explicitly authorizes a different timeout.
-  - Treats a `THUMBS_UP` reaction from the configured reviewer on the PR
-    summary as a positive review-gate signal; once current-head required
-    checks are green, the CLI may continue early on that signal while still
-    blocking actionable current-head review comments.
   - If the PR head changes after review work starts, the CLI owns any fresh
     re-review request for the new head; the agent should address feedback,
     push changes, and rerun `horadus tasks finish TASK-XXX`.
+  - For merge/review policy and timeout semantics, read `AGENTS.md`.
 - `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
   - Appends one structured workflow friction entry under the gitignored path
     `artifacts/agent/horadus-cli-feedback/entries.jsonl`.
@@ -59,33 +60,3 @@
     - `--path`
     - `--proposal-id`
     - `--lookback-days`
-
-## Output guidance
-
-- Do not skip prerequisite workflow steps such as preflight, guarded task
-  start, or context collection just because the likely end state looks
-  obvious.
-- Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers
-  the step because the CLI encodes sequencing, policy, and verification
-  dependencies rather than just style.
-- Keep using the workflow until prerequisite checks, required verification
-  reruns, and completion verification succeed; do not stop at the first
-  plausible success signal.
-- Treat an empty, partial, or suspiciously narrow workflow result as a
-  retrieval problem first when the missing data likely exists.
-- Before concluding that no result exists, try one or two sensible recovery
-  steps such as broader Horadus queries, alternate filters, or the documented
-  manual recovery path.
-- If a forced fallback is still required after those recovery attempts,
-  record it with `horadus tasks record-friction`; do not log routine success
-  cases or expected empty results.
-- Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
-  needed workflow step yet, or when the CLI explicitly tells you a manual
-  recovery step is required.
-- Use `--format json` for agent consumption.
-- Use text output when the command result is being read directly by a human in a terminal.
-- Treat exit codes as part of the contract:
-  - `0`: success
-  - `2`: validation/policy failure
-  - `3`: not found
-  - `4`: environment/dependency failure

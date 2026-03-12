@@ -137,6 +137,40 @@ _PROJECT_STATUS_ARCHIVE_GUIDANCE = (
     "Do not read `archive/` during normal implementation flow unless a user "
     "explicitly asks for historical context or an archive-aware CLI flag is used."
 )
+_THIN_WORKFLOW_SURFACES: tuple[str, ...] = (
+    "README.md",
+    "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
+)
+_THIN_SURFACE_FORBIDDEN_POLICY_MARKERS: tuple[str, ...] = (
+    "Do not claim a task is complete, done, or finished until",
+    "The default review-gate timeout for `horadus tasks finish` is 600",
+    "Do not proactively suggest changing the `horadus tasks finish` review timeout",
+    "Apply these guardrails only when changing shared workflow helpers,",
+)
+
+
+def _thin_surface_forbidden_policy_statements() -> tuple[str, ...]:
+    canonical_statements = (
+        *completion_guidance_statements(),
+        *workflow_policy_guardrail_statements(),
+    )
+    selected: list[str] = []
+    for marker in _THIN_SURFACE_FORBIDDEN_POLICY_MARKERS:
+        statement = next((value for value in canonical_statements if marker in value), None)
+        if statement is None:
+            raise RuntimeError(
+                "thin-surface forbidden policy marker no longer matches a canonical statement: "
+                f"{marker}"
+            )
+        selected.append(statement)
+    return tuple(selected)
+
+
+_THIN_SURFACE_FORBIDDEN_POLICY_STATEMENTS: tuple[str, ...] = (
+    _thin_surface_forbidden_policy_statements()
+)
 _PLANNING_GATES_LINE_PATTERN = re.compile(
     r"^(?:-\s+)?(?:\*\*)?Planning Gates(?:\*\*)?:\s*(?P<value>.+)$",
     re.MULTILINE,
@@ -1385,5 +1419,25 @@ def run_docs_freshness_check(
                 backlog_text=backlog_text,
             )
         )
+
+    for reference_path in _THIN_WORKFLOW_SURFACES:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            continue
+        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
+        for statement in _THIN_SURFACE_FORBIDDEN_POLICY_STATEMENTS:
+            if _normalize_whitespace(statement) not in normalized_content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_policy_statement_duplicated_outside_agents",
+                    message=(
+                        f"{reference_path} must stay thin and must not duplicate "
+                        "canonical workflow-policy statements owned by AGENTS.md."
+                    ),
+                    path=reference_path,
+                )
+            )
 
     return DocsFreshnessResult(errors=tuple(errors), warnings=tuple(warnings))

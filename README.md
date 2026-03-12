@@ -242,122 +242,21 @@ feeds:
 
 The project uses a `Makefile` to simplify common tasks. Run `make help` to see all available commands.
 
-Task workflow guard commands:
+Fast local development commands:
 
 ```bash
-uv run --no-sync horadus tasks preflight
-uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name
-uv run --no-sync horadus tasks context-pack TASK-XXX
 make agent-check
 uv run --no-sync horadus tasks local-gate --full
-uv run --no-sync horadus tasks lifecycle TASK-XXX --strict
-uv run --no-sync horadus tasks finish TASK-XXX
 ```
 
-Each task PR must use the title:
+Repo workflow guidance:
 
-```text
-TASK-XXX: short summary
-```
+- `AGENTS.md`: canonical workflow policy and completion rules
+- `docs/AGENT_RUNBOOK.md`: short command index for day-to-day operator work
+- `ops/skills/horadus-cli/`: thin agent-oriented CLI helper
 
-Each task PR body must include:
-
-```text
-Primary-Task: TASK-XXX
-```
-
-`horadus tasks safe-start TASK-XXX --name short-name` is the canonical guarded
-task-start command for agents. It enforces sprint eligibility plus sequencing
-checks before creating the canonical `codex/task-XXX-short-name` branch, and
-it can carry forward task-ledger-only intake edits for the target task instead
-of forcing a stash or commit on `main`.
-`make agent-safe-start` is a compatibility wrapper to the same CLI flow.
-
-`horadus tasks finish` is the canonical task-completion command. It does not
-report success unless the branch is pushed, the PR exists, required checks are
-green, the task-close ledger/archive state is already present on the PR head,
-the local branch head / pushed branch head / PR head all match, the review
-gate passes, the PR is merged, and local `main` is synced.
-If the review gate clears or silently times out under the allow policy but the
-current PR head already has failing required checks, the command exits promptly
-with a CI blocker instead of waiting for a later merge/timeout path.
-Outdated or already-resolved review threads are ignored; live unresolved
-threads still block merge completion.
-`make task-finish` is a compatibility wrapper to the same CLI flow.
-
-`horadus tasks lifecycle [TASK-XXX] [--strict]` is the mechanical verifier for
-task lifecycle state. `--strict` succeeds only when the task reaches
-`local-main-synced` and the task has been removed from live ledgers, recorded
-in `tasks/COMPLETED.md`, and preserved in `archive/closed_tasks/`, which is
-the repo policy definition of done.
-
-Do not skip prerequisite workflow steps such as preflight, guarded task start,
-or context collection just because the likely end state looks obvious.
-Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers the
-step because the CLI encodes sequencing, policy, and verification
-dependencies rather than just style.
-Keep using the workflow until prerequisite checks, required verification
-reruns, and completion verification succeed; do not stop at the first
-plausible success signal.
-Treat an empty, partial, or suspiciously narrow workflow result as a
-retrieval problem first when the missing data likely exists.
-Before concluding that no result exists, try one or two sensible recovery
-steps such as broader Horadus queries, alternate filters, or the documented
-manual recovery path.
-If a forced fallback is still required after those recovery attempts, record
-it with `horadus tasks record-friction`; do not log routine success cases or
-expected empty results.
-Treat repo-facing work as incomplete until requested deliverables, required
-repo updates, and required verification/gate runs are finished or explicitly
-reported blocked.
-Implementation, required tests/gates, and required task/doc/status updates
-remain part of the same task unless they are explicitly blocked.
-If a task is blocked, report the exact missing item, the blocker causing it,
-and the furthest completed lifecycle step rather than a vague
-partial-completion claim.
-Do not claim a task is complete, done, or finished until
-`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
-`horadus tasks finish TASK-XXX` completes successfully.
-The default review-gate timeout for `horadus tasks finish` is 600 seconds
-(10 minutes). Agents must not override it unless a human explicitly requested
-a different timeout.
-Do not proactively suggest changing the `horadus tasks finish` review
-timeout; wait the canonical 10-minute window unless the human explicitly
-asked otherwise.
-A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts
-as a positive review-gate signal; once current-head required checks are green,
-`horadus tasks finish` may continue early on that signal while still blocking
-actionable current-head review comments. If the wait window expires while
-unresolved review threads still block the same PR head, the command reports
-that blocker explicitly and requests a fresh `@codex review` instead of
-drifting into a later merge/auto-merge timeout.
-Local commits, local tests, and a clean working tree are checkpoints, not
-completion.
-Do not stop at a local commit boundary unless the user explicitly asked for a
-checkpoint.
-Resolve locally solvable environment blockers before reporting blocked.
-
-`horadus tasks local-gate --full` is the canonical post-task local validation
-gate before push/PR. It stays separate from `make agent-check`, which remains
-the fast inner-loop gate. If the Docker-backed integration step needs the
-daemon, the CLI attempts best-effort local auto-start on supported
-environments before failing with a specific blocker. If `UV_BIN` points to a
-specific `uv` executable, that same binary is used for every `uv`-backed full-
-gate step, including package-build validation. `make local-gate` is a
-compatibility wrapper to the same CLI flow. Its unit-coverage step fails closed
-at `100%` measured coverage for `src/`, matching the repo pre-push hook and CI.
-When the coverage gate fails, use `make test-unit-cov` to reproduce the same
-check locally and inspect the `term-missing` report for missing files, lines,
-or branches before re-running the full gate.
-
-`horadus tasks finish` uses the same Docker-readiness logic when the next
-required action is a Docker-gated push. Unsupported environments fail closed
-with an explicit “start Docker and retry” blocker instead of silently skipping
-integration expectations.
-
-Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
-needed workflow step yet, or when the CLI explicitly tells you a manual
-recovery step is required.
+If you are doing repo workflow work, start from `AGENTS.md` and use the
+runbook/skill as quick references instead of separate policy sources.
 
 ## Production Deployment
 

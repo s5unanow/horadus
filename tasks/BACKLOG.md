@@ -909,29 +909,6 @@ shell and isolated `v2` modules.
 
 ---
 
-### TASK-304: Realign Agent Workflow Docs and Remove Policy Duplication
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-
-`AGENTS.md`, `docs/AGENT_RUNBOOK.md`, and `tasks/BACKLOG.md` currently overlap
-too much on workflow policy, and some backlog/task references still point at
-pre-`TASK-303` workflow owners. Clean up the documentation so the current CLI
-and workflow layout are accurately represented without creating multiple
-competing policy manuals.
-
-**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `docs/RELEASING.md`, `tasks/BACKLOG.md`, `tasks/specs/`, `tasks/exec_plans/`, affected task entries/specs that still reference stale workflow owners, workflow-doc drift checks
-
-**Acceptance Criteria**:
-- [ ] `AGENTS.md` remains the canonical workflow-policy owner
-- [ ] `docs/AGENT_RUNBOOK.md` is reduced to command/index guidance and current CLI usage, without duplicating large workflow-policy blocks from `AGENTS.md`
-- [ ] Other workflow-facing operator docs such as `docs/RELEASING.md` are aligned to the same canonical start/completion CLI flow and do not preserve stale lower-level task-start guidance
-- [ ] `tasks/BACKLOG.md` keeps task-ledger content concise, removes stale canonical command guidance, aligns its task-start guidance to the current canonical CLI flow, and no longer acts as a second workflow policy surface
-- [ ] The documentation set explicitly states that backlog entries stay concise while detailed implementation boundaries, migration strategy, risks, and validation live in exec plans when required
-- [ ] Open tasks and specs that still point at pre-`TASK-303` workflow owners are updated to the current workflow ownership layout
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

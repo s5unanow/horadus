@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-03-12
-- Current state: In progress
+- Current state: Done
 - Planning Gates: Not Required — targeted workflow eligibility fix on existing guarded task-start behavior
 
 ## Goal (1-3 lines)

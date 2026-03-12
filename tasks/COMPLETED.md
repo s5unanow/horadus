@@ -270,3 +270,4 @@
 - TASK-298: Add Phase -1 Planning Gates Without Heavy Process Overhead ✅
 - TASK-303: Extract Repo Workflow Into a Dedicated Tooling Home ✅
 - TASK-304: Realign Agent Workflow Docs and Remove Policy Duplication ✅
+- TASK-305: Let Guarded Task Start Carry Target Planning Intake Files ✅

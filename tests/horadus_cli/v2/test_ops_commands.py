@@ -966,6 +966,7 @@ def test_runtime_payload_and_bridge_command_helpers(monkeypatch: pytest.MonkeyPa
 
 def test_ops_json_default_and_env_defaults_cover_edge_cases(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
 ) -> None:
     @dataclass
     class _Unsupported:
@@ -980,11 +981,26 @@ def test_ops_json_default_and_env_defaults_cover_edge_cases(
     assert ops_module._env_default("API_HOST", "0.0.0.0") == "0.0.0.0"
     monkeypatch.delenv("API_PORT", raising=False)
     assert ops_module._default_agent_base_url() == "http://127.0.0.1:8000"
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY_FILE", raising=False)
+    secret_path = tmp_path / "agent.key"
+    secret_path.write_text("dotenv-secret\n", encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "API_HOST=10.0.0.5\nAPI_PORT=9100\nAPI_KEY_FILE=agent.key\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"
+    assert ops_module._default_api_key() == "dotenv-secret"
     monkeypatch.setenv("API_HOST", "  ")
     assert ops_module._env_default("API_HOST", "0.0.0.0") == "0.0.0.0"
+    assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"
+    assert ops_module._read_secret_file(None) is None
     monkeypatch.setenv("API_HOST", "127.0.0.1")
     monkeypatch.setenv("API_PORT", "9000")
+    monkeypatch.setenv("API_KEY", "shell-secret")
     assert ops_module._default_agent_base_url() == "http://127.0.0.1:9000"
+    assert ops_module._default_api_key() == "shell-secret"
 
 
 def test_runtime_module_helper_functions_cover_result_serialization_and_namespace() -> None:

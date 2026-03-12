@@ -12,6 +12,8 @@ from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
 
+from dotenv import dotenv_values
+
 from tools.horadus.python.horadus_cli.result import CommandResult, ExitCode
 
 _RUNTIME_BRIDGE_MODULE = "src.cli_runtime"
@@ -283,9 +285,47 @@ def _env_default(name: str, default: str) -> str:
     return normalized or default
 
 
+def _dotenv_default(name: str) -> str | None:
+    value = dotenv_values(".env").get(name)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _config_default(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is not None:
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    dotenv_value = _dotenv_default(name)
+    if dotenv_value is not None:
+        return dotenv_value
+    return default
+
+
+def _read_secret_file(path_value: str | None) -> str | None:
+    if path_value is None:
+        return None
+    try:
+        secret = Path(path_value).read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return secret or None
+
+
+def _default_api_key() -> str:
+    direct_value = _config_default("API_KEY", "")
+    if direct_value:
+        return direct_value
+    secret_path = _config_default("API_KEY_FILE", "")
+    return _read_secret_file(secret_path) or ""
+
+
 def _default_agent_base_url() -> str:
-    host = _env_default("API_HOST", "127.0.0.1")
-    port = _env_default("API_PORT", "8000")
+    host = _config_default("API_HOST", "127.0.0.1")
+    port = _config_default("API_PORT", "8000")
     return f"http://{host}:{port}"
 
 
@@ -611,7 +651,7 @@ def register_ops_commands(subparsers: Any) -> None:
     )
     agent_smoke_parser.add_argument(
         "--api-key",
-        default=os.getenv("API_KEY", ""),
+        default=_default_api_key(),
         help="Optional API key used when auth-protected smoke endpoints are checked.",
     )
     agent_smoke_parser.set_defaults(handler=_handle_agent_smoke)

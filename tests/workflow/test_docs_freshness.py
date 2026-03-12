@@ -332,7 +332,7 @@ def test_docs_freshness_flags_missing_hierarchy_heading(tmp_path: Path) -> None:
 def test_docs_freshness_flags_missing_workflow_command_reference(tmp_path: Path) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "README.md").write_text(
+    (tmp_path / "docs" / "AGENT_RUNBOOK.md").write_text(
         WORKFLOW_ESCAPE_HATCH_TEXT + "\n",
         encoding="utf-8",
     )
@@ -468,6 +468,51 @@ def test_docs_freshness_flags_missing_workflow_policy_guardrail_statement(
     assert any(
         issue.rule_id == "workflow_policy_guardrail_statement_missing"
         and issue.path == "tasks/specs/TEMPLATE.md"
+        for issue in result.errors
+    )
+
+
+def test_docs_freshness_flags_workflow_policy_duplication_outside_agents(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(
+        "\n".join(
+            [
+                "Canonical commands only.",
+                completion_guidance_statements()[3],
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(
+        issue.rule_id == "workflow_policy_statement_duplicated_outside_agents"
+        and issue.path == "ops/skills/horadus-cli/references/commands.md"
+        for issue in result.errors
+    )
+
+
+def test_docs_freshness_ignores_missing_thin_workflow_surface(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").unlink()
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert not any(
+        issue.rule_id == "workflow_policy_statement_duplicated_outside_agents"
+        and issue.path == "ops/skills/horadus-cli/references/commands.md"
         for issue in result.errors
     )
 

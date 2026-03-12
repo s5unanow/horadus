@@ -13,64 +13,14 @@ Use this skill for repo workflow operations in this project.
   the workflow.
 - Prefer `--format json` for agent use.
 - Prefer `--dry-run` before any branch-creating command.
+- For canonical workflow policy, completion rules, and merge/review semantics,
+  read `AGENTS.md`.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.
-- Do not skip prerequisite workflow steps such as preflight, guarded task
-  start, or context collection just because the likely end state looks
-  obvious.
-- Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers
-  the step because the CLI encodes sequencing, policy, and verification
-  dependencies rather than just style.
-- Keep using the workflow until prerequisite checks, required verification
-  reruns, and completion verification succeed; do not stop at the first
-  plausible success signal.
-- Treat an empty, partial, or suspiciously narrow workflow result as a
-  retrieval problem first when the missing data likely exists.
-- Before concluding that no result exists, try one or two sensible recovery
-  steps such as broader Horadus queries, alternate filters, or the documented
-  manual recovery path.
 - If a forced fallback is still required after those recovery attempts,
   record it with `horadus tasks record-friction`; do not log routine success
   cases or expected empty results.
-- Treat repo-facing work as incomplete until requested deliverables, required
-  repo updates, and required verification/gate runs are finished or
-  explicitly reported blocked.
-- Implementation, required tests/gates, and required task/doc/status updates
-  remain part of the same task unless they are explicitly blocked.
-- If a task is blocked, report the exact missing item, the blocker causing it,
-  and the furthest completed lifecycle step rather than a vague
-  partial-completion claim.
-- Do not claim a task is complete, done, or finished until
-  `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
-  `horadus tasks finish TASK-XXX` completes successfully.
-- The default review-gate timeout for `horadus tasks finish` is 600 seconds
-  (10 minutes). Agents must not override it unless a human explicitly
-  requested a different timeout.
-- Do not proactively suggest changing the `horadus tasks finish` review
-  timeout; wait the canonical 10-minute window unless the human explicitly
-  asked otherwise.
-- A `THUMBS_UP` reaction from the configured reviewer on the PR summary
-  counts as a positive review-gate signal; once current-head required checks
-  are green, `horadus tasks finish` may continue early on that signal while
-  still blocking actionable current-head review comments.
-- Apply these guardrails only when changing shared workflow helpers, shared
-  workflow config, or review/merge policy behavior; do not inflate unrelated
-  tasks with generic process boilerplate.
-- Before changing shared workflow helpers or shared workflow config,
-  enumerate every caller that depends on the shared behavior.
-- When shared workflow behavior changes, add at least one regression test for
-  an unaffected caller so the change does not silently break other workflow
-  entry points.
-- Before changing review, comment, or reaction handling in merge policy
-  logic, define the current-head and current-window semantics for each signal
-  and regression-test both the intended pass path and at least one stale or
-  non-applicable signal path.
-- Local commits, local tests, and a clean working tree are checkpoints, not
-  completion.
-- Do not stop at a local commit boundary unless the user explicitly asked for
-  a checkpoint.
-- Resolve locally solvable environment blockers before reporting blocked.
 - If Horadus is insufficient or forces a fallback after sensible recovery
   attempts, record one structured friction entry via
   `horadus tasks record-friction`; do not log routine success cases,
@@ -103,5 +53,6 @@ Use this skill for repo workflow operations in this project.
 
 ## When to read more
 
+- For canonical workflow policy and completion rules, read `AGENTS.md`.
 - For command examples and output expectations, read
   `references/commands.md`.

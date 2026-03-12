@@ -137,6 +137,34 @@ _PROJECT_STATUS_ARCHIVE_GUIDANCE = (
     "Do not read `archive/` during normal implementation flow unless a user "
     "explicitly asks for historical context or an archive-aware CLI flag is used."
 )
+_THIN_WORKFLOW_SURFACES: tuple[str, ...] = (
+    "README.md",
+    "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
+)
+_THIN_SURFACE_FORBIDDEN_POLICY_STATEMENTS: tuple[str, ...] = (
+    (
+        "Do not claim a task is complete, done, or finished until "
+        "`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or "
+        "`horadus tasks finish TASK-XXX` completes successfully."
+    ),
+    (
+        "The default review-gate timeout for `horadus tasks finish` is 600 "
+        "seconds (10 minutes). Agents must not override it unless a human "
+        "explicitly requested a different timeout."
+    ),
+    (
+        "Do not proactively suggest changing the `horadus tasks finish` "
+        "review timeout; wait the canonical 10-minute window unless the human "
+        "explicitly asked otherwise."
+    ),
+    (
+        "Apply these guardrails only when changing shared workflow helpers, "
+        "shared workflow config, or review/merge policy behavior; do not "
+        "inflate unrelated tasks with generic process boilerplate."
+    ),
+)
 _PLANNING_GATES_LINE_PATTERN = re.compile(
     r"^(?:-\s+)?(?:\*\*)?Planning Gates(?:\*\*)?:\s*(?P<value>.+)$",
     re.MULTILINE,
@@ -1385,5 +1413,25 @@ def run_docs_freshness_check(
                 backlog_text=backlog_text,
             )
         )
+
+    for reference_path in _THIN_WORKFLOW_SURFACES:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            continue
+        normalized_content = _normalize_whitespace(file_path.read_text(encoding="utf-8"))
+        for statement in _THIN_SURFACE_FORBIDDEN_POLICY_STATEMENTS:
+            if _normalize_whitespace(statement) not in normalized_content:
+                continue
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="workflow_policy_statement_duplicated_outside_agents",
+                    message=(
+                        f"{reference_path} must stay thin and must not duplicate "
+                        "canonical workflow-policy statements owned by AGENTS.md."
+                    ),
+                    path=reference_path,
+                )
+            )
 
     return DocsFreshnessResult(errors=tuple(errors), warnings=tuple(warnings))

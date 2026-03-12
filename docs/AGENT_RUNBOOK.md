@@ -125,19 +125,8 @@ Task PRs must be titled `TASK-XXX: short summary` and include exactly one
 `Primary-Task: TASK-XXX` line in the body.
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
-Before merge, the CLI also requires the primary task to already be removed from
-live `tasks/BACKLOG.md` / `tasks/CURRENT_SPRINT.md`, recorded in
-`tasks/COMPLETED.md`, archived in `archive/closed_tasks/YYYY-QN.md`, and pushed
-so the local task-branch head, remote branch head, and PR head all match.
-The command blocks on actionable current-head feedback, may continue early on
-a qualifying `THUMBS_UP` review signal once current-head required checks are
-green, preserves the full-wait silent-timeout-allow path, and resumes cleanly
-if a prior finish attempt already left the repo on `main` before completion.
-Outdated unresolved review threads do not block completion; if GitHub still
-treats them as merge blockers, the CLI resolves them automatically before
-merge continues. For the full completion contract, review-timeout semantics,
-fresh re-review request ownership, blocker handling, and completion-claim
-policy, see `AGENTS.md`.
+For completion policy, review-timeout semantics, fresh re-review ownership,
+thread handling, and completion-claim rules, see `AGENTS.md`.
 
 Compatibility wrapper:
 - `make task-finish`
@@ -190,15 +179,5 @@ manually before rerunning the workflow command.
 
 ## Shared Workflow/Policy Guardrails
 
-- Apply these guardrails only when changing shared workflow helpers, shared
-  workflow config, or review/merge policy behavior; do not inflate unrelated
-  tasks with generic process boilerplate.
-- Before changing shared workflow helpers or shared workflow config,
-  enumerate every caller that depends on the shared behavior.
-- When shared workflow behavior changes, add at least one regression test for
-  an unaffected caller so the change does not silently break other workflow
-  entry points.
-- Before changing review, comment, or reaction handling in merge policy
-  logic, define the current-head and current-window semantics for each signal
-  and regression-test both the intended pass path and at least one stale or
-  non-applicable signal path.
+See `AGENTS.md` for the canonical shared-workflow guardrails and merge-policy
+rules.

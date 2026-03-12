@@ -55,40 +55,19 @@ CANONICAL_TASK_WORKFLOW_COMMANDS: tuple[WorkflowCommand, ...] = (
 
 WORKFLOW_REFERENCE_PATHS: tuple[str, ...] = (
     "AGENTS.md",
-    "README.md",
     "docs/AGENT_RUNBOOK.md",
     "ops/skills/horadus-cli/SKILL.md",
     "ops/skills/horadus-cli/references/commands.md",
 )
 
-COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
-    "AGENTS.md",
-    "README.md",
-    "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
-    "tasks/BACKLOG.md",
-)
+COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = ("AGENTS.md",)
 
-DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
-    "AGENTS.md",
-    "README.md",
-    "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
-    "ops/skills/horadus-cli/references/commands.md",
-)
+DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = ("AGENTS.md",)
 
-FALLBACK_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
-    "AGENTS.md",
-    "README.md",
-    "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
-    "ops/skills/horadus-cli/references/commands.md",
-)
+FALLBACK_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = ("AGENTS.md",)
 
 WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS: tuple[str, ...] = (
     "AGENTS.md",
-    "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
     "tasks/specs/TEMPLATE.md",
 )
 

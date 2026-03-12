@@ -143,27 +143,33 @@ _THIN_WORKFLOW_SURFACES: tuple[str, ...] = (
     "ops/skills/horadus-cli/SKILL.md",
     "ops/skills/horadus-cli/references/commands.md",
 )
+_THIN_SURFACE_FORBIDDEN_POLICY_MARKERS: tuple[str, ...] = (
+    "Do not claim a task is complete, done, or finished until",
+    "The default review-gate timeout for `horadus tasks finish` is 600",
+    "Do not proactively suggest changing the `horadus tasks finish` review timeout",
+    "Apply these guardrails only when changing shared workflow helpers,",
+)
+
+
+def _thin_surface_forbidden_policy_statements() -> tuple[str, ...]:
+    canonical_statements = (
+        *completion_guidance_statements(),
+        *workflow_policy_guardrail_statements(),
+    )
+    selected: list[str] = []
+    for marker in _THIN_SURFACE_FORBIDDEN_POLICY_MARKERS:
+        statement = next((value for value in canonical_statements if marker in value), None)
+        if statement is None:
+            raise RuntimeError(
+                "thin-surface forbidden policy marker no longer matches a canonical statement: "
+                f"{marker}"
+            )
+        selected.append(statement)
+    return tuple(selected)
+
+
 _THIN_SURFACE_FORBIDDEN_POLICY_STATEMENTS: tuple[str, ...] = (
-    (
-        "Do not claim a task is complete, done, or finished until "
-        "`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or "
-        "`horadus tasks finish TASK-XXX` completes successfully."
-    ),
-    (
-        "The default review-gate timeout for `horadus tasks finish` is 600 "
-        "seconds (10 minutes). Agents must not override it unless a human "
-        "explicitly requested a different timeout."
-    ),
-    (
-        "Do not proactively suggest changing the `horadus tasks finish` "
-        "review timeout; wait the canonical 10-minute window unless the human "
-        "explicitly asked otherwise."
-    ),
-    (
-        "Apply these guardrails only when changing shared workflow helpers, "
-        "shared workflow config, or review/merge policy behavior; do not "
-        "inflate unrelated tasks with generic process boilerplate."
-    ),
+    _thin_surface_forbidden_policy_statements()
 )
 _PLANNING_GATES_LINE_PATTERN = re.compile(
     r"^(?:-\s+)?(?:\*\*)?Planning Gates(?:\*\*)?:\s*(?P<value>.+)$",

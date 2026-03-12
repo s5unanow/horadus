@@ -13,9 +13,13 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 
 from tools.horadus.python.horadus_workflow.repo_workflow import (
+    CANONICAL_SAFE_START_COMMAND,
+    CANONICAL_SAFE_START_REFERENCE_PATHS,
     COMPLETION_GUIDANCE_REFERENCE_PATHS,
     DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS,
     FALLBACK_GUIDANCE_REFERENCE_PATHS,
+    STALE_LOWER_LEVEL_TASK_START_COMMAND,
+    STALE_TASK_START_FORBIDDEN_REFERENCE_PATHS,
     WORKFLOW_ESCAPE_HATCH_TEXT,
     WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS,
     WORKFLOW_REFERENCE_PATHS,
@@ -864,6 +868,48 @@ def run_docs_freshness_check(
                     message=(
                         f"{reference_path} must include the canonical raw git/gh escape-hatch "
                         "guidance."
+                    ),
+                    path=reference_path,
+                )
+            )
+
+    for reference_path in CANONICAL_SAFE_START_REFERENCE_PATHS:
+        file_path = repo_root / reference_path
+        if not file_path.exists():
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="safe_start_reference_file_missing",
+                    message=f"Missing safe-start reference file: {reference_path}",
+                    path=reference_path,
+                )
+            )
+            continue
+
+        content = file_path.read_text(encoding="utf-8")
+        if CANONICAL_SAFE_START_COMMAND not in content:
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="safe_start_reference_missing",
+                    message=(
+                        f"{reference_path} must include the canonical guarded task-start "
+                        f"command: {CANONICAL_SAFE_START_COMMAND}"
+                    ),
+                    path=reference_path,
+                )
+            )
+        if (
+            reference_path in STALE_TASK_START_FORBIDDEN_REFERENCE_PATHS
+            and STALE_LOWER_LEVEL_TASK_START_COMMAND in content
+        ):
+            errors.append(
+                DocsFreshnessIssue(
+                    level="error",
+                    rule_id="stale_task_start_reference_present",
+                    message=(
+                        f"{reference_path} must not teach the stale lower-level task-start "
+                        f"command: {STALE_LOWER_LEVEL_TASK_START_COMMAND}"
                     ),
                     path=reference_path,
                 )

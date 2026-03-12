@@ -28,6 +28,7 @@
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
+- `TASK-304` Realign Agent Workflow Docs and Remove Policy Duplication
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (carried from Sprint 3 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`

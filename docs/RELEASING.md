@@ -1,6 +1,6 @@
 # Release Process Runbook
 
-**Last Verified**: 2026-02-19
+**Last Verified**: 2026-03-12
 
 This runbook defines the standard release workflow for Horadus.
 
@@ -111,7 +111,7 @@ uv run --no-sync horadus tasks preflight
 ```
 3. Create/confirm a `TASK-XXX` and open a dedicated branch from `main`:
 ```bash
-uv run --no-sync horadus tasks start TASK-XXX --name short-name
+uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name
 ```
 4. Keep branch scope to one task only; open one PR for that task.
 5. Include canonical PR metadata field in body:
@@ -154,7 +154,7 @@ make branch-guard
 - Mandatory task-start sequencing guard:
 ```bash
 uv run --no-sync horadus tasks preflight
-uv run --no-sync horadus tasks start TASK-XXX --name short-name
+uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name
 ```
 - Apply/refresh GitHub `main` protection defaults:
 ```bash

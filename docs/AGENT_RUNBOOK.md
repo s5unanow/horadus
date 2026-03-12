@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-09
+**Last Verified**: 2026-03-12
 
 Short command index for day-to-day agent/operator work.
 
@@ -128,88 +128,20 @@ Before merge, the CLI also requires the primary task to already be removed from
 live `tasks/BACKLOG.md` / `tasks/CURRENT_SPRINT.md`, recorded in
 `tasks/COMPLETED.md`, archived in `archive/closed_tasks/YYYY-QN.md`, and pushed
 so the local task-branch head, remote branch head, and PR head all match.
-The finish flow always waits a positive review-gate timeout. Actionable
-current-head review feedback blocks completion. The default review-gate
-timeout is 600 seconds (10 minutes), and agents must not override or suggest
-changing it unless a human explicitly asked for a different timeout. A
-`THUMBS_UP` reaction from the configured reviewer on the PR summary counts as
-a positive review-gate signal, but the gate still waits the full timeout
-window. A silent timeout after the full wait window is allowed to continue
-inside the CLI flow only when the current PR head still has green required
-checks and no unresolved review threads still block merge; red CI or
-unresolved review comments are reported immediately as blockers, and the
-unresolved-thread timeout path requests a fresh `@codex review`
-automatically. Outdated or already-resolved review threads are ignored. If a
-prior finish attempt already left the repo on `main`
-before completion, re-run
-`uv run --no-sync horadus tasks finish TASK-XXX` with the explicit task id so
-the CLI can resume the task PR lifecycle. Do not bypass the CLI with raw
-`gh pr merge` unless the CLI still cannot recover and you need the documented
-manual fallback.
-
-Treat repo-facing work as incomplete until requested deliverables, required
-repo updates, and required verification/gate runs are finished or explicitly
-reported blocked.
-Implementation, required tests/gates, and required task/doc/status updates
-remain part of the same task unless they are explicitly blocked.
-If a task is blocked, report the exact missing item, the blocker causing it,
-and the furthest completed lifecycle step rather than a vague
-partial-completion claim.
-Do not claim a task is complete, done, or finished until
-`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
-`horadus tasks finish TASK-XXX` completes successfully.
-The default review-gate timeout for `horadus tasks finish` is 600 seconds
-(10 minutes). Agents must not override it unless a human explicitly requested
-a different timeout.
-Do not proactively suggest changing the `horadus tasks finish` review
-timeout; wait the canonical 10-minute window unless the human explicitly
-asked otherwise.
-A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts
-as a positive review-gate signal, but the gate still waits the full timeout
-window and still blocks actionable current-head review comments.
+The command waits the required review-gate window, blocks on actionable
+current-head feedback, and resumes cleanly if a prior finish attempt already
+left the repo on `main` before completion. For the full completion contract,
+review-timeout semantics, blocker handling, and completion-claim policy, see
+`AGENTS.md`.
 
 Compatibility wrapper:
 - `make task-finish`
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks finish` flow.
 
-Do not skip prerequisite workflow steps such as preflight, guarded task start,
-or context collection just because the likely end state looks obvious.
-Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers the
-step because the CLI encodes sequencing, policy, and verification
-dependencies rather than just style.
-Keep using the workflow until prerequisite checks, required verification
-reruns, and completion verification succeed; do not stop at the first
-plausible success signal.
-Treat an empty, partial, or suspiciously narrow workflow result as a
-retrieval problem first when the missing data likely exists.
-Before concluding that no result exists, try one or two sensible recovery
-steps such as broader Horadus queries, alternate filters, or the documented
-manual recovery path.
-If a forced fallback is still required after those recovery attempts, record
-it with `horadus tasks record-friction`; do not log routine success cases or
-expected empty results.
-Treat repo-facing work as incomplete until requested deliverables, required
-repo updates, and required verification/gate runs are finished or explicitly
-reported blocked.
-Implementation, required tests/gates, and required task/doc/status updates
-remain part of the same task unless they are explicitly blocked.
-If a task is blocked, report the exact missing item, the blocker causing it,
-and the furthest completed lifecycle step rather than a vague
-partial-completion claim.
-Do not claim a task is complete, done, or finished until
-`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or
-`horadus tasks finish TASK-XXX` completes successfully.
-Local commits, local tests, and a clean working tree are checkpoints, not
-completion.
-Do not stop at a local commit boundary unless the user explicitly asked for a
-checkpoint.
-Resolve locally solvable environment blockers before reporting blocked.
-
 Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
 needed workflow step yet, or when the CLI explicitly tells you a manual
-recovery step is required. A review-gate timeout from `horadus tasks finish`
-that completes silently inside the CLI is not a manual-recovery signal.
+recovery step is required.
 
 14. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 When: record a real Horadus workflow gap or forced fallback in a structured

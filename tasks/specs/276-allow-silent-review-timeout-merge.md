@@ -12,10 +12,10 @@ feedback.
 
 ## Inputs
 
-- Current finish flow in `src/horadus_cli/task_commands.py`
+- Current finish flow in `tools/horadus/python/horadus_workflow/task_workflow_core.py`
 - Review-gate helper in `scripts/check_pr_review_gate.py`
 - Operational behavior observed on PR `#209`
-- Existing finish/review-gate tests in `tests/horadus_cli/v1/test_cli.py` and `tests/unit/scripts/`
+- Existing finish/review-gate tests in `tests/horadus_cli/v2/test_cli.py` and `tests/unit/scripts/`
 
 ## Outputs
 
@@ -41,5 +41,5 @@ feedback.
 
 ## Validation
 
-- `uv run --no-sync pytest tests/unit/scripts/test_check_pr_review_gate.py tests/horadus_cli/v1/test_cli.py -k review_gate -q`
+- `uv run --no-sync pytest tests/unit/scripts/test_check_pr_review_gate.py tests/horadus_cli/v2/test_cli.py -k review_gate -q`
 - `uv run --no-sync horadus tasks local-gate --full`

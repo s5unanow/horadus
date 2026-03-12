@@ -24,6 +24,8 @@ from tools.horadus.python.horadus_workflow.docs_freshness import (
     run_docs_freshness_check,
 )
 from tools.horadus.python.horadus_workflow.repo_workflow import (
+    CANONICAL_SAFE_START_COMMAND,
+    STALE_LOWER_LEVEL_TASK_START_COMMAND,
     WORKFLOW_ESCAPE_HATCH_TEXT,
     canonical_task_workflow_command_templates,
     completion_guidance_statements,
@@ -85,7 +87,15 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         encoding="utf-8",
     )
     (repo_root / "tasks" / "BACKLOG.md").write_text(
-        completion_guidance_block,
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "## Task Branching Policy (Hard Rule)",
+                CANONICAL_SAFE_START_COMMAND,
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
     (repo_root / "AGENTS.md").write_text(
@@ -117,12 +127,6 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
             [
                 workflow_reference_block.strip(),
                 "",
-                completion_guidance_block.strip(),
-                "",
-                dependency_guidance_block.strip(),
-                "",
-                fallback_guidance_block.strip(),
-                "",
             ]
         ),
         encoding="utf-8",
@@ -130,15 +134,11 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     (repo_root / "docs" / "AGENT_RUNBOOK.md").write_text(
         "\n".join(
             [
+                f"**Last Verified**: {marker_date}",
+                "",
                 workflow_reference_block.strip(),
                 "",
-                completion_guidance_block.strip(),
-                "",
-                dependency_guidance_block.strip(),
-                "",
-                fallback_guidance_block.strip(),
-                "",
-                workflow_guardrail_block.strip(),
+                "See `AGENTS.md` for the canonical workflow policy.",
                 "",
             ]
         ),
@@ -148,14 +148,6 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         "\n".join(
             [
                 workflow_reference_block.strip(),
-                "",
-                completion_guidance_block.strip(),
-                "",
-                dependency_guidance_block.strip(),
-                "",
-                fallback_guidance_block.strip(),
-                "",
-                workflow_guardrail_block.strip(),
                 "",
             ]
         ),
@@ -223,7 +215,13 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         encoding="utf-8",
     )
     (repo_root / "docs" / "RELEASING.md").write_text(
-        f"**Last Verified**: {marker_date}\n",
+        "\n".join(
+            [
+                f"**Last Verified**: {marker_date}",
+                CANONICAL_SAFE_START_COMMAND,
+                "",
+            ]
+        ),
         encoding="utf-8",
     )
     (repo_root / "docs" / "API.md").write_text(
@@ -366,7 +364,7 @@ def test_docs_freshness_flags_missing_workflow_escape_hatch_guidance(tmp_path: P
 def test_docs_freshness_flags_missing_completion_guidance_statement(tmp_path: Path) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "tasks" / "BACKLOG.md").write_text(
+    (tmp_path / "AGENTS.md").write_text(
         "\n".join(completion_guidance_statements()[1:]) + "\n",
         encoding="utf-8",
     )
@@ -384,7 +382,7 @@ def test_docs_freshness_flags_missing_dependency_guidance_statement(
 ) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(
+    (tmp_path / "AGENTS.md").write_text(
         "\n".join(dependency_aware_guidance_statements()[1:]) + "\n",
         encoding="utf-8",
     )
@@ -400,7 +398,7 @@ def test_docs_freshness_flags_missing_dependency_guidance_statement(
 def test_docs_freshness_flags_missing_fallback_guidance_statement(tmp_path: Path) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
-    (tmp_path / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
+    (tmp_path / "AGENTS.md").write_text(
         "\n".join(fallback_guidance_statements()[1:]) + "\n",
         encoding="utf-8",
     )
@@ -411,6 +409,45 @@ def test_docs_freshness_flags_missing_fallback_guidance_statement(tmp_path: Path
     )
 
     assert any(issue.rule_id == "fallback_guidance_statement_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_missing_safe_start_reference(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "RELEASING.md").write_text(
+        f"**Last Verified**: {marker_date}\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "safe_start_reference_missing" for issue in result.errors)
+
+
+def test_docs_freshness_flags_stale_lower_level_task_start_reference(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "docs" / "RELEASING.md").write_text(
+        "\n".join(
+            [
+                f"**Last Verified**: {marker_date}",
+                CANONICAL_SAFE_START_COMMAND,
+                STALE_LOWER_LEVEL_TASK_START_COMMAND,
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(issue.rule_id == "stale_task_start_reference_present" for issue in result.errors)
 
 
 def test_docs_freshness_flags_missing_workflow_policy_guardrail_statement(

@@ -15,7 +15,7 @@ accepted.
 
 - Canonical workflow policy in `AGENTS.md`
 - Operator guidance in `docs/AGENT_RUNBOOK.md`
-- Finish-flow implementation in `src/horadus_cli/v2/task_workflow_core.py`
+- Finish-flow implementation in `tools/horadus/python/horadus_workflow/task_workflow_core.py`
 - Existing finish/review-gate unit coverage in `tests/horadus_cli/v2/test_cli.py` and `tests/unit/scripts/`
 
 ## Outputs

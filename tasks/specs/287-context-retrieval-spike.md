@@ -17,7 +17,7 @@ heavier infrastructure.
 
 - Existing context surfaces in `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`,
   `PROJECT_STATUS.md`, `AGENTS.md`, and `docs/AGENT_RUNBOOK.md`
-- Current `horadus tasks context-pack` behavior in `src/horadus_cli/task_commands.py`
+- Current `horadus tasks context-pack` behavior in `src/horadus_cli/v2/task_commands.py`
 - Current task/spec templates in `tasks/specs/TEMPLATE.md`
 - External guidance for retrieval, prompt variables, and optional MCP/resource
   patterns

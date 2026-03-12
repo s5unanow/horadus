@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-304`.
+- Next available task IDs start at `TASK-305`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -24,29 +24,15 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Task Branching Policy (Hard Rule)
 
-- Every implementation task must be executed on a dedicated task branch created from `main`.
-- Each task branch must contain changes for one `TASK-XXX` only.
-- Starting a task branch must pass sequencing preflight (`make task-preflight`) and use guarded branch creation (`make task-start TASK=XXX NAME=short-name`).
-- Task start is blocked unless `main` is clean + synced and there are no open non-merged task PRs for the current operator.
-- Open one PR per task branch; merge only after required checks are green.
-- Every task PR body must include a single canonical metadata line: `Primary-Task: TASK-XXX` (must match branch task ID).
-- Delete merged task branches to reduce stale branch drift.
-- Mandatory start sequence per task: `git switch main` → `git pull --ff-only` → create/switch task branch.
-- Mandatory completion sequence per task: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify merge commit is present locally.
-- Autonomous engineering-task completion is defined as full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync).
-- Treat repo-facing work as incomplete until requested deliverables, required repo updates, and required verification/gate runs are finished or explicitly reported blocked.
-- Implementation, required tests/gates, and required task/doc/status updates remain part of the same task unless they are explicitly blocked.
-- If a task is blocked, report the exact missing item, the blocker causing it, and the furthest completed lifecycle step rather than a vague partial-completion claim.
+- Treat `AGENTS.md` as the canonical workflow-policy owner; keep this ledger focused on open task definitions.
+- Every implementation task must run on a dedicated task branch created from `main`, with one `TASK-XXX` per branch/PR.
+- Start task work with the canonical guarded flow:
+  - `uv run --no-sync horadus tasks preflight`
+  - `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
+- `make task-preflight`, `make task-start`, and `make agent-safe-start` remain compatibility wrappers only.
+- Every task PR body must include exactly one canonical metadata line: `Primary-Task: TASK-XXX`.
 - Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
-- The default review-gate timeout for `horadus tasks finish` is 600 seconds (10 minutes). Agents must not override it unless a human explicitly requested a different timeout.
-- Do not proactively suggest changing the `horadus tasks finish` review timeout; wait the canonical 10-minute window unless the human explicitly asked otherwise.
-- A `THUMBS_UP` reaction from the configured reviewer on the PR summary counts as a positive review-gate signal, but the gate still waits the full timeout window and still blocks actionable current-head review comments.
-- Local commits, local tests, and a clean working tree are checkpoints, not completion.
-- Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
-- Resolve locally solvable environment blockers before reporting blocked.
-- If any lifecycle step is blocked (permissions/CI/platform), stop at the furthest completed step and capture exact blocker + required manual action.
-- If unrelated work appears, create a new task immediately but do not switch branches by default; continue current task unless the new work blocks current acceptance criteria or is urgent.
-- Never mix two tasks in one commit/PR; blockers must be done on a separate task branch after a safe checkpoint.
+- Keep backlog entries concise and task-shaped; detailed implementation boundaries, migration strategy, risks, and validation belong in the exec plan when one exists.
 
 ---
 
@@ -359,7 +345,7 @@ classification. That reintroduces the semantic drift the earlier task removed.
 Replace raw line-grep style search hits in triage bundles with deduplicated,
 task-aware matches that are directly useful to agents during backlog review.
 
-**Files**: `src/horadus_cli/triage_commands.py`, `src/horadus_cli/task_repo.py`, `tests/unit/`
+**Files**: `src/horadus_cli/v2/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tools/horadus/python/horadus_workflow/task_repo.py`, `tests/horadus_cli/`, `tests/workflow/`
 
 **Acceptance Criteria**:
 - [ ] Convert keyword/path/proposal search hits into task-aware records with `task_id`, title, status, and matched fields
@@ -378,7 +364,7 @@ The current triage bundle returns long flat assessment path lists. Replace that
 with compact summaries that preserve recent-signal value without flooding agent
 contexts.
 
-**Files**: `src/horadus_cli/triage_commands.py`, `tests/unit/`
+**Files**: `src/horadus_cli/v2/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tests/horadus_cli/`, `tests/workflow/`
 
 **Acceptance Criteria**:
 - [ ] Group recent assessments by role with counts and latest artifact metadata
@@ -737,7 +723,7 @@ runtime code, and existing runbook/context-pack entry points. Refine those
 entrypoints into a more coherent agent-facing navigation layer without creating
 another canonical project summary to keep in sync.
 
-**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/`, `scripts/check_docs_freshness.py`, `src/core/docs_freshness.py`, `tests/unit/core/test_docs_freshness.py`, `tests/unit/`
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/v2/`, `tools/horadus/python/horadus_workflow/docs_freshness.py`, `scripts/check_docs_freshness.py`, `tests/workflow/`, `tests/horadus_cli/`
 
 **Acceptance Criteria**:
 - [ ] Refine or unify the existing agent-facing entrypoints (`AGENTS.md`, runbook, context-pack guidance) into a clearer navigation path
@@ -799,7 +785,7 @@ agent-facing materials to route to canonical sources rather than redefine them.
 Add a thin repo workflow skill that helps agents execute the canonical flow
 while staying anchored to `AGENTS.md` and the `horadus` CLI.
 
-**Files**: `ops/skills/repo-workflow/SKILL.md`, `ops/skills/repo-workflow/references/`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/unit/core/test_docs_freshness.py`, `scripts/`
+**Files**: `ops/skills/repo-workflow/SKILL.md`, `ops/skills/repo-workflow/references/`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/workflow/test_docs_freshness.py`, `scripts/`
 
 **Acceptance Criteria**:
 - [ ] Add a dedicated repo workflow skill that provides short procedural guidance for the canonical task lifecycle

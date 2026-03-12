@@ -269,3 +269,4 @@
 - TASK-301: Move All Horadus CLI Functionality to `v2` and Delete `v1` ✅
 - TASK-298: Add Phase -1 Planning Gates Without Heavy Process Overhead ✅
 - TASK-303: Extract Repo Workflow Into a Dedicated Tooling Home ✅
+- TASK-304: Realign Agent Workflow Docs and Remove Policy Duplication ✅

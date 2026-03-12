@@ -67,6 +67,7 @@ Execution context policy (keep it small):
 - For implementation work, prefer `tasks/CURRENT_SPRINT.md` plus the specific task spec it references; avoid reading all of `tasks/BACKLOG.md` unless you are doing triage/planning.
 - Do not read `archive/` or `archive/closed_tasks/` during normal implementation flow unless the user explicitly asks for historical context.
 - For tasks with high complexity (estimate >2 hours, touches >5 files, involves migrations, LLM/pipeline changes, or probability math/ops guardrails), maintain a living execution plan at `tasks/exec_plans/TASK-XXX.md` using `tasks/exec_plans/TEMPLATE.md`.
+- Keep backlog entries concise and task-shaped; detailed implementation boundaries, migration strategy, risks, and validation belong in the exec plan when one exists.
 - Apply these guardrails only when changing shared workflow helpers, shared workflow config, or review/merge policy behavior; do not inflate unrelated tasks with generic process boilerplate.
 - Before changing shared workflow helpers or shared workflow config, enumerate every caller that depends on the shared behavior.
 - When shared workflow behavior changes, add at least one regression test for an unaffected caller so the change does not silently break other workflow entry points.

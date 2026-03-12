@@ -61,34 +61,35 @@ WORKFLOW_REFERENCE_PATHS: tuple[str, ...] = (
     "ops/skills/horadus-cli/references/commands.md",
 )
 
-COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
+CANONICAL_SAFE_START_REFERENCE_PATHS: tuple[str, ...] = (
     "AGENTS.md",
-    "README.md",
     "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
+    "docs/RELEASING.md",
     "tasks/BACKLOG.md",
 )
 
-DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
-    "AGENTS.md",
-    "README.md",
+STALE_TASK_START_FORBIDDEN_REFERENCE_PATHS: tuple[str, ...] = (
     "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
-    "ops/skills/horadus-cli/references/commands.md",
+    "docs/RELEASING.md",
+    "tasks/BACKLOG.md",
 )
 
-FALLBACK_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = (
-    "AGENTS.md",
-    "README.md",
-    "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
-    "ops/skills/horadus-cli/references/commands.md",
+CANONICAL_SAFE_START_COMMAND = (
+    f"uv run --no-sync horadus tasks safe-start {TASK_ID_PLACEHOLDER} --name short-name"
 )
+
+STALE_LOWER_LEVEL_TASK_START_COMMAND = (
+    f"uv run --no-sync horadus tasks start {TASK_ID_PLACEHOLDER} --name short-name"
+)
+
+COMPLETION_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = ("AGENTS.md",)
+
+DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = ("AGENTS.md",)
+
+FALLBACK_GUIDANCE_REFERENCE_PATHS: tuple[str, ...] = ("AGENTS.md",)
 
 WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS: tuple[str, ...] = (
     "AGENTS.md",
-    "docs/AGENT_RUNBOOK.md",
-    "ops/skills/horadus-cli/SKILL.md",
     "tasks/specs/TEMPLATE.md",
 )
 

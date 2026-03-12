@@ -125,6 +125,9 @@ Task PRs must be titled `TASK-XXX: short summary` and include exactly one
 `Primary-Task: TASK-XXX` line in the body.
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
+If you rerun `finish` after pushing a new PR head, the CLI refreshes stale
+older-head review state, requests fresh current-head review when needed, and
+starts a fresh review window before waiting again.
 For completion policy, review-timeout semantics, fresh re-review ownership,
 thread handling, and completion-claim rules, see `AGENTS.md`.
 

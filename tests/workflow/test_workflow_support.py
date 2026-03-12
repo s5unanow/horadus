@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 import tools.horadus.python.horadus_workflow.pr_review_gate as pr_review_gate_module
+import tools.horadus.python.horadus_workflow.review_defaults as review_defaults_module
 import tools.horadus.python.horadus_workflow.task_repo as task_repo_module
 import tools.horadus.python.horadus_workflow.triage as triage_module
 
@@ -173,6 +174,11 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
 def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
+    assert (
+        pr_review_gate_module.DEFAULT_REVIEW_TIMEOUT_SECONDS
+        == review_defaults_module.DEFAULT_REVIEW_TIMEOUT_SECONDS
+    )
+
     monkeypatch.setattr(
         pr_review_gate_module.subprocess,
         "run",

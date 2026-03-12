@@ -109,6 +109,14 @@ COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
         "on that signal while still blocking actionable current-head review "
         "comments."
     ),
+    (
+        "If the PR head changes during or between finish invocations after "
+        "review work starts, the CLI must immediately revalidate current-head "
+        "merge readiness, auto-resolve outdated unresolved older-head review "
+        "threads, request fresh review once for the new head when needed, "
+        "discard the older review-window context, and start a fresh review "
+        "window."
+    ),
     "Local commits, local tests, and a clean working tree are checkpoints, not completion.",
     "Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.",
     "Resolve locally solvable environment blockers before reporting blocked.",

@@ -15,6 +15,9 @@ from pathlib import Path
 from typing import Any
 
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
+from tools.horadus.python.horadus_workflow.review_defaults import (
+    DEFAULT_REVIEW_TIMEOUT_SECONDS,
+)
 from tools.horadus.python.horadus_workflow.task_repo import (
     CLOSED_TASK_ARCHIVE_GUIDANCE,
     TaskClosureState,
@@ -50,7 +53,6 @@ from tools.horadus.python.horadus_workflow.task_workflow_policy import (
 TASK_BRANCH_PATTERN = re.compile(r"^codex/task-(?P<number>\d{3})-[a-z0-9][a-z0-9._-]*$")
 DEFAULT_CHECKS_TIMEOUT_SECONDS = 1800
 DEFAULT_CHECKS_POLL_SECONDS = 10
-DEFAULT_REVIEW_TIMEOUT_SECONDS = 600
 DEFAULT_REVIEW_POLL_SECONDS = 10
 DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
@@ -587,7 +589,8 @@ def _read_review_timeout_seconds_env() -> int:
     approval = approval_raw.strip().lower() if approval_raw is not None else ""
     if approval not in {"1", "true", "yes"}:
         raise ValueError(
-            "REVIEW_TIMEOUT_SECONDS may differ from the default 600s (10 minutes) only when "
+            "REVIEW_TIMEOUT_SECONDS may differ from the default "
+            f"{DEFAULT_REVIEW_TIMEOUT_SECONDS}s ({DEFAULT_REVIEW_TIMEOUT_SECONDS // 60} minutes) only when "
             f"{REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV}=1 confirms an explicit human request."
         )
     return value
@@ -1785,6 +1788,93 @@ def _maybe_request_fresh_review(*, pr_url: str, config: FinishConfig) -> list[st
     ]
 
 
+def _fresh_review_request_blocker(
+    *, pr_url: str, config: FinishConfig
+) -> tuple[list[str], tuple[str, dict[str, Any], list[str]] | None]:
+    request_lines = _maybe_request_fresh_review(pr_url=pr_url, config=config)
+    if request_lines and request_lines[0].startswith("Failed"):
+        return (
+            [],
+            (
+                "unable to request a fresh current-head review automatically.",
+                {},
+                request_lines,
+            ),
+        )
+    return (request_lines, None)
+
+
+def _needs_pre_review_fresh_review_request(*, pr_url: str, config: FinishConfig) -> bool:
+    pr_result = _run_command(
+        [config.gh_bin, "pr", "view", pr_url, "--json", "number,headRefOid", "--jq", "."]
+    )
+    repo_result = _run_command(
+        [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
+    )
+    if pr_result.returncode != 0 or repo_result.returncode != 0:
+        raise ValueError("Unable to determine PR metadata for pre-review refresh state.")
+    try:
+        pr_payload = json.loads(pr_result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Unable to parse PR metadata for pre-review refresh state.") from exc
+    if not isinstance(pr_payload, dict):
+        raise ValueError("Unable to parse PR metadata for pre-review refresh state.")
+    pr_number = pr_payload.get("number")
+    head_oid = str(pr_payload.get("headRefOid") or "").strip()
+    repo_name = repo_result.stdout.strip()
+    if not isinstance(pr_number, int) or "/" not in repo_name or not head_oid:
+        raise ValueError("Unable to determine PR metadata for pre-review refresh state.")
+
+    reviews_result = _run_command(
+        [
+            config.gh_bin,
+            "api",
+            "--paginate",
+            "--slurp",
+            f"repos/{repo_name}/pulls/{pr_number}/reviews",
+        ]
+    )
+    if reviews_result.returncode != 0:
+        raise ValueError("Unable to inspect prior reviewer activity for pre-review refresh.")
+    try:
+        reviews_payload = json.loads(reviews_result.stdout or "[]")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Unable to parse prior reviewer activity for pre-review refresh.") from exc
+
+    review_entries: list[dict[str, Any]] = []
+    if isinstance(reviews_payload, list):
+        if all(isinstance(entry, dict) for entry in reviews_payload):
+            review_entries = [entry for entry in reviews_payload if isinstance(entry, dict)]
+        else:
+            for page in reviews_payload:
+                if not isinstance(page, list):
+                    raise ValueError("Unexpected prior reviewer activity payload.")
+                for entry in page:
+                    if not isinstance(entry, dict):
+                        raise ValueError("Unexpected prior reviewer activity payload.")
+                    review_entries.append(entry)
+    else:
+        raise ValueError("Unexpected prior reviewer activity payload.")
+
+    saw_current_head_review = False
+    saw_other_head_review = False
+    for review in review_entries:
+        user = review.get("user")
+        if not isinstance(user, dict):
+            continue
+        login = str(user.get("login") or "").strip()
+        if login != config.review_bot_login:
+            continue
+        commit_id = str(review.get("commit_id") or "").strip()
+        if not commit_id:
+            continue
+        if commit_id == head_oid:
+            saw_current_head_review = True
+        else:
+            saw_other_head_review = True
+    return saw_other_head_review and not saw_current_head_review
+
+
 def _wait_for_required_checks(*, pr_url: str, config: FinishConfig) -> tuple[bool, list[str], str]:
     deadline = time.time() + config.checks_timeout_seconds
     while True:
@@ -1853,6 +1943,97 @@ def _current_head_finish_blocker(
         blocker_message, blocker_lines = checks_blocker
         return (blocker_message, {}, blocker_lines)
     return None
+
+
+def _head_changed_review_gate_blocker(
+    *,
+    context: FinishContext,
+    pr_url: str,
+    config: FinishConfig,
+    review_lines: list[str],
+) -> tuple[int, dict[str, Any], list[str]] | None:
+    blocker = _current_head_finish_blocker(context=context, pr_url=pr_url, config=config)
+    if blocker is None:
+        return None
+    blocker_message, blocker_data, blocker_lines = blocker
+    return _task_blocked(
+        blocker_message,
+        next_action=(
+            "Ensure the updated PR head is pushed, task-close state is present on that head, "
+            "and current-head required checks are green, then re-run `horadus tasks finish`."
+        ),
+        data={
+            "task_id": context.task_id,
+            "branch_name": context.branch_name,
+            "pr_url": pr_url,
+            **blocker_data,
+        },
+        extra_lines=[*review_lines, *blocker_lines],
+    )
+
+
+def _prepare_current_head_review_window(
+    *, context: FinishContext, pr_url: str, config: FinishConfig
+) -> tuple[list[str], tuple[str, dict[str, Any], list[str]] | None]:
+    blocker = _current_head_finish_blocker(context=context, pr_url=pr_url, config=config)
+    if blocker is not None:
+        return ([], blocker)
+
+    try:
+        stale_thread_ids = _outdated_unresolved_review_thread_ids(pr_url=pr_url, config=config)
+        needs_fresh_review_request = bool(stale_thread_ids)
+        if not needs_fresh_review_request:
+            needs_fresh_review_request = _needs_pre_review_fresh_review_request(
+                pr_url=pr_url,
+                config=config,
+            )
+    except ValueError as exc:
+        return (
+            [],
+            (
+                "unable to determine outdated review thread state on the current head.",
+                {},
+                [str(exc)],
+            ),
+        )
+
+    if not needs_fresh_review_request:
+        return ([], None)
+
+    review_refresh_lines: list[str] = []
+    if stale_thread_ids:
+        resolved_ok, stale_thread_lines = _resolve_review_threads(
+            thread_ids=stale_thread_ids,
+            config=config,
+        )
+        if not resolved_ok:
+            return (
+                [],
+                (
+                    "PR still has outdated unresolved review threads that could not be auto-resolved.",
+                    {},
+                    stale_thread_lines,
+                ),
+            )
+        review_refresh_lines.extend(stale_thread_lines)
+    request_lines, request_blocker = _fresh_review_request_blocker(
+        pr_url=pr_url,
+        config=config,
+    )
+    if request_blocker is not None:
+        return ([], request_blocker)
+    review_refresh_lines.extend(request_lines)
+    if stale_thread_ids:
+        review_refresh_lines.append(
+            "Refreshed stale review state for the current head; discarding the previous "
+            f"review window and starting a fresh {config.review_timeout_seconds}s review window."
+        )
+    else:
+        review_refresh_lines.append(
+            "Detected reviewer activity on an older head; discarding the previous "
+            f"review window and starting a fresh {config.review_timeout_seconds}s review window."
+        )
+    return (review_refresh_lines, None)
 
 
 def _review_gate_lines(review_result: ReviewGateResult) -> list[str]:
@@ -3275,6 +3456,41 @@ def finish_task_data(
                 extra_lines=check_lines,
             )
 
+        refresh_lines, refresh_blocker = _prepare_current_head_review_window(
+            context=context,
+            pr_url=pr_url,
+            config=config,
+        )
+        if refresh_blocker is not None:
+            blocker_message, blocker_data, blocker_lines = refresh_blocker
+            blocker_exit_code = (
+                ExitCode.ENVIRONMENT_ERROR
+                if blocker_message.startswith(
+                    (
+                        "unable to determine outdated",
+                        "unable to request a fresh current-head review",
+                        "PR still has outdated unresolved review threads",
+                    )
+                )
+                else ExitCode.VALIDATION_ERROR
+            )
+            return _task_blocked(
+                blocker_message,
+                next_action=(
+                    "Ensure the current PR head is merge-ready and GitHub review state is readable, "
+                    "then re-run `horadus tasks finish`."
+                ),
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                    **blocker_data,
+                },
+                exit_code=blocker_exit_code,
+                extra_lines=blocker_lines,
+            )
+        lines.extend(refresh_lines)
+
         while True:
             lines.append(
                 "Waiting for review gate "
@@ -3315,16 +3531,26 @@ def finish_task_data(
             review_lines = _review_gate_lines(review_gate)
 
             if review_gate.status == "head_changed":
-                blocker = _current_head_finish_blocker(
-                    context=context, pr_url=pr_url, config=config
+                blocker = _head_changed_review_gate_blocker(
+                    context=context,
+                    pr_url=pr_url,
+                    config=config,
+                    review_lines=review_lines,
                 )
                 if blocker is not None:
-                    blocker_message, blocker_data, blocker_lines = blocker
+                    return blocker
+                lines.extend(review_lines)
+                request_lines, request_blocker = _fresh_review_request_blocker(
+                    pr_url=pr_url,
+                    config=config,
+                )
+                if request_blocker is not None:
+                    blocker_message, blocker_data, blocker_lines = request_blocker
                     return _task_blocked(
                         blocker_message,
                         next_action=(
-                            "Ensure the updated PR head is pushed, task-close state is present on that head, "
-                            "and current-head required checks are green, then re-run `horadus tasks finish`."
+                            "Fix the fresh-review request failure for the current PR head, then "
+                            "re-run `horadus tasks finish`."
                         ),
                         data={
                             "task_id": context.task_id,
@@ -3332,10 +3558,10 @@ def finish_task_data(
                             "pr_url": pr_url,
                             **blocker_data,
                         },
+                        exit_code=ExitCode.ENVIRONMENT_ERROR,
                         extra_lines=[*review_lines, *blocker_lines],
                     )
-                lines.extend(review_lines)
-                lines.extend(_maybe_request_fresh_review(pr_url=pr_url, config=config))
+                lines.extend(request_lines)
                 continue
 
             if review_gate.status == "block":

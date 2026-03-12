@@ -1,3 +1,6 @@
+from tools.horadus.python.horadus_workflow.review_defaults import (
+    DEFAULT_REVIEW_TIMEOUT_SECONDS as DEFAULT_REVIEW_TIMEOUT_SECONDS,
+)
 from tools.horadus.python.horadus_workflow.task_workflow_core import (
     DEFAULT_CHECKS_POLL_SECONDS as DEFAULT_CHECKS_POLL_SECONDS,
 )
@@ -24,9 +27,6 @@ from tools.horadus.python.horadus_workflow.task_workflow_core import (
 )
 from tools.horadus.python.horadus_workflow.task_workflow_core import (
     DEFAULT_REVIEW_TIMEOUT_POLICY as DEFAULT_REVIEW_TIMEOUT_POLICY,
-)
-from tools.horadus.python.horadus_workflow.task_workflow_core import (
-    DEFAULT_REVIEW_TIMEOUT_SECONDS as DEFAULT_REVIEW_TIMEOUT_SECONDS,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_core import (
     FRICTION_LOG_DIRECTORY as FRICTION_LOG_DIRECTORY,

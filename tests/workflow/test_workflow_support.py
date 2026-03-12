@@ -53,6 +53,9 @@ def test_task_repo_root_override_env_and_discovery_paths(
     override_root.mkdir()
     task_repo_module.set_repo_root_override(override_root)
     assert task_repo_module.repo_root() == override_root.resolve()
+    monkeypatch.setenv("HORADUS_REPO_ROOT", str(env_root))
+    assert task_repo_module.repo_root() == override_root.resolve()
+    monkeypatch.delenv("HORADUS_REPO_ROOT", raising=False)
     task_repo_module.clear_repo_root_override()
     assert task_repo_module._REPO_ROOT_OVERRIDE is None
 

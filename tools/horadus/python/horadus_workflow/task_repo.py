@@ -124,11 +124,11 @@ def _looks_like_repo_root(path: Path) -> bool:
 
 
 def _discover_repo_root() -> Path:
+    if _REPO_ROOT_OVERRIDE is not None:
+        return _REPO_ROOT_OVERRIDE
     env_root = os.getenv(_REPO_ROOT_ENV)
     if env_root:
         return Path(env_root).resolve()
-    if _REPO_ROOT_OVERRIDE is not None:
-        return _REPO_ROOT_OVERRIDE
 
     search_starts = (Path(__file__).resolve(), Path.cwd().resolve())
     for start in search_starts:

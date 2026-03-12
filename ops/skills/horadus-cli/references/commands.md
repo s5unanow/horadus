@@ -21,8 +21,12 @@
   - Uses the default 600-second (10-minute) review gate unless a human
     explicitly authorizes a different timeout.
   - Treats a `THUMBS_UP` reaction from the configured reviewer on the PR
-    summary as a positive review-gate signal, while still waiting the full
-    review window and still blocking actionable current-head review comments.
+    summary as a positive review-gate signal; once current-head required
+    checks are green, the CLI may continue early on that signal while still
+    blocking actionable current-head review comments.
+  - If the PR head changes after review work starts, the CLI owns any fresh
+    re-review request for the new head; the agent should address feedback,
+    push changes, and rerun `horadus tasks finish TASK-XXX`.
 - `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
   - Appends one structured workflow friction entry under the gitignored path
     `artifacts/agent/horadus-cli-feedback/entries.jsonl`.

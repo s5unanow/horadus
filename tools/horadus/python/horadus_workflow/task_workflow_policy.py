@@ -125,9 +125,10 @@ COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     ),
     (
         "A `THUMBS_UP` reaction from the configured reviewer on the PR "
-        "summary counts as a positive review-gate signal, but the gate still "
-        "waits the full timeout window and still blocks actionable current-head "
-        "review comments."
+        "summary counts as a positive review-gate signal; once current-head "
+        "required checks are green, `horadus tasks finish` may continue early "
+        "on that signal while still blocking actionable current-head review "
+        "comments."
     ),
     "Local commits, local tests, and a clean working tree are checkpoints, not completion.",
     "Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.",

@@ -47,7 +47,7 @@ case "${1:-}" in
     ;;
   api)
     if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
-      echo '[{"id":501,"commit_id":"head-sha-215","user":{"login":"chatgpt-codex-connector[bot]"}}]'
+      echo '[{"id":501,"commit_id":"head-sha-215","state":"APPROVED","body":"","user":{"login":"chatgpt-codex-connector[bot]"}}]'
       exit 0
     fi
     if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
@@ -219,7 +219,6 @@ esac
 """,
     )
 
-    started = time.monotonic()
     result = _run_gate(
         env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
         args=[
@@ -231,11 +230,9 @@ esac
             "0",
         ],
     )
-    elapsed = time.monotonic() - started
-
     assert result.returncode == 0
+    assert "review gate passed early" in result.stdout
     assert "reacted THUMBS_UP on the PR summary" in result.stdout
-    assert elapsed >= 0.9
 
 
 def test_review_gate_ignores_stale_pr_summary_thumbs_up(tmp_path: Path) -> None:

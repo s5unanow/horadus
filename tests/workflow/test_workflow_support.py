@@ -203,36 +203,52 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
             "headRefOid": "head-sha",
             "url": "https://example.invalid/pr/1",
         },
-        ("api", "repos/example/repo/pulls/1/reviews"): [
-            {"id": 11, "commit_id": "head-sha", "user": {"login": "bot"}},
-            {"id": 12, "commit_id": "old-sha", "user": {"login": "bot"}},
+        ("repos/example/repo/pulls/1/reviews",): [
+            [
+                {
+                    "id": 11,
+                    "commit_id": "head-sha",
+                    "state": "APPROVED",
+                    "body": "",
+                    "user": {"login": "bot"},
+                },
+                {"id": 12, "commit_id": "old-sha", "user": {"login": "bot"}},
+            ]
         ],
-        ("api", "repos/example/repo/pulls/1/comments"): [
-            {"pull_request_review_id": 11, "user": {"login": "bot"}, "path": "a.py", "line": 7}
+        ("repos/example/repo/pulls/1/comments",): [
+            [{"pull_request_review_id": 11, "user": {"login": "bot"}, "path": "a.py", "line": 7}]
         ],
-        ("api", "repos/example/repo/issues/1/reactions"): [
-            {
-                "content": "+1",
-                "created_at": datetime.now(tz=UTC).isoformat(),
-                "user": {"login": "bot"},
-            }
+        ("repos/example/repo/issues/1/reactions",): [
+            [
+                {
+                    "content": "+1",
+                    "created_at": datetime.now(tz=UTC).isoformat(),
+                    "user": {"login": "bot"},
+                }
+            ]
         ],
     }
     monkeypatch.setattr(pr_review_gate_module, "_run_gh_json", lambda *args: payloads[args])
+    monkeypatch.setattr(
+        pr_review_gate_module, "_run_gh_paginated_json", lambda *args: payloads[args]
+    )
 
     assert pr_review_gate_module._review_context("https://example.invalid/pr/1") == (
         "example/repo",
         1,
         "head-sha",
     )
-    matching_reviews, matching_comments = pr_review_gate_module._matching_review_comments(
-        repo="example/repo",
-        pr_number=1,
-        head_oid="head-sha",
-        reviewer_login="bot",
+    matching_reviews, matching_comments, actionable_reviews = (
+        pr_review_gate_module._matching_review_comments(
+            repo="example/repo",
+            pr_number=1,
+            head_oid="head-sha",
+            reviewer_login="bot",
+        )
     )
     assert len(matching_reviews) == 1
     assert len(matching_comments) == 1
+    assert actionable_reviews == []
     assert pr_review_gate_module._parse_github_timestamp("bad-timestamp") is None
     assert pr_review_gate_module._parse_github_timestamp(" ") is None
     assert pr_review_gate_module._has_pr_summary_thumbs_up(
@@ -274,8 +290,8 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
 
     monkeypatch.setattr(
         pr_review_gate_module,
-        "_run_gh_json",
-        lambda *args: {} if args[-1].endswith("/reviews") else [],
+        "_run_gh_paginated_json",
+        lambda *args: {} if args[-1].endswith("/reviews") else [[]],
     )
     with pytest.raises(pr_review_gate_module.GhError, match="unexpected reviews payload"):
         pr_review_gate_module._matching_review_comments(
@@ -287,8 +303,8 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
 
     monkeypatch.setattr(
         pr_review_gate_module,
-        "_run_gh_json",
-        lambda *args: [] if args[-1].endswith("/reviews") else {},
+        "_run_gh_paginated_json",
+        lambda *args: [[]] if args[-1].endswith("/reviews") else {},
     )
     with pytest.raises(pr_review_gate_module.GhError, match="unexpected comments payload"):
         pr_review_gate_module._matching_review_comments(
@@ -298,7 +314,7 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
             reviewer_login="bot",
         )
 
-    monkeypatch.setattr(pr_review_gate_module, "_run_gh_json", lambda *_args: {})
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh_paginated_json", lambda *_args: {})
     with pytest.raises(pr_review_gate_module.GhError, match="unexpected reactions payload"):
         pr_review_gate_module._has_pr_summary_thumbs_up(
             repo="example/repo",
@@ -306,6 +322,184 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
             reviewer_login="bot",
             wait_window_started_at=datetime.now(tz=UTC),
         )
+
+
+def test_pr_review_gate_uses_latest_current_head_review_state_for_summary_feedback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads: dict[tuple[str, ...], object] = {
+        ("repos/example/repo/pulls/1/reviews",): [
+            [
+                {
+                    "id": 11,
+                    "commit_id": "head-sha",
+                    "state": "COMMENTED",
+                    "body": "Please revise",
+                    "submitted_at": "2026-03-12T10:00:00Z",
+                    "user": {"login": "bot"},
+                },
+                {
+                    "id": 12,
+                    "commit_id": "head-sha",
+                    "state": "APPROVED",
+                    "body": "",
+                    "submitted_at": "2026-03-12T10:05:00Z",
+                    "user": {"login": "bot"},
+                },
+            ]
+        ],
+        ("repos/example/repo/pulls/1/comments",): [[]],
+    }
+    monkeypatch.setattr(
+        pr_review_gate_module, "_run_gh_paginated_json", lambda *args: payloads[args]
+    )
+
+    matching_reviews, matching_comments, actionable_reviews = (
+        pr_review_gate_module._matching_review_comments(
+            repo="example/repo",
+            pr_number=1,
+            head_oid="head-sha",
+            reviewer_login="bot",
+        )
+    )
+
+    assert len(matching_reviews) == 2
+    assert matching_comments == []
+    assert actionable_reviews == []
+
+
+def test_pr_review_gate_helper_functions_cover_additional_contract_edges(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh", lambda *_args: "")
+    assert (
+        pr_review_gate_module._run_gh_paginated_json("repos/example/repo/pulls/1/reviews") is None
+    )
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh", lambda *_args: '[{"id": 1}]')
+    assert pr_review_gate_module._run_gh_paginated_json("repos/example/repo/pulls/1/reviews") == [
+        {"id": 1}
+    ]
+
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh_json", lambda *_args: {})
+    with pytest.raises(pr_review_gate_module.GhError, match="current PR headRefOid"):
+        pr_review_gate_module._current_head_oid("https://example.invalid/pr/1")
+
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh_json", lambda *_args: {"headRefOid": " "})
+    with pytest.raises(pr_review_gate_module.GhError, match="current PR headRefOid"):
+        pr_review_gate_module._current_head_oid("https://example.invalid/pr/1")
+    monkeypatch.setattr(
+        pr_review_gate_module, "_run_gh_json", lambda *_args: {"headRefOid": "head-a"}
+    )
+    assert pr_review_gate_module._current_head_oid("https://example.invalid/pr/1") == "head-a"
+
+    assert pr_review_gate_module._flatten_paginated_list([], label="reviews") == []
+    assert pr_review_gate_module._flatten_paginated_list([{"id": 1}], label="reviews") == [
+        {"id": 1}
+    ]
+    with pytest.raises(pr_review_gate_module.GhError, match="unexpected reviews payload"):
+        pr_review_gate_module._flatten_paginated_list({}, label="reviews")
+    with pytest.raises(pr_review_gate_module.GhError, match="unexpected reviews payload"):
+        pr_review_gate_module._flatten_paginated_list([{"id": 1}, "bad"], label="reviews")
+    with pytest.raises(pr_review_gate_module.GhError, match="unexpected reviews payload"):
+        pr_review_gate_module._flatten_paginated_list([["bad"]], label="reviews")
+    assert pr_review_gate_module._user_login({"user": {"login": "bot"}}) == "bot"
+    assert pr_review_gate_module._user_login({"user": {}}) is None
+    assert pr_review_gate_module._user_login({}) is None
+    assert pr_review_gate_module._actionable_review_lines([{"state": "COMMENTED"}]) == [
+        "- COMMENTED"
+    ]
+
+    outcome = pr_review_gate_module.ReviewGateOutcome(
+        status="block",
+        reason="actionable_reviews",
+        reviewer_login="bot",
+        reviewed_head_oid="head-a",
+        current_head_oid="head-a",
+        clean_current_head_review=False,
+        summary_thumbs_up=False,
+        actionable_comment_count=0,
+        actionable_review_count=1,
+        timeout_seconds=600,
+        timed_out=False,
+        summary="summary",
+        actionable_lines=("line",),
+    )
+    assert pr_review_gate_module._emit_outcome(outcome, output_format="json") == 2
+    payload = capsys.readouterr().out
+    assert '"status": "block"' in payload
+
+    timeout_outcome = pr_review_gate_module.ReviewGateOutcome(
+        status="block",
+        reason="timeout_fail",
+        reviewer_login="bot",
+        reviewed_head_oid="head-a",
+        current_head_oid="head-a",
+        clean_current_head_review=False,
+        summary_thumbs_up=False,
+        actionable_comment_count=0,
+        actionable_review_count=0,
+        timeout_seconds=600,
+        timed_out=True,
+        summary="timed out",
+    )
+    assert pr_review_gate_module._emit_outcome(timeout_outcome, output_format="json") == 1
+    assert '"reason": "timeout_fail"' in capsys.readouterr().out
+
+    head_changed_outcome = pr_review_gate_module.ReviewGateOutcome(
+        status="head_changed",
+        reason="head_changed",
+        reviewer_login="bot",
+        reviewed_head_oid="head-a",
+        current_head_oid="head-b",
+        clean_current_head_review=False,
+        summary_thumbs_up=False,
+        actionable_comment_count=0,
+        actionable_review_count=0,
+        timeout_seconds=600,
+        timed_out=False,
+        summary="head changed",
+    )
+    assert pr_review_gate_module._emit_outcome(head_changed_outcome, output_format="json") == 3
+    assert '"status": "head_changed"' in capsys.readouterr().out
+
+    pass_outcome = pr_review_gate_module.ReviewGateOutcome(
+        status="pass",
+        reason="silent_timeout_allow",
+        reviewer_login="bot",
+        reviewed_head_oid="head-a",
+        current_head_oid="head-a",
+        clean_current_head_review=False,
+        summary_thumbs_up=False,
+        actionable_comment_count=0,
+        actionable_review_count=0,
+        timeout_seconds=600,
+        timed_out=True,
+        summary="ok",
+    )
+    assert pr_review_gate_module._emit_outcome(pass_outcome, output_format="json") == 0
+    assert '"status": "pass"' in capsys.readouterr().out
+
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_review_context",
+        lambda _pr_url: (_ for _ in ()).throw(pr_review_gate_module.GhError("boom")),
+    )
+    assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 1
+    assert "boom" in capsys.readouterr().err
+
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_review_context",
+        lambda _pr_url: ("example/repo", 1, "head-a"),
+    )
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_current_head_oid",
+        lambda _pr_url: (_ for _ in ()).throw(pr_review_gate_module.GhError("head failed")),
+    )
+    monkeypatch.setattr(pr_review_gate_module.time, "time", lambda: 0.0)
+    assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 1
+    assert "head failed" in capsys.readouterr().err
 
 
 def test_pr_review_gate_main_covers_review_outcomes_and_validation(
@@ -321,39 +515,48 @@ def test_pr_review_gate_main_covers_review_outcomes_and_validation(
         "_review_context",
         lambda _pr_url: ("example/repo", 1, "head-sha"),
     )
+    monkeypatch.setattr(pr_review_gate_module, "_current_head_oid", lambda _pr_url: "head-sha")
 
     _install_fake_time([0.0, 601.0])
     monkeypatch.setattr(pr_review_gate_module.time, "sleep", lambda _seconds: None)
     monkeypatch.setattr(
         pr_review_gate_module,
         "_matching_review_comments",
-        lambda **_kwargs: ([], [{"path": "a.py", "line": 3, "html_url": "", "body": "comment"}]),
+        lambda **_kwargs: (
+            [],
+            [{"path": "a.py", "line": 3, "html_url": "", "body": "comment"}],
+            [],
+        ),
     )
     monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: False)
     assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 2
 
     monkeypatch.setattr(
-        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([{}], [])
+        pr_review_gate_module,
+        "_matching_review_comments",
+        lambda **_kwargs: ([{"state": "APPROVED"}], [], []),
     )
     _install_fake_time([0.0, 601.0])
     assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 0
 
     monkeypatch.setattr(
-        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [])
-    )
-    monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: True)
-    _install_fake_time([0.0, 601.0])
-    assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 0
-
-    monkeypatch.setattr(
-        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([{}], [])
+        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [], [])
     )
     monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: True)
-    _install_fake_time([0.0, 601.0])
+    _install_fake_time([0.0])
     assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 0
 
     monkeypatch.setattr(
-        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [])
+        pr_review_gate_module,
+        "_matching_review_comments",
+        lambda **_kwargs: ([{"state": "APPROVED"}], [], []),
+    )
+    monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: True)
+    _install_fake_time([0.0])
+    assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 0
+
+    monkeypatch.setattr(
+        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [], [])
     )
     monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: False)
     _install_fake_time([0.0, 0.0, 2.0])
@@ -377,7 +580,7 @@ def test_pr_review_gate_main_covers_review_outcomes_and_validation(
     assert sleep_calls == [1]
 
     monkeypatch.setattr(
-        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [])
+        pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [], [])
     )
     _install_fake_time([0.0, 601.0])
     assert (
@@ -402,3 +605,43 @@ def test_pr_review_gate_main_covers_review_outcomes_and_validation(
         pr_review_gate_module.main(
             ["--pr-url", "https://example.invalid/pr/1", "--poll-seconds", "-1"]
         )
+
+
+def test_pr_review_gate_main_detects_head_change_and_summary_feedback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_review_context",
+        lambda _pr_url: ("example/repo", 1, "head-a"),
+    )
+    monkeypatch.setattr(pr_review_gate_module, "_current_head_oid", lambda _pr_url: "head-b")
+    monkeypatch.setattr(pr_review_gate_module.time, "time", lambda: 0.0)
+    assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 3
+
+    monkeypatch.setattr(pr_review_gate_module, "_current_head_oid", lambda _pr_url: "head-a")
+    monkeypatch.setattr(pr_review_gate_module.time, "time", lambda: 601.0)
+    monkeypatch.setattr(pr_review_gate_module.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_matching_review_comments",
+        lambda **_kwargs: (
+            [
+                {
+                    "state": "COMMENTED",
+                    "body": "Please revise",
+                    "html_url": "https://example.invalid/r/1",
+                }
+            ],
+            [],
+            [
+                {
+                    "state": "COMMENTED",
+                    "body": "Please revise",
+                    "html_url": "https://example.invalid/r/1",
+                }
+            ],
+        ),
+    )
+    monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: False)
+    assert pr_review_gate_module.main(["--pr-url", "https://example.invalid/pr/1"]) == 2

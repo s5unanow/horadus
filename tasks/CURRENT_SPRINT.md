@@ -63,3 +63,4 @@
 - `TASK-304` Realign Agent Workflow Docs and Remove Policy Duplication ✅
 - `TASK-305` Let Guarded Task Start Carry Target Planning Intake Files ✅
 - `TASK-306` Unblock Canonical Finish When Only Outdated Review Threads Remain ✅
+- `TASK-307` Make `horadus tasks finish` Behave Like a Stateful Review Loop ✅

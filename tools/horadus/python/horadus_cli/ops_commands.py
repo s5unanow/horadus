@@ -75,11 +75,7 @@ def _json_default(value: object) -> object:
 
 
 def _runtime_payload(args: Any) -> dict[str, Any]:
-    return {
-        key: value
-        for key, value in vars(args).items()
-        if key not in _INTERNAL_ARG_KEYS and value is not None
-    }
+    return {key: value for key, value in vars(args).items() if key not in _INTERNAL_ARG_KEYS}
 
 
 def _run_runtime_bridge(action: str, payload: dict[str, Any]) -> subprocess.CompletedProcess[str]:

@@ -938,7 +938,7 @@ def test_runtime_payload_and_bridge_command_helpers(monkeypatch: pytest.MonkeyPa
             optional=None,
         )
     )
-    assert payload == {"timeout_seconds": 1.5}
+    assert payload == {"timeout_seconds": 1.5, "optional": None}
 
     captured: dict[str, object] = {}
 

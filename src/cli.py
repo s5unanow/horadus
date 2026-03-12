@@ -2,9 +2,9 @@
 Horadus command-line interface compatibility module.
 """
 
+from src.core.config import settings
 from src.horadus_cli.app import _build_parser, main
 from src.horadus_cli.v2 import ops_commands as _ops
-from src.horadus_cli.v2.runtime.core.config import settings
 
 _change_arrow = _ops._change_arrow
 _format_trend_status_lines = _ops._format_trend_status_lines

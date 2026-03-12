@@ -10,8 +10,8 @@ from urllib import error as urllib_error
 from urllib import request as urllib_request
 from uuid import UUID
 
+from src.core.config import settings
 from src.horadus_cli.v2.result import CommandResult, ExitCode
-from src.horadus_cli.v2.runtime.core.config import settings
 
 
 def _change_arrow(change: float) -> str:
@@ -53,8 +53,8 @@ def _format_embedding_model_counts(summary: Any) -> str:
 
 
 async def _collect_trends_status(limit: int) -> tuple[dict[str, Any], list[str]]:
-    from src.horadus_cli.v2.runtime.core.calibration_dashboard import CalibrationDashboardService
-    from src.horadus_cli.v2.runtime.storage.database import async_session_maker
+    from src.core.calibration_dashboard import CalibrationDashboardService
+    from src.storage.database import async_session_maker
 
     async with async_session_maker() as session:
         service = CalibrationDashboardService(session)
@@ -85,9 +85,9 @@ async def _collect_trends_status(limit: int) -> tuple[dict[str, Any], list[str]]
 async def _collect_dashboard_export(
     output_dir: str, limit: int
 ) -> tuple[dict[str, Any], list[str]]:
-    from src.horadus_cli.v2.runtime.core.calibration_dashboard import CalibrationDashboardService
-    from src.horadus_cli.v2.runtime.core.dashboard_export import export_calibration_dashboard
-    from src.horadus_cli.v2.runtime.storage.database import async_session_maker
+    from src.core.calibration_dashboard import CalibrationDashboardService
+    from src.core.dashboard_export import export_calibration_dashboard
+    from src.storage.database import async_session_maker
 
     async with async_session_maker() as session:
         service = CalibrationDashboardService(session)
@@ -112,7 +112,7 @@ async def _collect_dashboard_export(
 
 
 async def _collect_eval_benchmark(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.eval.benchmark import run_gold_set_benchmark
+    from src.eval.benchmark import run_gold_set_benchmark
 
     output_path = await run_gold_set_benchmark(
         gold_set_path=args.gold_set,
@@ -129,7 +129,7 @@ async def _collect_eval_benchmark(args: Any) -> tuple[dict[str, Any], list[str],
 
 
 async def _collect_eval_replay(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.eval.replay import run_historical_replay_comparison
+    from src.eval.replay import run_historical_replay_comparison
 
     parsed_trend_id = UUID(args.trend_id) if args.trend_id else None
     output_path = await run_historical_replay_comparison(
@@ -145,7 +145,7 @@ async def _collect_eval_replay(args: Any) -> tuple[dict[str, Any], list[str], in
 
 
 async def _collect_eval_vector_benchmark(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.eval.vector_benchmark import run_vector_retrieval_benchmark
+    from src.eval.vector_benchmark import run_vector_retrieval_benchmark
 
     output_path = await run_vector_retrieval_benchmark(
         output_dir=args.output_dir,
@@ -165,8 +165,8 @@ async def _collect_eval_vector_benchmark(args: Any) -> tuple[dict[str, Any], lis
 
 
 async def _collect_eval_embedding_lineage(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.core.embedding_lineage import build_embedding_lineage_report
-    from src.horadus_cli.v2.runtime.storage.database import async_session_maker
+    from src.core.embedding_lineage import build_embedding_lineage_report
+    from src.storage.database import async_session_maker
 
     async with async_session_maker() as session:
         report = await build_embedding_lineage_report(session, target_model=args.target_model)
@@ -220,8 +220,8 @@ async def _collect_eval_embedding_lineage(args: Any) -> tuple[dict[str, Any], li
 
 
 async def _collect_eval_source_freshness(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.core.source_freshness import build_source_freshness_report
-    from src.horadus_cli.v2.runtime.storage.database import async_session_maker
+    from src.core.source_freshness import build_source_freshness_report
+    from src.storage.database import async_session_maker
 
     async with async_session_maker() as session:
         report = await build_source_freshness_report(
@@ -281,7 +281,7 @@ async def _collect_eval_source_freshness(args: Any) -> tuple[dict[str, Any], lis
 
 
 def _collect_eval_audit(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.eval.audit import run_gold_set_audit
+    from src.eval.audit import run_gold_set_audit
 
     result = run_gold_set_audit(
         gold_set_path=args.gold_set, output_dir=args.output_dir, max_items=max(1, args.max_items)
@@ -301,7 +301,7 @@ def _collect_eval_audit(args: Any) -> tuple[dict[str, Any], list[str], int]:
 
 
 def _collect_eval_validate_taxonomy(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.eval.taxonomy_validation import run_trend_taxonomy_validation
+    from src.eval.taxonomy_validation import run_trend_taxonomy_validation
 
     result = run_trend_taxonomy_validation(
         trend_config_dir=args.trend_config_dir,
@@ -516,8 +516,8 @@ def _doctor_safety_refusals() -> list[str]:
 async def _doctor_check_database(timeout_seconds: float) -> tuple[str, str]:
     from sqlalchemy import text
 
-    from src.horadus_cli.v2.runtime.core.migration_parity import check_migration_parity
-    from src.horadus_cli.v2.runtime.storage.database import async_session_maker
+    from src.core.migration_parity import check_migration_parity
+    from src.storage.database import async_session_maker
 
     database_url = settings.DATABASE_URL.strip()
     if not database_url:
@@ -610,7 +610,7 @@ def _run_doctor(*, timeout_seconds: float) -> int:
 
 
 def _collect_pipeline_dry_run(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.horadus_cli.v2.runtime.processing.dry_run_pipeline import run_pipeline_dry_run
+    from src.processing.dry_run_pipeline import run_pipeline_dry_run
 
     artifact_path = run_pipeline_dry_run(
         fixture_path=Path(args.fixture_path),
@@ -682,8 +682,8 @@ def register_ops_commands(subparsers: Any) -> None:
     eval_parser = subparsers.add_parser("eval")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
 
-    from src.horadus_cli.v2.runtime.eval.benchmark import available_configs, default_config_names
-    from src.horadus_cli.v2.runtime.eval.replay import available_replay_configs
+    from src.eval.benchmark import available_configs, default_config_names
+    from src.eval.replay import available_replay_configs
 
     eval_benchmark_parser = eval_subparsers.add_parser(
         "benchmark",

@@ -23,7 +23,7 @@ import src.horadus_cli.v2.task_repo as task_repo_module
 import src.horadus_cli.v2.task_workflow_core as task_commands_module
 import src.horadus_cli.v2.triage_commands as triage_commands_module
 from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
-from src.horadus_cli.v2.runtime.core.calibration_dashboard import TrendMovement
+from src.core.calibration_dashboard import TrendMovement
 
 pytestmark = pytest.mark.unit
 pytest_plugins = ("tests.horadus_cli.v2.task_repo_fixtures",)

@@ -87,7 +87,7 @@ exclude_globs = ["**/__pycache__/**"]
     result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
     lines = render_code_shape_issues(result)
 
-    assert any("module has 7 lines; budget is 4" in line for line in lines)
+    assert any("module has 6 lines; budget is 4" in line for line in lines)
     assert any("too_long spans 6 lines; budget is 4" in line for line in lines)
 
 
@@ -123,7 +123,7 @@ exclude_globs = ["**/__pycache__/**"]
 
 [[legacy_files]]
 path = "src/app.py"
-max_lines = 8
+max_lines = 7
 [legacy_files.member_max_lines]
 "too_long" = 7
 """.strip(),
@@ -153,7 +153,7 @@ max_lines = 8
     regressed = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
     lines = render_code_shape_issues(regressed)
 
-    assert any("module has 9 lines; allowlisted maximum is 8" in line for line in lines)
+    assert any("module has 8 lines; allowlisted maximum is 7" in line for line in lines)
     assert any("too_long spans 8 lines; allowlisted maximum is 7" in line for line in lines)
 
 

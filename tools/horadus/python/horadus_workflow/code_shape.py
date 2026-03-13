@@ -129,7 +129,7 @@ def measure_python_file(repo_root: Path, path: Path) -> FileMeasurement:
     tree = ast.parse(text, filename=relative_path)
     return FileMeasurement(
         path=relative_path,
-        module_lines=text.count("\n") + 1,
+        module_lines=len(text.splitlines()),
         member_lines=_collect_member_lines(tree),
         is_test=relative_path.startswith("tests/"),
     )

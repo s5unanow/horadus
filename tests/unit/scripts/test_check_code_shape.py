@@ -103,5 +103,5 @@ exclude_globs = ["**/__pycache__/**"]
     )
 
     assert result.returncode == 2
-    assert "ERROR [module-lines] src/app.py: module has 7 lines; budget is 4" in result.stdout
+    assert "ERROR [module-lines] src/app.py: module has 6 lines; budget is 4" in result.stdout
     assert "ERROR [member-lines] src/app.py: too_long spans 6 lines; budget is 4" in result.stdout

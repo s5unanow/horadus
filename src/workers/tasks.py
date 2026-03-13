@@ -5,12 +5,10 @@ Celery tasks for ingestion collection and processing orchestration.
 from __future__ import annotations
 
 import asyncio
-import json
 from collections.abc import Callable, Coroutine
-from dataclasses import asdict, dataclass
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
-from typing import Any, TypeVar, cast
+from datetime import UTC, datetime
+from types import SimpleNamespace
+from typing import Any, cast
 
 import httpx
 import redis
@@ -62,6 +60,11 @@ from src.storage.models import (
     TrendEvidence,
     TrendSnapshot,
 )
+from src.workers import _task_collectors as collector_helpers
+from src.workers import _task_maintenance as maintenance_helpers
+from src.workers import _task_processing as processing_helpers
+from src.workers import _task_retention as retention_helpers
+from src.workers import _task_shared as shared_helpers
 
 logger = structlog.get_logger(__name__)
 
@@ -70,148 +73,97 @@ DEAD_LETTER_MAX_ITEMS = 1000
 PROCESSING_IN_FLIGHT_KEY = "horadus:processing:in_flight"
 PROCESSING_DISPATCH_LOCK_KEY = "horadus:processing:dispatch_lock"
 
-TaskFunc = TypeVar("TaskFunc", bound=Callable[..., Any])
+CollectorTransientRunError = shared_helpers.CollectorTransientRunError
+ProcessingDispatchPlan = processing_helpers.ProcessingDispatchPlan
+RetentionCutoffs = retention_helpers.RetentionCutoffs
 
 
-class CollectorTransientRunError(RuntimeError):
-    """Raised when a collector run should be requeued for transient outages."""
-
-
-@dataclass(slots=True)
-class ProcessingDispatchPlan:
-    should_dispatch: bool
-    reason: str
-    task_limit: int
-    pending_backlog: int
-    in_flight: int
-    budget_status: str
-    budget_remaining_usd: float | None
-
-
-@dataclass(frozen=True, slots=True)
-class RetentionCutoffs:
-    now: datetime
-    raw_item_noise_before: datetime
-    raw_item_archived_event_before: datetime
-    archived_event_before: datetime
-    trend_evidence_before: datetime
-    batch_size: int
-    dry_run: bool
-
-
-def _build_retention_cutoffs(*, dry_run: bool | None = None) -> RetentionCutoffs:
-    now = datetime.now(tz=UTC)
-    effective_dry_run = settings.RETENTION_CLEANUP_DRY_RUN if dry_run is None else dry_run
-    return RetentionCutoffs(
-        now=now,
-        raw_item_noise_before=now - timedelta(days=settings.RETENTION_RAW_ITEM_NOISE_DAYS),
-        raw_item_archived_event_before=now
-        - timedelta(days=settings.RETENTION_RAW_ITEM_ARCHIVED_EVENT_DAYS),
-        archived_event_before=now - timedelta(days=settings.RETENTION_EVENT_ARCHIVED_DAYS),
-        trend_evidence_before=now - timedelta(days=settings.RETENTION_TREND_EVIDENCE_DAYS),
-        batch_size=max(1, settings.RETENTION_CLEANUP_BATCH_SIZE),
-        dry_run=effective_dry_run,
+def _deps() -> SimpleNamespace:
+    return SimpleNamespace(
+        asyncio=asyncio,
+        httpx=httpx,
+        redis=redis,
+        logger=logger,
+        settings=settings,
+        delete=delete,
+        func=func,
+        select=select,
+        ClusterDriftThresholds=ClusterDriftThresholds,
+        ClusterEventSample=ClusterEventSample,
+        compute_cluster_drift_summary=compute_cluster_drift_summary,
+        load_latest_language_distribution=load_latest_language_distribution,
+        write_cluster_drift_artifact=write_cluster_drift_artifact,
+        record_collector_metrics=record_collector_metrics,
+        record_pipeline_metrics=record_pipeline_metrics,
+        record_processing_backlog_depth=record_processing_backlog_depth,
+        record_processing_dispatch_decision=record_processing_dispatch_decision,
+        record_processing_reaper_resets=record_processing_reaper_resets,
+        record_retention_cleanup_rows=record_retention_cleanup_rows,
+        record_retention_cleanup_run=record_retention_cleanup_run,
+        record_source_catchup_dispatch=record_source_catchup_dispatch,
+        record_source_freshness_stale=record_source_freshness_stale,
+        record_worker_error=record_worker_error,
+        ReportGenerator=ReportGenerator,
+        build_source_freshness_report=build_source_freshness_report,
+        TrendEngine=TrendEngine,
+        GDELTClient=GDELTClient,
+        RSSCollector=RSSCollector,
+        CostTracker=CostTracker,
+        DegradedLLMTracker=DegradedLLMTracker,
+        EventLifecycleManager=EventLifecycleManager,
+        ProcessingPipeline=ProcessingPipeline,
+        run_tier2_canary=run_tier2_canary,
+        Tier2Classifier=Tier2Classifier,
+        async_session_maker=async_session_maker,
+        Event=Event,
+        EventItem=EventItem,
+        EventLifecycle=EventLifecycle,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        ProcessingStatus=ProcessingStatus,
+        RawItem=RawItem,
+        Trend=Trend,
+        TrendEvidence=TrendEvidence,
+        TrendSnapshot=TrendSnapshot,
+        DEAD_LETTER_KEY=DEAD_LETTER_KEY,
+        DEAD_LETTER_MAX_ITEMS=DEAD_LETTER_MAX_ITEMS,
+        PROCESSING_IN_FLIGHT_KEY=PROCESSING_IN_FLIGHT_KEY,
+        PROCESSING_DISPATCH_LOCK_KEY=PROCESSING_DISPATCH_LOCK_KEY,
+        _push_dead_letter=_push_dead_letter,
+        _record_worker_activity=_record_worker_activity,
+        _run_async=_run_async,
+        _build_processing_dispatch_plan=_build_processing_dispatch_plan,
+        _get_redis_client=_get_redis_client,
+        _get_processing_in_flight_count=_get_processing_in_flight_count,
+        _acquire_processing_dispatch_lock=_acquire_processing_dispatch_lock,
+        _load_processing_dispatch_inputs_async=_load_processing_dispatch_inputs_async,
+        _build_retention_cutoffs=_build_retention_cutoffs,
+        _select_noise_raw_item_ids=_select_noise_raw_item_ids,
+        _select_archived_event_raw_item_ids=_select_archived_event_raw_item_ids,
+        _select_trend_evidence_ids=_select_trend_evidence_ids,
+        process_pending_items=process_pending_items,
+        collect_rss=collect_rss,
+        collect_gdelt=collect_gdelt,
     )
 
 
-def _is_raw_item_noise_retention_eligible(
-    *,
-    processing_status: ProcessingStatus,
-    fetched_at: datetime,
-    has_event_link: bool,
-    cutoffs: RetentionCutoffs,
-) -> bool:
-    return (
-        processing_status in {ProcessingStatus.NOISE, ProcessingStatus.ERROR}
-        and fetched_at <= cutoffs.raw_item_noise_before
-        and not has_event_link
+def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[Any], Any]:
+    return shared_helpers.typed_shared_task(
+        *task_args,
+        shared_task_decorator=shared_task,
+        **task_kwargs,
     )
-
-
-def _is_raw_item_archived_event_retention_eligible(
-    *,
-    fetched_at: datetime,
-    event_lifecycle_status: str,
-    event_last_mention_at: datetime | None,
-    cutoffs: RetentionCutoffs,
-) -> bool:
-    if event_last_mention_at is None:
-        return False
-    return (
-        event_lifecycle_status == EventLifecycle.ARCHIVED.value
-        and event_last_mention_at <= cutoffs.raw_item_archived_event_before
-        and fetched_at <= cutoffs.raw_item_archived_event_before
-    )
-
-
-def _is_trend_evidence_retention_eligible(
-    *,
-    created_at: datetime,
-    event_lifecycle_status: str,
-    event_last_mention_at: datetime | None,
-    cutoffs: RetentionCutoffs,
-) -> bool:
-    if event_last_mention_at is None:
-        return False
-    return (
-        event_lifecycle_status == EventLifecycle.ARCHIVED.value
-        and event_last_mention_at <= cutoffs.archived_event_before
-        and created_at <= cutoffs.trend_evidence_before
-    )
-
-
-def _is_archived_event_retention_eligible(
-    *,
-    lifecycle_status: str,
-    last_mention_at: datetime,
-    has_remaining_evidence: bool,
-    cutoffs: RetentionCutoffs,
-) -> bool:
-    return (
-        lifecycle_status == EventLifecycle.ARCHIVED.value
-        and last_mention_at <= cutoffs.archived_event_before
-        and not has_remaining_evidence
-    )
-
-
-def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[TaskFunc], TaskFunc]:
-    """
-    Typed wrapper around Celery's shared_task decorator.
-
-    Celery decorators are untyped, which conflicts with strict mypy settings.
-    """
-    decorator = shared_task(*task_args, **task_kwargs)
-    return cast("Callable[[TaskFunc], TaskFunc]", decorator)
 
 
 def _run_async(coro: Coroutine[Any, Any, dict[str, Any]]) -> dict[str, Any]:
-    return asyncio.run(coro)
+    return shared_helpers.run_async(asyncio_module=asyncio, coro=coro)
 
 
 def _should_requeue_collector_run(result: dict[str, Any]) -> bool:
-    transient_errors = int(result.get("transient_errors", 0))
-    terminal_errors = int(result.get("terminal_errors", 0))
-    sources_succeeded = int(result.get("sources_succeeded", 0))
-    sources_failed = int(result.get("sources_failed", 0))
-    return (
-        transient_errors > 0
-        and terminal_errors == 0
-        and sources_succeeded == 0
-        and sources_failed > 0
-    )
+    return shared_helpers.should_requeue_collector_run(result)
 
 
 def _push_dead_letter(payload: dict[str, Any]) -> None:
-    client: redis.Redis[str] | None = None
-    try:
-        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        client.lpush(DEAD_LETTER_KEY, json.dumps(payload))
-        client.ltrim(DEAD_LETTER_KEY, 0, DEAD_LETTER_MAX_ITEMS - 1)
-    except Exception:
-        logger.exception("Failed to push dead letter payload")
-    finally:
-        if client is not None:
-            client.close()
+    shared_helpers.push_dead_letter(deps=_deps(), payload=payload)
 
 
 def _record_worker_activity(
@@ -220,26 +172,12 @@ def _record_worker_activity(
     status: str,
     error: str | None = None,
 ) -> None:
-    client: redis.Redis[str] | None = None
-    try:
-        client = redis.from_url(settings.REDIS_URL, decode_responses=True)
-        payload = {
-            "task": task_name,
-            "status": status,
-            "timestamp": datetime.now(tz=UTC).isoformat(),
-        }
-        if error:
-            payload["error"] = error[:500]
-        client.set(
-            settings.WORKER_HEARTBEAT_REDIS_KEY,
-            json.dumps(payload),
-            ex=max(60, settings.WORKER_HEARTBEAT_TTL_SECONDS),
-        )
-    except Exception:
-        logger.exception("Failed to record worker heartbeat", task_name=task_name, status=status)
-    finally:
-        if client is not None:
-            client.close()
+    shared_helpers.record_worker_activity(
+        deps=_deps(),
+        task_name=task_name,
+        status=status,
+        error=error,
+    )
 
 
 def _run_task_with_heartbeat(
@@ -247,14 +185,11 @@ def _run_task_with_heartbeat(
     task_name: str,
     runner: Callable[[], dict[str, Any]],
 ) -> dict[str, Any]:
-    _record_worker_activity(task_name=task_name, status="started")
-    try:
-        result = runner()
-    except Exception as exc:
-        _record_worker_activity(task_name=task_name, status="failed", error=str(exc))
-        raise
-    _record_worker_activity(task_name=task_name, status="ok")
-    return result
+    return shared_helpers.run_task_with_heartbeat(
+        deps=_deps(),
+        task_name=task_name,
+        runner=runner,
+    )
 
 
 def _handle_task_failure(
@@ -263,30 +198,17 @@ def _handle_task_failure(
     exception: BaseException | None = None,
     args: tuple[Any, ...] | None = None,
     kwargs: dict[str, Any] | None = None,
-    **_extra: Any,
+    **extra: Any,
 ) -> None:
-    request = getattr(sender, "request", None)
-    current_retries = int(getattr(request, "retries", 0))
-
-    max_retries_raw = getattr(sender, "max_retries", None)
-    max_retries = max_retries_raw if isinstance(max_retries_raw, int) else None
-
-    # Ignore intermediate failures that are still within retry budget.
-    if max_retries is not None and current_retries < max_retries:
-        return
-
-    payload = {
-        "task_name": getattr(sender, "name", "unknown"),
-        "task_id": task_id,
-        "exception_type": type(exception).__name__ if exception is not None else "unknown",
-        "exception_message": str(exception) if exception is not None else "",
-        "args": args or (),
-        "kwargs": kwargs or {},
-        "retries": current_retries,
-        "failed_at": datetime.now(tz=UTC).isoformat(),
-    }
-    record_worker_error(task_name=str(payload["task_name"]))
-    _push_dead_letter(payload)
+    shared_helpers.handle_task_failure(
+        deps=_deps(),
+        sender=sender,
+        task_id=task_id,
+        exception=exception,
+        args=args,
+        kwargs=kwargs,
+        **extra,
+    )
 
 
 task_failure.connect(_handle_task_failure)
@@ -301,654 +223,160 @@ def _build_processing_dispatch_plan(
     budget_remaining_usd: float | None,
     daily_cost_limit_usd: float,
 ) -> ProcessingDispatchPlan:
-    if stored_items <= 0:
-        return ProcessingDispatchPlan(
-            should_dispatch=False,
-            reason="no_new_items",
-            task_limit=0,
-            pending_backlog=max(0, pending_backlog),
-            in_flight=max(0, in_flight),
-            budget_status=budget_status,
-            budget_remaining_usd=budget_remaining_usd,
-        )
-    if not settings.ENABLE_PROCESSING_PIPELINE:
-        return ProcessingDispatchPlan(
-            should_dispatch=False,
-            reason="pipeline_disabled",
-            task_limit=0,
-            pending_backlog=max(0, pending_backlog),
-            in_flight=max(0, in_flight),
-            budget_status=budget_status,
-            budget_remaining_usd=budget_remaining_usd,
-        )
-
-    max_in_flight = max(1, settings.PROCESSING_DISPATCH_MAX_IN_FLIGHT)
-    if in_flight >= max_in_flight:
-        return ProcessingDispatchPlan(
-            should_dispatch=False,
-            reason="in_flight_throttle",
-            task_limit=0,
-            pending_backlog=max(0, pending_backlog),
-            in_flight=max(0, in_flight),
-            budget_status=budget_status,
-            budget_remaining_usd=budget_remaining_usd,
-        )
-
-    queue_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
-    base_limit = min(queue_limit, max(stored_items, min(pending_backlog, queue_limit)))
-    if budget_status == "sleep_mode":
-        return ProcessingDispatchPlan(
-            should_dispatch=False,
-            reason="budget_denied",
-            task_limit=0,
-            pending_backlog=max(0, pending_backlog),
-            in_flight=max(0, in_flight),
-            budget_status=budget_status,
-            budget_remaining_usd=budget_remaining_usd,
-        )
-
-    min_headroom_pct = max(0, settings.PROCESSING_DISPATCH_MIN_BUDGET_HEADROOM_PCT)
-    if (
-        budget_remaining_usd is not None
-        and daily_cost_limit_usd > 0
-        and min_headroom_pct > 0
-        and ((budget_remaining_usd / daily_cost_limit_usd) * 100.0) <= min_headroom_pct
-    ):
-        throttled_limit = min(base_limit, max(1, settings.PROCESSING_DISPATCH_LOW_HEADROOM_LIMIT))
-        return ProcessingDispatchPlan(
-            should_dispatch=throttled_limit > 0,
-            reason="budget_low_headroom",
-            task_limit=throttled_limit,
-            pending_backlog=max(0, pending_backlog),
-            in_flight=max(0, in_flight),
-            budget_status=budget_status,
-            budget_remaining_usd=budget_remaining_usd,
-        )
-
-    return ProcessingDispatchPlan(
-        should_dispatch=True,
-        reason="ok",
-        task_limit=base_limit,
-        pending_backlog=max(0, pending_backlog),
-        in_flight=max(0, in_flight),
-        budget_status=budget_status,
-        budget_remaining_usd=budget_remaining_usd,
-    )
-
-
-def _get_redis_client() -> redis.Redis[str]:
-    return redis.from_url(settings.REDIS_URL, decode_responses=True)
-
-
-def _get_processing_in_flight_count() -> int:
-    client: redis.Redis[str] | None = None
-    try:
-        client = _get_redis_client()
-        raw_value = client.get(PROCESSING_IN_FLIGHT_KEY)
-        return max(0, int(raw_value or 0))
-    except Exception:
-        return 0
-    finally:
-        if client is not None:
-            client.close()
-
-
-def _increment_processing_in_flight() -> int:
-    client: redis.Redis[str] | None = None
-    try:
-        client = _get_redis_client()
-        current = int(client.incr(PROCESSING_IN_FLIGHT_KEY))
-        client.expire(PROCESSING_IN_FLIGHT_KEY, 3600)
-        return max(0, current)
-    except Exception:
-        return 0
-    finally:
-        if client is not None:
-            client.close()
-
-
-def _decrement_processing_in_flight() -> int:
-    client: redis.Redis[str] | None = None
-    try:
-        client = _get_redis_client()
-        updated = int(client.decr(PROCESSING_IN_FLIGHT_KEY))
-        if updated <= 0:
-            client.delete(PROCESSING_IN_FLIGHT_KEY)
-            return 0
-        return updated
-    except Exception:
-        return 0
-    finally:
-        if client is not None:
-            client.close()
-
-
-def _acquire_processing_dispatch_lock() -> bool:
-    lock_ttl = max(0, settings.PROCESSING_DISPATCH_LOCK_TTL_SECONDS)
-    if lock_ttl == 0:
-        return True
-
-    client: redis.Redis[str] | None = None
-    try:
-        client = _get_redis_client()
-        acquired = client.set(
-            PROCESSING_DISPATCH_LOCK_KEY,
-            datetime.now(tz=UTC).isoformat(),
-            ex=lock_ttl,
-            nx=True,
-        )
-        return bool(acquired)
-    except Exception:
-        return True
-    finally:
-        if client is not None:
-            client.close()
-
-
-async def _load_processing_dispatch_inputs_async() -> dict[str, Any]:
-    async with async_session_maker() as session:
-        pending_count_raw = await session.scalar(
-            select(func.count(RawItem.id)).where(
-                RawItem.processing_status == ProcessingStatus.PENDING
-            )
-        )
-        pending_count = int(pending_count_raw or 0)
-        budget_summary = await CostTracker(session=session).get_daily_summary()
-    return {
-        "pending_backlog": pending_count,
-        "budget_status": str(budget_summary.get("status", "active")),
-        "budget_remaining_usd": budget_summary.get("budget_remaining_usd"),
-        "daily_cost_limit_usd": float(budget_summary.get("daily_cost_limit_usd", 0.0) or 0.0),
-    }
-
-
-async def _collect_rss_async() -> dict[str, Any]:
-    async with (
-        httpx.AsyncClient() as http_client,
-        async_session_maker() as session,
-    ):
-        collector = RSSCollector(session=session, http_client=http_client)
-        results = await collector.collect_all()
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "collector": "rss",
-        "fetched": sum(result.items_fetched for result in results),
-        "stored": sum(result.items_stored for result in results),
-        "skipped": sum(result.items_skipped for result in results),
-        "errors": sum(len(result.errors) for result in results),
-        "transient_errors": sum(result.transient_errors for result in results),
-        "terminal_errors": sum(result.terminal_errors for result in results),
-        "sources_succeeded": sum(1 for result in results if not result.errors),
-        "sources_failed": sum(1 for result in results if result.errors),
-        "results": [asdict(result) for result in results],
-    }
-
-
-async def _collect_gdelt_async() -> dict[str, Any]:
-    async with (
-        httpx.AsyncClient() as http_client,
-        async_session_maker() as session,
-    ):
-        collector = GDELTClient(session=session, http_client=http_client)
-        results = await collector.collect_all()
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "collector": "gdelt",
-        "fetched": sum(result.items_fetched for result in results),
-        "stored": sum(result.items_stored for result in results),
-        "skipped": sum(result.items_skipped for result in results),
-        "errors": sum(len(result.errors) for result in results),
-        "transient_errors": sum(result.transient_errors for result in results),
-        "terminal_errors": sum(result.terminal_errors for result in results),
-        "sources_succeeded": sum(1 for result in results if not result.errors),
-        "sources_failed": sum(1 for result in results if result.errors),
-        "results": [asdict(result) for result in results],
-    }
-
-
-async def _check_source_freshness_async() -> dict[str, Any]:
-    async with async_session_maker() as session:
-        report = await build_source_freshness_report(session=session)
-
-    stale_rows = [row for row in report.rows if row.is_stale]
-    stale_by_collector: dict[str, int] = {}
-    for row in stale_rows:
-        stale_by_collector[row.collector] = stale_by_collector.get(row.collector, 0) + 1
-
-    for collector, stale_count in stale_by_collector.items():
-        record_source_freshness_stale(collector=collector, stale_count=stale_count)
-
-    catchup_dispatched: list[str] = []
-    dispatch_budget = max(0, settings.SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES)
-    if dispatch_budget > 0:
-        stale_collectors = set(report.stale_collectors)
-        if (
-            "rss" in stale_collectors
-            and settings.ENABLE_RSS_INGESTION
-            and len(catchup_dispatched) < dispatch_budget
-        ):
-            cast("Any", collect_rss).delay()
-            record_source_catchup_dispatch(collector="rss")
-            catchup_dispatched.append("rss")
-        if (
-            "gdelt" in stale_collectors
-            and settings.ENABLE_GDELT_INGESTION
-            and len(catchup_dispatched) < dispatch_budget
-        ):
-            cast("Any", collect_gdelt).delay()
-            record_source_catchup_dispatch(collector="gdelt")
-            catchup_dispatched.append("gdelt")
-
-    stale_source_rows = [
-        {
-            "source_id": str(row.source_id),
-            "source_name": row.source_name,
-            "collector": row.collector,
-            "last_fetched_at": row.last_fetched_at.isoformat() if row.last_fetched_at else None,
-            "age_seconds": row.age_seconds,
-            "stale_after_seconds": row.stale_after_seconds,
-        }
-        for row in stale_rows
-    ]
-
-    return {
-        "status": "ok",
-        "task": "check_source_freshness",
-        "checked_at": report.checked_at.isoformat(),
-        "stale_multiplier": report.stale_multiplier,
-        "stale_count": len(stale_rows),
-        "stale_collectors": list(report.stale_collectors),
-        "stale_by_collector": stale_by_collector,
-        "catchup_dispatch_budget": dispatch_budget,
-        "catchup_dispatched": catchup_dispatched,
-        "stale_sources": stale_source_rows,
-    }
-
-
-async def _monitor_cluster_drift_async() -> dict[str, Any]:
-    window_end = datetime.now(tz=UTC)
-    window_start = window_end - timedelta(days=settings.CLUSTER_DRIFT_SENTINEL_LOOKBACK_DAYS)
-
-    async with async_session_maker() as session:
-        rows = (
-            await session.execute(
-                select(
-                    Event.id,
-                    Event.has_contradictions,
-                    func.count(EventItem.item_id).label("item_count"),
-                    func.array_agg(func.coalesce(RawItem.language, "unknown")).label("languages"),
-                )
-                .outerjoin(EventItem, EventItem.event_id == Event.id)
-                .outerjoin(RawItem, RawItem.id == EventItem.item_id)
-                .where(Event.first_seen_at >= window_start)
-                .where(Event.first_seen_at < window_end)
-                .group_by(Event.id, Event.has_contradictions)
-            )
-        ).all()
-
-    event_samples: list[ClusterEventSample] = []
-    for row in rows:
-        item_count_raw = row[2]
-        languages_raw = row[3]
-        language_values: tuple[str, ...]
-        if isinstance(languages_raw, list):
-            language_values = tuple(
-                str(item or "unknown") for item in languages_raw if item is not None
-            )
-        else:
-            language_values = ()
-
-        event_samples.append(
-            ClusterEventSample(
-                item_count=max(0, int(item_count_raw or 0)),
-                has_contradictions=bool(row[1]),
-                languages=language_values,
-            )
-        )
-
-    artifact_dir = Path(settings.CLUSTER_DRIFT_ARTIFACT_DIR)
-    baseline_distribution = load_latest_language_distribution(artifact_dir)
-    thresholds = ClusterDriftThresholds(
-        singleton_rate_warn=settings.CLUSTER_DRIFT_SINGLETON_RATE_WARN_THRESHOLD,
-        large_cluster_rate_warn=settings.CLUSTER_DRIFT_LARGE_CLUSTER_RATE_WARN_THRESHOLD,
-        contradiction_rate_warn=settings.CLUSTER_DRIFT_CONTRADICTION_RATE_WARN_THRESHOLD,
-        language_drift_warn=settings.CLUSTER_DRIFT_LANGUAGE_DRIFT_WARN_THRESHOLD,
-        large_cluster_size=settings.CLUSTER_DRIFT_LARGE_CLUSTER_SIZE,
-    )
-    summary = compute_cluster_drift_summary(
-        event_samples=event_samples,
-        thresholds=thresholds,
-        baseline_language_distribution=baseline_distribution,
-        window_start=window_start,
-        window_end=window_end,
-    )
-    artifact_path = write_cluster_drift_artifact(
-        artifact_dir=artifact_dir,
-        summary=summary,
-    )
-    warning_keys = summary.get("warning_keys")
-    warnings = list(warning_keys) if isinstance(warning_keys, list) else []
-
-    return {
-        "status": "ok",
-        "task": "monitor_cluster_drift",
-        "artifact_path": str(artifact_path),
-        "window_start": summary["window_start"],
-        "window_end": summary["window_end"],
-        "event_count": summary["event_count"],
-        "warning_keys": warnings,
-        "singleton_rate": summary["singleton_rate"],
-        "large_cluster_rate": summary["large_cluster_rate"],
-        "contradiction_rate": summary["contradiction_rate"],
-        "language_drift_score": summary["language_drift_score"],
-    }
-
-
-def _queue_processing_for_new_items(*, collector: str, stored_items: int) -> bool:
-    dispatch_inputs = _run_async(_load_processing_dispatch_inputs_async())
-    pending_backlog = int(dispatch_inputs["pending_backlog"])
-    budget_status = str(dispatch_inputs["budget_status"])
-    budget_remaining_raw = dispatch_inputs.get("budget_remaining_usd")
-    budget_remaining = (
-        float(budget_remaining_raw) if isinstance(budget_remaining_raw, int | float) else None
-    )
-    daily_cost_limit = float(dispatch_inputs.get("daily_cost_limit_usd", 0.0) or 0.0)
-    in_flight = _get_processing_in_flight_count()
-
-    plan = _build_processing_dispatch_plan(
+    return processing_helpers.build_processing_dispatch_plan(
+        deps=_deps(),
         stored_items=stored_items,
         pending_backlog=pending_backlog,
         in_flight=in_flight,
         budget_status=budget_status,
-        budget_remaining_usd=budget_remaining,
-        daily_cost_limit_usd=daily_cost_limit,
+        budget_remaining_usd=budget_remaining_usd,
+        daily_cost_limit_usd=daily_cost_limit_usd,
     )
-    record_processing_backlog_depth(pending_count=pending_backlog)
 
-    if plan.should_dispatch and not _acquire_processing_dispatch_lock():
-        record_processing_dispatch_decision(dispatched=False, reason="dispatch_lock_active")
-        logger.info(
-            "Skipped processing dispatch due to active dispatch lock",
-            collector=collector,
-            stored_items=stored_items,
-            pending_backlog=pending_backlog,
-            in_flight=in_flight,
-        )
-        return False
 
-    if not plan.should_dispatch:
-        record_processing_dispatch_decision(dispatched=False, reason=plan.reason)
-        logger.info(
-            "Skipped processing dispatch",
-            collector=collector,
-            stored_items=stored_items,
-            reason=plan.reason,
-            pending_backlog=plan.pending_backlog,
-            in_flight=plan.in_flight,
-            budget_status=plan.budget_status,
-            budget_remaining_usd=plan.budget_remaining_usd,
-        )
-        return False
+def _get_redis_client() -> redis.Redis[str]:
+    return cast("redis.Redis[str]", processing_helpers.get_redis_client(deps=_deps()))
 
-    cast("Any", process_pending_items).delay(limit=plan.task_limit)
-    record_processing_dispatch_decision(dispatched=True, reason=plan.reason)
-    logger.info(
-        "Queued processing pipeline task",
+
+def _get_processing_in_flight_count() -> int:
+    return processing_helpers.get_processing_in_flight_count(deps=_deps())
+
+
+def _increment_processing_in_flight() -> int:
+    return processing_helpers.increment_processing_in_flight(deps=_deps())
+
+
+def _decrement_processing_in_flight() -> int:
+    return processing_helpers.decrement_processing_in_flight(deps=_deps())
+
+
+def _acquire_processing_dispatch_lock() -> bool:
+    return processing_helpers.acquire_processing_dispatch_lock(deps=_deps())
+
+
+async def _load_processing_dispatch_inputs_async() -> dict[str, Any]:
+    return await processing_helpers.load_processing_dispatch_inputs_async(deps=_deps())
+
+
+async def _collect_rss_async() -> dict[str, Any]:
+    return await collector_helpers.collect_rss_async(deps=_deps())
+
+
+async def _collect_gdelt_async() -> dict[str, Any]:
+    return await collector_helpers.collect_gdelt_async(deps=_deps())
+
+
+async def _check_source_freshness_async() -> dict[str, Any]:
+    return await collector_helpers.check_source_freshness_async(deps=_deps())
+
+
+async def _monitor_cluster_drift_async() -> dict[str, Any]:
+    return await collector_helpers.monitor_cluster_drift_async(deps=_deps())
+
+
+def _queue_processing_for_new_items(*, collector: str, stored_items: int) -> bool:
+    return processing_helpers.queue_processing_for_new_items(
+        deps=_deps(),
         collector=collector,
         stored_items=stored_items,
-        task_limit=plan.task_limit,
-        pending_backlog=plan.pending_backlog,
-        in_flight=plan.in_flight,
-        budget_status=plan.budget_status,
-        budget_remaining_usd=plan.budget_remaining_usd,
     )
-    return True
 
 
 async def _process_pending_async(limit: int) -> dict[str, Any]:
-    async with async_session_maker() as session:
-        degraded_tracker = (
-            DegradedLLMTracker(stage="tier2") if settings.LLM_DEGRADED_MODE_ENABLED else None
-        )
-
-        tier2_model = settings.LLM_TIER2_MODEL
-        if degraded_tracker is not None and settings.LLM_DEGRADED_CANARY_ENABLED:
-            try:
-                primary_canary = await run_tier2_canary(
-                    model=settings.LLM_TIER2_MODEL,
-                    api_key=settings.OPENAI_API_KEY,
-                    base_url=settings.LLM_PRIMARY_BASE_URL,
-                    max_items=settings.LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS,
-                )
-            except Exception as exc:
-                primary_canary = None
-                degraded_tracker.latch_quality_degraded(
-                    ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
-                    reason=f"primary_canary_error:{type(exc).__name__}",
-                )
-
-            if primary_canary is not None and primary_canary.passed:
-                degraded_tracker.clear_quality_degraded()
-            elif primary_canary is not None:
-                emergency_model = settings.LLM_TIER2_EMERGENCY_MODEL
-                if isinstance(emergency_model, str) and emergency_model.strip():
-                    try:
-                        emergency_canary = await run_tier2_canary(
-                            model=emergency_model.strip(),
-                            api_key=settings.OPENAI_API_KEY,
-                            base_url=settings.LLM_PRIMARY_BASE_URL,
-                            max_items=settings.LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS,
-                        )
-                    except Exception as exc:
-                        emergency_canary = None
-                        degraded_tracker.latch_quality_degraded(
-                            ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
-                            reason=f"emergency_canary_error:{type(exc).__name__}",
-                        )
-                    else:
-                        if emergency_canary is not None and emergency_canary.passed:
-                            tier2_model = emergency_model.strip()
-                            degraded_tracker.clear_quality_degraded()
-                        else:
-                            degraded_tracker.latch_quality_degraded(
-                                ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
-                                reason=f"primary:{primary_canary.reason};emergency:{getattr(emergency_canary, 'reason', 'unknown')}",
-                            )
-                else:
-                    degraded_tracker.latch_quality_degraded(
-                        ttl_seconds=settings.LLM_DEGRADED_CANARY_QUALITY_TTL_SECONDS,
-                        reason=f"primary:{primary_canary.reason}",
-                    )
-
-        tier2_classifier = Tier2Classifier(session=session, model=tier2_model)
-        pipeline = ProcessingPipeline(
-            session=session,
-            tier2_classifier=tier2_classifier,
-            degraded_llm_tracker=degraded_tracker,
-        )
-        run_result = await pipeline.process_pending_items(limit=limit)
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "processing_pipeline",
-        **ProcessingPipeline.run_result_to_dict(run_result),
-    }
+    return await processing_helpers.process_pending_async(deps=_deps(), limit=limit)
 
 
 async def _reap_stale_processing_async() -> dict[str, Any]:
-    now = datetime.now(tz=UTC)
-    stale_before = now - timedelta(minutes=settings.PROCESSING_STALE_TIMEOUT_MINUTES)
-    async with async_session_maker() as session:
-        stale_items = list(
-            (
-                await session.scalars(
-                    select(RawItem)
-                    .where(RawItem.processing_status == ProcessingStatus.PROCESSING)
-                    .where(RawItem.processing_started_at.is_not(None))
-                    .where(RawItem.processing_started_at <= stale_before)
-                    .order_by(RawItem.processing_started_at.asc())
-                    .limit(max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE))
-                    .with_for_update(skip_locked=True)
-                )
-            ).all()
-        )
-
-        reset_item_ids: list[str] = []
-        for item in stale_items:
-            item.processing_status = ProcessingStatus.PENDING
-            item.processing_started_at = None
-            item.error_message = None
-            reset_item_ids.append(str(item.id))
-
-        await session.commit()
-
-    logger.info(
-        "Reaped stale processing items",
-        scanned=len(stale_items),
-        reset_count=len(reset_item_ids),
-        reset_item_ids=reset_item_ids,
-        stale_before=stale_before.isoformat(),
-    )
-    return {
-        "status": "ok",
-        "task": "reap_stale_processing_items",
-        "checked_at": now.isoformat(),
-        "stale_before": stale_before.isoformat(),
-        "scanned": len(stale_items),
-        "reset": len(reset_item_ids),
-        "reset_item_ids": reset_item_ids,
-    }
+    return await processing_helpers.reap_stale_processing_async(deps=_deps())
 
 
 async def _snapshot_trends_async() -> dict[str, Any]:
-    snapshot_time = datetime.now(tz=UTC).replace(second=0, microsecond=0)
-    async with async_session_maker() as session:
-        trends = list(
-            (
-                await session.scalars(
-                    select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
-                )
-            ).all()
-        )
-
-        created = 0
-        skipped = 0
-        for trend in trends:
-            trend_id = trend.id
-            if trend_id is None:
-                skipped += 1
-                continue
-
-            existing = await session.scalar(
-                select(TrendSnapshot.trend_id)
-                .where(TrendSnapshot.trend_id == trend_id)
-                .where(TrendSnapshot.timestamp == snapshot_time)
-                .limit(1)
-            )
-            if existing is not None:
-                skipped += 1
-                continue
-
-            session.add(
-                TrendSnapshot(
-                    trend_id=trend_id,
-                    timestamp=snapshot_time,
-                    log_odds=float(trend.current_log_odds),
-                )
-            )
-            created += 1
-
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "snapshot_trends",
-        "timestamp": snapshot_time.isoformat(),
-        "scanned": len(trends),
-        "created": created,
-        "skipped": skipped,
-    }
+    return await maintenance_helpers.snapshot_trends_async(deps=_deps())
 
 
 async def _decay_trends_async() -> dict[str, Any]:
-    as_of = datetime.now(tz=UTC)
-    async with async_session_maker() as session:
-        engine = TrendEngine(session=session)
-        trends = list(
-            (
-                await session.scalars(
-                    select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
-                )
-            ).all()
-        )
-
-        decayed = 0
-        unchanged = 0
-        for trend in trends:
-            previous_probability = engine.get_probability(trend)
-            new_probability = await engine.apply_decay(trend=trend, as_of=as_of)
-            if abs(new_probability - previous_probability) > 1e-12:
-                decayed += 1
-            else:
-                unchanged += 1
-            logger.debug(
-                "Applied trend decay",
-                trend_id=str(trend.id),
-                trend_name=trend.name,
-                previous_probability=previous_probability,
-                new_probability=new_probability,
-            )
-
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "apply_trend_decay",
-        "as_of": as_of.isoformat(),
-        "scanned": len(trends),
-        "decayed": decayed,
-        "unchanged": unchanged,
-    }
+    return await maintenance_helpers.decay_trends_async(deps=_deps())
 
 
 async def _check_event_lifecycles_async() -> dict[str, Any]:
-    async with async_session_maker() as session:
-        manager = EventLifecycleManager(session)
-        run_result = await manager.run_decay_check()
-        await session.commit()
+    return await maintenance_helpers.check_event_lifecycles_async(deps=_deps())
 
-    return {
-        "status": "ok",
-        **run_result,
-    }
+
+def _build_retention_cutoffs(*, dry_run: bool | None = None) -> RetentionCutoffs:
+    return retention_helpers.build_retention_cutoffs(deps=_deps(), dry_run=dry_run)
+
+
+def _is_raw_item_noise_retention_eligible(
+    *,
+    processing_status: ProcessingStatus,
+    fetched_at: datetime,
+    has_event_link: bool,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    return retention_helpers.is_raw_item_noise_retention_eligible(
+        processing_status=processing_status,
+        fetched_at=fetched_at,
+        has_event_link=has_event_link,
+        cutoffs=cutoffs,
+        noise_status=ProcessingStatus.NOISE,
+        error_status=ProcessingStatus.ERROR,
+    )
+
+
+def _is_raw_item_archived_event_retention_eligible(
+    *,
+    fetched_at: datetime,
+    event_lifecycle_status: str,
+    event_last_mention_at: datetime | None,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    return retention_helpers.is_raw_item_archived_event_retention_eligible(
+        fetched_at=fetched_at,
+        event_lifecycle_status=event_lifecycle_status,
+        event_last_mention_at=event_last_mention_at,
+        cutoffs=cutoffs,
+        archived_status=EventLifecycle.ARCHIVED.value,
+    )
+
+
+def _is_trend_evidence_retention_eligible(
+    *,
+    created_at: datetime,
+    event_lifecycle_status: str,
+    event_last_mention_at: datetime | None,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    return retention_helpers.is_trend_evidence_retention_eligible(
+        created_at=created_at,
+        event_lifecycle_status=event_lifecycle_status,
+        event_last_mention_at=event_last_mention_at,
+        cutoffs=cutoffs,
+        archived_status=EventLifecycle.ARCHIVED.value,
+    )
+
+
+def _is_archived_event_retention_eligible(
+    *,
+    lifecycle_status: str,
+    last_mention_at: datetime,
+    has_remaining_evidence: bool,
+    cutoffs: RetentionCutoffs,
+) -> bool:
+    return retention_helpers.is_archived_event_retention_eligible(
+        lifecycle_status=lifecycle_status,
+        last_mention_at=last_mention_at,
+        has_remaining_evidence=has_remaining_evidence,
+        cutoffs=cutoffs,
+        archived_status=EventLifecycle.ARCHIVED.value,
+    )
 
 
 async def _select_noise_raw_item_ids(*, batch_size: int, cutoff: datetime) -> list[Any]:
-    async with async_session_maker() as session:
-        linked_event_exists = (
-            select(EventItem.item_id).where(EventItem.item_id == RawItem.id).exists()
-        )
-        return list(
-            (
-                await session.scalars(
-                    select(RawItem.id)
-                    .where(
-                        RawItem.processing_status.in_(
-                            [ProcessingStatus.NOISE, ProcessingStatus.ERROR]
-                        )
-                    )
-                    .where(RawItem.fetched_at <= cutoff)
-                    .where(~linked_event_exists)
-                    .order_by(RawItem.fetched_at.asc())
-                    .limit(max(1, batch_size))
-                )
-            ).all()
-        )
+    return await retention_helpers.select_noise_raw_item_ids(
+        deps=_deps(),
+        batch_size=batch_size,
+        cutoff=cutoff,
+    )
 
 
 async def _select_archived_event_raw_item_ids(
@@ -956,21 +384,11 @@ async def _select_archived_event_raw_item_ids(
     batch_size: int,
     cutoff: datetime,
 ) -> list[Any]:
-    async with async_session_maker() as session:
-        return list(
-            (
-                await session.scalars(
-                    select(RawItem.id)
-                    .join(EventItem, EventItem.item_id == RawItem.id)
-                    .join(Event, Event.id == EventItem.event_id)
-                    .where(Event.lifecycle_status == EventLifecycle.ARCHIVED.value)
-                    .where(Event.last_mention_at <= cutoff)
-                    .where(RawItem.fetched_at <= cutoff)
-                    .order_by(RawItem.fetched_at.asc())
-                    .limit(max(1, batch_size))
-                )
-            ).all()
-        )
+    return await retention_helpers.select_archived_event_raw_item_ids(
+        deps=_deps(),
+        batch_size=batch_size,
+        cutoff=cutoff,
+    )
 
 
 async def _select_trend_evidence_ids(
@@ -979,144 +397,27 @@ async def _select_trend_evidence_ids(
     evidence_cutoff: datetime,
     archived_event_cutoff: datetime,
 ) -> list[Any]:
-    async with async_session_maker() as session:
-        return list(
-            (
-                await session.scalars(
-                    select(TrendEvidence.id)
-                    .join(Event, Event.id == TrendEvidence.event_id)
-                    .where(TrendEvidence.created_at <= evidence_cutoff)
-                    .where(Event.lifecycle_status == EventLifecycle.ARCHIVED.value)
-                    .where(Event.last_mention_at <= archived_event_cutoff)
-                    .order_by(TrendEvidence.created_at.asc())
-                    .limit(max(1, batch_size))
-                )
-            ).all()
-        )
+    return await retention_helpers.select_trend_evidence_ids(
+        deps=_deps(),
+        batch_size=batch_size,
+        evidence_cutoff=evidence_cutoff,
+        archived_event_cutoff=archived_event_cutoff,
+    )
 
 
 async def _run_data_retention_cleanup_async(*, dry_run: bool | None = None) -> dict[str, Any]:
-    cutoffs = _build_retention_cutoffs(dry_run=dry_run)
-
-    noise_ids = await _select_noise_raw_item_ids(
-        batch_size=cutoffs.batch_size,
-        cutoff=cutoffs.raw_item_noise_before,
+    return await retention_helpers.run_data_retention_cleanup_async(
+        deps=_deps(),
+        dry_run=dry_run,
     )
-    archived_event_raw_ids = await _select_archived_event_raw_item_ids(
-        batch_size=cutoffs.batch_size,
-        cutoff=cutoffs.raw_item_archived_event_before,
-    )
-    evidence_ids = await _select_trend_evidence_ids(
-        batch_size=cutoffs.batch_size,
-        evidence_cutoff=cutoffs.trend_evidence_before,
-        archived_event_cutoff=cutoffs.archived_event_before,
-    )
-
-    raw_ids = list(dict.fromkeys([*noise_ids, *archived_event_raw_ids]))
-    deleted_raw = 0
-    deleted_evidence = 0
-    deleted_events = 0
-    event_ids: list[Any] = []
-
-    async with async_session_maker() as session:
-        if not cutoffs.dry_run:
-            if raw_ids:
-                deleted_raw_result = await session.execute(
-                    delete(RawItem).where(RawItem.id.in_(raw_ids))
-                )
-                deleted_raw = int(getattr(deleted_raw_result, "rowcount", 0) or 0)
-
-            if evidence_ids:
-                deleted_evidence_result = await session.execute(
-                    delete(TrendEvidence).where(TrendEvidence.id.in_(evidence_ids))
-                )
-                deleted_evidence = int(getattr(deleted_evidence_result, "rowcount", 0) or 0)
-
-            await session.flush()
-
-        has_evidence = select(TrendEvidence.id).where(TrendEvidence.event_id == Event.id).exists()
-        event_ids = list(
-            (
-                await session.scalars(
-                    select(Event.id)
-                    .where(Event.lifecycle_status == EventLifecycle.ARCHIVED.value)
-                    .where(Event.last_mention_at <= cutoffs.archived_event_before)
-                    .where(~has_evidence)
-                    .order_by(Event.last_mention_at.asc())
-                    .limit(cutoffs.batch_size)
-                )
-            ).all()
-        )
-
-        if not cutoffs.dry_run and event_ids:
-            deleted_events_result = await session.execute(
-                delete(Event).where(Event.id.in_(event_ids))
-            )
-            deleted_events = int(getattr(deleted_events_result, "rowcount", 0) or 0)
-
-        if cutoffs.dry_run:
-            await session.rollback()
-        else:
-            await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "run_data_retention_cleanup",
-        "dry_run": cutoffs.dry_run,
-        "batch_size": cutoffs.batch_size,
-        "cutoffs": {
-            "raw_item_noise_before": cutoffs.raw_item_noise_before.isoformat(),
-            "raw_item_archived_event_before": cutoffs.raw_item_archived_event_before.isoformat(),
-            "archived_event_before": cutoffs.archived_event_before.isoformat(),
-            "trend_evidence_before": cutoffs.trend_evidence_before.isoformat(),
-        },
-        "eligible": {
-            "raw_items_noise": len(noise_ids),
-            "raw_items_archived_event": len(archived_event_raw_ids),
-            "raw_items_total": len(raw_ids),
-            "trend_evidence": len(evidence_ids),
-            "events": len(event_ids),
-        },
-        "deleted": {
-            "raw_items": deleted_raw,
-            "trend_evidence": deleted_evidence,
-            "events": deleted_events,
-        },
-    }
 
 
 async def _generate_weekly_reports_async() -> dict[str, Any]:
-    async with async_session_maker() as session:
-        generator = ReportGenerator(session=session)
-        run_result = await generator.generate_weekly_reports()
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "generate_weekly_reports",
-        "period_start": run_result.period_start.isoformat(),
-        "period_end": run_result.period_end.isoformat(),
-        "scanned": run_result.scanned,
-        "created": run_result.created,
-        "updated": run_result.updated,
-    }
+    return await maintenance_helpers.generate_weekly_reports_async(deps=_deps())
 
 
 async def _generate_monthly_reports_async() -> dict[str, Any]:
-    async with async_session_maker() as session:
-        generator = ReportGenerator(session=session)
-        run_result = await generator.generate_monthly_reports()
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "generate_monthly_reports",
-        "period_start": run_result.period_start.isoformat(),
-        "period_end": run_result.period_end.isoformat(),
-        "scanned": run_result.scanned,
-        "created": run_result.created,
-        "updated": run_result.updated,
-    }
+    return await maintenance_helpers.generate_monthly_reports_async(deps=_deps())
 
 
 @typed_shared_task(
@@ -1165,100 +466,7 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
 
 
 async def _replay_degraded_events_async(limit: int) -> dict[str, Any]:
-    tracker = DegradedLLMTracker(stage="tier2") if settings.LLM_DEGRADED_MODE_ENABLED else None
-    if tracker is not None:
-        status = await asyncio.to_thread(tracker.evaluate)
-        if status.is_degraded:
-            return {
-                "status": "skipped",
-                "task": "replay_degraded_events",
-                "reason": "degraded_llm_active",
-                "stage": status.stage,
-                "window": {
-                    "total_calls": status.window.total_calls,
-                    "secondary_calls": status.window.secondary_calls,
-                    "failover_ratio": round(status.window.failover_ratio, 6),
-                },
-            }
-
-    now = datetime.now(tz=UTC)
-    async with async_session_maker() as session:
-        run_limit = max(1, int(limit))
-        rows = (
-            await session.scalars(
-                select(LLMReplayQueueItem)
-                .where(LLMReplayQueueItem.status == "pending")
-                .order_by(LLMReplayQueueItem.priority.desc(), LLMReplayQueueItem.enqueued_at.asc())
-                .limit(run_limit)
-                .with_for_update(skip_locked=True)
-            )
-        ).all()
-        items = list(rows)
-        if not items:
-            return {"status": "ok", "task": "replay_degraded_events", "drained": 0, "errors": 0}
-
-        for item in items:
-            item.status = "processing"
-            item.locked_at = now
-            item.locked_by = "workers.replay_degraded_events"
-            item.attempt_count = int(item.attempt_count or 0) + 1
-            item.last_attempt_at = now
-        await session.flush()
-
-        trends = list(
-            (
-                await session.scalars(
-                    select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
-                )
-            ).all()
-        )
-        tier2 = Tier2Classifier(
-            session=session, model=settings.LLM_TIER2_MODEL, secondary_model=None
-        )
-        pipeline = ProcessingPipeline(
-            session=session, tier2_classifier=tier2, degraded_llm_tracker=None
-        )
-
-        drained = 0
-        errors = 0
-        for item in items:
-            drained += 1
-            try:
-                event = await session.get(Event, item.event_id)
-                if event is None:
-                    raise ValueError(f"Event not found: {item.event_id}")
-                await tier2.classify_event(event=event, trends=trends)
-                impacts_seen, updates_applied = await pipeline._apply_trend_impacts(
-                    event=event,
-                    trends=trends,
-                )
-                item.status = "done"
-                item.processed_at = now
-                item.locked_at = None
-                item.locked_by = None
-                item.last_error = None
-                details = dict(item.details or {})
-                details["replay_result"] = {
-                    "impacts_seen": impacts_seen,
-                    "updates_applied": updates_applied,
-                    "processed_at": now.isoformat(),
-                    "model": settings.LLM_TIER2_MODEL,
-                }
-                item.details = details
-            except Exception as exc:
-                errors += 1
-                item.status = "error"
-                item.last_error = str(exc)[:1000]
-                item.locked_at = None
-                item.locked_by = None
-        await session.commit()
-
-    return {
-        "status": "ok",
-        "task": "replay_degraded_events",
-        "drained": drained,
-        "errors": errors,
-    }
+    return await maintenance_helpers.replay_degraded_events_async(deps=_deps(), limit=limit)
 
 
 @typed_shared_task(name="workers.replay_degraded_events")
@@ -1669,3 +877,24 @@ def ping() -> dict[str, Any]:
         task_name="workers.ping",
         runner=_runner,
     )
+
+
+__all__ = [
+    "CollectorTransientRunError",
+    "ProcessingDispatchPlan",
+    "RetentionCutoffs",
+    "apply_trend_decay",
+    "check_event_lifecycles",
+    "check_source_freshness",
+    "collect_gdelt",
+    "collect_rss",
+    "generate_monthly_reports",
+    "generate_weekly_reports",
+    "monitor_cluster_drift",
+    "ping",
+    "process_pending_items",
+    "reap_stale_processing_items",
+    "replay_degraded_events",
+    "run_data_retention_cleanup",
+    "snapshot_trends",
+]

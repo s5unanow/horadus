@@ -194,6 +194,14 @@ def _ensure_finish_pull_request(
             created_pr=False,
             lines=[],
         )
+    if context.recovered_pr_url is not None:
+        return FinishPullRequestBootstrap(
+            pr_url=context.recovered_pr_url,
+            remote_branch_exists=remote_branch_exists,
+            pushed_branch=False,
+            created_pr=False,
+            lines=[],
+        )
 
     pr_title = _resolve_finish_pr_title(task_id=context.task_id, branch_name=context.branch_name)
     pr_body = _resolve_finish_pr_body(task_id=context.task_id)

@@ -65,6 +65,12 @@ def _resolve_finish_context(
                 branch_task_id=requested_task_id,
                 task_id=requested_task_id,
                 current_branch=current_branch,
+                recovered_pr_url=(
+                    lifecycle_result.pr.url
+                    if lifecycle_result.pr is not None
+                    and lifecycle_result.pr.head_ref_name == lifecycle_result.branch_name
+                    else None
+                ),
             )
         return shared._task_blocked(
             "refusing to run on 'main'.",

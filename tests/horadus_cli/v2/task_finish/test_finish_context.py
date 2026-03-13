@@ -192,6 +192,7 @@ def test_resolve_finish_context_allows_explicit_task_id_from_main(
     assert result.branch_task_id == "TASK-289"
     assert result.task_id == "TASK-289"
     assert result.current_branch == "main"
+    assert result.recovered_pr_url == "https://example.invalid/pr/289"
 
 
 def test_resolve_finish_context_blocks_for_noncanonical_or_dirty_branch(

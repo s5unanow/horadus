@@ -327,6 +327,37 @@ def test_ensure_finish_pull_request_attaches_to_existing_open_branch_pr(
     assert result.lines == []
 
 
+def test_ensure_finish_pull_request_reuses_recovered_same_branch_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _finish_config()
+    context = _finish_context(current_branch="main")
+    context.recovered_pr_url = "https://example.invalid/pr/326"
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:3] == ["gh", "pr", "list"]:
+            return _completed(args, stdout="[]")
+        if args[:3] == ["gh", "pr", "create"]:
+            raise AssertionError(args)
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    result = task_commands_module._ensure_finish_pull_request(
+        context=context,
+        config=config,
+        dry_run=False,
+    )
+
+    assert isinstance(result, task_commands_module.FinishPullRequestBootstrap)
+    assert result.pr_url == "https://example.invalid/pr/326"
+    assert result.remote_branch_exists is False
+    assert result.pushed_branch is False
+    assert result.created_pr is False
+
+
 def test_ensure_finish_pull_request_recovers_from_create_race_by_requerying_branch_pr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

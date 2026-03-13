@@ -45,10 +45,11 @@ def _request_timeline(
     owner, repo = repo_name.split("/", 1)
 
     query = (
-        "query($owner:String!, $repo:String!, $number:Int!){"
+        "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
         "repository(owner:$owner,name:$repo){"
         "pullRequest(number:$number){"
-        "timelineItems(first:200,itemTypes:[ISSUE_COMMENT,PULL_REQUEST_COMMIT,HEAD_REF_FORCE_PUSHED_EVENT]){"
+        "timelineItems(first:100,after:$after,itemTypes:[ISSUE_COMMENT,PULL_REQUEST_COMMIT,HEAD_REF_FORCE_PUSHED_EVENT]){"
+        "pageInfo{hasNextPage endCursor}"
         "nodes{"
         "__typename "
         "... on IssueComment{id body createdAt author{login}} "
@@ -60,8 +61,10 @@ def _request_timeline(
         "}"
         "}"
     )
-    timeline_result = shared._run_command(
-        [
+    timeline_items: list[dict[str, Any]] = []
+    after_cursor: str | None = None
+    while True:
+        args = [
             config.gh_bin,
             "api",
             "graphql",
@@ -74,27 +77,42 @@ def _request_timeline(
             "-F",
             f"number={pr_number}",
         ]
-    )
-    if timeline_result.returncode != 0:
-        raise ValueError("Unable to inspect fresh-review request history.")
-    try:
-        payload = json.loads(timeline_result.stdout or "{}")
-    except json.JSONDecodeError as exc:
-        raise ValueError("Unable to parse fresh-review request history.") from exc
-    if not isinstance(payload, dict):
-        raise ValueError("Unexpected fresh-review request history payload.")
-    timeline_items = (
-        payload.get("data", {})
-        .get("repository", {})
-        .get("pullRequest", {})
-        .get("timelineItems", {})
-        .get("nodes")
-    )
-    if not isinstance(timeline_items, list):
-        raise ValueError("Unexpected fresh-review request history payload.")
-    if not all(isinstance(item, dict) for item in timeline_items):
-        raise ValueError("Unexpected fresh-review request history payload.")
-    return (pr_number, head_oid, [item for item in timeline_items if isinstance(item, dict)])
+        if after_cursor is not None:
+            args.extend(["-F", f"after={after_cursor}"])
+        else:
+            args.extend(["-F", "after="])
+        timeline_result = shared._run_command(args)
+        if timeline_result.returncode != 0:
+            raise ValueError("Unable to inspect fresh-review request history.")
+        try:
+            payload = json.loads(timeline_result.stdout or "{}")
+        except json.JSONDecodeError as exc:
+            raise ValueError("Unable to parse fresh-review request history.") from exc
+        if not isinstance(payload, dict):
+            raise ValueError("Unexpected fresh-review request history payload.")
+        timeline_payload = (
+            payload.get("data", {})
+            .get("repository", {})
+            .get("pullRequest", {})
+            .get("timelineItems", {})
+        )
+        if not isinstance(timeline_payload, dict):
+            raise ValueError("Unexpected fresh-review request history payload.")
+        page_info = timeline_payload.get("pageInfo")
+        page_nodes = timeline_payload.get("nodes")
+        if not isinstance(page_info, dict) or not isinstance(page_nodes, list):
+            raise ValueError("Unexpected fresh-review request history payload.")
+        for item in page_nodes:
+            if not isinstance(item, dict):
+                raise ValueError("Unexpected fresh-review request history payload.")
+            timeline_items.append(item)
+        if page_info.get("hasNextPage") is not True:
+            break
+        end_cursor = page_info.get("endCursor")
+        if not isinstance(end_cursor, str) or not end_cursor.strip():
+            raise ValueError("Fresh-review request history pagination is incomplete.")
+        after_cursor = end_cursor
+    return (pr_number, head_oid, timeline_items)
 
 
 def _request_comment_state(

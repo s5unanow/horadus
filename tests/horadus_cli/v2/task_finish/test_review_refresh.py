@@ -11,13 +11,19 @@ from tests.horadus_cli.v2.helpers import _completed
 pytestmark = pytest.mark.unit
 
 
-def _timeline_payload(*nodes: dict[str, object]) -> str:
+def _timeline_payload(
+    *nodes: dict[str, object], has_next_page: bool = False, end_cursor: str | None = None
+) -> str:
     return json.dumps(
         {
             "data": {
                 "repository": {
                     "pullRequest": {
                         "timelineItems": {
+                            "pageInfo": {
+                                "hasNextPage": has_next_page,
+                                "endCursor": end_cursor,
+                            },
                             "nodes": list(nodes),
                         }
                     }
@@ -45,6 +51,14 @@ def _commit_node(oid: str) -> dict[str, object]:
             "committedDate": "2026-03-13T09:59:00Z",
         },
     }
+
+
+def _timeline_after(args: list[str]) -> str | None:
+    for index, arg in enumerate(args[:-1]):
+        if arg == "-F" and args[index + 1].startswith("after="):
+            after = args[index + 1].split("=", 1)[1]
+            return after or None
+    return None
 
 
 def test_maybe_request_fresh_review_posts_codex_comment(
@@ -416,6 +430,141 @@ def test_maybe_request_fresh_review_dedupes_plain_request_after_current_head_com
     ) == [
         "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
     ]
+
+
+def test_maybe_request_fresh_review_dedupes_paginated_current_head_request(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
+            return _completed(args, stdout="example/repo\n")
+        if args[:3] == ["gh", "api", "graphql"]:
+            after = _timeline_after(args)
+            if after is None:
+                return _completed(
+                    args,
+                    stdout=_timeline_payload(
+                        _issue_comment_node("unrelated"),
+                        _commit_node("head-sha-290"),
+                        has_next_page=True,
+                        end_cursor="cursor-1",
+                    ),
+                )
+            assert after == "cursor-1"
+            return _completed(
+                args,
+                stdout=_timeline_payload(_issue_comment_node("@codex review")),
+            )
+        raise AssertionError(f"Unexpected command: {args}")
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == [
+        "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
+    ]
+
+
+def test_maybe_request_fresh_review_rejects_incomplete_timeline_pagination(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(
+                args,
+                stdout=_timeline_payload(
+                    _commit_node("head-sha-290"),
+                    has_next_page=True,
+                    end_cursor=None,
+                ),
+            )
+        ),
+    )
+
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+
+def test_maybe_request_fresh_review_rejects_non_dict_timeline_items_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(
+                args,
+                stdout=json.dumps(
+                    {
+                        "data": {
+                            "repository": {
+                                "pullRequest": {
+                                    "timelineItems": [],
+                                }
+                            }
+                        }
+                    }
+                ),
+            )
+        ),
+    )
+
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
 
 
 def test_needs_pre_review_fresh_review_request_detects_stale_review_context(

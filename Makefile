@@ -10,7 +10,7 @@
         test-integration-docker \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
-        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness pre-commit check all \
+        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness code-shape pre-commit check all \
         db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-context-pack task-start agent-safe-start task-finish local-gate protect-main doctor agent-smoke-run agent-check \
         check-tracked-artifacts validate-assessments automations-export automations-apply install-horadus-cli-skill
 
@@ -99,6 +99,7 @@ check: format lint typecheck ## Run all code quality checks
 agent-check: deps-dev ## Fast local gate for agent iteration (ruff, mypy, unit tests)
 	./scripts/run_with_backpressure.sh ruff-check $(UV_RUN) ruff check src/ tools/ tests/
 	./scripts/run_with_backpressure.sh mypy $(UV_RUN) mypy src/ tools/horadus/python
+	./scripts/run_with_backpressure.sh code-shape $(UV_RUN) python scripts/check_code_shape.py
 	./scripts/run_with_backpressure.sh pytest-unit $(UV_RUN) pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v -m unit
 
 pre-commit: ## Run pre-commit on all files
@@ -287,6 +288,9 @@ audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and prove
 
 docs-freshness: deps-dev ## Validate docs freshness and runtime consistency invariants
 	$(UV_RUN) python scripts/check_docs_freshness.py
+
+code-shape: deps-dev ## Validate repo code-shape budgets and ratchets
+	$(UV_RUN) python scripts/check_code_shape.py
 
 release-gate: deps-dev ## Run release gates (check + test + docs + migration gate [+ optional eval audit])
 	@if [ -z "$(RELEASE_GATE_DATABASE_URL)" ]; then \

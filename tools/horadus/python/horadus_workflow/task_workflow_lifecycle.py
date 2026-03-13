@@ -438,6 +438,10 @@ def full_local_gate_steps() -> list[LocalGateStep]:
             command=f"{uv_bin} run --no-sync python scripts/check_docs_freshness.py",
         ),
         LocalGateStep(
+            name="code-shape",
+            command=f"{uv_bin} run --no-sync python scripts/check_code_shape.py",
+        ),
+        LocalGateStep(
             name="ruff-format-check",
             command=f"{uv_bin} run --no-sync ruff format src/ tools/ tests/ --check",
         ),

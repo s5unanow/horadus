@@ -1,0 +1,236 @@
+[budgets]
+production_module_lines = 700
+test_module_lines = 1200
+production_function_lines = 100
+test_function_lines = 160
+
+[paths]
+include_roots = ["src", "tools", "tests", "scripts"]
+exclude_globs = ["**/__pycache__/**"]
+
+[[legacy_files]]
+path = "src/api/routes/feedback.py"
+[legacy_files.member_max_lines]
+"create_event_feedback" = 112
+"list_review_queue" = 142
+
+[[legacy_files]]
+path = "src/api/routes/reports.py"
+[legacy_files.member_max_lines]
+"get_calibration_dashboard" = 140
+
+[[legacy_files]]
+path = "src/api/routes/trends.py"
+max_lines = 1311
+
+[[legacy_files]]
+path = "src/core/calibration_dashboard.py"
+max_lines = 935
+
+[[legacy_files]]
+path = "src/core/config.py"
+max_lines = 1538
+
+[[legacy_files]]
+path = "src/core/dashboard_export.py"
+[legacy_files.member_max_lines]
+"render_calibration_dashboard_html" = 139
+
+[[legacy_files]]
+path = "src/core/release_gate_runtime.py"
+[legacy_files.member_max_lines]
+"evaluate_runtime_gate" = 105
+
+[[legacy_files]]
+path = "src/core/report_generator.py"
+max_lines = 957
+[legacy_files.member_max_lines]
+"ReportGenerator._load_contradiction_analytics" = 106
+
+[[legacy_files]]
+path = "src/core/trend_engine.py"
+max_lines = 927
+[legacy_files.member_max_lines]
+"TrendEngine.apply_evidence" = 138
+"calculate_evidence_delta" = 130
+
+[[legacy_files]]
+path = "src/eval/benchmark.py"
+max_lines = 999
+[legacy_files.member_max_lines]
+"run_gold_set_benchmark" = 260
+
+[[legacy_files]]
+path = "src/eval/vector_benchmark.py"
+[legacy_files.member_max_lines]
+"run_vector_retrieval_benchmark" = 125
+
+[[legacy_files]]
+path = "src/ingestion/gdelt_client.py"
+max_lines = 899
+[legacy_files.member_max_lines]
+"GDELTClient.collect_query" = 122
+
+[[legacy_files]]
+path = "src/ingestion/rss_collector.py"
+[legacy_files.member_max_lines]
+"RSSCollector.collect_feed" = 101
+
+[[legacy_files]]
+path = "src/processing/pipeline_orchestrator.py"
+max_lines = 1522
+[legacy_files.member_max_lines]
+"ProcessingPipeline._apply_trend_impacts" = 116
+"ProcessingPipeline._prepare_item_for_tier1" = 112
+"ProcessingPipeline._process_after_tier1" = 220
+
+[[legacy_files]]
+path = "src/processing/tier2_canary.py"
+[legacy_files.member_max_lines]
+"run_tier2_canary" = 134
+
+[[legacy_files]]
+path = "src/processing/tier2_classifier.py"
+max_lines = 869
+[legacy_files.member_max_lines]
+"Tier2Classifier.classify_event" = 119
+
+[[legacy_files]]
+path = "src/storage/models.py"
+max_lines = 1165
+
+[[legacy_files]]
+path = "src/workers/_task_maintenance.py"
+[legacy_files.member_max_lines]
+"replay_degraded_events_async" = 111
+
+[[legacy_files]]
+path = "src/workers/tasks.py"
+max_lines = 901
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_cli/_ops_registration.py"
+[legacy_files.member_max_lines]
+"register_ops_commands" = 334
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_cli/task_commands.py"
+[legacy_files.member_max_lines]
+"register_task_commands" = 195
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/_docs_freshness_current_sprint.py"
+[legacy_files.member_max_lines]
+"check_current_sprint" = 142
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/_docs_freshness_planning.py"
+[legacy_files.member_max_lines]
+"_validate_planning_artifact" = 180
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/_task_preflight_guard.py"
+[legacy_files.member_max_lines]
+"task_preflight_data" = 138
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/pr_review_gate.py"
+[legacy_files.member_max_lines]
+"main" = 271
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_threads.py"
+[legacy_files.member_max_lines]
+"_review_threads" = 102
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_window.py"
+[legacy_files.member_max_lines]
+"review_gate_data" = 235
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/bootstrap.py"
+[legacy_files.member_max_lines]
+"_ensure_finish_pull_request" = 171
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/context.py"
+[legacy_files.member_max_lines]
+"_resolve_finish_context" = 136
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/merge.py"
+[legacy_files.member_max_lines]
+"complete_merge_data" = 246
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/orchestrator.py"
+[legacy_files.member_max_lines]
+"finish_task_data" = 282
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_ledgers.py"
+[legacy_files.member_max_lines]
+"close_ledgers_task_data" = 121
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_lifecycle.py"
+[legacy_files.member_max_lines]
+"resolve_task_lifecycle" = 148
+
+[[legacy_files]]
+path = "tests/horadus_cli/v2/task_finish/test_finish_data.py"
+max_lines = 4693
+[legacy_files.member_max_lines]
+"test_finish_task_data_covers_auto_merge_timeout_and_failure_paths" = 230
+
+[[legacy_files]]
+path = "tests/horadus_cli/v2/task_repo_fixtures.py"
+[legacy_files.member_max_lines]
+"seed_task_repo_layout" = 219
+
+[[legacy_files]]
+path = "tests/horadus_cli/v2/test_task_preflight.py"
+max_lines = 1912
+
+[[legacy_files]]
+path = "tests/unit/core/test_observability.py"
+[legacy_files.member_max_lines]
+"test_observability_recorders_cover_metric_paths" = 169
+
+[[legacy_files]]
+path = "tests/unit/processing/test_pipeline_orchestrator.py"
+max_lines = 1333
+
+[[legacy_files]]
+path = "tests/unit/processing/test_pipeline_orchestrator_additional.py"
+[legacy_files.member_max_lines]
+"test_pipeline_domain_helpers_cover_fallbacks_and_parsers" = 217
+"test_process_after_tier1_covers_existing_embedding_degraded_hold_budget_and_error_paths" = 193
+"test_replay_and_impact_helpers_cover_queue_and_prediction_logic" = 198
+
+[[legacy_files]]
+path = "tests/unit/workers/test_celery_setup.py"
+max_lines = 1293
+
+[[legacy_files]]
+path = "tests/unit/workers/test_tasks_additional.py"
+max_lines = 1613
+
+[[legacy_files]]
+path = "tests/workflow/test_docs_freshness.py"
+max_lines = 2160
+[legacy_files.member_max_lines]
+"_seed_repo_layout" = 203
+"test_planning_helper_functions_cover_marker_state_and_git_diff_edges" = 200
+"test_validate_planning_artifact_covers_template_and_exec_plan_paths" = 317
+
+[[legacy_files]]
+path = "tests/workflow/test_workflow_support.py"
+[legacy_files.member_max_lines]
+"test_pr_review_gate_helper_functions_cover_success_and_error_paths" = 217
+
+[[legacy_files]]
+path = "scripts/validate_assessment_artifacts_lib/schema_validation.py"
+[legacy_files.member_max_lines]
+"validate_file" = 167

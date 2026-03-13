@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-12
+**Last Verified**: 2026-03-14
 
 Short command index for day-to-day agent/operator work.
 
@@ -75,11 +75,14 @@ to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
 `tasks/COMPLETED.md` before merge.
 
 5. `make agent-check`
-When: fast local quality gate (lint + typecheck + unit tests).
+When: fast local quality gate (lint + typecheck + code-shape + unit tests).
 
 6. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
 local validation sequence without replacing the fast iteration gate.
+The full gate also runs the repo-owned code-shape checker, which enforces the
+current module/function budgets plus ratcheting limits for explicitly tracked
+legacy hotspots in `config/quality/code_shape.toml`.
 The unit-coverage step fails closed at `100%` measured coverage for `src/` and
 the workflow tooling home under `tools/` using the same repo-owned coverage
 gate script that CI and the pre-push hook call, so local and remote

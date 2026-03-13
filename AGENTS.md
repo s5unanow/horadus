@@ -57,6 +57,33 @@ Status precedence:
 - Keep **production-like discipline**: clear module boundaries, migrations, idempotency, retries/backoff, structured logs, and tests for core logic.
 - Avoid adding infrastructure unless it enables a concrete next milestone.
 
+## Code Shape Guardrails
+
+- Treat `config/quality/code_shape.toml` as the canonical code-shape policy and
+  legacy-ratchet inventory for tracked Python files under `src/`, `tools/`,
+  `tests/`, and `scripts/`.
+- Default Python budgets:
+  - production/tooling/scripts modules: `<= 700` lines
+  - test modules: `<= 1200` lines
+  - production/tooling/scripts functions or methods: `<= 100` lines
+  - test functions or methods: `<= 160` lines
+- New files and functions must fit the default budgets unless the task
+  explicitly introduces and justifies a repo-owned exception.
+- Legacy oversized files or functions may exist only through explicit entries
+  in `config/quality/code_shape.toml`; those entries are ratchets, not
+  entitlements. Do not increase an allowlisted maximum unless the task
+  explicitly changes the policy and justifies it.
+- Remove stale allowlist entries in the same task when a file or function drops
+  back under the default budget.
+- Single-owner module rule: each module should have one primary concern
+  (HTTP surface, domain math, external client, worker orchestration, workflow
+  tooling, test fixture/behavior area). If a change would push a file across
+  concerns, prefer extraction over adding another helper block in place.
+- Touching an allowlisted oversized Python file materially requires
+  `Planning Gates: Required` and an exec plan. The plan/spec must state whether
+  the task reduces the hotspot, keeps it flat, or carries forward debt with an
+  explicit follow-up.
+
 ## Workflow (How To Work In This Repo)
 
 Before starting work:
@@ -68,6 +95,7 @@ Execution context policy (keep it small):
 - For implementation work, prefer `tasks/CURRENT_SPRINT.md` plus the specific task spec it references; avoid reading all of `tasks/BACKLOG.md` unless you are doing triage/planning.
 - Do not read `archive/` or `archive/closed_tasks/` during normal implementation flow unless the user explicitly asks for historical context.
 - For tasks with high complexity (estimate >2 hours, touches >5 files, involves migrations, LLM/pipeline changes, or probability math/ops guardrails), maintain a living execution plan at `tasks/exec_plans/TASK-XXX.md` using `tasks/exec_plans/TEMPLATE.md`.
+- If a task materially changes a Python file that is allowlisted in `config/quality/code_shape.toml`, treat planning gates and an exec plan as required even when the rest of the task would otherwise look small.
 - Keep backlog entries concise and task-shaped; detailed implementation boundaries, migration strategy, risks, and validation belong in the exec plan when one exists.
 - Apply these guardrails only when changing shared workflow helpers, shared workflow config, or review/merge policy behavior; do not inflate unrelated tasks with generic process boilerplate.
 - Before changing shared workflow helpers or shared workflow config, enumerate every caller that depends on the shared behavior.
@@ -86,6 +114,9 @@ After completing work:
 - Don’t introduce network calls in tests.
 - Keep probability updates explainable (store factors used for deltas).
 - Any LLM usage must be protected by budget/limits where possible.
+- Run `python scripts/check_code_shape.py` through `make agent-check` or the
+  canonical local gate when changing Python code; do not treat code-shape
+  regressions as advisory.
 
 ## Agent Tooling Policy
 

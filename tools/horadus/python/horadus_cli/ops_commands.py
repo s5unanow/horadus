@@ -318,7 +318,7 @@ def _read_secret_file(path_value: str | None) -> str | None:
     if path_value is None:
         return None
     try:
-        secret = Path(path_value).read_text(encoding="utf-8").strip()
+        secret = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
     except OSError:
         return None
     return secret or None

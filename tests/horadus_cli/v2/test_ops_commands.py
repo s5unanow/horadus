@@ -1006,6 +1006,18 @@ def test_ops_json_default_and_env_defaults_cover_edge_cases(
         encoding="utf-8",
     )
     assert ops_module._default_embedding_model() == "text-embedding-3-large"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    (home_dir / "agent-home.key").write_text("home-secret\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home_dir))
+    (tmp_path / ".env").write_text("API_KEY_FILE=~/agent-home.key\n", encoding="utf-8")
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY_FILE", raising=False)
+    assert ops_module._default_api_key() == "home-secret"
+    (tmp_path / ".env").write_text(
+        "API_HOST=10.0.0.5\nAPI_PORT=9100\nEMBEDDING_MODEL=text-embedding-3-large\n",
+        encoding="utf-8",
+    )
     monkeypatch.setenv("API_HOST", "  ")
     assert ops_module._env_default("API_HOST", "0.0.0.0") == "0.0.0.0"
     assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"

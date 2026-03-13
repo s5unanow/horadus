@@ -112,3 +112,25 @@ def test_command_handlers_wrap_data_functions_and_validation_errors(
     assert task_commands_module.handle_lifecycle(
         argparse.Namespace(task_id="bad-task", strict=False, dry_run=False)
     ).error_lines == ["Invalid task id 'bad-task'. Expected TASK-XXX or XXX."]
+
+
+def test_finish_context_patch_still_flows_through_task_workflow_core(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = task_commands_module._task_blocked(
+        "compat finish blocker.",
+        next_action="re-run after compat check.",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_ensure_command_available",
+        lambda _name: "/bin/fake",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_context",
+        lambda *_args, **_kwargs: expected,
+    )
+
+    assert task_commands_module.finish_task_data("TASK-314", dry_run=False) == expected

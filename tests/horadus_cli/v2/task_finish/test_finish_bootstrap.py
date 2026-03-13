@@ -338,6 +338,7 @@ def test_ensure_finish_pull_request_reuses_recovered_same_branch_pr(
     config = _finish_config()
     context = _finish_context(current_branch="main")
     context.recovered_pr_url = "https://example.invalid/pr/326"
+    context.recovered_pr_state = "MERGED"
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:2] == ["git", "ls-remote"]:
@@ -361,6 +362,67 @@ def test_ensure_finish_pull_request_reuses_recovered_same_branch_pr(
     assert result.remote_branch_exists is False
     assert result.pushed_branch is False
     assert result.created_pr is False
+
+
+def test_ensure_finish_pull_request_ignores_closed_recovered_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _finish_config()
+    context = _finish_context(current_branch="main")
+    context.recovered_pr_url = "https://example.invalid/pr/326"
+    context.recovered_pr_state = "CLOSED"
+    _patch_generated_pr_metadata(monkeypatch, task_id=context.task_id)
+
+    pr_list_calls = 0
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal pr_list_calls
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:3] == ["gh", "pr", "list"]:
+            pr_list_calls += 1
+            if pr_list_calls == 1:
+                return _completed(args, stdout="[]")
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    [
+                        {
+                            "number": 327,
+                            "url": "https://example.invalid/pr/327",
+                            "headRefName": context.branch_name,
+                        }
+                    ]
+                ),
+            )
+        if args[:3] == ["git", "push", "-u"]:
+            return _completed(args)
+        if args[:3] == ["gh", "pr", "create"]:
+            return _completed(args, stdout="https://example.invalid/pr/327\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        task_commands_module,
+        "ensure_docker_ready",
+        lambda **_kwargs: task_commands_module.DockerReadiness(
+            ready=True,
+            attempted_start=False,
+            supported_auto_start=True,
+            lines=["Docker is ready."],
+        ),
+    )
+
+    result = task_commands_module._ensure_finish_pull_request(
+        context=context,
+        config=config,
+        dry_run=False,
+    )
+
+    assert isinstance(result, task_commands_module.FinishPullRequestBootstrap)
+    assert result.pr_url == "https://example.invalid/pr/327"
+    assert result.pushed_branch is True
+    assert result.created_pr is True
 
 
 def test_ensure_finish_pull_request_reuses_same_branch_lifecycle_pr(
@@ -405,6 +467,79 @@ def test_ensure_finish_pull_request_reuses_same_branch_lifecycle_pr(
     assert result.remote_branch_exists is False
     assert result.pushed_branch is False
     assert result.created_pr is False
+
+
+def test_ensure_finish_pull_request_ignores_closed_same_branch_lifecycle_pr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _finish_config()
+    context = _finish_context()
+    _patch_generated_pr_metadata(monkeypatch, task_id=context.task_id)
+    monkeypatch.setattr(
+        task_commands_module,
+        "_find_task_pull_request",
+        lambda **_kwargs: task_commands_module.TaskPullRequest(
+            number=326,
+            url="https://example.invalid/pr/326",
+            state="CLOSED",
+            is_draft=False,
+            head_ref_name=context.branch_name,
+            head_ref_oid="head-sha-326",
+            merge_commit_oid=None,
+            check_state="pass",
+        ),
+    )
+
+    pr_list_calls = 0
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal pr_list_calls
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args, returncode=2)
+        if args[:3] == ["gh", "pr", "list"]:
+            pr_list_calls += 1
+            if pr_list_calls == 1:
+                return _completed(args, stdout="[]")
+            return _completed(
+                args,
+                stdout=json.dumps(
+                    [
+                        {
+                            "number": 327,
+                            "url": "https://example.invalid/pr/327",
+                            "headRefName": context.branch_name,
+                        }
+                    ]
+                ),
+            )
+        if args[:3] == ["git", "push", "-u"]:
+            return _completed(args)
+        if args[:3] == ["gh", "pr", "create"]:
+            return _completed(args, stdout="https://example.invalid/pr/327\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        task_commands_module,
+        "ensure_docker_ready",
+        lambda **_kwargs: task_commands_module.DockerReadiness(
+            ready=True,
+            attempted_start=False,
+            supported_auto_start=True,
+            lines=["Docker is ready."],
+        ),
+    )
+
+    result = task_commands_module._ensure_finish_pull_request(
+        context=context,
+        config=config,
+        dry_run=False,
+    )
+
+    assert isinstance(result, task_commands_module.FinishPullRequestBootstrap)
+    assert result.pr_url == "https://example.invalid/pr/327"
+    assert result.pushed_branch is True
+    assert result.created_pr is True
 
 
 def test_ensure_finish_pull_request_recovers_from_create_race_by_requerying_branch_pr(

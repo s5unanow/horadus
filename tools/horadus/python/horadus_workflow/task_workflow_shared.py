@@ -67,6 +67,7 @@ class FinishContext:
     task_id: str
     current_branch: str | None = None
     recovered_pr_url: str | None = None
+    recovered_pr_state: str | None = None
 
 
 @dataclass(slots=True)

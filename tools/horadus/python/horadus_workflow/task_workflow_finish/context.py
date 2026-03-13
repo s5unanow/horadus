@@ -69,6 +69,14 @@ def _resolve_finish_context(
                     lifecycle_result.pr.url
                     if lifecycle_result.pr is not None
                     and lifecycle_result.pr.head_ref_name == lifecycle_result.branch_name
+                    and lifecycle_result.pr.state in {"OPEN", "MERGED"}
+                    else None
+                ),
+                recovered_pr_state=(
+                    lifecycle_result.pr.state
+                    if lifecycle_result.pr is not None
+                    and lifecycle_result.pr.head_ref_name == lifecycle_result.branch_name
+                    and lifecycle_result.pr.state in {"OPEN", "MERGED"}
                     else None
                 ),
             )

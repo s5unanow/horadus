@@ -171,7 +171,7 @@ def _find_same_branch_existing_pull_request(
     context: shared.FinishContext,
     config: shared.FinishConfig,
 ) -> BranchPullRequest | None:
-    if context.recovered_pr_url is not None:
+    if context.recovered_pr_url is not None and context.recovered_pr_state in {"OPEN", "MERGED"}:
         return BranchPullRequest(
             number=0,
             url=context.recovered_pr_url,
@@ -181,6 +181,7 @@ def _find_same_branch_existing_pull_request(
     if (
         isinstance(lifecycle_pr, lifecycle.TaskPullRequest)
         and lifecycle_pr.head_ref_name == context.branch_name
+        and lifecycle_pr.state in {"OPEN", "MERGED"}
         and lifecycle_pr.url.strip()
     ):
         return BranchPullRequest(

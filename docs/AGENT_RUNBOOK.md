@@ -4,6 +4,12 @@
 
 Short command index for day-to-day agent/operator work.
 
+CLI implementation ownership now lives entirely under
+`tools/horadus/python/horadus_cli/`. The installed `horadus` entrypoint points
+directly at that package, and app-backed CLI commands cross the explicit
+runtime bridge at `tools/horadus/python/horadus_app_cli_runtime.py` instead of
+importing business modules into the tooling package.
+
 Default live planning surfaces are `tasks/CURRENT_SPRINT.md`,
 `tasks/BACKLOG.md`, and `tasks/COMPLETED.md`. Treat `PROJECT_STATUS.md` as a
 pointer stub only, and do not read `archive/` or `archive/closed_tasks/`

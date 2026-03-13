@@ -4,7 +4,7 @@ import re
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
-from src.horadus_cli.v2.task_commands import add_leaf_cli_options
+from tools.horadus.python.horadus_cli.task_commands import add_leaf_cli_options
 from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo
 from tools.horadus.python.horadus_workflow import triage as workflow_triage
 

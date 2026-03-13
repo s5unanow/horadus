@@ -97,7 +97,7 @@ Issues = "https://github.com/yourname/geopolitical-intel/issues"
 Source = "https://github.com/yourname/geopolitical-intel"
 
 [project.scripts]
-horadus = "src.cli:main"
+horadus = "tools.horadus.python.horadus_cli.app:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src", "tools"]

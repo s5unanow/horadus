@@ -43,12 +43,13 @@ Status precedence:
 - `src/processing/` — LLM + clustering + pipeline (may be stubbed early)
 - `src/workers/` — async/background workers (may be stubbed early)
 - `tools/horadus/python/horadus_workflow/` — repo workflow/tooling ownership (task/PR/docs governance)
+- `tools/horadus/python/horadus_cli/` — Horadus CLI ownership (parser, command wiring, result rendering, workflow adapters)
+- `tools/horadus/python/horadus_app_cli_runtime.py` — app-owned runtime bridge for CLI commands that need business/runtime modules
 - `config/` — YAML configuration (`trends/`, `sources/`)
 - `ai/` — LLM assets (prompts, evaluation data, benchmark results)
 - `docs/` — architecture, glossary, ADRs (`docs/adr/`)
 - `tasks/` — backlog, sprint, and detailed specs (`tasks/specs/`)
 - `tests/` — unit/integration tests
-
 ## Working Agreements (Personal-Scale)
 
 - Prefer **simple, debuggable** solutions over distributed complexity.

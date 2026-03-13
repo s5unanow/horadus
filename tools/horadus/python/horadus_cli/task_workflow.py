@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.horadus_cli.v2.task_workflow_core import (
+from tools.horadus.python.horadus_cli.task_workflow_core import (
     LocalGateStep,
     full_local_gate_steps,
     handle_local_gate,

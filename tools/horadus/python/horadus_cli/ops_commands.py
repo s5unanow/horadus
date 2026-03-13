@@ -3,15 +3,40 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
-from datetime import datetime
+import os
+import subprocess  # nosec B404
+import sys
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
-from uuid import UUID
 
-from src.core.config import settings
-from src.horadus_cli.v2.result import CommandResult, ExitCode
+from dotenv import dotenv_values
+
+from tools.horadus.python.horadus_cli.result import CommandResult, ExitCode
+
+_RUNTIME_BRIDGE_MODULE = "tools.horadus.python.horadus_app_cli_runtime"
+_INTERNAL_ARG_KEYS = {
+    "agent_command",
+    "command",
+    "dashboard_command",
+    "dry_run",
+    "eval_command",
+    "handler",
+    "output_format",
+    "pipeline_command",
+    "trends_command",
+}
+_BENCHMARK_CONFIG_CHOICES = (
+    "baseline",
+    "alternative",
+    "tier1-gpt5-nano-minimal",
+    "tier1-gpt5-nano-low",
+    "tier2-gpt5-mini-low",
+    "tier2-gpt5-mini-medium",
+)
+_REPLAY_CONFIG_CHOICES = ("stable", "fast_lower_threshold")
 
 
 def _change_arrow(change: float) -> str:
@@ -52,289 +77,76 @@ def _format_embedding_model_counts(summary: Any) -> str:
     return ", ".join(f"{entry.model}={entry.count}" for entry in summary.model_counts)
 
 
-async def _collect_trends_status(limit: int) -> tuple[dict[str, Any], list[str]]:
-    from src.core.calibration_dashboard import CalibrationDashboardService
-    from src.storage.database import async_session_maker
-
-    async with async_session_maker() as session:
-        service = CalibrationDashboardService(session)
-        dashboard = await service.build_dashboard()
-
-    rows = dashboard.trend_movements[:limit]
-    if not rows:
-        return ({"trends": []}, ["No active trends found."])
-
-    lines: list[str] = []
-    trends: list[dict[str, Any]] = []
-    for movement in rows:
-        trends.append(
-            {
-                "trend_id": str(movement.trend_id),
-                "trend_name": movement.trend_name,
-                "current_probability": movement.current_probability,
-                "weekly_change": movement.weekly_change,
-                "risk_level": movement.risk_level,
-                "top_movers_7d": list(movement.top_movers_7d),
-                "movement_chart": movement.movement_chart,
-            }
-        )
-        lines.extend(_format_trend_status_lines(movement))
-    return ({"trends": trends}, lines)
+def _json_default(value: object) -> object:
+    if isinstance(value, date | datetime):
+        return value.isoformat()
+    if isinstance(value, Path):
+        return str(value)
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
 
 
-async def _collect_dashboard_export(
-    output_dir: str, limit: int
-) -> tuple[dict[str, Any], list[str]]:
-    from src.core.calibration_dashboard import CalibrationDashboardService
-    from src.core.dashboard_export import export_calibration_dashboard
-    from src.storage.database import async_session_maker
-
-    async with async_session_maker() as session:
-        service = CalibrationDashboardService(session)
-        dashboard = await service.build_dashboard()
-
-    result = export_calibration_dashboard(dashboard, output_dir=output_dir, trend_limit=limit)
-    data = {
-        "json_path": str(result.json_path),
-        "html_path": str(result.html_path),
-        "latest_json_path": str(result.latest_json_path),
-        "latest_html_path": str(result.latest_html_path),
-        "index_html_path": str(result.index_html_path),
-    }
-    lines = [
-        f"Exported JSON: {result.json_path}",
-        f"Exported HTML: {result.html_path}",
-        f"Latest JSON: {result.latest_json_path}",
-        f"Latest HTML: {result.latest_html_path}",
-        f"Hosting index: {result.index_html_path}",
-    ]
-    return (data, lines)
+def _runtime_payload(args: Any) -> dict[str, Any]:
+    return {key: value for key, value in vars(args).items() if key not in _INTERNAL_ARG_KEYS}
 
 
-async def _collect_eval_benchmark(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.eval.benchmark import run_gold_set_benchmark
-
-    output_path = await run_gold_set_benchmark(
-        gold_set_path=args.gold_set,
-        output_dir=args.output_dir,
-        api_key=settings.OPENAI_API_KEY,
-        trend_config_dir=args.trend_config_dir,
-        max_items=max(1, args.max_items),
-        config_names=args.config,
-        require_human_verified=args.require_human_verified,
-        dispatch_mode=args.dispatch_mode,
-        request_priority=args.request_priority,
-    )
-    return ({"output_path": str(output_path)}, [f"Benchmark output: {output_path}"], ExitCode.OK)
-
-
-async def _collect_eval_replay(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.eval.replay import run_historical_replay_comparison
-
-    parsed_trend_id = UUID(args.trend_id) if args.trend_id else None
-    output_path = await run_historical_replay_comparison(
-        output_dir=args.output_dir,
-        champion_config_name=args.champion_config,
-        challenger_config_name=args.challenger_config,
-        trend_id=parsed_trend_id,
-        start_date=_parse_iso_datetime(args.start_date),
-        end_date=_parse_iso_datetime(args.end_date),
-        days=max(1, args.days),
-    )
-    return ({"output_path": str(output_path)}, [f"Replay output: {output_path}"], ExitCode.OK)
-
-
-async def _collect_eval_vector_benchmark(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.eval.vector_benchmark import run_vector_retrieval_benchmark
-
-    output_path = await run_vector_retrieval_benchmark(
-        output_dir=args.output_dir,
-        database_url=args.database_url,
-        dataset_size=max(100, args.dataset_size),
-        query_count=max(10, args.query_count),
-        dimensions=max(8, args.dimensions),
-        top_k=max(1, args.top_k),
-        similarity_threshold=args.similarity_threshold,
-        seed=args.seed,
-    )
-    return (
-        {"output_path": str(output_path)},
-        [f"Vector benchmark output: {output_path}"],
-        ExitCode.OK,
+def _run_runtime_bridge(action: str, payload: dict[str, Any]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(  # nosec B603
+        [
+            sys.executable,
+            "-m",
+            _RUNTIME_BRIDGE_MODULE,
+            action,
+            "--payload",
+            json.dumps(payload, sort_keys=True, default=_json_default),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
     )
 
 
-async def _collect_eval_embedding_lineage(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.core.embedding_lineage import build_embedding_lineage_report
-    from src.storage.database import async_session_maker
-
-    async with async_session_maker() as session:
-        report = await build_embedding_lineage_report(session, target_model=args.target_model)
-
-    lines = [f"Embedding target model: {report.target_model}"]
-    summaries = []
-    for summary in (report.raw_items, report.events):
-        summaries.append(
-            {
-                "entity": summary.entity,
-                "vectors": summary.vectors,
-                "target_model_vectors": summary.target_model_vectors,
-                "vectors_other_models": summary.vectors_other_models,
-                "vectors_missing_model": summary.vectors_missing_model,
-                "reembed_scope": summary.reembed_scope,
-                "model_counts": [
-                    {"model": entry.model, "count": entry.count} for entry in summary.model_counts
-                ],
-            }
-        )
-        lines.append(
-            f"{summary.entity}: vectors={summary.vectors}, "
-            f"target={summary.target_model_vectors}, "
-            f"other_models={summary.vectors_other_models}, "
-            f"missing_model={summary.vectors_missing_model}, "
-            f"reembed_scope={summary.reembed_scope}"
-        )
-        lines.append(f"  model_counts: {_format_embedding_model_counts(summary)}")
-
-    lines.append(
-        f"total_vectors={report.total_vectors}, "
-        f"total_reembed_scope={report.total_reembed_scope}, "
-        f"mixed_population={str(report.has_mixed_populations).lower()}"
-    )
-    exit_code = (
-        ExitCode.VALIDATION_ERROR
-        if args.fail_on_mixed and report.has_mixed_populations
-        else ExitCode.OK
-    )
-    return (
-        {
-            "target_model": report.target_model,
-            "summaries": summaries,
-            "total_vectors": report.total_vectors,
-            "total_reembed_scope": report.total_reembed_scope,
-            "has_mixed_populations": report.has_mixed_populations,
-        },
-        lines,
-        exit_code,
-    )
-
-
-async def _collect_eval_source_freshness(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.core.source_freshness import build_source_freshness_report
-    from src.storage.database import async_session_maker
-
-    async with async_session_maker() as session:
-        report = await build_source_freshness_report(
-            session=session, stale_multiplier=args.stale_multiplier
+def _runtime_result(action: str, args: Any) -> CommandResult:
+    completed = _run_runtime_bridge(action, _runtime_payload(args))
+    stdout = completed.stdout.strip()
+    if not stdout:
+        return CommandResult(
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            error_lines=[
+                f"{action} runtime bridge returned no JSON output",
+                completed.stderr.strip() or "bridge stderr was empty",
+            ],
         )
 
-    enabled_collectors: list[str] = []
-    if settings.ENABLE_RSS_INGESTION:
-        enabled_collectors.append("rss")
-    if settings.ENABLE_GDELT_INGESTION:
-        enabled_collectors.append("gdelt")
-
-    dispatch_budget = max(0, settings.SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES)
-    catchup_candidates = [
-        collector for collector in report.stale_collectors if collector in enabled_collectors
-    ][:dispatch_budget]
-
-    lines = [
-        f"checked_at={report.checked_at.isoformat()}",
-        f"stale_multiplier={report.stale_multiplier}",
-        f"stale_count={report.stale_count}",
-        "catchup_candidates=" + (",".join(catchup_candidates) if catchup_candidates else "none"),
-    ]
-    rows = []
-    for row in report.rows:
-        last_fetched = row.last_fetched_at.isoformat() if row.last_fetched_at else "never"
-        age = row.age_seconds if row.age_seconds is not None else "unknown"
-        lines.append(
-            f"- {row.collector}:{row.source_name} stale={str(row.is_stale).lower()} "
-            f"age_seconds={age} stale_after_seconds={row.stale_after_seconds} "
-            f"last_fetched_at={last_fetched}"
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        return CommandResult(
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            error_lines=[
+                f"{action} runtime bridge returned invalid JSON: {exc}",
+                stdout,
+            ],
         )
-        rows.append(
-            {
-                "collector": row.collector,
-                "source_name": row.source_name,
-                "is_stale": row.is_stale,
-                "age_seconds": row.age_seconds,
-                "stale_after_seconds": row.stale_after_seconds,
-                "last_fetched_at": row.last_fetched_at.isoformat() if row.last_fetched_at else None,
-            }
+
+    if not isinstance(payload, dict):
+        return CommandResult(
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            error_lines=[f"{action} runtime bridge returned a non-object payload"],
         )
-    exit_code = (
-        ExitCode.VALIDATION_ERROR if args.fail_on_stale and report.stale_count > 0 else ExitCode.OK
-    )
-    return (
-        {
-            "checked_at": report.checked_at.isoformat(),
-            "stale_multiplier": report.stale_multiplier,
-            "stale_count": report.stale_count,
-            "catchup_candidates": catchup_candidates,
-            "rows": rows,
-        },
-        lines,
-        exit_code,
-    )
 
-
-def _collect_eval_audit(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.eval.audit import run_gold_set_audit
-
-    result = run_gold_set_audit(
-        gold_set_path=args.gold_set, output_dir=args.output_dir, max_items=max(1, args.max_items)
-    )
-    lines = [f"Audit output: {result.output_path}"]
-    if result.warnings:
-        lines.append("Audit warnings:")
-        lines.extend(f"- {warning}" for warning in result.warnings)
-    exit_code = (
-        ExitCode.VALIDATION_ERROR if args.fail_on_warnings and result.warnings else ExitCode.OK
-    )
-    return (
-        {"output_path": str(result.output_path), "warnings": list(result.warnings)},
-        lines,
-        exit_code,
-    )
-
-
-def _collect_eval_validate_taxonomy(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.eval.taxonomy_validation import run_trend_taxonomy_validation
-
-    result = run_trend_taxonomy_validation(
-        trend_config_dir=args.trend_config_dir,
-        gold_set_path=args.gold_set,
-        output_dir=args.output_dir,
-        max_items=max(1, args.max_items),
-        tier1_trend_mode=args.tier1_trend_mode,
-        signal_type_mode=args.signal_type_mode,
-        unknown_trend_mode=args.unknown_trend_mode,
-    )
-    lines = [f"Taxonomy validation output: {result.output_path}"]
-    if result.warnings:
-        lines.append("Taxonomy validation warnings:")
-        lines.extend(f"- {warning}" for warning in result.warnings)
-    if result.errors:
-        lines.append("Taxonomy validation errors:")
-        lines.extend(f"- {error}" for error in result.errors)
-        return (
-            {
-                "output_path": str(result.output_path),
-                "warnings": list(result.warnings),
-                "errors": list(result.errors),
-            },
-            lines,
-            ExitCode.VALIDATION_ERROR,
-        )
-    exit_code = (
-        ExitCode.VALIDATION_ERROR if args.fail_on_warnings and result.warnings else ExitCode.OK
-    )
-    return (
-        {"output_path": str(result.output_path), "warnings": list(result.warnings), "errors": []},
-        lines,
-        exit_code,
+    exit_code = int(payload.get("exit_code", completed.returncode or ExitCode.ENVIRONMENT_ERROR))
+    data = payload.get("data")
+    lines = payload.get("lines")
+    error_lines = payload.get("error_lines")
+    if lines is not None and not isinstance(lines, list):
+        lines = [str(lines)]
+    if error_lines is not None and not isinstance(error_lines, list):
+        error_lines = [str(error_lines)]
+    return CommandResult(
+        exit_code=exit_code,
+        data=data if isinstance(data, dict) else None,
+        lines=[str(line) for line in lines] if isinstance(lines, list) else None,
+        error_lines=[str(line) for line in error_lines] if isinstance(error_lines, list) else None,
     )
 
 
@@ -474,154 +286,60 @@ def _run_agent_smoke(*, base_url: str, timeout_seconds: float, api_key: str | No
     return int(exit_code)
 
 
-def _doctor_check_required_hooks() -> tuple[str, str]:
-    hooks_dir = Path(".git") / "hooks"
-    required = ("pre-commit", "pre-push", "commit-msg")
-    missing: list[str] = []
-    for hook_name in required:
-        hook_path = hooks_dir / hook_name
-        if (
-            not hook_path.exists()
-            or not hook_path.is_file()
-            or not hook_path.stat().st_mode & 0o111
-        ):
-            missing.append(hook_name)
-    if missing:
-        return ("FAIL", f"missing executable hooks: {', '.join(missing)} (run: make hooks)")
-    return ("PASS", "required git hooks installed")
+def _env_default(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    normalized = value.strip()
+    return normalized or default
 
 
-def _is_loopback_host(host: str) -> bool:
-    normalized = host.strip().lower()
-    return normalized in {"127.0.0.1", "localhost"}
+def _dotenv_default(name: str) -> str | None:
+    value = dotenv_values(".env").get(name)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
 
 
-def _doctor_safety_refusals() -> list[str]:
-    refusals: list[str] = []
-    if settings.is_production and settings.is_agent_profile:
-        refusals.append("agent profile is not allowed in production")
-    if (
-        settings.is_agent_profile
-        and not settings.AGENT_ALLOW_NON_LOOPBACK
-        and not _is_loopback_host(settings.API_HOST)
-    ):
-        refusals.append(
-            "agent profile requires loopback API_HOST unless AGENT_ALLOW_NON_LOOPBACK=true"
-        )
-    if settings.is_production_like and not settings.API_AUTH_ENABLED:
-        refusals.append("API_AUTH_ENABLED=false in production-like environment")
-    return refusals
+def _config_default(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is not None:
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    dotenv_value = _dotenv_default(name)
+    if dotenv_value is not None:
+        return dotenv_value
+    return default
 
 
-async def _doctor_check_database(timeout_seconds: float) -> tuple[str, str]:
-    from sqlalchemy import text
-
-    from src.core.migration_parity import check_migration_parity
-    from src.storage.database import async_session_maker
-
-    database_url = settings.DATABASE_URL.strip()
-    if not database_url:
-        return ("SKIP", "DATABASE_URL not configured")
-
+def _read_secret_file(path_value: str | None) -> str | None:
+    if path_value is None:
+        return None
     try:
-        async with async_session_maker() as session:
-            await asyncio.wait_for(
-                session.execute(text("SELECT 1")), timeout=max(0.1, timeout_seconds)
-            )
-            migration = await asyncio.wait_for(
-                check_migration_parity(session),
-                timeout=max(0.1, timeout_seconds),
-            )
-    except Exception as exc:
-        return ("FAIL", f"database check failed: {exc}")
-
-    migration_status = str(migration.get("status", "unknown"))
-    if migration_status != "healthy":
-        message = str(migration.get("message", "migration parity mismatch"))
-        return ("FAIL", f"database ok; migrations {migration_status}: {message}")
-    return ("PASS", "database connectivity ok; migration parity healthy")
+        secret = Path(path_value).expanduser().read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    return secret or None
 
 
-async def _doctor_check_redis(timeout_seconds: float) -> tuple[str, str]:
-    redis_url = settings.REDIS_URL.strip()
-    if not redis_url:
-        return ("SKIP", "REDIS_URL not configured")
-
-    try:
-        import redis.asyncio as redis
-    except ImportError:
-        return ("FAIL", "redis client is not installed")
-
-    client = redis.from_url(redis_url)
-    try:
-        await asyncio.wait_for(client.ping(), timeout=max(0.1, timeout_seconds))
-    except Exception as exc:
-        return ("FAIL", f"redis check failed: {exc}")
-    finally:
-        await client.close()
-    return ("PASS", "redis connectivity ok")
+def _default_api_key() -> str:
+    direct_value = _config_default("API_KEY", "")
+    if direct_value:
+        return direct_value
+    secret_path = _config_default("API_KEY_FILE", "")
+    return _read_secret_file(secret_path) or ""
 
 
-def _collect_doctor(timeout_seconds: float) -> tuple[dict[str, Any], list[str], int]:
-    lines = [
-        f"ENVIRONMENT={settings.ENVIRONMENT}",
-        f"RUNTIME_PROFILE={settings.RUNTIME_PROFILE}",
-        f"API_HOST={settings.API_HOST}",
-    ]
-    hook_status, hook_message = _doctor_check_required_hooks()
-    lines.append(f"HOOKS: {hook_status} - {hook_message}")
-
-    refusals = _doctor_safety_refusals()
-    if refusals:
-        lines.append("SAFETY_REFUSALS:")
-        lines.extend(f"- {refusal}" for refusal in refusals)
-    else:
-        lines.append("SAFETY_REFUSALS: none")
-
-    db_status, db_message = asyncio.run(_doctor_check_database(timeout_seconds))
-    redis_status, redis_message = asyncio.run(_doctor_check_redis(timeout_seconds))
-    lines.append(f"DATABASE: {db_status} - {db_message}")
-    lines.append(f"REDIS: {redis_status} - {redis_message}")
-
-    exit_code = ExitCode.OK
-    if "FAIL" in {hook_status, db_status, redis_status} or refusals:
-        exit_code = ExitCode.VALIDATION_ERROR
-
-    return (
-        {
-            "environment": settings.ENVIRONMENT,
-            "runtime_profile": settings.RUNTIME_PROFILE,
-            "api_host": settings.API_HOST,
-            "hooks": {"status": hook_status, "message": hook_message},
-            "safety_refusals": refusals,
-            "database": {"status": db_status, "message": db_message},
-            "redis": {"status": redis_status, "message": redis_message},
-        },
-        lines,
-        exit_code,
-    )
+def _default_embedding_model() -> str:
+    return _config_default("EMBEDDING_MODEL", "text-embedding-3-small")
 
 
-def _run_doctor(*, timeout_seconds: float) -> int:
-    _data, lines, exit_code = _collect_doctor(timeout_seconds)
-    for line in lines:
-        print(line)
-    return int(exit_code)
-
-
-def _collect_pipeline_dry_run(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.processing.dry_run_pipeline import run_pipeline_dry_run
-
-    artifact_path = run_pipeline_dry_run(
-        fixture_path=Path(args.fixture_path),
-        trend_config_dir=Path(args.trend_config_dir),
-        output_path=Path(args.output_path),
-    )
-    return (
-        {"artifact_path": str(artifact_path)},
-        [f"Dry-run artifact: {artifact_path}"],
-        ExitCode.OK,
-    )
+def _default_agent_base_url() -> str:
+    host = _config_default("API_HOST", "127.0.0.1")
+    port = _config_default("API_PORT", "8000")
+    return f"http://{host}:{port}"
 
 
 def _ops_leaf_options(parser: argparse.ArgumentParser) -> None:
@@ -651,9 +369,7 @@ def register_ops_commands(subparsers: Any) -> None:
     trends_status_parser.add_argument(
         "--limit", type=int, default=20, help="Maximum number of active trends to display."
     )
-    trends_status_parser.set_defaults(
-        handler=lambda args: _async_result(_collect_trends_status(max(args.limit, 1)))
-    )
+    trends_status_parser.set_defaults(handler=lambda args: _runtime_result("trends-status", args))
 
     dashboard_parser = subparsers.add_parser("dashboard")
     dashboard_subparsers = dashboard_parser.add_subparsers(dest="dashboard_command")
@@ -674,16 +390,11 @@ def register_ops_commands(subparsers: Any) -> None:
         help="Maximum number of trend movement rows included in export.",
     )
     dashboard_export_parser.set_defaults(
-        handler=lambda args: _async_result(
-            _collect_dashboard_export(args.output_dir, max(args.limit, 1))
-        )
+        handler=lambda args: _runtime_result("dashboard-export", args)
     )
 
     eval_parser = subparsers.add_parser("eval")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
-
-    from src.eval.benchmark import available_configs, default_config_names
-    from src.eval.replay import available_replay_configs
 
     eval_benchmark_parser = eval_subparsers.add_parser(
         "benchmark",
@@ -710,11 +421,11 @@ def register_ops_commands(subparsers: Any) -> None:
     eval_benchmark_parser.add_argument(
         "--config",
         action="append",
-        choices=sorted(available_configs().keys()),
+        choices=_BENCHMARK_CONFIG_CHOICES,
         help=(
             "Benchmark config name (repeat to run multiple). Defaults to the baseline "
-            f"set ({', '.join(default_config_names())}); GPT-5 candidates require "
-            "explicit --config selection."
+            "set (baseline, alternative); GPT-5 candidates require explicit "
+            "--config selection."
         ),
     )
     eval_benchmark_parser.add_argument(
@@ -734,9 +445,7 @@ def register_ops_commands(subparsers: Any) -> None:
         default="realtime",
         help="Provider priority hint.",
     )
-    eval_benchmark_parser.set_defaults(
-        handler=lambda args: _async_result_with_exit(_collect_eval_benchmark(args))
-    )
+    eval_benchmark_parser.set_defaults(handler=lambda args: _runtime_result("eval-benchmark", args))
 
     eval_audit_parser = eval_subparsers.add_parser(
         "audit", help="Audit gold-set quality (provenance, diversity, and label coverage)."
@@ -756,7 +465,7 @@ def register_ops_commands(subparsers: Any) -> None:
         action="store_true",
         help="Return non-zero exit code if audit warnings are present.",
     )
-    eval_audit_parser.set_defaults(handler=lambda args: _sync_result(*_collect_eval_audit(args)))
+    eval_audit_parser.set_defaults(handler=lambda args: _runtime_result("eval-audit", args))
 
     eval_taxonomy_parser = eval_subparsers.add_parser(
         "validate-taxonomy",
@@ -803,7 +512,7 @@ def register_ops_commands(subparsers: Any) -> None:
         help="Return non-zero exit code when warnings are emitted.",
     )
     eval_taxonomy_parser.set_defaults(
-        handler=lambda args: _sync_result(*_collect_eval_validate_taxonomy(args))
+        handler=lambda args: _runtime_result("eval-validate-taxonomy", args)
     )
 
     eval_replay_parser = eval_subparsers.add_parser(
@@ -813,17 +522,16 @@ def register_ops_commands(subparsers: Any) -> None:
     eval_replay_parser.add_argument(
         "--output-dir", default="ai/eval/results", help="Directory for replay result artifacts."
     )
-    replay_configs = sorted(available_replay_configs().keys())
     eval_replay_parser.add_argument(
         "--champion-config",
         default="stable",
-        choices=replay_configs,
+        choices=_REPLAY_CONFIG_CHOICES,
         help="Champion replay policy config.",
     )
     eval_replay_parser.add_argument(
         "--challenger-config",
         default="fast_lower_threshold",
-        choices=replay_configs,
+        choices=_REPLAY_CONFIG_CHOICES,
         help="Challenger replay policy config.",
     )
     eval_replay_parser.add_argument("--trend-id", default=None, help="Optional trend UUID scope.")
@@ -839,9 +547,7 @@ def register_ops_commands(subparsers: Any) -> None:
         default=90,
         help="Replay window in days when start-date is not provided.",
     )
-    eval_replay_parser.set_defaults(
-        handler=lambda args: _async_result_with_exit(_collect_eval_replay(args))
-    )
+    eval_replay_parser.set_defaults(handler=lambda args: _runtime_result("eval-replay", args))
 
     eval_vector_parser = eval_subparsers.add_parser(
         "vector-benchmark", help="Benchmark exact vs IVFFlat vs HNSW retrieval quality/latency."
@@ -878,7 +584,7 @@ def register_ops_commands(subparsers: Any) -> None:
         "--seed", type=int, default=42, help="Random seed for deterministic synthetic data."
     )
     eval_vector_parser.set_defaults(
-        handler=lambda args: _async_result_with_exit(_collect_eval_vector_benchmark(args))
+        handler=lambda args: _runtime_result("eval-vector-benchmark", args)
     )
 
     eval_embedding_lineage_parser = eval_subparsers.add_parser(
@@ -887,7 +593,7 @@ def register_ops_commands(subparsers: Any) -> None:
     _ops_leaf_options(eval_embedding_lineage_parser)
     eval_embedding_lineage_parser.add_argument(
         "--target-model",
-        default=settings.EMBEDDING_MODEL,
+        default=_default_embedding_model(),
         help="Embedding model that should be considered canonical.",
     )
     eval_embedding_lineage_parser.add_argument(
@@ -896,7 +602,7 @@ def register_ops_commands(subparsers: Any) -> None:
         help="Return non-zero when multiple embedding models are detected.",
     )
     eval_embedding_lineage_parser.set_defaults(
-        handler=lambda args: _async_result_with_exit(_collect_eval_embedding_lineage(args))
+        handler=lambda args: _runtime_result("eval-embedding-lineage", args)
     )
 
     eval_source_freshness_parser = eval_subparsers.add_parser(
@@ -915,7 +621,7 @@ def register_ops_commands(subparsers: Any) -> None:
         help="Return non-zero exit code when any stale source is detected.",
     )
     eval_source_freshness_parser.set_defaults(
-        handler=lambda args: _async_result_with_exit(_collect_eval_source_freshness(args))
+        handler=lambda args: _runtime_result("eval-source-freshness", args)
     )
 
     pipeline_parser = subparsers.add_parser("pipeline")
@@ -941,7 +647,7 @@ def register_ops_commands(subparsers: Any) -> None:
         help="Output JSON artifact path.",
     )
     pipeline_dry_run_parser.set_defaults(
-        handler=lambda args: _sync_result(*_collect_pipeline_dry_run(args))
+        handler=lambda args: _runtime_result("pipeline-dry-run", args)
     )
 
     agent_parser = subparsers.add_parser("agent")
@@ -953,7 +659,7 @@ def register_ops_commands(subparsers: Any) -> None:
     _ops_leaf_options(agent_smoke_parser)
     agent_smoke_parser.add_argument(
         "--base-url",
-        default=f"http://{settings.API_HOST}:{settings.API_PORT}",
+        default=_default_agent_base_url(),
         help="Base URL for local smoke checks.",
     )
     agent_smoke_parser.add_argument(
@@ -961,7 +667,7 @@ def register_ops_commands(subparsers: Any) -> None:
     )
     agent_smoke_parser.add_argument(
         "--api-key",
-        default=settings.API_KEY or "",
+        default=_default_api_key(),
         help="Optional API key used when auth-protected smoke endpoints are checked.",
     )
     agent_smoke_parser.set_defaults(handler=_handle_agent_smoke)
@@ -974,9 +680,7 @@ def register_ops_commands(subparsers: Any) -> None:
     doctor_parser.add_argument(
         "--timeout-seconds", type=float, default=2.0, help="Timeout per dependency check."
     )
-    doctor_parser.set_defaults(
-        handler=lambda args: _sync_result(*_collect_doctor(max(0.1, args.timeout_seconds)))
-    )
+    doctor_parser.set_defaults(handler=lambda args: _runtime_result("doctor", args))
 
 
 def _sync_result(data: dict[str, Any], lines: list[str], exit_code: int) -> CommandResult:

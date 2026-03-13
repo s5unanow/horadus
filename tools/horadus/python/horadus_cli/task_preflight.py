@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.horadus_cli.v2.task_workflow_core import (
+from tools.horadus.python.horadus_cli.task_workflow_core import (
     TaskLedgerIntakeState,
     _backlog_task_id_for_line,
     _changed_line_numbers,

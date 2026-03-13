@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import io
+import json
+import runpy
 import sys
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
@@ -21,25 +24,26 @@ import src.eval.benchmark as benchmark_module
 import src.eval.replay as replay_module
 import src.eval.taxonomy_validation as taxonomy_validation_module
 import src.eval.vector_benchmark as vector_benchmark_module
-import src.horadus_cli.v2.ops_commands as ops_module
 import src.processing.dry_run_pipeline as dry_run_pipeline_module
 import src.storage.database as database_module
-from src.horadus_cli.v2.result import ExitCode
+import tools.horadus.python.horadus_app_cli_runtime as runtime_module
+import tools.horadus.python.horadus_cli.ops_commands as ops_module
+from tools.horadus.python.horadus_cli.result import ExitCode
 
 pytestmark = pytest.mark.unit
 
 _ORIGINAL_HTTP_GET = ops_module._http_get
 _ORIGINAL_HTTP_GET_JSON = ops_module._http_get_json
-_ORIGINAL_DOCTOR_CHECK_DATABASE = ops_module._doctor_check_database
-_ORIGINAL_DOCTOR_CHECK_REDIS = ops_module._doctor_check_redis
+_ORIGINAL_DOCTOR_CHECK_DATABASE = runtime_module._doctor_check_database
+_ORIGINAL_DOCTOR_CHECK_REDIS = runtime_module._doctor_check_redis
 
 
 @pytest.fixture(autouse=True)
 def reset_ops_helpers() -> None:
     ops_module._http_get = _ORIGINAL_HTTP_GET
     ops_module._http_get_json = _ORIGINAL_HTTP_GET_JSON
-    ops_module._doctor_check_database = _ORIGINAL_DOCTOR_CHECK_DATABASE
-    ops_module._doctor_check_redis = _ORIGINAL_DOCTOR_CHECK_REDIS
+    runtime_module._doctor_check_database = _ORIGINAL_DOCTOR_CHECK_DATABASE
+    runtime_module._doctor_check_redis = _ORIGINAL_DOCTOR_CHECK_REDIS
 
 
 def test_parse_iso_datetime_and_embedding_count_helpers() -> None:
@@ -87,7 +91,7 @@ async def test_collect_trends_status_handles_empty_and_populated_dashboards(
     monkeypatch.setattr(database_module, "async_session_maker", fake_session_maker)
     monkeypatch.setattr(calibration_dashboard_module, "CalibrationDashboardService", FakeService)
 
-    data, lines = await ops_module._collect_trends_status(limit=3)
+    data, lines = await runtime_module._collect_trends_status(limit=3)
 
     assert data == {"trends": []}
     assert lines == ["No active trends found."]
@@ -103,7 +107,7 @@ async def test_collect_trends_status_handles_empty_and_populated_dashboards(
     )
     dashboard.trend_movements = [movement]
 
-    data, lines = await ops_module._collect_trends_status(limit=3)
+    data, lines = await runtime_module._collect_trends_status(limit=3)
 
     assert data["trends"][0]["trend_name"] == "Alpha"
     assert any("Top movers: diplomacy" in line for line in lines)
@@ -141,7 +145,7 @@ async def test_collect_dashboard_export_returns_artifact_paths(
         dashboard_export_module, "export_calibration_dashboard", lambda *_args, **_kwargs: result
     )
 
-    data, lines = await ops_module._collect_dashboard_export(str(tmp_path), 5)
+    data, lines = await runtime_module._collect_dashboard_export(str(tmp_path), 5)
 
     assert data["json_path"].endswith("dashboard.json")
     assert any("Hosting index:" in line for line in lines)
@@ -171,7 +175,7 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
     monkeypatch.setattr(benchmark_module, "run_gold_set_benchmark", fake_benchmark)
     monkeypatch.setattr(replay_module, "run_historical_replay_comparison", fake_replay)
     monkeypatch.setattr(vector_benchmark_module, "run_vector_retrieval_benchmark", fake_vector)
-    monkeypatch.setattr(ops_module.settings, "OPENAI_API_KEY", "stub")
+    monkeypatch.setattr(runtime_module.settings, "OPENAI_API_KEY", "stub")
 
     benchmark_args = SimpleNamespace(
         gold_set="gold.jsonl",
@@ -203,9 +207,9 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
         seed=7,
     )
 
-    _, _, benchmark_exit = await ops_module._collect_eval_benchmark(benchmark_args)
-    _, _, replay_exit = await ops_module._collect_eval_replay(replay_args)
-    _, _, vector_exit = await ops_module._collect_eval_vector_benchmark(vector_args)
+    _, _, benchmark_exit = await runtime_module._collect_eval_benchmark(benchmark_args)
+    _, _, replay_exit = await runtime_module._collect_eval_replay(replay_args)
+    _, _, vector_exit = await runtime_module._collect_eval_vector_benchmark(vector_args)
 
     assert benchmark_calls["max_items"] == 1
     assert replay_calls["trend_id"].hex == "550e8400e29b41d4a716446655440000"
@@ -283,21 +287,23 @@ async def test_collect_embedding_lineage_and_source_freshness(
         "build_source_freshness_report",
         fake_source_freshness_report,
     )
-    monkeypatch.setattr(ops_module.settings, "ENABLE_RSS_INGESTION", True)
-    monkeypatch.setattr(ops_module.settings, "ENABLE_GDELT_INGESTION", True)
-    monkeypatch.setattr(ops_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 1)
+    monkeypatch.setattr(runtime_module.settings, "ENABLE_RSS_INGESTION", True)
+    monkeypatch.setattr(runtime_module.settings, "ENABLE_GDELT_INGESTION", True)
+    monkeypatch.setattr(runtime_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 1)
 
     lineage_args = SimpleNamespace(target_model="canonical", fail_on_mixed=True)
     freshness_args = SimpleNamespace(stale_multiplier=2.0, fail_on_stale=True)
 
-    lineage_data, lineage_lines, lineage_exit = await ops_module._collect_eval_embedding_lineage(
-        lineage_args
-    )
+    (
+        lineage_data,
+        lineage_lines,
+        lineage_exit,
+    ) = await runtime_module._collect_eval_embedding_lineage(lineage_args)
     (
         freshness_data,
         freshness_lines,
         freshness_exit,
-    ) = await ops_module._collect_eval_source_freshness(freshness_args)
+    ) = await runtime_module._collect_eval_source_freshness(freshness_args)
 
     assert lineage_data["has_mixed_populations"] is True
     assert any("mixed_population=true" in line for line in lineage_lines)
@@ -335,11 +341,11 @@ async def test_collect_source_freshness_without_enabled_collectors_has_no_catchu
         "build_source_freshness_report",
         fake_source_freshness_report,
     )
-    monkeypatch.setattr(ops_module.settings, "ENABLE_RSS_INGESTION", False)
-    monkeypatch.setattr(ops_module.settings, "ENABLE_GDELT_INGESTION", False)
-    monkeypatch.setattr(ops_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
+    monkeypatch.setattr(runtime_module.settings, "ENABLE_RSS_INGESTION", False)
+    monkeypatch.setattr(runtime_module.settings, "ENABLE_GDELT_INGESTION", False)
+    monkeypatch.setattr(runtime_module.settings, "SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES", 2)
 
-    freshness_data, _lines, _exit = await ops_module._collect_eval_source_freshness(
+    freshness_data, _lines, _exit = await runtime_module._collect_eval_source_freshness(
         SimpleNamespace(stale_multiplier=2.0, fail_on_stale=False)
     )
 
@@ -389,11 +395,11 @@ def test_collect_eval_audit_validate_taxonomy_and_pipeline_dry_run(
         output_path=str(tmp_path / "pipeline.json"),
     )
 
-    audit_data, audit_lines, audit_exit = ops_module._collect_eval_audit(audit_args)
-    taxonomy_data, taxonomy_lines, taxonomy_exit = ops_module._collect_eval_validate_taxonomy(
+    audit_data, audit_lines, audit_exit = runtime_module._collect_eval_audit(audit_args)
+    taxonomy_data, taxonomy_lines, taxonomy_exit = runtime_module._collect_eval_validate_taxonomy(
         taxonomy_args
     )
-    pipeline_data, pipeline_lines, pipeline_exit = ops_module._collect_pipeline_dry_run(
+    pipeline_data, pipeline_lines, pipeline_exit = runtime_module._collect_pipeline_dry_run(
         pipeline_args
     )
 
@@ -427,12 +433,12 @@ def test_collect_eval_audit_and_taxonomy_without_warnings(
         ),
     )
 
-    audit_data, audit_lines, audit_exit = ops_module._collect_eval_audit(
+    audit_data, audit_lines, audit_exit = runtime_module._collect_eval_audit(
         SimpleNamespace(
             gold_set="gold.jsonl", output_dir=str(tmp_path), max_items=0, fail_on_warnings=False
         )
     )
-    taxonomy_data, taxonomy_lines, taxonomy_exit = ops_module._collect_eval_validate_taxonomy(
+    taxonomy_data, taxonomy_lines, taxonomy_exit = runtime_module._collect_eval_validate_taxonomy(
         SimpleNamespace(
             trend_config_dir="config/trends",
             gold_set="gold.jsonl",
@@ -550,7 +556,7 @@ def test_eval_taxonomy_and_http_json_cover_warning_and_non_dict_paths(
         ),
     )
 
-    data, lines, exit_code = ops_module._collect_eval_validate_taxonomy(args)
+    data, lines, exit_code = runtime_module._collect_eval_validate_taxonomy(args)
 
     assert data["warnings"] == ["warn"]
     assert data["errors"] == []
@@ -686,14 +692,14 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
 
     monkeypatch.setattr(database_module, "async_session_maker", fake_session_maker)
     monkeypatch.setattr(migration_parity_module, "check_migration_parity", healthy_migration)
-    monkeypatch.setattr(ops_module.settings, "DATABASE_URL", "postgres://db")
-    assert await ops_module._doctor_check_database(0.2) == (
+    monkeypatch.setattr(runtime_module.settings, "DATABASE_URL", "postgres://db")
+    assert await runtime_module._doctor_check_database(0.2) == (
         "PASS",
         "database connectivity ok; migration parity healthy",
     )
 
     monkeypatch.setattr(migration_parity_module, "check_migration_parity", failing_migration)
-    status, message = await ops_module._doctor_check_database(0.2)
+    status, message = await runtime_module._doctor_check_database(0.2)
     assert status == "FAIL"
     assert "drifted" in message
 
@@ -706,7 +712,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
 
     fake_redis_module = ModuleType("redis.asyncio")
     fake_redis_module.from_url = lambda _url: FakeRedisClient()
-    monkeypatch.setattr(ops_module.settings, "REDIS_URL", "redis://cache")
+    monkeypatch.setattr(runtime_module.settings, "REDIS_URL", "redis://cache")
     import builtins
 
     original_import = builtins.__import__
@@ -714,7 +720,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
     fake_redis_package.asyncio = fake_redis_module
     monkeypatch.setitem(sys.modules, "redis", fake_redis_package)
     monkeypatch.setitem(sys.modules, "redis.asyncio", fake_redis_module)
-    assert await ops_module._doctor_check_redis(0.2) == ("PASS", "redis connectivity ok")
+    assert await runtime_module._doctor_check_redis(0.2) == ("PASS", "redis connectivity ok")
 
     def failing_import(name, globals=None, locals=None, fromlist=(), level=0):
         if name == "redis.asyncio":
@@ -722,7 +728,10 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
         return original_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", failing_import)
-    assert await ops_module._doctor_check_redis(0.2) == ("FAIL", "redis client is not installed")
+    assert await runtime_module._doctor_check_redis(0.2) == (
+        "FAIL",
+        "redis client is not installed",
+    )
 
     class BrokenRedisClient:
         async def ping(self) -> None:
@@ -733,7 +742,7 @@ async def test_doctor_dependency_checks_cover_success_failure_and_import_error(
 
     monkeypatch.setattr(builtins, "__import__", original_import)
     fake_redis_module.from_url = lambda _url: BrokenRedisClient()
-    assert await ops_module._doctor_check_redis(0.2) == ("FAIL", "redis check failed: boom")
+    assert await runtime_module._doctor_check_redis(0.2) == ("FAIL", "redis check failed: boom")
 
 
 def test_doctor_helpers_and_command_result_wrappers(
@@ -743,24 +752,24 @@ def test_doctor_helpers_and_command_result_wrappers(
     hooks_dir = tmp_path / ".git" / "hooks"
     hooks_dir.mkdir(parents=True)
     monkeypatch.chdir(tmp_path)
-    assert ops_module._doctor_check_required_hooks()[0] == "FAIL"
+    assert runtime_module._doctor_check_required_hooks()[0] == "FAIL"
 
     for hook_name in ("pre-commit", "pre-push", "commit-msg"):
         path = hooks_dir / hook_name
         path.write_text("#!/bin/sh\n", encoding="utf-8")
         path.chmod(0o755)
 
-    assert ops_module._doctor_check_required_hooks()[0] == "PASS"
-    assert ops_module._is_loopback_host("localhost") is True
-    assert ops_module._is_loopback_host("example.com") is False
+    assert runtime_module._doctor_check_required_hooks()[0] == "PASS"
+    assert runtime_module._is_loopback_host("localhost") is True
+    assert runtime_module._is_loopback_host("example.com") is False
 
-    monkeypatch.setattr(ops_module.settings, "ENVIRONMENT", "production")
-    monkeypatch.setattr(ops_module.settings, "RUNTIME_PROFILE", "agent")
-    monkeypatch.setattr(ops_module.settings, "AGENT_MODE", False)
-    monkeypatch.setattr(ops_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
-    monkeypatch.setattr(ops_module.settings, "API_HOST", "0.0.0.0")
-    monkeypatch.setattr(ops_module.settings, "API_AUTH_ENABLED", False)
-    refusals = ops_module._doctor_safety_refusals()
+    monkeypatch.setattr(runtime_module.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(runtime_module.settings, "RUNTIME_PROFILE", "agent")
+    monkeypatch.setattr(runtime_module.settings, "AGENT_MODE", False)
+    monkeypatch.setattr(runtime_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
+    monkeypatch.setattr(runtime_module.settings, "API_HOST", "0.0.0.0")
+    monkeypatch.setattr(runtime_module.settings, "API_AUTH_ENABLED", False)
+    refusals = runtime_module._doctor_safety_refusals()
     assert "agent profile is not allowed in production" in refusals
     assert any("loopback API_HOST" in refusal for refusal in refusals)
     assert any("API_AUTH_ENABLED=false" in refusal for refusal in refusals)
@@ -771,12 +780,14 @@ def test_doctor_helpers_and_command_result_wrappers(
     async def fake_redis(_timeout: float) -> tuple[str, str]:
         return ("FAIL", "redis down")
 
-    monkeypatch.setattr(ops_module, "_doctor_check_database", fake_db)
-    monkeypatch.setattr(ops_module, "_doctor_check_redis", fake_redis)
-    monkeypatch.setattr(ops_module, "_doctor_safety_refusals", lambda: ["blocked"])
-    monkeypatch.setattr(ops_module, "_doctor_check_required_hooks", lambda: ("PASS", "hooks ok"))
+    monkeypatch.setattr(runtime_module, "_doctor_check_database", fake_db)
+    monkeypatch.setattr(runtime_module, "_doctor_check_redis", fake_redis)
+    monkeypatch.setattr(runtime_module, "_doctor_safety_refusals", lambda: ["blocked"])
+    monkeypatch.setattr(
+        runtime_module, "_doctor_check_required_hooks", lambda: ("PASS", "hooks ok")
+    )
 
-    data, lines, exit_code = ops_module._collect_doctor(0.2)
+    data, lines, exit_code = runtime_module._collect_doctor(0.2)
     assert data["database"]["status"] == "PASS"
     assert any("SAFETY_REFUSALS:" in line for line in lines)
     assert exit_code == ExitCode.VALIDATION_ERROR
@@ -806,30 +817,16 @@ def test_doctor_helpers_and_command_result_wrappers(
 
 
 def test_ops_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        benchmark_module,
-        "available_configs",
-        lambda: {
-            "alternative": object(),
-            "baseline": object(),
-            "tier1-gpt5-nano-minimal": object(),
-        },
-    )
-    monkeypatch.setattr(
-        benchmark_module,
-        "default_config_names",
-        lambda: ("baseline", "alternative"),
-    )
-    monkeypatch.setattr(replay_module, "available_replay_configs", lambda: {"stable": object()})
-
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")
     ops_module.register_ops_commands(subparsers)
 
-    args = parser.parse_args(["eval", "benchmark", "--config", "baseline", "--format", "json"])
+    args = parser.parse_args(
+        ["eval", "benchmark", "--config", "tier1-gpt5-nano-low", "--format", "json"]
+    )
     assert args.command == "eval"
     assert args.eval_command == "benchmark"
-    assert args.config == ["baseline"]
+    assert args.config == ["tier1-gpt5-nano-low"]
     assert args.output_format == "json"
 
     args = parser.parse_args(["agent", "smoke", "--dry-run"])
@@ -850,3 +847,330 @@ def test_ops_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch)
     help_text = benchmark_parser.format_help()
     assert "Defaults to the baseline set (baseline, alternative)" in help_text
     assert "GPT-5 candidates require explicit --config selection" in help_text
+
+    with pytest.raises(SystemExit, match="2"):
+        parser.parse_args(["eval", "benchmark", "--config", "unknown"])
+    with pytest.raises(SystemExit, match="2"):
+        parser.parse_args(["eval", "replay", "--champion-config", "unknown"])
+    args = parser.parse_args(["eval", "embedding-lineage"])
+    assert args.target_model == "text-embedding-3-small"
+
+
+def test_runtime_result_wraps_runtime_bridge_payload(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        ops_module,
+        "_run_runtime_bridge",
+        lambda action, payload: SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "exit_code": 2,
+                    "data": {"action": action, "payload": payload},
+                    "lines": ["line-one"],
+                    "error_lines": ["line-two"],
+                }
+            ),
+            stderr="",
+        ),
+    )
+
+    result = ops_module._runtime_result(
+        "doctor",
+        SimpleNamespace(timeout_seconds=1.5, output_format="json", handler=object()),
+    )
+
+    assert result.exit_code == ExitCode.VALIDATION_ERROR
+    assert result.data == {"action": "doctor", "payload": {"timeout_seconds": 1.5}}
+    assert result.lines == ["line-one"]
+    assert result.error_lines == ["line-two"]
+
+
+def test_runtime_result_reports_invalid_runtime_bridge_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ops_module,
+        "_run_runtime_bridge",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=4, stdout="not-json", stderr="boom"),
+    )
+
+    result = ops_module._runtime_result("doctor", SimpleNamespace(timeout_seconds=2.0))
+
+    assert result.exit_code == ExitCode.ENVIRONMENT_ERROR
+    assert result.error_lines is not None
+    assert "invalid JSON" in result.error_lines[0]
+
+
+def test_runtime_result_reports_missing_and_non_object_payloads(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        ops_module,
+        "_run_runtime_bridge",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=4, stdout="", stderr="boom"),
+    )
+    missing = ops_module._runtime_result("doctor", SimpleNamespace(timeout_seconds=2.0))
+    assert missing.exit_code == ExitCode.ENVIRONMENT_ERROR
+    assert missing.error_lines == ["doctor runtime bridge returned no JSON output", "boom"]
+
+    monkeypatch.setattr(
+        ops_module,
+        "_run_runtime_bridge",
+        lambda *_args, **_kwargs: SimpleNamespace(returncode=0, stdout='["bad"]', stderr=""),
+    )
+    non_object = ops_module._runtime_result("doctor", SimpleNamespace(timeout_seconds=2.0))
+    assert non_object.exit_code == ExitCode.ENVIRONMENT_ERROR
+    assert non_object.error_lines == ["doctor runtime bridge returned a non-object payload"]
+
+    monkeypatch.setattr(
+        ops_module,
+        "_run_runtime_bridge",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps({"exit_code": 0, "data": [], "lines": "line", "error_lines": "err"}),
+            stderr="",
+        ),
+    )
+    normalized = ops_module._runtime_result("doctor", SimpleNamespace(timeout_seconds=2.0))
+    assert normalized.data is None
+    assert normalized.lines == ["line"]
+    assert normalized.error_lines == ["err"]
+
+
+def test_runtime_payload_and_bridge_command_helpers(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = ops_module._runtime_payload(
+        SimpleNamespace(
+            timeout_seconds=1.5,
+            handler=object(),
+            output_format="json",
+            command="doctor",
+            optional=None,
+        )
+    )
+    assert payload == {"timeout_seconds": 1.5, "optional": None}
+
+    captured: dict[str, object] = {}
+
+    def fake_run(command: list[str], **kwargs: object) -> SimpleNamespace:
+        captured["command"] = command
+        captured["kwargs"] = kwargs
+        return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+
+    monkeypatch.setattr(ops_module.subprocess, "run", fake_run)
+    completed = ops_module._run_runtime_bridge(
+        "doctor", {"when": datetime(2026, 3, 8, 12, 0, tzinfo=UTC)}
+    )
+
+    assert completed.returncode == 0
+    assert captured["command"] == [
+        sys.executable,
+        "-m",
+        "tools.horadus.python.horadus_app_cli_runtime",
+        "doctor",
+        "--payload",
+        '{"when": "2026-03-08T12:00:00+00:00"}',
+    ]
+    assert captured["kwargs"] == {"capture_output": True, "text": True, "check": False}
+
+
+def test_ops_json_default_and_env_defaults_cover_edge_cases(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    @dataclass
+    class _Unsupported:
+        value: int
+
+    assert ops_module._json_default(datetime(2026, 3, 8, 12, 0, tzinfo=UTC)).endswith("+00:00")
+    assert ops_module._json_default(Path("artifacts/out.json")) == "artifacts/out.json"
+    with pytest.raises(TypeError):
+        ops_module._json_default(_Unsupported(1))
+
+    monkeypatch.delenv("API_HOST", raising=False)
+    assert ops_module._env_default("API_HOST", "0.0.0.0") == "0.0.0.0"
+    monkeypatch.delenv("API_PORT", raising=False)
+    assert ops_module._default_agent_base_url() == "http://127.0.0.1:8000"
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY_FILE", raising=False)
+    secret_path = tmp_path / "agent.key"
+    secret_path.write_text("dotenv-secret\n", encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "API_HOST=10.0.0.5\nAPI_PORT=9100\nAPI_KEY_FILE=agent.key\n",
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"
+    assert ops_module._default_api_key() == "dotenv-secret"
+    (tmp_path / ".env").write_text(
+        "API_HOST=10.0.0.5\nAPI_PORT=9100\nAPI_KEY_FILE=agent.key\nEMBEDDING_MODEL=text-embedding-3-large\n",
+        encoding="utf-8",
+    )
+    assert ops_module._default_embedding_model() == "text-embedding-3-large"
+    home_dir = tmp_path / "home"
+    home_dir.mkdir()
+    (home_dir / "agent-home.key").write_text("home-secret\n", encoding="utf-8")
+    monkeypatch.setenv("HOME", str(home_dir))
+    (tmp_path / ".env").write_text("API_KEY_FILE=~/agent-home.key\n", encoding="utf-8")
+    monkeypatch.delenv("API_KEY", raising=False)
+    monkeypatch.delenv("API_KEY_FILE", raising=False)
+    assert ops_module._default_api_key() == "home-secret"
+    (tmp_path / ".env").write_text(
+        "API_HOST=10.0.0.5\nAPI_PORT=9100\nEMBEDDING_MODEL=text-embedding-3-large\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("API_HOST", "  ")
+    assert ops_module._env_default("API_HOST", "0.0.0.0") == "0.0.0.0"
+    assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"
+    assert ops_module._read_secret_file(None) is None
+    monkeypatch.setenv("API_HOST", "127.0.0.1")
+    monkeypatch.setenv("API_PORT", "9000")
+    monkeypatch.setenv("API_KEY", "shell-secret")
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
+    assert ops_module._default_agent_base_url() == "http://127.0.0.1:9000"
+    assert ops_module._default_api_key() == "shell-secret"
+    assert ops_module._default_embedding_model() == "text-embedding-3-small"
+
+
+def test_runtime_module_helper_functions_cover_result_serialization_and_namespace() -> None:
+    @dataclass
+    class _Payload:
+        value: int
+
+    assert runtime_module._json_default(datetime(2026, 3, 8, 12, 0, tzinfo=UTC)).endswith("+00:00")
+    assert runtime_module._json_default(Path("artifacts/out.json")) == "artifacts/out.json"
+    assert runtime_module._json_default(_Payload(1)) == {"value": 1}
+    with pytest.raises(TypeError):
+        runtime_module._json_default(object())
+
+    assert runtime_module._result_payload(exit_code=0) == {"exit_code": 0}
+    assert runtime_module._result_payload(
+        exit_code=2,
+        data={"ok": True},
+        lines=["line"],
+        error_lines=["error"],
+    ) == {
+        "exit_code": 2,
+        "data": {"ok": True},
+        "lines": ["line"],
+        "error_lines": ["error"],
+    }
+    assert runtime_module._parse_iso_datetime(None) is None
+    assert runtime_module._parse_iso_datetime(" ") is None
+    assert runtime_module._parse_iso_datetime("2026-03-08T12:00:00Z") == datetime(
+        2026, 3, 8, 12, 0, tzinfo=UTC
+    )
+    assert runtime_module._parse_iso_datetime("2026-03-08T14:00:00+02:00") == datetime(
+        2026, 3, 8, 14, 0, tzinfo=datetime.fromisoformat("2026-03-08T14:00:00+02:00").tzinfo
+    )
+    assert runtime_module._format_embedding_model_counts(SimpleNamespace(model_counts=[])) == "none"
+    assert runtime_module._namespace({"value": 3}).value == 3
+
+
+def test_runtime_action_wrappers_delegate_to_collectors(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fake_trends(limit: int) -> tuple[dict[str, int], list[str]]:
+        assert limit == 1
+        return ({"limit": limit}, ["trend"])
+
+    async def fake_dashboard(output_dir: str, limit: int) -> tuple[dict[str, str], list[str]]:
+        assert output_dir == "artifacts/dashboard"
+        assert limit == 1
+        return ({"output_dir": output_dir}, ["dashboard"])
+
+    async def fake_async_collector(args: SimpleNamespace) -> tuple[dict[str, str], list[str], int]:
+        return ({"value": args.value}, ["async"], ExitCode.OK)
+
+    def fake_sync_collector(args: SimpleNamespace) -> tuple[dict[str, str], list[str], int]:
+        return ({"value": args.value}, ["sync"], ExitCode.VALIDATION_ERROR)
+
+    monkeypatch.setattr(runtime_module, "_collect_trends_status", fake_trends)
+    monkeypatch.setattr(runtime_module, "_collect_dashboard_export", fake_dashboard)
+    monkeypatch.setattr(runtime_module, "_collect_eval_benchmark", fake_async_collector)
+    monkeypatch.setattr(runtime_module, "_collect_eval_audit", fake_sync_collector)
+    monkeypatch.setattr(runtime_module, "_collect_eval_validate_taxonomy", fake_sync_collector)
+    monkeypatch.setattr(runtime_module, "_collect_eval_replay", fake_async_collector)
+    monkeypatch.setattr(runtime_module, "_collect_eval_vector_benchmark", fake_async_collector)
+    monkeypatch.setattr(runtime_module, "_collect_eval_embedding_lineage", fake_async_collector)
+    monkeypatch.setattr(runtime_module, "_collect_eval_source_freshness", fake_async_collector)
+    monkeypatch.setattr(runtime_module, "_collect_pipeline_dry_run", fake_sync_collector)
+    monkeypatch.setattr(
+        runtime_module,
+        "_collect_doctor",
+        lambda timeout: ({"timeout": timeout}, ["doctor"], ExitCode.OK),
+    )
+
+    assert runtime_module._action_trends_status({"limit": 0})["data"] == {"limit": 1}
+    assert runtime_module._action_dashboard_export({"limit": 0})["data"] == {
+        "output_dir": "artifacts/dashboard"
+    }
+    assert runtime_module._action_eval_benchmark({"value": "x"})["data"] == {"value": "x"}
+    assert (
+        runtime_module._action_eval_audit({"value": "x"})["exit_code"] == ExitCode.VALIDATION_ERROR
+    )
+    assert runtime_module._action_eval_validate_taxonomy({"value": "x"})["lines"] == ["sync"]
+    assert runtime_module._action_eval_replay({"value": "x"})["data"] == {"value": "x"}
+    assert runtime_module._action_eval_vector_benchmark({"value": "x"})["data"] == {"value": "x"}
+    assert runtime_module._action_eval_embedding_lineage({"value": "x"})["data"] == {"value": "x"}
+    assert runtime_module._action_eval_source_freshness({"value": "x"})["data"] == {"value": "x"}
+    assert runtime_module._action_pipeline_dry_run({"value": "x"})["lines"] == ["sync"]
+    assert runtime_module._action_doctor({"timeout_seconds": 0.0})["data"] == {"timeout": 0.1}
+
+
+def test_runtime_parser_and_main_cover_success_and_failure_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    parser = runtime_module._build_parser()
+    parsed = parser.parse_args(["doctor", "--payload", '{"timeout_seconds": 1.5}'])
+    assert parsed.action == "doctor"
+
+    monkeypatch.setitem(
+        runtime_module._ACTIONS,
+        "doctor",
+        lambda payload: runtime_module._result_payload(
+            exit_code=ExitCode.OK,
+            data={"payload": payload},
+            lines=["ok"],
+        ),
+    )
+    assert runtime_module.main(["doctor", "--payload", '{"timeout_seconds": 1.5}']) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["data"] == {"payload": {"timeout_seconds": 1.5}}
+
+    assert runtime_module.main(["doctor", "--payload", "[]"]) == ExitCode.ENVIRONMENT_ERROR
+    payload = json.loads(capsys.readouterr().out)
+    assert "payload must decode to a JSON object" in payload["error_lines"][0]
+
+    monkeypatch.setitem(
+        runtime_module._ACTIONS,
+        "doctor",
+        lambda _payload: (_ for _ in ()).throw(RuntimeError("boom")),
+    )
+    assert runtime_module.main(["doctor", "--payload", '{"timeout_seconds": 1.5}']) == 4
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["error_lines"] == ["doctor runtime bridge failed: boom"]
+
+    hooks_dir = tmp_path / ".git" / "hooks"
+    hooks_dir.mkdir(parents=True)
+    for hook_name in ("pre-commit", "pre-push", "commit-msg"):
+        path = hooks_dir / hook_name
+        path.write_text("#!/bin/sh\n", encoding="utf-8")
+        path.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(runtime_module.settings, "DATABASE_URL", "")
+    monkeypatch.setattr(runtime_module.settings, "REDIS_URL", "")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "tools.horadus.python.horadus_app_cli_runtime",
+            "doctor",
+            "--payload",
+            '{"timeout_seconds": 0.1}',
+        ],
+    )
+    loaded_module = sys.modules.pop("tools.horadus.python.horadus_app_cli_runtime", None)
+    with pytest.raises(SystemExit, match="0"):
+        runpy.run_module("tools.horadus.python.horadus_app_cli_runtime", run_name="__main__")
+    if loaded_module is not None:
+        sys.modules["tools.horadus.python.horadus_app_cli_runtime"] = loaded_module

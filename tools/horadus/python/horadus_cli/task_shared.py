@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.horadus_cli.v2.task_workflow_core import (
+from tools.horadus.python.horadus_cli.task_workflow_core import (
     DEFAULT_CHECKS_POLL_SECONDS,
     DEFAULT_CHECKS_TIMEOUT_SECONDS,
     DEFAULT_DOCKER_READY_POLL_SECONDS,

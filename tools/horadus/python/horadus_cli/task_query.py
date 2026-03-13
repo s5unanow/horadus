@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.horadus_cli.v2.task_workflow_core import (
+from tools.horadus.python.horadus_cli.task_workflow_core import (
     _archived_task_blocked_result,
     _task_record_payload,
     _workflow_commands_for_context_pack,

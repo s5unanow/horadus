@@ -3,19 +3,26 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
-from src.horadus_cli.v2.task_finish import handle_finish
-from src.horadus_cli.v2.task_friction import handle_record_friction, handle_summarize_friction
-from src.horadus_cli.v2.task_ledgers import handle_close_ledgers
-from src.horadus_cli.v2.task_lifecycle import handle_lifecycle
-from src.horadus_cli.v2.task_preflight import handle_eligibility, handle_preflight, handle_start
-from src.horadus_cli.v2.task_query import (
+from tools.horadus.python.horadus_cli.task_finish import handle_finish
+from tools.horadus.python.horadus_cli.task_friction import (
+    handle_record_friction,
+    handle_summarize_friction,
+)
+from tools.horadus.python.horadus_cli.task_ledgers import handle_close_ledgers
+from tools.horadus.python.horadus_cli.task_lifecycle import handle_lifecycle
+from tools.horadus.python.horadus_cli.task_preflight import (
+    handle_eligibility,
+    handle_preflight,
+    handle_start,
+)
+from tools.horadus.python.horadus_cli.task_query import (
     handle_context_pack,
     handle_list_active,
     handle_search,
     handle_show,
 )
-from src.horadus_cli.v2.task_shared import VALID_FRICTION_TYPES
-from src.horadus_cli.v2.task_workflow import handle_local_gate, handle_safe_start
+from tools.horadus.python.horadus_cli.task_shared import VALID_FRICTION_TYPES
+from tools.horadus.python.horadus_cli.task_workflow import handle_local_gate, handle_safe_start
 
 
 def add_leaf_cli_options(parser: Any) -> None:

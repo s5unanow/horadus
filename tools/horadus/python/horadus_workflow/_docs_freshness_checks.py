@@ -330,7 +330,7 @@ def run_docs_freshness_check_impl(
                 )
             )
 
-    for reference_path, statements, missing_rule_id, message_prefix in (
+    for reference_paths, statements, missing_rule_id, message_prefix in (
         (
             config.completion_guidance_reference_paths,
             config.completion_guidance_statements,
@@ -356,7 +356,7 @@ def run_docs_freshness_check_impl(
             "workflow/policy guardrail guidance",
         ),
     ):
-        for path_text in reference_path:
+        for path_text in reference_paths:
             file_path = repo_root / path_text
             if not file_path.exists():
                 errors.append(

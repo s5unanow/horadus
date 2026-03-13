@@ -567,6 +567,91 @@ def test_maybe_request_fresh_review_rejects_non_dict_timeline_items_payload(
     ) == ["Failed to inspect existing fresh-review requests automatically."]
 
 
+def test_maybe_request_fresh_review_handles_graphql_null_data_payload(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout='{"data":null,"errors":[{"message":"boom"}]}')
+        ),
+    )
+
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+
+@pytest.mark.parametrize(
+    ("timeline_payload"),
+    [
+        {"data": {"repository": None}},
+        {"data": {"repository": {"pullRequest": None}}},
+        {
+            "data": {
+                "repository": {
+                    "pullRequest": {
+                        "timelineItems": {
+                            "pageInfo": None,
+                            "nodes": [],
+                        }
+                    }
+                }
+            }
+        },
+    ],
+)
+def test_maybe_request_fresh_review_rejects_nested_invalid_timeline_shapes(
+    monkeypatch: pytest.MonkeyPatch, timeline_payload: dict[str, object]
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout=json.dumps(timeline_payload))
+        ),
+    )
+
+    assert task_commands_module._maybe_request_fresh_review(
+        pr_url="https://example.invalid/pr/290",
+        config=config,
+    ) == ["Failed to inspect existing fresh-review requests automatically."]
+
+
 def test_needs_pre_review_fresh_review_request_detects_stale_review_context(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -901,6 +986,25 @@ def test_needs_pre_review_fresh_review_request_handles_metadata_and_review_failu
             else _completed(args, stdout="example/repo\n")
             if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
             else _completed(args, stdout='{"body":"not-a-list"}\n')
+            if args[:3] == ["gh", "api", "graphql"]
+            else _completed(args, stdout="[]\n")
+        ),
+    )
+    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
+        task_commands_module._needs_pre_review_fresh_review_request(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda args, **_kwargs: (
+            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
+            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
+            else _completed(args, stdout="example/repo\n")
+            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
+            else _completed(args, stdout='{"data":null,"errors":[{"message":"boom"}]}')
             if args[:3] == ["gh", "api", "graphql"]
             else _completed(args, stdout="[]\n")
         ),

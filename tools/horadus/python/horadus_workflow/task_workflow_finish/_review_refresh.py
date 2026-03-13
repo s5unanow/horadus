@@ -90,12 +90,16 @@ def _request_timeline(
             raise ValueError("Unable to parse fresh-review request history.") from exc
         if not isinstance(payload, dict):
             raise ValueError("Unexpected fresh-review request history payload.")
-        timeline_payload = (
-            payload.get("data", {})
-            .get("repository", {})
-            .get("pullRequest", {})
-            .get("timelineItems", {})
-        )
+        data = payload.get("data")
+        if not isinstance(data, dict):
+            raise ValueError("Unexpected fresh-review request history payload.")
+        repository = data.get("repository")
+        if not isinstance(repository, dict):
+            raise ValueError("Unexpected fresh-review request history payload.")
+        pull_request = repository.get("pullRequest")
+        if not isinstance(pull_request, dict):
+            raise ValueError("Unexpected fresh-review request history payload.")
+        timeline_payload = pull_request.get("timelineItems")
         if not isinstance(timeline_payload, dict):
             raise ValueError("Unexpected fresh-review request history payload.")
         page_info = timeline_payload.get("pageInfo")

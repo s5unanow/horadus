@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+import tools.horadus.python.horadus_workflow.task_workflow_finish.review as review_module
 from tests.horadus_cli.v2.helpers import _completed
 
 pytestmark = pytest.mark.unit
@@ -271,6 +272,16 @@ def test_wait_helpers_retry_until_checks_and_state_succeed(
     assert state_ok is True
     assert state_lines == []
     assert sleep_calls == [2, 2]
+
+
+def test_review_module_compat_ignores_unknown_attribute_passthrough(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marker = object()
+
+    monkeypatch.setattr(review_module, "_task317_unknown_attr", marker, raising=False)
+
+    assert review_module._task317_unknown_attr is marker
 
 
 def test_wait_helpers_retry_without_sleep_when_polling_is_disabled(

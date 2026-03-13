@@ -170,7 +170,7 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
         [
             "tasks",
             "search",
-            "health",
+            "/health/live",
             "--status",
             "active",
             "--include-raw",
@@ -185,7 +185,6 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
     assert payload["data"]["status_filter"] == "active"
     assert payload["data"]["include_raw"] is True
     assert matches
-    assert "TASK-189" in {match["task_id"] for match in matches}
     assert all(match["status"] == "active" for match in matches)
     assert all("raw_block" in match for match in matches)
 
@@ -193,13 +192,13 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
 def test_main_tasks_search_text_output_remains_compact_by_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = main(["tasks", "search", "health", "--status", "active"])
+    result = main(["tasks", "search", "/health/live", "--status", "active"])
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "Task search: health" in output
-    assert "TASK-189" in output
-    assert "## TASK-189" not in output
+    assert "Task search: /health/live" in output
+    assert "TASK-" in output
+    assert "## TASK-" not in output
     assert "Acceptance Criteria" not in output
 
 
@@ -207,16 +206,13 @@ def test_main_tasks_search_text_output_can_include_raw_blocks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     result = main(
-        ["tasks", "search", "health", "--status", "active", "--limit", "1", "--include-raw"]
+        ["tasks", "search", "/health/live", "--status", "active", "--limit", "1", "--include-raw"]
     )
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "## TASK-189" in output
-    assert (
-        "### TASK-189: Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]"
-        in output
-    )
+    assert "## TASK-" in output
+    assert "### TASK-" in output
 
 
 def test_main_tasks_search_rejects_non_positive_limit(

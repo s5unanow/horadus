@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import types
 
+from . import bootstrap as bootstrap_module
 from . import checks as checks_module
 from . import context as context_module
 from . import orchestrator as orchestrator_module
@@ -10,6 +11,7 @@ from . import preconditions as preconditions_module
 from . import review as review_module
 
 _MODULE_EXPORTS: dict[object, list[str]] = {
+    bootstrap_module: list(bootstrap_module.__all__),
     context_module: list(context_module.__all__),
     checks_module: list(checks_module.__all__),
     preconditions_module: list(preconditions_module.__all__),

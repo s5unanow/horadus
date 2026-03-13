@@ -1,3 +1,11 @@
+from .bootstrap import (
+    BranchPullRequest,
+    FinishPullRequestBootstrap,
+    _ensure_finish_pull_request,
+    _find_open_branch_pull_request,
+    _resolve_finish_pr_body,
+    _resolve_finish_pr_title,
+)
 from .checks import (
     _coerce_wait_for_required_checks_result,
     _current_required_checks_blocker,
@@ -26,10 +34,14 @@ from .review import (
 )
 
 __all__ = [
+    "BranchPullRequest",
+    "FinishPullRequestBootstrap",
     "_branch_head_alignment_blocker",
     "_coerce_wait_for_required_checks_result",
     "_current_head_finish_blocker",
     "_current_required_checks_blocker",
+    "_ensure_finish_pull_request",
+    "_find_open_branch_pull_request",
     "_fresh_review_request_blocker",
     "_head_changed_review_gate_blocker",
     "_maybe_request_fresh_review",
@@ -39,6 +51,8 @@ __all__ = [
     "_prepare_current_head_review_window",
     "_required_checks_state",
     "_resolve_finish_context",
+    "_resolve_finish_pr_body",
+    "_resolve_finish_pr_title",
     "_resolve_review_threads",
     "_review_gate_lines",
     "_review_thread_lines",

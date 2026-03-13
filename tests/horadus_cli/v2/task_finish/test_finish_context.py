@@ -458,3 +458,48 @@ def test_find_task_pull_request_ignores_non_dict_merge_commit_payload(
 
     assert isinstance(result, task_commands_module.TaskPullRequest)
     assert result.merge_commit_oid is None
+
+
+def test_find_task_pull_request_remains_task_id_recovery_not_branch_dedupe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=1,
+        checks_poll_seconds=0,
+        review_timeout_seconds=1,
+        review_poll_seconds=0,
+        review_bot_login="bot",
+        review_timeout_policy="allow",
+    )
+    responses = iter(
+        [
+            _completed(["gh", "pr", "list"], stdout='[{"number":260},{"number":259}]'),
+            _completed(
+                ["gh", "pr", "view"],
+                stdout=json.dumps(
+                    {
+                        "number": 260,
+                        "url": "https://example.invalid/pr/260",
+                        "state": "MERGED",
+                        "isDraft": False,
+                        "headRefName": "codex/task-260-other-branch",
+                        "headRefOid": "head-sha-260",
+                        "mergeCommit": {"oid": "merge-sha-260"},
+                        "statusCheckRollup": [],
+                    }
+                ),
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        task_commands_module, "_run_command", lambda *_args, **_kwargs: next(responses)
+    )
+
+    result = task_commands_module._find_task_pull_request(task_id="TASK-259", config=config)
+
+    assert isinstance(result, task_commands_module.TaskPullRequest)
+    assert result.number == 260
+    assert result.head_ref_name == "codex/task-260-other-branch"

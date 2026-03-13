@@ -8,7 +8,7 @@ from tools.horadus.python.horadus_workflow import task_workflow_lifecycle as lif
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
-from . import checks, context, merge, preconditions, review
+from . import bootstrap, checks, context, merge, preconditions, review
 
 
 def finish_task_data(
@@ -36,55 +36,45 @@ def finish_task_data(
     if not isinstance(finish_context, shared.FinishContext):
         return finish_context
 
-    remote_branch_result = shared._run_command(
-        [
-            config.git_bin,
-            "ls-remote",
-            "--exit-code",
-            "--heads",
-            "origin",
-            finish_context.branch_name,
-        ]
+    bootstrap_result = bootstrap._ensure_finish_pull_request(
+        context=finish_context,
+        config=config,
+        dry_run=dry_run,
     )
-    remote_branch_exists = remote_branch_result.returncode == 0
+    if not isinstance(bootstrap_result, bootstrap.FinishPullRequestBootstrap):
+        return bootstrap_result
+    pr_url = bootstrap_result.pr_url
+    remote_branch_exists = bootstrap_result.remote_branch_exists
+    lines: list[str] = []
+    if (
+        finish_context.current_branch is not None
+        and finish_context.current_branch != finish_context.branch_name
+    ):
+        lines.append(
+            f"Resuming {finish_context.task_id} from {finish_context.current_branch} using task branch {finish_context.branch_name}."
+        )
+    lines.append(f"Finishing {finish_context.task_id} from {finish_context.branch_name}")
+    lines.extend(bootstrap_result.lines)
 
-    pr_url_result = shared._run_command(
-        [config.gh_bin, "pr", "view", finish_context.branch_name, "--json", "url", "--jq", ".url"]
-    )
-    pr_url = pr_url_result.stdout.strip()
-    if pr_url_result.returncode != 0 or not pr_url:
-        if not remote_branch_exists and not dry_run:
-            docker_readiness = shared.ensure_docker_ready(
-                reason="the next required `git push` pre-push integration gate"
-            )
-            if not docker_readiness.ready:
-                return shared._task_blocked(
-                    "Docker is not ready for the next required push gate.",
-                    next_action=(
-                        f"Make Docker ready, then run `git push -u origin {finish_context.branch_name}` "
-                        f"and re-run `horadus tasks finish {finish_context.task_id}`."
-                    ),
-                    data={
-                        "task_id": finish_context.task_id,
-                        "branch_name": finish_context.branch_name,
-                        "docker_ready": False,
-                    },
-                    exit_code=ExitCode.ENVIRONMENT_ERROR,
-                    extra_lines=docker_readiness.lines,
-                )
-        next_action = (
-            f"Run `git push -u origin {finish_context.branch_name}` and open a PR for {finish_context.task_id}."
-            if not remote_branch_exists
-            else (
-                f"Open a PR for `{finish_context.branch_name}` titled `{finish_context.task_id}: short summary` "
-                f"with `Primary-Task: {finish_context.task_id}` in the body, then re-run `horadus tasks finish`."
-            )
+    if dry_run and pr_url is None:
+        lines.append(
+            "Dry run: would wait for checks, merge, and sync main after bootstrapping the branch/PR."
         )
-        return shared._task_blocked(
-            f"unable to locate a PR for branch `{finish_context.branch_name}`.",
-            next_action=next_action,
-            data={"task_id": finish_context.task_id, "branch_name": finish_context.branch_name},
+        return (
+            ExitCode.OK,
+            {
+                "task_id": finish_context.task_id,
+                "branch_name": finish_context.branch_name,
+                "pr_url": None,
+                "generated_pr_title": bootstrap_result.generated_title,
+                "generated_pr_body": bootstrap_result.generated_body,
+                "pushed_branch": bootstrap_result.pushed_branch,
+                "created_pr": bootstrap_result.created_pr,
+                "dry_run": True,
+            },
+            lines,
         )
+    assert pr_url is not None
 
     pr_metadata_result = shared._run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "title,body"]
@@ -137,17 +127,7 @@ def finish_task_data(
             extra_lines=shared._output_lines(scope_result),
         )
 
-    lines: list[str] = []
-    if (
-        finish_context.current_branch is not None
-        and finish_context.current_branch != finish_context.branch_name
-    ):
-        lines.append(
-            f"Resuming {finish_context.task_id} from {finish_context.current_branch} using task branch {finish_context.branch_name}."
-        )
-    lines.extend(
-        [f"Finishing {finish_context.task_id} from {finish_context.branch_name}", f"PR: {pr_url}"]
-    )
+    lines.append(f"PR: {pr_url}")
 
     pr_state_result = shared._run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "state", "--jq", ".state"]
@@ -253,6 +233,8 @@ def finish_task_data(
                 "task_id": finish_context.task_id,
                 "branch_name": finish_context.branch_name,
                 "pr_url": pr_url,
+                "pushed_branch": bootstrap_result.pushed_branch,
+                "created_pr": bootstrap_result.created_pr,
                 "dry_run": True,
             },
             lines,

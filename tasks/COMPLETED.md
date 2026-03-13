@@ -288,3 +288,4 @@
 - TASK-320: Tighten `ops_commands.py` Internal Seams After the Initial Split ✅
 - TASK-321: Remove obsolete `src/core` workflow shims ✅
 - TASK-322: Harden `horadus tasks finish` Review Request Dedupe and Feedback Detection ✅
+- TASK-323: Collapse repetitive finish refresh test scaffolding ✅

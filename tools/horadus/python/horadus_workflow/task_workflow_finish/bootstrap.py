@@ -5,6 +5,7 @@ import re
 from dataclasses import dataclass
 
 from tools.horadus.python.horadus_workflow import task_repo
+from tools.horadus.python.horadus_workflow import task_workflow_lifecycle as lifecycle
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import ExitCode
 
@@ -165,6 +166,31 @@ def _generated_pr_scope_blocker(
     )
 
 
+def _find_same_branch_existing_pull_request(
+    *,
+    context: shared.FinishContext,
+    config: shared.FinishConfig,
+) -> BranchPullRequest | None:
+    if context.recovered_pr_url is not None:
+        return BranchPullRequest(
+            number=0,
+            url=context.recovered_pr_url,
+            head_ref_name=context.branch_name,
+        )
+    lifecycle_pr = lifecycle._find_task_pull_request(task_id=context.task_id, config=config)
+    if (
+        isinstance(lifecycle_pr, lifecycle.TaskPullRequest)
+        and lifecycle_pr.head_ref_name == context.branch_name
+        and lifecycle_pr.url.strip()
+    ):
+        return BranchPullRequest(
+            number=lifecycle_pr.number,
+            url=lifecycle_pr.url,
+            head_ref_name=lifecycle_pr.head_ref_name,
+        )
+    return None
+
+
 def _ensure_finish_pull_request(
     *,
     context: shared.FinishContext,
@@ -194,9 +220,10 @@ def _ensure_finish_pull_request(
             created_pr=False,
             lines=[],
         )
-    if context.recovered_pr_url is not None:
+    existing_pr = _find_same_branch_existing_pull_request(context=context, config=config)
+    if existing_pr is not None:
         return FinishPullRequestBootstrap(
-            pr_url=context.recovered_pr_url,
+            pr_url=existing_pr.url,
             remote_branch_exists=remote_branch_exists,
             pushed_branch=False,
             created_pr=False,

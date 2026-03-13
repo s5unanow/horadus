@@ -17,6 +17,8 @@ pytestmark = pytest.mark.unit
 
 @pytest.fixture(autouse=True)
 def _compat_branch_pr_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module, "_find_task_pull_request", lambda **_kwargs: None)
+
     def compat_lookup(
         *, branch_name: str, config: task_commands_module.FinishConfig
     ) -> tuple[int, dict[str, object], list[str]] | task_commands_module.BranchPullRequest | None:

@@ -961,5 +961,5 @@ def test_resolve_finish_pr_title_prefers_live_then_archive_then_branch_slug(
             task_id="TASK-326",
             branch_name="codex/task-326-finish-pr-bootstrap",
         )
-        == "TASK-326: pr bootstrap"
+        == "TASK-326: finish pr bootstrap"
     )

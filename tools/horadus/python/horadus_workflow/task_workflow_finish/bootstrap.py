@@ -34,7 +34,7 @@ def _humanize_branch_summary(branch_name: str) -> str:
     match = shared.TASK_BRANCH_PATTERN.match(branch_name)
     if match is None:
         return "short summary"
-    suffix = branch_name.split("-", maxsplit=3)[-1].strip()
+    suffix = re.sub(r"^codex/task-\d+-", "", branch_name).strip()
     summary = re.sub(r"[-_.]+", " ", suffix).strip()
     return summary or "short summary"
 

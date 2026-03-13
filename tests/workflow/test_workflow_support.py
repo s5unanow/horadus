@@ -263,6 +263,7 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
         repo="example/repo",
         pr_number=1,
         reviewer_login="bot",
+        head_oid="head-sha",
         wait_window_started_at=datetime.now(tz=UTC) - timedelta(seconds=1),
     )
     issue_comments = pr_review_gate_module._matching_issue_comments(
@@ -376,8 +377,109 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
             repo="example/repo",
             pr_number=1,
             reviewer_login="bot",
+            head_oid="head-sha",
             wait_window_started_at=datetime.now(tz=UTC),
         )
+
+
+def test_pr_review_gate_reuses_same_head_pr_summary_thumbs_up_across_reruns(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_signal_time = datetime(2026, 3, 13, 21, 20, tzinfo=UTC)
+    rerun_started_at = old_signal_time + timedelta(minutes=2)
+    payloads: dict[tuple[str, ...], object] = {
+        ("repos/example/repo/issues/1/comments",): [
+            [
+                {
+                    "created_at": old_signal_time.isoformat(),
+                    "body": (
+                        "@codex review\n<!-- horadus:fresh-review reviewer=bot head=head-sha -->"
+                    ),
+                    "user": {"login": "owner"},
+                }
+            ]
+        ],
+        ("repos/example/repo/issues/1/reactions",): [
+            [
+                {
+                    "content": "+1",
+                    "created_at": old_signal_time.isoformat(),
+                    "user": {"login": "bot"},
+                }
+            ]
+        ],
+    }
+    monkeypatch.setattr(
+        pr_review_gate_module, "_run_gh_paginated_json", lambda *args: payloads[args]
+    )
+
+    assert pr_review_gate_module._has_pr_summary_thumbs_up(
+        repo="example/repo",
+        pr_number=1,
+        reviewer_login="bot",
+        head_oid="head-sha",
+        wait_window_started_at=rerun_started_at,
+    )
+
+
+def test_pr_review_gate_does_not_reuse_other_head_pr_summary_thumbs_up(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    old_signal_time = datetime(2026, 3, 13, 21, 20, tzinfo=UTC)
+    rerun_started_at = old_signal_time + timedelta(minutes=2)
+    payloads: dict[tuple[str, ...], object] = {
+        ("repos/example/repo/issues/1/comments",): [
+            [
+                {
+                    "created_at": old_signal_time.isoformat(),
+                    "body": (
+                        "@codex review\n<!-- horadus:fresh-review reviewer=bot head=head-old -->"
+                    ),
+                    "user": {"login": "owner"},
+                }
+            ]
+        ],
+        ("repos/example/repo/issues/1/reactions",): [
+            [
+                {
+                    "content": "+1",
+                    "created_at": old_signal_time.isoformat(),
+                    "user": {"login": "bot"},
+                }
+            ]
+        ],
+    }
+    monkeypatch.setattr(
+        pr_review_gate_module, "_run_gh_paginated_json", lambda *args: payloads[args]
+    )
+
+    assert not pr_review_gate_module._has_pr_summary_thumbs_up(
+        repo="example/repo",
+        pr_number=1,
+        reviewer_login="bot",
+        head_oid="head-sha",
+        wait_window_started_at=rerun_started_at,
+    )
+
+
+def test_pr_review_gate_ignores_missing_current_head_review_request_history(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_run_gh_paginated_json",
+        lambda *_args: (_ for _ in ()).throw(pr_review_gate_module.GhError("boom")),
+    )
+
+    assert (
+        pr_review_gate_module._latest_current_head_review_request_at(
+            repo="example/repo",
+            pr_number=1,
+            reviewer_login="bot",
+            head_oid="head-sha",
+        )
+        is None
+    )
 
 
 def test_pr_review_gate_uses_latest_current_head_review_state_for_summary_feedback(

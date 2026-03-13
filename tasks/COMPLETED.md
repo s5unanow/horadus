@@ -292,3 +292,4 @@
 - TASK-324: Decompose `task_workflow_preflight.py` Into Focused Internal Modules ✅
 - TASK-325: Decompose `src/workers/tasks.py` Into Focused Internal Modules ✅
 - TASK-326: Let `horadus tasks finish` Bootstrap Missing PRs Canonically ✅
+- TASK-327: Preserve current-head PR-summary thumbs-up across `finish` reruns ✅

@@ -222,6 +222,36 @@ def _matching_issue_comments(
     ]
 
 
+def _fresh_review_marker_for_head(*, reviewer_login: str, head_oid: str) -> str:
+    return f"<!-- horadus:fresh-review reviewer={reviewer_login} head={head_oid} -->"
+
+
+def _latest_current_head_review_request_at(
+    *,
+    repo: str,
+    pr_number: int,
+    reviewer_login: str,
+    head_oid: str,
+) -> datetime | None:
+    try:
+        comments = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/comments"),
+            label="issue comments",
+        )
+    except (GhError, json.JSONDecodeError):
+        return None
+
+    marker = _fresh_review_marker_for_head(reviewer_login=reviewer_login, head_oid=head_oid)
+    timestamps = [
+        created_at
+        for comment in comments
+        if isinstance(comment, dict)
+        and marker in str(comment.get("body") or "")
+        and (created_at := _parse_github_timestamp(comment.get("created_at"))) is not None
+    ]
+    return max(timestamps) if timestamps else None
+
+
 def _parse_github_timestamp(value: object) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -236,19 +266,28 @@ def _has_pr_summary_thumbs_up(
     repo: str,
     pr_number: int,
     reviewer_login: str,
+    head_oid: str,
     wait_window_started_at: datetime,
 ) -> bool:
     reactions = _flatten_paginated_list(
         _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/reactions"),
         label="reactions",
     )
+    signal_started_at = _latest_current_head_review_request_at(
+        repo=repo,
+        pr_number=pr_number,
+        reviewer_login=reviewer_login,
+        head_oid=head_oid,
+    )
+    if signal_started_at is None:
+        signal_started_at = wait_window_started_at
 
     return any(
         isinstance(reaction, dict)
         and reaction.get("content") == "+1"
         and _user_login(reaction) == reviewer_login
         and (created_at := _parse_github_timestamp(reaction.get("created_at"))) is not None
-        and created_at >= wait_window_started_at
+        and created_at >= signal_started_at
         for reaction in reactions
     )
 
@@ -405,6 +444,7 @@ def main(argv: list[str] | None = None) -> int:
                 repo=repo,
                 pr_number=pr_number,
                 reviewer_login=args.reviewer_login,
+                head_oid=head_oid,
                 wait_window_started_at=wait_window_started_at,
             )
         except GhError as exc:

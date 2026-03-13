@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from collections.abc import Callable
 
 import pytest
 
@@ -9,6 +10,32 @@ import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_modu
 from tests.horadus_cli.v2.helpers import _completed
 
 pytestmark = pytest.mark.unit
+
+PR_URL = "https://example.invalid/pr/290"
+DEFAULT_REPO = "example/repo\n"
+DEFAULT_PR_NUMBER = 290
+DEFAULT_HEAD = "head-sha-290"
+DEFAULT_CURRENT_HEAD = "head-sha-current"
+
+
+def _finish_config(
+    *, review_bot_login: str = "chatgpt-codex-connector[bot]"
+) -> task_commands_module.FinishConfig:
+    return task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login=review_bot_login,
+        review_timeout_policy="allow",
+    )
+
+
+def _pr_payload(*, number: int = DEFAULT_PR_NUMBER, head_oid: str = DEFAULT_HEAD) -> str:
+    return json.dumps({"number": number, "headRefOid": head_oid}) + "\n"
 
 
 def _timeline_payload(
@@ -61,27 +88,79 @@ def _timeline_after(args: list[str]) -> str | None:
     return None
 
 
+def _refresh_run_command_factory(
+    *,
+    pr_stdout: str = _pr_payload(),
+    pr_returncode: int = 0,
+    repo_stdout: str = DEFAULT_REPO,
+    repo_returncode: int = 0,
+    timeline_stdout: str = "",
+    timeline_returncode: int = 0,
+    on_comment: Callable[[list[str]], subprocess.CompletedProcess[str]] | None = None,
+) -> Callable[[list[str]], subprocess.CompletedProcess[str]]:
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "pr", "view", PR_URL]:
+            return _completed(args, stdout=pr_stdout, returncode=pr_returncode)
+        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
+            return _completed(args, stdout=repo_stdout, returncode=repo_returncode)
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(args, stdout=timeline_stdout, returncode=timeline_returncode)
+        if on_comment is not None:
+            return on_comment(args)
+        return _completed(args, stdout="https://example.invalid/comment/trigger\n")
+
+    return fake_run_command
+
+
+def _pre_review_run_command_factory(
+    *,
+    pr_stdout: str = _pr_payload(head_oid=DEFAULT_CURRENT_HEAD),
+    pr_returncode: int = 0,
+    first_repo_stdout: str = DEFAULT_REPO,
+    first_repo_returncode: int = 0,
+    second_repo_stdout: str = DEFAULT_REPO,
+    second_repo_returncode: int = 0,
+    timeline_stdout: str = _timeline_payload(),
+    timeline_returncode: int = 0,
+    reviews_stdout: str = "[]\n",
+    reviews_returncode: int = 0,
+) -> Callable[[list[str]], subprocess.CompletedProcess[str]]:
+    repo_calls = {"count": 0}
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "pr", "view", PR_URL]:
+            return _completed(args, stdout=pr_stdout, returncode=pr_returncode)
+        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
+            repo_calls["count"] += 1
+            if repo_calls["count"] == 1:
+                return _completed(
+                    args,
+                    stdout=first_repo_stdout,
+                    returncode=first_repo_returncode,
+                )
+            return _completed(
+                args,
+                stdout=second_repo_stdout,
+                returncode=second_repo_returncode,
+            )
+        if args[:3] == ["gh", "api", "graphql"]:
+            return _completed(args, stdout=timeline_stdout, returncode=timeline_returncode)
+        return _completed(args, stdout=reviews_stdout, returncode=reviews_returncode)
+
+    return fake_run_command
+
+
 def test_maybe_request_fresh_review_posts_codex_comment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
     called: dict[str, object] = {}
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
-            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+        if args[:4] == ["gh", "pr", "view", PR_URL]:
+            return _completed(args, stdout=_pr_payload())
         if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
-            return _completed(args, stdout="example/repo\n")
+            return _completed(args, stdout=DEFAULT_REPO)
         if args[:3] == ["gh", "api", "graphql"]:
             return _completed(args, stdout=_timeline_payload())
         called["args"] = args
@@ -90,44 +169,34 @@ def test_maybe_request_fresh_review_posts_codex_comment(
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == [
-        "Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review` for head head-sha-290."
+        f"Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review` for head {DEFAULT_HEAD}."
     ]
     assert called["args"] == [
         "gh",
         "pr",
         "comment",
-        "https://example.invalid/pr/290",
+        PR_URL,
         "--body",
-        "@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-290 -->",
+        f"@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head={DEFAULT_HEAD} -->",
     ]
 
 
 def test_maybe_request_fresh_review_handles_non_codex_and_failures(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    non_codex_config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="other-reviewer",
-        review_timeout_policy="allow",
-    )
+    non_codex_config = _finish_config(review_bot_login="other-reviewer")
     non_codex_calls: list[list[str]] = []
 
     def fake_non_codex_run_command(
         args: list[str], **_kwargs: object
     ) -> subprocess.CompletedProcess[str]:
-        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
-            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+        if args[:4] == ["gh", "pr", "view", PR_URL]:
+            return _completed(args, stdout=_pr_payload())
         if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
-            return _completed(args, stdout="example/repo\n")
+            return _completed(args, stdout=DEFAULT_REPO)
         if args[:3] == ["gh", "api", "graphql"]:
             return _completed(args, stdout=_timeline_payload())
         non_codex_calls.append(args)
@@ -135,46 +204,31 @@ def test_maybe_request_fresh_review_handles_non_codex_and_failures(
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_non_codex_run_command)
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=non_codex_config,
     ) == [
-        "Requested a fresh review from `other-reviewer` with `@other-reviewer review` for head head-sha-290."
+        f"Requested a fresh review from `other-reviewer` with `@other-reviewer review` for head {DEFAULT_HEAD}."
     ]
     assert non_codex_calls[-1] == [
         "gh",
         "pr",
         "comment",
-        "https://example.invalid/pr/290",
+        PR_URL,
         "--body",
-        "@other-reviewer review\n<!-- horadus:fresh-review reviewer=other-reviewer head=head-sha-290 -->",
+        f"@other-reviewer review\n<!-- horadus:fresh-review reviewer=other-reviewer head={DEFAULT_HEAD} -->",
     ]
 
-    codex_config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    codex_config = _finish_config()
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, returncode=1, stderr="comment failed")
+        _refresh_run_command_factory(
+            timeline_stdout=_timeline_payload(),
+            on_comment=lambda args: _completed(args, returncode=1, stderr="comment failed"),
         ),
     )
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=codex_config,
     ) == [
         "Failed to request a fresh review from `chatgpt-codex-connector[bot]` automatically.",
@@ -185,273 +239,121 @@ def test_maybe_request_fresh_review_handles_non_codex_and_failures(
 def test_maybe_request_fresh_review_dedupes_current_head_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(
-                args,
-                stdout=_timeline_payload(
-                    _issue_comment_node(
-                        "@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-290 -->"
-                    )
-                ),
+        _refresh_run_command_factory(
+            timeline_stdout=_timeline_payload(
+                _issue_comment_node(
+                    f"@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head={DEFAULT_HEAD} -->"
+                )
             )
         ),
     )
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == [
-        "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
+        f"Fresh review already requested for `chatgpt-codex-connector[bot]` on current head {DEFAULT_HEAD}."
     ]
 
 
+@pytest.mark.parametrize(
+    ("stub_kwargs", "expected"),
+    [
+        (
+            {"pr_returncode": 1},
+            "Failed to determine PR metadata for automatic fresh-review request.",
+        ),
+        ({"pr_stdout": "{bad"}, "Failed to parse PR metadata for automatic fresh-review request."),
+        (
+            {"pr_stdout": '["bad"]\n'},
+            "Failed to parse PR metadata for automatic fresh-review request.",
+        ),
+        (
+            {
+                "pr_stdout": '{"number":"bad","headRefOid":""}\n',
+                "repo_stdout": "not-a-repo\n",
+                "timeline_stdout": _timeline_payload(),
+            },
+            "Failed to determine PR metadata for automatic fresh-review request.",
+        ),
+        (
+            {"timeline_returncode": 1},
+            "Failed to inspect existing fresh-review requests automatically.",
+        ),
+        (
+            {"timeline_stdout": "{bad"},
+            "Failed to inspect existing fresh-review requests automatically.",
+        ),
+        (
+            {"timeline_stdout": '["bad"]\n'},
+            "Failed to inspect existing fresh-review requests automatically.",
+        ),
+        (
+            {"timeline_stdout": _timeline_payload("bad")},  # type: ignore[arg-type]
+            "Failed to inspect existing fresh-review requests automatically.",
+        ),
+    ],
+)
 def test_maybe_request_fresh_review_handles_metadata_and_comment_parse_failures(
     monkeypatch: pytest.MonkeyPatch,
+    stub_kwargs: dict[str, object],
+    expected: str,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
-
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
-        lambda args, **_kwargs: _completed(args, returncode=1, stderr="boom"),
+        _refresh_run_command_factory(**stub_kwargs),
     )
+
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to determine PR metadata for automatic fresh-review request."]
+        pr_url=PR_URL,
+        config=_finish_config(),
+    ) == [expected]
 
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout="{bad")
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
+
+@pytest.mark.parametrize(
+    ("timeline_stdout"),
+    [
+        _timeline_payload(_issue_comment_node("@codex review")),
+        _timeline_payload(
+            _issue_comment_node("unrelated"),
+            _commit_node(DEFAULT_HEAD),
+            _issue_comment_node("@codex review"),
         ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to parse PR metadata for automatic fresh-review request."]
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='["bad"]\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-        ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to parse PR metadata for automatic fresh-review request."]
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":"bad","headRefOid":""}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="not-a-repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-        ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to determine PR metadata for automatic fresh-review request."]
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, returncode=1, stderr="timeline failed")
-        ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to inspect existing fresh-review requests automatically."]
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout="{bad")
-        ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to inspect existing fresh-review requests automatically."]
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout='["bad"]\n')
-        ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to inspect existing fresh-review requests automatically."]
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload("bad"))  # type: ignore[arg-type]
-        ),
-    )
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == ["Failed to inspect existing fresh-review requests automatically."]
-
-
-def test_maybe_request_fresh_review_dedupes_plain_current_head_request(
+    ],
+)
+def test_maybe_request_fresh_review_dedupes_plain_current_head_requests(
     monkeypatch: pytest.MonkeyPatch,
+    timeline_stdout: str,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload(_issue_comment_node("@codex review")))
-        ),
+        _refresh_run_command_factory(timeline_stdout=timeline_stdout),
     )
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
+        pr_url=PR_URL,
+        config=_finish_config(),
     ) == [
-        "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
-    ]
-
-
-def test_maybe_request_fresh_review_dedupes_plain_request_after_current_head_commit(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(
-                args,
-                stdout=_timeline_payload(
-                    _issue_comment_node("unrelated"),
-                    _commit_node("head-sha-290"),
-                    _issue_comment_node("@codex review"),
-                ),
-            )
-        ),
-    )
-
-    assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
-        config=config,
-    ) == [
-        "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
+        f"Fresh review already requested for `chatgpt-codex-connector[bot]` on current head {DEFAULT_HEAD}."
     ]
 
 
 def test_maybe_request_fresh_review_dedupes_paginated_current_head_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
-            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
+        if args[:4] == ["gh", "pr", "view", PR_URL]:
+            return _completed(args, stdout=_pr_payload())
         if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
-            return _completed(args, stdout="example/repo\n")
+            return _completed(args, stdout=DEFAULT_REPO)
         if args[:3] == ["gh", "api", "graphql"]:
             after = _timeline_after(args)
             if after is None:
@@ -459,7 +361,7 @@ def test_maybe_request_fresh_review_dedupes_paginated_current_head_request(
                     args,
                     stdout=_timeline_payload(
                         _issue_comment_node("unrelated"),
-                        _commit_node("head-sha-290"),
+                        _commit_node(DEFAULT_HEAD),
                         has_next_page=True,
                         end_cursor="cursor-1",
                     ),
@@ -474,40 +376,30 @@ def test_maybe_request_fresh_review_dedupes_paginated_current_head_request(
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == [
-        "Fresh review already requested for `chatgpt-codex-connector[bot]` on current head head-sha-290."
+        f"Fresh review already requested for `chatgpt-codex-connector[bot]` on current head {DEFAULT_HEAD}."
     ]
 
 
 def test_maybe_request_fresh_review_rejects_incomplete_timeline_pagination(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
 
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
         lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
+            _completed(args, stdout=_pr_payload())
+            if args[:4] == ["gh", "pr", "view", PR_URL]
+            else _completed(args, stdout=DEFAULT_REPO)
             if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
             else _completed(
                 args,
                 stdout=_timeline_payload(
-                    _commit_node("head-sha-290"),
+                    _commit_node(DEFAULT_HEAD),
                     has_next_page=True,
                     end_cursor=None,
                 ),
@@ -516,7 +408,7 @@ def test_maybe_request_fresh_review_rejects_incomplete_timeline_pagination(
     )
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == ["Failed to inspect existing fresh-review requests automatically."]
 
@@ -524,25 +416,15 @@ def test_maybe_request_fresh_review_rejects_incomplete_timeline_pagination(
 def test_maybe_request_fresh_review_rejects_non_dict_timeline_items_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
 
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
         lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
+            _completed(args, stdout=_pr_payload())
+            if args[:4] == ["gh", "pr", "view", PR_URL]
+            else _completed(args, stdout=DEFAULT_REPO)
             if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
             else _completed(
                 args,
@@ -562,7 +444,7 @@ def test_maybe_request_fresh_review_rejects_non_dict_timeline_items_payload(
     )
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == ["Failed to inspect existing fresh-review requests automatically."]
 
@@ -570,32 +452,22 @@ def test_maybe_request_fresh_review_rejects_non_dict_timeline_items_payload(
 def test_maybe_request_fresh_review_handles_graphql_null_data_payload(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
 
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
         lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
+            _completed(args, stdout=_pr_payload())
+            if args[:4] == ["gh", "pr", "view", PR_URL]
+            else _completed(args, stdout=DEFAULT_REPO)
             if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
             else _completed(args, stdout='{"data":null,"errors":[{"message":"boom"}]}')
         ),
     )
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == ["Failed to inspect existing fresh-review requests automatically."]
 
@@ -622,32 +494,22 @@ def test_maybe_request_fresh_review_handles_graphql_null_data_payload(
 def test_maybe_request_fresh_review_rejects_nested_invalid_timeline_shapes(
     monkeypatch: pytest.MonkeyPatch, timeline_payload: dict[str, object]
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
+    config = _finish_config()
 
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
         lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-290"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
+            _completed(args, stdout=_pr_payload())
+            if args[:4] == ["gh", "pr", "view", PR_URL]
+            else _completed(args, stdout=DEFAULT_REPO)
             if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
             else _completed(args, stdout=json.dumps(timeline_payload))
         ),
     )
 
     assert task_commands_module._maybe_request_fresh_review(
-        pr_url="https://example.invalid/pr/290",
+        pr_url=PR_URL,
         config=config,
     ) == ["Failed to inspect existing fresh-review requests automatically."]
 
@@ -866,290 +728,62 @@ def test_maybe_request_fresh_review_ignores_non_matching_head_events(
     ]
 
 
+@pytest.mark.parametrize(
+    ("stub_kwargs", "expected"),
+    [
+        ({"pr_returncode": 1}, "Unable to determine PR metadata"),
+        ({"pr_stdout": "{bad"}, "Unable to parse PR metadata"),
+        ({"pr_stdout": '["bad"]\n'}, "Unable to parse PR metadata"),
+        (
+            {
+                "pr_stdout": '{"number":"bad","headRefOid":""}\n',
+                "first_repo_stdout": "not-a-repo\n",
+            },
+            "Unable to determine PR metadata",
+        ),
+        ({"timeline_returncode": 1}, "Unable to inspect prior reviewer activity"),
+        ({"timeline_stdout": "{bad"}, "Unable to parse prior reviewer activity"),
+        (
+            {"timeline_stdout": '{"body":"not-a-list"}\n'},
+            "Unexpected prior reviewer activity payload",
+        ),
+        (
+            {"timeline_stdout": '{"data":null,"errors":[{"message":"boom"}]}'},
+            "Unexpected prior reviewer activity payload",
+        ),
+        ({"second_repo_returncode": 1}, "Unable to determine PR metadata"),
+        ({"first_repo_returncode": 1}, "Unable to determine PR metadata"),
+        ({"reviews_returncode": 1}, "Unable to inspect prior reviewer activity"),
+        ({"reviews_stdout": "{bad"}, "Unable to parse prior reviewer activity"),
+        (
+            {"reviews_stdout": '{"bad":"payload"}\n'},
+            "Unexpected prior reviewer activity payload",
+        ),
+        (
+            {"reviews_stdout": '["bad"]\n'},
+            "Unexpected prior reviewer activity payload",
+        ),
+        (
+            {"reviews_stdout": "[[1]]\n"},
+            "Unexpected prior reviewer activity payload",
+        ),
+    ],
+)
 def test_needs_pre_review_fresh_review_request_handles_metadata_and_review_failures(
     monkeypatch: pytest.MonkeyPatch,
+    stub_kwargs: dict[str, object],
+    expected: str,
 ) -> None:
-    config = task_commands_module.FinishConfig(
-        gh_bin="gh",
-        git_bin="git",
-        python_bin="python3",
-        checks_timeout_seconds=5,
-        checks_poll_seconds=1,
-        review_timeout_seconds=5,
-        review_poll_seconds=1,
-        review_bot_login="chatgpt-codex-connector[bot]",
-        review_timeout_policy="allow",
-    )
-
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
-        lambda args, **_kwargs: _completed(args, returncode=1, stderr="boom"),
+        _pre_review_run_command_factory(**stub_kwargs),
     )
-    with pytest.raises(ValueError, match="Unable to determine PR metadata"):
+
+    with pytest.raises(ValueError, match=expected):
         task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout="{bad")
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to parse PR metadata"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='["bad"]\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to parse PR metadata"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":"bad","headRefOid":""}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="not-a-repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to determine PR metadata"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, returncode=1, stderr="timeline failed")
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, returncode=1, stderr="reviews failed")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to inspect prior reviewer activity"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout="{bad")
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout="[]\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to parse prior reviewer activity"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout='{"body":"not-a-list"}\n')
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout="[]\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout='{"data":null,"errors":[{"message":"boom"}]}')
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout="[]\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    repo_calls = {"count": 0}
-
-    def fake_second_repo_failure(
-        args: list[str], **_kwargs: object
-    ) -> subprocess.CompletedProcess[str]:
-        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
-            return _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
-            repo_calls["count"] += 1
-            if repo_calls["count"] == 1:
-                return _completed(args, stdout="example/repo\n")
-            return _completed(args, returncode=1, stderr="repo failed")
-        if args[:3] == ["gh", "api", "graphql"]:
-            return _completed(args, stdout=_timeline_payload())
-        return _completed(args, stdout="[]\n")
-
-    monkeypatch.setattr(task_commands_module, "_run_command", fake_second_repo_failure)
-    with pytest.raises(ValueError, match="Unable to determine PR metadata"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, returncode=1, stderr="repo failed")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout="[]\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to determine PR metadata"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, returncode=1, stderr="reviews failed")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to inspect prior reviewer activity"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout="{bad")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unable to parse prior reviewer activity"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout='{"bad":"payload"}\n')
-        ),
-    )
-    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout='["bad"]\n')
-        ),
-    )
-    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
-        )
-
-    monkeypatch.setattr(
-        task_commands_module,
-        "_run_command",
-        lambda args, **_kwargs: (
-            _completed(args, stdout='{"number":290,"headRefOid":"head-sha-current"}\n')
-            if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]
-            else _completed(args, stdout="example/repo\n")
-            if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]
-            else _completed(args, stdout=_timeline_payload())
-            if args[:3] == ["gh", "api", "graphql"]
-            else _completed(args, stdout="[[1]]\n")
-        ),
-    )
-    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
-        task_commands_module._needs_pre_review_fresh_review_request(
-            pr_url="https://example.invalid/pr/290",
-            config=config,
+            pr_url=PR_URL,
+            config=_finish_config(),
         )
 
 

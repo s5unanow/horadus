@@ -514,6 +514,59 @@ def test_needs_pre_review_fresh_review_request_handles_metadata_and_review_failu
             config=config,
         )
 
+
+def test_prepare_current_head_review_window_uses_compat_exports_across_split_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = task_commands_module.FinishConfig(
+        gh_bin="gh",
+        git_bin="git",
+        python_bin="python3",
+        checks_timeout_seconds=5,
+        checks_poll_seconds=1,
+        review_timeout_seconds=5,
+        review_poll_seconds=1,
+        review_bot_login="chatgpt-codex-connector[bot]",
+        review_timeout_policy="allow",
+    )
+    context = task_commands_module.FinishContext(
+        branch_name="codex/task-317-split-review-modules",
+        branch_task_id="TASK-317",
+        task_id="TASK-317",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_current_head_finish_blocker", lambda **_kwargs: None
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_outdated_unresolved_review_thread_ids",
+        lambda **_kwargs: ["thread-stale-1"],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_review_threads",
+        lambda **_kwargs: (True, ["Resolved outdated review thread automatically: thread-stale-1"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_fresh_review_request_blocker",
+        lambda **_kwargs: (["Requested fresh review."], None),
+    )
+
+    refresh_lines, blocker = task_commands_module._prepare_current_head_review_window(
+        context=context,
+        pr_url="https://example.invalid/pr/317",
+        config=config,
+    )
+
+    assert blocker is None
+    assert refresh_lines == [
+        "Resolved outdated review thread automatically: thread-stale-1",
+        "Requested fresh review.",
+        "Refreshed stale review state for the current head; discarding the previous review window and starting a fresh 5s review window.",
+    ]
+
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",

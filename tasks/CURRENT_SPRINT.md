@@ -80,3 +80,4 @@
 - `TASK-321` Remove obsolete `src/core` workflow shims ✅
 - `TASK-322` Harden `horadus tasks finish` Review Request Dedupe and Feedback Detection ✅
 - `TASK-323` Collapse repetitive finish refresh test scaffolding ✅
+- `TASK-324` Decompose `task_workflow_preflight.py` Into Focused Internal Modules ✅

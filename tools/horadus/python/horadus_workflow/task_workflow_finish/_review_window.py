@@ -135,7 +135,11 @@ def _prepare_current_head_review_window(
 
 
 def _review_gate_lines(review_result: shared.ReviewGateResult) -> list[str]:
-    return [review_result.summary, *review_result.actionable_lines]
+    return [
+        review_result.summary,
+        *review_result.informational_lines,
+        *review_result.actionable_lines,
+    ]
 
 
 def review_gate_data(

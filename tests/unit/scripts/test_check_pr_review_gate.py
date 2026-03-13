@@ -288,6 +288,65 @@ esac
     assert "THUMBS_UP" not in result.stdout
 
 
+def test_review_gate_surfaces_current_window_issue_comment_feedback(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/comments" ]]; then
+      cat <<EOF
+[{"user":{"login":"chatgpt-codex-connector[bot]"},"html_url":"https://example.invalid/issue-comment/1","created_at":"2099-01-01T00:00:00Z","body":"Codex Review: Didn't find any major issues."}]
+EOF
+      exit 0
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      printf '[{"content":"+1","created_at":"%s","user":{"login":"chatgpt-codex-connector[bot]"}}]\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_gate(
+        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
+    )
+    assert result.returncode == 0
+    assert "review gate passed early" in result.stdout
+    assert "reviewer issue comment https://example.invalid/issue-comment/1" in result.stdout
+    assert "Codex Review: Didn't find any major issues." in result.stdout
+
+
 def test_review_gate_rejects_non_positive_timeout(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()

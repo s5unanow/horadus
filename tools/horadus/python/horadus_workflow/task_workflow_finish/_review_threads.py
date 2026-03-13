@@ -15,17 +15,23 @@ def _review_threads(*, pr_url: str, config: shared.FinishConfig) -> list[dict[st
     repo_result = shared._run_command(
         [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
     )
-    repo_name = repo_result.stdout.strip() if repo_result.returncode == 0 else ""
+    if repo_result.returncode != 0:
+        raise ValueError(
+            shared._result_message(repo_result, "Unable to determine repository name.")
+        )
+    repo_name = repo_result.stdout.strip()
     if "/" not in repo_name:
-        return []
+        raise ValueError("Unable to determine repository name.")
     owner, repo = repo_name.split("/", 1)
 
     pr_number_result = shared._run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "number", "--jq", ".number"]
     )
-    pr_number_raw = pr_number_result.stdout.strip() if pr_number_result.returncode == 0 else ""
+    if pr_number_result.returncode != 0:
+        raise ValueError(shared._result_message(pr_number_result, "Unable to determine PR number."))
+    pr_number_raw = pr_number_result.stdout.strip()
     if not pr_number_raw.isdigit():
-        return []
+        raise ValueError("Unable to determine PR number.")
 
     query = (
         "query($owner:String!, $repo:String!, $number:Int!, $after:String){"

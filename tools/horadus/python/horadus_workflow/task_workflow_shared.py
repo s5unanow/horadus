@@ -95,6 +95,7 @@ class ReviewGateResult:
     timeout_seconds: int
     timed_out: bool
     summary: str
+    informational_lines: list[str]
     actionable_lines: list[str]
 
 

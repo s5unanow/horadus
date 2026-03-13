@@ -75,3 +75,4 @@
 - `TASK-316` Decompose `_docs_freshness_checks.py` Into Focused Internal Modules ✅
 - `TASK-317` Decompose `review.py` Into Focused Internal Modules ✅
 - `TASK-318` Decompose `validate_assessment_artifacts.py` Into Focused Internal Modules ✅
+- `TASK-319` Decompose `ops_commands.py` Into Focused Internal Modules ✅

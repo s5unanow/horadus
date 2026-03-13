@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import argparse
+import asyncio
 import os
 import subprocess  # nosec B404
 import sys
@@ -14,7 +14,6 @@ from tools.horadus.python.horadus_cli import _ops_defaults as defaults
 from tools.horadus.python.horadus_cli import _ops_formatting as formatting
 from tools.horadus.python.horadus_cli import _ops_http as http_helpers
 from tools.horadus.python.horadus_cli import _ops_registration as registration
-from tools.horadus.python.horadus_cli import _ops_results as result_helpers
 from tools.horadus.python.horadus_cli import _ops_runtime_bridge as runtime_bridge
 from tools.horadus.python.horadus_cli import _ops_smoke as smoke_helpers
 from tools.horadus.python.horadus_cli.result import CommandResult, ExitCode
@@ -41,25 +40,11 @@ _BENCHMARK_CONFIG_CHOICES = (
 )
 _REPLAY_CONFIG_CHOICES = ("stable", "fast_lower_threshold")
 
-
-def _change_arrow(change: float) -> str:
-    return formatting.change_arrow(change)
-
-
-def _format_trend_status_lines(movement: Any) -> list[str]:
-    return formatting.format_trend_status_lines(movement)
-
-
-def _parse_iso_datetime(value: str | None) -> Any:
-    return formatting.parse_iso_datetime(value)
-
-
-def _format_embedding_model_counts(summary: Any) -> str:
-    return formatting.format_embedding_model_counts(summary)
-
-
-def _json_default(value: object) -> object:
-    return formatting.json_default(value)
+_change_arrow = formatting.change_arrow
+_format_trend_status_lines = formatting.format_trend_status_lines
+_parse_iso_datetime = formatting.parse_iso_datetime
+_format_embedding_model_counts = formatting.format_embedding_model_counts
+_json_default = formatting.json_default
 
 
 def _runtime_payload(args: Any) -> dict[str, Any]:
@@ -172,8 +157,7 @@ def _default_agent_base_url() -> str:
     return defaults.default_agent_base_url(config_lookup=_config_default)
 
 
-def _ops_leaf_options(parser: argparse.ArgumentParser) -> None:
-    registration.add_ops_leaf_options(parser)
+_ops_leaf_options = registration.add_ops_leaf_options
 
 
 def register_ops_commands(subparsers: Any) -> None:
@@ -191,15 +175,17 @@ def register_ops_commands(subparsers: Any) -> None:
 
 
 def _sync_result(data: dict[str, Any], lines: list[str], exit_code: int) -> CommandResult:
-    return result_helpers.sync_result(data, lines, exit_code)
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
 def _async_result(coro: Any) -> CommandResult:
-    return result_helpers.async_result(coro)
+    data, lines = asyncio.run(coro)
+    return CommandResult(lines=lines, data=data)
 
 
 def _async_result_with_exit(coro: Any) -> CommandResult:
-    return result_helpers.async_result_with_exit(coro)
+    data, lines, exit_code = asyncio.run(coro)
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
 def _handle_agent_smoke(args: Any) -> CommandResult:

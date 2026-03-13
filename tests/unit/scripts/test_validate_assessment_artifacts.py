@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import importlib
 import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "validate_assessment_artifacts.py"
+SCRIPTS_DIR = REPO_ROOT / "scripts"
 
 
 def _run(*args: str | Path, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -17,6 +20,12 @@ def _run(*args: str | Path, cwd: Path | None = None) -> subprocess.CompletedProc
         text=True,
         check=False,
     )
+
+
+def _import_internal(module_name: str):
+    if str(SCRIPTS_DIR) not in sys.path:
+        sys.path.insert(0, str(SCRIPTS_DIR))
+    return importlib.import_module(f"validate_assessment_artifacts_lib.{module_name}")
 
 
 def test_validator_accepts_all_clear(tmp_path: Path) -> None:
@@ -919,3 +928,121 @@ def test_validator_accepts_cross_role_overlap_with_explicit_delta(tmp_path: Path
         cwd=tmp_path,
     )
     assert result.returncode == 0
+
+
+def test_internal_grounding_pass_is_independently_invocable(tmp_path: Path) -> None:
+    grounding = _import_internal("grounding")
+    _write_current_sprint(tmp_path, active_tasks=["TASK-189"])
+
+    path = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-stale-blocker-reference",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "`TASK-193` remains an active blocker in the current sprint.",
+                "",
+                "Proposed change:",
+                "Remove stale blocker references before publish.",
+                "",
+                "Verification:",
+                '- rg -n "TASK-193" artifacts/assessments/po/daily/2026-03-06.md',
+                "",
+                "Blast radius:",
+                "- artifacts/assessments/po/daily/",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    findings = grounding.grounding_findings_for_file(path, repo_root=tmp_path)
+    assert len(findings) == 1
+    assert findings[0].line_no == 11
+    assert "TASK-193" in findings[0].message
+
+
+def test_internal_novelty_pass_is_independently_invocable(tmp_path: Path) -> None:
+    novelty = _import_internal("novelty")
+
+    prior = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-05.md"
+    prior.parent.mkdir(parents=True, exist_ok=True)
+    prior.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-05",
+                "",
+                "### PROPOSAL-2026-03-05-po-status-freshness-surface",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.7",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "PROJECT_STATUS is stale.",
+                "",
+                "Proposed change:",
+                "Add a freshness surface.",
+                "",
+                "Verification:",
+                "- make docs-freshness",
+                "",
+                "Blast radius:",
+                "- PROJECT_STATUS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    target = tmp_path / "artifacts" / "assessments" / "po" / "daily" / "2026-03-06.md"
+    target.write_text(
+        "\n".join(
+            [
+                "# PO Daily Assessment - 2026-03-06",
+                "",
+                "### PROPOSAL-2026-03-06-po-status-freshness-surface",
+                "area: repo",
+                "priority: P2",
+                "confidence: 0.8",
+                "estimate: 1-2h",
+                "recommended_gate: HUMAN_REVIEW",
+                "",
+                "Problem:",
+                "PROJECT_STATUS is still stale.",
+                "",
+                "Proposed change:",
+                "Add a freshness surface.",
+                "",
+                "Verification:",
+                "- make docs-freshness",
+                "",
+                "Blast radius:",
+                "- PROJECT_STATUS.md",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    findings = novelty.novelty_findings_for_file(
+        target,
+        lookback_days=7,
+        all_files=[prior, target],
+        repo_root=tmp_path,
+    )
+    assert len(findings) == 2
+    assert "non-novel within 7 days" in findings[0].message
+    assert "no materially new proposals remain" in findings[1].message

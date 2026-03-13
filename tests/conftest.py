@@ -19,6 +19,8 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 
+pytest_plugins = ("tests.horadus_cli.v2.task_repo_fixtures",)
+
 # =============================================================================
 # Event Loop Configuration
 # =============================================================================

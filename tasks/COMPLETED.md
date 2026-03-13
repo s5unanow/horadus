@@ -281,3 +281,4 @@
 - TASK-313: Split `task_workflow_core.py` Into Focused Workflow Modules ✅
 - TASK-314: Split Finish Workflow Into an Independent Package ✅
 - TASK-315: Split `docs_freshness.py` Into Focused Workflow Modules ✅
+- TASK-316: Decompose `_docs_freshness_checks.py` Into Focused Internal Modules ✅

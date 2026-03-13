@@ -6,7 +6,23 @@ from typing import Any
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 
 
-def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> list[str]:
+def _review_request_command(config: shared.FinishConfig) -> str:
+    if config.review_bot_login == "chatgpt-codex-connector[bot]":
+        return "@codex review"
+    return f"@{config.review_bot_login} review"
+
+
+def _request_comment_body(body: object) -> str:
+    return str(body or "").strip()
+
+
+def _marker_for_head(*, config: shared.FinishConfig, head_oid: str) -> str:
+    return f"<!-- horadus:fresh-review reviewer={config.review_bot_login} head={head_oid} -->"
+
+
+def _request_timeline(
+    pr_url: str, *, config: shared.FinishConfig
+) -> tuple[int, str, list[dict[str, Any]]]:
     pr_result = shared._run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "number,headRefOid", "--jq", "."]
     )
@@ -14,57 +30,134 @@ def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> 
         [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
     )
     if pr_result.returncode != 0 or repo_result.returncode != 0:
-        return ["Failed to determine PR metadata for automatic fresh-review request."]
+        raise ValueError("Unable to determine PR metadata for fresh-review request state.")
     try:
         pr_payload = json.loads(pr_result.stdout or "{}")
-    except json.JSONDecodeError:
-        return ["Failed to parse PR metadata for automatic fresh-review request."]
+    except json.JSONDecodeError as exc:
+        raise ValueError("Unable to parse PR metadata for fresh-review request state.") from exc
     if not isinstance(pr_payload, dict):
-        return ["Failed to parse PR metadata for automatic fresh-review request."]
+        raise ValueError("Unable to parse PR metadata for fresh-review request state.")
     pr_number = pr_payload.get("number")
     head_oid = str(pr_payload.get("headRefOid") or "").strip()
     repo_name = repo_result.stdout.strip()
     if not isinstance(pr_number, int) or "/" not in repo_name or not head_oid:
-        return ["Failed to determine PR metadata for automatic fresh-review request."]
+        raise ValueError("Unable to determine PR metadata for fresh-review request state.")
+    owner, repo = repo_name.split("/", 1)
 
-    marker = f"<!-- horadus:fresh-review reviewer={config.review_bot_login} head={head_oid} -->"
-    request_comment = (
-        f"@codex review\n{marker}"
-        if config.review_bot_login == "chatgpt-codex-connector[bot]"
-        else f"@{config.review_bot_login} review\n{marker}"
+    query = (
+        "query($owner:String!, $repo:String!, $number:Int!){"
+        "repository(owner:$owner,name:$repo){"
+        "pullRequest(number:$number){"
+        "timelineItems(first:200,itemTypes:[ISSUE_COMMENT,PULL_REQUEST_COMMIT,HEAD_REF_FORCE_PUSHED_EVENT]){"
+        "nodes{"
+        "__typename "
+        "... on IssueComment{id body createdAt author{login}} "
+        "... on PullRequestCommit{commit{oid committedDate}} "
+        "... on HeadRefForcePushedEvent{createdAt beforeCommit{oid} afterCommit{oid}}"
+        "}"
+        "}"
+        "}"
+        "}"
+        "}"
     )
-
-    comments_result = shared._run_command(
+    timeline_result = shared._run_command(
         [
             config.gh_bin,
             "api",
-            "--paginate",
-            "--slurp",
-            f"repos/{repo_name}/issues/{pr_number}/comments",
+            "graphql",
+            "-f",
+            f"query={query}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"repo={repo}",
+            "-F",
+            f"number={pr_number}",
         ]
     )
-    if comments_result.returncode != 0:
-        return ["Failed to inspect existing fresh-review requests automatically."]
+    if timeline_result.returncode != 0:
+        raise ValueError("Unable to inspect fresh-review request history.")
     try:
-        comments_payload = json.loads(comments_result.stdout or "[]")
-    except json.JSONDecodeError:
-        return ["Failed to inspect existing fresh-review requests automatically."]
-    existing_comments: list[dict[str, Any]] = []
-    if isinstance(comments_payload, list):
-        if all(isinstance(entry, dict) for entry in comments_payload):
-            existing_comments = [entry for entry in comments_payload if isinstance(entry, dict)]
-        else:
-            for page in comments_payload:
-                if not isinstance(page, list):
-                    return ["Failed to inspect existing fresh-review requests automatically."]
-                for entry in page:
-                    if not isinstance(entry, dict):
-                        return ["Failed to inspect existing fresh-review requests automatically."]
-                    existing_comments.append(entry)
-    else:
-        return ["Failed to inspect existing fresh-review requests automatically."]
+        payload = json.loads(timeline_result.stdout or "{}")
+    except json.JSONDecodeError as exc:
+        raise ValueError("Unable to parse fresh-review request history.") from exc
+    if not isinstance(payload, dict):
+        raise ValueError("Unexpected fresh-review request history payload.")
+    timeline_items = (
+        payload.get("data", {})
+        .get("repository", {})
+        .get("pullRequest", {})
+        .get("timelineItems", {})
+        .get("nodes")
+    )
+    if not isinstance(timeline_items, list):
+        raise ValueError("Unexpected fresh-review request history payload.")
+    if not all(isinstance(item, dict) for item in timeline_items):
+        raise ValueError("Unexpected fresh-review request history payload.")
+    return (pr_number, head_oid, [item for item in timeline_items if isinstance(item, dict)])
 
-    if any(marker in str(comment.get("body") or "") for comment in existing_comments):
+
+def _request_comment_state(
+    *, timeline_items: list[dict[str, Any]], config: shared.FinishConfig, head_oid: str
+) -> tuple[bool, bool]:
+    request_command = _review_request_command(config)
+    current_head_start_index = -1
+    for index, item in enumerate(timeline_items):
+        item_type = str(item.get("__typename") or "").strip()
+        if item_type == "HeadRefForcePushedEvent":
+            after_commit = item.get("afterCommit")
+            if (
+                isinstance(after_commit, dict)
+                and str(after_commit.get("oid") or "").strip() == head_oid
+            ):
+                current_head_start_index = index
+        elif item_type == "PullRequestCommit":
+            commit = item.get("commit")
+            if isinstance(commit, dict) and str(commit.get("oid") or "").strip() == head_oid:
+                current_head_start_index = index
+
+    saw_current_head_request = False
+    saw_other_head_request = False
+    current_head_marker = _marker_for_head(config=config, head_oid=head_oid)
+    for index, item in enumerate(timeline_items):
+        if str(item.get("__typename") or "").strip() != "IssueComment":
+            continue
+        body = _request_comment_body(item.get("body"))
+        if not body.startswith(request_command):
+            continue
+        if current_head_marker in body:
+            saw_current_head_request = True
+            continue
+        if "<!-- horadus:fresh-review reviewer=" in body:
+            saw_other_head_request = True
+            continue
+        if index > current_head_start_index:
+            saw_current_head_request = True
+        else:
+            saw_other_head_request = True
+    return (saw_current_head_request, saw_other_head_request)
+
+
+def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> list[str]:
+    try:
+        _pr_number, head_oid, timeline_items = _request_timeline(pr_url, config=config)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("Unable to parse PR metadata"):
+            return ["Failed to parse PR metadata for automatic fresh-review request."]
+        if message.startswith("Unexpected") or "history" in message:
+            return ["Failed to inspect existing fresh-review requests automatically."]
+        return ["Failed to determine PR metadata for automatic fresh-review request."]
+
+    marker = _marker_for_head(config=config, head_oid=head_oid)
+    request_command = _review_request_command(config)
+    request_comment = f"{request_command}\n{marker}"
+    saw_current_head_request, _saw_other_head_request = _request_comment_state(
+        timeline_items=timeline_items,
+        config=config,
+        head_oid=head_oid,
+    )
+    if saw_current_head_request:
         return [
             f"Fresh review already requested for `{config.review_bot_login}` on current head {head_oid}."
         ]
@@ -77,13 +170,8 @@ def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> 
             f"Failed to request a fresh review from `{config.review_bot_login}` automatically.",
             *shared._output_lines(result),
         ]
-    requested_with = (
-        "@codex review"
-        if config.review_bot_login == "chatgpt-codex-connector[bot]"
-        else f"@{config.review_bot_login} review"
-    )
     return [
-        f"Requested a fresh review from `{config.review_bot_login}` with `{requested_with}` for head {head_oid}."
+        f"Requested a fresh review from `{config.review_bot_login}` with `{request_command}` for head {head_oid}."
     ]
 
 
@@ -104,24 +192,28 @@ def _fresh_review_request_blocker(
 
 
 def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.FinishConfig) -> bool:
-    pr_result = shared._run_command(
-        [config.gh_bin, "pr", "view", pr_url, "--json", "number,headRefOid", "--jq", "."]
-    )
+    try:
+        pr_number, head_oid, timeline_items = _request_timeline(pr_url, config=config)
+    except ValueError as exc:
+        message = str(exc)
+        if message.startswith("Unable to parse PR metadata"):
+            raise ValueError("Unable to parse PR metadata for pre-review refresh state.") from exc
+        if message.startswith("Unable to parse fresh-review request history."):
+            raise ValueError(
+                "Unable to parse prior reviewer activity for pre-review refresh."
+            ) from exc
+        if message.startswith("Unexpected fresh-review request history payload."):
+            raise ValueError("Unexpected prior reviewer activity payload.") from exc
+        if "history" in message:
+            raise ValueError(
+                "Unable to inspect prior reviewer activity for pre-review refresh."
+            ) from exc
+        raise ValueError("Unable to determine PR metadata for pre-review refresh state.") from exc
     repo_result = shared._run_command(
         [config.gh_bin, "repo", "view", "--json", "nameWithOwner", "--jq", ".nameWithOwner"]
     )
-    if pr_result.returncode != 0 or repo_result.returncode != 0:
-        raise ValueError("Unable to determine PR metadata for pre-review refresh state.")
-    try:
-        pr_payload = json.loads(pr_result.stdout or "{}")
-    except json.JSONDecodeError as exc:
-        raise ValueError("Unable to parse PR metadata for pre-review refresh state.") from exc
-    if not isinstance(pr_payload, dict):
-        raise ValueError("Unable to parse PR metadata for pre-review refresh state.")
-    pr_number = pr_payload.get("number")
-    head_oid = str(pr_payload.get("headRefOid") or "").strip()
     repo_name = repo_result.stdout.strip()
-    if not isinstance(pr_number, int) or "/" not in repo_name or not head_oid:
+    if repo_result.returncode != 0 or "/" not in repo_name:
         raise ValueError("Unable to determine PR metadata for pre-review refresh state.")
 
     reviews_result = shared._run_command(
@@ -171,7 +263,14 @@ def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.Finish
             saw_current_head_review = True
         else:
             saw_other_head_review = True
-    return saw_other_head_review and not saw_current_head_review
+    saw_current_head_request, saw_other_head_request = _request_comment_state(
+        timeline_items=timeline_items,
+        config=config,
+        head_oid=head_oid,
+    )
+    return (saw_other_head_review or saw_other_head_request) and not (
+        saw_current_head_review or saw_current_head_request
+    )
 
 
 __all__ = [

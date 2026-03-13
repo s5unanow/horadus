@@ -216,6 +216,16 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
         ("repos/example/repo/pulls/1/comments",): [
             [{"pull_request_review_id": 11, "user": {"login": "bot"}, "path": "a.py", "line": 7}]
         ],
+        ("repos/example/repo/issues/1/comments",): [
+            [
+                {
+                    "html_url": "https://example.invalid/issue-comment/1",
+                    "created_at": datetime.now(tz=UTC).isoformat(),
+                    "body": "Codex Review: Didn't find any issues.",
+                    "user": {"login": "bot"},
+                }
+            ]
+        ],
         ("repos/example/repo/issues/1/reactions",): [
             [
                 {
@@ -255,6 +265,13 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
         reviewer_login="bot",
         wait_window_started_at=datetime.now(tz=UTC) - timedelta(seconds=1),
     )
+    issue_comments = pr_review_gate_module._matching_issue_comments(
+        repo="example/repo",
+        pr_number=1,
+        reviewer_login="bot",
+        wait_window_started_at=datetime.now(tz=UTC) - timedelta(seconds=1),
+    )
+    assert len(issue_comments) == 1
 
     pr_review_gate_module._print_actionable_comments(
         [
@@ -271,6 +288,47 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
         [{"path": "b.py", "original_line": 9, "html_url": "", "body": ""}]
     )
     assert "b.py:9" in capsys.readouterr().out
+    info_lines = pr_review_gate_module._informational_issue_comment_lines(
+        [
+            {
+                "html_url": "https://example.invalid/issue-comment/1",
+                "body": "Codex Review: Didn't find any issues.",
+            },
+            {
+                "html_url": "",
+                "body": "",
+            },
+        ]
+    )
+    assert info_lines == [
+        "- reviewer issue comment https://example.invalid/issue-comment/1",
+        "  Codex Review: Didn't find any issues.",
+        "- reviewer issue comment",
+    ]
+    assert (
+        pr_review_gate_module._emit_outcome(
+            pr_review_gate_module.ReviewGateOutcome(
+                status="pass",
+                reason="thumbs_up",
+                reviewer_login="bot",
+                reviewed_head_oid="head-sha",
+                current_head_oid="head-sha",
+                clean_current_head_review=False,
+                summary_thumbs_up=True,
+                actionable_comment_count=0,
+                actionable_review_count=0,
+                timeout_seconds=1,
+                timed_out=False,
+                summary="review gate passed early",
+                informational_lines=tuple(info_lines),
+            ),
+            output_format="text",
+        )
+        == 0
+    )
+    rendered = capsys.readouterr().out
+    assert "review gate passed early" in rendered
+    assert "reviewer issue comment https://example.invalid/issue-comment/1" in rendered
 
     bad_payloads = dict(payloads)
     bad_payloads[("repo", "view", "--json", "nameWithOwner")] = {}

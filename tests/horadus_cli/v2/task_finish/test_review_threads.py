@@ -355,35 +355,56 @@ def test_unresolved_review_thread_lines_handles_invalid_payloads(
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
+        lambda args, **_kwargs: _completed(args, returncode=1, stderr="repo failed"),
+    )
+    with pytest.raises(ValueError, match="repo failed"):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
         lambda args, **_kwargs: (
             _completed(args, stdout="invalid\n")
             if args[:4] == ["gh", "repo", "view", "--json"]
             else _completed(args)
         ),
     )
-    assert (
+    with pytest.raises(ValueError, match=r"Unable to determine repository name\."):
         task_commands_module._unresolved_review_thread_lines(
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
-        == []
-    )
 
     def fake_invalid_pr(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "repo", "view", "--json"]:
+            return _completed(args, stdout="s5unanow/horadus\n")
+        if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
+            return _completed(args, returncode=1, stderr="pr failed")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_invalid_pr)
+    with pytest.raises(ValueError, match="pr failed"):
+        task_commands_module._unresolved_review_thread_lines(
+            pr_url="https://example.invalid/pr/290",
+            config=config,
+        )
+
+    def fake_non_numeric_pr(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:4] == ["gh", "repo", "view", "--json"]:
             return _completed(args, stdout="s5unanow/horadus\n")
         if args[:4] == ["gh", "pr", "view", "https://example.invalid/pr/290"]:
             return _completed(args, stdout="not-a-number\n")
         raise AssertionError(args)
 
-    monkeypatch.setattr(task_commands_module, "_run_command", fake_invalid_pr)
-    assert (
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_non_numeric_pr)
+    with pytest.raises(ValueError, match=r"Unable to determine PR number\."):
         task_commands_module._unresolved_review_thread_lines(
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
-        == []
-    )
 
     def fake_bad_graphql(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:4] == ["gh", "repo", "view", "--json"]:
@@ -936,6 +957,25 @@ def test_parse_review_gate_result_rejects_invalid_payloads() -> None:
                         "current_head_oid": "head-a",
                         "summary": "ok",
                         "actionable_lines": "bad",
+                    }
+                ),
+            )
+        )
+
+    with pytest.raises(ValueError, match="informational_lines must be a string list"):
+        task_commands_module._parse_review_gate_result(
+            _completed(
+                ["review"],
+                stdout=json.dumps(
+                    {
+                        "status": "pass",
+                        "reason": "thumbs_up",
+                        "reviewer_login": "bot",
+                        "reviewed_head_oid": "head-a",
+                        "current_head_oid": "head-a",
+                        "summary": "ok",
+                        "actionable_lines": [],
+                        "informational_lines": "bad",
                     }
                 ),
             )

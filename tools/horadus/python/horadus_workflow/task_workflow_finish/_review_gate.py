@@ -50,6 +50,13 @@ def _parse_review_gate_result(result: subprocess.CompletedProcess[str]) -> share
         raise ValueError(
             "Unable to parse review gate payload: actionable_lines must be a string list."
         )
+    informational_lines = payload.get("informational_lines", [])
+    if not isinstance(informational_lines, list) or not all(
+        isinstance(line, str) for line in informational_lines
+    ):
+        raise ValueError(
+            "Unable to parse review gate payload: informational_lines must be a string list."
+        )
 
     required_str_fields = (
         "status",
@@ -77,6 +84,7 @@ def _parse_review_gate_result(result: subprocess.CompletedProcess[str]) -> share
             timeout_seconds=int(payload.get("timeout_seconds", 0)),
             timed_out=bool(payload.get("timed_out")),
             summary=str(payload["summary"]).strip(),
+            informational_lines=[str(line) for line in informational_lines],
             actionable_lines=[str(line) for line in actionable_lines],
         )
     except (TypeError, ValueError) as exc:

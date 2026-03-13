@@ -41,6 +41,7 @@ class ReviewGateOutcome:
     timeout_seconds: int
     timed_out: bool
     summary: str
+    informational_lines: tuple[str, ...] = ()
     actionable_lines: tuple[str, ...] = ()
 
 
@@ -196,6 +197,31 @@ def _matching_review_comments(
     return matching_reviews, matching_comments, actionable_reviews
 
 
+def _matching_issue_comments(
+    *,
+    repo: str,
+    pr_number: int,
+    reviewer_login: str,
+    wait_window_started_at: datetime,
+) -> list[dict[str, object]]:
+    try:
+        comments = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/comments"),
+            label="issue comments",
+        )
+    except (GhError, json.JSONDecodeError):
+        return []
+    return [
+        comment
+        for comment in comments
+        if isinstance(comment, dict)
+        and _user_login(comment) == reviewer_login
+        and (created_at := _parse_github_timestamp(comment.get("created_at"))) is not None
+        and created_at >= wait_window_started_at
+        and bool(str(comment.get("body") or "").strip())
+    ]
+
+
 def _parse_github_timestamp(value: object) -> datetime | None:
     if not isinstance(value, str) or not value.strip():
         return None
@@ -239,6 +265,20 @@ def _print_actionable_comments(comments: list[dict[str, object]]) -> None:
             print(f"  {body}")
 
 
+def _informational_issue_comment_lines(comments: list[dict[str, object]]) -> list[str]:
+    lines: list[str] = []
+    for comment in comments:
+        url = str(comment.get("html_url") or "").strip()
+        header = "- reviewer issue comment"
+        if url:
+            header = f"{header} {url}"
+        lines.append(header)
+        body = " ".join(str(comment.get("body") or "").strip().split())
+        if body:
+            lines.append(f"  {body}")
+    return lines
+
+
 def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
     if output_format == "json":
         print(json.dumps(asdict(outcome), sort_keys=True))
@@ -259,10 +299,12 @@ def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
             print("review gate failed: actionable current-head review summary feedback found:")
         else:
             print(outcome.summary)
-        for line in outcome.actionable_lines:
+        for line in (*outcome.informational_lines, *outcome.actionable_lines):
             print(line)
     else:
         print(outcome.summary)
+        for line in outcome.informational_lines:
+            print(line)
 
     if outcome.status == "head_changed":
         return EXIT_HEAD_CHANGED
@@ -353,6 +395,12 @@ def main(argv: list[str] | None = None) -> int:
                 head_oid=head_oid,
                 reviewer_login=args.reviewer_login,
             )
+            matching_issue_comments = _matching_issue_comments(
+                repo=repo,
+                pr_number=pr_number,
+                reviewer_login=args.reviewer_login,
+                wait_window_started_at=wait_window_started_at,
+            )
             has_pr_summary_thumbs_up = _has_pr_summary_thumbs_up(
                 repo=repo,
                 pr_number=pr_number,
@@ -362,6 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         except GhError as exc:
             print(str(exc), file=sys.stderr)
             return EXIT_TIMEOUT_FAILURE
+        informational_lines = tuple(_informational_issue_comment_lines(matching_issue_comments))
 
         if matching_comments:
             return _emit_outcome(
@@ -378,6 +427,7 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     timed_out=False,
                     summary="review gate failed: actionable current-head review comments found:",
+                    informational_lines=informational_lines,
                     actionable_lines=tuple(
                         line
                         for comment in matching_comments
@@ -409,6 +459,7 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     timed_out=False,
                     summary="review gate failed: actionable current-head review summary feedback found:",
+                    informational_lines=informational_lines,
                     actionable_lines=tuple(_actionable_review_lines(actionable_reviews)),
                 ),
                 output_format=args.format,
@@ -439,6 +490,7 @@ def main(argv: list[str] | None = None) -> int:
                             f"{args.reviewer_login} approved current head {head_oid} and reacted THUMBS_UP "
                             "on the PR summary during the active review window."
                         ),
+                        informational_lines=informational_lines,
                     ),
                     output_format=args.format,
                 )
@@ -459,6 +511,7 @@ def main(argv: list[str] | None = None) -> int:
                         "review gate passed early: "
                         f"{args.reviewer_login} reacted THUMBS_UP on the PR summary during the active review window."
                     ),
+                    informational_lines=informational_lines,
                 ),
                 output_format=args.format,
             )
@@ -483,6 +536,7 @@ def main(argv: list[str] | None = None) -> int:
                             f"{args.reviewer_login} approved current head {head_oid} during the "
                             f"{args.timeout_seconds}s wait window."
                         ),
+                        informational_lines=informational_lines,
                     ),
                     output_format=args.format,
                 )
@@ -506,6 +560,7 @@ def main(argv: list[str] | None = None) -> int:
                         timeout_seconds=args.timeout_seconds,
                         timed_out=True,
                         summary=f"{message} Continuing due to timeout policy=allow.",
+                        informational_lines=informational_lines,
                     ),
                     output_format=args.format,
                 )
@@ -523,6 +578,7 @@ def main(argv: list[str] | None = None) -> int:
                     timeout_seconds=args.timeout_seconds,
                     timed_out=True,
                     summary=f"{message} Failing due to timeout policy=fail.",
+                    informational_lines=informational_lines,
                 ),
                 output_format=args.format,
             )

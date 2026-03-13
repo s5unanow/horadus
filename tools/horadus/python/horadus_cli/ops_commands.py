@@ -16,7 +16,7 @@ from dotenv import dotenv_values
 
 from tools.horadus.python.horadus_cli.result import CommandResult, ExitCode
 
-_RUNTIME_BRIDGE_MODULE = "src.cli_runtime"
+_RUNTIME_BRIDGE_MODULE = "tools.horadus.python.horadus_app_cli_runtime"
 _INTERNAL_ARG_KEYS = {
     "agent_command",
     "command",

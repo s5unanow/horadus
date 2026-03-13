@@ -9,9 +9,9 @@ Use this skill for repo workflow operations in this project.
 
 Implementation note:
 - Canonical CLI ownership lives under `tools/horadus/python/horadus_cli/`.
-- `src/cli.py` is only the installed entrypoint shim.
-- App-backed commands cross `src/cli_runtime.py`; the tooling package should
-  not import business-app modules directly.
+- The installed `horadus` entrypoint points directly at the tooling package.
+- App-backed commands cross `tools/horadus/python/horadus_app_cli_runtime.py`;
+  the tooling package should not import business-app modules directly.
 
 ## Default behavior
 

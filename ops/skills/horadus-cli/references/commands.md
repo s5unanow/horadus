@@ -4,9 +4,9 @@
 
 Implementation note:
 - CLI ownership lives under `tools/horadus/python/horadus_cli/`.
-- `src/cli.py` remains the installed entrypoint shim.
-- App-backed commands cross `src/cli_runtime.py` instead of importing
-  business-app modules into the tooling package.
+- The installed `horadus` entrypoint points directly at the tooling package.
+- App-backed commands cross `tools/horadus/python/horadus_app_cli_runtime.py`
+  instead of importing business-app modules into the tooling package.
 
 - For canonical workflow policy, blocker handling, and fallback rules, read
   `AGENTS.md`.

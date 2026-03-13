@@ -585,7 +585,7 @@ _ACTIONS: dict[str, Any] = {
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="python -m src.cli_runtime")
+    parser = argparse.ArgumentParser(prog="python -m tools.horadus.python.horadus_app_cli_runtime")
     parser.add_argument("action", choices=sorted(_ACTIONS))
     parser.add_argument("--payload", required=True, help="JSON payload for the action.")
     return parser

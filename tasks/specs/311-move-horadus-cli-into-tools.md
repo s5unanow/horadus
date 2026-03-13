@@ -9,9 +9,9 @@ the CLI coupled to business modules through `ops_commands.py`.
 
 The result is architectural drift in three places: packaging still treats the
 CLI as part of app runtime ownership, tests and docs still describe
-`src/horadus_cli/` as the stable home, and the CLI package can import app
-logic directly. That makes the CLI harder to reason about as a self-contained
-tooling surface.
+`src/horadus_cli/` or `src/cli.py` as a stable home, and the CLI package can
+import app logic directly. That makes the CLI harder to reason about as a
+self-contained tooling surface.
 
 ## Inputs
 
@@ -20,9 +20,10 @@ tooling surface.
 - `tasks/BACKLOG.md`
 - `docs/ARCHITECTURE.md`
 - `docs/AGENT_RUNBOOK.md`
-- `src/cli.py`
 - `src/horadus_cli/`
+- `src/cli.py`
 - `tools/horadus/python/horadus_workflow/`
+- `tools/horadus/python/horadus_app_cli_runtime.py`
 - `tests/horadus_cli/`
 - `tests/workflow/`
 - `ops/skills/horadus-cli/`
@@ -31,7 +32,8 @@ tooling surface.
 
 - A tooling-home Horadus CLI package under `tools/horadus/python/horadus_cli/`
   that owns parser wiring, command handlers, and result rendering
-- A thin `src/cli.py` entrypoint that delegates to the tooling package
+- A direct installed `horadus` entrypoint to the tooling package with no CLI
+  ownership left under `src/`
 - An explicit app-runtime adapter boundary for commands that need app-owned
   behavior, without direct business-app imports inside the CLI package
 - Updated tests, docs, runbook entries, and repo skill guidance for the new
@@ -69,12 +71,11 @@ the task changes packaging, imports, tests, and agent guidance across the repo.
 ## Shared Workflow/Policy Change Checklist
 
 - Callers that depend on the current CLI ownership/import surface:
-  - `src/cli.py`
   - `tests/horadus_cli/v2/test_cli.py`
   - `tests/horadus_cli/v2/test_ops_commands.py`
   - `tests/horadus_cli/shell/test_cli_versioning.py`
   - `tests/workflow/test_task_workflow.py`
-  - `scripts` and docs that name `src/horadus_cli/`
+  - `scripts` and docs that name `src/horadus_cli/`, `src/cli.py`, or `src/cli_runtime.py`
 - Unaffected-caller regression target:
   - Keep workflow-owner tests under `tests/workflow/` green while moving the
     CLI package so repo-workflow owners do not silently drift.
@@ -82,12 +83,12 @@ the task changes packaging, imports, tests, and agent guidance across the repo.
 ## Acceptance Criteria
 
 - [ ] Runtime CLI ownership moves to `tools/horadus/python/horadus_cli/`
-- [ ] `src/cli.py` remains a thin entrypoint only; `src/horadus_cli/` no longer
-  owns live CLI implementation logic
+- [ ] `src/cli.py`, `src/cli_runtime.py`, and `src/horadus_cli/` are removed;
+  no live CLI implementation remains under `src/`
 - [ ] The tooling-home CLI package does not directly import business-app logic
   from `src/core`, `src/storage`, `src/processing`, `src/eval`, or similar
 - [ ] App-backed commands use an explicit adapter boundary that keeps app-owned
-  imports on the runtime side
+  imports on the runtime side under `tools/horadus/python/horadus_app_cli_runtime.py`
 - [ ] Tests and docs enforce the new ownership and import contract
 
 ## Validation

@@ -35,9 +35,7 @@ def test_compatibility_wrappers_alias_new_owners() -> None:
     assert importlib.import_module("src.core.repo_workflow") is importlib.import_module(
         "tools.horadus.python.horadus_workflow.repo_workflow"
     )
-    assert importlib.import_module(
-        "src.horadus_cli.v2.task_workflow_policy"
-    ) is importlib.import_module("tools.horadus.python.horadus_workflow.task_workflow_policy")
+    assert importlib.util.find_spec("src.horadus_cli") is None
 
 
 def test_task_repo_root_override_env_and_discovery_paths(

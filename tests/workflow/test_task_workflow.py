@@ -7,14 +7,10 @@ from types import SimpleNamespace
 
 import pytest
 
-import src.horadus_cli.task_commands as top_level_task_commands_module
-import src.horadus_cli.task_query as top_level_task_query_module
-import src.horadus_cli.task_repo as top_level_task_repo_module
-import src.horadus_cli.task_workflow_core as top_level_task_workflow_core_module
-import tools.horadus.python.horadus_cli.task_commands as v2_task_commands_module
-import tools.horadus.python.horadus_cli.task_query as v2_task_query_module
-import tools.horadus.python.horadus_cli.task_repo as v2_task_repo_module
-import tools.horadus.python.horadus_cli.task_workflow_core as v2_task_workflow_core_module
+import tools.horadus.python.horadus_cli.task_commands as task_commands_module
+import tools.horadus.python.horadus_cli.task_query as task_query_module
+import tools.horadus.python.horadus_cli.task_repo as task_repo_module
+import tools.horadus.python.horadus_cli.task_workflow_core as task_workflow_core_module
 import tools.horadus.python.horadus_workflow.task_workflow_policy as task_workflow_policy_module
 from tests.horadus_cli.v2.task_repo_fixtures import seed_task_repo_layout
 from tools.horadus.python.horadus_cli.result import CommandResult, emit_result
@@ -42,10 +38,8 @@ EXPECTED_TASK_SUBCOMMANDS = sorted(
 
 
 def _patch_repo_roots(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
-    monkeypatch.setattr(top_level_task_repo_module, "repo_root", lambda: repo_root)
-    monkeypatch.setattr(top_level_task_workflow_core_module, "repo_root", lambda: repo_root)
-    monkeypatch.setattr(v2_task_repo_module, "repo_root", lambda: repo_root)
-    monkeypatch.setattr(v2_task_workflow_core_module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(task_repo_module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(task_workflow_core_module, "repo_root", lambda: repo_root)
 
 
 @pytest.fixture
@@ -69,8 +63,7 @@ def _tasks_subcommand_names(register_module: object) -> list[str]:
 
 
 def test_task_parser_matches_expected_shape() -> None:
-    assert _tasks_subcommand_names(v2_task_commands_module) == EXPECTED_TASK_SUBCOMMANDS
-    assert _tasks_subcommand_names(top_level_task_commands_module) == EXPECTED_TASK_SUBCOMMANDS
+    assert _tasks_subcommand_names(task_commands_module) == EXPECTED_TASK_SUBCOMMANDS
 
 
 @pytest.mark.parametrize(
@@ -91,28 +84,27 @@ def test_task_parser_matches_expected_shape() -> None:
         ("handle_context_pack", SimpleNamespace(task_id="TASK-901", include_archive=False)),
     ],
 )
-def test_top_level_task_query_handlers_match_v2(
+def test_task_query_handlers_return_expected_payload(
     synthetic_task_repo_v2: Path, handler_name: str, args: SimpleNamespace
 ) -> None:
-    top_level_result = getattr(top_level_task_query_module, handler_name)(args)
-    v2_result = getattr(v2_task_query_module, handler_name)(args)
-    assert top_level_result.exit_code == v2_result.exit_code
-    assert top_level_result.data == v2_result.data
-    assert top_level_result.lines == v2_result.lines
+    _ = synthetic_task_repo_v2
+    result = getattr(task_query_module, handler_name)(args)
+    assert result.exit_code == 0
+    assert result.data is not None
 
 
-def test_runtime_does_not_import_v1_modules() -> None:
-    legacy_import = "src.horadus_cli." + "v1"
+def test_cli_sources_live_only_under_tools() -> None:
     runtime_paths = [
-        Path("src/cli.py"),
-        Path("src/horadus_cli/app.py"),
-        *sorted(Path("src/horadus_cli").glob("*.py")),
-        *sorted(Path("src/horadus_cli/v2").glob("*.py")),
+        Path("tools/horadus/python/horadus_cli/app.py"),
         *sorted(Path("tools/horadus/python/horadus_cli").glob("*.py")),
     ]
     for path in runtime_paths:
         text = path.read_text(encoding="utf-8")
-        assert legacy_import not in text, path.name
+        assert "src.horadus_cli" not in text, path.name
+
+    assert not Path("src/cli.py").exists()
+    assert not Path("src/cli_runtime.py").exists()
+    assert not Path("src/horadus_cli").exists()
 
 
 def test_v2_emit_result_includes_lines_in_json(capsys: pytest.CaptureFixture[str]) -> None:

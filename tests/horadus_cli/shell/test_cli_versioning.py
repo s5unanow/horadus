@@ -1,62 +1,18 @@
 from __future__ import annotations
 
 import ast
-import importlib
-import importlib.util
-import sys
 from pathlib import Path
 
 import pytest
 
-import src.horadus_cli.ops_commands as ops_module
-import src.horadus_cli.result as result_module
-import src.horadus_cli.task_commands as task_commands_module
-import src.horadus_cli.triage_commands as triage_commands_module
 import tools.horadus.python.horadus_cli.app as cli_app_module
 import tools.horadus.python.horadus_cli.ops_commands as v2_ops_module
-import tools.horadus.python.horadus_cli.result as v2_result_module
 import tools.horadus.python.horadus_cli.task_commands as v2_task_commands_module
-import tools.horadus.python.horadus_cli.task_finish as v2_task_finish_module
-import tools.horadus.python.horadus_cli.task_friction as v2_task_friction_module
-import tools.horadus.python.horadus_cli.task_ledgers as v2_task_ledgers_module
-import tools.horadus.python.horadus_cli.task_lifecycle as v2_task_lifecycle_module
-import tools.horadus.python.horadus_cli.task_preflight as v2_task_preflight_module
-import tools.horadus.python.horadus_cli.task_query as v2_task_query_module
-import tools.horadus.python.horadus_cli.task_shared as v2_task_shared_module
-import tools.horadus.python.horadus_cli.task_workflow as v2_task_workflow_module
 import tools.horadus.python.horadus_cli.triage_commands as v2_triage_commands_module
 
 pytestmark = pytest.mark.unit
 
 _CLI_PACKAGE_ROOT = Path("tools/horadus/python/horadus_cli")
-
-
-def test_top_level_router_modules_use_v2_for_all_cli_surfaces() -> None:
-    assert ops_module.register_ops_commands is v2_ops_module.register_ops_commands
-    assert result_module.emit_result is v2_result_module.emit_result
-    assert (
-        task_commands_module.register_task_commands
-        is v2_task_commands_module.register_task_commands
-    )
-    assert triage_commands_module.handle_collect is v2_triage_commands_module.handle_collect
-
-
-@pytest.mark.parametrize(
-    ("module_name", "target_name"),
-    [
-        ("src.horadus_cli.ops_commands", "tools.horadus.python.horadus_cli.ops_commands"),
-        ("src.horadus_cli.result", "tools.horadus.python.horadus_cli.result"),
-        ("src.horadus_cli.task_process", "tools.horadus.python.horadus_cli.task_process"),
-        ("src.horadus_cli.task_repo", "tools.horadus.python.horadus_cli.task_repo"),
-        (
-            "src.horadus_cli.task_workflow_core",
-            "tools.horadus.python.horadus_cli.task_workflow_core",
-        ),
-        ("src.horadus_cli.triage_commands", "tools.horadus.python.horadus_cli.triage_commands"),
-    ],
-)
-def test_top_level_module_keys_alias_expected_versions(module_name: str, target_name: str) -> None:
-    assert importlib.import_module(module_name) is importlib.import_module(target_name)
 
 
 def test_app_router_uses_v2_for_every_command_family() -> None:
@@ -68,53 +24,10 @@ def test_app_router_uses_v2_for_every_command_family() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("wrapper_name", "target_module", "attribute_name"),
-    [
-        ("task_finish", v2_task_finish_module, "handle_finish"),
-        ("task_friction", v2_task_friction_module, "handle_record_friction"),
-        ("task_ledgers", v2_task_ledgers_module, "handle_close_ledgers"),
-        ("task_lifecycle", v2_task_lifecycle_module, "handle_lifecycle"),
-        ("task_preflight", v2_task_preflight_module, "handle_preflight"),
-        ("task_query", v2_task_query_module, "handle_show"),
-        ("task_shared", v2_task_shared_module, "VALID_FRICTION_TYPES"),
-        ("task_workflow", v2_task_workflow_module, "handle_safe_start"),
-    ],
-)
-def test_task_wrappers_forward_v2_symbols(
-    wrapper_name: str, target_module: object, attribute_name: str
-) -> None:
-    wrapper_module = importlib.import_module(f"src.horadus_cli.{wrapper_name}")
-    assert getattr(wrapper_module, attribute_name) is getattr(target_module, attribute_name)
-
-
-@pytest.mark.parametrize(
-    "wrapper_name",
-    [
-        "ops_commands",
-        "result",
-        "task_process",
-        "task_repo",
-        "task_workflow_core",
-        "triage_commands",
-    ],
-)
-def test_cached_wrapper_files_execute_directly(wrapper_name: str) -> None:
-    wrapper_path = Path("src/horadus_cli") / f"{wrapper_name}.py"
-    module_name = f"tests._versioning_exec_{wrapper_name}"
-    spec = importlib.util.spec_from_file_location(module_name, wrapper_path)
-
-    assert spec is not None
-    assert spec.loader is not None
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    try:
-        spec.loader.exec_module(module)
-    finally:
-        sys.modules.pop(module_name, None)
-
-    assert module.__file__ is not None
+def test_cli_compatibility_wrappers_are_removed_from_src() -> None:
+    assert not Path("src/cli.py").exists()
+    assert not Path("src/cli_runtime.py").exists()
+    assert not Path("src/horadus_cli").exists()
 
 
 def test_horadus_cli_package_limits_repo_external_imports_to_ops_adapters() -> None:
@@ -135,11 +48,6 @@ def test_horadus_cli_package_limits_repo_external_imports_to_ops_adapters() -> N
                         raise AssertionError(f"{path} imports non-CLI module {alias.name}")
 
 
-def test_repo_source_has_no_runtime_mirror_imports() -> None:
-    forbidden = "src.horadus_cli.v2.runtime"
-    for path in Path("src").rglob("*.py"):
-        if forbidden in path.read_text(encoding="utf-8"):
-            raise AssertionError(f"{path} still references {forbidden}")
-
+def test_pyproject_points_horadus_entrypoint_to_tools() -> None:
     pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
-    assert "src/horadus_cli/v2/runtime" not in pyproject
+    assert 'horadus = "tools.horadus.python.horadus_cli.app:main"' in pyproject

@@ -4,7 +4,6 @@ import argparse
 import asyncio
 import json
 import os
-import runpy
 import shutil
 import subprocess
 from datetime import UTC, date, datetime
@@ -14,16 +13,17 @@ from uuid import uuid4
 
 import pytest
 
-import src.cli as cli_module
-import tools.horadus.python.horadus_cli.app as cli_app_module
+import tools.horadus.python.horadus_app_cli_runtime as runtime_module
+import tools.horadus.python.horadus_cli.ops_commands as ops_module
 import tools.horadus.python.horadus_cli.result as result_module
 import tools.horadus.python.horadus_cli.task_commands as task_parser_module
 import tools.horadus.python.horadus_cli.task_process as task_process_module
 import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 import tools.horadus.python.horadus_cli.triage_commands as triage_commands_module
-from src.cli import _build_parser, _change_arrow, _format_trend_status_lines
 from src.core.calibration_dashboard import TrendMovement
+from tools.horadus.python.horadus_cli.app import _build_parser, main
+from tools.horadus.python.horadus_cli.ops_commands import _change_arrow, _format_trend_status_lines
 
 pytestmark = pytest.mark.unit
 pytest_plugins = ("tests.horadus_cli.v2.task_repo_fixtures",)
@@ -37,6 +37,13 @@ EXEC_PLAN_NO_MARKER_TASK_ID = "TASK-906"
 
 _REAL_PRE_MERGE_TASK_CLOSURE_BLOCKER = task_commands_module._pre_merge_task_closure_blocker
 _REAL_BRANCH_HEAD_ALIGNMENT_BLOCKER = task_commands_module._branch_head_alignment_blocker
+
+
+def _run_doctor(*, timeout_seconds: float) -> int:
+    _data, lines, exit_code = runtime_module._collect_doctor(timeout_seconds)
+    for line in lines:
+        print(line)
+    return int(exit_code)
 
 
 def _closed_task_closure_state(task_id: str) -> task_repo_module.TaskClosureState:
@@ -664,7 +671,7 @@ def test_build_parser_accepts_triage_collect_command() -> None:
             "--keyword",
             "agent",
             "--path",
-            "src/cli.py",
+            "tools/horadus/python/horadus_cli/app.py",
             "--proposal-id",
             "PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe",
             "--lookback-days",
@@ -677,7 +684,7 @@ def test_build_parser_accepts_triage_collect_command() -> None:
     assert args.command == "triage"
     assert args.triage_command == "collect"
     assert args.keyword == ["agent"]
-    assert args.path == ["src/cli.py"]
+    assert args.path == ["tools/horadus/python/horadus_cli/app.py"]
     assert args.proposal_id == ["PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe"]
     assert args.lookback_days == 7
     assert args.output_format == "json"
@@ -717,10 +724,10 @@ def test_run_agent_smoke_passes_when_server_enforces_auth_and_no_key(
         assert url == "http://127.0.0.1:8000/openapi.json"
         return (200, {"openapi": "3.1.0"})
 
-    monkeypatch.setattr(cli_module, "_http_get", fake_http_get)
-    monkeypatch.setattr(cli_module, "_http_get_json", fake_http_get_json)
+    monkeypatch.setattr(ops_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(ops_module, "_http_get_json", fake_http_get_json)
 
-    result = cli_module._run_agent_smoke(
+    result = ops_module._run_agent_smoke(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=5.0,
         api_key=None,
@@ -753,10 +760,10 @@ def test_run_agent_smoke_fails_when_api_key_is_rejected(
         assert url == "http://127.0.0.1:8000/openapi.json"
         return (200, {"openapi": "3.1.0"})
 
-    monkeypatch.setattr(cli_module, "_http_get", fake_http_get)
-    monkeypatch.setattr(cli_module, "_http_get_json", fake_http_get_json)
+    monkeypatch.setattr(ops_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(ops_module, "_http_get_json", fake_http_get_json)
 
-    result = cli_module._run_agent_smoke(
+    result = ops_module._run_agent_smoke(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=5.0,
         api_key="invalid-token",  # pragma: allowlist secret
@@ -789,10 +796,10 @@ def test_run_agent_smoke_passes_when_auth_is_disabled(
         _ = headers
         return (200, {"openapi": "3.1.0"})
 
-    monkeypatch.setattr(cli_module, "_http_get", fake_http_get)
-    monkeypatch.setattr(cli_module, "_http_get_json", fake_http_get_json)
+    monkeypatch.setattr(ops_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(ops_module, "_http_get_json", fake_http_get_json)
 
-    result = cli_module._run_agent_smoke(
+    result = ops_module._run_agent_smoke(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=5.0,
         api_key=None,
@@ -821,10 +828,10 @@ def test_run_agent_smoke_fails_when_server_is_unreachable(
         _ = headers
         return (0, None)
 
-    monkeypatch.setattr(cli_module, "_http_get", fake_http_get)
-    monkeypatch.setattr(cli_module, "_http_get_json", fake_http_get_json)
+    monkeypatch.setattr(ops_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(ops_module, "_http_get_json", fake_http_get_json)
 
-    result = cli_module._run_agent_smoke(
+    result = ops_module._run_agent_smoke(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=5.0,
         api_key=None,
@@ -843,7 +850,7 @@ def test_run_doctor_fails_when_required_hooks_missing(
     (hooks_dir / "pre-commit").write_text("#!/usr/bin/env bash\n", encoding="utf-8")
     os.chmod(hooks_dir / "pre-commit", 0o755)
 
-    result = cli_module._run_doctor(timeout_seconds=0.2)
+    result = _run_doctor(timeout_seconds=0.2)
 
     assert result == 2
 
@@ -853,8 +860,8 @@ def test_run_doctor_passes_when_required_hooks_exist(
     tmp_path,
 ) -> None:
     monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(cli_module.settings, "DATABASE_URL", "")
-    monkeypatch.setattr(cli_module.settings, "REDIS_URL", "")
+    monkeypatch.setattr(runtime_module.settings, "DATABASE_URL", "")
+    monkeypatch.setattr(runtime_module.settings, "REDIS_URL", "")
     hooks_dir = tmp_path / ".git" / "hooks"
     hooks_dir.mkdir(parents=True)
 
@@ -863,7 +870,7 @@ def test_run_doctor_passes_when_required_hooks_exist(
         path.write_text("#!/usr/bin/env bash\n", encoding="utf-8")
         os.chmod(path, 0o755)
 
-    result = cli_module._run_doctor(timeout_seconds=0.2)
+    result = _run_doctor(timeout_seconds=0.2)
 
     assert result == 0
 
@@ -871,8 +878,8 @@ def test_run_doctor_passes_when_required_hooks_exist(
 def test_doctor_check_database_skips_when_database_url_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(cli_module.settings, "DATABASE_URL", "")
-    status, message = asyncio.run(cli_module._doctor_check_database(0.2))
+    monkeypatch.setattr(runtime_module.settings, "DATABASE_URL", "")
+    status, message = asyncio.run(runtime_module._doctor_check_database(0.2))
     assert status == "SKIP"
     assert "DATABASE_URL" in message
 
@@ -880,8 +887,8 @@ def test_doctor_check_database_skips_when_database_url_missing(
 def test_doctor_check_redis_skips_when_redis_url_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(cli_module.settings, "REDIS_URL", "")
-    status, message = asyncio.run(cli_module._doctor_check_redis(0.2))
+    monkeypatch.setattr(runtime_module.settings, "REDIS_URL", "")
+    status, message = asyncio.run(runtime_module._doctor_check_redis(0.2))
     assert status == "SKIP"
     assert "REDIS_URL" in message
 
@@ -889,12 +896,12 @@ def test_doctor_check_redis_skips_when_redis_url_missing(
 def test_run_doctor_returns_failure_on_safety_refusal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(cli_module.settings, "ENVIRONMENT", "production")
-    monkeypatch.setattr(cli_module.settings, "RUNTIME_PROFILE", "agent")
-    monkeypatch.setattr(cli_module.settings, "AGENT_MODE", False)
-    monkeypatch.setattr(cli_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
-    monkeypatch.setattr(cli_module.settings, "API_HOST", "0.0.0.0")
-    monkeypatch.setattr(cli_module.settings, "API_AUTH_ENABLED", True)
+    monkeypatch.setattr(runtime_module.settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(runtime_module.settings, "RUNTIME_PROFILE", "agent")
+    monkeypatch.setattr(runtime_module.settings, "AGENT_MODE", False)
+    monkeypatch.setattr(runtime_module.settings, "AGENT_ALLOW_NON_LOOPBACK", False)
+    monkeypatch.setattr(runtime_module.settings, "API_HOST", "0.0.0.0")
+    monkeypatch.setattr(runtime_module.settings, "API_AUTH_ENABLED", True)
 
     async def fake_doctor_check_database(_timeout_seconds: float) -> tuple[str, str]:
         return ("PASS", "ok")
@@ -902,10 +909,10 @@ def test_run_doctor_returns_failure_on_safety_refusal(
     async def fake_doctor_check_redis(_timeout_seconds: float) -> tuple[str, str]:
         return ("PASS", "ok")
 
-    monkeypatch.setattr(cli_module, "_doctor_check_database", fake_doctor_check_database)
-    monkeypatch.setattr(cli_module, "_doctor_check_redis", fake_doctor_check_redis)
+    monkeypatch.setattr(runtime_module, "_doctor_check_database", fake_doctor_check_database)
+    monkeypatch.setattr(runtime_module, "_doctor_check_redis", fake_doctor_check_redis)
 
-    result = cli_module._run_doctor(timeout_seconds=0.2)
+    result = _run_doctor(timeout_seconds=0.2)
     assert result == 2
 
 
@@ -913,7 +920,7 @@ def test_main_tasks_context_pack_json_output(
     synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main(["tasks", "context-pack", LIVE_TASK_ID, "--format", "json"])
+    result = main(["tasks", "context-pack", LIVE_TASK_ID, "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1160,7 +1167,7 @@ def test_main_tasks_list_active_json_includes_blocker_urgency(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["tasks", "list-active", "--format", "json"])
+    result = main(["tasks", "list-active", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1185,7 +1192,7 @@ def test_main_tasks_list_active_honors_root_format_flag(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["--format", "json", "tasks", "list-active"])
+    result = main(["--format", "json", "tasks", "list-active"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1227,7 +1234,7 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["tasks", "list-active", "--format", "json"])
+    result = main(["tasks", "list-active", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1250,7 +1257,7 @@ def test_main_tasks_list_active_text_highlights_overdue_blockers(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["tasks", "list-active"])
+    result = main(["tasks", "list-active"])
 
     assert result == 0
     output = capsys.readouterr().out
@@ -1261,7 +1268,7 @@ def test_main_tasks_list_active_text_highlights_overdue_blockers(
 def test_main_tasks_search_json_output_is_compact_by_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main(["tasks", "search", "health", "--limit", "1", "--format", "json"])
+    result = main(["tasks", "search", "health", "--limit", "1", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -1276,7 +1283,7 @@ def test_main_tasks_search_json_output_is_compact_by_default(
 def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main(
+    result = main(
         [
             "tasks",
             "search",
@@ -1303,7 +1310,7 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
 def test_main_tasks_search_text_output_remains_compact_by_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main(["tasks", "search", "health", "--status", "active"])
+    result = main(["tasks", "search", "health", "--status", "active"])
 
     assert result == 0
     output = capsys.readouterr().out
@@ -1316,7 +1323,7 @@ def test_main_tasks_search_text_output_remains_compact_by_default(
 def test_main_tasks_search_text_output_can_include_raw_blocks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main(
+    result = main(
         ["tasks", "search", "health", "--status", "active", "--limit", "1", "--include-raw"]
     )
 
@@ -1332,7 +1339,7 @@ def test_main_tasks_search_text_output_can_include_raw_blocks(
 def test_main_tasks_search_rejects_non_positive_limit(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main(["tasks", "search", "health", "--limit", "0"])
+    result = main(["tasks", "search", "health", "--limit", "0"])
 
     assert result == 2
     assert "--limit must be a positive integer" in capsys.readouterr().err
@@ -1366,7 +1373,7 @@ def test_main_tasks_start_honors_root_dry_run_flag(
     monkeypatch.setattr(task_commands_module, "start_task_data", fake_start_task_data)
     monkeypatch.setattr(task_commands_module, "start_task_data", fake_start_task_data)
 
-    result = cli_module.main(
+    result = main(
         [
             "--format",
             "json",
@@ -1443,19 +1450,15 @@ def _task_snapshot(
 def test_horadus_app_main_returns_1_without_subcommand(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = cli_module.main([])
+    result = main([])
 
     assert result == 1
     assert "usage:" in capsys.readouterr().out
 
 
-def test_cli_script_entrypoint_exits_with_main_result(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli_app_module, "main", lambda: 7)
-
-    with pytest.raises(SystemExit) as exc_info:
-        runpy.run_path(str(Path(cli_module.__file__)), run_name="__main__")
-
-    assert exc_info.value.code == 7
+def test_cli_entrypoint_is_owned_by_tools_package() -> None:
+    pyproject = Path("pyproject.toml").read_text(encoding="utf-8")
+    assert 'horadus = "tools.horadus.python.horadus_cli.app:main"' in pyproject
 
 
 def test_emit_result_serializes_errors_in_json(
@@ -2160,7 +2163,7 @@ def test_unresolved_review_thread_lines_reports_unresolved_threads(
                                                                 "login": "chatgpt-codex-connector[bot]"
                                                             },
                                                             "body": "Please resolve this thread.",
-                                                            "path": "src/horadus_cli/task_commands.py",
+                                                            "path": "tools/horadus/python/horadus_cli/task_commands.py",
                                                             "line": 2201,
                                                             "originalLine": 2201,
                                                             "url": "https://example.invalid/comment/290",
@@ -2200,7 +2203,7 @@ def test_unresolved_review_thread_lines_reports_unresolved_threads(
         pr_url="https://example.invalid/pr/290",
         config=config,
     ) == [
-        "- src/horadus_cli/task_commands.py:2201 https://example.invalid/comment/290 (chatgpt-codex-connector[bot])",
+        "- tools/horadus/python/horadus_cli/task_commands.py:2201 https://example.invalid/comment/290 (chatgpt-codex-connector[bot])",
         "  Please resolve this thread.",
     ]
 
@@ -8571,7 +8574,7 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_timeout(
         task_commands_module,
         "_unresolved_review_thread_lines",
         lambda **_kwargs: [
-            "- src/horadus_cli/task_commands.py:2201 https://example.invalid/comment/290 (chatgpt-codex-connector[bot])",
+            "- tools/horadus/python/horadus_cli/task_commands.py:2201 https://example.invalid/comment/290 (chatgpt-codex-connector[bot])",
             "  Please resolve this thread.",
         ],
     )
@@ -8676,7 +8679,7 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
         task_commands_module,
         "_unresolved_review_thread_lines",
         lambda **_kwargs: [
-            "- src/horadus_cli/task_commands.py:2201 https://example.invalid/comment/290 (chatgpt-codex-connector[bot])",
+            "- tools/horadus/python/horadus_cli/task_commands.py:2201 https://example.invalid/comment/290 (chatgpt-codex-connector[bot])",
             "  Please resolve this thread.",
         ],
     )
@@ -11283,7 +11286,7 @@ def test_finish_task_data_blocks_when_review_gate_finds_actionable_comments(
             reason="actionable_comments",
             reviewed_head_oid="head-sha-276",
             actionable_lines=[
-                "- src/horadus_cli/task_commands.py:1900 https://example.invalid/comment/276",
+                "- tools/horadus/python/horadus_cli/task_commands.py:1900 https://example.invalid/comment/276",
                 "  Please address this before merge.",
             ],
             returncode=2,
@@ -11330,7 +11333,7 @@ def test_finish_task_data_blocks_when_review_gate_finds_actionable_comments(
         lines[1]
         == "Next action: Address the current-head review feedback, then re-run `horadus tasks finish`."
     )
-    assert lines[-2].startswith("- src/horadus_cli/task_commands.py:1900")
+    assert lines[-2].startswith("- tools/horadus/python/horadus_cli/task_commands.py:1900")
 
 
 def test_finish_task_data_blocks_when_pr_title_or_body_is_invalid(
@@ -13131,7 +13134,7 @@ def test_handle_list_active_omits_urgency_note_for_pending_blockers(
 
 
 def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> None:
-    result = cli_module.main(
+    result = main(
         [
             "triage",
             "collect",
@@ -13162,7 +13165,7 @@ def test_main_triage_collect_includes_overdue_blockers(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["triage", "collect", "--lookback-days", "14", "--format", "json"])
+    result = main(["triage", "collect", "--lookback-days", "14", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -13199,7 +13202,7 @@ def test_main_triage_collect_ignores_stale_metadata_rows(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["triage", "collect", "--lookback-days", "14", "--format", "json"])
+    result = main(["triage", "collect", "--lookback-days", "14", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
@@ -13219,7 +13222,7 @@ def test_main_triage_collect_text_highlights_overdue_blockers(
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    result = cli_module.main(["triage", "collect", "--lookback-days", "14"])
+    result = main(["triage", "collect", "--lookback-days", "14"])
 
     assert result == 0
     output = capsys.readouterr().out

@@ -14,7 +14,6 @@ from urllib import error as urllib_error
 
 import pytest
 
-import src.cli_runtime as runtime_module
 import src.core.calibration_dashboard as calibration_dashboard_module
 import src.core.dashboard_export as dashboard_export_module
 import src.core.embedding_lineage as embedding_lineage_module
@@ -27,6 +26,7 @@ import src.eval.taxonomy_validation as taxonomy_validation_module
 import src.eval.vector_benchmark as vector_benchmark_module
 import src.processing.dry_run_pipeline as dry_run_pipeline_module
 import src.storage.database as database_module
+import tools.horadus.python.horadus_app_cli_runtime as runtime_module
 import tools.horadus.python.horadus_cli.ops_commands as ops_module
 from tools.horadus.python.horadus_cli.result import ExitCode
 
@@ -965,7 +965,7 @@ def test_runtime_payload_and_bridge_command_helpers(monkeypatch: pytest.MonkeyPa
     assert captured["command"] == [
         sys.executable,
         "-m",
-        "src.cli_runtime",
+        "tools.horadus.python.horadus_app_cli_runtime",
         "doctor",
         "--payload",
         '{"when": "2026-03-08T12:00:00+00:00"}',
@@ -1160,7 +1160,17 @@ def test_runtime_parser_and_main_cover_success_and_failure_paths(
     monkeypatch.setattr(runtime_module.settings, "DATABASE_URL", "")
     monkeypatch.setattr(runtime_module.settings, "REDIS_URL", "")
     monkeypatch.setattr(
-        sys, "argv", ["src.cli_runtime", "doctor", "--payload", '{"timeout_seconds": 0.1}']
+        sys,
+        "argv",
+        [
+            "tools.horadus.python.horadus_app_cli_runtime",
+            "doctor",
+            "--payload",
+            '{"timeout_seconds": 0.1}',
+        ],
     )
+    loaded_module = sys.modules.pop("tools.horadus.python.horadus_app_cli_runtime", None)
     with pytest.raises(SystemExit, match="0"):
-        runpy.run_module("src.cli_runtime", run_name="__main__")
+        runpy.run_module("tools.horadus.python.horadus_app_cli_runtime", run_name="__main__")
+    if loaded_module is not None:
+        sys.modules["tools.horadus.python.horadus_app_cli_runtime"] = loaded_module

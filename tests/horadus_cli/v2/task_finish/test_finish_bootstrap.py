@@ -376,6 +376,42 @@ def test_ensure_finish_pull_request_recovers_from_create_race_by_requerying_bran
     )
 
 
+def test_ensure_finish_pull_request_uses_created_pr_url_when_requery_is_stale(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _finish_config()
+    context = _finish_context()
+    _patch_generated_pr_metadata(monkeypatch, task_id=context.task_id)
+
+    pr_list_calls = 0
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        nonlocal pr_list_calls
+        if args[:2] == ["git", "ls-remote"]:
+            return _completed(args)
+        if args[:3] == ["gh", "pr", "list"]:
+            pr_list_calls += 1
+            return _completed(args, stdout="[]")
+        if args[:3] == ["gh", "pr", "create"]:
+            return _completed(args, stdout="https://example.invalid/pr/326\n")
+        raise AssertionError(args)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    result = task_commands_module._ensure_finish_pull_request(
+        context=context,
+        config=config,
+        dry_run=False,
+    )
+
+    assert isinstance(result, task_commands_module.FinishPullRequestBootstrap)
+    assert result.pr_url == "https://example.invalid/pr/326"
+    assert result.created_pr is True
+    assert result.lines[-1] == (
+        "Continuing with the newly created PR URL while branch lookup catches up."
+    )
+
+
 def test_find_open_branch_pull_request_blocks_on_query_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -294,6 +294,22 @@ def _ensure_finish_pull_request(
             generated_body=pr_body,
         )
 
+    created_pr_url = next(
+        (line.strip() for line in create_result.stdout.splitlines() if line.strip()),
+        "",
+    )
+    if create_result.returncode == 0 and created_pr_url:
+        lines.append("Continuing with the newly created PR URL while branch lookup catches up.")
+        return FinishPullRequestBootstrap(
+            pr_url=created_pr_url,
+            remote_branch_exists=remote_branch_exists,
+            pushed_branch=pushed_branch,
+            created_pr=True,
+            lines=lines,
+            generated_title=pr_title,
+            generated_body=pr_body,
+        )
+
     blocker_message = (
         f"unable to create a PR for branch `{context.branch_name}`."
         if create_result.returncode != 0

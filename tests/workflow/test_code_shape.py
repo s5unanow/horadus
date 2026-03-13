@@ -213,6 +213,28 @@ def test_measure_python_file_tracks_nested_class_members(tmp_path: Path) -> None
     assert measurement.member_lines["Outer.Inner.run"] == 2
 
 
+def test_measure_python_file_counts_decorator_lines_in_member_span(tmp_path: Path) -> None:
+    _write_file(
+        tmp_path,
+        "src/decorated.py",
+        "\n".join(
+            [
+                "def deco(func):",
+                "    return func",
+                "",
+                "@deco",
+                "def run() -> int:",
+                "    return 1",
+            ]
+        )
+        + "\n",
+    )
+
+    measurement = measure_python_file(tmp_path, tmp_path / "src" / "decorated.py")
+
+    assert measurement.member_lines["run"] == 3
+
+
 def test_run_code_shape_check_honors_excludes_and_flags_missing_override_targets(
     tmp_path: Path,
 ) -> None:

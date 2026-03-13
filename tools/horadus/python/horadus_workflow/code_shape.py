@@ -116,8 +116,11 @@ def _collect_member_lines(tree: ast.AST) -> dict[str, int]:
             if isinstance(child, ast.ClassDef):
                 visit(child, (*prefix, child.name))
             elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                start_lineno = (
+                    child.decorator_list[0].lineno if child.decorator_list else child.lineno
+                )
                 end_lineno = getattr(child, "end_lineno", child.lineno)
-                member_lines[_member_name(prefix, child.name)] = end_lineno - child.lineno + 1
+                member_lines[_member_name(prefix, child.name)] = end_lineno - start_lineno + 1
 
     visit(tree, ())
     return member_lines

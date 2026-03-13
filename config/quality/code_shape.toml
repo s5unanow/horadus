@@ -11,13 +11,13 @@ exclude_globs = ["**/__pycache__/**"]
 [[legacy_files]]
 path = "src/api/routes/feedback.py"
 [legacy_files.member_max_lines]
-"create_event_feedback" = 112
-"list_review_queue" = 142
+"create_event_feedback" = 113
+"list_review_queue" = 143
 
 [[legacy_files]]
 path = "src/api/routes/reports.py"
 [legacy_files.member_max_lines]
-"get_calibration_dashboard" = 140
+"get_calibration_dashboard" = 141
 
 [[legacy_files]]
 path = "src/api/routes/trends.py"
@@ -205,9 +205,9 @@ max_lines = 1332
 [[legacy_files]]
 path = "tests/unit/processing/test_pipeline_orchestrator_additional.py"
 [legacy_files.member_max_lines]
-"test_pipeline_domain_helpers_cover_fallbacks_and_parsers" = 217
-"test_process_after_tier1_covers_existing_embedding_degraded_hold_budget_and_error_paths" = 193
-"test_replay_and_impact_helpers_cover_queue_and_prediction_logic" = 198
+"test_pipeline_domain_helpers_cover_fallbacks_and_parsers" = 218
+"test_process_after_tier1_covers_existing_embedding_degraded_hold_budget_and_error_paths" = 194
+"test_replay_and_impact_helpers_cover_queue_and_prediction_logic" = 199
 
 [[legacy_files]]
 path = "tests/unit/workers/test_celery_setup.py"

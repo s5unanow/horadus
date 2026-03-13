@@ -458,8 +458,9 @@ Likewise, the curated legacy policy allowlist should be an explicit repo-owned
 registry of paths used during migration. It should not rely on implicit globbing
 or ad hoc document discovery. The preferred implementation is a dedicated
 implement-mode policy registry defined alongside the existing workflow metadata
-in `src/core/repo_workflow.py`, not reuse of the broader workflow/completion
-reference-path tuples that include README/skill-oriented material.
+in `tools/horadus/python/horadus_workflow/repo_workflow.py`, not reuse of the
+broader workflow/completion reference-path tuples that include README/skill-
+oriented material.
 
 For workflow/completion/fallback policy, retrieval must follow the repo's
 existing source-of-truth hierarchy rather than invent a new one. The effective
@@ -467,8 +468,8 @@ policy view should:
 
 - respect `AGENTS.md` precedence, with runtime/code truth above docs
 - treat `AGENTS.md` plus canonical runbook/docs as the normative policy sources
-- use `src/core/repo_workflow.py` for executable command metadata and the narrow
-  code-backed policy fragments it already owns
+- use `tools/horadus/python/horadus_workflow/repo_workflow.py` for executable
+  command metadata and the narrow code-backed policy fragments it already owns
 - combine those sources into a smaller implementation payload without claiming
   that `repo_workflow.py` replaces the broader repo policy contract
 
@@ -629,7 +630,8 @@ prerequisite for fixing the current noise problem.
   currently reference plain `context-pack`, including `AGENTS.md`, `README.md`,
   `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`,
   `ops/skills/horadus-cli/references/commands.md`, and the workflow reference
-  metadata in `src/core/repo_workflow.py`, so autonomous implementation flows
+  metadata in `tools/horadus/python/horadus_workflow/repo_workflow.py`, so
+  autonomous implementation flows
   use the implement-mode context-pack entry point instead of the legacy broad
   default
 - add parity/regression tests for at least one unaffected caller and one
@@ -658,12 +660,12 @@ prerequisite for fixing the current noise problem.
   including labeled candidate paths and `match_reason`
 - define and ship the phase-1 code-backed policy payload contract, including
   which statements and reference-path registries are emitted from
-  `src/core/repo_workflow.py`
+  `tools/horadus/python/horadus_workflow/repo_workflow.py`
 - source policy retrieval from an explicit curated allowlist of legacy policy
   docs until policy-doc front matter is introduced more broadly
 - define that curated legacy policy allowlist as an explicit repo-owned registry
   before wiring it into `implement` mode, preferably by extending
-  `src/core/repo_workflow.py`
+  `tools/horadus/python/horadus_workflow/repo_workflow.py`
 - add a doc-specific extractor for `tasks/CURRENT_SPRINT.md` so `implement`
   mode can retrieve the active task line/block, associated blocker metadata,
   and relevant sprint-scope constraints without pulling the full sprint file

@@ -286,3 +286,4 @@
 - TASK-318: Decompose `validate_assessment_artifacts.py` Into Focused Internal Modules ✅
 - TASK-319: Decompose `ops_commands.py` Into Focused Internal Modules ✅
 - TASK-320: Tighten `ops_commands.py` Internal Seams After the Initial Split ✅
+- TASK-321: Remove obsolete `src/core` workflow shims ✅

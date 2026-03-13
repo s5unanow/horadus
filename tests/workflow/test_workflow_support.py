@@ -28,13 +28,7 @@ def _fake_subprocess_error(*_args: object, **_kwargs: object) -> SimpleNamespace
     return SimpleNamespace(returncode=1, stdout="", stderr="boom")
 
 
-def test_compatibility_wrappers_alias_new_owners() -> None:
-    assert importlib.import_module("src.core.docs_freshness") is importlib.import_module(
-        "tools.horadus.python.horadus_workflow.docs_freshness"
-    )
-    assert importlib.import_module("src.core.repo_workflow") is importlib.import_module(
-        "tools.horadus.python.horadus_workflow.repo_workflow"
-    )
+def test_legacy_cli_package_is_removed() -> None:
     assert importlib.util.find_spec("src.horadus_cli") is None
 
 

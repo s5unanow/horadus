@@ -30,6 +30,10 @@ Implementation note:
   - Mechanical repo-policy verifier; success requires `local-main-synced`.
 - `uv run --no-sync horadus tasks finish TASK-XXX`
   - Canonical task-completion lifecycle command.
+  - Owns canonical missing-branch push and missing-PR bootstrap when it can
+    derive policy-valid PR metadata.
+  - Deduplicates bootstrap by open head branch first; `Primary-Task` PR search
+    remains a lifecycle recovery surface.
   - If the PR head changes during or between finish runs, the CLI refreshes
     stale older-head review state, owns any fresh re-review request for the
     new head, and starts a fresh review window; the agent should address

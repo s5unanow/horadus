@@ -15,6 +15,27 @@ from tests.horadus_cli.v2.task_finish.helpers import (
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _compat_branch_pr_lookup(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(task_commands_module, "_find_task_pull_request", lambda **_kwargs: None)
+
+    def compat_lookup(
+        *, branch_name: str, config: task_commands_module.FinishConfig
+    ) -> tuple[int, dict[str, object], list[str]] | task_commands_module.BranchPullRequest | None:
+        result = task_commands_module._run_command(
+            [config.gh_bin, "pr", "view", branch_name, "--json", "url"]
+        )
+        if result.returncode != 0:
+            return None
+        return task_commands_module.BranchPullRequest(
+            number=0,
+            url=result.stdout.strip(),
+            head_ref_name=branch_name,
+        )
+
+    monkeypatch.setattr(task_commands_module, "_find_open_branch_pull_request", compat_lookup)
+
+
 def test_finish_task_data_blocks_for_missing_required_command(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -127,7 +148,7 @@ def test_finish_task_data_blocks_when_task_closure_state_is_not_on_pr_head(
     assert "- tasks/BACKLOG.md still contains the task as open." in lines
 
 
-def test_finish_task_data_blocks_when_branch_not_pushed(
+def test_finish_task_data_dry_run_reports_bootstrap_for_missing_branch_and_pr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
@@ -144,12 +165,19 @@ def test_finish_task_data_blocks_when_branch_not_pushed(
     )
     monkeypatch.setattr(
         task_commands_module,
-        "ensure_docker_ready",
-        lambda **_kwargs: task_commands_module.DockerReadiness(
-            ready=True,
-            attempted_start=False,
-            supported_auto_start=True,
-            lines=["Docker is ready for the next required `git push` pre-push integration gate."],
+        "_resolve_finish_pr_title",
+        lambda **_kwargs: "TASK-258: canonical finish",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_pr_body",
+        lambda **_kwargs: "Primary-Task: TASK-258\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-258 (Primary-Task)"
         ),
     )
 
@@ -168,12 +196,18 @@ def test_finish_task_data_blocks_when_branch_not_pushed(
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
-    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=False)
+    exit_code, data, lines = task_commands_module.finish_task_data("TASK-258", dry_run=True)
 
-    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert exit_code == task_commands_module.ExitCode.OK
     assert data["branch_name"] == "codex/task-258-canonical-finish"
-    assert "unable to locate a PR" in lines[0]
-    assert "git push -u origin codex/task-258-canonical-finish" in lines[1]
+    assert data["generated_pr_title"] == "TASK-258: canonical finish"
+    assert data["generated_pr_body"] == "Primary-Task: TASK-258\n"
+    assert lines[0] == "Finishing TASK-258 from codex/task-258-canonical-finish"
+    assert "Dry run: would push `codex/task-258-canonical-finish` to `origin`." in lines
+    assert (
+        "Dry run: would create PR `TASK-258: canonical finish` for "
+        "`codex/task-258-canonical-finish`."
+    ) in lines
 
 
 def test_finish_task_data_blocks_when_local_remote_pr_heads_drift(
@@ -300,7 +334,7 @@ def test_finish_task_data_blocks_when_push_gate_docker_is_not_ready(
     assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
     assert data["docker_ready"] is False
     assert "Docker is not ready for the next required push gate." in lines[0]
-    assert "git push -u origin codex/task-261-docker-readiness" in lines[1]
+    assert "Make Docker ready, then re-run `horadus tasks finish TASK-261`." in lines[1]
     assert lines[-1] == "Docker auto-start did not make the daemon ready before timeout."
 
 
@@ -320,6 +354,23 @@ def test_finish_task_data_dry_run_does_not_attempt_docker_auto_start(
         ),
     )
     docker_calls: list[str] = []
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_pr_title",
+        lambda **_kwargs: "TASK-261: docker readiness",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_finish_pr_body",
+        lambda **_kwargs: "Primary-Task: TASK-261\n",
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_pr_scope_guard",
+        lambda **_kwargs: _completed(
+            ["scope"], stdout="PR scope guard passed: TASK-261 (Primary-Task)"
+        ),
+    )
     monkeypatch.setattr(
         task_commands_module,
         "ensure_docker_ready",
@@ -351,10 +402,15 @@ def test_finish_task_data_dry_run_does_not_attempt_docker_auto_start(
 
     exit_code, data, lines = task_commands_module.finish_task_data("TASK-261", dry_run=True)
 
-    assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
+    assert exit_code == task_commands_module.ExitCode.OK
     assert docker_calls == []
     assert data["branch_name"] == "codex/task-261-docker-readiness"
-    assert "git push -u origin codex/task-261-docker-readiness" in lines[1]
+    assert data["generated_pr_title"] == "TASK-261: docker readiness"
+    assert "Dry run: would push `codex/task-261-docker-readiness` to `origin`." in lines
+    assert (
+        "Dry run: would create PR `TASK-261: docker readiness` for "
+        "`codex/task-261-docker-readiness`."
+    ) in lines
 
 
 def test_finish_task_data_blocks_when_required_checks_do_not_pass(

@@ -25,6 +25,11 @@ Implementation note:
   let the CLI refresh stale older-head review state and request fresh
   current-head review when needed; the agent should fix feedback, push, and
   rerun `finish`, not post a duplicate manual re-review request.
+- Let `horadus tasks finish TASK-XXX` own canonical missing-branch push and
+  missing-PR bootstrap when it can derive policy-valid PR metadata; do not
+  jump to manual `git push` / `gh pr create` unless the CLI explicitly blocks.
+- For bootstrap dedupe, treat the open head-branch PR as authoritative; task-id
+  PR lookup remains a recovery surface rather than the creation dedupe key.
 - Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
   needed workflow step yet, or when the CLI explicitly tells you a manual
   recovery step is required.

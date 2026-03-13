@@ -125,12 +125,15 @@ task branches.
 
 13. `uv run --no-sync horadus tasks finish TASK-XXX`
 When: canonical task-completion command; finishes the current task PR lifecycle
-(branch/task verification -> pushed branch/PR checks -> current-head review gate
+(branch/task verification -> missing-branch push / missing-PR bootstrap when
+needed -> pushed branch/PR checks -> current-head review gate
 -> merge -> local `main` sync -> strict lifecycle verification).
 Task PRs must be titled `TASK-XXX: short summary` and include exactly one
 `Primary-Task: TASK-XXX` line in the body.
 If the next required action is a Docker-gated push and Docker is not ready, the
 command attempts supported local auto-start before returning a blocker.
+When bootstrapping, `finish` deduplicates by open head branch first; task-id PR
+search remains lifecycle recovery, not the bootstrap dedupe key.
 If you rerun `finish` after pushing a new PR head, the CLI refreshes stale
 older-head review state, requests fresh current-head review when needed, and
 starts a fresh review window before waiting again.
@@ -145,6 +148,7 @@ Compatibility wrapper:
 Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
 needed workflow step yet, or when the CLI explicitly tells you a manual
 recovery step is required.
+A missing PR alone is no longer a manual-recovery signal for `finish`.
 
 14. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 When: record a real Horadus workflow gap or forced fallback in a structured

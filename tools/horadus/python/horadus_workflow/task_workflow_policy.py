@@ -93,6 +93,16 @@ COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
         "`horadus tasks finish TASK-XXX` completes successfully."
     ),
     (
+        "`horadus tasks finish` owns canonical missing-branch push and "
+        "missing-PR bootstrap when it can derive policy-valid PR metadata; a "
+        "missing PR alone is not a manual-recovery signal."
+    ),
+    (
+        "`horadus tasks finish` deduplicates bootstrap by open head branch "
+        "first; `Primary-Task` PR search remains a lifecycle recovery "
+        "surface, not the bootstrap dedupe key."
+    ),
+    (
         "The default review-gate timeout for `horadus tasks finish` is 600 "
         "seconds (10 minutes). Agents must not override it unless a human "
         "explicitly requested a different timeout."
@@ -148,7 +158,8 @@ FALLBACK_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     (
         "Before concluding that no result exists, try one or two sensible "
         "recovery steps such as broader Horadus queries, alternate filters, "
-        "or the documented manual recovery path."
+        "or the documented manual recovery path. A missing PR alone is not a "
+        "manual-recovery signal for `horadus tasks finish`."
     ),
     (
         "If a forced fallback is still required after those recovery attempts, "

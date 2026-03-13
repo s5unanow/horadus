@@ -71,3 +71,4 @@
 - `TASK-312` Split `tests/horadus_cli/v2/test_cli.py` into Focused Ownership-Aligned Modules ✅
 - `TASK-313` Split `task_workflow_core.py` Into Focused Workflow Modules ✅
 - `TASK-314` Split Finish Workflow Into an Independent Package ✅
+- `TASK-315` Split `docs_freshness.py` Into Focused Workflow Modules ✅

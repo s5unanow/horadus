@@ -15,6 +15,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from tools.horadus.python.horadus_workflow.docs_freshness import (
+    render_docs_freshness_issues,
     run_docs_freshness_check,
 )
 
@@ -65,17 +66,10 @@ def main() -> int:
         planning_artifact_paths=tuple(args.planning_artifact) or None,
     )
 
-    if result.warnings:
-        print("Docs freshness warnings:")
-        for issue in result.warnings:
-            path_fragment = f" ({issue.path})" if issue.path else ""
-            print(f"- [{issue.rule_id}] {issue.message}{path_fragment}")
+    for line in render_docs_freshness_issues(result):
+        print(line)
 
     if result.errors:
-        print("Docs freshness errors:")
-        for issue in result.errors:
-            path_fragment = f" ({issue.path})" if issue.path else ""
-            print(f"- [{issue.rule_id}] {issue.message}{path_fragment}")
         return 2
 
     if args.fail_on_warnings and result.warnings:

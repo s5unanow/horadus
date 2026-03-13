@@ -821,10 +821,12 @@ def test_ops_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch)
     subparsers = parser.add_subparsers(dest="command")
     ops_module.register_ops_commands(subparsers)
 
-    args = parser.parse_args(["eval", "benchmark", "--config", "baseline", "--format", "json"])
+    args = parser.parse_args(
+        ["eval", "benchmark", "--config", "tier1-gpt5-nano-low", "--format", "json"]
+    )
     assert args.command == "eval"
     assert args.eval_command == "benchmark"
-    assert args.config == ["baseline"]
+    assert args.config == ["tier1-gpt5-nano-low"]
     assert args.output_format == "json"
 
     args = parser.parse_args(["agent", "smoke", "--dry-run"])
@@ -850,6 +852,8 @@ def test_ops_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch)
         parser.parse_args(["eval", "benchmark", "--config", "unknown"])
     with pytest.raises(SystemExit, match="2"):
         parser.parse_args(["eval", "replay", "--champion-config", "unknown"])
+    args = parser.parse_args(["eval", "embedding-lineage"])
+    assert args.target_model == "text-embedding-3-small"
 
 
 def test_runtime_result_wraps_runtime_bridge_payload(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -997,6 +1001,11 @@ def test_ops_json_default_and_env_defaults_cover_edge_cases(
     monkeypatch.chdir(tmp_path)
     assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"
     assert ops_module._default_api_key() == "dotenv-secret"
+    (tmp_path / ".env").write_text(
+        "API_HOST=10.0.0.5\nAPI_PORT=9100\nAPI_KEY_FILE=agent.key\nEMBEDDING_MODEL=text-embedding-3-large\n",
+        encoding="utf-8",
+    )
+    assert ops_module._default_embedding_model() == "text-embedding-3-large"
     monkeypatch.setenv("API_HOST", "  ")
     assert ops_module._env_default("API_HOST", "0.0.0.0") == "0.0.0.0"
     assert ops_module._default_agent_base_url() == "http://10.0.0.5:9100"
@@ -1004,8 +1013,10 @@ def test_ops_json_default_and_env_defaults_cover_edge_cases(
     monkeypatch.setenv("API_HOST", "127.0.0.1")
     monkeypatch.setenv("API_PORT", "9000")
     monkeypatch.setenv("API_KEY", "shell-secret")
+    monkeypatch.setenv("EMBEDDING_MODEL", "text-embedding-3-small")
     assert ops_module._default_agent_base_url() == "http://127.0.0.1:9000"
     assert ops_module._default_api_key() == "shell-secret"
+    assert ops_module._default_embedding_model() == "text-embedding-3-small"
 
 
 def test_runtime_module_helper_functions_cover_result_serialization_and_namespace() -> None:

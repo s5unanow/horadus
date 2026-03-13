@@ -352,7 +352,7 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
             "--max-items",
             "100",
             "--config",
-            "baseline",
+            "tier2-gpt5-mini-medium",
             "--require-human-verified",
             "--dispatch-mode",
             "batch",
@@ -367,7 +367,7 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
     assert args.output_dir == "ai/eval/results"
     assert args.trend_config_dir == "config/trends"
     assert args.max_items == 100
-    assert args.config == ["baseline"]
+    assert args.config == ["tier2-gpt5-mini-medium"]
     assert args.require_human_verified is True
     assert args.dispatch_mode == "batch"
     assert args.request_priority == "flex"
@@ -520,6 +520,23 @@ def test_build_parser_accepts_eval_embedding_lineage_command() -> None:
     assert args.eval_command == "embedding-lineage"
     assert args.target_model == "text-embedding-3-large"
     assert args.fail_on_mixed is True
+
+
+def test_build_parser_uses_default_embedding_lineage_model_from_dotenv(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    (tmp_path / ".env").write_text(
+        "EMBEDDING_MODEL=text-embedding-3-large\n",  # pragma: allowlist secret
+        encoding="utf-8",
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("EMBEDDING_MODEL", raising=False)
+
+    parser = _build_parser()
+    args = parser.parse_args(["eval", "embedding-lineage"])
+
+    assert args.target_model == "text-embedding-3-large"
 
 
 def test_build_parser_accepts_eval_source_freshness_command() -> None:

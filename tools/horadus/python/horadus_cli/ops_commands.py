@@ -32,7 +32,9 @@ _BENCHMARK_CONFIG_CHOICES = (
     "baseline",
     "alternative",
     "tier1-gpt5-nano-minimal",
+    "tier1-gpt5-nano-low",
     "tier2-gpt5-mini-low",
+    "tier2-gpt5-mini-medium",
 )
 _REPLAY_CONFIG_CHOICES = ("stable", "fast_lower_threshold")
 
@@ -330,6 +332,10 @@ def _default_api_key() -> str:
     return _read_secret_file(secret_path) or ""
 
 
+def _default_embedding_model() -> str:
+    return _config_default("EMBEDDING_MODEL", "text-embedding-3-small")
+
+
 def _default_agent_base_url() -> str:
     host = _config_default("API_HOST", "127.0.0.1")
     port = _config_default("API_PORT", "8000")
@@ -587,7 +593,7 @@ def register_ops_commands(subparsers: Any) -> None:
     _ops_leaf_options(eval_embedding_lineage_parser)
     eval_embedding_lineage_parser.add_argument(
         "--target-model",
-        default=_env_default("EMBEDDING_MODEL", "text-embedding-3-small"),
+        default=_default_embedding_model(),
         help="Embedding model that should be considered canonical.",
     )
     eval_embedding_lineage_parser.add_argument(

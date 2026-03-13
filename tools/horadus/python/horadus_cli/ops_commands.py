@@ -28,6 +28,13 @@ _INTERNAL_ARG_KEYS = {
     "pipeline_command",
     "trends_command",
 }
+_BENCHMARK_CONFIG_CHOICES = (
+    "baseline",
+    "alternative",
+    "tier1-gpt5-nano-minimal",
+    "tier2-gpt5-mini-low",
+)
+_REPLAY_CONFIG_CHOICES = ("stable", "fast_lower_threshold")
 
 
 def _change_arrow(change: float) -> str:
@@ -408,6 +415,7 @@ def register_ops_commands(subparsers: Any) -> None:
     eval_benchmark_parser.add_argument(
         "--config",
         action="append",
+        choices=_BENCHMARK_CONFIG_CHOICES,
         help=(
             "Benchmark config name (repeat to run multiple). Defaults to the baseline "
             "set (baseline, alternative); GPT-5 candidates require explicit "
@@ -511,11 +519,13 @@ def register_ops_commands(subparsers: Any) -> None:
     eval_replay_parser.add_argument(
         "--champion-config",
         default="stable",
+        choices=_REPLAY_CONFIG_CHOICES,
         help="Champion replay policy config.",
     )
     eval_replay_parser.add_argument(
         "--challenger-config",
         default="fast_lower_threshold",
+        choices=_REPLAY_CONFIG_CHOICES,
         help="Challenger replay policy config.",
     )
     eval_replay_parser.add_argument("--trend-id", default=None, help="Optional trend UUID scope.")

@@ -846,6 +846,11 @@ def test_ops_leaf_options_and_register_commands(monkeypatch: pytest.MonkeyPatch)
     assert "Defaults to the baseline set (baseline, alternative)" in help_text
     assert "GPT-5 candidates require explicit --config selection" in help_text
 
+    with pytest.raises(SystemExit, match="2"):
+        parser.parse_args(["eval", "benchmark", "--config", "unknown"])
+    with pytest.raises(SystemExit, match="2"):
+        parser.parse_args(["eval", "replay", "--champion-config", "unknown"])
+
 
 def test_runtime_result_wraps_runtime_bridge_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(

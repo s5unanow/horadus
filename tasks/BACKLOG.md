@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-330`.
+- Next available task IDs start at `TASK-331`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -48,6 +48,10 @@ unauthenticated liveness endpoint.
 
 **Assessment-Ref**:
 - `artifacts/assessments/security/daily/2026-03-02.md` (`FINDING-2026-03-02-security-public-health-metrics`)
+
+**Dependency Note**:
+- Reuse the privileged-route policy from `TASK-200` rather than defining a
+  second standalone authorization model for operational endpoints.
 
 **Exec Plan**: Required (`tasks/exec_plans/README.md`)
 **Files**: `src/api/middleware/auth.py`, `src/api/routes/health.py`, `src/api/routes/metrics.py`, `docs/DEPLOYMENT.md`, `tests/`
@@ -96,6 +100,10 @@ reloads and point the server at unexpected YAML paths.
 **Assessment-Ref**:
 - User review intake 2026-03-05, Reviewer 1 finding 1
 
+**Dependency Note**:
+- Coordinate with `TASK-200` so config-sync privilege checks reuse the
+  canonical privileged-authorization model instead of adding a one-off rule.
+
 **Files**: `src/api/routes/trends.py`, `src/core/trend_config.py`, `docs/API.md`, `tests/`
 
 **Acceptance Criteria**:
@@ -113,6 +121,10 @@ reloads and point the server at unexpected YAML paths.
 The runtime auth layer currently distinguishes only “valid API key” vs
 “invalid API key”. Most write/control routes remain effectively admin-capable
 for any authenticated client, which violates least privilege.
+
+This task is the policy owner for privileged route authorization. Related
+hardening tasks such as `TASK-189`, `TASK-199`, and `TASK-208` should reuse the
+resulting model rather than defining separate route-local auth semantics.
 
 **Assessment-Ref**:
 - User review intake 2026-03-05, Reviewer 1 finding 1
@@ -268,6 +280,12 @@ GDELT and Telegram source lookup still keys on mutable display names. Renaming a
 configured source can create a new `sources` row and reset watermarks, fetch
 history, and failure tracking.
 
+**Scope Note**:
+- The GDELT half is independently actionable now.
+- The Telegram half remains bounded by `TASK-080` and the current
+  launch-scope exclusion; if that continues to block implementation, split the
+  Telegram follow-up into a separate task instead of stalling the GDELT fix.
+
 **Assessment-Ref**:
 - User review intake 2026-03-05, Reviewer 3 finding 3
 
@@ -290,6 +308,11 @@ to unauthenticated clients in non-development environments.
 
 **Assessment-Ref**:
 - User review intake 2026-03-05, Reviewer 3 finding 4
+
+**Dependency Note**:
+- Reuse the environment/authorization policy from `TASK-200` and `TASK-189`
+  rather than creating docs-only auth behavior that drifts from the rest of
+  the operational surface.
 
 **Files**: `src/api/middleware/auth.py`, `src/api/main.py`, `src/cli.py`, `docs/DEPLOYMENT.md`, `tests/`
 
@@ -329,7 +352,7 @@ classification. That reintroduces the semantic drift the earlier task removed.
 Replace raw line-grep style search hits in triage bundles with deduplicated,
 task-aware matches that are directly useful to agents during backlog review.
 
-**Files**: `src/horadus_cli/v2/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tools/horadus/python/horadus_workflow/task_repo.py`, `tests/horadus_cli/`, `tests/workflow/`
+**Files**: `tools/horadus/python/horadus_cli/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tools/horadus/python/horadus_workflow/task_repo.py`, `tests/horadus_cli/`, `tests/workflow/`
 
 **Acceptance Criteria**:
 - [ ] Convert keyword/path/proposal search hits into task-aware records with `task_id`, title, status, and matched fields
@@ -348,7 +371,7 @@ The current triage bundle returns long flat assessment path lists. Replace that
 with compact summaries that preserve recent-signal value without flooding agent
 contexts.
 
-**Files**: `src/horadus_cli/v2/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tests/horadus_cli/`, `tests/workflow/`
+**Files**: `tools/horadus/python/horadus_cli/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tests/horadus_cli/`, `tests/workflow/`
 
 **Acceptance Criteria**:
 - [ ] Group recent assessments by role with counts and latest artifact metadata
@@ -644,82 +667,6 @@ spent on the most decision-relevant work first.
 
 ---
 
-### TASK-251: Normalize Task Specs Around Explicit Input/Output Contracts
-**Priority**: P2 (Medium)
-**Estimate**: 2-4 hours
-
-Current backlog items already have acceptance criteria, but spec quality still
-depends too much on author judgment. Tighten the task/spec template so new work
-is consistently framed in terms of inputs, outputs, non-goals, and acceptance
-criteria that an agent can execute against without inflating scope.
-
-**Canonical Example**: `tasks/specs/275-finish-review-gate-timeout.md`
-
-**Files**: `tasks/BACKLOG.md`, `tasks/specs/`, `tasks/exec_plans/TEMPLATE.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/`, `tests/unit/`
-
-**Scope Boundary**:
-- `TASK-251` owns the baseline task/spec contract:
-  problem statement, inputs, outputs, non-goals, acceptance criteria, and one
-  canonical repo-owned example/reference for that baseline structure.
-- `TASK-298` owns the added Phase -1 planning gates, Gate Outcomes / Waivers,
-  applicability rules, warn-only planning validation, and any `context-pack` /
-  runbook surfacing specific to those gates, including any gate-specific
-  example overlays built on top of the same baseline example rather than a
-  second canonical example.
-
-**Acceptance Criteria**:
-- [ ] Define a canonical task/spec shape for new implementation work: problem statement, inputs, outputs, non-goals, and acceptance criteria
-- [ ] Add a concrete repo artifact for that shape, such as `tasks/specs/TEMPLATE.md` or one canonical example spec referenced from workflow docs
-- [ ] Update the repo templates or documented examples so future specs follow the same structure by default
-- [ ] Keep the contract lightweight enough for small tasks while still being explicit for complex tasks
-- [ ] Surface the structure in task-context tooling or docs so agents see it without reading the full backlog
-
----
-
-### TASK-252: Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-The repo already has a fast local iteration gate in `make agent-check`. Preserve
-that fast path and add a separate canonical post-task local gate so agents have
-one command for “done with this task locally” checks without blurring the
-current fast/full split.
-
-**Files**: `Makefile`, `scripts/run_with_backpressure.sh`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/`, `tests/unit/`
-
-**Acceptance Criteria**:
-- [ ] Keep `make agent-check` positioned as the fast local iteration gate
-- [ ] Add a separate canonical post-task local gate command (for example `make local-gate` or `make task-gate`)
-- [ ] The new gate runs the intended post-task checks in one documented sequence without replacing the fast gate
-- [ ] `horadus tasks context-pack` suggested validation commands are updated to reflect the new canonical post-task gate rather than the old validation flow
-- [ ] Output remains backpressure-friendly and clearly identifies which sub-step failed
-- [ ] Docs explain when to use the fast gate versus the new post-task gate
-
----
-
-### TASK-254: Refine and Unify Agent-Facing Context Entry Points
-**Priority**: P2 (Medium)
-**Estimate**: 1-2 hours
-**Status**: Narrow after `TASK-329`; use `README.md`, `docs/AGENT_RUNBOOK.md`, and `context-pack` as the default navigation layer unless a separate gap remains
-
-Agents benefit from a short routing document, but a second full-project
-`README_AI.md` would duplicate existing truth in `AGENTS.md`, architecture docs,
-runtime code, and existing runbook/context-pack entry points. Refine those
-entrypoints into a more coherent agent-facing navigation layer without creating
-another canonical project summary to keep in sync.
-
-**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `README.md`, `src/horadus_cli/v2/`, `tools/horadus/python/horadus_workflow/docs_freshness.py`, `scripts/check_docs_freshness.py`, `tests/workflow/`, `tests/horadus_cli/`
-
-**Acceptance Criteria**:
-- [ ] Refine or unify the existing agent-facing entrypoints (`AGENTS.md`, runbook, context-pack guidance) into a clearer navigation path
-- [ ] Define one short agent-facing entrypoint/index that links to the current runtime, sprint, architecture, data model, and workflow sources of truth
-- [ ] Explicitly state that runtime code/tests remain authoritative over the agent-facing index
-- [ ] Avoid duplicating detailed architecture, schema, or ops content that already lives elsewhere
-- [ ] `horadus tasks context-pack` remains aligned with the unified agent-facing navigation rather than pointing to stale or divergent workflow guidance
-- [ ] Add or extend drift checks only if needed to keep the index’s core pointers accurate
-
----
-
 ### TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces
 **Priority**: P2 (Medium)
 **Estimate**: 3-5 hours
@@ -743,44 +690,22 @@ actually improves agent and human comprehension.
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours
 
-The repo already expects tests and docs updates, but the completion contract is
-still partly social. Make the “task is done” rules more explicit in tooling so
-agents reliably add tests, rerun local gates, and update docs when behavior or
-workflow changes.
+The repo now has explicit lifecycle checks, a canonical `local-gate`, and
+agent-facing workflow guidance, but the remaining completion contract is still
+partly social. Tighten the post-task path around the gaps that are not already
+mechanically enforced: required validation selection, docs update expectations,
+and explicit N/A handling when a task legitimately skips a normal gate.
 
-**Files**: `AGENTS.md`, `Makefile`, `scripts/finish_task_pr.sh`, `src/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `tests/unit/`
+**Files**: `AGENTS.md`, `Makefile`, `scripts/finish_task_pr.sh`, `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `docs/AGENT_RUNBOOK.md`, `tests/unit/`, `tests/workflow/`
 
 **Acceptance Criteria**:
-- [ ] Task-finish guidance or tooling explicitly requires relevant tests for code changes unless a documented N/A condition applies
-- [ ] Task-finish guidance or tooling explicitly requires rerunning the canonical post-task local gate before merge
+- [ ] The remaining implicit completion rules are enumerated explicitly, separating already-enforced requirements from still-social expectations
+- [ ] Task-finish guidance or tooling requires relevant tests for code changes unless a documented N/A condition applies
+- [ ] Task-finish guidance or tooling keeps `horadus tasks local-gate --full` as the canonical post-task local gate without reintroducing duplicate gate commands
 - [ ] Task-finish guidance or tooling explicitly requires the local integration gate where the task touches integration-covered paths or push/PR workflow requires it
 - [ ] Task-finish guidance or tooling calls out documentation updates when behavior, workflow, or operator-facing contracts changed
 - [ ] `horadus tasks context-pack` suggested validation commands stay aligned with the effective completion contract when that contract changes
-- [ ] The resulting contract is visible in agent-facing workflow docs, not just implicit in scattered instructions
-
----
-
-### TASK-267: Add a Thin Repo Workflow Skill Routed to AGENTS and Horadus
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-**Status**: Deferred after `TASK-329`; keep using the runbook plus `ops/skills/horadus-cli/` unless a separate repo-workflow skill becomes concretely necessary
-
-Agents benefit from a short procedural workflow aid, but the repo already
-defines `AGENTS.md` as the authoritative workflow policy and expects
-agent-facing materials to route to canonical sources rather than redefine them.
-Add a thin repo workflow skill that helps agents execute the canonical flow
-while staying anchored to `AGENTS.md` and the `horadus` CLI.
-
-**Files**: `ops/skills/repo-workflow/SKILL.md`, `ops/skills/repo-workflow/references/`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `tests/workflow/test_docs_freshness.py`, `scripts/`
-
-**Acceptance Criteria**:
-- [ ] Add a dedicated repo workflow skill that provides short procedural guidance for the canonical task lifecycle
-- [ ] The skill explicitly states that `AGENTS.md` remains the authoritative workflow policy and `horadus` remains the canonical executable workflow surface
-- [ ] The skill routes agents to existing canonical commands and policy sections instead of restating the full workflow contract in independent prose
-- [ ] The skill explains when to use `horadus`, when wrapper commands such as `make` are acceptable, and when raw `git`/`gh` is still necessary as an escape hatch
-- [ ] The skill covers start flow, local validation flow, completion flow, and blocker escalation only at the level needed to steer agents to the correct canonical commands/docs
-- [ ] The skill stays aligned with `docs/AGENT_RUNBOOK.md` and `ops/skills/horadus-cli/SKILL.md` without creating a second standalone workflow spec
-- [ ] Add or extend a drift check so the workflow skill cannot silently diverge from canonical workflow guidance
+- [ ] Tests cover the intended pass path plus at least one documented N/A or blocker path so the contract does not regress back into implicit policy
 
 ---
 
@@ -804,28 +729,6 @@ Tier-1 and Tier-2 telemetry and benchmark artifacts.
 
 ---
 
-### TASK-274: Standardize Task PR Titles on `TASK-XXX: ...`
-**Priority**: P2 (Medium)
-**Estimate**: 1-3 hours
-
-Recent task PRs mix task-prefixed titles and conventional-commit titles even
-though task branches, PR body metadata, and squash-merge history are all task-
-oriented surfaces. Standardize the PR title convention on
-`TASK-XXX: short summary` and add enforcement so branch/task scope, PR body
-metadata, and PR title stay aligned.
-
-**Files**: `AGENTS.md`, `README.md`, `.github/pull_request_template.md`, `docs/AGENT_RUNBOOK.md`, `src/horadus_cli/`, `scripts/`, `tests/unit/`
-
-**Acceptance Criteria**:
-- [ ] Canonical repo workflow docs explicitly require task PR titles in the form `TASK-XXX: short summary`
-- [ ] PR templates and agent-facing guidance show the same task-title convention instead of leaving title format implicit
-- [ ] Local and/or CI workflow validation fails when a task PR title does not match the branch task id or required `TASK-XXX:` prefix
-- [ ] The rule coexists cleanly with conventional-commit commit messages instead of replacing commit-level naming policy
-- [ ] Task-completion workflow output and examples no longer suggest mixed PR-title conventions
-- [ ] Tests cover valid task PR titles and representative invalid cases such as `feat(scope): ...` on a task branch
-
----
-
 ### TASK-286: Add Local Pre-Push Review via Codex CLI `[REQUIRES_HUMAN]`
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours
@@ -839,13 +742,39 @@ Implement this on the canonical `horadus tasks ...` workflow surface after
 `TASK-299` lands the isolated `v2` implementation behind that command, rather
 than reopening the frozen legacy `v1` task CLI files directly.
 
-**Files**: `src/horadus_cli/`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `tests/unit/`
+Investigation note (2026-03-14, local `codex-cli 0.111.0`):
+- top-level `codex review` and `codex exec review` both exist and can review
+  `--uncommitted`, `--base <branch>`, or `--commit <sha>` diffs
+- plain `codex exec` is the better fit when the caller needs custom review
+  instructions, such as a story-specific rubric or a post-implementation
+  focused review before PR creation
+- the dedicated `review` subcommands currently reject a positional prompt when
+  combined with `--uncommitted` or `--base`, so the repo wrapper must not rely
+  on promptable `codex review` semantics for the default path
+- `codex exec review -o <file>` was unreliable in local probing; prefer
+  `--json` event parsing for that path, or plain `codex exec -o <file>` for
+  promptable review flows
+- machine-readable output files must be written outside the reviewed repo so
+  the output artifact does not become an untracked part of the diff being
+  reviewed
+
+**Files**: `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `tests/unit/`, `tests/workflow/`
 
 **Acceptance Criteria**:
 - [ ] The repo exposes a canonical command for local pre-push review via Codex
   CLI under `horadus tasks ...`, with clear failure behavior when `codex` is
   unavailable
-- [ ] The command can review the current branch diff against a configured base branch without requiring a remote PR
+- [ ] The default command path can review the current branch diff against a
+  configured base branch without requiring a remote PR
+- [ ] The workflow supports an optional promptable review mode for agents that
+  need custom instructions, such as reviewing a generated story or requesting
+  a post-implementation review before PR creation
+- [ ] The implementation documents and tests the current `codex-cli` contract
+  differences between `codex review`, `codex exec review`, and plain
+  `codex exec`, including the prompt limitation on the dedicated review
+  subcommands
+- [ ] Any machine-readable output path used by the workflow avoids polluting
+  the reviewed diff with generated review artifacts
 - [ ] Agent-facing docs and skill surfaces describe when to use the local Codex review step versus remote PR review
 - [ ] Tests cover the happy path plus the missing-`codex` or invalid-context blocker path
 
@@ -862,36 +791,12 @@ before finalizing that execution queue. This task is human-gated because it
 decides how the RFC becomes actual repo work and may change scope boundaries,
 priorities, and rollout order.
 
-**Files**: `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `PROJECT_STATUS.md`, `tasks/specs/288-rfc-001-implementation-breakdown.md`, `docs/rfc/001-agent-context-retrieval.md`
+**Files**: `tasks/BACKLOG.md`, `tasks/CURRENT_SPRINT.md`, `tasks/specs/288-rfc-001-implementation-breakdown.md`, `docs/rfc/001-agent-context-retrieval.md`
 
 **Acceptance Criteria**:
 - [ ] RFC-001 is decomposed into concrete implementation-task candidates with clear scope boundaries
 - [ ] The proposed breakdown identifies any human decisions needed for sequencing or scope cuts
 - [ ] The task stops for human review/approval before finalizing the follow-up execution queue
-
----
-
-### TASK-289: Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-**Status**: Behavior already shipped; preserve during `TASK-299`
-
-The current `horadus tasks finish` implementation already supports rerunning
-from `main` with an explicit task id. Keep that behavior as part of the
-canonical baseline while `TASK-300` / `TASK-299` migrate the implementation
-onto the versioned shell and isolated `v2` modules.
-
----
-
-### TASK-291: Make `horadus tasks finish` Exit When the PR Has Already Merged
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-**Status**: Behavior already shipped; preserve during `TASK-299`
-
-The current `horadus tasks finish` implementation already converges when the
-PR has reached `MERGED`. Keep that behavior as part of the canonical baseline
-while `TASK-300` / `TASK-299` migrate the implementation onto the versioned
-shell and isolated `v2` modules.
 
 ---
 

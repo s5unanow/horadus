@@ -21,17 +21,18 @@
 - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations
 - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
 - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
-- `TASK-251` Normalize Task Specs Around Explicit Input/Output Contracts
-- `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
-- `TASK-254` Refine and Unify Agent-Facing Context Entry Points — narrow only if a separate navigation gap remains after `TASK-329`
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
-- `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...`
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue `[REQUIRES_HUMAN]` — human review/approval pending before follow-up tasks are finalized
 - `TASK-080` Telegram Collector Task Wiring `[REQUIRES_HUMAN]` — manual execution/approval pending (carried from Sprint 3 close)
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development `[REQUIRES_HUMAN]`
 - `TASK-190` Harden admin-key compare + API key store file permissions `[REQUIRES_HUMAN]`
+
+## Descoped This Sprint
+
+- `TASK-254` Refine and Unify Agent-Facing Context Entry Points — descoped after `TASK-329`; keep `README.md`, `docs/AGENT_RUNBOOK.md`, and `context-pack` as the default navigation layer
+- `TASK-267` Add a Thin Repo Workflow Skill Routed to AGENTS and Horadus — descoped after `TASK-329`; keep using the runbook plus `ops/skills/horadus-cli/` unless a concrete gap emerges later
 
 ## Human Blocker Metadata
 
@@ -86,3 +87,7 @@
 - `TASK-327` Preserve current-head PR-summary thumbs-up across `finish` reruns ✅
 - `TASK-328` Add Code-Shape Guardrails to Prevent Module Sprawl ✅
 - `TASK-329` Right-Size `AGENTS.md` Around Policy Invariants and Thin Helper Surfaces ✅
+- `TASK-251` Normalize Task Specs Around Explicit Input/Output Contracts ✅
+- `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check` ✅
+- `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...` ✅
+- `TASK-330` Trim stale backlog items and archive already-landed workflow tasks ✅

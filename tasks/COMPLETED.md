@@ -295,3 +295,11 @@
 - TASK-327: Preserve current-head PR-summary thumbs-up across `finish` reruns ✅
 - TASK-328: Add Code-Shape Guardrails to Prevent Module Sprawl ✅
 - TASK-329: Right-Size `AGENTS.md` Around Policy Invariants and Thin Helper Surfaces ✅
+- TASK-251: Normalize Task Specs Around Explicit Input/Output Contracts ✅
+- TASK-252: Add a Canonical Post-Task Local Gate Without Overloading `make agent-check` ✅
+- TASK-274: Standardize Task PR Titles on `TASK-XXX: ...` ✅
+- TASK-330: Trim stale backlog items and archive already-landed workflow tasks ✅
+- TASK-289: Make `horadus tasks finish` Resume or Fail Cleanly When Branch Context Drifts ✅
+- TASK-291: Make `horadus tasks finish` Exit When the PR Has Already Merged ✅
+- TASK-254: Refine and Unify Agent-Facing Context Entry Points (descoped after `TASK-329`)
+- TASK-267: Add a Thin Repo Workflow Skill Routed to AGENTS and Horadus (descoped after `TASK-329`)

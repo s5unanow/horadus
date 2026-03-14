@@ -4,6 +4,10 @@
 
 Short command index for day-to-day agent/operator work.
 
+Use this file for executable command references and quick operator notes.
+Use `AGENTS.md` for canonical workflow policy and completion rules, and use
+`README.md` for repo navigation plus setup pointers.
+
 CLI implementation ownership now lives entirely under
 `tools/horadus/python/horadus_cli/`. The installed `horadus` entrypoint points
 directly at that package, and app-backed CLI commands cross the explicit

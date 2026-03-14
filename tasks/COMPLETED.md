@@ -294,3 +294,4 @@
 - TASK-326: Let `horadus tasks finish` Bootstrap Missing PRs Canonically ✅
 - TASK-327: Preserve current-head PR-summary thumbs-up across `finish` reruns ✅
 - TASK-328: Add Code-Shape Guardrails to Prevent Module Sprawl ✅
+- TASK-329: Right-Size `AGENTS.md` Around Policy Invariants and Thin Helper Surfaces ✅

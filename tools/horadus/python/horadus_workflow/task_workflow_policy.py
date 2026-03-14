@@ -54,7 +54,6 @@ CANONICAL_TASK_WORKFLOW_COMMANDS: tuple[WorkflowCommand, ...] = (
 )
 
 WORKFLOW_REFERENCE_PATHS: tuple[str, ...] = (
-    "AGENTS.md",
     "docs/AGENT_RUNBOOK.md",
     "ops/skills/horadus-cli/SKILL.md",
     "ops/skills/horadus-cli/references/commands.md",

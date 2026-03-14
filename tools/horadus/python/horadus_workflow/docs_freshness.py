@@ -181,6 +181,7 @@ _THIN_WORKFLOW_SURFACES: tuple[str, ...] = (
 )
 _THIN_SURFACE_FORBIDDEN_POLICY_MARKERS: tuple[str, ...] = (
     "Do not claim a task is complete, done, or finished until",
+    "`horadus tasks finish` deduplicates bootstrap by open head branch first",
     "The default review-gate timeout for `horadus tasks finish` is 600",
     "Do not proactively suggest changing the `horadus tasks finish` review timeout",
     "Apply these guardrails only when changing shared workflow helpers,",

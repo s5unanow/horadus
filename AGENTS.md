@@ -2,19 +2,16 @@
 
 This repo is a hobby “geopolitical intelligence” backend (not enterprise scale; expect **≤ 20 trends**). Despite being personal, it aims to be **mature and production-shaped**, adhering to **enterprise best practices where reasonable** (tests, migrations, type safety, observability, safe defaults, cost controls) without premature over-engineering.
 
-## What This Project Is
-
+Core operating model:
 - Headless backend that ingests public news/posts, clusters them into **events**, and updates **trend probabilities** using **log-odds**.
 - Key principle: **LLM extracts structured signals; deterministic code computes probability deltas**.
 
-## Where To Look First (Fast Orientation)
+## Project Router
 
-1. `tasks/CURRENT_SPRINT.md` — active execution queue (authoritative for in-progress work)
-2. `tasks/BACKLOG.md` — canonical open task specifications and acceptance criteria (triage/planning; not required for most execution)
-3. `tasks/COMPLETED.md` — compact completion index
-4. `docs/ARCHITECTURE.md` — system design and runtime flow
-5. `docs/DATA_MODEL.md` — schema and entity definitions
-6. `docs/AGENT_RUNBOOK.md` — canonical day-to-day command index
+- Active execution context: `tasks/CURRENT_SPRINT.md`, the task-specific spec or exec plan, and `tasks/COMPLETED.md`
+- Runtime and design truth: `src/`, `alembic/`, `tests/`, `docs/ARCHITECTURE.md`, and `docs/DATA_MODEL.md`
+- Thin helper/reference surfaces: `README.md` for repo navigation and setup pointers, `docs/AGENT_RUNBOOK.md` for the command index
+- Ownership hotspots: `tools/horadus/python/horadus_workflow/` owns repo workflow policy/tooling, and `tools/horadus/python/horadus_cli/` owns the installed `horadus` command surface
 
 ## Canonical Source-of-Truth Hierarchy
 
@@ -34,28 +31,10 @@ Status precedence:
 3. `tasks/BACKLOG.md` for open task definitions
 4. `PROJECT_STATUS.md` only as a pointer to archived history
 
-## Repo Map
-
-- `src/api/` — FastAPI app and routes
-- `src/core/` — domain logic (trend math, config)
-- `src/storage/` — DB engine + SQLAlchemy models
-- `src/ingestion/` — collectors (may be stubbed early)
-- `src/processing/` — LLM + clustering + pipeline (may be stubbed early)
-- `src/workers/` — async/background workers (may be stubbed early)
-- `tools/horadus/python/horadus_workflow/` — repo workflow/tooling ownership (task/PR/docs governance)
-- `tools/horadus/python/horadus_cli/` — Horadus CLI ownership (parser, command wiring, result rendering, workflow adapters)
-- `tools/horadus/python/horadus_app_cli_runtime.py` — app-owned runtime bridge for CLI commands that need business/runtime modules
-- `config/` — YAML configuration (`trends/`, `sources/`)
-- `ai/` — LLM assets (prompts, evaluation data, benchmark results)
-- `docs/` — architecture, glossary, ADRs (`docs/adr/`)
-- `tasks/` — backlog, sprint, and detailed specs (`tasks/specs/`)
-- `tests/` — unit/integration tests
 ## Working Agreements (Personal-Scale)
 
 - Prefer **simple, debuggable** solutions over distributed complexity.
-- Optimize for: **bounded cost**, **traceability**, and **iterability**.
-- Keep **production-like discipline**: clear module boundaries, migrations, idempotency, retries/backoff, structured logs, and tests for core logic.
-- Avoid adding infrastructure unless it enables a concrete next milestone.
+- Optimize for **bounded cost**, **traceability**, and **iterability** while keeping production-like discipline on tests, migrations, retries, idempotency, and observability.
 
 ## Code Shape Guardrails
 
@@ -90,6 +69,7 @@ Before starting work:
 - Read `tasks/CURRENT_SPRINT.md` and any relevant `tasks/specs/*.md`.
 - Skim `docs/ARCHITECTURE.md` and `docs/DATA_MODEL.md` for context.
 - Run tests relevant to your change (at minimum unit tests).
+- Use `README.md` for repo navigation/setup pointers and `docs/AGENT_RUNBOOK.md` for the current command index; keep this file focused on policy and invariants.
 
 Execution context policy (keep it small):
 - For implementation work, prefer `tasks/CURRENT_SPRINT.md` plus the specific task spec it references; avoid reading all of `tasks/BACKLOG.md` unless you are doing triage/planning.
@@ -189,40 +169,6 @@ After completing work:
   - Split backlog edits to a separate task branch only when: scope is unrelated, the original task is already merged/closed, or an urgent blocker requires immediate isolation.
   - Before merge, verify backlog updates were either included in-branch or explicitly split with rationale in PR/task notes.
 
-## Implementation Pointers (Keep It Lean)
-
-- Clustering threshold semantics: check `src/processing/event_clusterer.py` and `docs/ARCHITECTURE.md`.
-- Probability math and log-odds helpers: `src/core/trend_engine.py`.
-- LLM budget/retry/failover policy: `src/processing/` and ADRs in `docs/adr/`.
-- Treat this file as a router; keep detailed implementation recipes in module docs/runbooks.
-
-## Development Commands
-
-- Repo workflow CLI:
-  - `uv run --no-sync horadus tasks preflight`
-  - `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
-  - `uv run --no-sync horadus tasks context-pack TASK-XXX`
-  - `make agent-check`
-  - `uv run --no-sync horadus tasks local-gate --full`
-  - `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
-  - `uv run --no-sync horadus tasks finish TASK-XXX`
-  - `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
-- `uv run --no-sync horadus tasks list-active --format json`
-  - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
-- Record friction only for real Horadus workflow gaps or forced fallback, not
-  routine success cases. Entries live under gitignored
-  `artifacts/agent/horadus-cli-feedback/` and should not be read during normal
-  task execution.
-- Use raw `git` / `gh` commands only when the Horadus CLI does not expose the
-  needed workflow step yet, or when the CLI explicitly tells you a manual
-  recovery step is required. A review-gate timeout handled inside
-  `horadus tasks finish` is not a manual-recovery signal, and neither is a
-  missing PR when `finish` can bootstrap it canonically.
-- Tests: `pytest tests/ -v`
-- Dev API: `uvicorn src.api.main:app --reload`
-- Format/lint: `ruff format src/ tools/ tests/` and `ruff check src/ tools/ tests/`
-- Typecheck: `mypy src/ tools/horadus/python`
-
 ## Git Conventions
 
 Branch naming:
@@ -238,12 +184,3 @@ Commit hygiene:
 - Keep commits atomic (one logical change).
 - Include `TASK-XXX` in body/footer when applicable.
 - Prefer subject ≤ 50 chars; wrap body at ~72 chars.
-
-## Environment Variables
-
-Copy `.env.example` to `.env`. LLM provider selection is documented in `docs/adr/002-llm-provider.md`.
-
-Typical required values:
-- `DATABASE_URL`
-- `REDIS_URL`
-- `OPENAI_API_KEY` (don’t commit real keys)

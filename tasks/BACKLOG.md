@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-329`.
+- Next available task IDs start at `TASK-330`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -700,6 +700,7 @@ current fast/full split.
 ### TASK-254: Refine and Unify Agent-Facing Context Entry Points
 **Priority**: P2 (Medium)
 **Estimate**: 1-2 hours
+**Status**: Narrow after `TASK-329`; use `README.md`, `docs/AGENT_RUNBOOK.md`, and `context-pack` as the default navigation layer unless a separate gap remains
 
 Agents benefit from a short routing document, but a second full-project
 `README_AI.md` would duplicate existing truth in `AGENTS.md`, architecture docs,
@@ -762,6 +763,7 @@ workflow changes.
 ### TASK-267: Add a Thin Repo Workflow Skill Routed to AGENTS and Horadus
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours
+**Status**: Deferred after `TASK-329`; keep using the runbook plus `ops/skills/horadus-cli/` unless a separate repo-workflow skill becomes concretely necessary
 
 Agents benefit from a short procedural workflow aid, but the repo already
 defines `AGENTS.md` as the authoritative workflow policy and expects

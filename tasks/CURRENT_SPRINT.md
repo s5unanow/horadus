@@ -23,7 +23,7 @@
 - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
 - `TASK-251` Normalize Task Specs Around Explicit Input/Output Contracts
 - `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check`
-- `TASK-254` Refine and Unify Agent-Facing Context Entry Points
+- `TASK-254` Refine and Unify Agent-Facing Context Entry Points — narrow only if a separate navigation gap remains after `TASK-329`
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
@@ -85,3 +85,4 @@
 - `TASK-326` Let `horadus tasks finish` Bootstrap Missing PRs Canonically ✅
 - `TASK-327` Preserve current-head PR-summary thumbs-up across `finish` reruns ✅
 - `TASK-328` Add Code-Shape Guardrails to Prevent Module Sprawl ✅
+- `TASK-329` Right-Size `AGENTS.md` Around Policy Invariants and Thin Helper Surfaces ✅

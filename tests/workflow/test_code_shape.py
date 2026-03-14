@@ -235,6 +235,30 @@ def test_measure_python_file_counts_decorator_lines_in_member_span(tmp_path: Pat
     assert measurement.member_lines["run"] == 3
 
 
+def test_measure_python_file_keeps_max_span_for_duplicate_member_names(tmp_path: Path) -> None:
+    _write_file(
+        tmp_path,
+        "src/duplicate.py",
+        "\n".join(
+            [
+                "class Example:",
+                "    @property",
+                "    def value(self) -> int:",
+                "        return 1",
+                "",
+                "    @value.setter",
+                "    def value(self, new_value: int) -> None:",
+                "        pass",
+            ]
+        )
+        + "\n",
+    )
+
+    measurement = measure_python_file(tmp_path, tmp_path / "src" / "duplicate.py")
+
+    assert measurement.member_lines["Example.value"] == 3
+
+
 def test_run_code_shape_check_honors_excludes_and_flags_missing_override_targets(
     tmp_path: Path,
 ) -> None:

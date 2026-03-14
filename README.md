@@ -2,6 +2,14 @@
 
 A headless backend for collecting, classifying, and analyzing news to track geopolitical trend probabilities.
 
+## Repo Navigation
+
+- Canonical workflow policy: `AGENTS.md`
+- Command index: `docs/AGENT_RUNBOOK.md`
+- Active task ledgers: `tasks/CURRENT_SPRINT.md`, `tasks/BACKLOG.md`, `tasks/COMPLETED.md`
+- System design and schema: `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`
+- Runtime truth for implementation questions: `src/`, `alembic/`, `tests/`
+
 ## Features
 
 - **Multi-source ingestion**: RSS feeds, GDELT, Telegram channels
@@ -45,6 +53,11 @@ python3 scripts/seed_trends.py
 # Start API server
 make run
 ```
+
+Workflow/setup helpers:
+- Use `docs/AGENT_RUNBOOK.md` for the current command index.
+- Copy `.env.example` to `.env`; LLM provider selection lives in `docs/adr/002-llm-provider.md`.
+- Typical local values include `DATABASE_URL`, `REDIS_URL`, and `OPENAI_API_KEY`.
 
 ### Start Workers
 

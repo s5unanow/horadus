@@ -30,15 +30,7 @@ Implementation note:
   - Mechanical repo-policy verifier; success requires `local-main-synced`.
 - `uv run --no-sync horadus tasks finish TASK-XXX`
   - Canonical task-completion lifecycle command.
-  - Owns canonical missing-branch push and missing-PR bootstrap when it can
-    derive policy-valid PR metadata.
-  - Deduplicates bootstrap by open head branch first; `Primary-Task` PR search
-    remains a lifecycle recovery surface.
-  - If the PR head changes during or between finish runs, the CLI refreshes
-    stale older-head review state, owns any fresh re-review request for the
-    new head, and starts a fresh review window; the agent should address
-    feedback, push changes, and rerun `horadus tasks finish TASK-XXX`.
-  - For merge/review policy and timeout semantics, read `AGENTS.md`.
+  - For merge/review policy, timeout semantics, and blocker handling, read `AGENTS.md`.
 - `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
   - Appends one structured workflow friction entry under the gitignored path
     `artifacts/agent/horadus-cli-feedback/entries.jsonl`.

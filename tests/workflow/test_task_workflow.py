@@ -122,6 +122,7 @@ def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> 
     first_command = task_workflow_policy_module.CANONICAL_TASK_WORKFLOW_COMMANDS[0]
 
     assert first_command.render("TASK-999") == "uv run --no-sync horadus tasks preflight"
+    assert "AGENTS.md" not in task_workflow_policy_module.WORKFLOW_REFERENCE_PATHS
     assert task_workflow_policy_module.canonical_task_workflow_command_templates()[0] == (
         "uv run --no-sync horadus tasks preflight"
     )

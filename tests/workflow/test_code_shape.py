@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -19,6 +20,34 @@ def _write_file(repo_root: Path, relative_path: str, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def _init_git_repo(repo_root: Path) -> None:
+    subprocess.run(["git", "init"], cwd=repo_root, check=True, capture_output=True, text=True)
+    subprocess.run(
+        ["git", "config", "user.name", "Code Shape Tests"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    subprocess.run(
+        ["git", "config", "user.email", "code-shape-tests@example.com"],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _track_paths(repo_root: Path, *relative_paths: str) -> None:
+    subprocess.run(
+        ["git", "add", *relative_paths],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
 def _write_policy(repo_root: Path, body: str) -> Path:
     policy_path = repo_root / "config" / "quality" / "code_shape.toml"
     policy_path.parent.mkdir(parents=True, exist_ok=True)
@@ -27,11 +56,13 @@ def _write_policy(repo_root: Path, body: str) -> Path:
 
 
 def test_run_code_shape_check_passes_for_files_within_budget(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
     _write_file(
         tmp_path,
         "src/app.py",
         "def ok() -> int:\n    return 1\n",
     )
+    _track_paths(tmp_path, "src/app.py")
     policy_path = _write_policy(
         tmp_path,
         """
@@ -54,6 +85,7 @@ exclude_globs = ["**/__pycache__/**"]
 
 
 def test_run_code_shape_check_flags_new_module_and_member_budget_violations(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
     _write_file(
         tmp_path,
         "src/app.py",
@@ -69,6 +101,7 @@ def test_run_code_shape_check_flags_new_module_and_member_budget_violations(tmp_
         )
         + "\n",
     )
+    _track_paths(tmp_path, "src/app.py")
     policy_path = _write_policy(
         tmp_path,
         """
@@ -92,6 +125,7 @@ exclude_globs = ["**/__pycache__/**"]
 
 
 def test_run_code_shape_check_allows_legacy_limits_but_blocks_regressions(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
     _write_file(
         tmp_path,
         "src/app.py",
@@ -108,6 +142,7 @@ def test_run_code_shape_check_allows_legacy_limits_but_blocks_regressions(tmp_pa
         )
         + "\n",
     )
+    _track_paths(tmp_path, "src/app.py")
     policy_path = _write_policy(
         tmp_path,
         """
@@ -158,11 +193,13 @@ max_lines = 7
 
 
 def test_run_code_shape_check_flags_stale_overrides(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
     _write_file(
         tmp_path,
         "src/app.py",
         "def ok() -> int:\n    return 1\n",
     )
+    _track_paths(tmp_path, "src/app.py")
     policy_path = _write_policy(
         tmp_path,
         """
@@ -191,6 +228,70 @@ max_lines = 25
     assert any(
         "member override is stale: ok now fits the default member budget" in line for line in lines
     )
+
+
+def test_run_code_shape_check_ignores_untracked_python_files(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
+    _write_file(tmp_path, "src/app.py", "def ok() -> int:\n    return 1\n")
+    _write_file(
+        tmp_path,
+        "src/debug_tmp.py",
+        "\n".join(
+            [
+                "def too_long() -> int:",
+                "    value = 0",
+                "    value += 1",
+                "    value += 1",
+                "    value += 1",
+                "    return value",
+            ]
+        )
+        + "\n",
+    )
+    _track_paths(tmp_path, "src/app.py")
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[budgets]
+production_module_lines = 4
+test_module_lines = 30
+production_function_lines = 4
+test_function_lines = 12
+
+[paths]
+include_roots = ["src", "tests"]
+exclude_globs = ["**/__pycache__/**"]
+""".strip(),
+    )
+
+    result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
+
+    assert result.issues == ()
+
+
+def test_run_code_shape_check_ignores_tracked_non_python_files(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
+    _write_file(tmp_path, "src/app.py", "def ok() -> int:\n    return 1\n")
+    _write_file(tmp_path, "src/notes.txt", "tracked but not python\n")
+    _track_paths(tmp_path, "src/app.py", "src/notes.txt")
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[budgets]
+production_module_lines = 4
+test_module_lines = 30
+production_function_lines = 4
+test_function_lines = 12
+
+[paths]
+include_roots = ["src", "tests"]
+exclude_globs = ["**/__pycache__/**"]
+""".strip(),
+    )
+
+    result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
+
+    assert result.issues == ()
 
 
 def test_measure_python_file_tracks_nested_class_members(tmp_path: Path) -> None:
@@ -262,8 +363,10 @@ def test_measure_python_file_keeps_max_span_for_duplicate_member_names(tmp_path:
 def test_run_code_shape_check_honors_excludes_and_flags_missing_override_targets(
     tmp_path: Path,
 ) -> None:
+    _init_git_repo(tmp_path)
     _write_file(tmp_path, "src/app.py", "def ok() -> int:\n    return 1\n")
     _write_file(tmp_path, "src/__pycache__/ignored.py", "def ignored() -> int:\n    return 1\n")
+    _track_paths(tmp_path, "src/app.py", "src/__pycache__/ignored.py")
     policy_path = _write_policy(
         tmp_path,
         """
@@ -301,12 +404,14 @@ max_lines = 25
 def test_run_code_shape_check_skips_pycache_without_glob_and_ignores_plain_statements(
     tmp_path: Path,
 ) -> None:
+    _init_git_repo(tmp_path)
     _write_file(
         tmp_path,
         "src/plain.py",
         "VALUE = 1\n\ndef ok() -> int:\n    return VALUE\n",
     )
     _write_file(tmp_path, "src/__pycache__/ignored.py", "def ignored() -> int:\n    return 1\n")
+    _track_paths(tmp_path, "src/plain.py", "src/__pycache__/ignored.py")
     policy_path = _write_policy(
         tmp_path,
         """

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import fnmatch
+import subprocess  # nosec B404
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,18 +90,24 @@ def _matches_any_glob(path: str, patterns: tuple[str, ...]) -> bool:
 
 
 def _iter_python_paths(repo_root: Path, policy: CodeShapePolicy) -> list[Path]:
+    completed = subprocess.run(  # nosec
+        ["git", "-C", str(repo_root), "ls-files", "--", *policy.include_roots],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
     paths: list[Path] = []
-    for include_root in policy.include_roots:
-        root = repo_root / include_root
-        if not root.exists():
+    for line in completed.stdout.splitlines():
+        relative = line.strip()
+        if not relative or not relative.endswith(".py"):
             continue
-        for path in root.rglob("*.py"):
-            relative = path.relative_to(repo_root).as_posix()
-            if _matches_any_glob(relative, policy.exclude_globs):
-                continue
-            if "__pycache__" in path.parts:
-                continue
-            paths.append(path)
+        if _matches_any_glob(relative, policy.exclude_globs):
+            continue
+        path = repo_root / relative
+        if "__pycache__" in path.parts or not path.exists():
+            continue
+        paths.append(path)
     return sorted(paths)
 
 

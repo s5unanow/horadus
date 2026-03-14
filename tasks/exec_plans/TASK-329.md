@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-03-14
-- Current state: In progress
+- Current state: Done
 - Planning Gates: Required — shared workflow-policy surface, helper-skill routing, and docs-freshness drift checks
 
 ## Goal (1-3 lines)

@@ -22,6 +22,7 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert [step.name for step in steps] == [
         "check-tracked-artifacts",
         "docs-freshness",
+        "code-shape",
         "ruff-format-check",
         "ruff-check",
         "mypy",
@@ -34,11 +35,12 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     ]
     assert steps[0].command == "./scripts/check_no_tracked_artifacts.sh"
     assert steps[1].command == "uv run --no-sync python scripts/check_docs_freshness.py"
-    assert steps[2].command == "uv run --no-sync ruff format src/ tools/ tests/ --check"
-    assert steps[5].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
-    assert steps[6].command == "./scripts/run_unit_coverage_gate.sh"
-    assert steps[9].command == "./scripts/test_integration_docker.sh"
-    assert steps[10].command == (
+    assert steps[2].command == "uv run --no-sync python scripts/check_code_shape.py"
+    assert steps[3].command == "uv run --no-sync ruff format src/ tools/ tests/ --check"
+    assert steps[6].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
+    assert steps[7].command == "./scripts/run_unit_coverage_gate.sh"
+    assert steps[10].command == "./scripts/test_integration_docker.sh"
+    assert steps[11].command == (
         "rm -rf dist build *.egg-info && "
         "uv run --no-sync --with build python -m build && "
         "uv run --no-sync --with twine twine check dist/*"
@@ -54,7 +56,10 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     assert "./scripts/run_unit_coverage_gate.sh" in precommit
     assert "stages: [pre-push]" in precommit
     assert "./scripts/run_unit_coverage_gate.sh" in ci_workflow
+    assert "python scripts/check_code_shape.py" in ci_workflow
     assert "--cov-fail-under=100" in ci_workflow
+    assert "code-shape: deps-dev" in makefile
+    assert "python scripts/check_code_shape.py" in makefile
     assert "test-unit-cov: deps-dev" in makefile
     assert "./scripts/run_unit_coverage_gate.sh" in makefile
 

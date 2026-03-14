@@ -45,6 +45,9 @@ than treating the backlog body as the permanent gate/waiver home.
 - `Integration-First Gate`:
   - Validation target:
   - Exercises:
+- `Code Shape Gate`: Triggered | Not applicable — if the task touches an
+  allowlisted oversized Python file, say whether it reduces the hotspot, keeps
+  it flat, or carries explicit follow-up debt
 - `Determinism Gate`: Triggered | Not applicable — short reason
 - `LLM Budget/Safety Gate`: Triggered | Not applicable — short reason
 - `Observability Gate`: Triggered | Not applicable — short reason

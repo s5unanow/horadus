@@ -132,6 +132,9 @@ jobs:
       - name: Check docs freshness consistency
         run: uv run --no-sync python scripts/check_docs_freshness.py
 
+      - name: Check code-shape budgets and ratchets
+        run: uv run --no-sync python scripts/check_code_shape.py
+
       - name: Validate eval taxonomy contract
         run: |
           uv run --no-sync horadus eval validate-taxonomy \

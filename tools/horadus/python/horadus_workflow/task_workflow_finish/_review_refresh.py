@@ -270,6 +270,7 @@ def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.Finish
         raise ValueError("Unexpected prior reviewer activity payload.")
 
     saw_current_head_review = False
+    saw_other_head_review = False
     for review in review_entries:
         user = review.get("user")
         if not isinstance(user, dict):
@@ -282,12 +283,16 @@ def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.Finish
             continue
         if commit_id == head_oid:
             saw_current_head_review = True
-    saw_current_head_request, _saw_other_head_request = _request_comment_state(
+        else:
+            saw_other_head_review = True
+    saw_current_head_request, saw_other_head_request = _request_comment_state(
         timeline_items=timeline_items,
         config=config,
         head_oid=head_oid,
     )
-    return not (saw_current_head_review or saw_current_head_request)
+    return (saw_other_head_review or saw_other_head_request) and not (
+        saw_current_head_review or saw_current_head_request
+    )
 
 
 __all__ = [

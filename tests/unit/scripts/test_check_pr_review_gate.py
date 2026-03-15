@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -298,8 +299,19 @@ def test_review_gate_accepts_current_head_pr_summary_thumbs_up_before_wait_windo
 ) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
+    state_path = tmp_path / "review-gate-state.json"
     head_started = (datetime.now(tz=UTC) - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
     signal_time = (datetime.now(tz=UTC) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    state_path.write_text(
+        json.dumps(
+            {
+                "example/repo#215#chatgpt-codex-connector[bot]": {
+                    "head_oid": "head-sha-215",
+                    "started_at": head_started,
+                }
+            }
+        )
+    )
     _write_executable(
         bin_dir / "gh",
         f"""#!/usr/bin/env bash
@@ -338,7 +350,10 @@ esac
     )
 
     result = _run_gate(
-        env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HORADUS_REVIEW_GATE_STATE_PATH": str(state_path),
+        },
         args=[
             "--pr-url",
             "https://example.invalid/pr/215",

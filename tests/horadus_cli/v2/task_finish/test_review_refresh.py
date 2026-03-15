@@ -669,7 +669,7 @@ def test_needs_pre_review_fresh_review_request_detects_plain_request_on_older_he
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
-        is True
+        is False
     )
 
 

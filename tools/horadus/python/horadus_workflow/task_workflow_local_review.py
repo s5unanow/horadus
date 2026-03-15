@@ -6,6 +6,7 @@ import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
@@ -185,7 +186,7 @@ def _write_raw_output(
     runs_dir = _local_review_runs_dir()
     runs_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-    path = runs_dir / f"{timestamp}-{provider}.txt"
+    path = runs_dir / f"{timestamp}-{provider}-{uuid4().hex}.txt"
     path.write_text(
         "\n".join(
             [

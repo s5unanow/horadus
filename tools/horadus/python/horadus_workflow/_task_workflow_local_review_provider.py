@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess  # nosec B404
 import time
+from typing import Final
 
 from tools.horadus.python.horadus_workflow import task_repo
 
@@ -14,6 +15,8 @@ from ._task_workflow_local_review_models import (
     LocalReviewParsedOutput,
     LocalReviewProviderRun,
 )
+
+_STDIN_PROMPT_PROVIDERS: Final[frozenset[str]] = frozenset({"claude", "gemini"})
 
 
 def _render_prompt_contract(*, instructions: str | None) -> str:
@@ -91,7 +94,6 @@ def _provider_command(
                 "text",
                 "--permission-mode",
                 "plan",
-                prompt,
             ],
             prompt,
         )
@@ -101,7 +103,7 @@ def _provider_command(
             [
                 "gemini",
                 "--prompt",
-                prompt,
+                "Review the full stdin payload and follow its contract exactly.",
                 "--approval-mode",
                 "plan",
                 "--output-format",
@@ -123,6 +125,12 @@ def _provider_command(
     )
 
 
+def _provider_stdin_text(provider: str, prompt: str) -> str | None:
+    if provider in _STDIN_PROMPT_PROVIDERS:
+        return prompt
+    return None
+
+
 def _execute_provider(
     provider: str,
     *,
@@ -131,13 +139,27 @@ def _execute_provider(
 ) -> LocalReviewProviderRun:
     command, prompt = _provider_command(provider, context=context, instructions=instructions)
     started = time.monotonic()
-    completed = subprocess.run(  # nosec B603
-        command,
-        cwd=task_repo.repo_root(),
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    try:
+        completed = subprocess.run(  # nosec B603
+            command,
+            cwd=task_repo.repo_root(),
+            input=_provider_stdin_text(provider, prompt),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except OSError as exc:
+        duration_seconds = time.monotonic() - started
+        return LocalReviewProviderRun(
+            provider=provider,
+            interface_kind=PROVIDER_INTERFACE_KIND[provider],
+            command=command,
+            prompt=prompt,
+            returncode=1,
+            stdout="",
+            stderr=str(exc),
+            duration_seconds=duration_seconds,
+        )
     duration_seconds = time.monotonic() - started
     return LocalReviewProviderRun(
         provider=provider,

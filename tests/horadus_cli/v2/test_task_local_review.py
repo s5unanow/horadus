@@ -335,7 +335,13 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
         stdout="hello\n",
         stderr="warn\n",
     )
+    second_raw_output_path = task_commands_module._write_raw_output(
+        provider="codex",
+        stdout="hello again\n",
+        stderr="warn again\n",
+    )
     assert raw_output_path.read_text(encoding="utf-8").startswith("provider=codex\n")
+    assert second_raw_output_path != raw_output_path
 
     context = task_commands_module.LocalReviewContext(
         current_branch="codex/task-286-local-review",
@@ -452,13 +458,16 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
 
-    monotonic_values = iter([10.0, 12.5])
+    monotonic_values = iter([10.0, 12.5, 20.0, 21.0, 30.0, 31.5, 40.0, 40.25])
     monkeypatch.setattr(task_commands_module.time, "monotonic", lambda: next(monotonic_values))
+    captured_runs: list[tuple[list[str], str | None]] = []
+
     monkeypatch.setattr(
         task_commands_module.subprocess,
         "run",
-        lambda command, **_kwargs: _completed(
-            command, stdout="HORADUS-LOCAL-REVIEW: no-findings\n"
+        lambda command, **kwargs: (
+            captured_runs.append((command, kwargs.get("input")))
+            or _completed(command, stdout="HORADUS-LOCAL-REVIEW: no-findings\n")
         ),
     )
     context = task_commands_module.LocalReviewContext(
@@ -475,6 +484,28 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     run = task_commands_module._execute_provider("codex", context=context, instructions=None)
     assert run.duration_seconds == 2.5
     assert run.command[:4] == ["codex", "exec", "review", "--base"]
+    claude_run = task_commands_module._execute_provider(
+        "claude", context=context, instructions=None
+    )
+    gemini_run = task_commands_module._execute_provider(
+        "gemini", context=context, instructions=None
+    )
+    assert claude_run.duration_seconds == 1.0
+    assert gemini_run.duration_seconds == 1.5
+    assert captured_runs[0][1] is None
+    assert captured_runs[1][1] == claude_run.prompt
+    assert captured_runs[2][1] == gemini_run.prompt
+
+    monkeypatch.setattr(
+        task_commands_module.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("argument list too long")),
+    )
+    failed_run = task_commands_module._execute_provider(
+        "claude", context=context, instructions=None
+    )
+    assert failed_run.returncode == 1
+    assert "argument list too long" in failed_run.stderr
 
     exit_code, data, lines = task_commands_module.local_review_data(
         provider="codex",

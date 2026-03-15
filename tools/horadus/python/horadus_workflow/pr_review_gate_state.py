@@ -5,6 +5,8 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 
+from tools.horadus.python.horadus_workflow import task_repo
+
 REVIEW_GATE_STATE_PATH_ENV = "HORADUS_REVIEW_GATE_STATE_PATH"
 
 
@@ -17,11 +19,23 @@ def _parse_github_timestamp(value: object) -> datetime | None:
         return None
 
 
+def _git_metadata_dir() -> Path:
+    dot_git_path = task_repo.repo_root() / ".git"
+    if dot_git_path.is_dir():
+        return dot_git_path
+    if dot_git_path.is_file():
+        gitdir_line = dot_git_path.read_text().strip()
+        prefix = "gitdir:"
+        if gitdir_line.startswith(prefix):
+            return (dot_git_path.parent / gitdir_line[len(prefix) :].strip()).resolve()
+    return dot_git_path
+
+
 def _review_gate_state_path() -> Path:
     override = os.environ.get(REVIEW_GATE_STATE_PATH_ENV)
     if override:
         return Path(override)
-    return Path(__file__).resolve().parents[4] / ".git" / "horadus" / "review_gate_windows.json"
+    return _git_metadata_dir() / "horadus" / "review_gate_windows.json"
 
 
 def _review_gate_state_key(*, repo: str, pr_number: int, reviewer_login: str) -> str:

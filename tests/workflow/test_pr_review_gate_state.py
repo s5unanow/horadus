@@ -163,14 +163,65 @@ def test_persisted_wait_window_started_at_returns_now_when_state_write_fails(
 
 def test_review_gate_state_path_defaults_under_repo_git_dir(
     monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
 ) -> None:
     monkeypatch.delenv("HORADUS_REVIEW_GATE_STATE_PATH", raising=False)
+    repo_root = tmp_path / "repo"
+    git_dir = repo_root / ".git"
+    git_dir.mkdir(parents=True)
+    monkeypatch.setattr(review_gate_state_module.task_repo, "repo_root", lambda: repo_root)
 
     state_path = review_gate_state_module._review_gate_state_path()
 
     assert state_path.name == "review_gate_windows.json"
     assert state_path.parent.name == "horadus"
     assert state_path.parent.parent.name == ".git"
+
+
+def test_review_gate_state_path_uses_gitdir_pointer_for_worktrees(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.delenv("HORADUS_REVIEW_GATE_STATE_PATH", raising=False)
+    repo_root = tmp_path / "repo"
+    worktree_git_dir = tmp_path / "git" / "worktrees" / "task-332"
+    repo_root.mkdir(parents=True)
+    worktree_git_dir.mkdir(parents=True)
+    (repo_root / ".git").write_text("gitdir: ../git/worktrees/task-332\n")
+    monkeypatch.setattr(review_gate_state_module.task_repo, "repo_root", lambda: repo_root)
+
+    state_path = review_gate_state_module._review_gate_state_path()
+
+    assert state_path == worktree_git_dir / "horadus" / "review_gate_windows.json"
+
+
+def test_review_gate_state_path_falls_back_when_git_pointer_is_malformed(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.delenv("HORADUS_REVIEW_GATE_STATE_PATH", raising=False)
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True)
+    (repo_root / ".git").write_text("not-a-gitdir-pointer\n")
+    monkeypatch.setattr(review_gate_state_module.task_repo, "repo_root", lambda: repo_root)
+
+    state_path = review_gate_state_module._review_gate_state_path()
+
+    assert state_path == repo_root / ".git" / "horadus" / "review_gate_windows.json"
+
+
+def test_review_gate_state_path_falls_back_when_dot_git_is_missing(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    monkeypatch.delenv("HORADUS_REVIEW_GATE_STATE_PATH", raising=False)
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True)
+    monkeypatch.setattr(review_gate_state_module.task_repo, "repo_root", lambda: repo_root)
+
+    state_path = review_gate_state_module._review_gate_state_path()
+
+    assert state_path == repo_root / ".git" / "horadus" / "review_gate_windows.json"
 
 
 def test_start_wait_window_delegates_with_utc_now(

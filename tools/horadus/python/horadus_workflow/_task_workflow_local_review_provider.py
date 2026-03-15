@@ -18,7 +18,7 @@ from ._task_workflow_local_review_models import (
 )
 
 _STDIN_PROMPT_PROVIDERS: Final[frozenset[str]] = frozenset({"claude", "gemini"})
-_CODEX_NO_FINDINGS_PATTERN: Final[re.Pattern[str]] = re.compile(
+_CODEX_NO_FINDINGS_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"\b("
     r"no\s+(?:findings|issues)(?:\s+found)?"
     r"|did\s+not\s+(?:find|identify)(?:\s+any)?\s+issues"
@@ -26,6 +26,10 @@ _CODEX_NO_FINDINGS_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"|no\s+blocking\s+issues"
     r"|looks\s+good\s+to\s+me"
     r")\b",
+    re.IGNORECASE,
+)
+_CODEX_FINDINGS_CONTRADICTION_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"\b(but|however|except|although|though)\b",
     re.IGNORECASE,
 )
 
@@ -210,11 +214,16 @@ def _parse_repo_contract_output(output_text: str) -> LocalReviewParsedOutput | N
 
 
 def _parse_codex_review_output(output_text: str) -> LocalReviewParsedOutput | None:
-    stripped = output_text.strip()
-    if not stripped:
+    non_empty_lines = [line.strip() for line in output_text.splitlines() if line.strip()]
+    if not non_empty_lines:
         return None
+    stripped = "\n".join(non_empty_lines)
     return LocalReviewParsedOutput(
-        findings_reported=_CODEX_NO_FINDINGS_PATTERN.search(stripped) is None,
+        findings_reported=not (
+            len(non_empty_lines) == 1
+            and _CODEX_NO_FINDINGS_LINE_PATTERN.search(non_empty_lines[0]) is not None
+            and _CODEX_FINDINGS_CONTRADICTION_PATTERN.search(non_empty_lines[0]) is None
+        ),
         review_body=stripped,
     )
 

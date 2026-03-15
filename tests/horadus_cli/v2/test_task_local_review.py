@@ -384,6 +384,12 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
     )
     assert codex_no_findings is not None
     assert codex_no_findings.findings_reported is False
+    codex_mixed_response = task_commands_module._parse_provider_output(
+        "codex",
+        "Looks good to me.\n- foo.py: found a real bug after the summary line.",
+    )
+    assert codex_mixed_response is not None
+    assert codex_mixed_response.findings_reported is True
     codex_findings = task_commands_module._parse_provider_output(
         "codex",
         "- tools/horadus/python/horadus_workflow/_task_workflow_local_review_provider.py: "

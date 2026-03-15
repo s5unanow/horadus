@@ -24,6 +24,19 @@ Implementation note:
   - Returns backlog block, sprint lines, matching specs, likely code areas, and the canonical workflow/validation commands for the task.
 - `make agent-check`
   - Fast inner-loop validation gate for lint, type-checking, and unit tests.
+- `uv run --no-sync horadus tasks local-review --format json`
+  - Runs an opt-in advisory local review against the current branch diff
+    without requiring PR state.
+  - Provider precedence is: `--provider`, then
+    `HORADUS_LOCAL_REVIEW_PROVIDER` from optional local-only `.env.harness`,
+    then the repo default `claude`.
+  - Auto-fallback is only for missing provider CLIs on `PATH` unless
+    `--allow-provider-fallback` is explicitly set.
+  - Keeps telemetry under the gitignored
+    `artifacts/agent/local-review/entries.jsonl` log, with optional raw output
+    under `artifacts/agent/local-review/runs/`.
+  - Use this before push when you want a local branch-diff review; keep remote
+    PR review and `horadus tasks finish` as the merge gate.
 - `uv run --no-sync horadus tasks local-gate --full`
   - Canonical CI-parity local validation gate before push/PR.
 - `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`

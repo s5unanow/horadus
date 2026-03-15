@@ -72,6 +72,38 @@ def test_build_parser_accepts_task_local_gate_command() -> None:
     assert args.full is True
 
 
+def test_build_parser_accepts_task_local_review_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "local-review",
+            "--provider",
+            "codex",
+            "--base",
+            "main",
+            "--instructions",
+            "Focus on workflow regressions.",
+            "--allow-provider-fallback",
+            "--save-raw-output",
+            "--usefulness",
+            "follow-up-changes",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "local-review"
+    assert args.provider == "codex"
+    assert args.base == "main"
+    assert args.instructions == "Focus on workflow regressions."
+    assert args.allow_provider_fallback is True
+    assert args.save_raw_output is True
+    assert args.usefulness == "follow-up-changes"
+    assert args.output_format == "json"
+
+
 def test_build_parser_accepts_task_safe_start_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(

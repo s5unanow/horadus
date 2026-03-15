@@ -26,6 +26,7 @@ EXPECTED_TASK_SUBCOMMANDS = sorted(
         "lifecycle",
         "list-active",
         "local-gate",
+        "local-review",
         "preflight",
         "record-friction",
         "safe-start",

@@ -52,6 +52,7 @@ env/
 # Environment & Secrets
 # -----------------------------------------------------------------------------
 .env
+.env.harness
 .env.local
 .env.*.local
 *.pem

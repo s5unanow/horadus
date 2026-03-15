@@ -729,57 +729,6 @@ Tier-1 and Tier-2 telemetry and benchmark artifacts.
 
 ---
 
-### TASK-286: Add Local Pre-Push Review via Codex CLI `[REQUIRES_HUMAN]`
-**Priority**: P2 (Medium)
-**Estimate**: 2-4 hours
-
-The repo currently relies on local gates plus remote PR review, but there is
-no first-class repo workflow step for running a separate Codex review against
-local branch changes before push. Add a repo-owned pre-push review command
-that wraps the local Codex CLI review flow so agents and humans can request a
-local review against unpushed branch diffs without relying on GitHub PR state.
-Implement this on the canonical `horadus tasks ...` workflow surface after
-`TASK-299` lands the isolated `v2` implementation behind that command, rather
-than reopening the frozen legacy `v1` task CLI files directly.
-
-Investigation note (2026-03-14, local `codex-cli 0.111.0`):
-- top-level `codex review` and `codex exec review` both exist and can review
-  `--uncommitted`, `--base <branch>`, or `--commit <sha>` diffs
-- plain `codex exec` is the better fit when the caller needs custom review
-  instructions, such as a story-specific rubric or a post-implementation
-  focused review before PR creation
-- the dedicated `review` subcommands currently reject a positional prompt when
-  combined with `--uncommitted` or `--base`, so the repo wrapper must not rely
-  on promptable `codex review` semantics for the default path
-- `codex exec review -o <file>` was unreliable in local probing; prefer
-  `--json` event parsing for that path, or plain `codex exec -o <file>` for
-  promptable review flows
-- machine-readable output files must be written outside the reviewed repo so
-  the output artifact does not become an untracked part of the diff being
-  reviewed
-
-**Files**: `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `ops/skills/horadus-cli/SKILL.md`, `ops/skills/horadus-cli/references/commands.md`, `tests/unit/`, `tests/workflow/`
-
-**Acceptance Criteria**:
-- [ ] The repo exposes a canonical command for local pre-push review via Codex
-  CLI under `horadus tasks ...`, with clear failure behavior when `codex` is
-  unavailable
-- [ ] The default command path can review the current branch diff against a
-  configured base branch without requiring a remote PR
-- [ ] The workflow supports an optional promptable review mode for agents that
-  need custom instructions, such as reviewing a generated story or requesting
-  a post-implementation review before PR creation
-- [ ] The implementation documents and tests the current `codex-cli` contract
-  differences between `codex review`, `codex exec review`, and plain
-  `codex exec`, including the prompt limitation on the dedicated review
-  subcommands
-- [ ] Any machine-readable output path used by the workflow avoids polluting
-  the reviewed diff with generated review artifacts
-- [ ] Agent-facing docs and skill surfaces describe when to use the local Codex review step versus remote PR review
-- [ ] Tests cover the happy path plus the missing-`codex` or invalid-context blocker path
-
----
-
 ### TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

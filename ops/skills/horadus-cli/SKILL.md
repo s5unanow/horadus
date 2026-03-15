@@ -35,6 +35,8 @@ Implementation note:
 - Canonical autonomous start: `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
 - Context pack: `uv run --no-sync horadus tasks context-pack TASK-XXX`
 - Fast iteration gate: `make agent-check`
+- Optional local review:
+  `uv run --no-sync horadus tasks local-review --format json`
 - Canonical local gate: `uv run --no-sync horadus tasks local-gate --full`
 - Lifecycle verifier: `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
 - Finish: `uv run --no-sync horadus tasks finish TASK-XXX`
@@ -53,6 +55,12 @@ Implementation note:
 
 ## When to read more
 
+- For local pre-push review, use `horadus tasks local-review` when you want an
+  advisory branch-diff review before push. Keep PR review / `tasks finish` as
+  the remote merge gate.
+- Provider selection for local review is: `--provider` override first, then
+  `HORADUS_LOCAL_REVIEW_PROVIDER` from optional local-only `.env.harness`,
+  then the repo default `claude`.
 - For canonical workflow policy and completion rules, read `AGENTS.md`.
 - For command examples and output expectations, read `references/commands.md`
   or `docs/AGENT_RUNBOOK.md`.

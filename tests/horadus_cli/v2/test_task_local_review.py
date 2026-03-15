@@ -320,6 +320,14 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
     )
     assert task_commands_module._run_git(["status"]).stdout == "ok\n"
     assert captured_commands == [["custom-git", "status"]]
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("missing git")),
+    )
+    missing_git = task_commands_module._run_git(["status"])
+    assert missing_git.returncode == 1
+    assert "missing git" in missing_git.stderr
 
     parsed = task_commands_module._parse_provider_output(
         "\nHORADUS-LOCAL-REVIEW: findings\n- file.py: issue\n"

@@ -136,9 +136,6 @@ artifacts/assessments/
 artifacts/agent_context/
 artifacts/agent/
 
-# Legacy/local-only assessment output path (prefer artifacts/assessments/)
-assessments/
-
 # Generated reports
 reports/generated/
 artifacts/dashboard/

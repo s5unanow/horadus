@@ -390,6 +390,12 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
     )
     assert codex_mixed_response is not None
     assert codex_mixed_response.findings_reported is True
+    codex_colon_finding = task_commands_module._parse_provider_output(
+        "codex",
+        "No blocking issues found: foo.py still raises on empty config.",
+    )
+    assert codex_colon_finding is not None
+    assert codex_colon_finding.findings_reported is True
     codex_findings = task_commands_module._parse_provider_output(
         "codex",
         "- tools/horadus/python/horadus_workflow/_task_workflow_local_review_provider.py: "

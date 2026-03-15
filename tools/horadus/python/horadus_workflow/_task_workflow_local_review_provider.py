@@ -19,17 +19,13 @@ from ._task_workflow_local_review_models import (
 
 _STDIN_PROMPT_PROVIDERS: Final[frozenset[str]] = frozenset({"claude", "gemini"})
 _CODEX_NO_FINDINGS_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"\b("
+    r"^("
     r"no\s+(?:findings|issues)(?:\s+found)?"
     r"|did\s+not\s+(?:find|identify)(?:\s+any)?\s+issues"
     r"|didn't\s+(?:find|identify)(?:\s+any)?\s+issues"
-    r"|no\s+blocking\s+issues"
+    r"|no\s+blocking\s+issues(?:\s+found)?"
     r"|looks\s+good\s+to\s+me"
-    r")\b",
-    re.IGNORECASE,
-)
-_CODEX_FINDINGS_CONTRADICTION_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"\b(but|however|except|although|though)\b",
+    r")(?:\s+(?:in|on|for|across|throughout)\b[^:;]*)?[.!]?$",
     re.IGNORECASE,
 )
 
@@ -221,8 +217,7 @@ def _parse_codex_review_output(output_text: str) -> LocalReviewParsedOutput | No
     return LocalReviewParsedOutput(
         findings_reported=not (
             len(non_empty_lines) == 1
-            and _CODEX_NO_FINDINGS_LINE_PATTERN.search(non_empty_lines[0]) is not None
-            and _CODEX_FINDINGS_CONTRADICTION_PATTERN.search(non_empty_lines[0]) is None
+            and _CODEX_NO_FINDINGS_LINE_PATTERN.fullmatch(non_empty_lines[0]) is not None
         ),
         review_body=stripped,
     )

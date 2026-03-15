@@ -11,6 +11,7 @@ import time
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 
+from tools.horadus.python.horadus_workflow import pr_review_gate_state
 from tools.horadus.python.horadus_workflow.review_defaults import (
     DEFAULT_REVIEW_TIMEOUT_SECONDS,
 )
@@ -261,6 +262,19 @@ def _parse_github_timestamp(value: object) -> datetime | None:
         return None
 
 
+def _initial_review_loop_state(
+    *, pr_url: str, reviewer_login: str, timeout_seconds: int
+) -> tuple[str, int, str, datetime, float]:
+    repo, pr_number, head_oid = _review_context(pr_url)
+    wait_window_started_at = pr_review_gate_state.start_wait_window(
+        repo=repo,
+        pr_number=pr_number,
+        reviewer_login=reviewer_login,
+        head_oid=head_oid,
+    )
+    return repo, pr_number, head_oid, wait_window_started_at, time.time() + timeout_seconds
+
+
 def _has_pr_summary_thumbs_up(
     *,
     repo: str,
@@ -354,6 +368,13 @@ def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
     return 0
 
 
+def _validate_main_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be positive")
+    if args.poll_seconds < 0:
+        parser.error("--poll-seconds must be non-negative")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-url", required=True, help="PR URL or gh-resolvable PR ref.")
@@ -387,19 +408,17 @@ def main(argv: list[str] | None = None) -> int:
         help="Output format for the final gate result.",
     )
     args = parser.parse_args(argv)
-
-    if args.timeout_seconds <= 0:
-        parser.error("--timeout-seconds must be positive")
-    if args.poll_seconds < 0:
-        parser.error("--poll-seconds must be non-negative")
+    _validate_main_args(parser, args)
 
     try:
-        repo, pr_number, head_oid = _review_context(args.pr_url)
+        repo, pr_number, head_oid, wait_window_started_at, deadline = _initial_review_loop_state(
+            pr_url=args.pr_url,
+            reviewer_login=args.reviewer_login,
+            timeout_seconds=args.timeout_seconds,
+        )
     except GhError as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_TIMEOUT_FAILURE
-    wait_window_started_at = datetime.now(tz=UTC)
-    deadline = time.time() + args.timeout_seconds
     saw_clean_current_head_review = False
     has_pr_summary_thumbs_up = False
 

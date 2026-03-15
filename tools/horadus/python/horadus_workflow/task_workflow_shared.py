@@ -8,6 +8,7 @@ import subprocess  # nosec B404
 import sys
 import time
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,7 @@ DEFAULT_REVIEW_BOT_LOGIN = "chatgpt-codex-connector[bot]"
 DEFAULT_REVIEW_TIMEOUT_POLICY = "allow"
 DEFAULT_REVIEW_TIMEOUT_SECONDS = review_defaults.DEFAULT_REVIEW_TIMEOUT_SECONDS
 REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV = "HORADUS_HUMAN_APPROVED_REVIEW_TIMEOUT_OVERRIDE"
+FINISH_DEBUG_ENV = "HORADUS_FINISH_DEBUG"
 DEFAULT_FINISH_REVIEW_GATE_GRACE_SECONDS = 30
 DEFAULT_FINISH_MERGE_COMMAND_TIMEOUT_SECONDS = 120
 DEFAULT_DOCKER_READY_TIMEOUT_SECONDS = 120
@@ -197,6 +199,20 @@ def _task_blocked(
 
 def getenv(name: str) -> str | None:
     return os.environ.get(name)
+
+
+def _truthy_env(name: str) -> bool:
+    raw = getenv(name)
+    return raw is not None and raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _finish_debug_enabled() -> bool:
+    return _truthy_env(FINISH_DEBUG_ENV)
+
+
+def _finish_debug_line(message: str) -> str:
+    timestamp = datetime.now(tz=UTC).isoformat(timespec="seconds")
+    return f"[finish-debug {timestamp}] {message}"
 
 
 def _compat_attr(name: str, fallback_module: object) -> Any:
@@ -481,6 +497,7 @@ __all__ = [
     "DEFAULT_REVIEW_POLL_SECONDS",
     "DEFAULT_REVIEW_TIMEOUT_POLICY",
     "DEFAULT_REVIEW_TIMEOUT_SECONDS",
+    "FINISH_DEBUG_ENV",
     "FRICTION_LOG_DIRECTORY",
     "FRICTION_LOG_FILENAME",
     "FRICTION_SUMMARY_DIRECTORY",
@@ -501,6 +518,8 @@ __all__ = [
     "_docker_start_plan",
     "_ensure_command_available",
     "_finish_config",
+    "_finish_debug_enabled",
+    "_finish_debug_line",
     "_output_lines",
     "_parse_git_branch_lines",
     "_parse_remote_branch_lines",
@@ -516,6 +535,7 @@ __all__ = [
     "_task_blocked",
     "_task_branch_pattern",
     "_task_id_from_branch_name",
+    "_truthy_env",
     "ensure_docker_ready",
     "getenv",
 ]

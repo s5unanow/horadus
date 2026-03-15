@@ -196,7 +196,13 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
 
     payloads: dict[tuple[str, ...], object] = {
         ("repo", "view", "--json", "nameWithOwner"): {"nameWithOwner": "example/repo"},
-        ("pr", "view", "https://example.invalid/pr/1", "--json", "number,headRefOid,url"): {
+        (
+            "pr",
+            "view",
+            "https://example.invalid/pr/1",
+            "--json",
+            "number,headRefOid,url",
+        ): {
             "number": 1,
             "headRefOid": "head-sha",
             "url": "https://example.invalid/pr/1",
@@ -331,6 +337,26 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
     assert "review gate passed early" in rendered
     assert "reviewer issue comment https://example.invalid/issue-comment/1" in rendered
 
+
+def test_pr_review_gate_helper_functions_cover_error_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    payloads: dict[tuple[str, ...], object] = {
+        ("repo", "view", "--json", "nameWithOwner"): {"nameWithOwner": "example/repo"},
+        (
+            "pr",
+            "view",
+            "https://example.invalid/pr/1",
+            "--json",
+            "number,headRefOid,url",
+        ): {
+            "number": 1,
+            "headRefOid": "head-sha",
+            "url": "https://example.invalid/pr/1",
+        },
+        ("repos/example/repo/issues/1/reactions",): [[]],
+    }
+
     bad_payloads = dict(payloads)
     bad_payloads[("repo", "view", "--json", "nameWithOwner")] = {}
     monkeypatch.setattr(pr_review_gate_module, "_run_gh_json", lambda *args: bad_payloads[args])
@@ -339,7 +365,13 @@ def test_pr_review_gate_helper_functions_cover_success_and_error_paths(
 
     bad_pr_payloads = dict(payloads)
     bad_pr_payloads[
-        ("pr", "view", "https://example.invalid/pr/1", "--json", "number,headRefOid,url")
+        (
+            "pr",
+            "view",
+            "https://example.invalid/pr/1",
+            "--json",
+            "number,headRefOid,url",
+        )
     ] = {}
     monkeypatch.setattr(pr_review_gate_module, "_run_gh_json", lambda *args: bad_pr_payloads[args])
     with pytest.raises(pr_review_gate_module.GhError, match="PR number/headRefOid"):

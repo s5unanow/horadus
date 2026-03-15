@@ -257,6 +257,7 @@
 - TASK-290: Make `horadus tasks finish` Fail Fast When CI Is Red After Review Timeout ✅
 - TASK-287: Spike Markdown-First Context Retrieval for Agent Workflow ✅
 ## Sprint 4
+- TASK-332: Fix `horadus tasks finish` when thumbs-up review-gate passes do not merge ✅
 - TASK-331: Remove legacy root `assessments/` leftovers ✅
 - TASK-292: Right-Size Live Task Ledgers and Archive Historical Planning Surfaces ✅
 - TASK-294: Preserve Closed Task Bodies in Quarterly Archive Shards ✅

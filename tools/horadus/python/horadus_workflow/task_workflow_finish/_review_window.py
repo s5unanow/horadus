@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess  # nosec B404
+
 from tools.horadus.python.horadus_workflow import task_workflow_lifecycle as lifecycle
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import ExitCode
@@ -142,13 +144,36 @@ def _review_gate_lines(review_result: shared.ReviewGateResult) -> list[str]:
     ]
 
 
+def _review_gate_debug_lines(
+    *,
+    pr_url: str,
+    review_result: subprocess.CompletedProcess[str] | None = None,
+    review_gate: shared.ReviewGateResult | None = None,
+) -> list[str]:
+    if not shared._finish_debug_enabled():
+        return []
+    if review_result is not None:
+        return [
+            shared._finish_debug_line(
+                f"Review gate subprocess exited rc={review_result.returncode} for {pr_url}."
+            )
+        ]
+    assert review_gate is not None
+    return [
+        shared._finish_debug_line(
+            "Parsed review gate result: "
+            f"status={review_gate.status}, reason={review_gate.reason}, "
+            f"summary_thumbs_up={review_gate.summary_thumbs_up}, "
+            f"clean_current_head_review={review_gate.clean_current_head_review}."
+        )
+    ]
+
+
 def review_gate_data(
     *, context: shared.FinishContext, pr_url: str, config: shared.FinishConfig
 ) -> tuple[int, dict[str, object], list[str]]:
     refresh_lines, refresh_blocker = _prepare_current_head_review_window(
-        context=context,
-        pr_url=pr_url,
-        config=config,
+        context=context, pr_url=pr_url, config=config
     )
     if refresh_blocker is not None:
         blocker_message, blocker_data, blocker_lines = refresh_blocker
@@ -202,6 +227,7 @@ def review_gate_data(
                 exit_code=ExitCode.ENVIRONMENT_ERROR,
                 extra_lines=[str(exc), *exc.output_lines()],
             )
+        lines.extend(_review_gate_debug_lines(pr_url=pr_url, review_result=review_result))
 
         try:
             review_gate = gate_module._parse_review_gate_result(review_result)
@@ -217,6 +243,7 @@ def review_gate_data(
                 exit_code=ExitCode.ENVIRONMENT_ERROR,
                 extra_lines=[str(exc), *shared._output_lines(review_result)],
             )
+        lines.extend(_review_gate_debug_lines(pr_url=pr_url, review_gate=review_gate))
         review_lines = _review_gate_lines(review_gate)
 
         if review_gate.status == "head_changed":

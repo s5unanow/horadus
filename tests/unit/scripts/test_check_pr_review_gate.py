@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import time
@@ -279,6 +280,80 @@ esac
 
     result = _run_gate(
         env={"PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}"},
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "1",
+            "--poll-seconds",
+            "0",
+        ],
+    )
+    assert result.returncode == 0
+    assert "review gate passed early" in result.stdout
+    assert "reacted THUMBS_UP on the PR summary" in result.stdout
+
+
+def test_review_gate_accepts_current_head_pr_summary_thumbs_up_before_wait_window(
+    tmp_path: Path,
+) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    state_path = tmp_path / "review-gate-state.json"
+    head_started = (datetime.now(tz=UTC) - timedelta(minutes=3)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    signal_time = (datetime.now(tz=UTC) - timedelta(minutes=2)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    state_path.write_text(
+        json.dumps(
+            {
+                "example/repo#215#chatgpt-codex-connector[bot]": {
+                    "head_oid": "head-sha-215",
+                    "started_at": head_started,
+                }
+            }
+        )
+    )
+    _write_executable(
+        bin_dir / "gh",
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+case "${{1:-}}" in
+  repo)
+    echo '{{"nameWithOwner":"example/repo"}}'
+    ;;
+  pr)
+    echo '{{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}}'
+    ;;
+  api)
+    if [[ "${{2:-}}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${{2:-}}" == "repos/example/repo/pulls/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${{2:-}}" == "repos/example/repo/issues/215/comments" ]]; then
+      printf '[{{"created_at":"{head_started}","body":"@codex review <!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-215 -->","user":{{"login":"owner"}}}}]\n'
+      exit 0
+    fi
+    if [[ "${{2:-}}" == "repos/example/repo/issues/215/reactions" ]]; then
+      printf '[{{"content":"+1","created_at":"{signal_time}","user":{{"login":"chatgpt-codex-connector[bot]"}}}}]\n'
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_gate(
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HORADUS_REVIEW_GATE_STATE_PATH": str(state_path),
+        },
         args=[
             "--pr-url",
             "https://example.invalid/pr/215",

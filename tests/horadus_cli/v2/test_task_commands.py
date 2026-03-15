@@ -44,6 +44,37 @@ def test_task_commands_register_task_commands_wires_all_task_subcommands() -> No
     assert args.handler is task_commands_module.handle_record_friction
 
 
+def test_task_commands_registers_local_review_and_keeps_local_gate_wiring() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+
+    task_parser_module.register_task_commands(subparsers)
+    review_args = parser.parse_args(
+        [
+            "tasks",
+            "local-review",
+            "--provider",
+            "claude",
+            "--base",
+            "main",
+            "--instructions",
+            "Focus on regressions.",
+            "--allow-provider-fallback",
+            "--save-raw-output",
+            "--usefulness",
+            "not-useful",
+        ]
+    )
+    gate_args = parser.parse_args(["tasks", "local-gate", "--full"])
+
+    assert review_args.tasks_command == "local-review"
+    assert review_args.provider == "claude"
+    assert review_args.base == "main"
+    assert review_args.usefulness == "not-useful"
+    assert review_args.handler is task_commands_module.handle_local_review
+    assert gate_args.handler is task_commands_module.handle_local_gate
+
+
 def test_command_handlers_wrap_data_functions_and_validation_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -81,6 +112,11 @@ def test_command_handlers_wrap_data_functions_and_validation_errors(
         "local_gate_data",
         lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["gate"]),
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "local_review_data",
+        lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["review"]),
+    )
 
     assert task_commands_module.handle_finish(
         argparse.Namespace(task_id="257", dry_run=False)
@@ -105,6 +141,17 @@ def test_command_handlers_wrap_data_functions_and_validation_errors(
     assert task_commands_module.handle_local_gate(
         argparse.Namespace(full=True, dry_run=False)
     ).lines == ["gate"]
+    assert task_commands_module.handle_local_review(
+        argparse.Namespace(
+            provider="claude",
+            base="main",
+            instructions=None,
+            allow_provider_fallback=False,
+            save_raw_output=False,
+            usefulness="pending",
+            dry_run=False,
+        )
+    ).lines == ["review"]
 
     assert task_commands_module.handle_finish(
         argparse.Namespace(task_id="bad-task", dry_run=False)

@@ -22,7 +22,14 @@ from tools.horadus.python.horadus_cli.task_query import (
     handle_show,
 )
 from tools.horadus.python.horadus_cli.task_shared import VALID_FRICTION_TYPES
-from tools.horadus.python.horadus_cli.task_workflow import handle_local_gate, handle_safe_start
+from tools.horadus.python.horadus_cli.task_workflow import (
+    DEFAULT_LOCAL_REVIEW_BASE_BRANCH,
+    SUPPORTED_LOCAL_REVIEW_PROVIDERS,
+    VALID_LOCAL_REVIEW_USEFULNESS,
+    handle_local_gate,
+    handle_local_review,
+    handle_safe_start,
+)
 
 
 def add_leaf_cli_options(parser: Any) -> None:
@@ -39,6 +46,59 @@ def add_leaf_cli_options(parser: Any) -> None:
         default=argparse.SUPPRESS,
         help="Validate and describe the command without making changes.",
     )
+
+
+def _register_local_review_parser(tasks_subparsers: Any) -> None:
+    local_review_parser = tasks_subparsers.add_parser(
+        "local-review",
+        help="Run an opt-in local pre-push review via a supported local agent CLI.",
+    )
+    add_leaf_cli_options(local_review_parser)
+    local_review_parser.add_argument(
+        "--provider",
+        choices=list(SUPPORTED_LOCAL_REVIEW_PROVIDERS),
+        help="Review provider override. Defaults to .env.harness or the repo default.",
+    )
+    local_review_parser.add_argument(
+        "--base",
+        default=DEFAULT_LOCAL_REVIEW_BASE_BRANCH,
+        help="Base branch used for the branch diff review target.",
+    )
+    local_review_parser.add_argument(
+        "--instructions",
+        help="Optional additional review instructions layered onto the repo-owned rubric.",
+    )
+    local_review_parser.add_argument(
+        "--allow-provider-fallback",
+        action="store_true",
+        help="Allow fallback after runtime/auth/config failures instead of only missing CLIs.",
+    )
+    local_review_parser.add_argument(
+        "--save-raw-output",
+        action="store_true",
+        help="Keep the provider raw output under artifacts/agent/local-review/runs/.",
+    )
+    local_review_parser.add_argument(
+        "--usefulness",
+        choices=list(VALID_LOCAL_REVIEW_USEFULNESS),
+        default="pending",
+        help="Optional lightweight usefulness annotation for local-review telemetry.",
+    )
+    local_review_parser.set_defaults(handler=handle_local_review)
+
+
+def _register_local_gate_parser(tasks_subparsers: Any) -> None:
+    local_gate_parser = tasks_subparsers.add_parser(
+        "local-gate",
+        help="Run the canonical post-task local validation gate.",
+    )
+    add_leaf_cli_options(local_gate_parser)
+    local_gate_parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Run the full CI-parity local gate.",
+    )
+    local_gate_parser.set_defaults(handler=handle_local_gate)
 
 
 def register_task_commands(subparsers: Any) -> None:
@@ -225,14 +285,5 @@ def register_task_commands(subparsers: Any) -> None:
     )
     lifecycle_parser.set_defaults(handler=handle_lifecycle)
 
-    local_gate_parser = tasks_subparsers.add_parser(
-        "local-gate",
-        help="Run the canonical post-task local validation gate.",
-    )
-    add_leaf_cli_options(local_gate_parser)
-    local_gate_parser.add_argument(
-        "--full",
-        action="store_true",
-        help="Run the full CI-parity local gate.",
-    )
-    local_gate_parser.set_defaults(handler=handle_local_gate)
+    _register_local_review_parser(tasks_subparsers)
+    _register_local_gate_parser(tasks_subparsers)

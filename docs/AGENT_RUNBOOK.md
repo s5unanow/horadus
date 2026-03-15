@@ -178,6 +178,36 @@ Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 If Docker auto-start is unsupported in the current environment, start Docker
 manually before rerunning the workflow command.
 
+## Optional Local Review
+
+`uv run --no-sync horadus tasks local-review --format json`
+
+When: run an opt-in local pre-push review against the current branch diff
+without opening a PR. The default target is the current branch against `main`,
+and the command returns a repo-owned JSON/text result instead of a
+provider-specific stdout contract.
+
+Provider selection:
+- `--provider` overrides the configured default for the current run.
+- Absent `--provider`, the command reads `HORADUS_LOCAL_REVIEW_PROVIDER` from
+  optional local-only `.env.harness` when present.
+- If neither is set, the repo default provider is `claude`.
+
+Fallback behavior:
+- Missing provider CLIs on `PATH` can fall back to the next supported provider
+  in repo order when the command is using the env/default provider chain.
+- Auth, config, runtime, or unreadable-output failures stay visible by default;
+  use `--allow-provider-fallback` only when you explicitly want the command to
+  try another provider after those failures.
+
+Artifacts and scope:
+- Telemetry appends to the gitignored
+  `artifacts/agent/local-review/entries.jsonl` log.
+- `--save-raw-output` keeps per-run raw provider output under
+  `artifacts/agent/local-review/runs/`.
+- Use this command for advisory local branch-diff review before push; keep
+  remote PR review and `horadus tasks finish` as the merge gate.
+
 ## Eval Benchmark Configs
 
 - `uv run --no-sync horadus eval benchmark` runs only the default baseline

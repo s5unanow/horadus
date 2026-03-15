@@ -91,3 +91,4 @@
 - `TASK-252` Add a Canonical Post-Task Local Gate Without Overloading `make agent-check` ✅
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...` ✅
 - `TASK-330` Trim stale backlog items and archive already-landed workflow tasks ✅
+- `TASK-286` Add CLI-Agnostic Local Pre-Push Review via Supported Agent CLIs `[REQUIRES_HUMAN]` ✅

@@ -377,6 +377,7 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
     assert parsed.findings_reported is True
     assert task_commands_module._parse_provider_output("claude", "") is None
     assert task_commands_module._parse_provider_output("claude", "not the marker") is None
+    assert task_commands_module._parse_provider_output("codex", "   \n") is None
     codex_no_findings = task_commands_module._parse_provider_output(
         "codex",
         "No blocking issues found in the reviewed changes.",

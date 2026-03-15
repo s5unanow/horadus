@@ -94,3 +94,4 @@
 - `TASK-274` Standardize Task PR Titles on `TASK-XXX: ...` ✅
 - `TASK-330` Trim stale backlog items and archive already-landed workflow tasks ✅
 - `TASK-286` Add CLI-Agnostic Local Pre-Push Review via Supported Agent CLIs `[REQUIRES_HUMAN]` ✅
+- `TASK-333` Fix Codex local-review `--base` invocation compatibility ✅

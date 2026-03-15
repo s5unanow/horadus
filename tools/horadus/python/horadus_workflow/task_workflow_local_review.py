@@ -576,7 +576,7 @@ def _run_provider_review(
             f"Ran `{provider_name}` local review ({provider_run.interface_kind} adapter, "
             f"{provider_run.duration_seconds:.2f}s)."
         )
-        parsed_output = _parse_provider_output(provider_run.stdout)
+        parsed_output = _parse_provider_output(provider_name, provider_run.stdout)
         if provider_run.returncode == 0 and parsed_output is not None:
             return _success_result(
                 context=context,

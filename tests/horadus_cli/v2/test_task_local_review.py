@@ -155,6 +155,47 @@ def test_local_review_data_auto_falls_back_when_default_provider_cli_is_missing(
     assert "Falling back to `codex`." in lines
 
 
+def test_local_review_data_accepts_codex_native_review_output(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _seed_repo_root(tmp_path)
+    monkeypatch.setattr(task_commands_module, "_run_git", _fake_review_git)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_execute_provider",
+        lambda provider, **_kwargs: task_commands_module.LocalReviewProviderRun(
+            provider=provider,
+            interface_kind="review",
+            command=["codex", "exec", "review", "--base", "main"],
+            prompt="prompt",
+            returncode=0,
+            stdout="No blocking issues found in the reviewed changes.\n",
+            stderr="",
+            duration_seconds=0.3,
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.local_review_data(
+        provider="codex",
+        base_branch="main",
+        instructions=None,
+        allow_provider_fallback=False,
+        save_raw_output=False,
+        usefulness="pending",
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data["provider"] == "codex"
+    assert data["executed_provider"] == "codex"
+    assert data["findings_reported"] is False
+    assert any(line == "Local review completed via `codex`." for line in lines)
+
+
 def test_local_review_data_does_not_fallback_on_runtime_failure_without_opt_in(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -301,7 +342,7 @@ def test_local_review_helper_functions_cover_provider_config_and_prompt_shapes(
     )
     assert claude_command[:3] == ["claude", "--print", "--output-format"]
     assert gemini_command[:2] == ["gemini", "--prompt"]
-    assert codex_command[:4] == ["codex", "exec", "review", "--base"]
+    assert codex_command == ["codex", "exec", "review", "--base", "main"]
 
 
 def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifacts(
@@ -330,12 +371,25 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
     assert "missing git" in missing_git.stderr
 
     parsed = task_commands_module._parse_provider_output(
-        "\nHORADUS-LOCAL-REVIEW: findings\n- file.py: issue\n"
+        "claude", "\nHORADUS-LOCAL-REVIEW: findings\n- file.py: issue\n"
     )
     assert parsed is not None
     assert parsed.findings_reported is True
-    assert task_commands_module._parse_provider_output("") is None
-    assert task_commands_module._parse_provider_output("not the marker") is None
+    assert task_commands_module._parse_provider_output("claude", "") is None
+    assert task_commands_module._parse_provider_output("claude", "not the marker") is None
+    codex_no_findings = task_commands_module._parse_provider_output(
+        "codex",
+        "No blocking issues found in the reviewed changes.",
+    )
+    assert codex_no_findings is not None
+    assert codex_no_findings.findings_reported is False
+    codex_findings = task_commands_module._parse_provider_output(
+        "codex",
+        "- tools/horadus/python/horadus_workflow/_task_workflow_local_review_provider.py: "
+        "drops the compatibility branch for older prompt adapters.",
+    )
+    assert codex_findings is not None
+    assert codex_findings.findings_reported is True
 
     monkeypatch.setattr(task_commands_module, "_local_review_runs_dir", lambda: tmp_path / "runs")
     raw_output_path = task_commands_module._write_raw_output(
@@ -491,7 +545,7 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     )
     run = task_commands_module._execute_provider("codex", context=context, instructions=None)
     assert run.duration_seconds == 2.5
-    assert run.command[:4] == ["codex", "exec", "review", "--base"]
+    assert run.command == ["codex", "exec", "review", "--base", "main"]
     claude_run = task_commands_module._execute_provider(
         "claude", context=context, instructions=None
     )
@@ -500,6 +554,24 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     )
     assert claude_run.duration_seconds == 1.0
     assert gemini_run.duration_seconds == 1.5
+    assert captured_runs[0][0] == ["codex", "exec", "review", "--base", "main"]
+    assert captured_runs[1][0] == [
+        "claude",
+        "--print",
+        "--output-format",
+        "text",
+        "--permission-mode",
+        "plan",
+    ]
+    assert captured_runs[2][0] == [
+        "gemini",
+        "--prompt",
+        "Review the full stdin payload and follow its contract exactly.",
+        "--approval-mode",
+        "plan",
+        "--output-format",
+        "text",
+    ]
     assert captured_runs[0][1] is None
     assert captured_runs[1][1] == claude_run.prompt
     assert captured_runs[2][1] == gemini_run.prompt

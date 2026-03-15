@@ -354,6 +354,13 @@ def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
     return 0
 
 
+def _validate_main_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if args.timeout_seconds <= 0:
+        parser.error("--timeout-seconds must be positive")
+    if args.poll_seconds < 0:
+        parser.error("--poll-seconds must be non-negative")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pr-url", required=True, help="PR URL or gh-resolvable PR ref.")
@@ -387,11 +394,7 @@ def main(argv: list[str] | None = None) -> int:
         help="Output format for the final gate result.",
     )
     args = parser.parse_args(argv)
-
-    if args.timeout_seconds <= 0:
-        parser.error("--timeout-seconds must be positive")
-    if args.poll_seconds < 0:
-        parser.error("--poll-seconds must be non-negative")
+    _validate_main_args(parser, args)
 
     try:
         repo, pr_number, head_oid = _review_context(args.pr_url)

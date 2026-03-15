@@ -16,6 +16,106 @@ def _pr_state(*, pr_url: str, config: shared.FinishConfig) -> str:
     return state_result.stdout.strip() if state_result.returncode == 0 else ""
 
 
+def _merge_debug_lines(
+    *,
+    pr_url: str,
+    merge_result: subprocess.CompletedProcess[str] | None = None,
+    merge_commit: str | None = None,
+) -> list[str]:
+    if not shared._finish_debug_enabled():
+        return []
+    if merge_result is not None:
+        return [
+            shared._finish_debug_line(
+                f"Primary merge command exited rc={merge_result.returncode} for {pr_url}."
+            )
+        ]
+    assert merge_commit is not None
+    return [shared._finish_debug_line(f"Resolved merge commit {merge_commit}.")]
+
+
+def _auto_merge_debug_lines(
+    *, pr_url: str, auto_merge_result: subprocess.CompletedProcess[str]
+) -> list[str]:
+    if not shared._finish_debug_enabled():
+        return []
+    return [
+        shared._finish_debug_line(
+            f"Auto-merge command exited rc={auto_merge_result.returncode} for {pr_url}."
+        )
+    ]
+
+
+def _sync_local_main_after_merge(
+    *,
+    context: shared.FinishContext,
+    pr_url: str,
+    merge_commit: str,
+    config: shared.FinishConfig,
+) -> tuple[int, dict[str, object], list[str]] | tuple[None, None, list[str]]:
+    lines = ["Syncing main..."]
+    switch_main_result = shared._run_command([config.git_bin, "switch", "main"])
+    if switch_main_result.returncode != 0:
+        return shared._task_blocked(
+            shared._result_message(switch_main_result, "Failed to switch to main."),
+            next_action="Resolve the local git state and switch to `main`, then re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    pull_result = shared._run_command([config.git_bin, "pull", "--ff-only"])
+    if pull_result.returncode != 0:
+        return shared._task_blocked(
+            shared._result_message(pull_result, "Failed to fast-forward local main."),
+            next_action="Resolve the local `main` sync issue and re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    cat_file_result = shared._run_command([config.git_bin, "cat-file", "-e", merge_commit])
+    if cat_file_result.returncode != 0:
+        return shared._task_blocked(
+            f"merge commit {merge_commit} is not available locally after syncing main.",
+            next_action="Fetch/pull `main` successfully, then re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+                "merge_commit": merge_commit,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+        )
+    branch_exists_result = shared._run_command(
+        [config.git_bin, "show-ref", "--verify", f"refs/heads/{context.branch_name}"]
+    )
+    if branch_exists_result.returncode == 0:
+        delete_branch_result = shared._run_command(
+            [config.git_bin, "branch", "-d", context.branch_name]
+        )
+        if delete_branch_result.returncode != 0:
+            return shared._task_blocked(
+                f"merged branch `{context.branch_name}` still exists locally and could not be deleted.",
+                next_action=f"Delete `{context.branch_name}` locally after syncing main, then re-run `horadus tasks finish`.",
+                data={
+                    "task_id": context.task_id,
+                    "branch_name": context.branch_name,
+                    "pr_url": pr_url,
+                    "merge_commit": merge_commit,
+                },
+                exit_code=ExitCode.ENVIRONMENT_ERROR,
+                extra_lines=shared._output_lines(delete_branch_result),
+            )
+    return (None, None, lines)
+
+
 def complete_merge_data(
     *,
     context: shared.FinishContext,
@@ -54,6 +154,7 @@ def complete_merge_data(
                 stdout="",
                 stderr="",
             )
+        lines.extend(_merge_debug_lines(pr_url=pr_url, merge_result=merge_result))
         if merge_result.returncode != 0:
             state_after = _pr_state(pr_url=pr_url, config=config)
             if state_after != "MERGED":
@@ -110,6 +211,9 @@ def complete_merge_data(
                             stdout="",
                             stderr="",
                         )
+                    lines.extend(
+                        _auto_merge_debug_lines(pr_url=pr_url, auto_merge_result=auto_merge_result)
+                    )
                     if auto_merge_result.returncode != 0:
                         auto_state_after = _pr_state(pr_url=pr_url, config=config)
                         if auto_state_after != "MERGED":
@@ -164,70 +268,17 @@ def complete_merge_data(
             data={"task_id": context.task_id, "branch_name": context.branch_name, "pr_url": pr_url},
             exit_code=ExitCode.ENVIRONMENT_ERROR,
         )
+    lines.extend(_merge_debug_lines(pr_url=pr_url, merge_commit=merge_commit))
 
-    lines.append("Syncing main...")
-    switch_main_result = shared._run_command([config.git_bin, "switch", "main"])
-    if switch_main_result.returncode != 0:
-        return shared._task_blocked(
-            shared._result_message(switch_main_result, "Failed to switch to main."),
-            next_action="Resolve the local git state and switch to `main`, then re-run `horadus tasks finish`.",
-            data={
-                "task_id": context.task_id,
-                "branch_name": context.branch_name,
-                "pr_url": pr_url,
-                "merge_commit": merge_commit,
-            },
-            exit_code=ExitCode.ENVIRONMENT_ERROR,
-        )
-
-    pull_result = shared._run_command([config.git_bin, "pull", "--ff-only"])
-    if pull_result.returncode != 0:
-        return shared._task_blocked(
-            shared._result_message(pull_result, "Failed to fast-forward local main."),
-            next_action="Resolve the local `main` sync issue and re-run `horadus tasks finish`.",
-            data={
-                "task_id": context.task_id,
-                "branch_name": context.branch_name,
-                "pr_url": pr_url,
-                "merge_commit": merge_commit,
-            },
-            exit_code=ExitCode.ENVIRONMENT_ERROR,
-        )
-
-    cat_file_result = shared._run_command([config.git_bin, "cat-file", "-e", merge_commit])
-    if cat_file_result.returncode != 0:
-        return shared._task_blocked(
-            f"merge commit {merge_commit} is not available locally after syncing main.",
-            next_action="Fetch/pull `main` successfully, then re-run `horadus tasks finish`.",
-            data={
-                "task_id": context.task_id,
-                "branch_name": context.branch_name,
-                "pr_url": pr_url,
-                "merge_commit": merge_commit,
-            },
-            exit_code=ExitCode.ENVIRONMENT_ERROR,
-        )
-
-    branch_exists_result = shared._run_command(
-        [config.git_bin, "show-ref", "--verify", f"refs/heads/{context.branch_name}"]
+    sync_exit, sync_data, sync_lines = _sync_local_main_after_merge(
+        context=context,
+        pr_url=pr_url,
+        merge_commit=merge_commit,
+        config=config,
     )
-    if branch_exists_result.returncode == 0:
-        delete_branch_result = shared._run_command(
-            [config.git_bin, "branch", "-d", context.branch_name]
-        )
-        if delete_branch_result.returncode != 0:
-            return shared._task_blocked(
-                f"merged branch `{context.branch_name}` still exists locally and could not be deleted.",
-                next_action=f"Delete `{context.branch_name}` locally after syncing main, then re-run `horadus tasks finish`.",
-                data={
-                    "task_id": context.task_id,
-                    "branch_name": context.branch_name,
-                    "pr_url": pr_url,
-                    "merge_commit": merge_commit,
-                },
-                exit_code=ExitCode.ENVIRONMENT_ERROR,
-                extra_lines=shared._output_lines(delete_branch_result),
-            )
+    if sync_exit is not None:
+        return sync_exit, sync_data or {}, sync_lines
+    lines.extend(sync_lines)
 
     lifecycle_exit, lifecycle_data_result, lifecycle_lines = lifecycle.task_lifecycle_data(
         context.task_id,

@@ -11,6 +11,23 @@ from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from . import bootstrap, checks, context, merge, preconditions, review
 
 
+def _finish_debug_lines(message: str) -> list[str]:
+    if not shared._finish_debug_enabled():
+        return []
+    return [shared._finish_debug_line(message)]
+
+
+def _resume_lines(finish_context: shared.FinishContext) -> list[str]:
+    if (
+        finish_context.current_branch is None
+        or finish_context.current_branch == finish_context.branch_name
+    ):
+        return []
+    return [
+        f"Resuming {finish_context.task_id} from {finish_context.current_branch} using task branch {finish_context.branch_name}."
+    ]
+
+
 def finish_task_data(
     task_input: str | None, *, dry_run: bool
 ) -> tuple[int, dict[str, object], list[str]]:
@@ -45,14 +62,7 @@ def finish_task_data(
         return bootstrap_result
     pr_url = bootstrap_result.pr_url
     remote_branch_exists = bootstrap_result.remote_branch_exists
-    lines: list[str] = []
-    if (
-        finish_context.current_branch is not None
-        and finish_context.current_branch != finish_context.branch_name
-    ):
-        lines.append(
-            f"Resuming {finish_context.task_id} from {finish_context.current_branch} using task branch {finish_context.branch_name}."
-        )
+    lines: list[str] = _resume_lines(finish_context)
     lines.append(f"Finishing {finish_context.task_id} from {finish_context.branch_name}")
     lines.extend(bootstrap_result.lines)
 
@@ -262,6 +272,9 @@ def finish_task_data(
                 },
                 extra_lines=check_lines,
             )
+        lines.extend(
+            _finish_debug_lines(f"Required checks passed for {pr_url}; reason={check_reason}.")
+        )
 
         review_exit, _review_data, review_lines = review.review_gate_data(
             context=finish_context,
@@ -271,6 +284,7 @@ def finish_task_data(
         if review_exit != ExitCode.OK:
             return review_exit, _review_data, review_lines
         lines.extend(review_lines)
+        lines.extend(_finish_debug_lines(f"Review gate passed for {pr_url}."))
 
     merge_exit, merge_data, merge_lines = merge.complete_merge_data(
         context=finish_context,

@@ -208,6 +208,13 @@ Artifacts and scope:
 - Use this command for advisory local branch-diff review before push; keep
   remote PR review and `horadus tasks finish` as the merge gate.
 
+## Finish Debug Surface
+
+- `HORADUS_FINISH_DEBUG=1 uv run --no-sync horadus tasks finish TASK-XXX`
+
+When: capture extra finish-path diagnostics for checks, review gate, merge, and
+sync transitions without changing merge policy or timeout policy.
+
 ## Eval Benchmark Configs
 
 - `uv run --no-sync horadus eval benchmark` runs only the default baseline

@@ -164,9 +164,9 @@ curl "http://localhost:8000/api/v1/trends/<trend-id>/calibration"
 - `GET /api/v1/events/{event_id}`
 
 Feedback mutations are exposed under:
-- `PATCH /api/v1/feedback/taxonomy-gaps/{gap_id}`
-- `POST /api/v1/feedback/events/{event_id}/feedback`
-- `POST /api/v1/feedback/trends/{trend_id}/override`
+- `PATCH /api/v1/taxonomy-gaps/{gap_id}`
+- `POST /api/v1/events/{event_id}/feedback`
+- `POST /api/v1/trends/{trend_id}/override`
 
 These routes require both `X-API-Key` and `X-Admin-API-Key`.
 

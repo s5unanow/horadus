@@ -262,6 +262,17 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
     assert concurrent_evidence.is_invalidated is not True
     trend_engine.apply_log_odds_delta.assert_not_awaited()
 
+    missing_id_evidence = _evidence(trend_id=trend_id, event_id=event_id)
+    missing_id_evidence.id = None
+    with pytest.raises(ValueError, match="Evidence must have an id"):
+        await _invalidate_active_evidence(
+            session=session,
+            trend_engine=trend_engine,
+            evidence=missing_id_evidence,
+            trend=trend,
+            invalidated_at=datetime.now(tz=UTC),
+        )
+
 
 @pytest.mark.asyncio
 async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> None:
@@ -340,6 +351,16 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     )
     assert updates == 1
     assert lineage == []
+
+    removed_updates, removed_lineage = await _invalidate_absent_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        active_by_key={(trend_id, "military_movement"): concurrent_existing},
+        trend_by_uuid={trend_id: trend},
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert removed_updates == 0
+    assert removed_lineage == []
 
     matching = _evidence(trend_id=trend_id, event_id=event_id)
     updates, lineage = await _reconcile_desired_evidence(

@@ -306,3 +306,4 @@
 - TASK-254: Refine and Unify Agent-Facing Context Entry Points (descoped after `TASK-329`)
 - TASK-267: Add a Thin Repo Workflow Skill Routed to AGENTS and Horadus (descoped after `TASK-329`)
 - TASK-286: Add CLI-Agnostic Local Pre-Push Review via Supported Agent CLIs `[REQUIRES_HUMAN]` ✅
+- TASK-333: Fix Codex local-review `--base` invocation compatibility ✅

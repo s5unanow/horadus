@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import subprocess  # nosec B404
 import time
 from typing import Final
@@ -17,6 +18,16 @@ from ._task_workflow_local_review_models import (
 )
 
 _STDIN_PROMPT_PROVIDERS: Final[frozenset[str]] = frozenset({"claude", "gemini"})
+_CODEX_NO_FINDINGS_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
+    r"^("
+    r"no\s+(?:findings|issues)(?:\s+found)?"
+    r"|did\s+not\s+(?:find|identify)(?:\s+any)?\s+issues"
+    r"|didn't\s+(?:find|identify)(?:\s+any)?\s+issues"
+    r"|no\s+blocking\s+issues(?:\s+found)?"
+    r"|looks\s+good\s+to\s+me"
+    r")(?:\s+(?:in|on|for|across|throughout)\b[^:;]*)?[.!]?$",
+    re.IGNORECASE,
+)
 
 
 def _render_prompt_contract(*, instructions: str | None) -> str:
@@ -119,7 +130,6 @@ def _provider_command(
             "review",
             "--base",
             context.base_branch,
-            prompt,
         ],
         prompt,
     )
@@ -173,7 +183,7 @@ def _execute_provider(
     )
 
 
-def _parse_provider_output(output_text: str) -> LocalReviewParsedOutput | None:
+def _parse_repo_contract_output(output_text: str) -> LocalReviewParsedOutput | None:
     lines = output_text.splitlines()
     first_non_empty_index = None
     first_non_empty_line = None
@@ -197,3 +207,26 @@ def _parse_provider_output(output_text: str) -> LocalReviewParsedOutput | None:
         findings_reported=match.group("status").lower() == "findings",
         review_body=remainder,
     )
+
+
+def _parse_codex_review_output(output_text: str) -> LocalReviewParsedOutput | None:
+    non_empty_lines = [line.strip() for line in output_text.splitlines() if line.strip()]
+    if not non_empty_lines:
+        return None
+    stripped = "\n".join(non_empty_lines)
+    return LocalReviewParsedOutput(
+        findings_reported=not (
+            len(non_empty_lines) == 1
+            and _CODEX_NO_FINDINGS_LINE_PATTERN.fullmatch(non_empty_lines[0]) is not None
+        ),
+        review_body=stripped,
+    )
+
+
+def _parse_provider_output(provider: str, output_text: str) -> LocalReviewParsedOutput | None:
+    parsed = _parse_repo_contract_output(output_text)
+    if parsed is not None:
+        return parsed
+    if provider == "codex":
+        return _parse_codex_review_output(output_text)
+    return None

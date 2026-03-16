@@ -205,6 +205,9 @@ Artifacts and scope:
   `artifacts/agent/local-review/entries.jsonl` log.
 - `--save-raw-output` keeps per-run raw provider output under
   `artifacts/agent/local-review/runs/`.
+- Claude and Gemini run against the repo-owned prompt contract directly;
+  Codex uses its native `review --base` flow and Horadus normalizes the review
+  result into the same local-review surface.
 - Use this command for advisory local branch-diff review before push; keep
   remote PR review and `horadus tasks finish` as the merge gate.
 

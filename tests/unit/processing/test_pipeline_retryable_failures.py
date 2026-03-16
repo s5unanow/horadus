@@ -7,9 +7,10 @@ from uuid import uuid4
 import httpx
 import pytest
 
+import src.processing.pipeline_retry as pipeline_retry_module
 from src.processing.event_clusterer import ClusterResult
 from src.processing.pipeline_orchestrator import ProcessingPipeline, _PreparedItem
-from src.processing.pipeline_retry import RetryablePipelineError
+from src.processing.pipeline_retry import RetryablePipelineError, build_retryable_pipeline_error
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2EventResult, Tier2Usage
 from src.storage.models import Event, ProcessingStatus, RawItem
@@ -96,6 +97,54 @@ def _pipeline(mock_db_session, **overrides) -> ProcessingPipeline:
     )
 
 
+def test_build_retryable_pipeline_error_covers_passthrough_and_non_retryable_paths(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retryable = RetryablePipelineError(
+        item_id=None,
+        stage="tier1_batch",
+        reason="TimeoutError",
+        exc=TimeoutError("retry"),
+    )
+    assert (
+        build_retryable_pipeline_error(item_id=None, stage="tier1_batch", exc=retryable)
+        is retryable
+    )
+
+    request = httpx.Request("POST", "https://example.test")
+    non_retryable = httpx.HTTPStatusError(
+        "bad request",
+        request=request,
+        response=httpx.Response(400, request=request),
+    )
+    assert build_retryable_pipeline_error(item_id=None, stage="tier2", exc=non_retryable) is None
+
+    remote_protocol = httpx.RemoteProtocolError("protocol")
+    protocol_error = build_retryable_pipeline_error(
+        item_id=None,
+        stage="tier2",
+        exc=remote_protocol,
+    )
+    assert protocol_error is not None
+    assert protocol_error.reason == "RemoteProtocolError"
+
+    monkeypatch.setattr(
+        pipeline_retry_module.LLMChatFailoverInvoker,
+        "classify_error",
+        lambda _exc: SimpleNamespace(
+            retryable=True,
+            code=SimpleNamespace(value="rate_limit"),
+        ),
+    )
+    llm_retryable = build_retryable_pipeline_error(
+        item_id=None,
+        stage="tier2",
+        exc=RuntimeError("provider retry"),
+    )
+    assert llm_retryable is not None
+    assert llm_retryable.reason == "rate_limit"
+
+
 @pytest.mark.asyncio
 async def test_prepare_item_for_tier1_raises_retryable_pipeline_error(mock_db_session) -> None:
     item = _item()
@@ -112,6 +161,17 @@ async def test_prepare_item_for_tier1_raises_retryable_pipeline_error(mock_db_se
     assert item.processing_status == ProcessingStatus.PENDING
     assert item.processing_started_at is None
     assert item.error_message is None
+
+
+def test_raise_retryable_failure_if_needed_covers_batch_item_none(mock_db_session) -> None:
+    pipeline = _pipeline(mock_db_session)
+
+    with pytest.raises(RetryablePipelineError, match="tier1_batch"):
+        pipeline._raise_retryable_failure_if_needed(
+            item=None,
+            stage="tier1_batch",
+            exc=ConnectionError("retry"),
+        )
 
 
 @pytest.mark.asyncio

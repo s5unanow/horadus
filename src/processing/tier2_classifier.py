@@ -34,9 +34,8 @@ from src.processing.llm_policy import (
     invoke_with_policy,
 )
 from src.processing.semantic_cache import LLMSemanticCache
+from src.processing.trend_impact_reconciliation import TREND_IMPACT_RECONCILIATION_KEY
 from src.storage.models import Event, EventItem, RawItem, Trend
-
-_PRESERVED_SYSTEM_CLAIM_KEYS = {"_trend_impact_reconciliation"}
 
 
 @dataclass(slots=True)
@@ -361,11 +360,9 @@ class Tier2Classifier:
     ) -> tuple[Tier2EventResult, Tier2Usage]:
         """Classify one event and persist extracted fields."""
         if event.id is None:
-            msg = "Event must have an id before Tier 2 classification"
-            raise ValueError(msg)
+            raise ValueError("Event must have an id before Tier 2 classification")
         if not trends:
-            msg = "At least one trend is required for Tier 2 classification"
-            raise ValueError(msg)
+            raise ValueError("At least one trend is required for Tier 2 classification")
 
         chunks = (
             context_chunks
@@ -718,9 +715,11 @@ class Tier2Classifier:
 
     def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
         existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-        system_claims = {
-            k: existing_claims[k] for k in _PRESERVED_SYSTEM_CLAIM_KEYS if k in existing_claims
-        }
+        system_claims = (
+            {TREND_IMPACT_RECONCILIATION_KEY: existing_claims[TREND_IMPACT_RECONCILIATION_KEY]}
+            if TREND_IMPACT_RECONCILIATION_KEY in existing_claims
+            else {}
+        )
         event.canonical_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()

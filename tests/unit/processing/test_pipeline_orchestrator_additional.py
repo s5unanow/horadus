@@ -1027,6 +1027,12 @@ def test_runtime_trend_identifier_helper_paths() -> None:
     )
     assert (
         ProcessingPipeline._impact_reasoning(
+            {"trend_id": "a", "signal_type": "x", "direction": "escalatory"}
+        )
+        == "Tier 2 classified x as escalatory"
+    )
+    assert (
+        ProcessingPipeline._impact_reasoning(
             {"signal_type": "x", "direction": "escalatory", "rationale": "given"}
         )
         == "given"

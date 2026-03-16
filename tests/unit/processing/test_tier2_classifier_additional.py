@@ -41,6 +41,7 @@ def _build_trend(
     return SimpleNamespace(
         id=uuid4(),
         name="Trend",
+        runtime_trend_id=trend_id,
         definition={"id": trend_id} if definition is None else definition,
         indicators=(
             {
@@ -240,7 +241,7 @@ def test_build_payload_budget_and_indicator_fallbacks(
         context_chunks=["first chunk", "second chunk"],
     )
 
-    assert payload["trends"][0]["trend_id"] == str(trend.id)
+    assert payload["trends"][0]["trend_id"] == "eu-russia"
     assert payload["trends"][0]["indicators"][0]["keywords"] == []
     assert payload["trends"][0]["indicators"][0]["description"] == "x" * 200
     assert (
@@ -398,7 +399,7 @@ def test_indicator_description_and_trend_identifier_fallbacks(mock_db_session) -
         == "Signal relevant to this trend."
     )
     trend = _build_trend(definition={})
-    assert classifier._trend_identifier(trend) == str(trend.id)
+    assert classifier._trend_identifier(trend) == "eu-russia"
 
 
 def test_parse_output_and_alignment_guard_invalid_responses(mock_db_session) -> None:

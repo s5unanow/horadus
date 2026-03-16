@@ -17,8 +17,20 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.routes._trend_write_contract import (
+    build_validated_trend_write_payload,
+)
+from src.api.routes._trend_write_persistence import (
+    enforce_trend_uniqueness,
+    get_existing_trend_by_runtime_id,
+    is_unique_integrity_error,
+)
+from src.api.routes._trend_write_persistence import (
+    raise_payload_validation_error as raise_trend_payload_validation_error,
+)
 from src.api.routes.trend_response_models import (
     TrendConfigLoadResponse,
     TrendDefinitionVersionResponse,
@@ -41,7 +53,7 @@ from src.core.risk import (
     get_confidence_rating,
     get_risk_level,
 )
-from src.core.trend_config import TrendConfig
+from src.core.trend_config import normalize_definition_payload
 from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
 from src.storage.models import (
@@ -437,38 +449,6 @@ class TrendRetrospectiveResponse(BaseModel):
     grounding_references: dict[str, Any] | None
 
 
-# Helpers
-def _slugify_name(name: str) -> str:
-    normalized = "-".join(name.lower().strip().split())
-    return normalized.replace("/", "-").replace("_", "-")
-
-
-def _ensure_definition_id(definition: dict[str, Any], *, trend_name: str) -> dict[str, Any]:
-    updated_definition = dict(definition)
-    raw_id = updated_definition.get("id")
-    if isinstance(raw_id, str) and raw_id.strip():
-        return updated_definition
-    updated_definition["id"] = _slugify_name(trend_name)
-    return updated_definition
-
-
-def _sync_definition_baseline_probability(
-    definition: dict[str, Any],
-    *,
-    baseline_log_odds: float,
-) -> dict[str, Any]:
-    updated_definition = dict(definition)
-    updated_definition["baseline_probability"] = round(
-        logodds_to_prob(float(baseline_log_odds)),
-        6,
-    )
-    return updated_definition
-
-
-def _normalize_definition_payload(definition: Any) -> dict[str, Any]:
-    return dict(definition) if isinstance(definition, dict) else {}
-
-
 def _hash_definition_payload(definition: dict[str, Any]) -> str:
     canonical = json.dumps(
         definition,
@@ -493,14 +473,20 @@ async def _record_definition_version_if_material_change(
         trend_id = uuid4()
         trend.id = trend_id
 
-    current_definition = _normalize_definition_payload(trend.definition)
+    current_definition = normalize_definition_payload(
+        trend.definition if isinstance(trend.definition, dict) else None
+    )
     current_hash = _hash_definition_payload(current_definition)
 
     if not force:
         if previous_definition is None:
             msg = "previous_definition is required when force=False"
             raise ValueError(msg)
-        previous_hash = _hash_definition_payload(_normalize_definition_payload(previous_definition))
+        previous_hash = _hash_definition_payload(
+            normalize_definition_payload(
+                previous_definition if isinstance(previous_definition, dict) else None
+            )
+        )
         if current_hash == previous_hash:
             return False
 
@@ -724,7 +710,7 @@ async def load_trends_from_config(
     *,
     config_dir: str = "config/trends",
 ) -> TrendConfigLoadResponse:
-    """Load trends from YAML files and upsert by trend name."""
+    """Load trends from YAML files and upsert by runtime trend identifier."""
     config_path = Path(config_dir)
     if not config_path.exists() or not config_path.is_dir():
         return TrendConfigLoadResponse(errors=[f"Config directory not found: {config_dir}"])
@@ -738,32 +724,46 @@ async def load_trends_from_config(
             if not isinstance(raw_config, dict):
                 raise ValueError("YAML root must be a mapping")
 
-            parsed_config = TrendConfig.model_validate(raw_config)
-            trend_name = parsed_config.name
-            baseline_log_odds = prob_to_logodds(parsed_config.baseline_probability)
-            indicators = {
-                signal_name: indicator.model_dump(mode="json")
-                for signal_name, indicator in parsed_config.indicators.items()
-            }
-            definition = _ensure_definition_id(
-                parsed_config.model_dump(mode="json", exclude_none=True),
-                trend_name=trend_name,
+            write_payload = build_validated_trend_write_payload(
+                name=raw_config.get("name", ""),
+                description=raw_config.get("description"),
+                baseline_probability=raw_config.get("baseline_probability"),
+                decay_half_life_days=raw_config.get("decay_half_life_days", 30),
+                indicators=raw_config.get("indicators"),
+                definition=raw_config,
             )
-            definition = _sync_definition_baseline_probability(
-                definition,
-                baseline_log_odds=baseline_log_odds,
-            )
+            validated_config = write_payload.trend_config
+            runtime_trend_id = write_payload.runtime_trend_id
 
-            existing = await session.scalar(select(Trend).where(Trend.name == trend_name).limit(1))
+            existing_by_runtime = await get_existing_trend_by_runtime_id(
+                session,
+                runtime_trend_id=runtime_trend_id,
+            )
+            existing_by_name = await session.scalar(
+                select(Trend).where(Trend.name == validated_config.name).limit(1)
+            )
+            if (
+                existing_by_runtime is not None
+                and existing_by_name is not None
+                and existing_by_runtime.id != existing_by_name.id
+            ):
+                msg = (
+                    "Config sync found conflicting trend identity rows for "
+                    f"name '{validated_config.name}' and runtime id '{runtime_trend_id}'"
+                )
+                raise ValueError(msg)
+
+            existing = existing_by_runtime or existing_by_name
             if existing is None:
                 trend = Trend(
-                    name=trend_name,
-                    description=parsed_config.description,
-                    definition=definition,
-                    baseline_log_odds=baseline_log_odds,
-                    current_log_odds=baseline_log_odds,
-                    indicators=indicators,
-                    decay_half_life_days=parsed_config.decay_half_life_days,
+                    name=validated_config.name,
+                    description=validated_config.description,
+                    runtime_trend_id=runtime_trend_id,
+                    definition=write_payload.definition,
+                    baseline_log_odds=write_payload.baseline_log_odds,
+                    current_log_odds=write_payload.baseline_log_odds,
+                    indicators=write_payload.indicators,
+                    decay_half_life_days=validated_config.decay_half_life_days,
                     is_active=True,
                 )
                 session.add(trend)
@@ -779,12 +779,16 @@ async def load_trends_from_config(
                 result.created += 1
                 continue
 
-            previous_definition = _normalize_definition_payload(existing.definition)
-            existing.description = parsed_config.description
-            existing.definition = definition
-            existing.baseline_log_odds = baseline_log_odds
-            existing.indicators = indicators
-            existing.decay_half_life_days = parsed_config.decay_half_life_days
+            previous_definition = normalize_definition_payload(
+                existing.definition if isinstance(existing.definition, dict) else None
+            )
+            existing.name = validated_config.name
+            existing.description = validated_config.description
+            existing.runtime_trend_id = runtime_trend_id
+            existing.definition = write_payload.definition
+            existing.baseline_log_odds = write_payload.baseline_log_odds
+            existing.indicators = write_payload.indicators
+            existing.decay_half_life_days = validated_config.decay_half_life_days
             await _record_definition_version_if_material_change(
                 session,
                 trend=existing,
@@ -834,38 +838,53 @@ async def create_trend(
     session: AsyncSession = Depends(get_session),
 ) -> TrendResponse:
     """Create a new trend."""
-    existing = await session.scalar(select(Trend.id).where(Trend.name == trend.name).limit(1))
-    if existing is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=f"Trend '{trend.name}' already exists",
+    try:
+        write_payload = build_validated_trend_write_payload(
+            name=trend.name,
+            description=trend.description,
+            baseline_probability=trend.baseline_probability,
+            decay_half_life_days=trend.decay_half_life_days,
+            indicators=trend.indicators,
+            definition=trend.definition,
         )
+    except ValueError as exc:
+        raise_trend_payload_validation_error(exc)
+    validated_config = write_payload.trend_config
 
-    definition = _ensure_definition_id(trend.definition, trend_name=trend.name)
-    baseline_log_odds = prob_to_logodds(trend.baseline_probability)
-    definition = _sync_definition_baseline_probability(
-        definition,
-        baseline_log_odds=baseline_log_odds,
+    await enforce_trend_uniqueness(
+        session,
+        trend_name=validated_config.name,
+        runtime_trend_id=write_payload.runtime_trend_id,
     )
+
     current_probability = (
         trend.current_probability
         if trend.current_probability is not None
-        else trend.baseline_probability
+        else validated_config.baseline_probability
     )
     current_log_odds = prob_to_logodds(current_probability)
 
     trend_record = Trend(
-        name=trend.name,
-        description=trend.description,
-        definition=definition,
-        baseline_log_odds=baseline_log_odds,
+        name=validated_config.name,
+        description=validated_config.description,
+        runtime_trend_id=write_payload.runtime_trend_id,
+        definition=write_payload.definition,
+        baseline_log_odds=write_payload.baseline_log_odds,
         current_log_odds=current_log_odds,
-        indicators=trend.indicators,
-        decay_half_life_days=trend.decay_half_life_days,
+        indicators=write_payload.indicators,
+        decay_half_life_days=validated_config.decay_half_life_days,
         is_active=trend.is_active,
     )
     session.add(trend_record)
-    await session.flush()
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if is_unique_integrity_error(exc, marker="runtime_trend_id"):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Trend runtime id '{write_payload.runtime_trend_id}' already exists",
+            ) from exc
+        raise
     await _record_definition_version_if_material_change(
         session,
         trend=trend_record,
@@ -1180,49 +1199,80 @@ async def update_trend(
 ) -> TrendResponse:
     """Update a trend."""
     trend_record = await _get_trend_or_404(session, trend_id)
-    previous_definition = _normalize_definition_payload(trend_record.definition)
+    previous_definition = normalize_definition_payload(
+        trend_record.definition if isinstance(trend_record.definition, dict) else None
+    )
     updates = trend.model_dump(exclude_unset=True)
 
-    if "name" in updates and updates["name"] is not None and updates["name"] != trend_record.name:
-        existing_id = await session.scalar(
-            select(Trend.id).where(Trend.name == updates["name"]).limit(1)
+    candidate_name = updates.get("name", trend_record.name)
+    candidate_description = updates.get("description", trend_record.description)
+    candidate_definition = updates.get("definition", trend_record.definition)
+    candidate_baseline_probability = (
+        updates["baseline_probability"]
+        if "baseline_probability" in updates
+        else logodds_to_prob(float(trend_record.baseline_log_odds))
+    )
+    candidate_indicators = updates.get("indicators", trend_record.indicators)
+    candidate_decay_half_life_days = updates.get(
+        "decay_half_life_days",
+        trend_record.decay_half_life_days,
+    )
+
+    try:
+        write_payload = build_validated_trend_write_payload(
+            name=candidate_name,
+            description=candidate_description,
+            baseline_probability=candidate_baseline_probability,
+            decay_half_life_days=candidate_decay_half_life_days,
+            indicators=candidate_indicators,
+            definition=candidate_definition,
         )
-        if existing_id is not None and existing_id != trend_id:
+    except ValueError as exc:
+        raise_trend_payload_validation_error(exc)
+    validated_config = write_payload.trend_config
+
+    await enforce_trend_uniqueness(
+        session,
+        trend_name=validated_config.name,
+        runtime_trend_id=write_payload.runtime_trend_id,
+        current_trend_id=trend_id,
+    )
+
+    if "name" in updates:
+        trend_record.name = validated_config.name
+    if "description" in updates:
+        trend_record.description = validated_config.description
+    if "definition" in updates or "baseline_probability" in updates:
+        trend_record.runtime_trend_id = write_payload.runtime_trend_id
+        trend_record.definition = write_payload.definition
+    if "baseline_probability" in updates:
+        trend_record.baseline_log_odds = write_payload.baseline_log_odds
+    if "indicators" in updates:
+        trend_record.indicators = write_payload.indicators
+    if "decay_half_life_days" in updates:
+        trend_record.decay_half_life_days = validated_config.decay_half_life_days
+    if "is_active" in updates:
+        trend_record.is_active = updates["is_active"]
+    if "current_probability" in updates and updates["current_probability"] is not None:
+        trend_record.current_log_odds = prob_to_logodds(updates["current_probability"])
+
+    if "definition" in updates or "baseline_probability" in updates:
+        await _record_definition_version_if_material_change(
+            session,
+            trend=trend_record,
+            previous_definition=previous_definition,
+            actor="api",
+            context="update_trend",
+        )
+    try:
+        await session.flush()
+    except IntegrityError as exc:
+        if is_unique_integrity_error(exc, marker="runtime_trend_id"):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=f"Trend '{updates['name']}' already exists",
-            )
-
-    if "definition" in updates and updates["definition"] is not None:
-        updates["definition"] = _ensure_definition_id(
-            updates["definition"], trend_name=updates.get("name", trend_record.name)
-        )
-
-    if "baseline_probability" in updates and updates["baseline_probability"] is not None:
-        updates["baseline_log_odds"] = prob_to_logodds(updates.pop("baseline_probability"))
-
-    if "definition" in updates or "baseline_log_odds" in updates:
-        baseline_log_odds = updates.get("baseline_log_odds", float(trend_record.baseline_log_odds))
-        base_definition = updates.get("definition", trend_record.definition)
-        updates["definition"] = _sync_definition_baseline_probability(
-            base_definition,
-            baseline_log_odds=baseline_log_odds,
-        )
-
-    if "current_probability" in updates and updates["current_probability"] is not None:
-        updates["current_log_odds"] = prob_to_logodds(updates.pop("current_probability"))
-
-    for field_name, field_value in updates.items():
-        setattr(trend_record, field_name, field_value)
-
-    await _record_definition_version_if_material_change(
-        session,
-        trend=trend_record,
-        previous_definition=previous_definition,
-        actor="api",
-        context="update_trend",
-    )
-    await session.flush()
+                detail=f"Trend runtime id '{write_payload.runtime_trend_id}' already exists",
+            ) from exc
+        raise
     return await _to_response(trend_record, session=session)
 
 

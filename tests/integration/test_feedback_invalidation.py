@@ -22,6 +22,7 @@ async def test_event_invalidation_preserves_evidence_lineage_and_reverses_delta(
         trend = Trend(
             name=f"Invalidate Trend {uuid4()}",
             description="Integration trend for invalidation lineage",
+            runtime_trend_id="invalidate-lineage",
             definition={"id": "invalidate-lineage"},
             baseline_log_odds=-2.0,
             current_log_odds=-1.5,

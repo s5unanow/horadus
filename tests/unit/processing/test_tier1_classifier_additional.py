@@ -51,6 +51,7 @@ def _build_trend(
     return SimpleNamespace(
         id=uuid4(),
         name="Trend",
+        runtime_trend_id=trend_id,
         definition={"id": trend_id} if definition is None else definition,
         indicators={"signal": {"keywords": [trend_id, "shared"]}}
         if indicators is None
@@ -169,7 +170,7 @@ def test_item_payload_requires_id_and_trend_payload_filters_keywords(mock_db_ses
     )
     payload = classifier._trend_payload(trend)
 
-    assert payload["trend_id"] == str(trend.id)
+    assert payload["trend_id"] == "eu-russia"
     assert payload["keywords"] == ["alpha"]
 
 

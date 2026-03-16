@@ -34,10 +34,12 @@ async def _create_trend_and_events(
     *, current_log_odds: float, updated_at: datetime
 ) -> tuple[UUID, UUID, UUID]:
     async with async_session_maker() as session:
+        runtime_trend_id = f"concurrency-{uuid4()}"
         trend = Trend(
             name=f"Concurrency Trend {uuid4()}",
             description="Integration trend for concurrency checks",
-            definition={"id": f"concurrency-{uuid4()}"},
+            runtime_trend_id=runtime_trend_id,
+            definition={"id": runtime_trend_id},
             baseline_log_odds=0.0,
             current_log_odds=current_log_odds,
             indicators={},

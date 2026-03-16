@@ -64,6 +64,7 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
             SimpleNamespace(
                 id=uuid5(NAMESPACE_URL, f"trend/{trend_id}"),
                 name=parsed.name,
+                runtime_trend_id=trend_id,
                 definition={"id": trend_id},
                 description=parsed.description,
                 indicators={

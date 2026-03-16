@@ -18,9 +18,15 @@
 - `TASK-233` Support Multi-Horizon Trend Variants for the Same Underlying Theme
 - `TASK-234` Make Uncertainty and Momentum First-Class Trend State
 - `TASK-235` Add Event Split/Merge Lineage for Evolving Stories
+- `TASK-334` Split Event Epistemic State from Activity State
+- `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
+- `TASK-336` Separate Story Clusters from Stable Event-Claim Identity
+- `TASK-337` Pin Live Trend State to Active Definition/Scoring Versions
+- `TASK-338` Separate Provisional and Canonical Extraction State in Degraded Mode
 - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations
 - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
 - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling
+- `TASK-339` Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
@@ -96,3 +102,4 @@
 - `TASK-286` Add CLI-Agnostic Local Pre-Push Review via Supported Agent CLIs `[REQUIRES_HUMAN]` ✅
 - `TASK-333` Fix Codex local-review `--base` invocation compatibility ✅
 - `TASK-200` Add authorization boundaries for privileged API mutations ✅
+- `TASK-203` Enforce validated, unique runtime trend identifiers across config and API ✅

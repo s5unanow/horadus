@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from src.core.trend_config import resolve_runtime_trend_id
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 
 pytestmark = pytest.mark.unit
@@ -208,3 +209,15 @@ indicators:
 
     assert files == [config_dir / "top.yaml"]
     assert [trend.definition["id"] for trend in trends] == ["top"]
+
+
+def test_resolve_runtime_trend_id_falls_back_from_blank_definition_id() -> None:
+    assert (
+        resolve_runtime_trend_id(definition={"id": "   "}, trend_name="Signal Watch")
+        == "signal-watch"
+    )
+
+
+def test_resolve_runtime_trend_id_rejects_blank_name_without_identifier() -> None:
+    with pytest.raises(ValueError, match="cannot be blank"):
+        resolve_runtime_trend_id(definition={"id": "   "}, trend_name=" ")

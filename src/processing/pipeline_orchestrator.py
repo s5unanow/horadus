@@ -32,6 +32,7 @@ from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
 )
+from src.core.trend_config import index_trends_by_runtime_id, trend_runtime_id_for_record
 from src.core.trend_engine import (
     TrendEngine,
     calculate_evidence_delta,
@@ -183,6 +184,7 @@ class ProcessingPipeline:
         if not active_trends:
             msg = "No active trends available for processing pipeline"
             raise ValueError(msg)
+        self._index_trends_by_runtime_id(active_trends)
 
         run_result = PipelineRunResult(scanned=len(items))
         execution_by_item: dict[UUID, _ItemExecution] = {}
@@ -834,7 +836,7 @@ class ProcessingPipeline:
         if not isinstance(impacts_payload, list) or not impacts_payload:
             return (0, 0)
 
-        trend_by_id = {self._trend_identifier(trend): trend for trend in trends}
+        trend_by_id = self._index_trends_by_runtime_id(trends)
         source_credibility = await self._load_event_source_credibility(event)
         corroboration_score = await self._corroboration_score(event)
 
@@ -1340,13 +1342,10 @@ class ProcessingPipeline:
             return 0.7
         return 1.0
 
-    @staticmethod
-    def _trend_identifier(trend: Trend) -> str:
-        definition = trend.definition if isinstance(trend.definition, dict) else {}
-        definition_id = definition.get("id")
-        if isinstance(definition_id, str) and definition_id.strip():
-            return definition_id.strip()
-        return str(trend.id)
+    _trend_identifier = staticmethod(trend_runtime_id_for_record)
+    _index_trends_by_runtime_id = classmethod(
+        lambda _cls, trends: index_trends_by_runtime_id(trends)
+    )
 
     @staticmethod
     def _resolve_indicator_weight(*, trend: Trend, signal_type: str) -> float | None:

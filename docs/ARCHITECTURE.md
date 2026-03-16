@@ -197,6 +197,7 @@ Taxonomy drift safety:
 - If Tier-2 emits an unknown `trend_id` or unknown `signal_type` mapping, the impact is skipped.
 - Skipped impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`).
 - This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
+- Active runtime trend routing is pinned to the normalized, unique `trends.runtime_trend_id` value (mirrored in `definition.id`) so duplicate config/API writes fail closed instead of shadowing one trend behind another.
 
 Degraded-mode safety (sustained Tier-2 failover / quality drift):
 - The system tracks Tier-2 failover ratios over rolling windows and runs a small Tier-2 gold-set canary before bulk pipeline runs.

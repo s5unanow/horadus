@@ -20,6 +20,7 @@ async def test_list_events_trend_filter_deduplicates_multi_evidence_rows() -> No
         trend = Trend(
             name=f"Events API Trend {uuid4()}",
             description="Integration trend for events API de-duplication",
+            runtime_trend_id="events-api-trend",
             definition={"id": "events-api-trend"},
             baseline_log_odds=-2.0,
             current_log_odds=-2.0,

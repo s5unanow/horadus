@@ -549,7 +549,6 @@ class Trend(Base):
 
     Trends represent hypotheses with associated probabilities.
     Examples: "EU-Russia Military Conflict", "US-China Trade War"
-
     Probability is stored as log-odds internally for mathematical correctness.
     Use the trend_engine functions to convert to/from probability.
 
@@ -574,6 +573,7 @@ class Trend(Base):
     )
     name: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
+    runtime_trend_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
 
     # Probability as log-odds

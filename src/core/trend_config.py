@@ -4,7 +4,8 @@ Trend configuration schema validation for YAML files.
 
 from __future__ import annotations
 
-from typing import Literal
+from collections.abc import Mapping, Sequence
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -51,3 +52,92 @@ class TrendConfig(BaseModel):
     falsification_criteria: TrendFalsificationCriteria = Field(
         default_factory=TrendFalsificationCriteria
     )
+
+
+def slugify_trend_name(name: str) -> str:
+    """Normalize a trend name into the default runtime identifier shape."""
+
+    normalized = "-".join(name.lower().strip().split())
+    return normalized.replace("/", "-").replace("_", "-")
+
+
+def normalize_definition_payload(definition: Mapping[str, Any] | None) -> dict[str, Any]:
+    """Return a mutable definition mapping for downstream normalization."""
+
+    return dict(definition) if isinstance(definition, Mapping) else {}
+
+
+def resolve_runtime_trend_id(*, definition: Mapping[str, Any] | None, trend_name: str) -> str:
+    """Resolve the runtime taxonomy identifier used by Tier-1/Tier-2/pipeline routing."""
+
+    normalized_definition = normalize_definition_payload(definition)
+    raw_id = normalized_definition.get("id")
+    if isinstance(raw_id, str):
+        normalized_id = raw_id.strip()
+        if normalized_id:
+            return normalized_id
+
+    fallback_id = slugify_trend_name(trend_name)
+    if fallback_id:
+        return fallback_id
+
+    msg = "Trend runtime id cannot be blank"
+    raise ValueError(msg)
+
+
+def build_trend_config(
+    *,
+    name: str,
+    description: str | None,
+    baseline_probability: float,
+    decay_half_life_days: int,
+    indicators: Mapping[str, Any] | None,
+    definition: Mapping[str, Any] | None = None,
+) -> TrendConfig:
+    """Validate a full trend payload against the canonical taxonomy contract."""
+
+    normalized_definition = normalize_definition_payload(definition)
+    payload = dict(normalized_definition)
+    payload.update(
+        {
+            "id": resolve_runtime_trend_id(definition=normalized_definition, trend_name=name),
+            "name": name,
+            "description": description,
+            "baseline_probability": baseline_probability,
+            "decay_half_life_days": decay_half_life_days,
+            "indicators": dict(indicators) if isinstance(indicators, Mapping) else {},
+        }
+    )
+    return TrendConfig.model_validate(payload)
+
+
+def trend_runtime_id_for_record(trend: Any) -> str:
+    """Resolve the canonical runtime trend id from a trend-like object."""
+
+    runtime_trend_id = getattr(trend, "runtime_trend_id", None)
+    if isinstance(runtime_trend_id, str) and runtime_trend_id.strip():
+        return runtime_trend_id.strip()
+
+    definition = getattr(trend, "definition", None)
+    normalized_definition = normalize_definition_payload(
+        definition if isinstance(definition, Mapping) else None
+    )
+    definition_id = normalized_definition.get("id")
+    if isinstance(definition_id, str) and definition_id.strip():
+        return definition_id.strip()
+
+    msg = f"Trend '{getattr(trend, 'name', '')}' is missing runtime_trend_id"
+    raise ValueError(msg)
+
+
+def index_trends_by_runtime_id(trends: Sequence[Any]) -> dict[str, Any]:
+    """Build a runtime-id keyed map and fail closed on duplicates."""
+
+    trend_by_id: dict[str, Any] = {}
+    for trend in trends:
+        runtime_trend_id = trend_runtime_id_for_record(trend)
+        if runtime_trend_id in trend_by_id:
+            msg = f"Duplicate active runtime_trend_id '{runtime_trend_id}'"
+            raise ValueError(msg)
+        trend_by_id[runtime_trend_id] = trend
+    return trend_by_id

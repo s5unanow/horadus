@@ -53,6 +53,7 @@ def _build_trend(*, probability: float) -> Trend:
         id=uuid4(),
         name="Trend",
         description="desc",
+        runtime_trend_id="trend",
         definition={"baseline_probability": probability},
         baseline_log_odds=log_odds,
         current_log_odds=log_odds,

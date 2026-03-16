@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.trend_config import trend_runtime_id_for_record
 from src.processing.cost_tracker import TIER2, CostTracker
 from src.processing.llm_failover import LLMChatRoute
 from src.processing.llm_input_safety import (
@@ -677,11 +678,7 @@ class Tier2Classifier:
 
     @staticmethod
     def _trend_identifier(trend: Trend) -> str:
-        definition = trend.definition if isinstance(trend.definition, dict) else {}
-        definition_id = definition.get("id")
-        if isinstance(definition_id, str) and definition_id.strip():
-            return definition_id.strip()
-        return str(trend.id)
+        return trend_runtime_id_for_record(trend)
 
     @staticmethod
     def _parse_output(response: Any) -> _Tier2Output:

@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Mapping
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from inspect import isawaitable
 from typing import TYPE_CHECKING, Any
@@ -43,6 +42,14 @@ from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
+from src.processing.pipeline_retry import build_retryable_pipeline_error
+from src.processing.pipeline_types import (
+    PipelineItemResult,
+    PipelineRunResult,
+    PipelineUsage,
+    _ItemExecution,
+    _PreparedItem,
+)
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.models import (
@@ -63,80 +70,6 @@ if TYPE_CHECKING:
     from src.processing.degraded_llm_tracker import DegradedLLMStatus, DegradedLLMTracker
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass(slots=True)
-class PipelineUsage:
-    """Usage and API call metrics across one pipeline run."""
-
-    embedding_api_calls: int = 0
-    embedding_estimated_cost_usd: float = 0.0
-    tier1_prompt_tokens: int = 0
-    tier1_completion_tokens: int = 0
-    tier1_api_calls: int = 0
-    tier1_estimated_cost_usd: float = 0.0
-    tier2_prompt_tokens: int = 0
-    tier2_completion_tokens: int = 0
-    tier2_api_calls: int = 0
-    tier2_estimated_cost_usd: float = 0.0
-
-
-@dataclass(slots=True)
-class PipelineItemResult:
-    """Result of processing one raw item."""
-
-    item_id: UUID
-    final_status: ProcessingStatus
-    event_id: UUID | None = None
-    duplicate: bool = False
-    embedded: bool = False
-    event_created: bool = False
-    event_merged: bool = False
-    tier2_applied: bool = False
-    degraded_llm_hold: bool = False
-    replay_enqueued: bool = False
-    trend_impacts_seen: int = 0
-    trend_updates: int = 0
-    error_message: str | None = None
-
-
-@dataclass(slots=True)
-class PipelineRunResult:
-    """Summary metrics for one pipeline run."""
-
-    scanned: int = 0
-    processed: int = 0
-    classified: int = 0
-    noise: int = 0
-    duplicates: int = 0
-    errors: int = 0
-    embedded: int = 0
-    events_created: int = 0
-    events_merged: int = 0
-    trend_impacts_seen: int = 0
-    trend_updates: int = 0
-    degraded_llm: bool = False
-    degraded_holds: int = 0
-    replay_enqueued: int = 0
-    results: list[PipelineItemResult] = field(default_factory=list)
-    usage: PipelineUsage = field(default_factory=PipelineUsage)
-
-
-@dataclass(slots=True)
-class _ItemExecution:
-    """Internal execution details for one processed item."""
-
-    result: PipelineItemResult
-    usage: PipelineUsage = field(default_factory=PipelineUsage)
-
-
-@dataclass(slots=True)
-class _PreparedItem:
-    """Item state prepared for Tier-1 batch classification."""
-
-    item: RawItem
-    item_id: UUID
-    raw_content: str
 
 
 class ProcessingPipeline:
@@ -318,6 +251,37 @@ class ProcessingPipeline:
         if execution.result.replay_enqueued:
             run_result.replay_enqueued += 1
 
+    @staticmethod
+    def _reset_item_for_retry(item: RawItem) -> None:
+        item.processing_status = ProcessingStatus.PENDING
+        item.processing_started_at = None
+        item.error_message = None
+
+    def _raise_retryable_failure_if_needed(
+        self,
+        *,
+        item: RawItem | None,
+        stage: str,
+        exc: Exception,
+    ) -> None:
+        retryable_error = build_retryable_pipeline_error(
+            item_id=getattr(item, "id", None),
+            stage=stage,
+            exc=exc,
+        )
+        if retryable_error is None:
+            return
+        if item is not None:
+            self._reset_item_for_retry(item)
+        logger.warning(
+            "Retryable pipeline failure will be requeued at task level",
+            item_id=str(retryable_error.item_id) if retryable_error.item_id is not None else None,
+            stage=stage,
+            reason=retryable_error.reason,
+            error=str(exc),
+        )
+        raise retryable_error from exc
+
     async def _prepare_item_for_tier1(
         self,
         *,
@@ -328,7 +292,6 @@ class ProcessingPipeline:
         item.processing_started_at = datetime.now(tz=UTC)
         item.error_message = None
         await self.session.flush()
-
         try:
             duplicate_result = await self.deduplication_service.find_duplicate(
                 external_id=item.external_id,
@@ -412,6 +375,7 @@ class ProcessingPipeline:
                 ),
             )
         except Exception as exc:
+            self._raise_retryable_failure_if_needed(item=item, stage="prepare", exc=exc)
             item.processing_status = ProcessingStatus.ERROR
             item.processing_started_at = None
             item.error_message = str(exc)[:1000]
@@ -475,6 +439,21 @@ class ProcessingPipeline:
             )
             return ({}, failed_by_item, usage)
         except Exception as exc:
+            retryable_error = build_retryable_pipeline_error(
+                item_id=None,
+                stage="tier1_batch",
+                exc=exc,
+            )
+            if retryable_error is not None:
+                for prepared in prepared_items:
+                    self._reset_item_for_retry(prepared.item)
+                logger.warning(
+                    "Retryable Tier 1 batch failure will be requeued at task level",
+                    prepared_items=len(prepared_items),
+                    reason=retryable_error.reason,
+                    error=str(exc),
+                )
+                raise retryable_error from exc
             logger.warning(
                 "Tier 1 batch classification failed; falling back to per-item classification",
                 prepared_items=len(prepared_items),
@@ -502,6 +481,7 @@ class ProcessingPipeline:
                     )
                 )
             except Exception as exc:
+                self._raise_retryable_failure_if_needed(item=prepared.item, stage="tier1", exc=exc)
                 prepared.item.processing_status = ProcessingStatus.ERROR
                 prepared.item.processing_started_at = None
                 prepared.item.error_message = str(exc)[:1000]
@@ -541,7 +521,6 @@ class ProcessingPipeline:
                     ),
                     usage=usage,
                 )
-
             if item.embedding is None:
                 embedding_audit = None
                 embed_with_contexts = getattr(
@@ -720,6 +699,7 @@ class ProcessingPipeline:
                 usage=usage,
             )
         except Exception as exc:
+            self._raise_retryable_failure_if_needed(item=item, stage="post_tier1", exc=exc)
             item.processing_status = ProcessingStatus.ERROR
             item.processing_started_at = None
             item.error_message = str(exc)[:1000]

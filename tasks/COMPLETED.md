@@ -309,4 +309,5 @@
 - TASK-333: Fix Codex local-review `--base` invocation compatibility ✅
 - TASK-200: Add authorization boundaries for privileged API mutations ✅
 - TASK-203: Enforce validated, unique runtime trend identifiers across config and API ✅
+- TASK-204: Recompute applied trend evidence when Tier-2 impacts change ✅
 - TASK-205: Requeue retryable pipeline failures instead of permanently erroring items ✅

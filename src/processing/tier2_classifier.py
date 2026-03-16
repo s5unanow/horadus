@@ -1,6 +1,4 @@
-"""
-Tier 2 LLM classifier for detailed event extraction and trend impacts.
-"""
+"""Tier 2 LLM classifier for detailed event extraction and trend impacts."""
 
 # ruff: noqa: RUF001
 
@@ -36,6 +34,7 @@ from src.processing.llm_policy import (
     invoke_with_policy,
 )
 from src.processing.semantic_cache import LLMSemanticCache
+from src.processing.trend_impact_reconciliation import TREND_IMPACT_RECONCILIATION_KEY
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -361,11 +360,9 @@ class Tier2Classifier:
     ) -> tuple[Tier2EventResult, Tier2Usage]:
         """Classify one event and persist extracted fields."""
         if event.id is None:
-            msg = "Event must have an id before Tier 2 classification"
-            raise ValueError(msg)
+            raise ValueError("Event must have an id before Tier 2 classification")
         if not trends:
-            msg = "At least one trend is required for Tier 2 classification"
-            raise ValueError(msg)
+            raise ValueError("At least one trend is required for Tier 2 classification")
 
         chunks = (
             context_chunks
@@ -717,6 +714,12 @@ class Tier2Classifier:
             seen_pairs.add(pair)
 
     def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
+        existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+        system_claims = (
+            {TREND_IMPACT_RECONCILIATION_KEY: existing_claims[TREND_IMPACT_RECONCILIATION_KEY]}
+            if TREND_IMPACT_RECONCILIATION_KEY in existing_claims
+            else {}
+        )
         event.canonical_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
@@ -725,7 +728,6 @@ class Tier2Classifier:
         event.categories = self._dedupe_strings(output.categories)
         claims = self._dedupe_strings(output.claims)
         claim_graph = self._build_claim_graph(claims)
-
         trend_impacts = [
             TrendImpact(
                 trend_id=impact.trend_id,
@@ -751,6 +753,7 @@ class Tier2Classifier:
             "claims": claims,
             "claim_graph": claim_graph,
             "trend_impacts": trend_impacts,
+            **system_claims,
         }
 
     @staticmethod

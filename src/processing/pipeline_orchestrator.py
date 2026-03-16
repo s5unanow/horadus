@@ -52,6 +52,14 @@ from src.processing.pipeline_types import (
 )
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Classifier
+from src.processing.trend_impact_reconciliation import (
+    event_age_days,
+    impact_reasoning,
+    parse_trend_impact,
+    reconcile_event_trend_impacts,
+    resolve_indicator_decay_half_life,
+    resolve_indicator_weight,
+)
 from src.storage.models import (
     Event,
     EventItem,
@@ -807,116 +815,16 @@ class ProcessingPipeline:
         event: Event,
         trends: list[Trend],
     ) -> tuple[int, int]:
-        if event.id is None:
-            msg = "Event must have an id before applying trend impacts"
-            raise ValueError(msg)
-
-        claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-        impacts_payload = claims.get("trend_impacts", [])
-        if not isinstance(impacts_payload, list) or not impacts_payload:
-            return (0, 0)
-
-        trend_by_id = self._index_trends_by_runtime_id(trends)
-        source_credibility = await self._load_event_source_credibility(event)
-        corroboration_score = await self._corroboration_score(event)
-
-        impacts_seen = 0
-        updates_applied = 0
-        for payload in impacts_payload:
-            impact = self._parse_trend_impact(payload)
-            if impact is None:
-                logger.warning("Skipping malformed trend impact payload", event_id=str(event.id))
-                continue
-
-            impacts_seen += 1
-            trend = trend_by_id.get(impact["trend_id"])
-            if trend is None:
-                await self._capture_taxonomy_gap(
-                    event_id=event.id,
-                    trend_id=impact["trend_id"],
-                    signal_type=impact["signal_type"],
-                    reason=TaxonomyGapReason.UNKNOWN_TREND_ID,
-                    details={
-                        "direction": impact["direction"],
-                        "severity": impact["severity"],
-                        "confidence": impact["confidence"],
-                        "rationale": impact["rationale"],
-                    },
-                )
-                logger.warning(
-                    "Skipping unknown trend impact",
-                    event_id=str(event.id),
-                    trend_id=impact["trend_id"],
-                )
-                continue
-
-            signal_type = impact["signal_type"]
-            indicator_weight = self._resolve_indicator_weight(trend=trend, signal_type=signal_type)
-            if indicator_weight is None:
-                await self._capture_taxonomy_gap(
-                    event_id=event.id,
-                    trend_id=self._trend_identifier(trend),
-                    signal_type=signal_type,
-                    reason=TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE,
-                    details={
-                        "trend_uuid": str(trend.id),
-                        "direction": impact["direction"],
-                        "severity": impact["severity"],
-                        "confidence": impact["confidence"],
-                        "rationale": impact["rationale"],
-                    },
-                )
-                logger.warning(
-                    "Skipping trend impact with unknown indicator weight",
-                    event_id=str(event.id),
-                    trend_id=str(trend.id),
-                    signal_type=signal_type,
-                )
-                continue
-            indicator_decay_half_life_days = self._resolve_indicator_decay_half_life(
-                trend=trend, signal_type=signal_type
-            )
-            evidence_age_days = self._event_age_days(event)
-
-            trend_id = trend.id
-            if trend_id is None:
-                logger.warning(
-                    "Skipping trend impact because trend id is missing",
-                    event_id=str(event.id),
-                    trend_name=trend.name,
-                    signal_type=signal_type,
-                )
-                continue
-
-            novelty_score = await self._novelty_score(
-                trend_id=trend_id,
-                signal_type=signal_type,
-                event_id=event.id,
-            )
-            delta, factors = calculate_evidence_delta(
-                signal_type=signal_type,
-                indicator_weight=indicator_weight,
-                source_credibility=source_credibility,
-                corroboration_count=corroboration_score,
-                novelty_score=novelty_score,
-                direction=impact["direction"],
-                severity=impact["severity"],
-                confidence=impact["confidence"],
-                evidence_age_days=evidence_age_days,
-                indicator_decay_half_life_days=indicator_decay_half_life_days,
-            )
-            update = await self.trend_engine.apply_evidence(
-                trend=trend,
-                delta=delta,
-                event_id=event.id,
-                signal_type=signal_type,
-                factors=factors,
-                reasoning=self._impact_reasoning(impact),
-            )
-            if abs(update.delta_applied) > 0.0:
-                updates_applied += 1
-
-        return (impacts_seen, updates_applied)
+        return await reconcile_event_trend_impacts(
+            session=self.session,
+            trend_engine=self.trend_engine,
+            event=event,
+            trends=trends,
+            load_event_source_credibility=self._load_event_source_credibility,
+            load_corroboration_score=self._corroboration_score,
+            load_novelty_score=self._novelty_score,
+            capture_taxonomy_gap=self._capture_taxonomy_gap,
+        )
 
     async def _maybe_enqueue_replay(
         self,
@@ -1004,7 +912,7 @@ class ProcessingPipeline:
         if not isinstance(impacts_payload, list) or not impacts_payload:
             return (False, 0.0, False)
 
-        trend_by_id = {self._trend_identifier(trend): trend for trend in trends}
+        trend_by_id = index_trends_by_runtime_id(trends)
         source_credibility = await self._load_event_source_credibility(event)
         corroboration_score = await self._corroboration_score(event)
 
@@ -1014,22 +922,22 @@ class ProcessingPipeline:
 
         high_impact = False
         for payload in impacts_payload:
-            impact = self._parse_trend_impact(payload)
+            impact = parse_trend_impact(payload)
             if impact is None:
                 continue
 
-            trend = trend_by_id.get(impact["trend_id"])
+            trend = trend_by_id.get(impact.trend_id)
             if trend is None or trend.id is None:
                 continue
 
-            signal_type = impact["signal_type"]
-            indicator_weight = self._resolve_indicator_weight(trend=trend, signal_type=signal_type)
+            signal_type = impact.signal_type
+            indicator_weight = resolve_indicator_weight(trend=trend, signal_type=signal_type)
             if indicator_weight is None:
                 continue
-            indicator_decay_half_life_days = self._resolve_indicator_decay_half_life(
+            indicator_decay_half_life_days = resolve_indicator_decay_half_life(
                 trend=trend, signal_type=signal_type
             )
-            evidence_age_days = self._event_age_days(event)
+            evidence_age_days = event_age_days(event)
             novelty_score = await self._novelty_score(
                 trend_id=trend.id,
                 signal_type=signal_type,
@@ -1042,9 +950,9 @@ class ProcessingPipeline:
                 source_credibility=source_credibility,
                 corroboration_count=corroboration_score,
                 novelty_score=novelty_score,
-                direction=impact["direction"],
-                severity=impact["severity"],
-                confidence=impact["confidence"],
+                direction=impact.direction,
+                severity=impact.severity,
+                confidence=impact.confidence,
                 evidence_age_days=evidence_age_days,
                 indicator_decay_half_life_days=indicator_decay_half_life_days,
             )
@@ -1326,101 +1234,29 @@ class ProcessingPipeline:
     _index_trends_by_runtime_id = classmethod(
         lambda _cls, trends: index_trends_by_runtime_id(trends)
     )
-
-    @staticmethod
-    def _resolve_indicator_weight(*, trend: Trend, signal_type: str) -> float | None:
-        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
-        indicator_config = indicators.get(signal_type)
-        if not isinstance(indicator_config, dict):
-            return None
-
-        raw_weight = indicator_config.get("weight")
-        if raw_weight is None:
-            return None
-        if not isinstance(raw_weight, str | int | float):
-            return None
-        try:
-            weight = float(raw_weight)
-        except (TypeError, ValueError):
-            return None
-
-        if weight <= 0:
-            return None
-        return weight
-
-    @staticmethod
-    def _resolve_indicator_decay_half_life(*, trend: Trend, signal_type: str) -> float | None:
-        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
-        indicator_config = indicators.get(signal_type)
-
-        if isinstance(indicator_config, dict):
-            raw_indicator_half_life = indicator_config.get("decay_half_life_days")
-            if isinstance(raw_indicator_half_life, str | int | float):
-                try:
-                    parsed = float(raw_indicator_half_life)
-                except (TypeError, ValueError):
-                    parsed = 0.0
-                if parsed > 0:
-                    return parsed
-
-        raw_trend_half_life = getattr(trend, "decay_half_life_days", None)
-        if isinstance(raw_trend_half_life, str | int | float):
-            try:
-                parsed = float(raw_trend_half_life)
-            except (TypeError, ValueError):
-                return None
-            if parsed > 0:
-                return parsed
-        return None
-
-    @staticmethod
-    def _event_age_days(event: Event) -> float:
-        reference_time = event.extracted_when or event.last_mention_at or event.first_seen_at
-        if reference_time is None:
-            return 0.0
-        if reference_time.tzinfo is None:
-            reference_time = reference_time.replace(tzinfo=UTC)
-        else:
-            reference_time = reference_time.astimezone(UTC)
-        return max(0.0, (datetime.now(tz=UTC) - reference_time).total_seconds() / 86400.0)
+    _resolve_indicator_weight = staticmethod(resolve_indicator_weight)
+    _resolve_indicator_decay_half_life = staticmethod(resolve_indicator_decay_half_life)
+    _event_age_days = staticmethod(event_age_days)
 
     @staticmethod
     def _parse_trend_impact(payload: Any) -> dict[str, Any] | None:
-        if not isinstance(payload, dict):
+        parsed = parse_trend_impact(payload)
+        if parsed is None:
             return None
-
-        trend_id = payload.get("trend_id")
-        signal_type = payload.get("signal_type")
-        direction = payload.get("direction")
-        if not isinstance(trend_id, str) or not trend_id.strip():
-            return None
-        if not isinstance(signal_type, str) or not signal_type.strip():
-            return None
-        if direction not in ("escalatory", "de_escalatory"):
-            return None
-
-        try:
-            severity = float(payload.get("severity", 1.0))
-            confidence = float(payload.get("confidence", 1.0))
-        except (TypeError, ValueError):
-            return None
-
-        rationale = payload.get("rationale")
-        rationale_text = (
-            rationale.strip() if isinstance(rationale, str) and rationale.strip() else None
-        )
-
         return {
-            "trend_id": trend_id.strip(),
-            "signal_type": signal_type.strip(),
-            "direction": direction,
-            "severity": max(0.0, min(1.0, severity)),
-            "confidence": max(0.0, min(1.0, confidence)),
-            "rationale": rationale_text,
+            "trend_id": parsed.trend_id,
+            "signal_type": parsed.signal_type,
+            "direction": parsed.direction,
+            "severity": parsed.severity,
+            "confidence": parsed.confidence,
+            "rationale": parsed.rationale,
         }
 
     @staticmethod
     def _impact_reasoning(impact: dict[str, Any]) -> str:
+        parsed = parse_trend_impact(impact)
+        if parsed is not None:
+            return impact_reasoning(parsed)
         rationale = impact.get("rationale")
         if isinstance(rationale, str) and rationale:
             return rationale

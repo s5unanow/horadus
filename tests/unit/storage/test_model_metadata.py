@@ -121,3 +121,23 @@ def test_trend_evidence_factorization_columns_present_in_model_metadata() -> Non
     assert "base_weight" in TrendEvidence.__table__.c
     assert "direction_multiplier" in TrendEvidence.__table__.c
     assert "trend_definition_hash" in TrendEvidence.__table__.c
+
+
+def test_trend_evidence_active_unique_index_present_in_model_metadata() -> None:
+    evidence_index = next(
+        index
+        for index in TrendEvidence.__table__.indexes
+        if index.name == "uq_trend_event_signal_active"
+    )
+    where_clause = evidence_index.dialect_options["postgresql"]["where"]
+
+    assert evidence_index.unique is True
+    assert (
+        str(
+            where_clause.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        )
+        == "is_invalidated = false"
+    )

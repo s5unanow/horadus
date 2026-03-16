@@ -538,6 +538,7 @@ class TrendEngine:
                 TrendEvidence.trend_id == trend.id,
                 TrendEvidence.event_id == event_id,
                 TrendEvidence.signal_type == signal_type,
+                TrendEvidence.is_invalidated.is_(False),
             )
         )
         if existing.scalar_one_or_none() is not None:
@@ -573,7 +574,6 @@ class TrendEngine:
             delta_log_odds=delta,
             reasoning=reasoning,
         )
-
         try:
             async with self.session.begin_nested():
                 self.session.add(evidence)

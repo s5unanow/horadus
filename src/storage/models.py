@@ -656,18 +656,7 @@ class TrendDefinitionVersion(Base):
 
 
 class TrendEvidence(Base):
-    """
-    Record of evidence applied to a trend.
-
-    Every time an event affects a trend's probability, we record:
-    - What event caused it
-    - What signal type was detected
-    - All the scoring factors
-    - The resulting log-odds delta
-    - Human-readable reasoning
-
-    This creates a full audit trail for probability changes.
-    """
+    """Record one scored event signal and the resulting trend delta."""
 
     __tablename__ = "trend_evidence"
 
@@ -729,10 +718,17 @@ class TrendEvidence(Base):
 
     # Constraints
     __table_args__ = (
-        UniqueConstraint("trend_id", "event_id", "signal_type", name="uq_trend_event_signal"),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
         Index("idx_evidence_event_invalidated", "event_id", "is_invalidated"),
+        Index(
+            "uq_trend_event_signal_active",
+            "trend_id",
+            "event_id",
+            "signal_type",
+            unique=True,
+            postgresql_where=text("is_invalidated = false"),
+        ),
     )
 
 

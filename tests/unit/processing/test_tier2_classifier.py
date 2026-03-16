@@ -236,6 +236,28 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
 
 
 @pytest.mark.asyncio
+async def test_classify_event_preserves_system_claim_metadata(mock_db_session) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Initial summary",
+        extracted_claims={
+            "_trend_impact_reconciliation": [{"reason": "prior_reclassification"}],
+            "_llm_policy": {"degraded_llm": True},
+        },
+    )
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    await classifier.classify_event(event=event, trends=trends, context_chunks=["Prior context"])
+
+    assert isinstance(event.extracted_claims, dict)
+    assert event.extracted_claims["_trend_impact_reconciliation"] == [
+        {"reason": "prior_reclassification"}
+    ]
+    assert "_llm_policy" not in event.extracted_claims
+
+
+@pytest.mark.asyncio
 async def test_classify_event_propagates_reasoning_effort_for_gpt5(mock_db_session) -> None:
     classifier, chat, _cost_tracker = _build_classifier(
         mock_db_session,

@@ -175,28 +175,6 @@ Transient model/provider/DB failures can strand held deltas permanently.
 
 ---
 
-### TASK-204: Recompute applied trend evidence when Tier-2 impacts change
-**Priority**: P0 (Critical)
-**Estimate**: 1-2 days
-
-Tier-2 reclassification still overwrites `event.extracted_claims["trend_impacts"]`
-without reconciling already-applied `TrendEvidence`. When severity, direction,
-or impacted trends change, the stored delta remains stale.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 2 finding 2
-
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-**Files**: `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/core/trend_engine.py`, `src/storage/models.py`, `docs/ARCHITECTURE.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Detect differences between previously applied impacts and newly classified impacts for the same event
-- [ ] Reverse, replace, or otherwise reconcile stale `TrendEvidence` rows and trend deltas when impact payloads change
-- [ ] Preserve an auditable lineage showing which evidence was superseded by reclassification
-- [ ] Add tests covering severity/direction changes and event merges that alter impact application
-
----
-
 ### TASK-206: Keep event recency monotonic under late and backfilled mentions
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

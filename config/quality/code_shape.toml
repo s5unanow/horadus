@@ -11,7 +11,6 @@ exclude_globs = ["**/__pycache__/**"]
 [[legacy_files]]
 path = "src/api/routes/feedback.py"
 [legacy_files.member_max_lines]
-"create_event_feedback" = 113
 "list_review_queue" = 143
 
 [[legacy_files]]

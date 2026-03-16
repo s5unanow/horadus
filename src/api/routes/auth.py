@@ -10,11 +10,13 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.api.middleware.auth import verify_privileged_access
 from src.core.api_key_manager import APIKeyRecord, get_api_key_manager
-from src.core.config import settings
+from src.core.config import settings as app_settings
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
+settings = app_settings
 
 
 class APIKeySummary(BaseModel):
@@ -81,24 +83,6 @@ def _to_summary(record: APIKeyRecord) -> APIKeySummary:
     )
 
 
-def _ensure_admin_access(request: Request) -> None:
-    configured_admin_key = (settings.API_ADMIN_KEY or "").strip()
-    if not configured_admin_key:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin API key is not configured",
-        )
-
-    header_value = request.headers.get("X-Admin-API-Key", "").strip()
-    if header_value == configured_admin_key:
-        return
-
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Admin API key required",
-    )
-
-
 def _audit_admin_action(
     *,
     request: Request,
@@ -128,7 +112,7 @@ def _audit_admin_action(
 async def list_api_keys(request: Request) -> list[APIKeySummary]:
     """List API keys (metadata only)."""
     try:
-        _ensure_admin_access(request)
+        verify_privileged_access(request)
     except HTTPException as exc:
         _audit_admin_action(
             request=request,
@@ -155,7 +139,7 @@ async def create_api_key(
 ) -> APIKeyCreateResponse:
     """Create a new API key."""
     try:
-        _ensure_admin_access(request)
+        verify_privileged_access(request)
     except HTTPException as exc:
         _audit_admin_action(
             request=request,
@@ -192,7 +176,7 @@ async def revoke_api_key(
 ) -> None:
     """Revoke an API key by id."""
     try:
-        _ensure_admin_access(request)
+        verify_privileged_access(request)
     except HTTPException as exc:
         _audit_admin_action(
             request=request,
@@ -230,7 +214,7 @@ async def rotate_api_key(
 ) -> APIKeyCreateResponse:
     """Rotate an API key by id and return a replacement credential."""
     try:
-        _ensure_admin_access(request)
+        verify_privileged_access(request)
     except HTTPException as exc:
         _audit_admin_action(
             request=request,

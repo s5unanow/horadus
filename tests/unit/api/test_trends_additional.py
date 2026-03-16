@@ -6,8 +6,9 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
+import src.api.middleware.auth as auth_middleware_module
 import src.api.routes.trends as trends_module
 from src.api.routes.trends import (
     _downsample_snapshots,
@@ -44,6 +45,24 @@ def _build_trend(*, trend_id=None, name: str = "Trend A", is_active: bool = True
         is_active=is_active,
         created_at=now,
         updated_at=now,
+    )
+
+
+def _build_request(*, admin_key: str | None = None) -> Request:
+    headers: list[tuple[bytes, bytes]] = []
+    if admin_key is not None:
+        headers.append((b"x-admin-api-key", admin_key.encode("utf-8")))
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/trends",
+            "headers": headers,
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
     )
 
 
@@ -175,6 +194,7 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
     monkeypatch.setattr(trends_module, "_get_evidence_stats", AsyncMock(return_value=(0, 0.5, 30)))
     monkeypatch.setattr(trends_module, "_get_top_movers_7d", AsyncMock(return_value=[]))
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
     called: list[str] = []
 
     async def fake_sync(*, session, config_dir: str = "config/trends"):
@@ -185,6 +205,7 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     monkeypatch.setattr(trends_module, "load_trends_from_config", fake_sync)
 
     results = await list_trends(
+        request=_build_request(admin_key="admin-secret"),
         active_only=False,
         sync_from_config=True,
         session=mock_db_session,

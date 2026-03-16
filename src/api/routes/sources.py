@@ -15,6 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.middleware.auth import require_privileged_access
 from src.core.config import settings
 from src.core.source_freshness import build_source_freshness_report
 from src.storage.database import get_session
@@ -232,7 +233,12 @@ async def get_source_freshness(
     )
 
 
-@router.post("", response_model=SourceResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=SourceResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(require_privileged_access("sources.create"))],
+)
 async def create_source(
     source: SourceCreate,
     session: AsyncSession = Depends(get_session),
@@ -282,7 +288,11 @@ async def get_source(
     return _to_response(source)
 
 
-@router.patch("/{source_id}", response_model=SourceResponse)
+@router.patch(
+    "/{source_id}",
+    response_model=SourceResponse,
+    dependencies=[Depends(require_privileged_access("sources.update"))],
+)
 async def update_source(
     source_id: UUID,
     source: SourceUpdate,
@@ -313,7 +323,11 @@ async def update_source(
     return _to_response(source_record)
 
 
-@router.delete("/{source_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{source_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[Depends(require_privileged_access("sources.delete"))],
+)
 async def delete_source(
     source_id: UUID,
     session: AsyncSession = Depends(get_session),

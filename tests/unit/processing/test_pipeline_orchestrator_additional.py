@@ -49,6 +49,7 @@ def _trend(
     return SimpleNamespace(
         id=trend_id if trend_id is not None else uuid4(),
         name="EU-Russia",
+        runtime_trend_id="eu-russia",
         current_log_odds=0.0,
         decay_half_life_days=trend_half_life,
         definition={"id": "eu-russia"},
@@ -149,6 +150,31 @@ async def test_process_items_marks_missing_execution_as_error(mock_db_session) -
 
     assert result.errors == 1
     assert result.results[0].error_message == "Pipeline execution result missing"
+
+
+@pytest.mark.asyncio
+async def test_process_items_rejects_duplicate_active_runtime_trend_ids(mock_db_session) -> None:
+    pipeline = _pipeline(mock_db_session)
+
+    duplicate_a = SimpleNamespace(
+        id=uuid4(),
+        name="Trend A",
+        runtime_trend_id="duplicate-runtime-id",
+        definition={"id": "duplicate-runtime-id"},
+        indicators={},
+    )
+    duplicate_b = SimpleNamespace(
+        id=uuid4(),
+        name="Trend B",
+        runtime_trend_id="duplicate-runtime-id",
+        definition={"id": "duplicate-runtime-id"},
+        indicators={},
+    )
+
+    with pytest.raises(
+        ValueError, match="Duplicate active runtime_trend_id 'duplicate-runtime-id'"
+    ):
+        await pipeline.process_items([_item()], trends=[duplicate_a, duplicate_b])
 
 
 def test_pipeline_usage_and_result_counter_helpers_cover_pending_and_flags() -> None:
@@ -874,7 +900,6 @@ async def test_pipeline_domain_helpers_cover_fallbacks_and_parsers(
     assert ProcessingPipeline._contradiction_penalty(
         Event(has_contradictions=True)
     ) == pytest.approx(0.7)
-    assert ProcessingPipeline._trend_identifier(SimpleNamespace(id="uuid", definition={})) == "uuid"
     assert (
         ProcessingPipeline._resolve_indicator_weight(
             trend=SimpleNamespace(indicators={"military_movement": {}}),
@@ -957,6 +982,15 @@ async def test_pipeline_domain_helpers_cover_fallbacks_and_parsers(
         )
         is None
     )
+
+
+def test_runtime_trend_identifier_helper_paths() -> None:
+    assert (
+        ProcessingPipeline._trend_identifier(SimpleNamespace(runtime_trend_id="runtime-id"))
+        == "runtime-id"
+    )
+    with pytest.raises(ValueError, match="missing runtime_trend_id"):
+        ProcessingPipeline._trend_identifier(SimpleNamespace(name="Missing", definition={}))
     assert (
         ProcessingPipeline._parse_trend_impact(
             {"trend_id": "a", "signal_type": "x", "direction": "bad"}

@@ -50,6 +50,7 @@ def _build_trend() -> object:
     return SimpleNamespace(
         id=uuid4(),
         name="EU-Russia",
+        runtime_trend_id="eu-russia",
         definition={"id": "eu-russia"},
         indicators={
             "military_movement": {
@@ -99,7 +100,6 @@ async def test_process_items_classifies_relevant_item(mock_db_session) -> None:
         )
     )
     mock_db_session.scalar = AsyncMock(side_effect=[event, None])
-
     pipeline = ProcessingPipeline(
         session=mock_db_session,
         deduplication_service=dedup,
@@ -108,7 +108,6 @@ async def test_process_items_classifies_relevant_item(mock_db_session) -> None:
         tier1_classifier=tier1,
         tier2_classifier=tier2,
     )
-
     result = await pipeline.process_items([item], trends=[_build_trend()])
 
     assert result.scanned == 1

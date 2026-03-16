@@ -6,6 +6,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 
 import src.api.routes.trends as trends_module
 from src.api.routes.trends import (
@@ -62,10 +63,11 @@ def _build_trend(
         id=trend_id or uuid4(),
         name=name,
         description="Trend description",
+        runtime_trend_id="test-trend",
         definition={"id": "test-trend"},
         baseline_log_odds=prob_to_logodds(0.1),
         current_log_odds=prob_to_logodds(0.2),
-        indicators={"signal": {"direction": "escalatory", "keywords": ["x"]}},
+        indicators={"signal": {"direction": "escalatory", "weight": 0.04, "keywords": ["x"]}},
         decay_half_life_days=30,
         is_active=is_active,
         created_at=now,
@@ -130,7 +132,7 @@ async def test_create_trend_persists_new_record(mock_db_session) -> None:
             description="Tracks conflict probability",
             definition={"baseline_probability": 0.99},
             baseline_probability=0.08,
-            indicators={"military_movement": {"direction": "escalatory"}},
+            indicators={"military_movement": {"direction": "escalatory", "weight": 0.04}},
         ),
         session=mock_db_session,
     )
@@ -141,6 +143,7 @@ async def test_create_trend_persists_new_record(mock_db_session) -> None:
     assert result.id == created_id
     assert result.name == "EU-Russia Conflict"
     assert result.current_probability == pytest.approx(0.08, rel=0.01)
+    assert added.runtime_trend_id == "eu-russia-conflict"
     assert added.definition["id"] == "eu-russia-conflict"
     assert added.definition["baseline_probability"] == pytest.approx(0.08, rel=0.001)
     assert float(added.baseline_log_odds) == pytest.approx(prob_to_logodds(0.08), rel=0.001)
@@ -159,12 +162,89 @@ async def test_create_trend_returns_409_when_name_exists(mock_db_session) -> Non
             trend=TrendCreate(
                 name="Duplicate",
                 baseline_probability=0.1,
-                indicators={"x": {"direction": "escalatory"}},
+                indicators={"x": {"direction": "escalatory", "weight": 0.04}},
             ),
             session=mock_db_session,
         )
 
     assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_trend_returns_409_when_runtime_trend_id_exists(mock_db_session) -> None:
+    mock_db_session.scalar.side_effect = [None, uuid4()]
+
+    with pytest.raises(HTTPException, match="runtime id") as exc_info:
+        await create_trend(
+            trend=TrendCreate(
+                name="Duplicate Runtime Id",
+                definition={"id": "eu-russia"},
+                baseline_probability=0.1,
+                indicators={"x": {"direction": "escalatory", "weight": 0.04}},
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_trend_validates_against_canonical_trend_schema(mock_db_session) -> None:
+    with pytest.raises(HTTPException, match="less than or equal to 1") as exc_info:
+        await create_trend(
+            trend=TrendCreate(
+                name="Invalid Indicator Trend",
+                baseline_probability=0.1,
+                indicators={"x": {"direction": "escalatory", "weight": 1.2}},
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_create_trend_returns_409_when_flush_hits_runtime_id_constraint(
+    mock_db_session,
+) -> None:
+    mock_db_session.scalar.side_effect = [None, None]
+    mock_db_session.flush.side_effect = IntegrityError(
+        "insert",
+        {},
+        Exception("runtime_trend_id"),
+    )
+
+    with pytest.raises(HTTPException, match="runtime id") as exc_info:
+        await create_trend(
+            trend=TrendCreate(
+                name="Conflict On Flush",
+                baseline_probability=0.1,
+                indicators={"x": {"direction": "escalatory", "weight": 0.04}},
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_create_trend_reraises_non_runtime_integrity_errors(mock_db_session) -> None:
+    mock_db_session.scalar.side_effect = [None, None]
+    mock_db_session.flush.side_effect = IntegrityError(
+        "insert",
+        {},
+        Exception("different_constraint"),
+    )
+
+    with pytest.raises(IntegrityError):
+        await create_trend(
+            trend=TrendCreate(
+                name="Other Integrity Error",
+                baseline_probability=0.1,
+                indicators={"x": {"direction": "escalatory", "weight": 0.04}},
+            ),
+            session=mock_db_session,
+        )
 
 
 @pytest.mark.asyncio
@@ -196,6 +276,7 @@ async def test_update_trend_updates_fields_and_probabilities(mock_db_session) ->
     )
 
     assert trend.name == "Updated Trend"
+    assert trend.runtime_trend_id == "updated-trend"
     assert trend.definition["id"] == "updated-trend"
     assert trend.definition["baseline_probability"] == pytest.approx(0.25, rel=0.001)
     assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.25), rel=0.001)
@@ -212,6 +293,7 @@ async def test_update_trend_syncs_definition_baseline_without_definition_payload
     trend = _build_trend()
     trend.definition = {"id": "test-trend", "baseline_probability": 0.9}
     mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
 
     await update_trend(
         trend_id=trend.id,
@@ -230,6 +312,7 @@ async def test_update_trend_noop_definition_does_not_create_version_row(
 ) -> None:
     trend = _build_trend()
     mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
 
     await update_trend(
         trend_id=trend.id,
@@ -251,6 +334,7 @@ async def test_update_trend_material_definition_change_creates_version_row(
 ) -> None:
     trend = _build_trend()
     mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
 
     await update_trend(
         trend_id=trend.id,
@@ -271,6 +355,103 @@ async def test_update_trend_material_definition_change_creates_version_row(
     assert len(added_versions) == 1
     assert added_versions[0].trend_id == trend.id
     assert added_versions[0].context == "update_trend"
+
+
+@pytest.mark.asyncio
+async def test_update_trend_returns_409_when_runtime_trend_id_exists(mock_db_session) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.side_effect = [None, uuid4()]
+
+    with pytest.raises(HTTPException, match="runtime id") as exc_info:
+        await update_trend(
+            trend_id=trend.id,
+            trend=TrendUpdate(definition={"id": "existing-runtime-id"}),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_trend_validates_invalid_merged_payload(mock_db_session) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+
+    with pytest.raises(HTTPException, match="less than or equal to 1") as exc_info:
+        await update_trend(
+            trend_id=trend.id,
+            trend=TrendUpdate(indicators={"signal": {"direction": "escalatory", "weight": 2.0}}),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_update_trend_updates_indicators_and_decay_without_definition_version(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+
+    await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(
+            indicators={"signal": {"direction": "de_escalatory", "weight": 0.07}},
+            decay_half_life_days=45,
+        ),
+        session=mock_db_session,
+    )
+
+    assert trend.indicators["signal"]["direction"] == "de_escalatory"
+    assert trend.indicators["signal"]["weight"] == pytest.approx(0.07)
+    assert trend.indicators["signal"]["keywords"] == []
+    assert trend.decay_half_life_days == 45
+
+
+@pytest.mark.asyncio
+async def test_update_trend_returns_409_when_flush_hits_runtime_id_constraint(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.side_effect = [None, None]
+    mock_db_session.flush.side_effect = IntegrityError(
+        "update",
+        {},
+        Exception("runtime_trend_id"),
+    )
+
+    with pytest.raises(HTTPException, match="runtime id") as exc_info:
+        await update_trend(
+            trend_id=trend.id,
+            trend=TrendUpdate(definition={"id": "conflict-on-flush"}),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_trend_reraises_non_runtime_integrity_errors(mock_db_session) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.side_effect = [None, None]
+    mock_db_session.flush.side_effect = IntegrityError(
+        "update",
+        {},
+        Exception("different_constraint"),
+    )
+
+    with pytest.raises(IntegrityError):
+        await update_trend(
+            trend_id=trend.id,
+            trend=TrendUpdate(definition={"id": "other-integrity-error"}),
+            session=mock_db_session,
+        )
 
 
 @pytest.mark.asyncio
@@ -302,7 +483,7 @@ indicators:
 """.strip(),
         encoding="utf-8",
     )
-    mock_db_session.scalar.side_effect = [None]
+    mock_db_session.scalar.side_effect = [None, None]
 
     result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
 
@@ -319,6 +500,34 @@ indicators:
     assert len(added_versions) == 1
     assert added_versions[0].context == "config_sync:sample-trend.yaml"
     assert mock_db_session.flush.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_defaults_missing_indicators_to_empty_mapping(
+    mock_db_session,
+    tmp_path,
+) -> None:
+    config_file = tmp_path / "minimal-trend.yaml"
+    config_file.write_text(
+        """
+id: minimal-trend
+name: Minimal Trend
+baseline_probability: 0.12
+decay_half_life_days: 20
+""".strip(),
+        encoding="utf-8",
+    )
+    mock_db_session.scalar.side_effect = [None, None]
+
+    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+
+    assert result.created == 1
+    assert result.updated == 0
+    assert result.errors == []
+    added_objects = [call.args[0] for call in mock_db_session.add.call_args_list]
+    added = next(obj for obj in added_objects if isinstance(obj, Trend))
+    assert added.indicators == {}
+    assert added.definition["indicators"] == {}
 
 
 @pytest.mark.asyncio
@@ -350,7 +559,7 @@ indicators:
 """.strip(),
         encoding="utf-8",
     )
-    mock_db_session.scalar.side_effect = [None]
+    mock_db_session.scalar.side_effect = [None, None]
 
     result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
 

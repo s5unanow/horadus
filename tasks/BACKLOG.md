@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-335`.
+- Next available task IDs start at `TASK-340`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -172,30 +172,6 @@ Transient model/provider/DB failures can strand held deltas permanently.
 - [ ] Retryable replay failures re-enter a bounded retry/backoff path automatically instead of becoming unrecoverable `error` rows on first failure
 - [ ] Exhausted or non-retryable failures remain auditable with clear terminal status and last-error context
 - [ ] Add tests covering transient replay failure -> retry -> success and exhausted retry behavior
-
----
-
-### TASK-203: Enforce validated, unique runtime trend identifiers across config and API
-**Priority**: P0 (Critical)
-**Estimate**: 1 day
-
-Runtime trend routing still keys on `definition.id`, but API create/update
-paths do not fully validate the taxonomy contract and the database still does
-not enforce uniqueness for that runtime identifier. One bad write can silently
-shadow another active trend in Tier-2 routing.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 1 finding 4
-- User review intake 2026-03-05, Reviewer 2 finding 4
-
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-**Files**: `src/core/trend_config.py`, `src/api/routes/trends.py`, `src/processing/pipeline_orchestrator.py`, `src/storage/models.py`, `alembic/`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] API create/update paths validate trend payloads against the same contract used by config sync (or an explicitly shared schema)
-- [ ] Enforce uniqueness for the runtime trend identifier used by Tier-2 matching (`definition.id` or a dedicated normalized column), with migration-time duplicate detection
-- [ ] Fail closed on duplicate/ambiguous runtime identifiers instead of silently overwriting dict entries in orchestration
-- [ ] Add tests covering duplicate identifier rejection and config/API validation parity
 
 ---
 
@@ -395,6 +371,7 @@ This is a follow-up hardening task, not a replacement for completed
 **Acceptance Criteria**:
 - [ ] Derive and persist bounded provenance signals needed to group event evidence by likely independent origin (for example source family, syndication lineage, or near-duplicate reporting clusters)
 - [ ] Update corroboration scoring to prefer independent-evidence group counts over raw/distinct source counts when provenance metadata is available
+- [ ] Align event lifecycle confirmation semantics with the same independence model so `confirmed` does not silently continue to mean only "3 unique sources"
 - [ ] Keep scoring fail-safe by falling back to the current conservative path when provenance grouping is incomplete or ambiguous
 - [ ] Expose enough runtime/debug visibility to compare raw source counts versus independent-evidence counts on events and/or evidence responses
 - [ ] Preserve existing invalidation, replay, and idempotency semantics under the new corroboration model
@@ -421,6 +398,7 @@ falsification-criteria work.
 
 **Acceptance Criteria**:
 - [ ] Extend trend definition schema with explicit forecast-contract fields such as horizon, measurable resolution basis, and closure rule
+- [ ] Require an operator-readable forecast question and resolver source/basis so every probability clearly states what fact closes it
 - [ ] Fail config sync and API writes when required forecast-contract fields are missing or internally inconsistent
 - [ ] Surface forecast-contract metadata in trend API responses so operators can inspect what the probability actually refers to
 - [ ] Add migration/backfill guidance for existing trend YAMLs without breaking current trend IDs
@@ -465,6 +443,7 @@ language, source family, and topical dimensions.
 
 **Acceptance Criteria**:
 - [ ] Compute bounded coverage summaries segmented by language, source family/tier, and configured topical dimensions
+- [ ] Make the coverage view distinguish at least seen, processable, processed, deferred, and skipped-by-language volume so operators can tell "no signal" from "not processed"
 - [ ] Persist or export coverage artifacts suitable for operational review and release-gate inputs
 - [ ] Expose a read-only API/report path for recent coverage health distinct from collector freshness
 - [ ] Add metrics/logs that make sudden coverage drops visible even when collectors remain healthy
@@ -489,7 +468,9 @@ ledger of restatement actions without destroying audit history.
 **Acceptance Criteria**:
 - [ ] Introduce explicit compensating-restatement records that distinguish full invalidation from partial reinterpretation/manual correction
 - [ ] Preserve append-only auditability while allowing later corrections to adjust prior probability effects honestly
+- [ ] Define whether `current_log_odds` is a rebuildable projection from the ledger and add a deterministic verification/recompute path for that contract
 - [ ] Keep replay, decay, and idempotency semantics correct under compensating restatement flows
+- [ ] Define how invalidations/restatements affect historical snapshots and already-generated reports (`belief at the time` vs corrected-history restatement)
 - [ ] Expose lineage so operators can inspect original evidence, restatement action, and resulting net effect
 - [ ] Add regression coverage for invalidate, partial restate, and manual compensating-delta scenarios
 
@@ -516,6 +497,7 @@ the operator workflow reuses one canonical compensating-restatement model.
 - [ ] Extend review-queue ranking and filtering for high-delta low-confidence, contradiction-heavy, and taxonomy-gap-linked events
 - [ ] Persist operator workflow state needed to track review status beyond simple feedback rows
 - [ ] Support explicit adjudication outcomes such as confirm, suppress, restate, and escalate-for-taxonomy-review
+- [ ] Replace catch-all operator actions with a typed, append-only adjudication model that distinguishes review state, override intent, and resulting state effect
 - [ ] Expose enough queue metadata for a future UI without coupling the backend to a frontend implementation
 - [ ] Add regression coverage for ranking, status transitions, and adjudication outcome effects
 
@@ -583,7 +565,9 @@ lineage so clustering corrections remain auditable.
 **Acceptance Criteria**:
 - [ ] Add explicit event-lineage records for split and merge operations
 - [ ] Preserve raw-item linkage auditability when events are corrected after initial clustering
+- [ ] Persist a bounded cluster-cohesion or split-risk signal so likely bad merges are visible before operators need to discover them ad hoc
 - [ ] Keep downstream evidence/reporting paths consistent when lineage changes occur
+- [ ] Define how split/merge repairs restate or redistribute already-applied trend evidence so cluster corrections do not leave belief state ambiguous
 - [ ] Expose lineage metadata in event detail responses for operator debugging
 - [ ] Add regression coverage for split, merge, and no-op lineage cases
 
@@ -653,9 +637,156 @@ spent on the most decision-relevant work first.
 **Acceptance Criteria**:
 - [ ] Define a deterministic Tier-2 prioritization score using bounded inputs such as expected delta magnitude, uncertainty, contradiction risk, novelty, and trend relevance
 - [ ] Reorder or batch Tier-2 candidate processing by this score when budget pressure exists, without breaking idempotency or starvation safety
+- [ ] Reserve bounded budget/fairness for late-arriving or lower-volume high-impact items so early noisy traffic cannot consume the entire day
 - [ ] Keep the scheduling policy explainable by surfacing the main factors behind Tier-2 prioritization decisions in logs, metrics, or debug responses
 - [ ] Preserve current behavior as a safe fallback when value-of-information inputs are unavailable
 - [ ] Add regression coverage for high-impact ambiguity-first prioritization, low-value deprioritization, and bounded fairness behavior
+
+---
+
+### TASK-339: Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Auditability is already strong for some surfaces, but runtime provenance is still
+split across prompt files, cache keys, event payloads, and partial evidence
+metadata. Add one bounded provenance contract for persisted LLM-derived records
+and scoring math so operators can explain why two runs or two artifacts differ.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/processing/tier1_classifier.py`, `src/processing/tier2_classifier.py`, `src/processing/semantic_cache.py`, `src/core/trend_engine.py`, `src/core/report_generator.py`, `src/api/routes/reports.py`, `tests/`, `docs/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Define a compact provenance payload for persisted LLM-derived artifacts covering at least model identifier, prompt hash/version, schema version, and route/request-override basis
+- [ ] Persist a scoring-math version identifier alongside applied trend evidence and compensating/restatement records so factor changes are auditable over time
+- [ ] Define a named scoring-parameter-set contract plus a replay/backtest promotion check before scoring-weight or factor changes ship
+- [ ] Ensure semantic cache/debug surfaces expose the same provenance basis used by persisted runtime artifacts rather than a separate implicit contract
+- [ ] Persist an immutable report-generation manifest that pins report period scope, evidence/event inputs, prompt/model lineage, and degraded/provisional status for every generated report artifact
+- [ ] Expose enough read/debug visibility for operators to compare provenance across events/evidence/cache hits without reading source code
+- [ ] Add regression coverage proving provenance changes when model, prompt, schema, taxonomy/config basis, or scoring-math version changes
+
+---
+
+### TASK-334: Split Event Epistemic State from Activity State
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Current event lifecycle status still overloads at least two different meanings:
+how well-supported the event is and how recently it has been active. Separate
+epistemic state from activity state so corroboration, contradiction, retraction,
+dormancy, and closure do not fight over one field.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/processing/event_lifecycle.py`, `src/api/routes/events.py`, `src/api/routes/feedback.py`, `docs/DATA_MODEL.md`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Replace the single event lifecycle field with explicit epistemic and activity state contracts, or add those contracts alongside a clearly deprecated compatibility field
+- [ ] Put corroboration/contestation/retraction on the epistemic axis and recency/dormancy/closure on the activity axis
+- [ ] Keep operator review, invalidation, and reporting surfaces explicit about which axis changed and why
+- [ ] Add migration/backfill guidance for current `emerging`/`confirmed`/`fading`/`archived` rows
+- [ ] Add regression coverage for corroboration promotion, contradiction/retraction, dormancy, and reactivation
+
+---
+
+### TASK-335: Move Trend-Impact Mapping Fully Into Deterministic Code
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+Tier-2 still emits direct `trend_id`/`signal_type` impacts, which means prompt
+behavior can change business semantics without a code change. Move the boundary
+earlier so the model extracts structured facts and claims while deterministic
+code owns trend-indicator mapping and impact eligibility.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/core/trend_config.py`, `src/storage/models.py`, `ai/prompts/tier2_classify.md`, `docs/ARCHITECTURE.md`, `tests/`
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+**Acceptance Criteria**:
+- [ ] Tier-2 no longer persists first-class business actions such as direct `trend_id`/`signal_type` selections as the authoritative runtime contract
+- [ ] Define a deterministic mapping layer from extracted facts/claims/entities/times to eligible trend indicators, with explicit ambiguity and no-match outcomes
+- [ ] Preserve taxonomy-gap and review/debug visibility when deterministic mapping cannot confidently assign a trend impact
+- [ ] Keep scoring outputs stable under prompt/model changes when the extracted structured facts are unchanged
+- [ ] Add regression coverage for mapped, ambiguous, and unmapped cases across at least two prompt/model variants
+
+---
+
+### TASK-336: Separate Story Clusters from Stable Event-Claim Identity
+**Priority**: P1 (High)
+**Estimate**: 1-2 days
+
+The mutable event cluster is still the effective identity boundary for applied
+evidence. Introduce a first-class stable event-claim or event-version entity so
+cluster repairs, contradictory subclaims, and split/merge operations do not
+force auditability and reproducibility to hinge on one mutable cluster id.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/processing/event_clusterer.py`, `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/api/routes/events.py`, `docs/DATA_MODEL.md`, `tests/`, `alembic/`
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+**Acceptance Criteria**:
+- [ ] Introduce a stable claim/hypothesis or event-version entity distinct from the mutable story cluster
+- [ ] Attach applied trend evidence and compensating/restatement actions to the stable claim/version identity rather than the raw cluster id alone
+- [ ] Allow one cluster to carry multiple claims or event versions without breaking raw-item linkage auditability
+- [ ] Keep split/merge lineage, invalidation, and replay semantics coherent when cluster membership changes around the stable claim identity
+- [ ] Add regression coverage for contradictory claims within one cluster and for split/merge repairs that preserve explainable belief state
+
+---
+
+### TASK-337: Pin Live Trend State to Active Definition/Scoring Versions
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+Evidence rows now carry strong provenance, but live trend state can still drift
+into a semantic hybrid when definition or scoring contracts change. Make live
+probability state explicitly versioned so definition activation, replay, and
+rebase behavior are auditable instead of implicit.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/api/routes/trends.py`, `src/core/trend_engine.py`, `src/workers/`, `src/core/report_generator.py`, `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md`, `tests/`, `alembic/`
+
+**Exec Plan**: Required (`tasks/exec_plans/README.md`)
+
+**Acceptance Criteria**:
+- [ ] Introduce an explicit active definition/scoring-version reference for live trend state and any persisted derived state that depends on current scoring semantics
+- [ ] Require definition/scoring changes to activate through an explicit workflow that chooses between rebase/replay and a new active-state line, rather than silently continuing the old live state
+- [ ] Define one replay/rebase isolation strategy for live-state recomputation (for example shadow state + promote, or equivalent cutoff/freeze semantics) and document it as an invariant
+- [ ] Expose active definition/scoring-version metadata in trend API responses and operator-facing debug paths
+- [ ] Add regression coverage proving the system does not mix old-version and new-version semantics into one unexplained live probability state
+
+---
+
+### TASK-338: Separate Provisional and Canonical Extraction State in Degraded Mode
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Degraded mode correctly holds trend deltas, but event extraction can still
+populate user-visible fields while primary-quality Tier-2 behavior is
+unavailable. Separate provisional extraction from canonical extraction so
+degraded outputs do not silently become the long-lived event/report truth.
+
+**Assessment-Ref**:
+- User-provided external architecture evaluation on 2026-03-06
+
+**Files**: `src/storage/models.py`, `src/processing/pipeline_orchestrator.py`, `src/processing/tier2_classifier.py`, `src/core/report_generator.py`, `src/api/routes/events.py`, `src/api/routes/reports.py`, `docs/ARCHITECTURE.md`, `docs/adr/008-degraded-llm-mode.md`, `tests/`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Persist extraction status that distinguishes provisional degraded-mode output from canonical promoted output
+- [ ] Prevent provisional extraction fields from overwriting canonical event summaries/categories or feeding normal report-generation paths without explicit promotion semantics
+- [ ] Define how primary-route replay promotes, supersedes, or discards prior provisional extraction so event history remains explainable
+- [ ] Expose provisional/canonical status in operator-facing event or report debug responses
+- [ ] Add regression coverage for degraded provisional write, post-recovery promotion, and report-path exclusion of provisional-only data
 
 ---
 

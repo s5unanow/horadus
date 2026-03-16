@@ -151,6 +151,7 @@ async def test_create_event_feedback_invalidates_evidence_and_reverts_trends(
     trend = Trend(
         id=uuid4(),
         name="EU-Russia",
+        runtime_trend_id="eu-russia",
         definition={"id": "eu-russia"},
         baseline_log_odds=-2.0,
         current_log_odds=-1.0,
@@ -291,6 +292,7 @@ async def test_create_trend_override_updates_log_odds(mock_db_session) -> None:
     trend = Trend(
         id=uuid4(),
         name="EU-Russia",
+        runtime_trend_id="eu-russia",
         definition={"id": "eu-russia"},
         baseline_log_odds=-2.0,
         current_log_odds=-1.0,
@@ -336,6 +338,7 @@ async def test_list_review_queue_orders_by_ranking_score(mock_db_session) -> Non
     trend = Trend(
         id=uuid4(),
         name="EU-Russia",
+        runtime_trend_id="eu-russia",
         definition={"id": "eu-russia"},
         baseline_log_odds=-2.0,
         current_log_odds=-1.0,
@@ -406,6 +409,7 @@ async def test_list_review_queue_filters_unreviewed_and_trend(mock_db_session) -
     trend_a = Trend(
         id=uuid4(),
         name="Trend A",
+        runtime_trend_id="trend-a",
         definition={"id": "trend-a"},
         baseline_log_odds=-2.0,
         current_log_odds=-1.0,
@@ -416,6 +420,7 @@ async def test_list_review_queue_filters_unreviewed_and_trend(mock_db_session) -
     trend_b = Trend(
         id=uuid4(),
         name="Trend B",
+        runtime_trend_id="trend-b",
         definition={"id": "trend-b"},
         baseline_log_odds=-2.0,
         current_log_odds=-1.0,

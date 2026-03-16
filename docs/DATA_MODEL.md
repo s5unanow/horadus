@@ -240,6 +240,7 @@ Trend definitions and current probability state.
 | id | UUID | No | gen_random_uuid() | Primary key |
 | name | VARCHAR(255) | No | | Unique trend name |
 | description | TEXT | Yes | | Human-readable description |
+| runtime_trend_id | VARCHAR(255) | No | | Unique runtime taxonomy identifier used by Tier-1/Tier-2/pipeline routing |
 | definition | JSONB | No | | Full trend configuration |
 | baseline_log_odds | DECIMAL(10,6) | No | | Prior probability (log-odds) |
 | current_log_odds | DECIMAL(10,6) | No | | Current probability (log-odds) |
@@ -252,6 +253,7 @@ Trend definitions and current probability state.
 **Indexes:**
 - Primary key: `id`
 - Unique: `name`
+- Unique: `runtime_trend_id`
 
 **Probability conversion:**
 ```python
@@ -271,6 +273,7 @@ baseline_log_odds = prob_to_logodds(0.08)  # -2.44
 **Baseline source-of-truth note:**
 - Canonical decay baseline is `trends.baseline_log_odds`.
 - `trends.definition.baseline_probability` is synchronized metadata for operator visibility and config parity.
+- `trends.runtime_trend_id` is the canonical routing key for runtime taxonomy lookups; it must match `trends.definition.id` after normalization.
 
 **Example indicators:**
 ```json

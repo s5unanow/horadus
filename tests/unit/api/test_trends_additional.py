@@ -7,8 +7,11 @@ from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 
 import src.api.middleware.auth as auth_middleware_module
+import src.api.routes._trend_write_contract as trend_write_contract_module
+import src.api.routes._trend_write_persistence as trend_write_persistence_module
 import src.api.routes.trends as trends_module
 from src.api.routes.trends import (
     _downsample_snapshots,
@@ -37,10 +40,11 @@ def _build_trend(*, trend_id=None, name: str = "Trend A", is_active: bool = True
         id=trend_id or uuid4(),
         name=name,
         description="description",
+        runtime_trend_id=name.lower().replace(" ", "-"),
         definition={"id": name.lower().replace(" ", "-")},
         baseline_log_odds=prob_to_logodds(0.1),
         current_log_odds=prob_to_logodds(0.2),
-        indicators={"signal": {"direction": "escalatory", "keywords": ["x"]}},
+        indicators={"signal": {"direction": "escalatory", "weight": 0.04, "keywords": ["x"]}},
         decay_half_life_days=30,
         is_active=is_active,
         created_at=now,
@@ -217,6 +221,119 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     assert results[0].id == trend.id
     assert called == ["config/trends", "custom/trends"]
     assert synced.loaded_files == 0
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_upserts_by_runtime_trend_id(
+    tmp_path,
+    mock_db_session,
+) -> None:
+    config_file = tmp_path / "renamed.yaml"
+    config_file.write_text(
+        """
+id: shared-runtime-id
+name: Renamed Trend
+baseline_probability: 0.20
+decay_half_life_days: 15
+indicators:
+  signal:
+    weight: 0.04
+    direction: escalatory
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    existing = _build_trend(name="Old Name")
+    existing.runtime_trend_id = "shared-runtime-id"
+    mock_db_session.scalar.side_effect = [existing, None]
+
+    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+
+    assert result.created == 0
+    assert result.updated == 1
+    assert existing.name == "Renamed Trend"
+    assert existing.runtime_trend_id == "shared-runtime-id"
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_rejects_conflicting_name_and_runtime_rows(
+    tmp_path,
+    mock_db_session,
+) -> None:
+    config_file = tmp_path / "conflict.yaml"
+    config_file.write_text(
+        """
+id: shared-runtime-id
+name: Renamed Trend
+baseline_probability: 0.20
+decay_half_life_days: 15
+indicators:
+  signal:
+    weight: 0.04
+    direction: escalatory
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+    existing_by_runtime = _build_trend(name="Runtime Owner")
+    existing_by_runtime.runtime_trend_id = "shared-runtime-id"
+    existing_by_name = _build_trend(name="Renamed Trend")
+    existing_by_name.runtime_trend_id = "other-runtime-id"
+    mock_db_session.scalar.side_effect = [existing_by_runtime, existing_by_name]
+
+    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+
+    assert result.created == 0
+    assert result.updated == 0
+    assert result.errors == [
+        "conflict.yaml: Config sync found conflicting trend identity rows for name 'Renamed Trend' and runtime id 'shared-runtime-id'"
+    ]
+
+
+def test_trend_write_helper_edges_cover_blank_runtime_id_and_integrity_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        trend_write_contract_module,
+        "build_trend_config",
+        lambda **_: SimpleNamespace(
+            id=None,
+            baseline_probability=0.2,
+            model_dump=lambda **__: {},
+            indicators={},
+        ),
+    )
+
+    with pytest.raises(ValueError, match="cannot be blank"):
+        trend_write_contract_module.build_validated_trend_write_payload(
+            name="Trend",
+            description=None,
+            baseline_probability=0.2,
+            decay_half_life_days=30,
+            indicators={},
+            definition={},
+        )
+
+    exc = IntegrityError("insert", {}, Exception("runtime_trend_id"))
+    assert (
+        trend_write_persistence_module.is_unique_integrity_error(
+            exc,
+            marker="runtime_trend_id",
+        )
+        is True
+    )
+
+
+def test_trend_write_helper_rejects_overlength_runtime_id() -> None:
+    with pytest.raises(ValueError, match="cannot exceed 255 characters"):
+        trend_write_contract_module.build_validated_trend_write_payload(
+            name="Trend",
+            description=None,
+            baseline_probability=0.2,
+            decay_half_life_days=30,
+            indicators={},
+            definition={"id": "x" * 256},
+        )
 
 
 @pytest.mark.asyncio

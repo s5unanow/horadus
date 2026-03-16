@@ -308,3 +308,4 @@
 - TASK-286: Add CLI-Agnostic Local Pre-Push Review via Supported Agent CLIs `[REQUIRES_HUMAN]` ✅
 - TASK-333: Fix Codex local-review `--base` invocation compatibility ✅
 - TASK-200: Add authorization boundaries for privileged API mutations ✅
+- TASK-203: Enforce validated, unique runtime trend identifiers across config and API ✅

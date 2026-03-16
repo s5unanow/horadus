@@ -144,6 +144,7 @@ async def test_processing_pipeline_runs_end_to_end(monkeypatch: pytest.MonkeyPat
         trend = Trend(
             name=trend_name,
             description="Test trend for processing pipeline integration",
+            runtime_trend_id="eu-russia",
             definition={"id": "eu-russia"},
             baseline_log_odds=-2.197225,
             current_log_odds=-2.197225,
@@ -268,6 +269,7 @@ async def test_processing_pipeline_keeps_item_pending_when_budget_exceeded(monke
         trend = Trend(
             name=trend_name,
             description="Budget guard trend",
+            runtime_trend_id="eu-russia",
             definition={"id": "eu-russia"},
             baseline_log_odds=-2.197225,
             current_log_odds=-2.197225,

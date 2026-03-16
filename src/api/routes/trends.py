@@ -9,12 +9,11 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -43,7 +42,6 @@ from src.api.routes.trend_route_auth import (
     AUTHORIZE_TREND_OUTCOME,
     AUTHORIZE_TREND_SYNC,
     AUTHORIZE_TREND_UPDATE,
-    authorize_sync_from_config_request,
 )
 from src.core.calibration import CalibrationService
 from src.core.retrospective_analyzer import RetrospectiveAnalyzer
@@ -53,7 +51,12 @@ from src.core.risk import (
     get_confidence_rating,
     get_risk_level,
 )
-from src.core.trend_config import normalize_definition_payload
+from src.core.trend_config import (
+    DEFAULT_TREND_CONFIG_SYNC_DIR,
+    TrendConfigSyncPathError,
+    normalize_definition_payload,
+    resolve_trend_config_sync_dir,
+)
 from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
 from src.storage.database import get_session
 from src.storage.models import (
@@ -66,6 +69,10 @@ from src.storage.models import (
 )
 
 router = APIRouter()
+SYNC_FROM_CONFIG_QUERY_REJECTED_DETAIL = (
+    "sync_from_config is no longer supported on GET /api/v1/trends; "
+    "use POST /api/v1/trends/sync-config instead"
+)
 
 # Request/Response models
 
@@ -708,10 +715,10 @@ async def _get_trend_or_404(session: AsyncSession, trend_id: UUID) -> Trend:
 async def load_trends_from_config(
     session: AsyncSession,
     *,
-    config_dir: str = "config/trends",
+    config_dir: str = DEFAULT_TREND_CONFIG_SYNC_DIR,
 ) -> TrendConfigLoadResponse:
     """Load trends from YAML files and upsert by runtime trend identifier."""
-    config_path = Path(config_dir)
+    config_path = resolve_trend_config_sync_dir(config_dir)
     if not config_path.exists() or not config_path.is_dir():
         return TrendConfigLoadResponse(errors=[f"Config directory not found: {config_dir}"])
 
@@ -809,15 +816,16 @@ async def load_trends_from_config(
 
 @router.get("", response_model=list[TrendResponse])
 async def list_trends(
-    request: Request,
     active_only: bool = True,
     sync_from_config: bool = False,
     session: AsyncSession = Depends(get_session),
 ) -> list[TrendResponse]:
     """List trends with current and baseline probabilities."""
     if sync_from_config:
-        authorize_sync_from_config_request(request)
-        await load_trends_from_config(session=session)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=SYNC_FROM_CONFIG_QUERY_REJECTED_DETAIL,
+        )
 
     query = select(Trend).order_by(Trend.updated_at.desc())
     if active_only:
@@ -901,11 +909,17 @@ async def create_trend(
     "/sync-config", response_model=TrendConfigLoadResponse, dependencies=[AUTHORIZE_TREND_SYNC]
 )
 async def sync_trends_from_config(
-    config_dir: str = Query(default="config/trends"),
+    config_dir: str = Query(default=DEFAULT_TREND_CONFIG_SYNC_DIR),
     session: AsyncSession = Depends(get_session),
 ) -> TrendConfigLoadResponse:
     """Load or update trends from YAML files under `config/trends/`."""
-    return await load_trends_from_config(session=session, config_dir=config_dir)
+    try:
+        return await load_trends_from_config(session=session, config_dir=config_dir)
+    except TrendConfigSyncPathError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("/{trend_id}", response_model=TrendResponse)

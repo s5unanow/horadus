@@ -5,10 +5,11 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
 import src.api.routes.trends as trends_module
+import src.core.trend_config as trend_config_module
 from src.api.routes.trends import (
     TrendCreate,
     TrendUpdate,
@@ -75,19 +76,8 @@ def _build_trend(
     )
 
 
-def _build_request() -> Request:
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/trends",
-            "headers": [],
-            "query_string": b"",
-            "client": ("127.0.0.1", 1234),
-            "server": ("testserver", 80),
-            "scheme": "http",
-        }
-    )
+def _use_tmp_trend_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(trend_config_module, "REPO_TREND_CONFIG_ROOT", tmp_path.resolve())
 
 
 @pytest.mark.asyncio
@@ -96,7 +86,6 @@ async def test_list_trends_returns_response_models(mock_db_session) -> None:
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
 
     result = await list_trends(
-        request=_build_request(),
         session=mock_db_session,
         sync_from_config=False,
     )
@@ -466,7 +455,12 @@ async def test_delete_trend_deactivates_record(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_trends_from_config_creates_records(mock_db_session, tmp_path) -> None:
+async def test_load_trends_from_config_creates_records(
+    mock_db_session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "sample-trend.yaml"
     config_file.write_text(
         """
@@ -485,7 +479,7 @@ indicators:
     )
     mock_db_session.scalar.side_effect = [None, None]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.loaded_files == 1
     assert result.created == 1
@@ -506,7 +500,9 @@ indicators:
 async def test_load_trends_from_config_defaults_missing_indicators_to_empty_mapping(
     mock_db_session,
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "minimal-trend.yaml"
     config_file.write_text(
         """
@@ -519,7 +515,7 @@ decay_half_life_days: 20
     )
     mock_db_session.scalar.side_effect = [None, None]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.created == 1
     assert result.updated == 0
@@ -534,7 +530,9 @@ decay_half_life_days: 20
 async def test_load_trends_from_config_supports_enhanced_fields(
     mock_db_session,
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "enhanced-trend.yaml"
     config_file.write_text(
         """
@@ -561,7 +559,7 @@ indicators:
     )
     mock_db_session.scalar.side_effect = [None, None]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.created == 1
     assert result.errors == []
@@ -579,7 +577,9 @@ indicators:
 async def test_load_trends_from_config_rejects_invalid_indicator_type(
     mock_db_session,
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "invalid-trend.yaml"
     config_file.write_text(
         """
@@ -596,7 +596,7 @@ indicators:
         encoding="utf-8",
     )
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.created == 0
     assert result.updated == 0

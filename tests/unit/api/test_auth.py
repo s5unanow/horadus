@@ -342,14 +342,11 @@ def test_source_create_allows_admin_header(
     mock_db_session.add.assert_called_once()
 
 
-def test_trend_sync_requires_admin_even_on_list_route(
+def test_trend_sync_query_flag_is_rejected_on_list_route(
     mock_db_session: AsyncMock,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manager, credential = _build_manager()
-    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
-    audit_logger = MagicMock()
-    monkeypatch.setattr(auth_middleware_module, "logger", audit_logger)
     sync_mock = AsyncMock()
     monkeypatch.setattr(trends_routes, "load_trends_from_config", sync_mock)
     mock_db_session.scalars.return_value = SimpleNamespace(all=list)
@@ -363,11 +360,29 @@ def test_trend_sync_requires_admin_even_on_list_route(
 
     assert baseline.status_code == 200
     assert baseline.json() == []
-    assert sync_attempt.status_code == 403
+    assert sync_attempt.status_code == 400
+    assert sync_attempt.json()["detail"] == trends_routes.SYNC_FROM_CONFIG_QUERY_REJECTED_DETAIL
     sync_mock.assert_not_awaited()
-    last_log = audit_logger.info.call_args_list[-1]
-    assert last_log.kwargs["action"] == "trends.sync_config"
-    assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_trend_sync_config_requires_admin_header(
+    mock_db_session: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    sync_mock = AsyncMock()
+    monkeypatch.setattr(trends_routes, "load_trends_from_config", sync_mock)
+    client = TestClient(_build_api_app(manager, mock_db_session))
+
+    response = client.post(
+        "/api/v1/trends/sync-config",
+        headers={"X-API-Key": credential},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin API key required"
+    sync_mock.assert_not_awaited()
 
 
 def test_feedback_override_requires_admin_header(

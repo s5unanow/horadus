@@ -224,6 +224,11 @@ def test_resolve_runtime_trend_id_rejects_blank_name_without_identifier() -> Non
         resolve_runtime_trend_id(definition={"id": "   "}, trend_name=" ")
 
 
+def test_resolve_runtime_trend_id_rejects_overlength_identifier() -> None:
+    with pytest.raises(ValueError, match="cannot exceed 255 characters"):
+        resolve_runtime_trend_id(definition={"id": "x" * 256}, trend_name="Signal Watch")
+
+
 def test_build_trend_config_rejects_non_mapping_indicators() -> None:
     with pytest.raises(ValidationError, match="indicators"):
         build_trend_config(

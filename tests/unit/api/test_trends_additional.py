@@ -324,6 +324,18 @@ def test_trend_write_helper_edges_cover_blank_runtime_id_and_integrity_tokens(
     )
 
 
+def test_trend_write_helper_rejects_overlength_runtime_id() -> None:
+    with pytest.raises(ValueError, match="cannot exceed 255 characters"):
+        trend_write_contract_module.build_validated_trend_write_payload(
+            name="Trend",
+            description=None,
+            baseline_probability=0.2,
+            decay_half_life_days=30,
+            indicators={},
+            definition={"id": "x" * 256},
+        )
+
+
 @pytest.mark.asyncio
 async def test_load_trends_from_config_updates_existing_trend(mock_db_session, tmp_path) -> None:
     config_file = tmp_path / "trend.yaml"

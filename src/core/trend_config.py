@@ -9,6 +9,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MAX_RUNTIME_TREND_ID_LENGTH = 255
+
 
 class TrendDisqualifier(BaseModel):
     """Condition that invalidates or resets a trend estimate."""
@@ -42,7 +44,7 @@ class TrendConfig(BaseModel):
 
     model_config = ConfigDict(extra="allow")
 
-    id: str | None = None
+    id: str | None = Field(default=None, max_length=MAX_RUNTIME_TREND_ID_LENGTH)
     name: str = Field(..., min_length=1)
     description: str | None = None
     baseline_probability: float = Field(..., ge=0.0, le=1.0)
@@ -61,6 +63,14 @@ def slugify_trend_name(name: str) -> str:
     return normalized.replace("/", "-").replace("_", "-")
 
 
+def _validate_runtime_trend_id_length(runtime_trend_id: str) -> str:
+    if len(runtime_trend_id) <= MAX_RUNTIME_TREND_ID_LENGTH:
+        return runtime_trend_id
+
+    msg = f"Trend runtime id cannot exceed {MAX_RUNTIME_TREND_ID_LENGTH} characters"
+    raise ValueError(msg)
+
+
 def normalize_definition_payload(definition: Mapping[str, Any] | None) -> dict[str, Any]:
     """Return a mutable definition mapping for downstream normalization."""
 
@@ -75,11 +85,11 @@ def resolve_runtime_trend_id(*, definition: Mapping[str, Any] | None, trend_name
     if isinstance(raw_id, str):
         normalized_id = raw_id.strip()
         if normalized_id:
-            return normalized_id
+            return _validate_runtime_trend_id_length(normalized_id)
 
     fallback_id = slugify_trend_name(trend_name)
     if fallback_id:
-        return fallback_id
+        return _validate_runtime_trend_id_length(fallback_id)
 
     msg = "Trend runtime id cannot be blank"
     raise ValueError(msg)

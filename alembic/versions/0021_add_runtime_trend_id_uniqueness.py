@@ -19,6 +19,7 @@ revision = "0021_runtime_trend_id_uniqueness"
 down_revision = "0020_llm_replay_queue"
 branch_labels = None
 depends_on = None
+_MAX_RUNTIME_TREND_ID_LENGTH = 255
 
 
 _TRENDS_TABLE = sa.table(
@@ -36,19 +37,27 @@ def _slugify_name(name: str) -> str:
 
 
 def _resolve_runtime_trend_id(*, name: str, definition: Any) -> str:
+    runtime_trend_id: str | None = None
     if isinstance(definition, dict):
         raw_id = definition.get("id")
         if isinstance(raw_id, str):
             normalized_id = raw_id.strip()
             if normalized_id:
-                return normalized_id
+                runtime_trend_id = normalized_id
 
-    runtime_trend_id = _slugify_name(name)
-    if runtime_trend_id:
-        return runtime_trend_id
+    if runtime_trend_id is None:
+        runtime_trend_id = _slugify_name(name)
+        if not runtime_trend_id:
+            msg = "Cannot backfill runtime_trend_id for trend with blank name and blank definition.id"
+            raise RuntimeError(msg)
 
-    msg = "Cannot backfill runtime_trend_id for trend with blank name and blank definition.id"
-    raise RuntimeError(msg)
+    if len(runtime_trend_id) > _MAX_RUNTIME_TREND_ID_LENGTH:
+        msg = (
+            "Cannot backfill runtime_trend_id longer than "
+            f"{_MAX_RUNTIME_TREND_ID_LENGTH} characters"
+        )
+        raise RuntimeError(msg)
+    return runtime_trend_id
 
 
 def upgrade() -> None:

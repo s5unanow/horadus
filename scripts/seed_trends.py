@@ -20,13 +20,15 @@ from typing import Any
 import yaml
 from sqlalchemy import select
 
+from src.core.trend_config import resolve_runtime_trend_id
 from src.core.trend_engine import (
-    DEFAULT_BASELINE_PROBABILITY,
     DEFAULT_DECAY_HALF_LIFE_DAYS,
     prob_to_logodds,
 )
 from src.storage.database import async_session_maker
 from src.storage.models import Trend
+
+DEFAULT_BASELINE_PROBABILITY = 0.10
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -97,6 +99,9 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
             if not isinstance(indicators, dict):
                 raise ValueError(f"'indicators' must be a mapping in {path}")
             _validate_indicators(indicators, path)
+            runtime_trend_id = resolve_runtime_trend_id(definition=definition, trend_name=name)
+            normalized_definition = dict(definition)
+            normalized_definition["id"] = runtime_trend_id
 
             baseline_log_odds = prob_to_logodds(baseline_probability)
 
@@ -110,7 +115,8 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
                         Trend(
                             name=name,
                             description=definition.get("description"),
-                            definition=definition,
+                            runtime_trend_id=runtime_trend_id,
+                            definition=normalized_definition,
                             baseline_log_odds=baseline_log_odds,
                             current_log_odds=baseline_log_odds,
                             indicators=indicators,
@@ -122,7 +128,8 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
                 updated += 1
                 if not dry_run:
                     trend.description = definition.get("description")
-                    trend.definition = definition
+                    trend.runtime_trend_id = runtime_trend_id
+                    trend.definition = normalized_definition
                     trend.indicators = indicators
                     trend.decay_half_life_days = decay_half_life_days
                     trend.baseline_log_odds = baseline_log_odds

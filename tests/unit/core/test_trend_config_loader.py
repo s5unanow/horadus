@@ -3,8 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 
-from src.core.trend_config import resolve_runtime_trend_id
+from src.core.trend_config import build_trend_config, resolve_runtime_trend_id
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 
 pytestmark = pytest.mark.unit
@@ -221,3 +222,14 @@ def test_resolve_runtime_trend_id_falls_back_from_blank_definition_id() -> None:
 def test_resolve_runtime_trend_id_rejects_blank_name_without_identifier() -> None:
     with pytest.raises(ValueError, match="cannot be blank"):
         resolve_runtime_trend_id(definition={"id": "   "}, trend_name=" ")
+
+
+def test_build_trend_config_rejects_non_mapping_indicators() -> None:
+    with pytest.raises(ValidationError, match="indicators"):
+        build_trend_config(
+            name="Signal Watch",
+            description=None,
+            baseline_probability=0.1,
+            decay_half_life_days=30,
+            indicators=["not-a-mapping"],  # type: ignore[arg-type]
+        )

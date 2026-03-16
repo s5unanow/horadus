@@ -105,7 +105,7 @@ def build_trend_config(
             "description": description,
             "baseline_probability": baseline_probability,
             "decay_half_life_days": decay_half_life_days,
-            "indicators": dict(indicators) if isinstance(indicators, Mapping) else {},
+            "indicators": dict(indicators) if isinstance(indicators, Mapping) else indicators,
         }
     )
     return TrendConfig.model_validate(payload)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -135,9 +136,25 @@ def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
         desired,
         desired_hash=TrendEngine._definition_hash(trend.definition),
     )
+    evidence.evidence_age_days = 1.23
+    evidence.temporal_decay_factor = 0.9877
+    rounded_desired = replace(
+        desired,
+        factors=replace(
+            desired.factors,
+            evidence_age_days=1.2349,
+            temporal_decay_multiplier=0.98765,
+        ),
+    )
+    assert _evidence_matches(
+        evidence,
+        rounded_desired,
+        desired_hash=TrendEngine._definition_hash(trend.definition),
+    )
     assert _float_matches(None, None) is True
     assert _float_matches(None, 1.0) is False
     assert _float_matches(1.0, 1.0) is True
+    assert _float_matches(1.234, 1.23, places=2) is True
     assert _taxonomy_gap_details(parsed) == {
         "direction": "escalatory",
         "severity": 1.0,

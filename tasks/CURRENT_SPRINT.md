@@ -55,6 +55,7 @@
 
 ## Completed This Sprint
 
+- `TASK-204` Recompute applied trend evidence when Tier-2 impacts change ✅
 - `TASK-205` Requeue retryable pipeline failures instead of permanently erroring items ✅
 - `TASK-332` Fix `horadus tasks finish` when thumbs-up review-gate passes do not merge ✅
 - `TASK-331` Remove legacy root `assessments/` leftovers ✅

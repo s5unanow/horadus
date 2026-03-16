@@ -1,6 +1,4 @@
-"""
-Tier 2 LLM classifier for detailed event extraction and trend impacts.
-"""
+"""Tier 2 LLM classifier for detailed event extraction and trend impacts."""
 
 # ruff: noqa: RUF001
 
@@ -717,6 +715,10 @@ class Tier2Classifier:
             seen_pairs.add(pair)
 
     def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
+        existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+        system_claims = {
+            k: v for k, v in existing_claims.items() if isinstance(k, str) and k.startswith("_")
+        }
         event.canonical_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
@@ -725,7 +727,6 @@ class Tier2Classifier:
         event.categories = self._dedupe_strings(output.categories)
         claims = self._dedupe_strings(output.claims)
         claim_graph = self._build_claim_graph(claims)
-
         trend_impacts = [
             TrendImpact(
                 trend_id=impact.trend_id,
@@ -751,6 +752,7 @@ class Tier2Classifier:
             "claims": claims,
             "claim_graph": claim_graph,
             "trend_impacts": trend_impacts,
+            **system_claims,
         }
 
     @staticmethod

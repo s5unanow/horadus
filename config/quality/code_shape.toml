@@ -79,7 +79,6 @@ path = "src/ingestion/rss_collector.py"
 path = "src/processing/pipeline_orchestrator.py"
 max_lines = 1521
 [legacy_files.member_max_lines]
-"ProcessingPipeline._apply_trend_impacts" = 116
 "ProcessingPipeline._prepare_item_for_tier1" = 112
 "ProcessingPipeline._process_after_tier1" = 220
 

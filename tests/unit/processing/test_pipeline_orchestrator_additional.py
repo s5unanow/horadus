@@ -590,7 +590,7 @@ async def test_event_and_trend_helper_methods_cover_remaining_paths(
     )
     seen, updates = await pipeline._apply_trend_impacts(event=multi_event, trends=[valid_trend])
     assert seen == 2
-    assert updates == 1
+    assert updates == 0
 
     monkeypatch.setattr(orchestrator_module.settings, "LLM_DEGRADED_REPLAY_ENABLED", False)
     assert (

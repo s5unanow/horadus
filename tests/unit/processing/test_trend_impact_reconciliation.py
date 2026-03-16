@@ -19,6 +19,7 @@ from src.processing.trend_impact_reconciliation import (
     _invalidate_existing_match,
     _lineage_entry,
     _load_active_event_evidence,
+    _reconcile_desired_evidence,
     _taxonomy_gap_details,
     _trend_for_evidence,
     impact_reasoning,
@@ -183,6 +184,18 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
     )
     assert loaded_trend is trend
 
+    no_id_trend = SimpleNamespace(id=None)
+    session.get = AsyncMock(return_value=no_id_trend)
+    uncached = {}
+    loaded_trend = await _trend_for_evidence(
+        session=session,
+        evidence=evidence,
+        trend_by_uuid=uncached,
+    )
+    assert loaded_trend is no_id_trend
+    assert uncached == {}
+    session.get = AsyncMock(return_value=trend)
+
     delta = await _invalidate_existing_match(
         session=session,
         trend_engine=trend_engine,
@@ -200,6 +213,19 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
             trend=None,
             invalidated_at=datetime.now(tz=UTC),
         )
+
+    zero_delta_evidence = _evidence(trend_id=trend_id, event_id=event_id, delta=0.0)
+    trend_engine.apply_log_odds_delta.reset_mock()
+    zero_delta = await _invalidate_active_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        evidence=zero_delta_evidence,
+        trend=trend,
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert zero_delta == pytest.approx(0.0)
+    assert zero_delta_evidence.is_invalidated is True
+    trend_engine.apply_log_odds_delta.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -232,9 +258,39 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     assert updates == 1
     assert lineage[0]["change_type"] == "removed"
 
-    matching = _evidence(trend_id=trend_id, event_id=event_id)
-    from src.processing.trend_impact_reconciliation import _reconcile_desired_evidence
+    zero_delta_existing = _evidence(trend_id=trend_id, event_id=event_id, delta=0.0)
+    zero_delta_updates, zero_delta_lineage = await _invalidate_absent_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        active_by_key={(trend_id, "military_movement"): zero_delta_existing},
+        trend_by_uuid={trend_id: trend},
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert zero_delta_updates == 0
+    assert zero_delta_lineage[0]["change_type"] == "removed"
 
+    replacing = _evidence(
+        trend_id=trend_id,
+        event_id=event_id,
+        delta=0.02,
+        reasoning="stale reasoning",
+    )
+    replacing.trend_definition_hash = TrendEngine._definition_hash({"id": "trend-a", "v": 0})
+    trend_engine.apply_evidence.return_value = SimpleNamespace(delta_applied=0.0)
+    updates, lineage = await _reconcile_desired_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        event_id=event_id,
+        desired_by_key={desired.key: desired},
+        active_by_key={(trend_id, "military_movement"): replacing},
+        trend_by_uuid={trend_id: trend},
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert updates == 1
+    assert lineage[0]["change_type"] == "replaced"
+    assert lineage[0]["replacement"]["trend_id"] == "trend-a"
+
+    matching = _evidence(trend_id=trend_id, event_id=event_id)
     updates, lineage = await _reconcile_desired_evidence(
         session=session,
         trend_engine=trend_engine,

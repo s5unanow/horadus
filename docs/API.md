@@ -15,7 +15,8 @@ API key auth and rate limiting are controlled by environment config.
 - Admin header for key management: `X-Admin-API-Key: <admin-key>`
 - Set `API_AUTH_ENABLED=true` to enforce auth globally
 - Configure keys via `API_KEY` and/or `API_KEYS`
-- Key-management endpoints require a configured admin key; authenticated non-admin API keys are not an admin fallback
+- Privileged mutation/control routes require a configured `X-Admin-API-Key` in addition to a valid `X-API-Key`; authenticated non-admin API keys are not an admin fallback
+- Privileged routes include API key management, source create/update/delete, trend create/update/delete/sync/outcome recording, and feedback/override/taxonomy-gap mutation endpoints
 - Per-key default rate limit is controlled by `API_RATE_LIMIT_PER_MINUTE`
 - Rate-limit algorithm is configured via `API_RATE_LIMIT_STRATEGY` (`fixed_window` default, `sliding_window` optional)
 - On throttling, API returns `429` with `Retry-After` seconds
@@ -56,6 +57,8 @@ Create example:
 
 ```bash
 curl -X POST http://localhost:8000/api/v1/sources \
+  -H "X-API-Key: dev-key" \
+  -H "X-Admin-API-Key: admin-secret" \
   -H "Content-Type: application/json" \
   -d '{
     "type": "rss",
@@ -96,6 +99,9 @@ Freshness response includes:
 - `POST /api/v1/trends/{trend_id}/outcomes`
 - `GET /api/v1/trends/{trend_id}/calibration`
 
+Privileged trend mutations require both `X-API-Key` and `X-Admin-API-Key`.
+`GET /api/v1/trends?sync_from_config=true` also counts as a privileged sync path.
+
 Trend responses now include:
 - `risk_level` (`low`/`guarded`/`elevated`/`high`/`severe`)
 - `probability_band` (lower/upper bound)
@@ -135,6 +141,8 @@ Record an outcome for calibration:
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/trends/<trend-id>/outcomes" \
+  -H "X-API-Key: dev-key" \
+  -H "X-Admin-API-Key: admin-secret" \
   -H "Content-Type: application/json" \
   -d '{
     "outcome": "occurred",
@@ -154,6 +162,13 @@ curl "http://localhost:8000/api/v1/trends/<trend-id>/calibration"
 
 - `GET /api/v1/events`
 - `GET /api/v1/events/{event_id}`
+
+Feedback mutations are exposed under:
+- `PATCH /api/v1/feedback/taxonomy-gaps/{gap_id}`
+- `POST /api/v1/feedback/events/{event_id}/feedback`
+- `POST /api/v1/feedback/trends/{trend_id}/override`
+
+These routes require both `X-API-Key` and `X-Admin-API-Key`.
 
 Supported event filters:
 - `category` (string)

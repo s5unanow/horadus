@@ -1,16 +1,22 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
+from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, Request
 from fastapi.responses import Response
 from fastapi.testclient import TestClient
 
+import src.api.middleware.auth as auth_middleware_module
 import src.api.routes.auth as auth_module
+import src.api.routes.feedback as feedback_routes
+import src.api.routes.sources as sources_routes
+import src.api.routes.trends as trends_routes
 from src.api.middleware.auth import APIKeyAuthMiddleware
 from src.core.api_key_manager import APIKeyManager
+from src.storage.database import get_session
 
 pytestmark = pytest.mark.unit
 
@@ -42,7 +48,28 @@ def _build_app(manager: APIKeyManager) -> FastAPI:
     async def protected() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.post(
+        "/api/v1/admin-protected",
+        dependencies=[Depends(auth_middleware_module.require_privileged_access("test.admin"))],
+    )
+    async def admin_protected() -> dict[str, str]:
+        return {"status": "admin-ok"}
+
     app.include_router(auth_module.router, prefix="/api/v1/auth", tags=["Auth"])
+    return app
+
+
+def _build_api_app(manager: APIKeyManager, session: AsyncMock) -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(APIKeyAuthMiddleware, manager=manager)
+    app.include_router(sources_routes.router, prefix="/api/v1/sources", tags=["Sources"])
+    app.include_router(trends_routes.router, prefix="/api/v1/trends", tags=["Trends"])
+    app.include_router(feedback_routes.router, prefix="/api/v1", tags=["Feedback"])
+
+    async def _override_get_session():
+        yield session
+
+    app.dependency_overrides[get_session] = _override_get_session
     return app
 
 
@@ -67,6 +94,51 @@ def test_valid_api_key_allows_request() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_valid_non_admin_key_is_denied_on_privileged_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_middleware_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+
+    response = client.post(
+        "/api/v1/admin-protected",
+        headers={"X-API-Key": credential},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin API key required"
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "test.admin"
+    assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_privileged_route_allows_admin_header(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_middleware_module, "logger", audit_logger)
+    client = TestClient(_build_app(manager))
+
+    response = client.post(
+        "/api/v1/admin-protected",
+        headers={
+            "X-API-Key": credential,
+            "X-Admin-API-Key": "admin-secret",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "admin-ok"}
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "test.admin"
+    assert last_log.kwargs["outcome"] == "authorized"
 
 
 def test_health_route_bypasses_auth() -> None:
@@ -207,6 +279,118 @@ def test_admin_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -> Non
     assert audit_logger.info.call_count >= 1
     last_log = audit_logger.info.call_args_list[-1]
     assert last_log.kwargs["action"] == "list_keys"
+    assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_source_create_requires_admin_header(
+    mock_db_session: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_middleware_module, "logger", audit_logger)
+    client = TestClient(_build_api_app(manager, mock_db_session))
+
+    response = client.post(
+        "/api/v1/sources",
+        headers={"X-API-Key": credential},
+        json={
+            "type": "rss",
+            "name": "Denied Source",
+            "url": "https://example.com/feed.xml",
+        },
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin API key required"
+    mock_db_session.add.assert_not_called()
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "sources.create"
+    assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_source_create_allows_admin_header(
+    mock_db_session: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    client = TestClient(_build_api_app(manager, mock_db_session))
+
+    async def flush_side_effect() -> None:
+        source_record = mock_db_session.add.call_args.args[0]
+        source_record.id = uuid4()
+
+    mock_db_session.flush.side_effect = flush_side_effect
+
+    response = client.post(
+        "/api/v1/sources",
+        headers={
+            "X-API-Key": credential,
+            "X-Admin-API-Key": "admin-secret",
+        },
+        json={
+            "type": "rss",
+            "name": "Allowed Source",
+            "url": "https://example.com/feed.xml",
+        },
+    )
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Allowed Source"
+    mock_db_session.add.assert_called_once()
+
+
+def test_trend_sync_requires_admin_even_on_list_route(
+    mock_db_session: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_middleware_module, "logger", audit_logger)
+    sync_mock = AsyncMock()
+    monkeypatch.setattr(trends_routes, "load_trends_from_config", sync_mock)
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+    client = TestClient(_build_api_app(manager, mock_db_session))
+
+    baseline = client.get("/api/v1/trends", headers={"X-API-Key": credential})
+    sync_attempt = client.get(
+        "/api/v1/trends?sync_from_config=true",
+        headers={"X-API-Key": credential},
+    )
+
+    assert baseline.status_code == 200
+    assert baseline.json() == []
+    assert sync_attempt.status_code == 403
+    sync_mock.assert_not_awaited()
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "trends.sync_config"
+    assert last_log.kwargs["outcome"] == "denied"
+
+
+def test_feedback_override_requires_admin_header(
+    mock_db_session: AsyncMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    audit_logger = MagicMock()
+    monkeypatch.setattr(auth_middleware_module, "logger", audit_logger)
+    client = TestClient(_build_api_app(manager, mock_db_session))
+
+    response = client.post(
+        f"/api/v1/trends/{uuid4()}/override",
+        headers={"X-API-Key": credential},
+        json={"delta_log_odds": -0.1},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin API key required"
+    mock_db_session.get.assert_not_awaited()
+    last_log = audit_logger.info.call_args_list[-1]
+    assert last_log.kwargs["action"] == "feedback.trend_override"
     assert last_log.kwargs["outcome"] == "denied"
 
 

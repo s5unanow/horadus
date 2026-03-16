@@ -8,11 +8,15 @@ from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 from typing import Any
 
-from fastapi import Request
+import structlog
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from src.core.api_key_manager import APIKeyManager, get_api_key_manager
+from src.core.config import settings
+
+logger = structlog.get_logger(__name__)
 
 
 class APIKeyAuthMiddleware(BaseHTTPMiddleware):
@@ -84,3 +88,71 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
                 "message": message,
             },
         )
+
+
+def audit_privileged_action(
+    *,
+    request: Request,
+    action: str,
+    outcome: str,
+    detail: str | None = None,
+    **extra: Any,
+) -> None:
+    """Emit a structured audit log for privileged-route authorization."""
+    client_host = request.client.host if request.client is not None else None
+    logger.info(
+        "Privileged API action",
+        action=action,
+        outcome=outcome,
+        actor_api_key_id=getattr(request.state, "api_key_id", None),
+        actor_api_key_name=getattr(request.state, "api_key_name", None),
+        client_ip=client_host,
+        request_method=request.method,
+        request_path=request.url.path,
+        detail=detail,
+        **extra,
+    )
+
+
+def verify_privileged_access(request: Request) -> None:
+    """Require the configured admin header in addition to baseline API-key auth."""
+    configured_admin_key = (settings.API_ADMIN_KEY or "").strip()
+    if not configured_admin_key:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin API key is not configured",
+        )
+
+    header_value = request.headers.get("X-Admin-API-Key", "").strip()
+    if header_value == configured_admin_key:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Admin API key required",
+    )
+
+
+def require_privileged_access(action: str) -> Callable[[Request], None]:
+    """Create a route dependency that enforces privileged-route access."""
+
+    def _dependency(request: Request) -> None:
+        try:
+            verify_privileged_access(request)
+        except HTTPException as exc:
+            audit_privileged_action(
+                request=request,
+                action=action,
+                outcome="denied",
+                detail=str(exc.detail),
+            )
+            raise
+
+        audit_privileged_action(
+            request=request,
+            action=action,
+            outcome="authorized",
+        )
+
+    _dependency.__name__ = f"require_privileged_access_{action.replace('.', '_')}"
+    return _dependency

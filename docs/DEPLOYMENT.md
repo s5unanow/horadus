@@ -262,6 +262,7 @@ Operator allowlisting guidance:
 1. Restrict SSH/admin entry points to trusted CIDRs only.
 2. Restrict `80/443` at perimeter firewall/WAF to intended client ranges when possible.
 3. Keep database/redis management access local-only (`docker exec`/SSH tunnel), not public firewall rules.
+4. Treat `X-Admin-API-Key` holders as privileged operators only; do not embed the admin secret in broad client distributions or shared read-only integrations.
 
 External verification checks (run from a separate host/network):
 
@@ -355,6 +356,7 @@ Recommended practice:
 ## Operational Notes
 
 - `api` serves FastAPI (`/health`, `/metrics`, `/docs`).
+- Privileged API mutations additionally require `X-Admin-API-Key`; keep the admin secret in an operator-only secret backend and rotate it with the same care as SSH/VPN admin credentials.
 - `worker` runs Celery worker queues: `default`, `ingestion`, `processing`.
 - `beat` schedules periodic ingestion, snapshots, decay, and report jobs.
 - Postgres and Redis use named volumes (`postgres_data`, `redis_data`) for persistence.

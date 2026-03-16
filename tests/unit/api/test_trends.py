@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 
 import src.api.routes.trends as trends_module
 from src.api.routes.trends import (
@@ -73,12 +73,31 @@ def _build_trend(
     )
 
 
+def _build_request() -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/trends",
+            "headers": [],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+
 @pytest.mark.asyncio
 async def test_list_trends_returns_response_models(mock_db_session) -> None:
     trend = _build_trend()
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
 
-    result = await list_trends(session=mock_db_session, sync_from_config=False)
+    result = await list_trends(
+        request=_build_request(),
+        session=mock_db_session,
+        sync_from_config=False,
+    )
 
     assert len(result) == 1
     assert result[0].id == trend.id

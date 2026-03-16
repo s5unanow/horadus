@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.middleware.auth import require_privileged_access
 from src.core.trend_engine import TrendEngine
 from src.storage.database import get_session
 from src.storage.models import (
@@ -199,6 +200,74 @@ def _to_taxonomy_gap_response(gap: TaxonomyGap) -> TaxonomyGapResponse:
     )
 
 
+async def _build_event_invalidation_payload(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> tuple[dict[str, Any], dict[str, Any], list[TrendEvidence], datetime]:
+    evidences = list(
+        (
+            await session.scalars(
+                select(TrendEvidence)
+                .where(TrendEvidence.event_id == event_id)
+                .where(TrendEvidence.is_invalidated.is_(False))
+                .order_by(TrendEvidence.created_at.asc())
+            )
+        ).all()
+    )
+    trend_deltas: dict[UUID, float] = {}
+    for evidence in evidences:
+        trend_deltas[evidence.trend_id] = trend_deltas.get(evidence.trend_id, 0.0) + float(
+            evidence.delta_log_odds
+        )
+
+    trend_adjustments: dict[str, dict[str, float]] = {}
+    if trend_deltas:
+        trend_engine = TrendEngine(session=session)
+        trends = list(
+            (
+                await session.scalars(select(Trend).where(Trend.id.in_(tuple(trend_deltas.keys()))))
+            ).all()
+        )
+        trend_by_id = {trend.id: trend for trend in trends}
+        for trend_id, trend_delta in trend_deltas.items():
+            trend = trend_by_id.get(trend_id)
+            previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
+                trend_id=trend_id,
+                trend_name=trend.name if trend is not None else None,
+                delta=-trend_delta,
+                reason="event_invalidation",
+                fallback_current_log_odds=float(trend.current_log_odds)
+                if trend is not None
+                else None,
+            )
+            if trend is not None:
+                trend.current_log_odds = new_lo
+                trend.updated_at = datetime.now(tz=UTC)
+            trend_adjustments[str(trend_id)] = {
+                "previous_log_odds": previous_lo,
+                "new_log_odds": new_lo,
+                "delta_applied": -trend_delta,
+            }
+
+    invalidation_timestamp = datetime.now(tz=UTC)
+    evidence_ids = [str(evidence.id) for evidence in evidences if evidence.id is not None]
+    original_value = {
+        "evidence_count": len(evidences),
+        "active_evidence_ids": evidence_ids,
+        "trend_deltas": {str(trend_id): delta for trend_id, delta in trend_deltas.items()},
+    }
+    corrected_value = {
+        "reverted_event_id": str(event_id),
+        "affected_trend_count": len(trend_deltas),
+        "trend_adjustments": trend_adjustments,
+        "invalidated_evidence_count": len(evidence_ids),
+        "invalidated_evidence_ids": evidence_ids,
+        "invalidated_at": invalidation_timestamp.isoformat(),
+    }
+    return original_value, corrected_value, evidences, invalidation_timestamp
+
+
 @router.get("/feedback", response_model=list[FeedbackResponse])
 async def list_feedback(
     target_type: str | None = Query(default=None),
@@ -301,7 +370,11 @@ async def list_taxonomy_gaps(
     )
 
 
-@router.patch("/taxonomy-gaps/{gap_id}", response_model=TaxonomyGapResponse)
+@router.patch(
+    "/taxonomy-gaps/{gap_id}",
+    response_model=TaxonomyGapResponse,
+    dependencies=[Depends(require_privileged_access("feedback.taxonomy_gap_update"))],
+)
 async def update_taxonomy_gap(
     gap_id: UUID,
     payload: TaxonomyGapUpdateRequest,
@@ -332,7 +405,11 @@ async def update_taxonomy_gap(
     return _to_taxonomy_gap_response(gap)
 
 
-@router.post("/events/{event_id}/feedback", response_model=FeedbackResponse)
+@router.post(
+    "/events/{event_id}/feedback",
+    response_model=FeedbackResponse,
+    dependencies=[Depends(require_privileged_access("feedback.event_feedback"))],
+)
 async def create_event_feedback(
     event_id: UUID,
     payload: EventFeedbackRequest,
@@ -361,70 +438,12 @@ async def create_event_feedback(
         event.lifecycle_status = EventLifecycle.ARCHIVED.value
         corrected_value = {"lifecycle_status": event.lifecycle_status}
     elif payload.action == "invalidate":
-        evidences = list(
-            (
-                await session.scalars(
-                    select(TrendEvidence)
-                    .where(TrendEvidence.event_id == event_id)
-                    .where(TrendEvidence.is_invalidated.is_(False))
-                    .order_by(TrendEvidence.created_at.asc())
-                )
-            ).all()
-        )
-        evidences_to_invalidate = evidences
-        trend_deltas: dict[UUID, float] = {}
-        for evidence in evidences:
-            trend_deltas[evidence.trend_id] = trend_deltas.get(evidence.trend_id, 0.0) + float(
-                evidence.delta_log_odds
-            )
-
-        trend_adjustments: dict[str, dict[str, float]] = {}
-        if trend_deltas:
-            trend_engine = TrendEngine(session=session)
-            trends = list(
-                (
-                    await session.scalars(
-                        select(Trend).where(Trend.id.in_(tuple(trend_deltas.keys())))
-                    )
-                ).all()
-            )
-            trend_by_id = {trend.id: trend for trend in trends}
-            for trend_id, trend_delta in trend_deltas.items():
-                trend = trend_by_id.get(trend_id)
-                trend_name = trend.name if trend is not None else None
-                fallback_current = float(trend.current_log_odds) if trend is not None else None
-                previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
-                    trend_id=trend_id,
-                    trend_name=trend_name,
-                    delta=-trend_delta,
-                    reason="event_invalidation",
-                    fallback_current_log_odds=fallback_current,
-                )
-                if trend is not None:
-                    trend.current_log_odds = new_lo
-                    trend.updated_at = datetime.now(tz=UTC)
-                trend_adjustments[str(trend_id)] = {
-                    "previous_log_odds": previous_lo,
-                    "new_log_odds": new_lo,
-                    "delta_applied": -trend_delta,
-                }
-
-        invalidation_timestamp = datetime.now(tz=UTC)
-        evidence_ids = [str(evidence.id) for evidence in evidences if evidence.id is not None]
-
-        original_value = {
-            "evidence_count": len(evidences),
-            "active_evidence_ids": evidence_ids,
-            "trend_deltas": {str(trend_id): delta for trend_id, delta in trend_deltas.items()},
-        }
-        corrected_value = {
-            "reverted_event_id": str(event_id),
-            "affected_trend_count": len(trend_deltas),
-            "trend_adjustments": trend_adjustments,
-            "invalidated_evidence_count": len(evidence_ids),
-            "invalidated_evidence_ids": evidence_ids,
-            "invalidated_at": invalidation_timestamp.isoformat(),
-        }
+        (
+            original_value,
+            corrected_value,
+            evidences_to_invalidate,
+            invalidation_timestamp,
+        ) = await _build_event_invalidation_payload(session=session, event_id=event_id)
 
     feedback = HumanFeedback(
         target_type="event",
@@ -628,7 +647,11 @@ async def list_review_queue(
     return queue_items[:limit_value]
 
 
-@router.post("/trends/{trend_id}/override", response_model=FeedbackResponse)
+@router.post(
+    "/trends/{trend_id}/override",
+    response_model=FeedbackResponse,
+    dependencies=[Depends(require_privileged_access("feedback.trend_override"))],
+)
 async def create_trend_override(
     trend_id: UUID,
     payload: TrendOverrideRequest,

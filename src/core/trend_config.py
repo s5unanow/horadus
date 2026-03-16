@@ -5,11 +5,18 @@ Trend configuration schema validation for YAML files.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from pathlib import Path
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 MAX_RUNTIME_TREND_ID_LENGTH = 255
+DEFAULT_TREND_CONFIG_SYNC_DIR = "config/trends"
+REPO_TREND_CONFIG_ROOT = (Path(__file__).resolve().parents[2] / "config" / "trends").resolve()
+
+
+class TrendConfigSyncPathError(ValueError):
+    """Raised when a sync request points outside the repo-owned trend-config root."""
 
 
 class TrendDisqualifier(BaseModel):
@@ -75,6 +82,37 @@ def normalize_definition_payload(definition: Mapping[str, Any] | None) -> dict[s
     """Return a mutable definition mapping for downstream normalization."""
 
     return dict(definition) if isinstance(definition, Mapping) else {}
+
+
+def resolve_trend_config_sync_dir(
+    config_dir: str | Path = DEFAULT_TREND_CONFIG_SYNC_DIR,
+) -> Path:
+    """Resolve a sync request path within the repo-owned `config/trends` root."""
+
+    raw_value = str(config_dir).strip()
+    if not raw_value or raw_value == ".":
+        relative_path = Path()
+    else:
+        requested_path = Path(raw_value)
+        if requested_path.is_absolute():
+            msg = "config_dir must be relative to the repo-owned config/trends root"
+            raise TrendConfigSyncPathError(msg)
+
+        if ".." in requested_path.parts:
+            msg = "config_dir cannot contain path traversal segments"
+            raise TrendConfigSyncPathError(msg)
+
+        if requested_path.parts[:2] == ("config", "trends"):
+            relative_path = Path(*requested_path.parts[2:])
+        else:
+            relative_path = requested_path
+
+    resolved_path = (REPO_TREND_CONFIG_ROOT / relative_path).resolve()
+    if not resolved_path.is_relative_to(REPO_TREND_CONFIG_ROOT):
+        msg = "config_dir must resolve within the repo-owned config/trends root"
+        raise TrendConfigSyncPathError(msg)
+
+    return resolved_path
 
 
 def resolve_runtime_trend_id(*, definition: Mapping[str, Any] | None, trend_name: str) -> str:

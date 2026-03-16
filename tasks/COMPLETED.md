@@ -311,3 +311,4 @@
 - TASK-203: Enforce validated, unique runtime trend identifiers across config and API ✅
 - TASK-204: Recompute applied trend evidence when Tier-2 impacts change ✅
 - TASK-205: Requeue retryable pipeline failures instead of permanently erroring items ✅
+- TASK-199: Harden trend config sync against write-on-read and arbitrary path access ✅

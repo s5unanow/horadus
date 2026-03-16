@@ -100,7 +100,11 @@ Freshness response includes:
 - `GET /api/v1/trends/{trend_id}/calibration`
 
 Privileged trend mutations require both `X-API-Key` and `X-Admin-API-Key`.
-`GET /api/v1/trends?sync_from_config=true` also counts as a privileged sync path.
+Config sync is only available through `POST /api/v1/trends/sync-config`.
+`GET /api/v1/trends?sync_from_config=true` is rejected with `400`.
+`POST /api/v1/trends/sync-config` accepts only repo-owned directories under
+`config/trends` (the default root or a descendant); traversal, symlink escape,
+and arbitrary server-local paths are rejected with `400`.
 
 Trend responses now include:
 - `risk_level` (`low`/`guarded`/`elevated`/`high`/`severe`)

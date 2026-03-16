@@ -6,13 +6,13 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 
-import src.api.middleware.auth as auth_middleware_module
 import src.api.routes._trend_write_contract as trend_write_contract_module
 import src.api.routes._trend_write_persistence as trend_write_persistence_module
 import src.api.routes.trends as trends_module
+import src.core.trend_config as trend_config_module
 from src.api.routes.trends import (
     _downsample_snapshots,
     _get_evidence_stats,
@@ -52,22 +52,8 @@ def _build_trend(*, trend_id=None, name: str = "Trend A", is_active: bool = True
     )
 
 
-def _build_request(*, admin_key: str | None = None) -> Request:
-    headers: list[tuple[bytes, bytes]] = []
-    if admin_key is not None:
-        headers.append((b"x-admin-api-key", admin_key.encode("utf-8")))
-    return Request(
-        {
-            "type": "http",
-            "method": "GET",
-            "path": "/api/v1/trends",
-            "headers": headers,
-            "query_string": b"",
-            "client": ("127.0.0.1", 1234),
-            "server": ("testserver", 80),
-            "scheme": "http",
-        }
-    )
+def _use_tmp_trend_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    monkeypatch.setattr(trend_config_module, "REPO_TREND_CONFIG_ROOT", tmp_path.resolve())
 
 
 @pytest.mark.asyncio
@@ -185,12 +171,13 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     mock_db_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    missing = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path / "missing"))
-    assert missing.errors == [f"Config directory not found: {tmp_path / 'missing'}"]
+    _use_tmp_trend_root(monkeypatch, tmp_path)
+    missing = await load_trends_from_config(mock_db_session, config_dir="missing")
+    assert missing.errors == ["Config directory not found: missing"]
 
     broken = tmp_path / "broken.yaml"
     broken.write_text("- not-a-mapping\n", encoding="utf-8")
-    invalid = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    invalid = await load_trends_from_config(mock_db_session, config_dir=".")
     assert invalid.loaded_files == 1
     assert len(invalid.errors) == 1
 
@@ -198,7 +185,6 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
     monkeypatch.setattr(trends_module, "_get_evidence_stats", AsyncMock(return_value=(0, 0.5, 30)))
     monkeypatch.setattr(trends_module, "_get_top_movers_7d", AsyncMock(return_value=[]))
-    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
     called: list[str] = []
 
     async def fake_sync(*, session, config_dir: str = "config/trends"):
@@ -209,9 +195,8 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     monkeypatch.setattr(trends_module, "load_trends_from_config", fake_sync)
 
     results = await list_trends(
-        request=_build_request(admin_key="admin-secret"),
         active_only=False,
-        sync_from_config=True,
+        sync_from_config=False,
         session=mock_db_session,
     )
 
@@ -219,15 +204,73 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
 
     assert len(results) == 1
     assert results[0].id == trend.id
-    assert called == ["config/trends", "custom/trends"]
+    assert called == ["custom/trends"]
     assert synced.loaded_files == 0
+
+
+@pytest.mark.asyncio
+async def test_sync_trends_from_config_rejects_invalid_path(mock_db_session) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await sync_trends_from_config(config_dir="../outside", session=mock_db_session)
+
+    assert exc_info.value.status_code == 400
+    assert "path traversal" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_list_trends_rejects_sync_from_config_query_flag(mock_db_session) -> None:
+    with pytest.raises(HTTPException) as exc_info:
+        await list_trends(
+            session=mock_db_session,
+            sync_from_config=True,
+        )
+
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == trends_module.SYNC_FROM_CONFIG_QUERY_REJECTED_DETAIL
+    mock_db_session.scalars.assert_not_awaited()
+
+
+def test_resolve_trend_config_sync_dir_rejects_absolute_and_traversal_paths() -> None:
+    with pytest.raises(trend_config_module.TrendConfigSyncPathError, match="relative"):
+        trend_config_module.resolve_trend_config_sync_dir("/tmp")
+
+    with pytest.raises(trend_config_module.TrendConfigSyncPathError, match="path traversal"):
+        trend_config_module.resolve_trend_config_sync_dir("../outside")
+
+
+def test_resolve_trend_config_sync_dir_accepts_repo_root_alias(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "config" / "trends"
+    root.mkdir(parents=True)
+    monkeypatch.setattr(trend_config_module, "REPO_TREND_CONFIG_ROOT", root.resolve())
+
+    assert trend_config_module.resolve_trend_config_sync_dir("config/trends") == root.resolve()
+
+
+def test_resolve_trend_config_sync_dir_rejects_symlink_escape(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = tmp_path / "config" / "trends"
+    root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (root / "escape").symlink_to(outside, target_is_directory=True)
+    monkeypatch.setattr(trend_config_module, "REPO_TREND_CONFIG_ROOT", root.resolve())
+
+    with pytest.raises(trend_config_module.TrendConfigSyncPathError, match="within the repo-owned"):
+        trend_config_module.resolve_trend_config_sync_dir("escape")
 
 
 @pytest.mark.asyncio
 async def test_load_trends_from_config_upserts_by_runtime_trend_id(
     tmp_path,
     mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "renamed.yaml"
     config_file.write_text(
         """
@@ -247,7 +290,7 @@ indicators:
     existing.runtime_trend_id = "shared-runtime-id"
     mock_db_session.scalar.side_effect = [existing, None]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.created == 0
     assert result.updated == 1
@@ -259,7 +302,9 @@ indicators:
 async def test_load_trends_from_config_rejects_conflicting_name_and_runtime_rows(
     tmp_path,
     mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "conflict.yaml"
     config_file.write_text(
         """
@@ -281,7 +326,7 @@ indicators:
     existing_by_name.runtime_trend_id = "other-runtime-id"
     mock_db_session.scalar.side_effect = [existing_by_runtime, existing_by_name]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.created == 0
     assert result.updated == 0
@@ -337,7 +382,12 @@ def test_trend_write_helper_rejects_overlength_runtime_id() -> None:
 
 
 @pytest.mark.asyncio
-async def test_load_trends_from_config_updates_existing_trend(mock_db_session, tmp_path) -> None:
+async def test_load_trends_from_config_updates_existing_trend(
+    mock_db_session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "trend.yaml"
     config_file.write_text(
         """
@@ -356,7 +406,7 @@ indicators:
     existing = _build_trend(name="EU Russia")
     mock_db_session.scalar.return_value = existing
 
-    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
 
     assert result.updated == 1
     assert existing.description == "Updated description"

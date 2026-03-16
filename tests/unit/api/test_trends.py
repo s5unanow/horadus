@@ -503,6 +503,34 @@ indicators:
 
 
 @pytest.mark.asyncio
+async def test_load_trends_from_config_defaults_missing_indicators_to_empty_mapping(
+    mock_db_session,
+    tmp_path,
+) -> None:
+    config_file = tmp_path / "minimal-trend.yaml"
+    config_file.write_text(
+        """
+id: minimal-trend
+name: Minimal Trend
+baseline_probability: 0.12
+decay_half_life_days: 20
+""".strip(),
+        encoding="utf-8",
+    )
+    mock_db_session.scalar.side_effect = [None, None]
+
+    result = await load_trends_from_config(mock_db_session, config_dir=str(tmp_path))
+
+    assert result.created == 1
+    assert result.updated == 0
+    assert result.errors == []
+    added_objects = [call.args[0] for call in mock_db_session.add.call_args_list]
+    added = next(obj for obj in added_objects if isinstance(obj, Trend))
+    assert added.indicators == {}
+    assert added.definition["indicators"] == {}
+
+
+@pytest.mark.asyncio
 async def test_load_trends_from_config_supports_enhanced_fields(
     mock_db_session,
     tmp_path,

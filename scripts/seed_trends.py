@@ -3,7 +3,7 @@ Seed Trend definitions into the database from `config/trends/*.yaml`.
 
 This script is intentionally simple and idempotent:
 - Inserts missing trends
-- Updates existing trends matched by `Trend.name`
+- Updates existing trends matched by runtime id first, then `Trend.name`
 
 Usage:
   python3 scripts/seed_trends.py
@@ -73,6 +73,34 @@ def _validate_indicators(indicators: dict[str, Any], path: Path) -> None:
             )
 
 
+async def _get_existing_trend(
+    session: Any,
+    *,
+    runtime_trend_id: str,
+    trend_name: str,
+) -> Trend | None:
+    runtime_result = await session.execute(
+        select(Trend).where(Trend.runtime_trend_id == runtime_trend_id).limit(1)
+    )
+    existing_by_runtime = runtime_result.scalar_one_or_none()
+
+    name_result = await session.execute(select(Trend).where(Trend.name == trend_name).limit(1))
+    existing_by_name = name_result.scalar_one_or_none()
+
+    if (
+        existing_by_runtime is not None
+        and existing_by_name is not None
+        and existing_by_runtime.id != existing_by_name.id
+    ):
+        msg = (
+            "Seeded trend identity conflict for "
+            f"name '{trend_name}' and runtime id '{runtime_trend_id}'"
+        )
+        raise ValueError(msg)
+
+    return existing_by_runtime or existing_by_name
+
+
 async def seed_trends(trends_path: Path, dry_run: bool) -> int:
     if not trends_path.exists():
         raise FileNotFoundError(f"Trends path not found: {trends_path}")
@@ -105,8 +133,11 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
 
             baseline_log_odds = prob_to_logodds(baseline_probability)
 
-            existing = await session.execute(select(Trend).where(Trend.name == name))
-            trend = existing.scalar_one_or_none()
+            trend = await _get_existing_trend(
+                session,
+                runtime_trend_id=runtime_trend_id,
+                trend_name=name,
+            )
 
             if trend is None:
                 created += 1
@@ -127,6 +158,7 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
             else:
                 updated += 1
                 if not dry_run:
+                    trend.name = name
                     trend.description = definition.get("description")
                     trend.runtime_trend_id = runtime_trend_id
                     trend.definition = normalized_definition

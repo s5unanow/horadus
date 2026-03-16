@@ -729,7 +729,7 @@ async def load_trends_from_config(
                 description=raw_config.get("description"),
                 baseline_probability=raw_config.get("baseline_probability"),
                 decay_half_life_days=raw_config.get("decay_half_life_days", 30),
-                indicators=raw_config.get("indicators"),
+                indicators=raw_config.get("indicators", {}),
                 definition=raw_config,
             )
             validated_config = write_payload.trend_config

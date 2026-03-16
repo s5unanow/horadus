@@ -36,6 +36,8 @@ from src.processing.llm_policy import (
 from src.processing.semantic_cache import LLMSemanticCache
 from src.storage.models import Event, EventItem, RawItem, Trend
 
+_PRESERVED_SYSTEM_CLAIM_KEYS = {"_trend_impact_reconciliation"}
+
 
 @dataclass(slots=True)
 class TrendImpact:
@@ -717,7 +719,7 @@ class Tier2Classifier:
     def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
         existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         system_claims = {
-            k: v for k, v in existing_claims.items() if isinstance(k, str) and k.startswith("_")
+            k: existing_claims[k] for k in _PRESERVED_SYSTEM_CLAIM_KEYS if k in existing_claims
         }
         event.canonical_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)

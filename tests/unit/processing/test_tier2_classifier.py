@@ -251,10 +251,10 @@ async def test_classify_event_preserves_system_claim_metadata(mock_db_session) -
     await classifier.classify_event(event=event, trends=trends, context_chunks=["Prior context"])
 
     assert isinstance(event.extracted_claims, dict)
-    assert event.extracted_claims["_llm_policy"] == {"degraded_llm": True}
     assert event.extracted_claims["_trend_impact_reconciliation"] == [
         {"reason": "prior_reclassification"}
     ]
+    assert "_llm_policy" not in event.extracted_claims
 
 
 @pytest.mark.asyncio

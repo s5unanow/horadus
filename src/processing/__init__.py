@@ -4,11 +4,11 @@ from src.processing.cost_tracker import BudgetExceededError, CostTracker
 from src.processing.deduplication_service import DeduplicationResult, DeduplicationService
 from src.processing.embedding_service import EmbeddingRunResult, EmbeddingService
 from src.processing.event_clusterer import ClusterResult, EventClusterer
-from src.processing.pipeline_orchestrator import (
+from src.processing.pipeline_orchestrator import ProcessingPipeline
+from src.processing.pipeline_types import (
     PipelineItemResult,
     PipelineRunResult,
     PipelineUsage,
-    ProcessingPipeline,
 )
 from src.processing.tier1_classifier import (
     Tier1Classifier,

@@ -197,29 +197,6 @@ or impacted trends change, the stored delta remains stale.
 
 ---
 
-### TASK-205: Requeue retryable pipeline failures instead of permanently erroring items
-**Priority**: P0 (Critical)
-**Estimate**: 1 day
-
-The processing pipeline still catches broad exceptions inside per-item stages and
-marks items `ERROR`, which prevents Celery-level retries from handling transient
-LLM/provider/network failures. Retryable failures can therefore become permanent
-item failures after partial side effects.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 3 finding 1
-
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-**Files**: `src/processing/pipeline_orchestrator.py`, `src/workers/tasks.py`, `docs/ARCHITECTURE.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Classify retryable exceptions distinctly from terminal data/validation failures across prepare, Tier-1, embedding, clustering, and Tier-2 stages
-- [ ] Retryable failures leave items in a safe retryable state and allow task-level retry/backoff to execute
-- [ ] Partial side effects remain idempotent or are explicitly rolled back so reprocessing is safe
-- [ ] Add tests covering transient provider failures that eventually succeed without leaving items stranded in `ERROR`
-
----
-
 ### TASK-206: Keep event recency monotonic under late and backfilled mentions
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

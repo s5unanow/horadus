@@ -88,6 +88,10 @@ def _evidence(
     )
 
 
+def _update_result(value) -> SimpleNamespace:
+    return SimpleNamespace(scalar_one_or_none=lambda: value)
+
+
 def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
     no_id_trend = SimpleNamespace(id=None)
     desired_without_id = _desired(trend=no_id_trend)
@@ -184,6 +188,7 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
     )
     evidence = _evidence(trend_id=trend_id, event_id=event_id)
     session = AsyncMock()
+    session.execute = AsyncMock(return_value=_update_result(evidence.id))
     session.flush = AsyncMock()
     session.get = AsyncMock(return_value=trend)
     session.scalars = AsyncMock(
@@ -244,6 +249,19 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
     assert zero_delta_evidence.is_invalidated is True
     trend_engine.apply_log_odds_delta.assert_not_awaited()
 
+    session.execute = AsyncMock(return_value=_update_result(None))
+    concurrent_evidence = _evidence(trend_id=trend_id, event_id=event_id, delta=0.03)
+    concurrent_delta = await _invalidate_active_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        evidence=concurrent_evidence,
+        trend=trend,
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert concurrent_delta is None
+    assert concurrent_evidence.is_invalidated is not True
+    trend_engine.apply_log_odds_delta.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> None:
@@ -264,6 +282,7 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     )
 
     existing = _evidence(trend_id=trend_id, event_id=event_id)
+    session.execute = AsyncMock(return_value=_update_result(existing.id))
     desired = _desired(trend=trend, reasoning="updated reasoning")
     updates, lineage = await _invalidate_absent_evidence(
         session=session,
@@ -306,6 +325,21 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     assert updates == 1
     assert lineage[0]["change_type"] == "replaced"
     assert lineage[0]["replacement"]["trend_id"] == "trend-a"
+
+    session.execute = AsyncMock(return_value=_update_result(None))
+    concurrent_existing = _evidence(trend_id=trend_id, event_id=event_id, delta=0.02)
+    trend_engine.apply_evidence.return_value = SimpleNamespace(delta_applied=0.03)
+    updates, lineage = await _reconcile_desired_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        event_id=event_id,
+        desired_by_key={desired.key: desired},
+        active_by_key={(trend_id, "military_movement"): concurrent_existing},
+        trend_by_uuid={trend_id: trend},
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert updates == 1
+    assert lineage == []
 
     matching = _evidence(trend_id=trend_id, event_id=event_id)
     updates, lineage = await _reconcile_desired_evidence(

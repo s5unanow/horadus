@@ -10,7 +10,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_config import index_trends_by_runtime_id, trend_runtime_id_for_record
@@ -164,8 +164,7 @@ async def reconcile_event_trend_impacts(
 ) -> tuple[int, int]:
     """Reconcile active evidence rows to the event's current Tier-2 impacts."""
     if event.id is None:
-        msg = "Event must have an id before applying trend impacts"
-        raise ValueError(msg)
+        raise ValueError("Event must have an id before applying trend impacts")
 
     claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
     impacts_payload = claims.get("trend_impacts", [])
@@ -354,7 +353,7 @@ async def _reconcile_desired_evidence(
         desired_hash = TrendEngine._definition_hash(desired.trend.definition)
         if existing is not None and _evidence_matches(existing, desired, desired_hash=desired_hash):
             continue
-        existing_delta = 0.0
+        existing_delta: float | None = 0.0
         if existing is not None:
             existing_delta = await _invalidate_existing_match(
                 session=session,
@@ -363,15 +362,16 @@ async def _reconcile_desired_evidence(
                 trend_by_uuid=trend_by_uuid,
                 invalidated_at=invalidated_at,
             )
-            lineage_entries.append(
-                _lineage_entry(
-                    evidence=existing,
-                    trend_runtime_id=trend_runtime_id_for_record(desired.trend),
-                    invalidated_at=invalidated_at,
-                    replacement=desired,
-                    change_type="replaced",
+            if existing_delta is not None:
+                lineage_entries.append(
+                    _lineage_entry(
+                        evidence=existing,
+                        trend_runtime_id=trend_runtime_id_for_record(desired.trend),
+                        invalidated_at=invalidated_at,
+                        replacement=desired,
+                        change_type="replaced",
+                    )
                 )
-            )
         update = await trend_engine.apply_evidence(
             trend=desired.trend,
             delta=desired.delta,
@@ -380,7 +380,9 @@ async def _reconcile_desired_evidence(
             factors=desired.factors,
             reasoning=desired.reasoning,
         )
-        if abs(existing_delta) > 0.0 or abs(update.delta_applied) > 0.0:
+        if (existing_delta is not None and abs(existing_delta) > 0.0) or abs(
+            update.delta_applied
+        ) > 0.0:
             updates_applied += 1
     return (updates_applied, lineage_entries)
 
@@ -408,6 +410,8 @@ async def _invalidate_absent_evidence(
             trend=existing_trend,
             invalidated_at=invalidated_at,
         )
+        if existing_delta is None:
+            continue
         lineage_entries.append(
             _lineage_entry(
                 evidence=existing,
@@ -484,7 +488,7 @@ async def _invalidate_existing_match(
     evidence: TrendEvidence,
     trend_by_uuid: dict[UUID, Trend],
     invalidated_at: datetime,
-) -> float:
+) -> float | None:
     existing_trend = await _trend_for_evidence(
         session=session,
         evidence=evidence,
@@ -537,10 +541,19 @@ async def _invalidate_active_evidence(
     evidence: TrendEvidence,
     trend: Trend | None,
     invalidated_at: datetime,
-) -> float:
+) -> float | None:
     if trend is None or trend.id is None:
-        msg = f"Trend {evidence.trend_id} not found while reconciling active evidence"
-        raise ValueError(msg)
+        raise ValueError(f"Trend {evidence.trend_id} not found while reconciling active evidence")
+    if evidence.id is None:
+        raise ValueError("Evidence must have an id before reconciliation invalidation")
+
+    claimed_invalidation = await _claim_evidence_invalidation(
+        session=session,
+        evidence=evidence,
+        invalidated_at=invalidated_at,
+    )
+    if not claimed_invalidation:
+        return None
 
     delta_to_reverse = float(evidence.delta_log_odds)
     if abs(delta_to_reverse) > 0.0:
@@ -555,10 +568,32 @@ async def _invalidate_active_evidence(
         trend.current_log_odds = new_lo
         trend.updated_at = invalidated_at
 
+    return delta_to_reverse
+
+
+async def _claim_evidence_invalidation(
+    *,
+    session: AsyncSession,
+    evidence: TrendEvidence,
+    invalidated_at: datetime,
+) -> bool:
+    stmt = (
+        update(TrendEvidence)
+        .where(TrendEvidence.id == evidence.id)
+        .where(TrendEvidence.is_invalidated.is_(False))
+        .values(is_invalidated=True, invalidated_at=invalidated_at)
+        .returning(TrendEvidence.id)
+        .execution_options(synchronize_session=False)
+    )
+    result = await session.execute(stmt)
+    claimed_id = result.scalar_one_or_none()
+    if isawaitable(claimed_id):
+        claimed_id = await claimed_id
+    if claimed_id is None:
+        return False
     evidence.is_invalidated = True
     evidence.invalidated_at = invalidated_at
-    await session.flush()
-    return delta_to_reverse
+    return True
 
 
 def _append_reconciliation_history(

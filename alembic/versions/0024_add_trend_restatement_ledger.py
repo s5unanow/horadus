@@ -70,15 +70,24 @@ def _backfill_legacy_invalidations() -> None:
             "event_claim_id": row["event_claim_id"],
             "trend_evidence_id": row["trend_evidence_id"],
             "feedback_id": row["feedback_id"],
-            "restatement_kind": "full_invalidation",
-            "source": "event_feedback",
+            "restatement_kind": (
+                "full_invalidation" if row["feedback_id"] is not None else "reclassification"
+            ),
+            "source": "event_feedback" if row["feedback_id"] is not None else "tier2_reconciliation",
             "original_evidence_delta_log_odds": row["delta_log_odds"],
             "compensation_delta_log_odds": -Decimal(str(row["delta_log_odds"])),
             "notes": row["notes"],
-            "details": {
-                "backfilled_from_legacy_lineage": True,
-                "event_action": "invalidate",
-            },
+            "details": (
+                {
+                    "backfilled_from_legacy_lineage": True,
+                    "event_action": "invalidate",
+                }
+                if row["feedback_id"] is not None
+                else {
+                    "backfilled_from_legacy_lineage": True,
+                    "reconciliation_backfill": True,
+                }
+            ),
             "recorded_at": row["recorded_at"],
         }
         for row in rows

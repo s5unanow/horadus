@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.processing.event_claims import (
     FALLBACK_EVENT_CLAIM_KEY,
     MAX_EVENT_CLAIM_KEY_LENGTH,
+    _begin_nested_if_available,
     _decorate_event_claim_payload,
     _decorate_impact_payload,
     assign_claim_keys_to_impacts,
@@ -204,6 +208,86 @@ async def test_sync_event_claims_updates_existing_rows_and_decorates_payload() -
     assert extracted_claims["trend_impacts"][0]["event_claim_id"] == str(statement_claim.id)
     assert extracted_claims["trend_impacts"][1] == "raw-impact"
     assert extracted_claims["event_claims"][0]["event_claim_id"] == str(fallback_claim.id)
+
+
+@pytest.mark.asyncio
+async def test_sync_event_claims_recovers_from_unique_key_race() -> None:
+    event_id = uuid4()
+    fallback_claim = EventClaim(
+        id=uuid4(),
+        event_id=event_id,
+        claim_key=FALLBACK_EVENT_CLAIM_KEY,
+        claim_text="Existing fallback",
+        claim_type="fallback",
+        claim_order=0,
+        is_active=True,
+    )
+    persisted_claim = EventClaim(
+        id=uuid4(),
+        event_id=event_id,
+        claim_key="border clashes intensify",
+        claim_text="Persisted statement",
+        claim_type="statement",
+        claim_order=9,
+        is_active=False,
+    )
+    session = AsyncMock()
+    session.add = MagicMock()
+
+    @asynccontextmanager
+    async def _nested_transaction():
+        yield
+
+    session.begin_nested = MagicMock(return_value=_nested_transaction())
+    session.flush = AsyncMock(side_effect=[IntegrityError("stmt", {}, None), None])
+    session.scalars = AsyncMock(
+        side_effect=[
+            SimpleNamespace(all=lambda: [fallback_claim]),
+            SimpleNamespace(one=lambda: persisted_claim),
+        ]
+    )
+    event = Event(
+        id=event_id,
+        extracted_what="New fallback",
+        extracted_claims={
+            "claim_graph": {"nodes": [{"text": "Border clashes intensify"}]},
+            "trend_impacts": [],
+        },
+    )
+
+    resolved = await sync_event_claims(session=session, event=event)
+
+    assert session.add.call_count == 1
+    assert session.flush.await_count == 2
+    assert resolved[FALLBACK_EVENT_CLAIM_KEY] is fallback_claim
+    assert resolved["border clashes intensify"] is persisted_claim
+    assert persisted_claim.claim_text == "Border clashes intensify"
+    assert persisted_claim.claim_order == 1
+    assert persisted_claim.is_active is True
+
+
+@pytest.mark.asyncio
+async def test_begin_nested_if_available_uses_async_session_savepoint() -> None:
+    calls: list[str] = []
+
+    class _FakeAsyncSession(AsyncSession):
+        def begin_nested(self):
+            @asynccontextmanager
+            async def _nested():
+                calls.append("enter")
+                try:
+                    yield
+                finally:
+                    calls.append("exit")
+
+            return _nested()
+
+    session = object.__new__(_FakeAsyncSession)
+
+    async with _begin_nested_if_available(session):
+        calls.append("body")
+
+    assert calls == ["enter", "body", "exit"]
 
 
 def test_decorate_helpers_and_fallback_lookup_cover_guard_paths() -> None:

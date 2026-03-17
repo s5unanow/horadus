@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -10,6 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.models import Event, EventClaim, EventClaimType
@@ -178,36 +181,20 @@ async def sync_event_claims(
         .where(EventClaim.event_id == event.id)
         .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
     )
-    existing_rows = result.all()
-    if isawaitable(existing_rows):
-        existing_rows = await existing_rows
-    existing_rows = list(existing_rows)
+    existing_rows = list(await _await_if_needed(result.all()))
     existing_by_key = {row.claim_key: row for row in existing_rows}
     now = datetime.now(tz=UTC)
     desired_keys = {spec.claim_key for spec in desired_specs}
 
     resolved: dict[str, EventClaim] = {}
     for spec in desired_specs:
-        row = existing_by_key.get(spec.claim_key)
-        if row is None:
-            row = EventClaim(
-                id=uuid4(),
-                event_id=event.id,
-                claim_key=spec.claim_key,
-                claim_text=spec.claim_text,
-                claim_type=spec.claim_type,
-                claim_order=spec.claim_order,
-                is_active=True,
-                first_seen_at=now,
-                last_seen_at=now,
-            )
-            session.add(row)
-        else:
-            row.claim_text = spec.claim_text
-            row.claim_type = spec.claim_type
-            row.claim_order = spec.claim_order
-            row.is_active = True
-            row.last_seen_at = now
+        row = await _resolve_event_claim_row(
+            session=session,
+            event_id=event.id,
+            spec=spec,
+            existing_by_key=existing_by_key,
+            now=now,
+        )
         resolved[spec.claim_key] = row
 
     for row in existing_rows:
@@ -217,6 +204,80 @@ async def sync_event_claims(
     await session.flush()
     _decorate_event_claim_payload(event=event, claim_by_key=resolved)
     return resolved
+
+
+async def _resolve_event_claim_row(
+    *,
+    session: AsyncSession,
+    event_id: Any,
+    spec: EventClaimSpec,
+    existing_by_key: dict[str, EventClaim],
+    now: datetime,
+) -> EventClaim:
+    row = existing_by_key.get(spec.claim_key)
+    if row is None:
+        row = await _insert_or_reload_event_claim(
+            session=session,
+            event_id=event_id,
+            spec=spec,
+            now=now,
+        )
+        existing_by_key[spec.claim_key] = row
+    row.claim_text = spec.claim_text
+    row.claim_type = spec.claim_type
+    row.claim_order = spec.claim_order
+    row.is_active = True
+    row.last_seen_at = now
+    return row
+
+
+async def _insert_or_reload_event_claim(
+    *,
+    session: AsyncSession,
+    event_id: Any,
+    spec: EventClaimSpec,
+    now: datetime,
+) -> EventClaim:
+    row = EventClaim(
+        id=uuid4(),
+        event_id=event_id,
+        claim_key=spec.claim_key,
+        claim_text=spec.claim_text,
+        claim_type=spec.claim_type,
+        claim_order=spec.claim_order,
+        is_active=True,
+        first_seen_at=now,
+        last_seen_at=now,
+    )
+    try:
+        async with _begin_nested_if_available(session):
+            session.add(row)
+            await session.flush([row])
+    except IntegrityError:
+        result = await session.scalars(
+            select(EventClaim).where(
+                EventClaim.event_id == event_id,
+                EventClaim.claim_key == spec.claim_key,
+            )
+        )
+        row = await _await_if_needed(result.one())
+    return row
+
+
+async def _await_if_needed(value: Any) -> Any:
+    if isawaitable(value):
+        return await value
+    return value
+
+
+@asynccontextmanager
+async def _begin_nested_if_available(session: AsyncSession) -> AsyncIterator[None]:
+    if not isinstance(session, AsyncSession):
+        yield
+        return
+
+    async with session.begin_nested():
+        yield
 
 
 def _decorate_event_claim_payload(

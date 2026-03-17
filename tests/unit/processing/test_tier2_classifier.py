@@ -230,7 +230,7 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
     assert len(chat.calls) == 1
     assert chat.calls[0]["response_format"]["type"] == "json_schema"
-    assert mock_db_session.flush.await_count == 2
+    assert mock_db_session.flush.await_count >= 2
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
 

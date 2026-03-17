@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-340`.
+- Next available task IDs start at `TASK-343`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -589,16 +589,17 @@ and scoring math so operators can explain why two runs or two artifacts differ.
 
 **Acceptance Criteria**:
 - [ ] Define a compact provenance payload for persisted LLM-derived artifacts covering at least model identifier, prompt hash/version, schema version, and route/request-override basis
+- [ ] Persist immutable provenance for held/replayed Tier-2 work, or record an explicit replay-derivation link back to the original invocation basis, so replay does not silently look like an original run
 - [ ] Persist a scoring-math version identifier alongside applied trend evidence and compensating/restatement records so factor changes are auditable over time
 - [ ] Define a named scoring-parameter-set contract plus a replay/backtest promotion check before scoring-weight or factor changes ship
 - [ ] Ensure semantic cache/debug surfaces expose the same provenance basis used by persisted runtime artifacts rather than a separate implicit contract
 - [ ] Persist an immutable report-generation manifest that pins report period scope, evidence/event inputs, prompt/model lineage, and degraded/provisional status for every generated report artifact
 - [ ] Expose enough read/debug visibility for operators to compare provenance across events/evidence/cache hits without reading source code
-- [ ] Add regression coverage proving provenance changes when model, prompt, schema, taxonomy/config basis, or scoring-math version changes
+- [ ] Add regression coverage proving provenance changes when model, prompt, schema, taxonomy/config basis, scoring-math version, or replay-derivation basis changes
 
 ---
 
-### TASK-334: Split Event Epistemic State from Activity State
+### TASK-340: Split Event Epistemic State from Activity State
 **Priority**: P1 (High)
 **Estimate**: 4-6 hours
 
@@ -618,6 +619,36 @@ dormancy, and closure do not fight over one field.
 - [ ] Keep operator review, invalidation, and reporting surfaces explicit about which axis changed and why
 - [ ] Add migration/backfill guidance for current `emerging`/`confirmed`/`fading`/`archived` rows
 - [ ] Add regression coverage for corroboration promotion, contradiction/retraction, dormancy, and reactivation
+
+---
+
+### TASK-341: Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records
+**Priority**: P1 (High)
+**Estimate**: 6-8 hours
+
+The API surface now has baseline auth, but mutable operator/admin writes still
+lack an explicit revision/idempotency contract and a durable mutation audit
+surface. Harden write endpoints so duplicate submissions, stale concurrent
+writes, and privileged operator actions are mechanically explainable rather than
+only visible in transient logs or partial per-feature lineage.
+
+**Assessment-Ref**:
+- Codebase review against external architecture assessment on 2026-03-17
+
+**Dependency Note**:
+- Build on `TASK-201` for manual probability writes and on `TASK-231` / `TASK-232`
+  for restatement/adjudication lineage instead of creating a second mutation
+  model for those surfaces.
+
+**Files**: `src/api/routes/trends.py`, `src/api/routes/feedback.py`, `src/api/routes/auth.py`, `src/api/middleware/auth.py`, `src/storage/models.py`, `tests/`, `docs/API.md`, `alembic/`
+
+**Acceptance Criteria**:
+- [ ] Define which mutable API endpoints require idempotency keys, revision tokens, or both, and document one consistent contract for operator/admin writes
+- [ ] Reject duplicate or replayed write requests deterministically rather than relying on best-effort internal safeguards alone
+- [ ] Reject stale writes where revision-sensitive resources changed since the caller last read them, or define one bounded equivalent concurrency contract
+- [ ] Persist durable mutation-audit records for privileged write actions with actor, target, request intent, outcome, and linkage to resulting `HumanFeedback` / restatement / trend-version records where applicable
+- [ ] Keep the contract narrow and compatible with existing audited override flows instead of bypassing `TASK-201` and related lineage work
+- [ ] Add regression coverage for duplicate submission, stale write rejection, and durable audit-log creation across at least one trend write and one feedback/adjudication write path
 
 ---
 

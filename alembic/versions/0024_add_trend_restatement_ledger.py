@@ -102,16 +102,18 @@ def _backfill_legacy_trend_overrides() -> None:
         sa.text(
             """
             SELECT
-                id AS feedback_id,
-                target_id AS trend_id,
-                notes,
-                created_at,
-                corrected_value ->> 'delta_log_odds' AS delta_log_odds
-            FROM human_feedback
-            WHERE target_type = 'trend'
-              AND action = 'override_delta'
-              AND corrected_value IS NOT NULL
-              AND corrected_value ? 'delta_log_odds'
+                hf.id AS feedback_id,
+                hf.target_id AS trend_id,
+                hf.notes,
+                hf.created_at,
+                hf.corrected_value ->> 'delta_log_odds' AS delta_log_odds
+            FROM human_feedback AS hf
+            JOIN trends AS t
+                ON t.id = hf.target_id
+            WHERE hf.target_type = 'trend'
+              AND hf.action = 'override_delta'
+              AND hf.corrected_value IS NOT NULL
+              AND hf.corrected_value ? 'delta_log_odds'
             """
         )
     ).mappings()

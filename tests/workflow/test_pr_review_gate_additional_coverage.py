@@ -156,3 +156,119 @@ def test_pr_review_gate_outcomes_waiting_path_uses_current_time() -> None:
     )
 
     assert outcome.status == "waiting"
+
+
+def test_run_gh_graphql_json_builds_expected_command(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_gh_json_command(args: tuple[str, ...] | list[str], *, context: str) -> object:
+        captured["args"] = list(args)
+        captured["context"] = context
+        return {"ok": True}
+
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh_json_command", fake_run_gh_json_command)
+
+    payload = pr_review_gate_module._run_gh_graphql_json(
+        query="query { viewer { login } }",
+        fields={"owner": "example", "repo": "repo"},
+        context="graphql test",
+    )
+
+    assert payload == {"ok": True}
+    assert captured == {
+        "args": [
+            "api",
+            "graphql",
+            "-f",
+            "query=query { viewer { login } }",
+            "-F",
+            "owner=example",
+            "-F",
+            "repo=repo",
+        ],
+        "context": "graphql test",
+    }
+
+
+def test_matching_review_comments_falls_back_to_graphql_on_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def fake_paginated(endpoint: str) -> object:
+        calls.append(("rest", endpoint))
+        raise pr_review_gate_module.GhError("gh api failed: API rate limit exceeded")
+
+    def fake_graphql_reviews_and_comments(
+        **kwargs: object,
+    ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        calls.append(("graphql", str(kwargs["repo"])))
+        return (
+            [{"id": 1, "state": "COMMENTED", "user": {"login": "bot"}, "commit_id": "head"}],
+            [],
+        )
+
+    monkeypatch.setattr(pr_review_gate_module, "_run_gh_paginated_json", fake_paginated)
+    monkeypatch.setattr(
+        pr_review_gate_module.pr_review_gate_graphql,
+        "graphql_reviews_and_comments",
+        fake_graphql_reviews_and_comments,
+    )
+
+    matching_reviews, matching_comments, actionable_reviews = (
+        pr_review_gate_module._matching_review_comments(
+            repo="example/repo",
+            pr_number=215,
+            head_oid="head",
+            reviewer_login="bot",
+        )
+    )
+
+    assert len(matching_reviews) == 1
+    assert matching_comments == []
+    assert actionable_reviews == []
+    assert calls == [
+        ("rest", "repos/example/repo/pulls/215/reviews"),
+        ("graphql", "example/repo"),
+    ]
+
+
+def test_has_pr_summary_thumbs_up_falls_back_to_graphql_on_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_run_gh_paginated_json",
+        lambda _endpoint: (_ for _ in ()).throw(
+            pr_review_gate_module.GhError("gh api failed: API rate limit exceeded")
+        ),
+    )
+    monkeypatch.setattr(
+        pr_review_gate_module.pr_review_gate_graphql,
+        "graphql_reactions",
+        lambda **_kwargs: [
+            {
+                "content": "+1",
+                "created_at": "2026-03-17T12:00:00+00:00",
+                "user": {"login": "bot"},
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        pr_review_gate_module,
+        "_latest_current_head_review_request_at",
+        lambda **_kwargs: datetime(2026, 3, 17, 11, 59, tzinfo=UTC),
+    )
+
+    assert (
+        pr_review_gate_module._has_pr_summary_thumbs_up(
+            repo="example/repo",
+            pr_number=215,
+            reviewer_login="bot",
+            head_oid="head",
+            wait_window_started_at=datetime(2026, 3, 17, 11, 58, tzinfo=UTC),
+        )
+        is True
+    )

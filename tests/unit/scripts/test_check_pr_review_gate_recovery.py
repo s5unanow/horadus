@@ -221,6 +221,76 @@ esac
     )
 
 
+def test_review_gate_falls_back_to_graphql_when_rest_rate_limited(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    if [[ "${2:-}" == "repos/example/repo/pulls/215/reviews" ]]; then
+      echo 'gh: API rate limit exceeded (HTTP 403)' >&2
+      exit 1
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/reactions" ]]; then
+      echo 'gh: API rate limit exceeded (HTTP 403)' >&2
+      exit 1
+    fi
+    if [[ "${2:-}" == "repos/example/repo/issues/215/comments" ]]; then
+      echo '[]'
+      exit 0
+    fi
+    if [[ "${2:-}" == "graphql" ]]; then
+      joined="$*"
+      if [[ "$joined" == *"reviews(first:100"* ]]; then
+        echo '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'
+        exit 0
+      fi
+      if [[ "$joined" == *"reactions(first:100"* ]]; then
+        echo '{"data":{"repository":{"pullRequest":{"reactions":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[]}}}}}'
+        exit 0
+      fi
+    fi
+    exit 1
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_gate(
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HORADUS_REVIEW_GATE_STATE_PATH": str(tmp_path / "review-gate-state.json"),
+        },
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "30",
+            "--poll-seconds",
+            "0",
+            "--single-poll",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "waiting"
+
+
 def test_review_gate_retries_unreadable_reaction_payload(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()

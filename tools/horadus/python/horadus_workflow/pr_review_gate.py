@@ -12,6 +12,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 
 from tools.horadus.python.horadus_workflow import (
+    pr_review_gate_graphql,
     pr_review_gate_outcomes,
     pr_review_gate_state,
     pr_review_gate_window,
@@ -99,6 +100,17 @@ def _run_gh_json_command(args: tuple[str, ...] | list[str], *, context: str) -> 
     raise last_error
 
 
+def _is_rate_limit_error(exc: GhError) -> bool:
+    return "API rate limit exceeded" in str(exc)
+
+
+def _run_gh_graphql_json(*, query: str, fields: dict[str, str], context: str) -> object:
+    args = ["api", "graphql", "-f", f"query={query}"]
+    for key, value in fields.items():
+        args.extend(["-F", f"{key}={value}"])
+    return _run_gh_json_command(args, context=context)
+
+
 def _review_context(pr_url: str) -> tuple[str, int, str]:
     repo_data = _run_gh_json("repo", "view", "--json", "nameWithOwner")
     pr_data = _run_gh_json("pr", "view", pr_url, "--json", "number,headRefOid,url")
@@ -166,14 +178,28 @@ def _matching_review_comments(
     head_oid: str,
     reviewer_login: str,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
-    reviews = _flatten_paginated_list(
-        _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/reviews"),
-        label="reviews",
-    )
-    comments = _flatten_paginated_list(
-        _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/comments"),
-        label="comments",
-    )
+    try:
+        reviews = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/reviews"),
+            label="reviews",
+        )
+        comments = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/comments"),
+            label="comments",
+        )
+    except GhError as exc:
+        if not _is_rate_limit_error(exc):
+            raise
+        reviews, comments = pr_review_gate_graphql.graphql_reviews_and_comments(
+            repo=repo,
+            pr_number=pr_number,
+            load_graphql=lambda query, fields, context: _run_gh_graphql_json(
+                query=query,
+                fields=fields,
+                context=context,
+            ),
+            error_factory=GhError,
+        )
 
     matching_reviews = [
         review
@@ -304,10 +330,24 @@ def _has_pr_summary_thumbs_up(
     head_oid: str,
     wait_window_started_at: datetime,
 ) -> bool:
-    reactions = _flatten_paginated_list(
-        _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/reactions"),
-        label="reactions",
-    )
+    try:
+        reactions = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/reactions"),
+            label="reactions",
+        )
+    except GhError as exc:
+        if not _is_rate_limit_error(exc):
+            raise
+        reactions = pr_review_gate_graphql.graphql_reactions(
+            repo=repo,
+            pr_number=pr_number,
+            load_graphql=lambda query, fields, context: _run_gh_graphql_json(
+                query=query,
+                fields=fields,
+                context=context,
+            ),
+            error_factory=GhError,
+        )
     signal_started_at = _latest_current_head_review_request_at(
         repo=repo,
         pr_number=pr_number,

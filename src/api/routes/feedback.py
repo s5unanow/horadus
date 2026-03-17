@@ -26,6 +26,7 @@ from src.api.routes.feedback_models import (
     to_feedback_response,
     to_taxonomy_gap_response,
 )
+from src.api.routes.feedback_restatement import validate_restatement_targets
 from src.core.trend_engine import TrendEngine
 from src.core.trend_restatement import (
     HISTORICAL_ARTIFACT_POLICY,
@@ -260,17 +261,6 @@ async def update_taxonomy_gap(
     return to_taxonomy_gap_response(gap)
 
 
-def _restatement_targets_by_evidence_id(
-    targets: list[EventRestatementTarget],
-) -> dict[UUID, EventRestatementTarget]:
-    mapped: dict[UUID, EventRestatementTarget] = {}
-    for target in targets:
-        if target.evidence_id in mapped:
-            raise ValueError("restatement_targets must not contain duplicate evidence_id values")
-        mapped[target.evidence_id] = target
-    return mapped
-
-
 async def _apply_event_feedback_restatements(
     *,
     session: AsyncSession,
@@ -402,34 +392,10 @@ async def create_event_feedback(
     elif payload.action in {"invalidate", "restate"}:
         evidences = await _active_event_evidence(session=session, event_id=event_id)
         if payload.action == "restate":
-            if not payload.restatement_targets:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="restate requires at least one restatement_targets entry",
-                )
-            try:
-                restatement_targets = _restatement_targets_by_evidence_id(
-                    payload.restatement_targets
-                )
-            except ValueError as exc:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=str(exc),
-                ) from exc
-            evidence_ids = {evidence.id for evidence in evidences if evidence.id is not None}
-            unknown_targets = [
-                target for target in restatement_targets if target not in evidence_ids
-            ]
-            if unknown_targets:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="restatement_targets must reference active evidence for the event",
-                )
-            evidences = [
-                evidence
-                for evidence in evidences
-                if evidence.id is not None and evidence.id in restatement_targets
-            ]
+            evidences, restatement_targets = validate_restatement_targets(
+                evidences=evidences,
+                targets=payload.restatement_targets,
+            )
 
         original_value = _event_feedback_original_value(evidences)
         corrected_value = _event_feedback_corrected_value(

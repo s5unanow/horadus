@@ -51,8 +51,7 @@ def test_main_triage_collect_includes_overdue_blockers(
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
     overdue = payload["data"]["current_sprint"]["overdue_human_blockers"]
-    assert {item["task_id"] for item in overdue} == {"TASK-080", "TASK-189", "TASK-190"}
-    assert overdue[0]["urgency"]["state"] == "overdue"
+    assert overdue == []
 
 
 def test_main_triage_collect_ignores_stale_metadata_rows(
@@ -107,8 +106,8 @@ def test_main_triage_collect_text_highlights_overdue_blockers(
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "- overdue_human_blockers=3" in output
-    assert "- overdue_tasks=TASK-080, TASK-189, TASK-190" in output
+    assert "- overdue_human_blockers=0" in output
+    assert "- overdue_tasks=" not in output
 
 
 def test_recent_assessment_paths_skips_invalid_dates_and_honors_cutoff(

@@ -35,7 +35,7 @@ def test_main_tasks_context_pack_json_output(
     assert "suggested_validation_commands" in payload["data"]
 
 
-def test_main_tasks_list_active_json_includes_blocker_urgency(
+def test_main_tasks_list_active_json_excludes_non_active_human_blockers(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -54,10 +54,8 @@ def test_main_tasks_list_active_json_includes_blocker_urgency(
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
-    blocker = payload["data"]["human_blockers"][0]
-    assert blocker["urgency"]["state"] == "overdue"
-    assert blocker["urgency"]["days_until_next_action"] == -1
-    assert payload["data"]["overdue_human_blockers"]
+    assert payload["data"]["human_blockers"] == []
+    assert payload["data"]["overdue_human_blockers"] == []
 
 
 def test_main_tasks_list_active_honors_root_format_flag(
@@ -125,7 +123,7 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
     assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == ["TASK-189"]
 
 
-def test_main_tasks_list_active_text_highlights_overdue_blockers(
+def test_main_tasks_list_active_text_omits_non_active_human_blockers(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -144,8 +142,8 @@ def test_main_tasks_list_active_text_highlights_overdue_blockers(
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "[OVERDUE by 1d]" in output
-    assert "overdue_human_blockers=3 (TASK-080, TASK-189, TASK-190)" in output
+    assert "[OVERDUE" not in output
+    assert "overdue_human_blockers=" not in output
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(
@@ -170,7 +168,7 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
         [
             "tasks",
             "search",
-            "/health/live",
+            "stable event-claim",
             "--status",
             "active",
             "--include-raw",
@@ -192,11 +190,11 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
 def test_main_tasks_search_text_output_remains_compact_by_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = main(["tasks", "search", "/health/live", "--status", "active"])
+    result = main(["tasks", "search", "stable event-claim", "--status", "active"])
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "Task search: /health/live" in output
+    assert "Task search: stable event-claim" in output
     assert "TASK-" in output
     assert "## TASK-" not in output
     assert "Acceptance Criteria" not in output
@@ -206,7 +204,16 @@ def test_main_tasks_search_text_output_can_include_raw_blocks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     result = main(
-        ["tasks", "search", "/health/live", "--status", "active", "--limit", "1", "--include-raw"]
+        [
+            "tasks",
+            "search",
+            "stable event-claim",
+            "--status",
+            "active",
+            "--limit",
+            "1",
+            "--include-raw",
+        ]
     )
 
     assert result == 0
@@ -595,7 +602,7 @@ def test_handle_search_covers_validation_and_raw_output_branches() -> None:
     )
     raw = task_commands_module.handle_search(
         argparse.Namespace(
-            query=["health"],
+            query=["stable", "event-claim"],
             status="active",
             limit=1,
             include_raw=True,

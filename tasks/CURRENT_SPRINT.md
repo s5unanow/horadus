@@ -25,3 +25,16 @@
 - Sprint 5 intentionally excludes human-gated work from the active queue unless a human explicitly reactivates it.
 - The selected tasks were chosen for direct impact on stable identity, deterministic semantics, replay/rebuild safety, and production-facing mutation correctness.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
+
+## Human Blocker Metadata
+
+- TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-189 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-190 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
+- TASK-288 | owner=human-operator | last_touched=2026-03-09 | next_action=2026-03-10 | escalate_after_days=7
+
+## Telegram Launch Scope
+
+- launch_scope: excluded_until_task_080_done
+- decision_date: 2026-03-03
+- rationale: Telegram ingestion remains explicitly out of launch scope until the human-gated wiring/sign-off task closes.

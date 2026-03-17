@@ -582,7 +582,9 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
 
-    monotonic_values = iter([10.0, 12.5, 20.0, 21.0, 30.0, 31.5, 40.0, 40.25, 50.0, 50.5])
+    monotonic_values = iter(
+        [10.0, 12.5, 20.0, 21.0, 30.0, 31.5, 40.0, 40.25, 50.0, 50.5, 60.0, 60.25]
+    )
     monkeypatch.setattr(task_commands_module.time, "monotonic", lambda: next(monotonic_values))
     captured_runs: list[tuple[list[str], str | None]] = []
 
@@ -662,6 +664,18 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     assert timed_out_run.stdout == "partial"
     assert "still waiting" in timed_out_run.stderr
     assert "provider command timed out after 180s" in timed_out_run.stderr
+
+    def raise_timeout_with_text(
+        *_args: object, **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(["claude"], 180, output="partial-text", stderr=None)
+
+    monkeypatch.setattr(task_commands_module.subprocess, "run", raise_timeout_with_text)
+    timed_out_text_run = task_commands_module._execute_provider(
+        "claude", context=context, instructions=None
+    )
+    assert timed_out_text_run.stdout == "partial-text"
+    assert timed_out_text_run.stderr == "provider command timed out after 180s"
 
     exit_code, data, lines = task_commands_module.local_review_data(
         provider="codex",

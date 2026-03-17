@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -84,3 +84,24 @@ async def load_prior_compensation_by_evidence_id(
         session=session,
         evidence_ids=evidence_ids,
     )
+
+
+async def apply_compensation_without_trend(
+    *,
+    trend_engine: Any,
+    evidence: TrendEvidence,
+    compensation_delta: float,
+    invalidate_evidence: bool,
+) -> tuple[float, float] | None:
+    """Apply a compensation directly when the referenced trend row is missing."""
+
+    try:
+        return await trend_engine.apply_log_odds_delta(
+            trend_id=evidence.trend_id,
+            trend_name=None,
+            delta=compensation_delta,
+            reason="event_invalidation" if invalidate_evidence else "event_partial_restatement",
+            fallback_current_log_odds=None,
+        )
+    except ValueError:
+        return None

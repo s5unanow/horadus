@@ -27,6 +27,7 @@ from src.api.routes.feedback_models import (
     to_taxonomy_gap_response,
 )
 from src.api.routes.feedback_restatement import (
+    apply_compensation_without_trend,
     invalidation_compensation_delta,
     load_prior_compensation_by_evidence_id,
     validate_restatement_targets,
@@ -310,18 +311,15 @@ async def _apply_event_feedback_restatements(
         )
         trend = trend_by_id.get(evidence.trend_id)
         if trend is None:
-            try:
-                previous_log_odds, new_log_odds = await trend_engine.apply_log_odds_delta(
-                    trend_id=evidence.trend_id,
-                    trend_name=None,
-                    delta=compensation_delta,
-                    reason=(
-                        "event_invalidation" if invalidate_evidence else "event_partial_restatement"
-                    ),
-                    fallback_current_log_odds=None,
-                )
-            except ValueError:
+            trend_adjustment = await apply_compensation_without_trend(
+                trend_engine=trend_engine,
+                evidence=evidence,
+                compensation_delta=compensation_delta,
+                invalidate_evidence=invalidate_evidence,
+            )
+            if trend_adjustment is None:
                 continue
+            previous_log_odds, new_log_odds = trend_adjustment
             trend_adjustments[str(evidence.trend_id)] = {
                 "previous_log_odds": previous_log_odds,
                 "new_log_odds": new_log_odds,

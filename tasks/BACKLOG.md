@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-343`.
+- Next available task IDs start at `TASK-348`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -37,6 +37,109 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 ---
 
 ## Open Task Ledger
+
+### TASK-343: Add caller-aware validation packs for shared helper changes
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+`TASK-231` exposed a repeated failure mode where a seemingly small helper change
+was locally validated against one direct caller, but later broke adjacent
+surfaces that shared the same helper. Cross-surface helpers need a canonical,
+repo-owned way to map a code change to the minimum dependent regression suites
+and type checks before the first push.
+
+**Files**: `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tests/horadus_cli/`, `tests/workflow/`
+
+**Acceptance Criteria**:
+- [ ] Define a repo-owned validation-pack contract for high-fanout helper changes instead of relying on ad hoc per-task judgment
+- [ ] `horadus tasks context-pack` or an equivalent workflow surface can recommend dependent suites when a change touches shared helpers used across multiple surfaces
+- [ ] The contract explicitly includes full-repo type checking when shared Python helpers or domain math are modified
+- [ ] Tests cover at least one shared-helper case where the suggested validation set includes more than the most obvious direct caller
+
+---
+
+### TASK-344: Surface review-gate wait state and deadlines in `horadus tasks finish`
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+The `horadus tasks finish` review gate currently looks idle for long stretches
+while it is actually waiting on a current-head review window. That makes it too
+hard to distinguish “working as designed” from “hung on stale state” and slows
+down recovery when a task is in the expensive PR/merge loop.
+
+**Files**: `tools/horadus/python/horadus_workflow/task_workflow_finish/`, `tools/horadus/python/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `tests/workflow/`
+
+**Acceptance Criteria**:
+- [ ] `horadus tasks finish` prints explicit status when it is waiting on the review gate rather than appearing silent
+- [ ] The wait output includes the current PR head, the reviewer identity, and the review-window deadline or remaining time
+- [ ] The finish output distinguishes review-gate waiting from CI waiting and from stale-state refresh work
+- [ ] Tests cover at least one review-window wait path and assert the new operator-facing status text
+
+---
+
+### TASK-345: Preflight stale review state before entering the finish review window
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`TASK-231` lost time to unresolved or stale review-thread state that only became
+obvious deep inside the finish loop. The finish workflow should detect and
+surface current-head review blockers and outdated-thread cleanup work before it
+starts the full review wait, not after the operator has already spent minutes
+waiting.
+
+**Files**: `tools/horadus/python/horadus_workflow/task_workflow_finish/`, `tools/horadus/python/horadus_cli/`, `tests/workflow/`
+
+**Acceptance Criteria**:
+- [ ] The finish workflow enumerates current-head unresolved review blockers before entering the review wait
+- [ ] Outdated review threads that can be auto-resolved are handled up front instead of only after a timeout or head refresh
+- [ ] Operator-facing output clearly separates current-head actionable blockers from stale or outdated review artifacts
+- [ ] Tests cover current-head unresolved-thread blocking and stale-thread auto-resolution paths
+
+---
+
+### TASK-346: Front-load adversarial review guidance for high-risk cross-surface tasks
+**Priority**: P2 (Medium)
+**Estimate**: 2-3 hours
+
+For cross-cutting tasks with migrations, shared math, workflow tooling, or
+multi-surface mutation paths, discovering semantic bugs for the first time in
+the PR finish loop is too expensive. The repo workflow should explicitly push
+high-risk tasks toward adversarial review before the first push, with a clear
+fallback when a provider-specific local-review path is unavailable.
+
+**Dependency Note**:
+- Coordinate with `TASK-334` so the guidance does not depend on one provider-specific local-review wrapper being healthy.
+
+**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `tests/horadus_cli/`, `tests/workflow/`
+
+**Acceptance Criteria**:
+- [ ] Define which task shapes count as “high-risk cross-surface” for pre-push adversarial review guidance
+- [ ] Workflow guidance or context-pack output recommends a pre-push review step for those task shapes instead of discovering everything in `horadus tasks finish`
+- [ ] The guidance documents an explicit fallback path when local-review tooling is unavailable, so operators still front-load review rather than skipping it silently
+- [ ] Tests cover at least one high-risk task context where the guidance includes the new pre-push review recommendation
+
+---
+
+### TASK-347: Investigate and stabilize hanging `horadus tasks local-review` runs
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`TASK-231` exposed a blocking workflow failure where `horadus tasks local-review`
+hung repeatedly instead of returning a review result or a clear error. The hang
+occurred with the default provider and again with explicit `codex` and `gemini`
+providers, which made the pre-push review step unreliable and forced review
+discovery into the slower PR finish loop.
+
+**Files**: `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `docs/AGENT_RUNBOOK.md`, `tests/horadus_cli/`, `tests/workflow/`
+
+**Acceptance Criteria**:
+- [ ] Reproduce the hanging `horadus tasks local-review` behavior from the recorded `TASK-231` friction case or a stable test fixture
+- [ ] Isolate whether the hang is caused by provider invocation, timeout handling, workflow orchestration, or result parsing
+- [ ] `horadus tasks local-review` returns a bounded failure with actionable diagnostics instead of hanging indefinitely when the underlying provider path misbehaves
+- [ ] Keep successful local-review behavior unchanged for healthy providers
+- [ ] Add regression coverage for the identified hang/failure mode
+
+---
 
 ### TASK-334: Align Gemini local-review approval-mode flags with installed CLI
 **Priority**: P3 (Low)

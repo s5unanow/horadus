@@ -17,6 +17,7 @@
 - `TASK-339` Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math
 - `TASK-337` Pin Live Trend State to Active Definition/Scoring Versions
 - `TASK-341` Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records
+- `TASK-347` Investigate and Stabilize Hanging `horadus tasks local-review` Runs
 
 ## Selection Notes
 

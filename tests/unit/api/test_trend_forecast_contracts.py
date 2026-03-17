@@ -61,6 +61,15 @@ def _build_legacy_trend_without_contract() -> Trend:
     return trend
 
 
+def _build_legacy_trend_with_malformed_contract() -> Trend:
+    trend = _build_trend()
+    trend.definition = {
+        "id": "contract-trend",
+        "forecast_contract": "legacy-invalid-shape",
+    }
+    return trend
+
+
 @pytest.mark.asyncio
 async def test_create_trend_round_trips_forecast_contract(mock_db_session) -> None:
     created_id = uuid4()
@@ -250,12 +259,26 @@ async def test_update_trend_allows_unrelated_patch_for_legacy_rows_without_contr
 
 
 @pytest.mark.asyncio
+async def test_update_trend_allows_unrelated_patch_for_legacy_rows_with_malformed_contract(
+    mock_db_session,
+) -> None:
+    trend = _build_legacy_trend_with_malformed_contract()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+
+    result = await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(is_active=False),
+        session=mock_db_session,
+    )
+
+    assert trend.is_active is False
+    assert result.is_active is False
+
+
+@pytest.mark.asyncio
 async def test_to_response_tolerates_malformed_legacy_forecast_contract(mock_db_session) -> None:
-    trend = _build_trend()
-    trend.definition = {
-        "id": "contract-trend",
-        "forecast_contract": "legacy-invalid-shape",
-    }
+    trend = _build_legacy_trend_with_malformed_contract()
 
     result = await trends_module._to_response(trend, session=mock_db_session)
 

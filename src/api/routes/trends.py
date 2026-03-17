@@ -867,12 +867,15 @@ async def update_trend(
         trend_record.definition if isinstance(trend_record.definition, dict) else None
     )
     updates = trend.model_dump(exclude_unset=True)
+    definition_updated = any(
+        key in updates for key in ("definition", "forecast_contract", "baseline_probability")
+    )
 
     candidate_name = updates.get("name", trend_record.name)
     candidate_description = updates.get("description", trend_record.description)
     candidate_definition = updates.get("definition", trend_record.definition)
     candidate_forecast_contract = updates.get("forecast_contract")
-    if "forecast_contract" in updates and "definition" not in updates:
+    if ("forecast_contract" in updates and "definition" not in updates) or not definition_updated:
         candidate_definition = normalize_definition_payload(
             trend_record.definition if isinstance(trend_record.definition, dict) else None
         )
@@ -886,9 +889,6 @@ async def update_trend(
     candidate_decay_half_life_days = updates.get(
         "decay_half_life_days",
         trend_record.decay_half_life_days,
-    )
-    definition_updated = any(
-        key in updates for key in ("definition", "forecast_contract", "baseline_probability")
     )
 
     try:

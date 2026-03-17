@@ -8,11 +8,13 @@ import pytest
 
 from src.processing.event_claims import (
     FALLBACK_EVENT_CLAIM_KEY,
+    MAX_EVENT_CLAIM_KEY_LENGTH,
     _decorate_event_claim_payload,
     _decorate_impact_payload,
     assign_claim_keys_to_impacts,
     build_event_claim_specs,
     fallback_event_claim_id,
+    normalize_claim_key,
     sync_event_claims,
 )
 from src.storage.models import Event, EventClaim
@@ -68,6 +70,18 @@ def test_build_event_claim_specs_covers_graph_and_claim_list_paths() -> None:
     assert [spec.claim_key for spec in build_event_claim_specs(non_list_claims_event)] == [
         FALLBACK_EVENT_CLAIM_KEY
     ]
+
+
+def test_normalize_claim_key_bounds_oversized_values_deterministically() -> None:
+    repeated_phrase = "border clashes intensify near disputed crossing "
+    long_text = repeated_phrase * 10
+    long_key = normalize_claim_key(long_text)
+
+    assert len(long_key) == MAX_EVENT_CLAIM_KEY_LENGTH
+    assert long_key == normalize_claim_key(long_text)
+
+    same_prefix_different_suffix = normalize_claim_key(long_text + "different ending")
+    assert same_prefix_different_suffix != long_key
 
 
 def test_assign_claim_keys_to_impacts_covers_selection_paths() -> None:

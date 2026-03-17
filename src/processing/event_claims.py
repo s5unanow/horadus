@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from hashlib import sha256
 from inspect import isawaitable
 from typing import Any
 from uuid import uuid4
@@ -14,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.storage.models import Event, EventClaim, EventClaimType
 
 FALLBACK_EVENT_CLAIM_KEY = "__event__"
+MAX_EVENT_CLAIM_KEY_LENGTH = 255
 _DEFAULT_FALLBACK_CLAIM_TEXT = "Cluster event"
 
 
@@ -31,7 +33,14 @@ def normalize_claim_key(value: str) -> str:
     """Return a deterministic key for stable claim matching."""
     normalized = value.lower().strip()
     chars = [ch if ch.isalnum() or ch.isspace() else " " for ch in normalized]
-    return " ".join("".join(chars).split())
+    collapsed = " ".join("".join(chars).split())
+    if len(collapsed) <= MAX_EVENT_CLAIM_KEY_LENGTH:
+        return collapsed
+
+    digest = sha256(collapsed.encode("utf-8")).hexdigest()[:16]
+    prefix_length = MAX_EVENT_CLAIM_KEY_LENGTH - len(digest) - 1
+    prefix = collapsed[:prefix_length].rstrip()
+    return f"{prefix}-{digest}"
 
 
 def fallback_claim_text(event: Event) -> str:

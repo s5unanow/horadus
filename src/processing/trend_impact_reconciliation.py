@@ -621,7 +621,7 @@ async def _invalidate_active_evidence(
         source="tier2_reconciliation",
         recorded_at=invalidated_at,
         trend_evidence=evidence,
-        original_evidence_delta_log_odds=delta_to_reverse,
+        original_evidence_delta_log_odds=float(evidence.delta_log_odds),
         details={"reason": "tier2_reclassification"},
     )
 

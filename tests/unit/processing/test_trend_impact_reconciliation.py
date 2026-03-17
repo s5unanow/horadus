@@ -364,6 +364,7 @@ async def test_invalidate_active_evidence_reverses_only_net_remaining_delta(
     assert reversed_delta == pytest.approx(0.2)
     assert len(applied) == 1
     assert applied[0]["compensation_delta_log_odds"] == pytest.approx(-0.2)
+    assert applied[0]["original_evidence_delta_log_odds"] == pytest.approx(0.4)
 
 
 @pytest.mark.asyncio

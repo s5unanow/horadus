@@ -380,31 +380,6 @@ language, source family, and topical dimensions.
 
 ---
 
-### TASK-231: Extend Event Invalidation into a Compensating Restatement Ledger
-**Priority**: P1 (High)
-**Estimate**: 6-8 hours
-
-The system already preserves invalidation lineage, but it still lacks a richer
-restatement model for material reinterpretation, partial retraction, and
-analyst-issued compensating corrections. Extend invalidation into an explicit
-ledger of restatement actions without destroying audit history.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/api/routes/feedback.py`, `src/core/trend_engine.py`, `src/processing/pipeline_orchestrator.py`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Introduce explicit compensating-restatement records that distinguish full invalidation from partial reinterpretation/manual correction
-- [ ] Preserve append-only auditability while allowing later corrections to adjust prior probability effects honestly
-- [ ] Define whether `current_log_odds` is a rebuildable projection from the ledger and add a deterministic verification/recompute path for that contract
-- [ ] Keep replay, decay, and idempotency semantics correct under compensating restatement flows
-- [ ] Define how invalidations/restatements affect historical snapshots and already-generated reports (`belief at the time` vs corrected-history restatement)
-- [ ] Expose lineage so operators can inspect original evidence, restatement action, and resulting net effect
-- [ ] Add regression coverage for invalidate, partial restate, and manual compensating-delta scenarios
-
----
-
 ### TASK-232: Strengthen Operator Adjudication Workflow for High-Risk Events
 **Priority**: P2 (Medium)
 **Estimate**: 4-6 hours

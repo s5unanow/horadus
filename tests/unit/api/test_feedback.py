@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -9,6 +11,7 @@ from fastapi import HTTPException
 import src.api.routes.feedback as feedback_module
 from src.api.routes.feedback import (
     EventFeedbackRequest,
+    EventRestatementTarget,
     TaxonomyGapUpdateRequest,
     TrendOverrideRequest,
     _claim_graph_contradiction_links,
@@ -257,6 +260,63 @@ async def test_create_event_feedback_invalidate_handles_missing_trend_rows(
 
 
 @pytest.mark.asyncio
+async def test_create_event_feedback_invalidate_reverses_only_net_remaining_delta(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Restated evidence later invalidated")
+    trend = Trend(
+        id=uuid4(),
+        name="EU-Russia",
+        runtime_trend_id="eu-russia",
+        definition={"id": "eu-russia"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-1.0,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.4,
+    )
+    applied: list[dict[str, object]] = []
+
+    async def _fake_apply(**kwargs):
+        applied.append(kwargs)
+        trend.current_log_odds = -1.2
+        trend.updated_at = datetime.now(tz=UTC)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    monkeypatch.setattr(
+        feedback_module,
+        "load_prior_compensation_by_evidence_id",
+        AsyncMock(return_value={evidence.id: -0.2}),
+    )
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [evidence]),
+        SimpleNamespace(all=lambda: [trend]),
+    ]
+
+    result = await create_event_feedback(
+        event_id=event.id,
+        payload=EventFeedbackRequest(action="invalidate", created_by="analyst@horadus"),
+        session=mock_db_session,
+    )
+
+    assert len(applied) == 1
+    assert applied[0]["compensation_delta_log_odds"] == pytest.approx(-0.2)
+    assert result.corrected_value is not None
+    assert result.corrected_value["total_compensation_delta_log_odds"] == pytest.approx(-0.2)
+
+
+@pytest.mark.asyncio
 async def test_create_event_feedback_invalidate_without_active_evidence(
     mock_db_session,
 ) -> None:
@@ -274,6 +334,196 @@ async def test_create_event_feedback_invalidate_without_active_evidence(
     assert result.corrected_value["affected_trend_count"] == 0
     assert result.corrected_value["invalidated_evidence_count"] == 0
     assert result.corrected_value["trend_adjustments"] == {}
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_invalidate_skips_missing_trend_adjustment_on_value_error(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Missing trend row")
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=uuid4(),
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.4,
+    )
+
+    class FakeTrendEngine:
+        def __init__(self, *, session) -> None:
+            assert session is mock_db_session
+
+        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
+            raise ValueError("missing trend")
+
+    monkeypatch.setattr(feedback_module, "TrendEngine", FakeTrendEngine)
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [evidence]),
+        SimpleNamespace(all=list),
+    ]
+
+    result = await create_event_feedback(
+        event_id=event.id,
+        payload=EventFeedbackRequest(action="invalidate"),
+        session=mock_db_session,
+    )
+
+    assert evidence.is_invalidated is True
+    assert result.corrected_value is not None
+    assert result.corrected_value["trend_adjustments"] == {}
+    assert result.corrected_value["total_compensation_delta_log_odds"] == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_restate_preserves_evidence_and_records_compensation(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Partial correction")
+    trend = Trend(
+        id=uuid4(),
+        name="EU-Russia",
+        runtime_trend_id="eu-russia",
+        definition={"id": "eu-russia"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-1.0,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.4,
+    )
+    applied: list[dict[str, object]] = []
+
+    async def _fake_apply(**kwargs):
+        applied.append(kwargs)
+        trend.current_log_odds = -1.2
+        trend.updated_at = datetime.now(tz=UTC)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [evidence]),
+        SimpleNamespace(all=lambda: [trend]),
+    ]
+
+    result = await create_event_feedback(
+        event_id=event.id,
+        payload=EventFeedbackRequest(
+            action="restate",
+            notes="Analyst reduced confidence impact.",
+            restatement_targets=[
+                EventRestatementTarget(
+                    evidence_id=evidence.id,
+                    compensation_delta_log_odds=-0.2,
+                    notes="Only half the original impact remains.",
+                )
+            ],
+        ),
+        session=mock_db_session,
+    )
+
+    assert evidence.is_invalidated is not True
+    assert len(applied) == 1
+    assert applied[0]["restatement_kind"] == "partial_restatement"
+    assert applied[0]["compensation_delta_log_odds"] == pytest.approx(-0.2)
+    assert result.corrected_value is not None
+    assert result.corrected_value["total_compensation_delta_log_odds"] == pytest.approx(-0.2)
+    assert result.corrected_value["historical_artifact_policy"] == "belief_at_time"
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_restate_requires_targets(mock_db_session) -> None:
+    event = Event(id=uuid4(), canonical_summary="Partial correction")
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+
+    with pytest.raises(HTTPException, match="restate requires at least one") as exc:
+        await create_event_feedback(
+            event_id=event.id,
+            payload=EventFeedbackRequest(action="restate"),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_restate_rejects_unknown_targets(mock_db_session) -> None:
+    event = Event(id=uuid4(), canonical_summary="Partial correction")
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=uuid4(),
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.2,
+    )
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [evidence])
+
+    with pytest.raises(HTTPException, match="must reference active evidence") as exc:
+        await create_event_feedback(
+            event_id=event.id,
+            payload=EventFeedbackRequest(
+                action="restate",
+                restatement_targets=[
+                    EventRestatementTarget(
+                        evidence_id=uuid4(),
+                        compensation_delta_log_odds=-0.1,
+                    )
+                ],
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_restate_rejects_duplicate_targets(mock_db_session) -> None:
+    event = Event(id=uuid4(), canonical_summary="Partial correction")
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=uuid4(),
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.2,
+    )
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [evidence])
+
+    with pytest.raises(HTTPException, match="must not contain duplicate evidence_id") as exc:
+        await create_event_feedback(
+            event_id=event.id,
+            payload=EventFeedbackRequest(
+                action="restate",
+                restatement_targets=[
+                    EventRestatementTarget(
+                        evidence_id=evidence.id,
+                        compensation_delta_log_odds=-0.1,
+                    ),
+                    EventRestatementTarget(
+                        evidence_id=evidence.id,
+                        compensation_delta_log_odds=-0.05,
+                    ),
+                ],
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
 
 
 @pytest.mark.asyncio
@@ -323,6 +573,47 @@ async def test_create_trend_override_updates_log_odds(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_trend_override_records_manual_compensation_restatement(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trend = Trend(
+        id=uuid4(),
+        name="Override Trend",
+        runtime_trend_id="override-trend",
+        definition={"id": "override-trend"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-0.8,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    recorded: list[dict[str, object]] = []
+
+    async def _fake_apply(**kwargs):
+        recorded.append(kwargs)
+        trend.current_log_odds = -0.9
+        trend.updated_at = datetime.now(tz=UTC)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    mock_db_session.get.return_value = trend
+
+    result = await create_trend_override(
+        trend_id=trend.id,
+        payload=TrendOverrideRequest(delta_log_odds=-0.1, notes="Manual correction"),
+        session=mock_db_session,
+    )
+
+    assert len(recorded) == 1
+    assert recorded[0]["restatement_kind"] == "manual_compensation"
+    assert recorded[0]["source"] == "trend_override"
+    assert result.corrected_value is not None
+    assert result.corrected_value["historical_artifact_policy"] == "belief_at_time"
+    assert result.corrected_value["new_log_odds"] == pytest.approx(-0.9)
+
+
+@pytest.mark.asyncio
 async def test_create_trend_override_returns_404_for_unknown_trend(mock_db_session) -> None:
     mock_db_session.get.return_value = None
 
@@ -334,6 +625,13 @@ async def test_create_trend_override_returns_404_for_unknown_trend(mock_db_sessi
         )
 
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_trend_map_returns_empty_for_no_ids(mock_db_session) -> None:
+    result = await feedback_module._trend_map(session=mock_db_session, trend_ids=set())
+
+    assert result == {}
 
 
 @pytest.mark.asyncio

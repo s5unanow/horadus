@@ -22,7 +22,8 @@ from src.core.source_credibility import (
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
-from src.storage.models import Event, EventItem, HumanFeedback, RawItem, Source
+from src.storage.models import Event, EventItem, RawItem, Source
+from src.storage.restatement_models import HumanFeedback
 
 logger = structlog.get_logger(__name__)
 

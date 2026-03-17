@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from datetime import date, datetime
-from typing import Any, ClassVar
+from typing import Any
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
@@ -27,17 +27,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    """Base class for all models."""
-
-    type_annotation_map: ClassVar[dict[Any, Any]] = {
-        dict[str, Any]: JSONB,
-        list[str]: ARRAY(String),
-        UUID: PGUUID(as_uuid=True),
-    }
+from src.storage.base import Base
 
 
 class SourceType(enum.StrEnum):
@@ -1112,50 +1104,4 @@ class TrendOutcome(Base):
     )
 
 
-class HumanFeedback(Base):
-    """
-    Human corrections and annotations (Expert Recommendation).
-
-    Tracks manual overrides, pins, and noise markings
-    for training/evaluation data.
-    """
-
-    __tablename__ = "human_feedback"
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-    )
-
-    # What was annotated
-    target_type: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-    )  # "event" | "trend_evidence" | "classification"
-    target_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        nullable=False,
-    )
-
-    # The feedback
-    action: Mapped[str] = mapped_column(
-        String(50),
-        nullable=False,
-    )  # "pin" | "mark_noise" | "override_delta" | "correct_category"
-    original_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    corrected_value: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
-    notes: Mapped[str | None] = mapped_column(Text)
-
-    # Metadata
-    created_by: Mapped[str | None] = mapped_column(String(100))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        Index("idx_feedback_target", "target_type", "target_id"),
-        Index("idx_feedback_action", "action"),
-    )
+from src.storage.restatement_models import HumanFeedback, TrendRestatement  # noqa: E402,F401

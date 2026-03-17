@@ -38,6 +38,17 @@ def _write_trend_config(
             f'name: "{trend_name}"\n'
             "baseline_probability: 0.10\n"
             "decay_half_life_days: 30\n"
+            "forecast_contract:\n"
+            '  question: "Will a test conflict occur by 2030-12-31?"\n'
+            "  horizon:\n"
+            "    kind: fixed_date\n"
+            "    fixed_date: 2030-12-31\n"
+            '  resolution_basis: "Binary event question resolved against confirmed direct conflict."\n'
+            '  resolver_source: "Official statements plus multi-source corroborated reporting."\n'
+            '  resolver_basis: "Resolve yes on confirmed conflict; otherwise resolve no at horizon."\n'
+            '  closure_rule: "binary_event_by_horizon"\n'
+            '  occurrence_definition: "Confirmed direct conflict occurs."\n'
+            '  non_occurrence_definition: "No confirmed direct conflict occurs by the horizon date."\n'
             "indicators:\n"
             f"{indicator_lines}\n"
         ),
@@ -153,6 +164,40 @@ def test_run_trend_taxonomy_validation_reports_duplicate_and_missing_ids(tmp_pat
 
     assert any("missing required trend 'id'" in message for message in result.errors)
     assert any("duplicate trend id 'eu-russia'" in message for message in result.errors)
+
+
+def test_run_trend_taxonomy_validation_reports_missing_forecast_contract(tmp_path: Path) -> None:
+    trend_dir = tmp_path / "trends"
+    trend_dir.mkdir()
+    (trend_dir / "missing-contract.yaml").write_text(
+        """
+id: "eu-russia"
+name: "EU-Russia"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  military_movement:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    gold_path = tmp_path / "gold_set.jsonl"
+    _write_gold_set(
+        gold_path,
+        [_gold_row(item_id="eval-1", tier1_scores={"eu-russia": 8}, tier2=None)],
+    )
+
+    result = taxonomy_module.run_trend_taxonomy_validation(
+        trend_config_dir=str(trend_dir),
+        gold_set_path=str(gold_path),
+        output_dir=str(tmp_path / "results"),
+    )
+
+    assert any("forecast_contract is required" in message for message in result.errors)
 
 
 def test_run_trend_taxonomy_validation_fails_unknown_tier2_trend_id(tmp_path: Path) -> None:

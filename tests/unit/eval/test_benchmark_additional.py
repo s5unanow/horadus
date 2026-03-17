@@ -11,6 +11,7 @@ from src.eval import benchmark as benchmark_module
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage, TrendRelevanceScore
 from src.processing.tier2_classifier import Tier2Usage
 from src.storage.models import Event
+from tests.unit.trend_forecast_contract_fixtures import sample_binary_forecast_contract
 
 pytestmark = pytest.mark.unit
 
@@ -68,6 +69,7 @@ def _write_trend_configs(config_dir: Path) -> None:
                 "id": "eu-russia",
                 "name": "EU-Russia",
                 "baseline_probability": 0.2,
+                "forecast_contract": sample_binary_forecast_contract(),
                 "indicators": {"military_movement": {"weight": 0.04, "direction": "escalatory"}},
             }
         ),

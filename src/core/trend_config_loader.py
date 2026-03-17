@@ -14,7 +14,7 @@ from uuid import NAMESPACE_URL, uuid5
 import yaml
 from pydantic import ValidationError
 
-from src.core.trend_config import TrendConfig
+from src.core.trend_config import validate_trend_config_payload
 
 
 def discover_trend_config_files(*, config_dir: Path) -> list[Path]:
@@ -46,10 +46,12 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
             raise ValueError(msg)
 
         try:
-            parsed = TrendConfig.model_validate(raw_config)
-        except ValidationError as exc:
+            parsed = validate_trend_config_payload(raw_config)
+        except (ValidationError, ValueError) as exc:
             msg = f"TrendConfig validation failed for {file_path.name}: {exc}"
             raise ValueError(msg) from exc
+        forecast_contract = parsed.forecast_contract
+        assert forecast_contract is not None
 
         trend_id = (parsed.id or "").strip()
         if not trend_id:
@@ -65,7 +67,13 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
                 id=uuid5(NAMESPACE_URL, f"trend/{trend_id}"),
                 name=parsed.name,
                 runtime_trend_id=trend_id,
-                definition={"id": trend_id},
+                definition={
+                    "id": trend_id,
+                    "forecast_contract": forecast_contract.model_dump(
+                        mode="json",
+                        exclude_none=True,
+                    ),
+                },
                 description=parsed.description,
                 indicators={
                     signal_type: {

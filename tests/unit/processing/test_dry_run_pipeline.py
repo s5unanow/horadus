@@ -137,6 +137,17 @@ def test_deduplicate_cluster_and_load_trend_configs_helpers(tmp_path: Path) -> N
                 "name: Custom Trend",
                 "baseline_probability: 0.2",
                 "description: Custom trend",
+                "forecast_contract:",
+                '  question: "Will a test conflict occur by 2030-12-31?"',
+                "  horizon:",
+                "    kind: fixed_date",
+                "    fixed_date: 2030-12-31",
+                '  resolution_basis: "Binary event question resolved against confirmed direct conflict."',
+                '  resolver_source: "Official statements plus multi-source corroborated reporting."',
+                '  resolver_basis: "Resolve yes on confirmed conflict; otherwise resolve no at horizon."',
+                '  closure_rule: "binary_event_by_horizon"',
+                '  occurrence_definition: "Confirmed direct conflict occurs."',
+                '  non_occurrence_definition: "No confirmed direct conflict occurs by the horizon date."',
                 "indicators:",
                 "  signal_one:",
                 "    weight: 0.5",
@@ -151,6 +162,29 @@ def test_deduplicate_cluster_and_load_trend_configs_helpers(tmp_path: Path) -> N
     loaded = _load_trend_configs(trend_dir)
 
     assert [trend_id for trend_id, _config in loaded] == ["custom"]
+
+
+def test_load_trend_configs_requires_forecast_contract(tmp_path: Path) -> None:
+    trend_dir = tmp_path / "trends"
+    trend_dir.mkdir()
+    (trend_dir / "missing-contract.yaml").write_text(
+        "\n".join(
+            [
+                "name: Custom Trend",
+                "baseline_probability: 0.2",
+                "description: Custom trend",
+                "indicators:",
+                "  signal_one:",
+                "    weight: 0.5",
+                "    direction: escalatory",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="forecast_contract is required"):
+        _load_trend_configs(trend_dir)
 
 
 def test_score_trends_ignores_blank_keywords() -> None:

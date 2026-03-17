@@ -9,6 +9,17 @@ description: |
 
 baseline_probability: 0.38
 decay_half_life_days: 270
+forecast_contract:
+  question: "Over the 10 years following the evaluation date, will elite-mass polarization and agency erosion continue accelerating?"
+  horizon:
+    kind: "rolling_window"
+    value: 10
+    unit: "years"
+    reference_point: "evaluation_date"
+  resolution_basis: "Rolling-window question resolved using wealth concentration, mobility, institutional trust, and participation evidence across major economies."
+  resolver_source: "OECD, World Bank, survey series, public policy datasets, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked acceleration state persists over the scoped rolling window across multiple major economies; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "mobility_recovery"

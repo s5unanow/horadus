@@ -11,6 +11,7 @@ from src.core.config import settings
 from src.eval import benchmark as benchmark_module
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage, TrendRelevanceScore
 from src.processing.tier2_classifier import Tier2EventResult, Tier2Usage
+from tests.unit.trend_forecast_contract_fixtures import sample_binary_forecast_contract
 
 pytestmark = pytest.mark.unit
 
@@ -152,6 +153,7 @@ def _write_trend_configs(config_dir: Path) -> None:
             "id": "eu-russia",
             "name": "EU-Russia",
             "baseline_probability": 0.2,
+            "forecast_contract": sample_binary_forecast_contract(),
             "indicators": {
                 "military_movement": {"weight": 0.04, "direction": "escalatory"},
                 "diplomatic_breakdown": {"weight": 0.03, "direction": "escalatory"},
@@ -161,6 +163,7 @@ def _write_trend_configs(config_dir: Path) -> None:
             "id": "us-china",
             "name": "US-China",
             "baseline_probability": 0.2,
+            "forecast_contract": sample_binary_forecast_contract(),
             "indicators": {
                 "diplomatic_engagement": {"weight": 0.03, "direction": "de_escalatory"},
                 "trade_restriction": {"weight": 0.03, "direction": "escalatory"},
@@ -170,6 +173,7 @@ def _write_trend_configs(config_dir: Path) -> None:
             "id": "middle-east",
             "name": "Middle East",
             "baseline_probability": 0.2,
+            "forecast_contract": sample_binary_forecast_contract(),
             "indicators": {
                 "energy_disruption": {"weight": 0.03, "direction": "escalatory"},
                 "ceasefire": {"weight": 0.02, "direction": "de_escalatory"},

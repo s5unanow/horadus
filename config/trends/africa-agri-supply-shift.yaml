@@ -6,6 +6,17 @@ description: |
 
 baseline_probability: 0.11
 decay_half_life_days: 365
+forecast_contract:
+  question: "Over the 10 years following the evaluation date, will Africa materially increase its share of global food exports?"
+  horizon:
+    kind: "rolling_window"
+    value: 10
+    unit: "years"
+    reference_point: "evaluation_date"
+  resolution_basis: "Rolling-window question resolved using sustained export-share gains plus productivity and logistics evidence across major African producers."
+  resolver_source: "FAOSTAT, UN Comtrade, World Bank logistics data, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked state is present over the scoped rolling window based on public datasets and corroborated reporting; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "multi_year_crop_collapse"

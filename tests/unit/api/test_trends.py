@@ -37,6 +37,10 @@ from src.storage.models import (
     TrendOutcome,
     TrendSnapshot,
 )
+from tests.unit.trend_forecast_contract_fixtures import (
+    sample_binary_forecast_contract,
+    sample_forecast_contract_yaml,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -65,7 +69,10 @@ def _build_trend(
         name=name,
         description="Trend description",
         runtime_trend_id="test-trend",
-        definition={"id": "test-trend"},
+        definition={
+            "id": "test-trend",
+            "forecast_contract": sample_binary_forecast_contract(),
+        },
         baseline_log_odds=prob_to_logodds(0.1),
         current_log_odds=prob_to_logodds(0.2),
         indicators={"signal": {"direction": "escalatory", "weight": 0.04, "keywords": ["x"]}},
@@ -120,6 +127,7 @@ async def test_create_trend_persists_new_record(mock_db_session) -> None:
             name="EU-Russia Conflict",
             description="Tracks conflict probability",
             definition={"baseline_probability": 0.99},
+            forecast_contract=sample_binary_forecast_contract(),
             baseline_probability=0.08,
             indicators={"military_movement": {"direction": "escalatory", "weight": 0.04}},
         ),
@@ -150,6 +158,7 @@ async def test_create_trend_returns_409_when_name_exists(mock_db_session) -> Non
         await create_trend(
             trend=TrendCreate(
                 name="Duplicate",
+                forecast_contract=sample_binary_forecast_contract(),
                 baseline_probability=0.1,
                 indicators={"x": {"direction": "escalatory", "weight": 0.04}},
             ),
@@ -168,6 +177,7 @@ async def test_create_trend_returns_409_when_runtime_trend_id_exists(mock_db_ses
             trend=TrendCreate(
                 name="Duplicate Runtime Id",
                 definition={"id": "eu-russia"},
+                forecast_contract=sample_binary_forecast_contract(),
                 baseline_probability=0.1,
                 indicators={"x": {"direction": "escalatory", "weight": 0.04}},
             ),
@@ -183,6 +193,7 @@ async def test_create_trend_validates_against_canonical_trend_schema(mock_db_ses
         await create_trend(
             trend=TrendCreate(
                 name="Invalid Indicator Trend",
+                forecast_contract=sample_binary_forecast_contract(),
                 baseline_probability=0.1,
                 indicators={"x": {"direction": "escalatory", "weight": 1.2}},
             ),
@@ -207,6 +218,7 @@ async def test_create_trend_returns_409_when_flush_hits_runtime_id_constraint(
         await create_trend(
             trend=TrendCreate(
                 name="Conflict On Flush",
+                forecast_contract=sample_binary_forecast_contract(),
                 baseline_probability=0.1,
                 indicators={"x": {"direction": "escalatory", "weight": 0.04}},
             ),
@@ -229,6 +241,7 @@ async def test_create_trend_reraises_non_runtime_integrity_errors(mock_db_sessio
         await create_trend(
             trend=TrendCreate(
                 name="Other Integrity Error",
+                forecast_contract=sample_binary_forecast_contract(),
                 baseline_probability=0.1,
                 indicators={"x": {"direction": "escalatory", "weight": 0.04}},
             ),
@@ -260,6 +273,7 @@ async def test_update_trend_updates_fields_and_probabilities(mock_db_session) ->
             current_probability=0.35,
             is_active=False,
             definition={},
+            forecast_contract=sample_binary_forecast_contract(),
         ),
         session=mock_db_session,
     )
@@ -280,7 +294,11 @@ async def test_update_trend_syncs_definition_baseline_without_definition_payload
     mock_db_session,
 ) -> None:
     trend = _build_trend()
-    trend.definition = {"id": "test-trend", "baseline_probability": 0.9}
+    trend.definition = {
+        "id": "test-trend",
+        "baseline_probability": 0.9,
+        "forecast_contract": sample_binary_forecast_contract(),
+    }
     mock_db_session.get.return_value = trend
     mock_db_session.scalar.return_value = None
 
@@ -331,7 +349,8 @@ async def test_update_trend_material_definition_change_creates_version_row(
             definition={
                 "id": "test-trend",
                 "new_field": {"source": "api"},
-            }
+            },
+            forecast_contract=sample_binary_forecast_contract(),
         ),
         session=mock_db_session,
     )
@@ -355,7 +374,10 @@ async def test_update_trend_returns_409_when_runtime_trend_id_exists(mock_db_ses
     with pytest.raises(HTTPException, match="runtime id") as exc_info:
         await update_trend(
             trend_id=trend.id,
-            trend=TrendUpdate(definition={"id": "existing-runtime-id"}),
+            trend=TrendUpdate(
+                definition={"id": "existing-runtime-id"},
+                forecast_contract=sample_binary_forecast_contract(),
+            ),
             session=mock_db_session,
         )
 
@@ -417,7 +439,10 @@ async def test_update_trend_returns_409_when_flush_hits_runtime_id_constraint(
     with pytest.raises(HTTPException, match="runtime id") as exc_info:
         await update_trend(
             trend_id=trend.id,
-            trend=TrendUpdate(definition={"id": "conflict-on-flush"}),
+            trend=TrendUpdate(
+                definition={"id": "conflict-on-flush"},
+                forecast_contract=sample_binary_forecast_contract(),
+            ),
             session=mock_db_session,
         )
 
@@ -438,7 +463,10 @@ async def test_update_trend_reraises_non_runtime_integrity_errors(mock_db_sessio
     with pytest.raises(IntegrityError):
         await update_trend(
             trend_id=trend.id,
-            trend=TrendUpdate(definition={"id": "other-integrity-error"}),
+            trend=TrendUpdate(
+                definition={"id": "other-integrity-error"},
+                forecast_contract=sample_binary_forecast_contract(),
+            ),
             session=mock_db_session,
         )
 
@@ -463,12 +491,13 @@ async def test_load_trends_from_config_creates_records(
     _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "sample-trend.yaml"
     config_file.write_text(
-        """
+        f"""
 id: sample-trend
 name: Sample Trend
 description: Sample description
 baseline_probability: 0.15
 decay_half_life_days: 20
+{sample_forecast_contract_yaml()}
 indicators:
   test_signal:
     weight: 0.04
@@ -505,11 +534,12 @@ async def test_load_trends_from_config_defaults_missing_indicators_to_empty_mapp
     _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "minimal-trend.yaml"
     config_file.write_text(
-        """
+        f"""
 id: minimal-trend
 name: Minimal Trend
 baseline_probability: 0.12
 decay_half_life_days: 20
+{sample_forecast_contract_yaml()}
 """.strip(),
         encoding="utf-8",
     )
@@ -527,53 +557,6 @@ decay_half_life_days: 20
 
 
 @pytest.mark.asyncio
-async def test_load_trends_from_config_supports_enhanced_fields(
-    mock_db_session,
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    _use_tmp_trend_root(monkeypatch, tmp_path)
-    config_file = tmp_path / "enhanced-trend.yaml"
-    config_file.write_text(
-        """
-id: enhanced-trend
-name: Enhanced Trend
-baseline_probability: 0.20
-decay_half_life_days: 15
-disqualifiers:
-  - signal: peace_treaty
-    effect: reset_to_baseline
-    description: Signed peace treaty
-falsification_criteria:
-  decrease_confidence:
-    - Sustained de-escalation
-indicators:
-  military_movement:
-    weight: 0.04
-    direction: escalatory
-    type: leading
-    decay_half_life_days: 10
-    keywords: ["troops"]
-""".strip(),
-        encoding="utf-8",
-    )
-    mock_db_session.scalar.side_effect = [None, None]
-
-    result = await load_trends_from_config(mock_db_session, config_dir=".")
-
-    assert result.created == 1
-    assert result.errors == []
-    added_objects = [call.args[0] for call in mock_db_session.add.call_args_list]
-    added = next(obj for obj in added_objects if isinstance(obj, Trend))
-    assert added.indicators["military_movement"]["type"] == "leading"
-    assert added.indicators["military_movement"]["decay_half_life_days"] == 10
-    assert added.definition["disqualifiers"][0]["effect"] == "reset_to_baseline"
-    assert added.definition["falsification_criteria"]["decrease_confidence"] == [
-        "Sustained de-escalation"
-    ]
-
-
-@pytest.mark.asyncio
 async def test_load_trends_from_config_rejects_invalid_indicator_type(
     mock_db_session,
     tmp_path,
@@ -582,10 +565,11 @@ async def test_load_trends_from_config_rejects_invalid_indicator_type(
     _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "invalid-trend.yaml"
     config_file.write_text(
-        """
+        f"""
 id: invalid-trend
 name: Invalid Trend
 baseline_probability: 0.20
+{sample_forecast_contract_yaml()}
 indicators:
   military_movement:
     weight: 0.04

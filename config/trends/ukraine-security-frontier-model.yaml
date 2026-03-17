@@ -8,6 +8,17 @@ description: |
 
 baseline_probability: 0.40
 decay_half_life_days: 365
+forecast_contract:
+  question: "Over the 10 years following the evaluation date, will Ukraine function as a sustained, externally backed militarized frontier?"
+  horizon:
+    kind: "rolling_window"
+    value: 10
+    unit: "years"
+    reference_point: "evaluation_date"
+  resolution_basis: "Rolling-window question resolved using durable security guarantees, defense burden, force posture, and militarized-frontier evidence."
+  resolver_source: "Official security agreements, budget and force-structure releases, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked frontier state persists over the scoped rolling window; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "comprehensive_peace_settlement"

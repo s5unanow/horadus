@@ -6,6 +6,15 @@ description: |
 
 baseline_probability: 0.25
 decay_half_life_days: 270
+forecast_contract:
+  question: "Will USD centrality in reserves, trade settlement, and strategic commodity contracts be materially weaker by 2035-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2035-12-31
+  resolution_basis: "Threshold-state question resolved using reserve-share, settlement-rail, and commodity-pricing evidence showing durable non-USD substitution."
+  resolver_source: "IMF COFER, BIS and central-bank publications, commodity-contract disclosures, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked erosion state is present at horizon using public datasets and corroborated reporting; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "usd_share_rebound"

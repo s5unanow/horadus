@@ -7,6 +7,15 @@ description: |
 
 baseline_probability: 0.12
 decay_half_life_days: 365
+forecast_contract:
+  question: "Will materially entrenched parallel governance zones still be present across the scoped European geographies on 2035-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2035-12-31
+  resolution_basis: "Threshold-state question resolved using sustained evidence of governance-deficit zones, informal justice, extremist networks, and weakened state authority."
+  resolver_source: "Official security reports, court and policing data, survey series, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked parallel-governance state is present at horizon across the scoped geographies; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "state_authority_restored"

@@ -9,6 +9,17 @@ description: |
 
 baseline_probability: 0.33
 decay_half_life_days: 345
+forecast_contract:
+  question: "Over the 10 years following the evaluation date, will South America materially strengthen its share of global food exports?"
+  horizon:
+    kind: "rolling_window"
+    value: 10
+    unit: "years"
+    reference_point: "evaluation_date"
+  resolution_basis: "Rolling-window question resolved using export-share, logistics, and market-access evidence across the scoped South American producers."
+  resolver_source: "FAOSTAT, UN Comtrade, port and logistics data, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked strengthening state persists over the scoped rolling window across the producers; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "structural_export_decline"

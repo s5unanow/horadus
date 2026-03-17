@@ -7,6 +7,17 @@ description: |
 
 baseline_probability: 0.12
 decay_half_life_days: 45
+forecast_contract:
+  question: "Will a novel or materially changed infectious threat reach globally significant system-level spread by 2030-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2030-12-31
+  resolution_basis: "Binary event question resolved against a novel or materially changed pathogen causing sustained multi-region spread with system-level health or economic impact."
+  resolver_source: "WHO, national public-health authorities, major surveillance releases, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes on confirmed globally significant cross-border spread meeting the scoped impact standard; otherwise resolve no at the horizon."
+  closure_rule: "binary_event_by_horizon"
+  occurrence_definition: "A novel or materially changed infectious threat causes sustained international spread with system-level health or economic impact."
+  non_occurrence_definition: "No novel or materially changed infectious threat reaches the scoped globally significant spread threshold by the horizon date."
 
 disqualifiers:
   - signal: "pathogen_contained"

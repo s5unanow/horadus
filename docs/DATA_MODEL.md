@@ -301,6 +301,7 @@ baseline_log_odds = prob_to_logodds(0.08)  # -2.44
 **Baseline source-of-truth note:**
 - Canonical decay baseline is `trends.baseline_log_odds`.
 - `trends.definition.baseline_probability` is synchronized metadata for operator visibility and config parity.
+- `trends.definition.forecast_contract` is synchronized metadata describing the forecast question, horizon, resolver, and closure rule for the stored probability.
 - `trends.runtime_trend_id` is the canonical routing key for runtime taxonomy lookups; it must match `trends.definition.id` after normalization.
 
 **Example indicators:**

@@ -439,6 +439,17 @@ name: "EU-Russia Military Conflict"
 description: "Probability of direct military confrontation"
 
 baseline_probability: 0.08  # 8% prior (converted to log-odds: -2.44)
+forecast_contract:
+  question: "Will direct military conflict involving Russia and one or more European NATO states occur by 2030-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2030-12-31
+  resolution_basis: "Binary event question resolved against attributable direct state-on-state hostilities."
+  resolver_source: "Official state/alliance statements plus multi-source corroborated reporting."
+  resolver_basis: "Resolve yes on confirmed direct hostilities; otherwise resolve no at the horizon."
+  closure_rule: "binary_event_by_horizon"
+  occurrence_definition: "Confirmed direct combat engagement between Russian forces and one or more European NATO member-state forces."
+  non_occurrence_definition: "No confirmed direct combat engagement between Russian forces and one or more European NATO member-state forces by the horizon date."
 
 indicators:
   military_movement:

@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics
 - `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
 - `TASK-340` Split Event Epistemic State from Activity State
 - `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware
@@ -42,3 +41,4 @@
 - `TASK-336` Separate Story Clusters from Stable Event-Claim Identity
 - `TASK-231` Extend Event Invalidation into a Compensating Restatement Ledger ✅
 - `TASK-347` Investigate and stabilize hanging `horadus tasks local-review` runs ✅
+- `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅

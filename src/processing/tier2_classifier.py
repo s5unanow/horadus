@@ -22,7 +22,7 @@ from src.core.trend_config import trend_runtime_id_for_record
 from src.processing.cost_tracker import TIER2, CostTracker
 from src.processing.event_claims import (
     assign_claim_keys_to_impacts,
-    normalize_claim_key,
+    normalize_claim_text,
     sync_event_claims,
 )
 from src.processing.llm_failover import LLMChatRoute
@@ -775,7 +775,7 @@ class Tier2Classifier:
             {
                 "claim_id": f"claim_{index + 1}",
                 "text": claim,
-                "normalized_text": normalize_claim_key(claim),
+                "normalized_text": normalize_claim_text(claim),
             }
             for index, claim in enumerate(claims)
         ]
@@ -822,7 +822,7 @@ class Tier2Classifier:
 
     def _claim_tokens(self, value: str, *, language: str) -> set[str]:
         stop_words = self._CLAIM_STOP_WORDS.get(language, set())
-        normalized = normalize_claim_key(value)
+        normalized = normalize_claim_text(value)
         return {
             token
             for token in normalized.split()

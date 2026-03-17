@@ -34,9 +34,7 @@ class EventClaimSpec:
 
 def normalize_claim_key(value: str) -> str:
     """Return a deterministic key for stable claim matching."""
-    normalized = value.lower().strip()
-    chars = [ch if ch.isalnum() or ch.isspace() else " " for ch in normalized]
-    collapsed = " ".join("".join(chars).split())
+    collapsed = normalize_claim_text(value)
     if len(collapsed) <= MAX_EVENT_CLAIM_KEY_LENGTH:
         return collapsed
 
@@ -44,6 +42,13 @@ def normalize_claim_key(value: str) -> str:
     prefix_length = MAX_EVENT_CLAIM_KEY_LENGTH - len(digest) - 1
     prefix = collapsed[:prefix_length].rstrip()
     return f"{prefix}-{digest}"
+
+
+def normalize_claim_text(value: str) -> str:
+    """Return normalized claim text without storage-specific length bounds."""
+    normalized = value.lower().strip()
+    chars = [ch if ch.isalnum() or ch.isspace() else " " for ch in normalized]
+    return " ".join("".join(chars).split())
 
 
 def fallback_claim_text(event: Event) -> str:

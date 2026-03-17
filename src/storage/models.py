@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -391,7 +392,10 @@ class Event(Base):
     # Relationships
     item_links: Mapped[list[EventItem]] = relationship(back_populates="event")
     claims: Mapped[list[EventClaim]] = relationship(back_populates="event")
-    evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="event")
+    evidence_records: Mapped[list[TrendEvidence]] = relationship(
+        back_populates="event",
+        foreign_keys="TrendEvidence.event_id",
+    )
     taxonomy_gaps: Mapped[list[TaxonomyGap]] = relationship(back_populates="event")
 
     # Indexes
@@ -448,12 +452,7 @@ class EventItem(Base):
 
 
 class EventClaim(Base):
-    """
-    Stable claim/version identity recorded beneath a mutable event cluster.
-
-    Each claim row persists a deterministic claim key within one event so
-    evidence lineage can survive reclassification and cluster repairs.
-    """
+    """Stable claim identity recorded beneath a mutable event cluster."""
 
     __tablename__ = "event_claims"
 
@@ -510,7 +509,10 @@ class EventClaim(Base):
     )
 
     event: Mapped[Event] = relationship(back_populates="claims")
-    evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="event_claim")
+    evidence_records: Mapped[list[TrendEvidence]] = relationship(
+        back_populates="event_claim",
+        foreign_keys="TrendEvidence.event_claim_id",
+    )
 
     __table_args__ = (
         CheckConstraint(
@@ -518,13 +520,9 @@ class EventClaim(Base):
             name="check_event_claims_claim_type_allowed",
         ),
         UniqueConstraint("event_id", "claim_key", name="uq_event_claims_event_claim_key"),
+        UniqueConstraint("event_id", "id", name="uq_event_claims_event_id_id"),
         Index("idx_event_claims_event_active", "event_id", "is_active"),
     )
-
-
-# =============================================================================
-# Trend Models
-# =============================================================================
 
 
 class Trend(Base):
@@ -703,11 +701,23 @@ class TrendEvidence(Base):
 
     # Relationships
     trend: Mapped[Trend] = relationship(back_populates="evidence_records")
-    event: Mapped[Event] = relationship(back_populates="evidence_records")
-    event_claim: Mapped[EventClaim] = relationship(back_populates="evidence_records")
+    event: Mapped[Event] = relationship(
+        back_populates="evidence_records",
+        foreign_keys=[event_id],
+    )
+    event_claim: Mapped[EventClaim] = relationship(
+        back_populates="evidence_records",
+        foreign_keys=[event_claim_id],
+    )
 
     # Constraints
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["event_id", "event_claim_id"],
+            ["event_claims.event_id", "event_claims.id"],
+            ondelete="CASCADE",
+            name="fk_trend_evidence_event_id_event_claim_id_event_claims",
+        ),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
         Index("idx_evidence_event_claim", "event_claim_id"),

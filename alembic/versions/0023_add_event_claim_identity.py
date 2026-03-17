@@ -31,10 +31,30 @@ def upgrade() -> None:
         sa.Column("claim_type", sa.String(length=20), nullable=False, server_default="statement"),
         sa.Column("claim_order", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
-        sa.Column("first_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("last_seen_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
+        sa.Column(
+            "first_seen_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "last_seen_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
+        sa.Column(
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.text("now()"),
+        ),
         sa.CheckConstraint(
             "claim_type IN ('fallback', 'statement')",
             name="check_event_claims_claim_type_allowed",
@@ -42,6 +62,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(["event_id"], ["events.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("event_id", "claim_key", name="uq_event_claims_event_claim_key"),
+        sa.UniqueConstraint("event_id", "id", name="uq_event_claims_event_id_id"),
     )
     op.create_index(
         "idx_event_claims_event_active",
@@ -56,7 +77,7 @@ def upgrade() -> None:
 
     op.execute(
         sa.text(
-            f"""
+            """
             INSERT INTO event_claims (
                 id,
                 event_id,
@@ -110,6 +131,14 @@ def upgrade() -> None:
         ["id"],
         ondelete="CASCADE",
     )
+    op.create_foreign_key(
+        "fk_trend_evidence_event_id_event_claim_id_event_claims",
+        "trend_evidence",
+        "event_claims",
+        ["event_id", "event_claim_id"],
+        ["event_id", "id"],
+        ondelete="CASCADE",
+    )
     op.create_index("idx_evidence_event_claim", "trend_evidence", ["event_claim_id"])
     op.drop_index("uq_trend_event_signal_active", table_name="trend_evidence")
     op.create_index(
@@ -124,6 +153,11 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.drop_index("uq_trend_event_claim_signal_active", table_name="trend_evidence")
     op.drop_index("idx_evidence_event_claim", table_name="trend_evidence")
+    op.drop_constraint(
+        "fk_trend_evidence_event_id_event_claim_id_event_claims",
+        "trend_evidence",
+        type_="foreignkey",
+    )
     op.drop_constraint(
         "fk_trend_evidence_event_claim_id_event_claims",
         "trend_evidence",

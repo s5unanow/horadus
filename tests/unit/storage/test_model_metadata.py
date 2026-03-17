@@ -134,6 +134,17 @@ def test_event_claim_constraints_present_in_model_metadata() -> None:
 
     assert "check_event_claims_claim_type_allowed" in constraint_names
     assert "uq_event_claims_event_claim_key" in constraint_names
+    assert "uq_event_claims_event_id_id" in constraint_names
+
+
+def test_trend_evidence_claim_consistency_constraint_present_in_model_metadata() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in TrendEvidence.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+
+    assert "fk_trend_evidence_event_id_event_claim_id_event_claims" in constraint_names
 
 
 def test_trend_evidence_active_unique_index_present_in_model_metadata() -> None:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -256,6 +257,63 @@ async def test_create_event_feedback_invalidate_handles_missing_trend_rows(
     adjustment = result.corrected_value["trend_adjustments"][str(evidence.trend_id)]
     assert adjustment["previous_log_odds"] == pytest.approx(0.2)
     assert adjustment["new_log_odds"] == pytest.approx(-0.2)
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_invalidate_reverses_only_net_remaining_delta(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Restated evidence later invalidated")
+    trend = Trend(
+        id=uuid4(),
+        name="EU-Russia",
+        runtime_trend_id="eu-russia",
+        definition={"id": "eu-russia"},
+        baseline_log_odds=-2.0,
+        current_log_odds=-1.0,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.4,
+    )
+    applied: list[dict[str, object]] = []
+
+    async def _fake_apply(**kwargs):
+        applied.append(kwargs)
+        trend.current_log_odds = -1.2
+        trend.updated_at = datetime.now(tz=UTC)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    monkeypatch.setattr(
+        feedback_module,
+        "load_prior_compensation_by_evidence_id",
+        AsyncMock(return_value={evidence.id: -0.2}),
+    )
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [evidence]),
+        SimpleNamespace(all=lambda: [trend]),
+    ]
+
+    result = await create_event_feedback(
+        event_id=event.id,
+        payload=EventFeedbackRequest(action="invalidate", created_by="analyst@horadus"),
+        session=mock_db_session,
+    )
+
+    assert len(applied) == 1
+    assert applied[0]["compensation_delta_log_odds"] == pytest.approx(-0.2)
+    assert result.corrected_value is not None
+    assert result.corrected_value["total_compensation_delta_log_odds"] == pytest.approx(-0.2)
 
 
 @pytest.mark.asyncio

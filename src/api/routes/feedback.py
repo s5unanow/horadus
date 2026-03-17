@@ -26,7 +26,11 @@ from src.api.routes.feedback_models import (
     to_feedback_response,
     to_taxonomy_gap_response,
 )
-from src.api.routes.feedback_restatement import validate_restatement_targets
+from src.api.routes.feedback_restatement import (
+    invalidation_compensation_delta,
+    load_prior_compensation_by_evidence_id,
+    validate_restatement_targets,
+)
 from src.core.trend_engine import TrendEngine
 from src.core.trend_restatement import (
     HISTORICAL_ARTIFACT_POLICY,
@@ -276,6 +280,10 @@ async def _apply_event_feedback_restatements(
         session=session,
         trend_ids={evidence.trend_id for evidence in evidences},
     )
+    prior_compensation_by_evidence_id = await load_prior_compensation_by_evidence_id(
+        session=session,
+        evidences=evidences,
+    )
     recorded_at = datetime.now(tz=UTC)
     total_compensation_delta = 0.0
     trend_adjustments: dict[str, dict[str, float]] = {}
@@ -286,12 +294,17 @@ async def _apply_event_feedback_restatements(
             evidence.invalidated_at = recorded_at
             evidence.invalidation_feedback_id = feedback.id
 
-        target = None
-        if target_by_evidence_id is not None and evidence.id is not None:
-            target = target_by_evidence_id.get(evidence.id)
+        target = (
+            target_by_evidence_id.get(evidence.id)
+            if target_by_evidence_id and evidence.id is not None
+            else None
+        )
 
         compensation_delta = (
-            -float(evidence.delta_log_odds)
+            invalidation_compensation_delta(
+                evidence=evidence,
+                prior_compensation_by_evidence_id=prior_compensation_by_evidence_id,
+            )
             if invalidate_evidence
             else float(target.compensation_delta_log_odds if target is not None else 0.0)
         )

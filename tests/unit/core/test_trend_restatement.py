@@ -11,6 +11,8 @@ from src.core.trend_restatement import (
     _as_utc,
     apply_compensating_restatement,
     build_trend_projection_check,
+    remaining_evidence_delta,
+    restatement_compensation_totals_by_evidence_id,
 )
 from src.storage.models import Trend, TrendEvidence, TrendRestatement
 
@@ -231,3 +233,56 @@ async def test_build_trend_projection_check_requires_trend_id(mock_db_session) -
 
     with pytest.raises(ValueError, match="Trend must have an id"):
         await build_trend_projection_check(session=mock_db_session, trend=trend)
+
+
+def test_remaining_evidence_delta_accounts_for_prior_restatements() -> None:
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=uuid4(),
+        event_id=uuid4(),
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.4,
+    )
+
+    assert remaining_evidence_delta(
+        evidence=evidence, prior_compensation_delta=-0.2
+    ) == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_restatement_compensation_totals_by_evidence_id_aggregates_rows(
+    mock_db_session,
+) -> None:
+    evidence_id = uuid4()
+    other_evidence_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(
+        all=lambda: [
+            (evidence_id, -0.2),
+            (other_evidence_id, 0.1),
+            (None, 0.3),
+        ]
+    )
+
+    totals = await restatement_compensation_totals_by_evidence_id(
+        session=mock_db_session,
+        evidence_ids=(evidence_id, other_evidence_id),
+    )
+
+    assert totals == {
+        evidence_id: pytest.approx(-0.2),
+        other_evidence_id: pytest.approx(0.1),
+    }
+
+
+@pytest.mark.asyncio
+async def test_restatement_compensation_totals_by_evidence_id_skips_empty_input(
+    mock_db_session,
+) -> None:
+    totals = await restatement_compensation_totals_by_evidence_id(
+        session=mock_db_session,
+        evidence_ids=(),
+    )
+
+    assert totals == {}
+    mock_db_session.execute.assert_not_called()

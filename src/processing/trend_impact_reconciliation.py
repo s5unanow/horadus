@@ -14,7 +14,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_config import index_trends_by_runtime_id, trend_runtime_id_for_record
 from src.core.trend_engine import EvidenceFactors, TrendEngine, calculate_evidence_delta
-from src.core.trend_restatement import apply_compensating_restatement
+from src.core.trend_restatement import (
+    apply_compensating_restatement,
+    remaining_evidence_delta,
+    restatement_compensation_totals_by_evidence_id,
+)
 from src.processing import trend_impact_reconciliation_lineage as reconciliation_lineage
 from src.processing.event_claims import FALLBACK_EVENT_CLAIM_KEY, sync_event_claims
 from src.processing.trend_evidence_matching import _evidence_matches
@@ -601,7 +605,14 @@ async def _invalidate_active_evidence(
     if not claimed_invalidation:
         return None
 
-    delta_to_reverse = float(evidence.delta_log_odds)
+    prior_compensation_by_evidence_id = await restatement_compensation_totals_by_evidence_id(
+        session=session,
+        evidence_ids=(evidence.id,),
+    )
+    delta_to_reverse = remaining_evidence_delta(
+        evidence=evidence,
+        prior_compensation_delta=prior_compensation_by_evidence_id.get(evidence.id, 0.0),
+    )
     await apply_compensating_restatement(
         trend_engine=trend_engine,
         trend=trend,

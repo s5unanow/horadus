@@ -220,7 +220,9 @@ def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
 
 
 @pytest.mark.asyncio
-async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branches() -> None:
+async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     event_id = uuid4()
     trend_id = uuid4()
     trend = SimpleNamespace(
@@ -238,6 +240,10 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
         return_value=SimpleNamespace(all=AsyncMock(return_value=[evidence]))
     )
     trend_engine = SimpleNamespace(apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.2)))
+    monkeypatch.setattr(
+        "src.processing.trend_impact_reconciliation.restatement_compensation_totals_by_evidence_id",
+        AsyncMock(return_value={}),
+    )
 
     loaded = await _load_active_event_evidence(session=session, event_id=event_id)
     assert loaded == [evidence]
@@ -318,7 +324,52 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
 
 
 @pytest.mark.asyncio
-async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> None:
+async def test_invalidate_active_evidence_reverses_only_net_remaining_delta(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event_id = uuid4()
+    trend_id = uuid4()
+    evidence = _evidence(trend_id=trend_id, event_id=event_id, delta=0.4)
+    trend = SimpleNamespace(
+        id=trend_id,
+        name="Trend A",
+        runtime_trend_id="trend-a",
+        current_log_odds=0.1,
+    )
+    session = AsyncMock()
+    session.execute = AsyncMock(return_value=_update_result(evidence.id))
+    applied: list[dict[str, object]] = []
+
+    async def _fake_apply(**kwargs):
+        applied.append(kwargs)
+        return SimpleNamespace(id=uuid4())
+
+    monkeypatch.setattr(
+        "src.processing.trend_impact_reconciliation.apply_compensating_restatement",
+        _fake_apply,
+    )
+    monkeypatch.setattr(
+        "src.processing.trend_impact_reconciliation.restatement_compensation_totals_by_evidence_id",
+        AsyncMock(return_value={evidence.id: -0.2}),
+    )
+
+    reversed_delta = await _invalidate_active_evidence(
+        session=session,
+        trend_engine=SimpleNamespace(),
+        evidence=evidence,
+        trend=trend,
+        invalidated_at=datetime.now(tz=UTC),
+    )
+
+    assert reversed_delta == pytest.approx(0.2)
+    assert len(applied) == 1
+    assert applied[0]["compensation_delta_log_odds"] == pytest.approx(-0.2)
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_helper_replaces_and_removes_evidence_rows(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     event_id = uuid4()
     trend_id = uuid4()
     trend = SimpleNamespace(
@@ -327,6 +378,10 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
         definition={"id": "trend-a"},
         runtime_trend_id="trend-a",
         current_log_odds=0.1,
+    )
+    monkeypatch.setattr(
+        "src.processing.trend_impact_reconciliation.restatement_compensation_totals_by_evidence_id",
+        AsyncMock(return_value={}),
     )
     session = AsyncMock()
     session.flush = AsyncMock()

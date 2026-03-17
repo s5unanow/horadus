@@ -7,7 +7,14 @@ from uuid import UUID
 
 from fastapi import HTTPException, status
 
+from src.core.trend_restatement import (
+    remaining_evidence_delta,
+    restatement_compensation_totals_by_evidence_id,
+)
+
 if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
+
     from src.api.routes.feedback_models import EventRestatementTarget
     from src.storage.models import TrendEvidence
 
@@ -47,3 +54,33 @@ def validate_restatement_targets(
         if evidence.id is not None and evidence.id in target_by_evidence_id
     ]
     return (filtered_evidence, target_by_evidence_id)
+
+
+def invalidation_compensation_delta(
+    *,
+    evidence: TrendEvidence,
+    prior_compensation_by_evidence_id: dict[UUID, float],
+) -> float:
+    """Return the remaining net evidence contribution that invalidation must reverse."""
+
+    prior_compensation_delta = (
+        prior_compensation_by_evidence_id.get(evidence.id, 0.0) if evidence.id is not None else 0.0
+    )
+    return -remaining_evidence_delta(
+        evidence=evidence,
+        prior_compensation_delta=prior_compensation_delta,
+    )
+
+
+async def load_prior_compensation_by_evidence_id(
+    *,
+    session: AsyncSession,
+    evidences: list[TrendEvidence],
+) -> dict[UUID, float]:
+    """Load cumulative compensation totals for active evidence rows."""
+
+    evidence_ids = tuple(evidence.id for evidence in evidences if evidence.id is not None)
+    return await restatement_compensation_totals_by_evidence_id(
+        session=session,
+        evidence_ids=evidence_ids,
+    )

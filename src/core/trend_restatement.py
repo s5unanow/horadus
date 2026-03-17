@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from inspect import isawaitable
 from math import pow
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_engine import DEFAULT_DECAY_HALF_LIFE_DAYS, TrendEngine
@@ -44,6 +45,16 @@ class TrendProjectionCheck:
     @property
     def matches_projection(self) -> bool:
         return abs(self.drift_log_odds) <= PROJECTION_DRIFT_TOLERANCE
+
+
+def remaining_evidence_delta(
+    *,
+    evidence: TrendEvidence,
+    prior_compensation_delta: float = 0.0,
+) -> float:
+    """Return the evidence contribution still active after prior restatements."""
+
+    return float(evidence.delta_log_odds) + prior_compensation_delta
 
 
 def _as_utc(value: datetime) -> datetime:
@@ -127,6 +138,35 @@ async def apply_compensating_restatement(
             trend.updated_at = applied_at
 
     return restatement
+
+
+async def restatement_compensation_totals_by_evidence_id(
+    *,
+    session: AsyncSession,
+    evidence_ids: tuple[UUID, ...],
+) -> dict[UUID, float]:
+    """Return cumulative compensation totals for the given evidence ids."""
+
+    if not evidence_ids:
+        return {}
+
+    rows = (
+        await session.execute(
+            select(
+                TrendRestatement.trend_evidence_id,
+                func.sum(TrendRestatement.compensation_delta_log_odds),
+            )
+            .where(TrendRestatement.trend_evidence_id.in_(evidence_ids))
+            .group_by(TrendRestatement.trend_evidence_id)
+        )
+    ).all()
+    if isawaitable(rows):
+        rows = await rows
+    return {
+        evidence_id: float(total)
+        for evidence_id, total in rows
+        if evidence_id is not None and total is not None
+    }
 
 
 async def build_trend_projection_check(

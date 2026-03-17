@@ -78,7 +78,6 @@ async def apply_compensating_restatement(
     event_id: UUID | None = None,
     event_claim_id: UUID | None = None,
     trend_evidence: TrendEvidence | None = None,
-    replacement_evidence_id: UUID | None = None,
     feedback_id: UUID | None = None,
     original_evidence_delta_log_odds: float | None = None,
     notes: str | None = None,
@@ -101,7 +100,6 @@ async def apply_compensating_restatement(
             else getattr(trend_evidence, "event_claim_id", None)
         ),
         trend_evidence_id=evidence_id,
-        replacement_evidence_id=replacement_evidence_id,
         feedback_id=feedback_id,
         restatement_kind=restatement_kind,
         source=source,

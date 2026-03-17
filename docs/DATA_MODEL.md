@@ -426,7 +426,6 @@ Append-only compensating ledger for corrections applied after original evidence 
 | event_id | UUID | Yes | | Optional FK to `events` for event-scoped restatements |
 | event_claim_id | UUID | Yes | | Optional FK to `event_claims` for claim-aware lineage |
 | trend_evidence_id | UUID | Yes | | Optional FK to the original compensated evidence row |
-| replacement_evidence_id | UUID | Yes | | Optional FK to the replacement evidence row for reclassification flows |
 | feedback_id | UUID | Yes | | Optional FK to `human_feedback.id` when operator initiated |
 | restatement_kind | VARCHAR(50) | No | | `full_invalidation`, `partial_restatement`, `manual_compensation`, or `reclassification` |
 | source | VARCHAR(50) | No | | Correction source (`event_feedback`, `trend_override`, `tier2_reconciliation`) |

@@ -67,10 +67,6 @@ class TrendRestatement(Base):
         PGUUID(as_uuid=True),
         ForeignKey("trend_evidence.id", ondelete="SET NULL"),
     )
-    replacement_evidence_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("trend_evidence.id", ondelete="SET NULL"),
-    )
     feedback_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("human_feedback.id", ondelete="SET NULL"),

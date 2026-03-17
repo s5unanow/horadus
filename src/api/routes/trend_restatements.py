@@ -27,7 +27,6 @@ class TrendRestatementResponse(BaseModel):
     event_id: UUID | None
     event_claim_id: UUID | None
     trend_evidence_id: UUID | None
-    replacement_evidence_id: UUID | None
     feedback_id: UUID | None
     restatement_kind: str
     source: str
@@ -115,7 +114,6 @@ async def list_trend_restatements(
                 event_id=row.event_id,
                 event_claim_id=row.event_claim_id,
                 trend_evidence_id=row.trend_evidence_id,
-                replacement_evidence_id=row.replacement_evidence_id,
                 feedback_id=row.feedback_id,
                 restatement_kind=row.restatement_kind,
                 source=row.source,

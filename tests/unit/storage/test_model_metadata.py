@@ -177,7 +177,6 @@ def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -
     index_names = {index.name for index in TrendRestatement.__table__.indexes}
 
     assert "trend_evidence_id" in TrendRestatement.__table__.c
-    assert "replacement_evidence_id" in TrendRestatement.__table__.c
     assert "compensation_delta_log_odds" in TrendRestatement.__table__.c
     assert "check_trend_restatements_kind_allowed" in constraint_names
     assert "check_trend_restatements_source_allowed" in constraint_names

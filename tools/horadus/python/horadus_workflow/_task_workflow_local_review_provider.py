@@ -8,6 +8,7 @@ from typing import Final
 from tools.horadus.python.horadus_workflow import task_repo
 
 from ._task_workflow_local_review_constants import (
+    DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS,
     LOCAL_REVIEW_STATUS_PATTERN,
     PROVIDER_INTERFACE_KIND,
 )
@@ -28,6 +29,12 @@ _CODEX_NO_FINDINGS_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
     r")(?:\s+(?:in|on|for|across|throughout)\b[^:;]*)?[.!]?$",
     re.IGNORECASE,
 )
+
+
+def _timeout_output_text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
 
 
 def _render_prompt_contract(*, instructions: str | None) -> str:
@@ -148,6 +155,7 @@ def _execute_provider(
     instructions: str | None,
 ) -> LocalReviewProviderRun:
     command, prompt = _provider_command(provider, context=context, instructions=instructions)
+    timeout_seconds = DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS
     started = time.monotonic()
     try:
         completed = subprocess.run(  # nosec B603
@@ -157,6 +165,25 @@ def _execute_provider(
             capture_output=True,
             text=True,
             check=False,
+            timeout=timeout_seconds,
+        )
+    except subprocess.TimeoutExpired as exc:
+        duration_seconds = time.monotonic() - started
+        stdout = _timeout_output_text(exc.stdout)
+        stderr = _timeout_output_text(exc.stderr)
+        timeout_text = f"provider command timed out after {timeout_seconds}s"
+        stderr = f"{stderr}\n{timeout_text}".strip() if stderr else timeout_text
+        return LocalReviewProviderRun(
+            provider=provider,
+            interface_kind=PROVIDER_INTERFACE_KIND[provider],
+            command=command,
+            prompt=prompt,
+            returncode=124,
+            stdout=stdout,
+            stderr=stderr,
+            duration_seconds=duration_seconds,
+            timed_out=True,
+            timeout_seconds=float(timeout_seconds),
         )
     except OSError as exc:
         duration_seconds = time.monotonic() - started
@@ -180,6 +207,7 @@ def _execute_provider(
         stdout=completed.stdout or "",
         stderr=completed.stderr or "",
         duration_seconds=duration_seconds,
+        timeout_seconds=float(timeout_seconds),
     )
 
 

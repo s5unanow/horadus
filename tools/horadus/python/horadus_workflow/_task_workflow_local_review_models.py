@@ -32,3 +32,5 @@ class LocalReviewProviderRun:
     stdout: str
     stderr: str
     duration_seconds: float
+    timed_out: bool = False
+    timeout_seconds: float | None = None

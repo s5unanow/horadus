@@ -205,6 +205,8 @@ Artifacts and scope:
   `artifacts/agent/local-review/entries.jsonl` log.
 - `--save-raw-output` keeps per-run raw provider output under
   `artifacts/agent/local-review/runs/`.
+- Provider subprocess runs are bounded to 180 seconds; a hung provider returns
+  a repo-owned failure with timeout diagnostics instead of hanging indefinitely.
 - Claude and Gemini run against the repo-owned prompt contract directly;
   Codex uses its native `review --base` flow and Horadus normalizes the review
   result into the same local-review surface.

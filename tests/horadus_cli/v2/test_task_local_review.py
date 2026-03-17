@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -239,6 +240,54 @@ def test_local_review_data_does_not_fallback_on_runtime_failure_without_opt_in(
         line == "Local review failed: the provider command did not produce a usable result."
         for line in lines
     )
+    assert any(
+        str(line).startswith("Raw output: artifacts/agent/local-review/runs/") for line in lines
+    )
+
+
+def test_local_review_data_returns_bounded_timeout_failure_with_diagnostics(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _seed_repo_root(tmp_path)
+    monkeypatch.setattr(task_commands_module, "_run_git", _fake_review_git)
+    monkeypatch.setattr(
+        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_execute_provider",
+        lambda provider, **_kwargs: task_commands_module.LocalReviewProviderRun(
+            provider=provider,
+            interface_kind="prompt",
+            command=[provider],
+            prompt="prompt",
+            returncode=124,
+            stdout="partial stdout\n",
+            stderr="provider command timed out after 180s\n",
+            duration_seconds=180.0,
+            timed_out=True,
+            timeout_seconds=180.0,
+        ),
+    )
+
+    exit_code, data, lines = task_commands_module.local_review_data(
+        provider="claude",
+        base_branch="main",
+        instructions=None,
+        allow_provider_fallback=False,
+        save_raw_output=False,
+        usefulness="pending",
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["provider"] == "claude"
+    assert data["executed_provider"] == "claude"
+    assert data["timed_out"] is True
+    assert data["timeout_seconds"] == 180.0
+    assert any(line == "`claude` timed out after 180s." for line in lines)
+    assert any(line == "Local review failed: `claude` did not exit within 180s." for line in lines)
     assert any(
         str(line).startswith("Raw output: artifacts/agent/local-review/runs/") for line in lines
     )
@@ -533,7 +582,9 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
         task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
     )
 
-    monotonic_values = iter([10.0, 12.5, 20.0, 21.0, 30.0, 31.5, 40.0, 40.25])
+    monotonic_values = iter(
+        [10.0, 12.5, 20.0, 21.0, 30.0, 31.5, 40.0, 40.25, 50.0, 50.5, 60.0, 60.25]
+    )
     monkeypatch.setattr(task_commands_module.time, "monotonic", lambda: next(monotonic_values))
     captured_runs: list[tuple[list[str], str | None]] = []
 
@@ -599,6 +650,32 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     )
     assert failed_run.returncode == 1
     assert "argument list too long" in failed_run.stderr
+
+    def raise_timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(["claude"], 180, output=b"partial", stderr=b"still waiting")
+
+    monkeypatch.setattr(task_commands_module.subprocess, "run", raise_timeout)
+    timed_out_run = task_commands_module._execute_provider(
+        "claude", context=context, instructions=None
+    )
+    assert timed_out_run.returncode == 124
+    assert timed_out_run.timed_out is True
+    assert timed_out_run.timeout_seconds == 180.0
+    assert timed_out_run.stdout == "partial"
+    assert "still waiting" in timed_out_run.stderr
+    assert "provider command timed out after 180s" in timed_out_run.stderr
+
+    def raise_timeout_with_text(
+        *_args: object, **_kwargs: object
+    ) -> subprocess.CompletedProcess[str]:
+        raise subprocess.TimeoutExpired(["claude"], 180, output="partial-text", stderr=None)
+
+    monkeypatch.setattr(task_commands_module.subprocess, "run", raise_timeout_with_text)
+    timed_out_text_run = task_commands_module._execute_provider(
+        "claude", context=context, instructions=None
+    )
+    assert timed_out_text_run.stdout == "partial-text"
+    assert timed_out_text_run.stderr == "provider command timed out after 180s"
 
     exit_code, data, lines = task_commands_module.local_review_data(
         provider="codex",

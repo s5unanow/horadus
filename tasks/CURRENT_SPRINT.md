@@ -41,3 +41,4 @@
 
 - `TASK-336` Separate Story Clusters from Stable Event-Claim Identity
 - `TASK-231` Extend Event Invalidation into a Compensating Restatement Ledger ✅
+- `TASK-347` Investigate and stabilize hanging `horadus tasks local-review` runs ✅

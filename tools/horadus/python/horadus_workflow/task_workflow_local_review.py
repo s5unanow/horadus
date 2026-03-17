@@ -27,6 +27,7 @@ from ._task_workflow_local_review_config import (
 from ._task_workflow_local_review_constants import (
     DEFAULT_LOCAL_REVIEW_BASE_BRANCH,
     DEFAULT_LOCAL_REVIEW_PROVIDER,
+    DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS,
     LOCAL_REVIEW_DIRECTORY,
     LOCAL_REVIEW_HARNESS_PATH,
     LOCAL_REVIEW_LOG_FILENAME,
@@ -266,6 +267,7 @@ def _configuration_lines(
         f"- provider order: {', '.join(provider_order)}",
         f"- base branch: {context.base_branch}",
         f"- target: {context.review_target_value}",
+        f"- provider timeout: {DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS}s",
         f"- instructions supplied: {'yes' if instructions and instructions.strip() else 'no'}",
         f"- usefulness: {usefulness}",
         f"- raw output: {'keep' if save_raw_output else 'discard on success'}",
@@ -445,6 +447,12 @@ def _failed_result(
     output_lines = shared._summarize_output_lines(
         [*provider_run.stdout.splitlines(), *provider_run.stderr.splitlines()]
     )
+    message = "Local review failed: the provider command did not produce a usable result."
+    if provider_run.timed_out and provider_run.timeout_seconds is not None:
+        message = (
+            f"Local review failed: `{executed_provider}` did not exit within "
+            f"{provider_run.timeout_seconds:.0f}s."
+        )
     return (
         ExitCode.ENVIRONMENT_ERROR,
         {
@@ -452,10 +460,12 @@ def _failed_result(
             "provider": selected_provider,
             "provider_order": provider_order,
             "command": provider_run.command,
+            "timed_out": provider_run.timed_out,
+            "timeout_seconds": provider_run.timeout_seconds,
         },
         [
             *lines,
-            "Local review failed: the provider command did not produce a usable result.",
+            message,
             f"Raw output: {raw_output_path.relative_to(task_repo.repo_root())}",
             *output_lines,
         ],
@@ -593,7 +603,9 @@ def _run_provider_review(
                 provider_run=provider_run,
                 lines=lines,
             )
-        if provider_run.returncode != 0:
+        if provider_run.timed_out and provider_run.timeout_seconds is not None:
+            lines.append(f"`{provider_name}` timed out after {provider_run.timeout_seconds:.0f}s.")
+        elif provider_run.returncode != 0:
             lines.append(f"`{provider_name}` exited with status {provider_run.returncode}.")
         else:
             lines.append(
@@ -634,6 +646,7 @@ def handle_local_review(args: Any) -> CommandResult:
 __all__ = [
     "DEFAULT_LOCAL_REVIEW_BASE_BRANCH",
     "DEFAULT_LOCAL_REVIEW_PROVIDER",
+    "DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS",
     "LOCAL_REVIEW_DIRECTORY",
     "LOCAL_REVIEW_HARNESS_PATH",
     "LOCAL_REVIEW_LOG_FILENAME",

@@ -33,6 +33,7 @@ def build_validated_trend_write_payload(
     forecast_contract: trend_forecast_contract_module.TrendForecastContract
     | dict[str, Any]
     | None = None,
+    require_forecast_contract: bool = True,
 ) -> ValidatedTrendWritePayload:
     merged_definition = merge_forecast_contract_into_definition(
         definition=definition,
@@ -45,6 +46,7 @@ def build_validated_trend_write_payload(
         decay_half_life_days=decay_half_life_days,
         indicators=indicators,
         definition=merged_definition,
+        require_forecast_contract=require_forecast_contract,
     )
     runtime_trend_id = (validated_config.id or "").strip()
     if not runtime_trend_id:

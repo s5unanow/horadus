@@ -381,6 +381,7 @@ async def load_trends_from_config(
                 indicators=raw_config.get("indicators", {}),
                 definition=raw_config,
                 forecast_contract=raw_config.get("forecast_contract"),
+                require_forecast_contract=True,
             )
             validated_config = write_payload.trend_config
             runtime_trend_id = write_payload.runtime_trend_id
@@ -498,6 +499,7 @@ async def create_trend(
             indicators=trend.indicators,
             definition=trend.definition,
             forecast_contract=trend.forecast_contract,
+            require_forecast_contract=True,
         )
     except ValueError as exc:
         raise_trend_payload_validation_error(exc)
@@ -866,6 +868,11 @@ async def update_trend(
     candidate_description = updates.get("description", trend_record.description)
     candidate_definition = updates.get("definition", trend_record.definition)
     candidate_forecast_contract = updates.get("forecast_contract")
+    if "forecast_contract" in updates and "definition" not in updates:
+        candidate_definition = normalize_definition_payload(
+            trend_record.definition if isinstance(trend_record.definition, dict) else None
+        )
+        candidate_definition.pop("forecast_contract", None)
     candidate_baseline_probability = (
         updates["baseline_probability"]
         if "baseline_probability" in updates
@@ -875,6 +882,9 @@ async def update_trend(
     candidate_decay_half_life_days = updates.get(
         "decay_half_life_days",
         trend_record.decay_half_life_days,
+    )
+    definition_updated = any(
+        key in updates for key in ("definition", "forecast_contract", "baseline_probability")
     )
 
     try:
@@ -886,6 +896,7 @@ async def update_trend(
             indicators=candidate_indicators,
             definition=candidate_definition,
             forecast_contract=candidate_forecast_contract,
+            require_forecast_contract=definition_updated,
         )
     except ValueError as exc:
         raise_trend_payload_validation_error(exc)
@@ -902,11 +913,7 @@ async def update_trend(
         trend_record.name = validated_config.name
     if "description" in updates:
         trend_record.description = validated_config.description
-    if (
-        "definition" in updates
-        or "forecast_contract" in updates
-        or "baseline_probability" in updates
-    ):
+    if definition_updated:
         trend_record.runtime_trend_id = write_payload.runtime_trend_id
         trend_record.definition = write_payload.definition
     if "baseline_probability" in updates:
@@ -920,11 +927,7 @@ async def update_trend(
     if "current_probability" in updates and updates["current_probability"] is not None:
         trend_record.current_log_odds = prob_to_logodds(updates["current_probability"])
 
-    if (
-        "definition" in updates
-        or "forecast_contract" in updates
-        or "baseline_probability" in updates
-    ):
+    if definition_updated:
         await _record_definition_version_if_material_change(
             session,
             trend=trend_record,

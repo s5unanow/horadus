@@ -58,7 +58,7 @@ class TrendConfig(BaseModel):
     description: str | None = None
     baseline_probability: float = Field(..., ge=0.0, le=1.0)
     decay_half_life_days: int = Field(default=30, ge=1)
-    forecast_contract: trend_forecast_contract_module.TrendForecastContract
+    forecast_contract: trend_forecast_contract_module.TrendForecastContract | None = None
     indicators: dict[str, TrendIndicatorConfig] = Field(default_factory=dict)
     disqualifiers: list[TrendDisqualifier] = Field(default_factory=list)
     falsification_criteria: TrendFalsificationCriteria = Field(
@@ -136,6 +136,18 @@ def resolve_runtime_trend_id(*, definition: Mapping[str, Any] | None, trend_name
     raise ValueError(msg)
 
 
+def validate_trend_config_payload(
+    payload: Mapping[str, Any], *, require_forecast_contract: bool = True
+) -> TrendConfig:
+    """Validate a trend payload and enforce forecast-contract requirements when requested."""
+
+    validated_config = TrendConfig.model_validate(dict(payload))
+    if require_forecast_contract and validated_config.forecast_contract is None:
+        msg = "forecast_contract is required"
+        raise ValueError(msg)
+    return validated_config
+
+
 def build_trend_config(
     *,
     name: str,
@@ -144,6 +156,7 @@ def build_trend_config(
     decay_half_life_days: int,
     indicators: Mapping[str, Any] | None,
     definition: Mapping[str, Any] | None = None,
+    require_forecast_contract: bool = True,
 ) -> TrendConfig:
     """Validate a full trend payload against the canonical taxonomy contract."""
 
@@ -159,7 +172,10 @@ def build_trend_config(
             "indicators": dict(indicators) if isinstance(indicators, Mapping) else indicators,
         }
     )
-    return TrendConfig.model_validate(payload)
+    return validate_trend_config_payload(
+        payload,
+        require_forecast_contract=require_forecast_contract,
+    )
 
 
 def trend_runtime_id_for_record(trend: Any) -> str:

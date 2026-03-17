@@ -8,7 +8,13 @@ from pydantic import ValidationError
 
 import src.api.routes.trends as trends_module
 import src.core.trend_config as trend_config_module
-from src.api.routes.trends import TrendCreate, create_trend, load_trends_from_config
+from src.api.routes.trends import (
+    TrendCreate,
+    TrendUpdate,
+    create_trend,
+    load_trends_from_config,
+    update_trend,
+)
 from src.core.trend_engine import prob_to_logodds
 from src.storage.models import Trend
 from tests.unit.trend_forecast_contract_fixtures import sample_binary_forecast_contract
@@ -47,6 +53,12 @@ def _build_trend() -> Trend:
         created_at=now,
         updated_at=now,
     )
+
+
+def _build_legacy_trend_without_contract() -> Trend:
+    trend = _build_trend()
+    trend.definition = {"id": "contract-trend"}
+    return trend
 
 
 @pytest.mark.asyncio
@@ -193,3 +205,45 @@ indicators:
     assert added_trend.definition["falsification_criteria"]["decrease_confidence"] == [
         "Sustained de-escalation"
     ]
+
+
+@pytest.mark.asyncio
+async def test_update_trend_accepts_forecast_contract_only_patch(mock_db_session) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+
+    result = await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(
+            forecast_contract=sample_binary_forecast_contract(
+                question="Will an updated test conflict occur by 2030-12-31?"
+            )
+        ),
+        session=mock_db_session,
+    )
+
+    assert result.forecast_contract is not None
+    assert result.forecast_contract.question == "Will an updated test conflict occur by 2030-12-31?"
+    assert (
+        trend.definition["forecast_contract"]["question"]
+        == "Will an updated test conflict occur by 2030-12-31?"
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_trend_allows_unrelated_patch_for_legacy_rows_without_contract(
+    mock_db_session,
+) -> None:
+    trend = _build_legacy_trend_without_contract()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+
+    result = await update_trend(
+        trend_id=trend.id,
+        trend=TrendUpdate(is_active=False),
+        session=mock_db_session,
+    )
+
+    assert trend.is_active is False
+    assert result.is_active is False

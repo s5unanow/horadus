@@ -14,7 +14,7 @@ from uuid import uuid4
 import yaml
 from pydantic import ValidationError
 
-from src.core.trend_config import TrendConfig
+from src.core.trend_config import validate_trend_config_payload
 from src.eval.benchmark import GoldSetItem, load_gold_set
 
 TrendMode = Literal["strict", "warn"]
@@ -117,8 +117,8 @@ def _load_trend_taxonomy(*, config_dir: Path) -> tuple[dict[str, set[str]], list
             continue
 
         try:
-            parsed_config = TrendConfig.model_validate(raw_config)
-        except ValidationError as exc:
+            parsed_config = validate_trend_config_payload(raw_config)
+        except (ValidationError, ValueError) as exc:
             errors.append(f"{file_path.name}: TrendConfig validation failed ({exc})")
             continue
 

@@ -164,6 +164,29 @@ def test_deduplicate_cluster_and_load_trend_configs_helpers(tmp_path: Path) -> N
     assert [trend_id for trend_id, _config in loaded] == ["custom"]
 
 
+def test_load_trend_configs_requires_forecast_contract(tmp_path: Path) -> None:
+    trend_dir = tmp_path / "trends"
+    trend_dir.mkdir()
+    (trend_dir / "missing-contract.yaml").write_text(
+        "\n".join(
+            [
+                "name: Custom Trend",
+                "baseline_probability: 0.2",
+                "description: Custom trend",
+                "indicators:",
+                "  signal_one:",
+                "    weight: 0.5",
+                "    direction: escalatory",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="forecast_contract is required"):
+        _load_trend_configs(trend_dir)
+
+
 def test_score_trends_ignores_blank_keywords() -> None:
     clusters = [{"cluster_id": "cluster-1", "source_count": 2, "text": "border border update"}]
     trend_scores = dry_run_module._score_trends(

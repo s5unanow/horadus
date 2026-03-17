@@ -43,7 +43,7 @@ def test_trend_forecast_contract_rejects_ambiguous_threshold_contract() -> None:
 
 
 def test_build_trend_config_requires_forecast_contract() -> None:
-    with pytest.raises(ValidationError, match="forecast_contract"):
+    with pytest.raises(ValueError, match="forecast_contract is required"):
         build_trend_config(
             name="Signal Watch",
             description=None,

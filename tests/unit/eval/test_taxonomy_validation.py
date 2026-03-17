@@ -166,6 +166,40 @@ def test_run_trend_taxonomy_validation_reports_duplicate_and_missing_ids(tmp_pat
     assert any("duplicate trend id 'eu-russia'" in message for message in result.errors)
 
 
+def test_run_trend_taxonomy_validation_reports_missing_forecast_contract(tmp_path: Path) -> None:
+    trend_dir = tmp_path / "trends"
+    trend_dir.mkdir()
+    (trend_dir / "missing-contract.yaml").write_text(
+        """
+id: "eu-russia"
+name: "EU-Russia"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  military_movement:
+    weight: 0.04
+    direction: escalatory
+    type: leading
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    gold_path = tmp_path / "gold_set.jsonl"
+    _write_gold_set(
+        gold_path,
+        [_gold_row(item_id="eval-1", tier1_scores={"eu-russia": 8}, tier2=None)],
+    )
+
+    result = taxonomy_module.run_trend_taxonomy_validation(
+        trend_config_dir=str(trend_dir),
+        gold_set_path=str(gold_path),
+        output_dir=str(tmp_path / "results"),
+    )
+
+    assert any("forecast_contract is required" in message for message in result.errors)
+
+
 def test_run_trend_taxonomy_validation_fails_unknown_tier2_trend_id(tmp_path: Path) -> None:
     trend_dir = tmp_path / "trends"
     trend_dir.mkdir()

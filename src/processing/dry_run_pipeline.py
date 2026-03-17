@@ -12,7 +12,7 @@ from typing import Any
 
 import yaml
 
-from src.core.trend_config import TrendConfig
+from src.core.trend_config import TrendConfig, validate_trend_config_payload
 from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
 from src.processing.deduplication_service import DeduplicationService
 
@@ -185,7 +185,7 @@ def _load_trend_configs(trend_config_dir: Path) -> list[tuple[str, TrendConfig]]
         payload = yaml.safe_load(config_path.read_text(encoding="utf-8"))
         if not isinstance(payload, dict):
             continue
-        validated = TrendConfig.model_validate(payload)
+        validated = validate_trend_config_payload(payload)
         trend_id = str(payload.get("id") or config_path.stem)
         loaded.append((trend_id, validated))
     return loaded

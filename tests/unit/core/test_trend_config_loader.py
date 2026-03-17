@@ -125,6 +125,30 @@ indicators:
         load_trends_from_config_dir(config_dir=config_dir)
 
 
+def test_load_trends_from_config_dir_rejects_missing_forecast_contract(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "missing-contract.yaml").write_text(
+        """
+id: "signal-watch"
+name: "Signal Watch"
+baseline_probability: 0.10
+decay_half_life_days: 30
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="forecast_contract is required"):
+        load_trends_from_config_dir(config_dir=config_dir)
+
+
 def test_load_trends_from_config_dir_rejects_duplicate_ids_and_sorts_results(
     tmp_path: Path,
 ) -> None:

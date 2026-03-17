@@ -157,6 +157,70 @@ esac
     assert payload["timed_out"] is True
 
 
+def test_review_gate_single_poll_rewrites_future_wait_window_start(tmp_path: Path) -> None:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    state_path = tmp_path / "review-gate-state.json"
+    future_started_at = "3020-01-01T00:00:00+00:00"
+    state_path.write_text(
+        json.dumps(
+            {
+                "example/repo#215#chatgpt-codex-connector[bot]": {
+                    "head_oid": "head-sha-215",
+                    "started_at": future_started_at,
+                }
+            }
+        )
+    )
+    _write_executable(
+        bin_dir / "gh",
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "${1:-}" in
+  repo)
+    echo '{"nameWithOwner":"example/repo"}'
+    ;;
+  pr)
+    echo '{"number":215,"headRefOid":"head-sha-215","url":"https://example.invalid/pr/215"}'
+    ;;
+  api)
+    echo '[]'
+    ;;
+  *)
+    exit 1
+    ;;
+esac
+""",
+    )
+
+    result = _run_gate(
+        env={
+            "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+            "HORADUS_REVIEW_GATE_STATE_PATH": str(state_path),
+        },
+        args=[
+            "--pr-url",
+            "https://example.invalid/pr/215",
+            "--timeout-seconds",
+            "30",
+            "--poll-seconds",
+            "0",
+            "--single-poll",
+            "--format",
+            "json",
+        ],
+    )
+
+    assert result.returncode == 0
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "waiting"
+    rewritten_state = json.loads(state_path.read_text())
+    assert (
+        rewritten_state["example/repo#215#chatgpt-codex-connector[bot]"]["started_at"]
+        != future_started_at
+    )
+
+
 def test_review_gate_retries_unreadable_reaction_payload(tmp_path: Path) -> None:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()

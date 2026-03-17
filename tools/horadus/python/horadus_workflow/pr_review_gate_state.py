@@ -65,7 +65,7 @@ def persisted_wait_window_started_at(
     if isinstance(entry, dict) and str(entry.get("head_oid") or "").strip() == head_oid:
         persisted_started_at = _parse_github_timestamp(entry.get("started_at"))
         if persisted_started_at is not None:
-            started_at = persisted_started_at
+            started_at = min(persisted_started_at, now)
     state[key] = {"head_oid": head_oid, "started_at": started_at.isoformat()}
     try:
         state_path.parent.mkdir(parents=True, exist_ok=True)

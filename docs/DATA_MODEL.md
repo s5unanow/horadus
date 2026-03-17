@@ -231,6 +231,34 @@ Junction table linking events to their source items.
 
 ---
 
+### event_claims
+
+Stable claim/version identities recorded under one mutable `events` cluster.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| event_id | UUID | No | | Foreign key to events |
+| claim_key | VARCHAR(255) | No | | Deterministic per-event stable key (`__event__` fallback or normalized claim text) |
+| claim_text | TEXT | No | | Human-readable claim/version text |
+| claim_type | VARCHAR(20) | No | `statement` | Claim kind: `fallback` or `statement` |
+| claim_order | INTEGER | No | 0 | Stable display / reconciliation order |
+| is_active | BOOLEAN | No | true | Whether the claim still appears in the latest event extraction |
+| first_seen_at | TIMESTAMPTZ | No | NOW() | First time this claim identity was observed |
+| last_seen_at | TIMESTAMPTZ | No | NOW() | Most recent extraction that still referenced this claim |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+| updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
+
+**Indexes / uniqueness:**
+- Primary key: `id`
+- Unique: `(event_id, claim_key)`
+- Index: `(event_id, is_active)`
+
+Operational note:
+- Each event always has one fallback claim (`claim_key='__event__'`) so legacy single-claim flows still have a durable stable identity even when Tier-2 emits no explicit statements.
+
+---
+
 ### trends
 
 Trend definitions and current probability state.
@@ -334,6 +362,7 @@ Audit trail of all probability updates.
 | id | UUID | No | gen_random_uuid() | Primary key |
 | trend_id | UUID | No | | Foreign key to trends |
 | event_id | UUID | No | | Foreign key to events |
+| event_claim_id | UUID | No | | Foreign key to stable `event_claims` identity used for replay/invalidation lineage |
 | signal_type | VARCHAR(100) | No | | Type of signal detected |
 | base_weight | DECIMAL(10,6) | Yes | | Indicator weight used at scoring time (nullable for pre-`TASK-157` rows) |
 | direction_multiplier | DECIMAL(3,1) | Yes | | Direction factor used at scoring time (`+1.0` escalatory, `-1.0` de-escalatory; nullable for legacy rows) |
@@ -354,15 +383,16 @@ Audit trail of all probability updates.
 
 **Indexes / uniqueness:**
 - Primary key: `id`
-- Unique active row only: `(trend_id, event_id, signal_type)` where `is_invalidated=false`
+- Unique active row only: `(trend_id, event_claim_id, signal_type)` where `is_invalidated=false`
 - Index: `(trend_id, created_at DESC)`
 - Index: `event_id`
+- Index: `event_claim_id`
 - Index: `(event_id, is_invalidated)`
 
 **Invalidation lineage semantics:**
 - Event invalidation no longer deletes evidence rows.
 - Instead, evidence is marked `is_invalidated=true` and linked to the originating `human_feedback` record.
-- Tier-2 reclassification can also supersede an active evidence row; the old row is invalidated, a replacement active row is inserted, and the event stores reconciliation metadata under `extracted_claims`.
+- Tier-2 reclassification can also supersede an active evidence row; the old row is invalidated, a replacement active row is inserted against the stable `event_claim_id`, and the event stores reconciliation metadata under `extracted_claims`.
 - Operational analytics/reporting queries use only active (`is_invalidated=false`) evidence by default.
 - Audit/replay paths can include invalidated lineage explicitly when needed.
 

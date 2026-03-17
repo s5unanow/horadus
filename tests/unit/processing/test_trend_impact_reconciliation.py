@@ -3,18 +3,19 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
 from src.core.trend_engine import EvidenceFactors, TrendEngine
+from src.processing.trend_evidence_matching import _float_matches
 from src.processing.trend_impact_reconciliation import (
     DesiredTrendEvidence,
     ParsedTrendImpact,
     _append_reconciliation_history,
+    _event_claim_for_impact,
     _evidence_matches,
-    _float_matches,
     _invalidate_absent_evidence,
     _invalidate_active_evidence,
     _invalidate_existing_match,
@@ -27,7 +28,7 @@ from src.processing.trend_impact_reconciliation import (
     parse_trend_impact,
     reconcile_event_trend_impacts,
 )
-from src.storage.models import Event, TrendEvidence
+from src.storage.models import Event, EventClaim, TrendEvidence
 
 pytestmark = pytest.mark.unit
 
@@ -49,6 +50,14 @@ def _factors(*, severity: float = 0.5, confidence: float = 0.6) -> EvidenceFacto
 
 
 def _desired(*, trend, reasoning: str = "because") -> DesiredTrendEvidence:
+    event_claim = EventClaim(
+        id=uuid4(),
+        event_id=uuid4(),
+        claim_key="__event__",
+        claim_text="Cluster event",
+        claim_type="fallback",
+        claim_order=0,
+    )
     return DesiredTrendEvidence(
         trend=trend,
         impact=ParsedTrendImpact(
@@ -58,7 +67,9 @@ def _desired(*, trend, reasoning: str = "because") -> DesiredTrendEvidence:
             severity=0.5,
             confidence=0.6,
             rationale=reasoning,
+            event_claim_key="__event__",
         ),
+        event_claim=event_claim,
         delta=0.01,
         factors=_factors(),
         reasoning=reasoning,
@@ -66,12 +77,13 @@ def _desired(*, trend, reasoning: str = "because") -> DesiredTrendEvidence:
 
 
 def _evidence(
-    *, trend_id, event_id, evidence_id=None, delta=0.01, reasoning="because"
+    *, trend_id, event_id, evidence_id=None, event_claim_id=None, delta=0.01, reasoning="because"
 ) -> TrendEvidence:
     return TrendEvidence(
         id=evidence_id or uuid4(),
         trend_id=trend_id,
         event_id=event_id,
+        event_claim_id=event_claim_id or uuid4(),
         signal_type="military_movement",
         base_weight=0.04,
         direction_multiplier=1.0,
@@ -97,6 +109,19 @@ def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
     desired_without_id = _desired(trend=no_id_trend)
     with pytest.raises(ValueError, match="must have an id"):
         _ = desired_without_id.key
+    desired_without_claim_id = replace(
+        _desired(trend=SimpleNamespace(id=uuid4())),
+        event_claim=EventClaim(
+            id=None,
+            event_id=uuid4(),
+            claim_key="__event__",
+            claim_text="Cluster event",
+            claim_type="fallback",
+            claim_order=0,
+        ),
+    )
+    with pytest.raises(ValueError, match="Event claim must have an id"):
+        _ = desired_without_claim_id.key
 
     assert parse_trend_impact("bad") is None
     parsed = parse_trend_impact(
@@ -116,6 +141,7 @@ def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
         severity=1.0,
         confidence=0.0,
         rationale="rationale",
+        event_claim_key=None,
     )
     assert impact_reasoning(parsed) == "rationale"
     assert (
@@ -164,6 +190,7 @@ def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
         "severity": 1.0,
         "confidence": 0.0,
         "rationale": "rationale",
+        "event_claim_key": None,
     }
 
     entry = _lineage_entry(
@@ -174,6 +201,22 @@ def test_reconciliation_helper_primitives_cover_guard_paths() -> None:
         change_type="replaced",
     )
     assert entry["replacement"]["trend_id"] == "trend-a"
+
+    fallback_claim = EventClaim(
+        id=uuid4(),
+        event_id=uuid4(),
+        claim_key="__event__",
+        claim_text="Cluster event",
+        claim_type="fallback",
+        claim_order=0,
+    )
+    assert (
+        _event_claim_for_impact(
+            impact=replace(parsed, event_claim_key="missing-claim"),
+            claim_by_key={"__event__": fallback_claim},
+        )
+        is fallback_claim
+    )
 
 
 @pytest.mark.asyncio
@@ -298,7 +341,7 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     updates, lineage = await _invalidate_absent_evidence(
         session=session,
         trend_engine=trend_engine,
-        active_by_key={(trend_id, "military_movement"): existing},
+        active_by_key={(trend_id, existing.event_claim_id, "military_movement"): existing},
         trend_by_uuid={trend_id: trend},
         invalidated_at=datetime.now(tz=UTC),
     )
@@ -309,7 +352,9 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     zero_delta_updates, zero_delta_lineage = await _invalidate_absent_evidence(
         session=session,
         trend_engine=trend_engine,
-        active_by_key={(trend_id, "military_movement"): zero_delta_existing},
+        active_by_key={
+            (trend_id, zero_delta_existing.event_claim_id, "military_movement"): zero_delta_existing
+        },
         trend_by_uuid={trend_id: trend},
         invalidated_at=datetime.now(tz=UTC),
     )
@@ -319,6 +364,7 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     replacing = _evidence(
         trend_id=trend_id,
         event_id=event_id,
+        event_claim_id=desired.event_claim.id,
         delta=0.02,
         reasoning="stale reasoning",
     )
@@ -329,7 +375,7 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
         trend_engine=trend_engine,
         event_id=event_id,
         desired_by_key={desired.key: desired},
-        active_by_key={(trend_id, "military_movement"): replacing},
+        active_by_key={(trend_id, replacing.event_claim_id, "military_movement"): replacing},
         trend_by_uuid={trend_id: trend},
         invalidated_at=datetime.now(tz=UTC),
     )
@@ -345,7 +391,9 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
         trend_engine=trend_engine,
         event_id=event_id,
         desired_by_key={desired.key: desired},
-        active_by_key={(trend_id, "military_movement"): concurrent_existing},
+        active_by_key={
+            (trend_id, concurrent_existing.event_claim_id, "military_movement"): concurrent_existing
+        },
         trend_by_uuid={trend_id: trend},
         invalidated_at=datetime.now(tz=UTC),
     )
@@ -355,7 +403,9 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     removed_updates, removed_lineage = await _invalidate_absent_evidence(
         session=session,
         trend_engine=trend_engine,
-        active_by_key={(trend_id, "military_movement"): concurrent_existing},
+        active_by_key={
+            (trend_id, concurrent_existing.event_claim_id, "military_movement"): concurrent_existing
+        },
         trend_by_uuid={trend_id: trend},
         invalidated_at=datetime.now(tz=UTC),
     )
@@ -363,6 +413,7 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
     assert removed_lineage == []
 
     matching = _evidence(trend_id=trend_id, event_id=event_id)
+    matching.event_claim_id = desired.event_claim.id
     updates, lineage = await _reconcile_desired_evidence(
         session=session,
         trend_engine=trend_engine,
@@ -370,7 +421,29 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
         desired_by_key={
             desired.key: DesiredTrendEvidence(**{**desired.__dict__, "reasoning": "because"})
         },
-        active_by_key={(trend_id, "military_movement"): matching},
+        active_by_key={(trend_id, matching.event_claim_id, "military_movement"): matching},
+        trend_by_uuid={trend_id: trend},
+        invalidated_at=datetime.now(tz=UTC),
+    )
+    assert updates == 0
+    assert lineage == []
+
+    session.execute = AsyncMock(return_value=_update_result(None))
+    concurrent_match = _evidence(
+        trend_id=trend_id,
+        event_id=event_id,
+        event_claim_id=desired.event_claim.id,
+        delta=0.02,
+    )
+    trend_engine.apply_evidence.return_value = SimpleNamespace(delta_applied=0.0)
+    updates, lineage = await _reconcile_desired_evidence(
+        session=session,
+        trend_engine=trend_engine,
+        event_id=event_id,
+        desired_by_key={desired.key: desired},
+        active_by_key={
+            (trend_id, concurrent_match.event_claim_id, "military_movement"): concurrent_match
+        },
         trend_by_uuid={trend_id: trend},
         invalidated_at=datetime.now(tz=UTC),
     )
@@ -379,7 +452,9 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows() -> Non
 
 
 @pytest.mark.asyncio
-async def test_reconcile_event_trend_impacts_handles_non_list_and_history_append() -> None:
+async def test_reconcile_event_trend_impacts_handles_non_list_and_history_append(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     event_id = uuid4()
     trend_id = uuid4()
     trend = SimpleNamespace(
@@ -391,6 +466,7 @@ async def test_reconcile_event_trend_impacts_handles_non_list_and_history_append
     )
     evidence = _evidence(trend_id=trend_id, event_id=event_id)
     session = AsyncMock()
+    session.add = MagicMock()
     session.flush = AsyncMock()
     session.scalars = AsyncMock(
         side_effect=[
@@ -423,6 +499,34 @@ async def test_reconcile_event_trend_impacts_handles_non_list_and_history_append
         session=session,
         trend_engine=trend_engine,
         event=non_list_event,
+        trends=[trend],
+        **callbacks,
+    ) == (0, 0)
+
+    claim_session = AsyncMock()
+    claim_session.flush = AsyncMock()
+    claim_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
+    claim_session.add = MagicMock()
+    claim_reset_event = Event(
+        id=uuid4(),
+        extracted_claims={"trend_impacts": []},
+    )
+    original_claims = claim_reset_event.extracted_claims
+
+    async def _break_impacts(*, session, event):
+        assert session is claim_session
+        assert event is claim_reset_event
+        event.extracted_claims = {**(original_claims or {}), "trend_impacts": "bad"}
+        return {}
+
+    monkeypatch.setattr(
+        "src.processing.trend_impact_reconciliation.sync_event_claims",
+        _break_impacts,
+    )
+    assert await reconcile_event_trend_impacts(
+        session=claim_session,
+        trend_engine=trend_engine,
+        event=claim_reset_event,
         trends=[trend],
         **callbacks,
     ) == (0, 0)

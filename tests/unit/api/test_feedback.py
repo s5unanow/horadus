@@ -163,6 +163,7 @@ async def test_create_event_feedback_invalidates_evidence_and_reverts_trends(
         id=uuid4(),
         trend_id=trend.id,
         event_id=event.id,
+        event_claim_id=uuid4(),
         signal_type="military_movement",
         delta_log_odds=0.2,
     )
@@ -170,6 +171,7 @@ async def test_create_event_feedback_invalidates_evidence_and_reverts_trends(
         id=uuid4(),
         trend_id=trend.id,
         event_id=event.id,
+        event_claim_id=uuid4(),
         signal_type="diplomatic_breakdown",
         delta_log_odds=0.1,
     )
@@ -209,6 +211,7 @@ async def test_create_event_feedback_invalidate_handles_missing_trend_rows(
         id=uuid4(),
         trend_id=uuid4(),
         event_id=event.id,
+        event_claim_id=uuid4(),
         signal_type="military_movement",
         delta_log_odds=0.4,
     )

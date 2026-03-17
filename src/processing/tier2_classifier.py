@@ -20,6 +20,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.core.trend_config import trend_runtime_id_for_record
 from src.processing.cost_tracker import TIER2, CostTracker
+from src.processing.event_claims import (
+    assign_claim_keys_to_impacts,
+    normalize_claim_text,
+    sync_event_claims,
+)
 from src.processing.llm_failover import LLMChatRoute
 from src.processing.llm_input_safety import (
     DEFAULT_CHARS_PER_TOKEN,
@@ -382,6 +387,7 @@ class Tier2Classifier:
                 cached_output = _Tier2Output.model_validate(json.loads(cached_content))
                 self._validate_output_alignment(cached_output, trends=trends)
                 self._apply_output(event=event, output=cached_output)
+                await sync_event_claims(session=self.session, event=event)
                 await self.session.flush()
                 return (
                     Tier2EventResult(
@@ -447,6 +453,7 @@ class Tier2Classifier:
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, trends=trends)
         self._apply_output(event=event, output=output)
+        await sync_event_claims(session=self.session, event=event)
         response_choices = getattr(invocation.response, "choices", None)
         if isinstance(response_choices, list) and response_choices:
             message = getattr(response_choices[0], "message", None)
@@ -715,11 +722,11 @@ class Tier2Classifier:
 
     def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
         existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-        system_claims = (
-            {TREND_IMPACT_RECONCILIATION_KEY: existing_claims[TREND_IMPACT_RECONCILIATION_KEY]}
-            if TREND_IMPACT_RECONCILIATION_KEY in existing_claims
-            else {}
-        )
+        system_claims = {}
+        if TREND_IMPACT_RECONCILIATION_KEY in existing_claims:
+            system_claims[TREND_IMPACT_RECONCILIATION_KEY] = existing_claims[
+                TREND_IMPACT_RECONCILIATION_KEY
+            ]
         event.canonical_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
@@ -749,12 +756,10 @@ class Tier2Classifier:
             contradiction_notes = "Potential contradiction detected across source claims."
         event.has_contradictions = has_contradictions
         event.contradiction_notes = contradiction_notes if has_contradictions else None
-        event.extracted_claims = {
-            "claims": claims,
-            "claim_graph": claim_graph,
-            "trend_impacts": trend_impacts,
-            **system_claims,
-        }
+        event.extracted_claims = {"claims": claims, "claim_graph": claim_graph, **system_claims}
+        event.extracted_claims["trend_impacts"] = assign_claim_keys_to_impacts(
+            event=event, impacts=trend_impacts
+        )
 
     @staticmethod
     def _dedupe_strings(values: list[str]) -> list[str]:
@@ -770,7 +775,7 @@ class Tier2Classifier:
             {
                 "claim_id": f"claim_{index + 1}",
                 "text": claim,
-                "normalized_text": self._normalize_claim_text(claim),
+                "normalized_text": normalize_claim_text(claim),
             }
             for index, claim in enumerate(claims)
         ]
@@ -792,12 +797,6 @@ class Tier2Classifier:
                 )
 
         return {"nodes": nodes, "links": links}
-
-    @staticmethod
-    def _normalize_claim_text(value: str) -> str:
-        normalized = value.lower().strip()
-        chars = [ch if ch.isalnum() or ch.isspace() else " " for ch in normalized]
-        return " ".join("".join(chars).split())
 
     def _claim_relation(self, first: str, second: str) -> str | None:
         first_language = self._claim_language(first)
@@ -823,7 +822,7 @@ class Tier2Classifier:
 
     def _claim_tokens(self, value: str, *, language: str) -> set[str]:
         stop_words = self._CLAIM_STOP_WORDS.get(language, set())
-        normalized = self._normalize_claim_text(value)
+        normalized = normalize_claim_text(value)
         return {
             token
             for token in normalized.split()

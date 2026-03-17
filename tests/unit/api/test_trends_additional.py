@@ -120,6 +120,7 @@ async def test_evidence_stats_and_top_movers_cover_fallback_paths(mock_db_sessio
             id=uuid4(),
             trend_id=uuid4(),
             event_id=uuid4(),
+            event_claim_id=uuid4(),
             signal_type="military_movement",
             delta_log_odds=0.1,
             reasoning=None,
@@ -128,6 +129,7 @@ async def test_evidence_stats_and_top_movers_cover_fallback_paths(mock_db_sessio
             id=uuid4(),
             trend_id=uuid4(),
             event_id=uuid4(),
+            event_claim_id=uuid4(),
             signal_type="sanctions",
             delta_log_odds=0.05,
             reasoning=None,
@@ -502,6 +504,7 @@ async def test_simulate_remove_event_and_update_trend_duplicate_name_paths(
                 id=uuid4(),
                 trend_id=trend.id,
                 event_id=uuid4(),
+                event_claim_id=uuid4(),
                 signal_type="military_movement",
                 delta_log_odds=0.2,
             )

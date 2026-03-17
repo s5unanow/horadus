@@ -123,8 +123,20 @@ async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session
         ),
         SimpleNamespace(
             all=lambda: [
-                (uuid4(), "military_movement", 0.12),
-                (uuid4(), "diplomatic_talks", -0.05),
+                (uuid4(), uuid4(), "Troops advanced into border region", "military_movement", 0.12),
+                (uuid4(), uuid4(), "Negotiators resumed talks", "diplomatic_talks", -0.05),
+            ]
+        ),
+        SimpleNamespace(
+            all=lambda: [
+                (uuid4(), "__event__", "Cluster summary", "fallback", True),
+                (
+                    uuid4(),
+                    "troops advanced into border region",
+                    "Troops advanced into border region",
+                    "statement",
+                    True,
+                ),
             ]
         ),
     ]
@@ -136,6 +148,10 @@ async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session
     assert "conflict" in (result.contradiction_notes or "").lower()
     assert len(result.sources) == 2
     assert result.sources[0]["source_name"] == "Reuters"
+    assert len(result.claims) == 2
+    assert result.claims[0]["claim_key"] == "__event__"
     assert len(result.trend_impacts) == 2
+    assert "event_claim_id" in result.trend_impacts[0]
+    assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"
     assert result.trend_impacts[0]["direction"] == "escalatory"
     assert result.trend_impacts[1]["direction"] == "de_escalatory"

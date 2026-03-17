@@ -1,9 +1,4 @@
-"""
-Database models for the Geopolitical Intelligence Platform.
-
-This module defines all SQLAlchemy ORM models for the application.
-Uses async SQLAlchemy 2.0 patterns.
-"""
+"""Database models for the Geopolitical Intelligence Platform."""
 
 from __future__ import annotations
 
@@ -20,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
@@ -33,10 +29,6 @@ from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-# =============================================================================
-# Base Configuration
-# =============================================================================
-
 
 class Base(DeclarativeBase):
     """Base class for all models."""
@@ -46,11 +38,6 @@ class Base(DeclarativeBase):
         list[str]: ARRAY(String),
         UUID: PGUUID(as_uuid=True),
     }
-
-
-# =============================================================================
-# Enums
-# =============================================================================
 
 
 class SourceType(enum.StrEnum):
@@ -98,6 +85,13 @@ class EventLifecycle(enum.StrEnum):
     CONFIRMED = "confirmed"  # Multiple independent sources
     FADING = "fading"  # No new mentions in 48h
     ARCHIVED = "archived"  # No mentions in 7d, historical only
+
+
+class EventClaimType(enum.StrEnum):
+    """Stable claim identities tracked under a mutable event cluster."""
+
+    FALLBACK = "fallback"
+    STATEMENT = "statement"
 
 
 class TrendDirection(enum.StrEnum):
@@ -158,36 +152,16 @@ def sql_string_literals(values: tuple[str, ...]) -> str:
 SOURCE_TIER_VALUES = tuple(enum_values(SourceTier))
 REPORTING_TYPE_VALUES = tuple(enum_values(ReportingType))
 EVENT_LIFECYCLE_VALUES = tuple(enum_values(EventLifecycle))
+EVENT_CLAIM_TYPE_VALUES = tuple(enum_values(EventClaimType))
 
 SOURCE_TIER_SQL_VALUES = sql_string_literals(SOURCE_TIER_VALUES)
 REPORTING_TYPE_SQL_VALUES = sql_string_literals(REPORTING_TYPE_VALUES)
 EVENT_LIFECYCLE_SQL_VALUES = sql_string_literals(EVENT_LIFECYCLE_VALUES)
-
-
-# =============================================================================
-# Source Models
-# =============================================================================
+EVENT_CLAIM_TYPE_SQL_VALUES = sql_string_literals(EVENT_CLAIM_TYPE_VALUES)
 
 
 class Source(Base):
-    """
-    A data source (RSS feed, Telegram channel, etc.).
-
-    Attributes:
-        id: Unique identifier
-        type: Source type (rss, telegram, gdelt, api, scraper)
-        name: Human-readable name
-        url: Source URL (feed URL, channel URL, etc.)
-        credibility_score: Reliability rating (0.0 to 1.0)
-        source_tier: Tier classification (primary, wire, major, regional, aggregator)
-        reporting_type: Type of reporting (firsthand, secondary, aggregator)
-        config: Source-specific configuration (JSON)
-        is_active: Whether source is being collected
-        last_fetched_at: Last successful fetch time
-        ingestion_window_end_at: High-water timestamp for source collection coverage
-        error_count: Consecutive error count
-        last_error: Most recent error message
-    """
+    """A data source (RSS feed, Telegram channel, etc.)."""
 
     __tablename__ = "sources"
 
@@ -261,39 +235,8 @@ class Source(Base):
     )
 
 
-# =============================================================================
-# Raw Item Models
-# =============================================================================
-
-
 class RawItem(Base):
-    """
-    A single collected item (article, post, message).
-
-    This is the raw data before classification. Each item goes through
-    the processing pipeline: pending -> processing -> classified/noise/error
-
-    Attributes:
-        id: Unique identifier
-        source_id: Reference to source
-        external_id: ID from source (URL for RSS, message_id for Telegram)
-        url: Full URL to original content
-        title: Article/post title
-        published_at: Original publication time
-        fetched_at: When we collected it
-        raw_content: Extracted text content
-        embedding: Vector embedding for similarity and clustering
-        embedding_model: Embedding model identifier used for current vector
-        embedding_generated_at: Timestamp when current vector was generated
-        embedding_input_tokens: Approximate token count before embedding guardrails
-        embedding_retained_tokens: Approximate retained token count after guardrails
-        embedding_was_truncated: Whether truncate policy dropped tail tokens
-        embedding_truncation_strategy: Guardrail strategy used when input exceeded limit
-        content_hash: SHA256 hash for deduplication
-        language: Detected language code (e.g., 'en', 'ru')
-        processing_status: Current pipeline status
-        error_message: Error details if status is ERROR
-    """
+    """A single collected item before classification."""
 
     __tablename__ = "raw_items"
 
@@ -368,42 +311,8 @@ class RawItem(Base):
     )
 
 
-# =============================================================================
-# Event Models
-# =============================================================================
-
-
 class Event(Base):
-    """
-    A clustered event (multiple articles about the same story).
-
-    Events are the unit of analysis for trend impact. Multiple RawItems
-    are clustered into Events based on embedding similarity.
-
-    Attributes:
-        id: Unique identifier
-        canonical_summary: LLM-generated summary of the event
-        embedding: Vector embedding for similarity search
-        embedding_model: Embedding model identifier used for current vector
-        embedding_generated_at: Timestamp when current vector was generated
-        embedding_input_tokens: Approximate token count before embedding guardrails
-        embedding_retained_tokens: Approximate retained token count after guardrails
-        embedding_was_truncated: Whether truncate policy dropped tail tokens
-        embedding_truncation_strategy: Guardrail strategy used when input exceeded limit
-        extracted_who: Entities involved (people, organizations)
-        extracted_what: What happened
-        extracted_where: Location
-        extracted_when: When it happened
-        extracted_claims: Structured claims from the event
-        categories: Assigned category labels
-        source_count: Number of sources reporting this
-        lifecycle_status: Current lifecycle stage (emerging/confirmed/fading/archived)
-        first_seen_at: When first article arrived
-        last_mention_at: When last article was added
-        last_updated_at: When last article was added
-        primary_item_id: Most authoritative source item
-        has_contradictions: Whether sources contradict each other
-    """
+    """A mutable story cluster built from one or more raw items."""
 
     __tablename__ = "events"
 
@@ -482,7 +391,11 @@ class Event(Base):
 
     # Relationships
     item_links: Mapped[list[EventItem]] = relationship(back_populates="event")
-    evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="event")
+    claims: Mapped[list[EventClaim]] = relationship(back_populates="event")
+    evidence_records: Mapped[list[TrendEvidence]] = relationship(
+        back_populates="event",
+        foreign_keys="TrendEvidence.event_id",
+    )
     taxonomy_gaps: Mapped[list[TaxonomyGap]] = relationship(back_populates="event")
 
     # Indexes
@@ -538,9 +451,78 @@ class EventItem(Base):
     __table_args__ = (UniqueConstraint("item_id", name="uq_event_items_item_id"),)
 
 
-# =============================================================================
-# Trend Models
-# =============================================================================
+class EventClaim(Base):
+    """Stable claim identity recorded beneath a mutable event cluster."""
+
+    __tablename__ = "event_claims"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        primary_key=True,
+        default=uuid4,
+    )
+    event_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    claim_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    claim_text: Mapped[str] = mapped_column(Text, nullable=False)
+    claim_type: Mapped[str] = mapped_column(
+        String(20),
+        default=EventClaimType.STATEMENT.value,
+        server_default=text(f"'{EventClaimType.STATEMENT.value}'"),
+        nullable=False,
+    )
+    claim_order: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False,
+    )
+    is_active: Mapped[bool] = mapped_column(
+        Boolean,
+        default=True,
+        server_default=text("true"),
+        nullable=False,
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    event: Mapped[Event] = relationship(back_populates="claims")
+    evidence_records: Mapped[list[TrendEvidence]] = relationship(
+        back_populates="event_claim",
+        foreign_keys="TrendEvidence.event_claim_id",
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"claim_type IN ({EVENT_CLAIM_TYPE_SQL_VALUES})",
+            name="check_event_claims_claim_type_allowed",
+        ),
+        UniqueConstraint("event_id", "claim_key", name="uq_event_claims_event_claim_key"),
+        UniqueConstraint("event_id", "id", name="uq_event_claims_event_id_id"),
+        Index("idx_event_claims_event_active", "event_id", "is_active"),
+    )
 
 
 class Trend(Base):
@@ -675,6 +657,11 @@ class TrendEvidence(Base):
         ForeignKey("events.id", ondelete="CASCADE"),
         nullable=False,
     )
+    event_claim_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("event_claims.id", ondelete="CASCADE"),
+        nullable=False,
+    )
 
     # Signal classification
     signal_type: Mapped[str] = mapped_column(String(100), nullable=False)
@@ -714,17 +701,31 @@ class TrendEvidence(Base):
 
     # Relationships
     trend: Mapped[Trend] = relationship(back_populates="evidence_records")
-    event: Mapped[Event] = relationship(back_populates="evidence_records")
+    event: Mapped[Event] = relationship(
+        back_populates="evidence_records",
+        foreign_keys=[event_id],
+    )
+    event_claim: Mapped[EventClaim] = relationship(
+        back_populates="evidence_records",
+        foreign_keys=[event_claim_id],
+    )
 
     # Constraints
     __table_args__ = (
+        ForeignKeyConstraint(
+            ["event_id", "event_claim_id"],
+            ["event_claims.event_id", "event_claims.id"],
+            ondelete="CASCADE",
+            name="fk_trend_evidence_event_id_event_claim_id_event_claims",
+        ),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
+        Index("idx_evidence_event_claim", "event_claim_id"),
         Index("idx_evidence_event_invalidated", "event_id", "is_invalidated"),
         Index(
-            "uq_trend_event_signal_active",
+            "uq_trend_event_claim_signal_active",
             "trend_id",
-            "event_id",
+            "event_claim_id",
             "signal_type",
             unique=True,
             postgresql_where=text("is_invalidated = false"),

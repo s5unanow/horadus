@@ -42,6 +42,7 @@ class TrendEvidenceResponse(BaseModel):
                 "id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
                 "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
                 "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                "event_claim_id": "5b1fdf8a-327d-4b3f-82e0-1f53dfcccf63",
                 "signal_type": "military_movement",
                 "credibility_score": 0.9,
                 "corroboration_factor": 0.67,
@@ -63,6 +64,7 @@ class TrendEvidenceResponse(BaseModel):
     id: UUID
     trend_id: UUID
     event_id: UUID
+    event_claim_id: UUID
     signal_type: str
     credibility_score: float | None
     corroboration_factor: float | None

@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-336` Separate Story Clusters from Stable Event-Claim Identity
 - `TASK-231` Extend Event Invalidation into a Compensating Restatement Ledger
 - `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics
 - `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
@@ -41,4 +40,4 @@
 
 ## Completed This Sprint
 
-- Sprint opened on 2026-03-17 with a narrowed active queue; no Sprint 5 tasks are complete yet.
+- `TASK-336` Separate Story Clusters from Stable Event-Claim Identity

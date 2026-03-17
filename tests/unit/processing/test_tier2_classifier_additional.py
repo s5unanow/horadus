@@ -520,6 +520,8 @@ def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None
         "crossed",
         "border",
     }
+    long_claim = ("forces crossed border repeatedly near northern checkpoint " * 8).strip()
+    assert "checkpoint" in classifier._claim_tokens(long_claim, language="en")
     assert classifier._claim_polarity("forces did not cross", language="en") == "negative"
     assert classifier._claim_language("plain ascii") == "en"
     assert classifier._claim_language("текст") == "ru"

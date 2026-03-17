@@ -168,7 +168,7 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
         [
             "tasks",
             "search",
-            "stable event-claim",
+            "compensating restatement",
             "--status",
             "active",
             "--include-raw",
@@ -190,11 +190,11 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
 def test_main_tasks_search_text_output_remains_compact_by_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = main(["tasks", "search", "stable event-claim", "--status", "active"])
+    result = main(["tasks", "search", "compensating restatement", "--status", "active"])
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "Task search: stable event-claim" in output
+    assert "Task search: compensating restatement" in output
     assert "TASK-" in output
     assert "## TASK-" not in output
     assert "Acceptance Criteria" not in output
@@ -207,7 +207,7 @@ def test_main_tasks_search_text_output_can_include_raw_blocks(
         [
             "tasks",
             "search",
-            "stable event-claim",
+            "compensating restatement",
             "--status",
             "active",
             "--limit",
@@ -602,7 +602,7 @@ def test_handle_search_covers_validation_and_raw_output_branches() -> None:
     )
     raw = task_commands_module.handle_search(
         argparse.Namespace(
-            query=["stable", "event-claim"],
+            query=["compensating", "restatement"],
             status="active",
             limit=1,
             include_raw=True,

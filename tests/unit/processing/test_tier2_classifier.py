@@ -230,7 +230,7 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
     assert len(chat.calls) == 1
     assert chat.calls[0]["response_format"]["type"] == "json_schema"
-    assert mock_db_session.flush.await_count == 1
+    assert mock_db_session.flush.await_count >= 2
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
 
@@ -524,6 +524,8 @@ async def test_classify_events_classifies_unstructured_events(mock_db_session) -
     event_two = Event(id=uuid4(), canonical_summary="Summary 2")
     mock_db_session.scalars.side_effect = [
         SimpleNamespace(all=lambda: [event_one, event_two]),
+        SimpleNamespace(all=list),
+        SimpleNamespace(all=list),
     ]
     trends = [_build_trend("eu-russia", "EU-Russia")]
 

@@ -677,31 +677,6 @@ code owns trend-indicator mapping and impact eligibility.
 
 ---
 
-### TASK-336: Separate Story Clusters from Stable Event-Claim Identity
-**Priority**: P1 (High)
-**Estimate**: 1-2 days
-
-The mutable event cluster is still the effective identity boundary for applied
-evidence. Introduce a first-class stable event-claim or event-version entity so
-cluster repairs, contradictory subclaims, and split/merge operations do not
-force auditability and reproducibility to hinge on one mutable cluster id.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/processing/event_clusterer.py`, `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/api/routes/events.py`, `docs/DATA_MODEL.md`, `tests/`, `alembic/`
-
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-
-**Acceptance Criteria**:
-- [ ] Introduce a stable claim/hypothesis or event-version entity distinct from the mutable story cluster
-- [ ] Attach applied trend evidence and compensating/restatement actions to the stable claim/version identity rather than the raw cluster id alone
-- [ ] Allow one cluster to carry multiple claims or event versions without breaking raw-item linkage auditability
-- [ ] Keep split/merge lineage, invalidation, and replay semantics coherent when cluster membership changes around the stable claim identity
-- [ ] Add regression coverage for contradictory claims within one cluster and for split/merge repairs that preserve explainable belief state
-
----
-
 ### TASK-337: Pin Live Trend State to Active Definition/Scoring Versions
 **Priority**: P1 (High)
 **Estimate**: 6-8 hours

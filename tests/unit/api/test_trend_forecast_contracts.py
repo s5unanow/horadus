@@ -247,3 +247,18 @@ async def test_update_trend_allows_unrelated_patch_for_legacy_rows_without_contr
 
     assert trend.is_active is False
     assert result.is_active is False
+
+
+@pytest.mark.asyncio
+async def test_to_response_tolerates_malformed_legacy_forecast_contract(mock_db_session) -> None:
+    trend = _build_trend()
+    trend.definition = {
+        "id": "contract-trend",
+        "forecast_contract": "legacy-invalid-shape",
+    }
+
+    result = await trends_module._to_response(trend, session=mock_db_session)
+
+    assert result.id == trend.id
+    assert result.forecast_contract is None
+    assert result.definition["forecast_contract"] == "legacy-invalid-shape"

@@ -223,15 +223,19 @@ async def _to_response(
         avg_corroboration=avg_corroboration,
     )
     top_movers = await _get_top_movers_7d(session, trend_id=trend.id)
+    try:
+        forecast_contract = forecast_contract_from_definition(
+            trend.definition if isinstance(trend.definition, dict) else None
+        )
+    except ValueError:
+        forecast_contract = None
 
     return TrendResponse(
         id=trend.id,
         name=trend.name,
         description=trend.description,
         definition=trend.definition,
-        forecast_contract=forecast_contract_from_definition(
-            trend.definition if isinstance(trend.definition, dict) else None
-        ),
+        forecast_contract=forecast_contract,
         baseline_probability=logodds_to_prob(float(trend.baseline_log_odds)),
         current_probability=probability,
         risk_level=get_risk_level(probability).value,

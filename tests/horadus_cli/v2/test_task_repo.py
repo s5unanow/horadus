@@ -299,6 +299,29 @@ def test_parse_active_tasks_ignores_non_task_lines(tmp_path: Path) -> None:
     assert [task.task_id for task in tasks] == ["TASK-292"]
 
 
+def test_parse_active_tasks_extracts_note_after_em_dash(tmp_path: Path) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-342` Sprint reset — planning-surface update in progress",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    tasks = task_repo_module.parse_active_tasks(sprint_path)
+
+    assert len(tasks) == 1
+    assert tasks[0].task_id == "TASK-342"
+    assert tasks[0].title == "Sprint reset"
+    assert tasks[0].note == "planning-surface update in progress"
+
+
 def test_archive_backlog_paths_returns_empty_when_archive_root_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

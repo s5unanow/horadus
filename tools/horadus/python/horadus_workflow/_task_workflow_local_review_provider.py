@@ -31,6 +31,12 @@ _CODEX_NO_FINDINGS_LINE_PATTERN: Final[re.Pattern[str]] = re.compile(
 )
 
 
+def _timeout_output_text(value: str | bytes | None) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value or ""
+
+
 def _render_prompt_contract(*, instructions: str | None) -> str:
     lines = [
         "Return the first non-empty line exactly as one of:",
@@ -163,8 +169,8 @@ def _execute_provider(
         )
     except subprocess.TimeoutExpired as exc:
         duration_seconds = time.monotonic() - started
-        stdout = exc.stdout if isinstance(exc.stdout, str) else ""
-        stderr = exc.stderr if isinstance(exc.stderr, str) else ""
+        stdout = _timeout_output_text(exc.stdout)
+        stderr = _timeout_output_text(exc.stderr)
         timeout_text = f"provider command timed out after {timeout_seconds}s"
         stderr = f"{stderr}\n{timeout_text}".strip() if stderr else timeout_text
         return LocalReviewProviderRun(

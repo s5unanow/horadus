@@ -650,7 +650,7 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     assert "argument list too long" in failed_run.stderr
 
     def raise_timeout(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
-        raise subprocess.TimeoutExpired(["claude"], 180, output="partial", stderr="still waiting")
+        raise subprocess.TimeoutExpired(["claude"], 180, output=b"partial", stderr=b"still waiting")
 
     monkeypatch.setattr(task_commands_module.subprocess, "run", raise_timeout)
     timed_out_run = task_commands_module._execute_provider(
@@ -660,6 +660,7 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
     assert timed_out_run.timed_out is True
     assert timed_out_run.timeout_seconds == 180.0
     assert timed_out_run.stdout == "partial"
+    assert "still waiting" in timed_out_run.stderr
     assert "provider command timed out after 180s" in timed_out_run.stderr
 
     exit_code, data, lines = task_commands_module.local_review_data(

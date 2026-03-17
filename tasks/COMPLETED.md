@@ -318,3 +318,4 @@
 - TASK-231: Extend Event Invalidation into a Compensating Restatement Ledger ✅
 - TASK-347: Investigate and stabilize hanging `horadus tasks local-review` runs ✅
 - TASK-228: Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅
+- TASK-348: Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅

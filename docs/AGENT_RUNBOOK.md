@@ -144,6 +144,17 @@ search remains lifecycle recovery, not the bootstrap dedupe key.
 If you rerun `finish` after pushing a new PR head, the CLI refreshes stale
 older-head review state, requests fresh current-head review when needed, and
 starts a fresh review window before waiting again.
+During the review window, `finish` emits periodic status that includes the
+reviewer, current PR head, and remaining time / deadline so the wait does not
+look hung.
+Before entering that wait, `finish` now surfaces unresolved current-head review
+threads immediately. If GitHub still marks older-head-fixed threads as current,
+the blocker text tells you to inspect and resolve the stale-current threads
+manually before rerunning.
+If a same-head review window already timed out and the only remaining blocker
+is unresolved review threads, resolving those threads and rerunning `finish`
+can continue on the same head without silently restarting a fresh timeout
+window.
 For completion policy, review-timeout semantics, fresh re-review ownership,
 thread handling, and completion-claim rules, see `AGENTS.md`.
 

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import tempfile
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,6 +24,10 @@ def _run_gate(
 ) -> subprocess.CompletedProcess[str]:
     merged_env = os.environ.copy()
     merged_env.update(env)
+    merged_env.setdefault(
+        "HORADUS_REVIEW_GATE_STATE_PATH",
+        str(Path(tempfile.mkdtemp()) / "review-gate-state.json"),
+    )
     return subprocess.run(
         ["python", str(SCRIPT_PATH), *(args or [])],
         cwd=REPO_ROOT,

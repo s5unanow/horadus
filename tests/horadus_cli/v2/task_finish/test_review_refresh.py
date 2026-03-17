@@ -825,6 +825,11 @@ def test_prepare_current_head_review_window_uses_compat_exports_across_split_mod
         "_fresh_review_request_blocker",
         lambda **_kwargs: (["Requested fresh review."], None),
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
 
     refresh_lines, blocker = task_commands_module._prepare_current_head_review_window(
         context=context,

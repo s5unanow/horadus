@@ -720,15 +720,11 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_timeout(
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
 
     exit_code, data, lines = task_commands_module.finish_task_data("TASK-290", dry_run=False)
-
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert data["pr_url"] == "https://example.invalid/pr/290"
     assert lines[0] == "Task finish blocked: PR is blocked by unresolved review comments."
-    assert any("review gate timeout:" in line for line in lines)
     assert any("Please resolve this thread." in line for line in lines)
-    assert lines[-1] == (
-        "Requested a fresh review from `chatgpt-codex-connector[bot]` with `@codex review`."
-    )
+    assert not any("Requested a fresh review" in line for line in lines)
 
 
 def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review(
@@ -828,8 +824,7 @@ def test_finish_task_data_blocks_on_unresolved_review_threads_after_clean_review
 
     assert exit_code == task_commands_module.ExitCode.VALIDATION_ERROR
     assert lines[0] == "Task finish blocked: PR is blocked by unresolved review comments."
-    assert any("review gate passed:" in line for line in lines)
-    assert any(
+    assert not any(
         "Requested a fresh review from `chatgpt-codex-connector[bot]`" in line for line in lines
     )
     assert "  Please resolve this thread." in lines
@@ -2252,6 +2247,11 @@ def test_finish_task_data_blocks_when_pre_review_refresh_cannot_request_fresh_re
         task_commands_module,
         "_run_review_gate",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("review gate should not run")),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
     )
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:

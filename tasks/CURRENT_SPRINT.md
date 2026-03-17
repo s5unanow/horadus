@@ -38,3 +38,7 @@
 - launch_scope: excluded_until_task_080_done
 - decision_date: 2026-03-03
 - rationale: Telegram ingestion remains explicitly out of launch scope until the human-gated wiring/sign-off task closes.
+
+## Completed This Sprint
+
+- Sprint opened on 2026-03-17 with a narrowed active queue; no Sprint 5 tasks are complete yet.

@@ -22,6 +22,12 @@ from tools.horadus.python.horadus_cli.app import main
 pytestmark = pytest.mark.unit
 
 
+def _live_active_search_query() -> str:
+    active_tasks = task_repo_module.parse_active_tasks()
+    assert active_tasks
+    return active_tasks[0].task_id
+
+
 def test_main_tasks_context_pack_json_output(
     synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],
@@ -164,11 +170,12 @@ def test_main_tasks_search_json_output_is_compact_by_default(
 def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    query = _live_active_search_query()
     result = main(
         [
             "tasks",
             "search",
-            "compensating restatement",
+            query,
             "--status",
             "active",
             "--include-raw",
@@ -190,11 +197,12 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
 def test_main_tasks_search_text_output_remains_compact_by_default(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    result = main(["tasks", "search", "compensating restatement", "--status", "active"])
+    query = _live_active_search_query()
+    result = main(["tasks", "search", query, "--status", "active"])
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "Task search: compensating restatement" in output
+    assert f"Task search: {query}" in output
     assert "TASK-" in output
     assert "## TASK-" not in output
     assert "Acceptance Criteria" not in output
@@ -203,11 +211,12 @@ def test_main_tasks_search_text_output_remains_compact_by_default(
 def test_main_tasks_search_text_output_can_include_raw_blocks(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    query = _live_active_search_query()
     result = main(
         [
             "tasks",
             "search",
-            "compensating restatement",
+            query,
             "--status",
             "active",
             "--limit",
@@ -591,6 +600,7 @@ def test_handle_list_active_omits_urgency_note_for_pending_blockers(
 
 
 def test_handle_search_covers_validation_and_raw_output_branches() -> None:
+    query = _live_active_search_query()
     invalid = task_commands_module.handle_search(
         argparse.Namespace(
             query=["health"],
@@ -602,7 +612,7 @@ def test_handle_search_covers_validation_and_raw_output_branches() -> None:
     )
     raw = task_commands_module.handle_search(
         argparse.Namespace(
-            query=["compensating", "restatement"],
+            query=[query],
             status="active",
             limit=1,
             include_raw=True,

@@ -265,6 +265,8 @@ def _restatement_targets_by_evidence_id(
 ) -> dict[UUID, EventRestatementTarget]:
     mapped: dict[UUID, EventRestatementTarget] = {}
     for target in targets:
+        if target.evidence_id in mapped:
+            raise ValueError("restatement_targets must not contain duplicate evidence_id values")
         mapped[target.evidence_id] = target
     return mapped
 
@@ -405,7 +407,15 @@ async def create_event_feedback(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="restate requires at least one restatement_targets entry",
                 )
-            restatement_targets = _restatement_targets_by_evidence_id(payload.restatement_targets)
+            try:
+                restatement_targets = _restatement_targets_by_evidence_id(
+                    payload.restatement_targets
+                )
+            except ValueError as exc:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=str(exc),
+                ) from exc
             evidence_ids = {evidence.id for evidence in evidences if evidence.id is not None}
             unknown_targets = [
                 target for target in restatement_targets if target not in evidence_ids

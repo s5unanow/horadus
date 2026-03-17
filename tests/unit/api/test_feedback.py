@@ -433,6 +433,42 @@ async def test_create_event_feedback_restate_rejects_unknown_targets(mock_db_ses
 
 
 @pytest.mark.asyncio
+async def test_create_event_feedback_restate_rejects_duplicate_targets(mock_db_session) -> None:
+    event = Event(id=uuid4(), canonical_summary="Partial correction")
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=uuid4(),
+        event_id=event.id,
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.2,
+    )
+    mock_db_session.get.return_value = event
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [evidence])
+
+    with pytest.raises(HTTPException, match="must not contain duplicate evidence_id") as exc:
+        await create_event_feedback(
+            event_id=event.id,
+            payload=EventFeedbackRequest(
+                action="restate",
+                restatement_targets=[
+                    EventRestatementTarget(
+                        evidence_id=evidence.id,
+                        compensation_delta_log_odds=-0.1,
+                    ),
+                    EventRestatementTarget(
+                        evidence_id=evidence.id,
+                        compensation_delta_log_odds=-0.05,
+                    ),
+                ],
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
 async def test_create_event_feedback_returns_404_for_unknown_event(mock_db_session) -> None:
     mock_db_session.get.return_value = None
 

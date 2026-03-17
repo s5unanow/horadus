@@ -10,6 +10,17 @@ description: |
 
 baseline_probability: 0.35
 decay_half_life_days: 365
+forecast_contract:
+  question: "Over the 10 years following the evaluation date, will fertility decline remain structurally accelerated below replacement across the tracked regions?"
+  horizon:
+    kind: "rolling_window"
+    value: 10
+    unit: "years"
+    reference_point: "evaluation_date"
+  resolution_basis: "Rolling-window question resolved using comparable TFR, birth-count, and family-formation data across Europe, North America, and East Asia."
+  resolver_source: "National statistical agencies, Human Fertility Database style releases, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked below-replacement acceleration state persists over the scoped rolling window across the regions; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "sustained_fertility_recovery"

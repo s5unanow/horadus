@@ -14,6 +14,15 @@ description: |
 
 baseline_probability: 0.10
 decay_half_life_days: 270
+forecast_contract:
+  question: "Will normalization of the scoped extreme taboo violations be materially more mainstream across law, media, or academia by 2035-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2035-12-31
+  resolution_basis: "Threshold-state question resolved using mainstream institutional, media, legal, and academic normalization signals within the explicitly scoped domains."
+  resolver_source: "Public legislation, mainstream media archives, academic publications, platform-policy disclosures, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the scoped normalization state is materially more mainstream at horizon across one or more covered domains; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "explicit_legal_prohibition_expansion"

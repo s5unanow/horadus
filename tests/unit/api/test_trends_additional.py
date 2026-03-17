@@ -30,6 +30,10 @@ from src.api.routes.trends import (
 )
 from src.core.trend_engine import prob_to_logodds
 from src.storage.models import Trend, TrendEvidence, TrendSnapshot
+from tests.unit.trend_forecast_contract_fixtures import (
+    sample_binary_forecast_contract,
+    sample_forecast_contract_yaml,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -41,7 +45,10 @@ def _build_trend(*, trend_id=None, name: str = "Trend A", is_active: bool = True
         name=name,
         description="description",
         runtime_trend_id=name.lower().replace(" ", "-"),
-        definition={"id": name.lower().replace(" ", "-")},
+        definition={
+            "id": name.lower().replace(" ", "-"),
+            "forecast_contract": sample_binary_forecast_contract(),
+        },
         baseline_log_odds=prob_to_logodds(0.1),
         current_log_odds=prob_to_logodds(0.2),
         indicators={"signal": {"direction": "escalatory", "weight": 0.04, "keywords": ["x"]}},
@@ -84,7 +91,10 @@ async def test_record_definition_version_requires_previous_definition_and_skips_
     unchanged = await _record_definition_version_if_material_change(
         mock_db_session,
         trend=trend,
-        previous_definition={"id": "trend-a"},
+        previous_definition={
+            "id": "trend-a",
+            "forecast_contract": sample_binary_forecast_contract(),
+        },
         actor="api",
         context="update",
     )
@@ -275,11 +285,12 @@ async def test_load_trends_from_config_upserts_by_runtime_trend_id(
     _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "renamed.yaml"
     config_file.write_text(
-        """
+        f"""
 id: shared-runtime-id
 name: Renamed Trend
 baseline_probability: 0.20
 decay_half_life_days: 15
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.04
@@ -309,11 +320,12 @@ async def test_load_trends_from_config_rejects_conflicting_name_and_runtime_rows
     _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "conflict.yaml"
     config_file.write_text(
-        """
+        f"""
 id: shared-runtime-id
 name: Renamed Trend
 baseline_probability: 0.20
 decay_half_life_days: 15
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.04
@@ -359,6 +371,7 @@ def test_trend_write_helper_edges_cover_blank_runtime_id_and_integrity_tokens(
             decay_half_life_days=30,
             indicators={},
             definition={},
+            forecast_contract=sample_binary_forecast_contract(),
         )
 
     exc = IntegrityError("insert", {}, Exception("runtime_trend_id"))
@@ -380,6 +393,7 @@ def test_trend_write_helper_rejects_overlength_runtime_id() -> None:
             decay_half_life_days=30,
             indicators={},
             definition={"id": "x" * 256},
+            forecast_contract=sample_binary_forecast_contract(),
         )
 
 
@@ -392,12 +406,13 @@ async def test_load_trends_from_config_updates_existing_trend(
     _use_tmp_trend_root(monkeypatch, tmp_path)
     config_file = tmp_path / "trend.yaml"
     config_file.write_text(
-        """
+        f"""
 id: eu-russia
 name: EU Russia
 description: Updated description
 baseline_probability: 0.25
 decay_half_life_days: 20
+{sample_forecast_contract_yaml()}
 indicators:
   military_movement:
     weight: 0.04

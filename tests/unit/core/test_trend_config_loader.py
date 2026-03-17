@@ -7,6 +7,10 @@ from pydantic import ValidationError
 
 from src.core.trend_config import build_trend_config, resolve_runtime_trend_id
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
+from tests.unit.trend_forecast_contract_fixtures import (
+    sample_binary_forecast_contract,
+    sample_forecast_contract_yaml,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -15,11 +19,12 @@ def test_load_trends_from_config_dir_preserves_indicator_descriptions(tmp_path: 
     config_dir = tmp_path / "trends"
     config_dir.mkdir()
     (config_dir / "eu-russia.yaml").write_text(
-        """
+        f"""
 id: "eu-russia"
 name: "EU-Russia"
 baseline_probability: 0.10
 decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
 indicators:
   military_movement:
     weight: 0.05
@@ -99,11 +104,12 @@ def test_load_trends_from_config_dir_rejects_blank_trend_id(tmp_path: Path) -> N
     config_dir = tmp_path / "trends"
     config_dir.mkdir()
     (config_dir / "blank-id.yaml").write_text(
-        """
+        f"""
 id: "   "
 name: "Blank"
 baseline_probability: 0.10
 decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.05
@@ -125,11 +131,12 @@ def test_load_trends_from_config_dir_rejects_duplicate_ids_and_sorts_results(
     config_dir = tmp_path / "trends"
     config_dir.mkdir()
     (config_dir / "b.yaml").write_text(
-        """
+        f"""
 id: "beta"
 name: "Beta"
 baseline_probability: 0.10
 decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.05
@@ -141,11 +148,12 @@ indicators:
         encoding="utf-8",
     )
     (config_dir / "a.yml").write_text(
-        """
+        f"""
 id: "alpha"
 name: "Alpha"
 baseline_probability: 0.10
 decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.05
@@ -162,11 +170,12 @@ indicators:
     assert [trend.definition["id"] for trend in trends] == ["alpha", "beta"]
 
     (config_dir / "dup.yaml").write_text(
-        """
+        f"""
 id: "alpha"
 name: "Duplicate"
 baseline_probability: 0.10
 decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.05
@@ -188,11 +197,12 @@ def test_discover_trend_config_files_ignores_nested_yaml(tmp_path: Path) -> None
     nested_dir = config_dir / "nested"
     nested_dir.mkdir()
     (config_dir / "top.yaml").write_text(
-        """
+        f"""
 id: "top"
 name: "Top"
 baseline_probability: 0.10
 decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
 indicators:
   signal:
     weight: 0.05
@@ -237,4 +247,5 @@ def test_build_trend_config_rejects_non_mapping_indicators() -> None:
             baseline_probability=0.1,
             decay_half_life_days=30,
             indicators=["not-a-mapping"],  # type: ignore[arg-type]
+            definition={"forecast_contract": sample_binary_forecast_contract()},
         )

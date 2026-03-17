@@ -6,6 +6,15 @@ description: |
 
 baseline_probability: 0.14
 decay_half_life_days: 150
+forecast_contract:
+  question: "Will the Three Seas area function as a materially more coordinated security, logistics, and energy bloc by 2035-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2035-12-31
+  resolution_basis: "Threshold-state question resolved using institutional, procurement, infrastructure, and energy-coordination evidence across member states."
+  resolver_source: "Official bloc and member-state releases, treaty texts, budget disclosures, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked bloc-consolidation state is present at horizon; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "formal_bloc_fragmentation"

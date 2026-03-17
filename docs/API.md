@@ -111,6 +111,16 @@ Trend responses now include:
 - `probability_band` (lower/upper bound)
 - `confidence` (`low`/`medium`/`high`)
 - `top_movers_7d` (highest-impact recent evidence summaries)
+- `forecast_contract` (explicit question, structured horizon, resolver source/basis, and closure semantics)
+
+Trend config sync and `POST /api/v1/trends` now require an explicit
+`forecast_contract`. `PATCH /api/v1/trends/{trend_id}` may omit the field only
+when the stored trend definition already has one and the caller is not changing
+the forecast contract.
+Backfill existing YAML definitions in `config/trends/` by adding the contract
+block in place while preserving each trend's existing `id`; do not rotate trend
+IDs during this migration because `runtime_trend_id` must continue to match
+`definition.id`.
 
 Retrospective example:
 

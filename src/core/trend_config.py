@@ -10,6 +10,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+import src.core.trend_forecast_contract as trend_forecast_contract_module  # noqa: TC001
+
 MAX_RUNTIME_TREND_ID_LENGTH = 255
 DEFAULT_TREND_CONFIG_SYNC_DIR = "config/trends"
 REPO_TREND_CONFIG_ROOT = (Path(__file__).resolve().parents[2] / "config" / "trends").resolve()
@@ -56,6 +58,7 @@ class TrendConfig(BaseModel):
     description: str | None = None
     baseline_probability: float = Field(..., ge=0.0, le=1.0)
     decay_half_life_days: int = Field(default=30, ge=1)
+    forecast_contract: trend_forecast_contract_module.TrendForecastContract
     indicators: dict[str, TrendIndicatorConfig] = Field(default_factory=dict)
     disqualifiers: list[TrendDisqualifier] = Field(default_factory=list)
     falsification_criteria: TrendFalsificationCriteria = Field(

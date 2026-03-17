@@ -6,6 +6,15 @@ description: |
 
 baseline_probability: 0.25
 decay_half_life_days: 120
+forecast_contract:
+  question: "Will AI-mediated control over human decision space be materially more entrenched across core civic and economic systems by 2035-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2035-12-31
+  resolution_basis: "Threshold-state question resolved using binding policy, deployment breadth, and observed high-stakes automation across identity, finance, mobility, services, and discourse."
+  resolver_source: "Official laws, regulator guidance, major platform or state-system disclosures, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if materially broader AI-mediated control is present at horizon across multiple core domains; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "binding_algorithmic_rights_framework"

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+import src.core.trend_forecast_contract as trend_forecast_contract_module  # noqa: TC001
+from src.api.routes._trend_forecast_contract import merge_forecast_contract_into_definition
 from src.core.trend_config import TrendConfig, build_trend_config
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 
@@ -28,14 +30,21 @@ def build_validated_trend_write_payload(
     decay_half_life_days: Any,
     indicators: dict[str, Any] | None,
     definition: dict[str, Any] | None,
+    forecast_contract: trend_forecast_contract_module.TrendForecastContract
+    | dict[str, Any]
+    | None = None,
 ) -> ValidatedTrendWritePayload:
+    merged_definition = merge_forecast_contract_into_definition(
+        definition=definition,
+        forecast_contract=forecast_contract,
+    )
     validated_config = build_trend_config(
         name=name,
         description=description,
         baseline_probability=baseline_probability,
         decay_half_life_days=decay_half_life_days,
         indicators=indicators,
-        definition=definition,
+        definition=merged_definition,
     )
     runtime_trend_id = (validated_config.id or "").strip()
     if not runtime_trend_id:

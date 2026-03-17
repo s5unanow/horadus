@@ -7,6 +7,15 @@ description: |
 
 baseline_probability: 0.14
 decay_half_life_days: 330
+forecast_contract:
+  question: "Will alternative proteins have materially displaced conventional meat demand across major tracked markets by 2035-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2035-12-31
+  resolution_basis: "Threshold-state question resolved using market-share, price-parity, procurement, and regulatory-adoption evidence across major tracked markets."
+  resolver_source: "Industry market data, public procurement records, regulator releases, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes if the tracked substitution state is present at horizon across major markets; otherwise resolve no."
+  closure_rule: "threshold_state_at_horizon"
 
 disqualifiers:
   - signal: "alternative_protein_rejection"

@@ -8,6 +8,17 @@ description: |
 
 baseline_probability: 0.05
 decay_half_life_days: 60
+forecast_contract:
+  question: "Will the United States experience sustained organized armed political conflict by 2030-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2030-12-31
+  resolution_basis: "Binary event question resolved against sustained organized armed political conflict involving coordinated militia, insurgent, or state-federal confrontation."
+  resolver_source: "Official federal or state reporting, court or incident records, and multi-source corroborated reporting."
+  resolver_basis: "Resolve yes on confirmed sustained organized armed political conflict; otherwise resolve no at the horizon."
+  closure_rule: "binary_event_by_horizon"
+  occurrence_definition: "Confirmed sustained organized armed political conflict involving coordinated armed actors in the United States."
+  non_occurrence_definition: "No confirmed sustained organized armed political conflict meeting the scoped standard occurs by the horizon date."
 
 disqualifiers:
   - signal: "cross_party_stabilization_compact"

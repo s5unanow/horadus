@@ -6,6 +6,17 @@ description: |
 
 baseline_probability: 0.05
 decay_half_life_days: 30
+forecast_contract:
+  question: "Will direct military conflict involving Russia and Turkey occur by 2030-12-31?"
+  horizon:
+    kind: "fixed_date"
+    fixed_date: 2030-12-31
+  resolution_basis: "Binary event question resolved against attributable direct state-on-state hostilities, excluding proxy-only confrontation."
+  resolver_source: "Official state statements plus multi-source corroborated reporting."
+  resolver_basis: "Resolve yes on confirmed direct hostilities; otherwise resolve no at the horizon."
+  closure_rule: "binary_event_by_horizon"
+  occurrence_definition: "Confirmed direct combat engagement between Russian and Turkish state forces."
+  non_occurrence_definition: "No confirmed direct combat engagement between Russian and Turkish state forces by the horizon date."
 
 disqualifiers:
   - signal: "theater_deconfliction_protocol"

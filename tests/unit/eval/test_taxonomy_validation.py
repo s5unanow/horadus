@@ -38,6 +38,17 @@ def _write_trend_config(
             f'name: "{trend_name}"\n'
             "baseline_probability: 0.10\n"
             "decay_half_life_days: 30\n"
+            "forecast_contract:\n"
+            '  question: "Will a test conflict occur by 2030-12-31?"\n'
+            "  horizon:\n"
+            "    kind: fixed_date\n"
+            "    fixed_date: 2030-12-31\n"
+            '  resolution_basis: "Binary event question resolved against confirmed direct conflict."\n'
+            '  resolver_source: "Official statements plus multi-source corroborated reporting."\n'
+            '  resolver_basis: "Resolve yes on confirmed conflict; otherwise resolve no at horizon."\n'
+            '  closure_rule: "binary_event_by_horizon"\n'
+            '  occurrence_definition: "Confirmed direct conflict occurs."\n'
+            '  non_occurrence_definition: "No confirmed direct conflict occurs by the horizon date."\n'
             "indicators:\n"
             f"{indicator_lines}\n"
         ),

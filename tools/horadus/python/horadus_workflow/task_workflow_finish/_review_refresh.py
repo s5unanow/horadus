@@ -3,7 +3,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
+from tools.horadus.python.horadus_workflow import (
+    pr_review_gate_state,
+)
+from tools.horadus.python.horadus_workflow import (
+    task_workflow_shared as shared,
+)
 
 PRE_REVIEW_GRAPHQL_REVIEWS_QUERY = (
     "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
@@ -35,7 +40,7 @@ def _marker_for_head(*, config: shared.FinishConfig, head_oid: str) -> str:
 
 def _request_timeline(
     pr_url: str, *, config: shared.FinishConfig
-) -> tuple[int, str, list[dict[str, Any]]]:
+) -> tuple[int, str, str, list[dict[str, Any]]]:
     pr_result = shared._run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "number,headRefOid", "--jq", "."]
     )
@@ -129,7 +134,7 @@ def _request_timeline(
         if not isinstance(end_cursor, str) or not end_cursor.strip():
             raise ValueError("Fresh-review request history pagination is incomplete.")
         after_cursor = end_cursor
-    return (pr_number, head_oid, timeline_items)
+    return (pr_number, repo_name, head_oid, timeline_items)
 
 
 def _request_comment_state(
@@ -175,7 +180,7 @@ def _request_comment_state(
 
 def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> list[str]:
     try:
-        _pr_number, head_oid, timeline_items = _request_timeline(pr_url, config=config)
+        pr_number, repo_name, head_oid, timeline_items = _request_timeline(pr_url, config=config)
     except ValueError as exc:
         message = str(exc)
         if message.startswith("Unable to parse PR metadata"):
@@ -205,6 +210,12 @@ def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> 
             f"Failed to request a fresh review from `{config.review_bot_login}` automatically.",
             *shared._output_lines(result),
         ]
+    pr_review_gate_state.reset_wait_window(
+        repo=repo_name,
+        pr_number=pr_number,
+        reviewer_login=config.review_bot_login,
+        head_oid=head_oid,
+    )
     return [
         f"Requested a fresh review from `{config.review_bot_login}` with `{request_command}` for head {head_oid}."
     ]
@@ -301,7 +312,7 @@ def _graphql_review_entries(
 
 def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.FinishConfig) -> bool:
     try:
-        pr_number, head_oid, timeline_items = _request_timeline(pr_url, config=config)
+        pr_number, _repo_name, head_oid, timeline_items = _request_timeline(pr_url, config=config)
     except ValueError as exc:
         message = str(exc)
         if message.startswith("Unable to parse PR metadata"):

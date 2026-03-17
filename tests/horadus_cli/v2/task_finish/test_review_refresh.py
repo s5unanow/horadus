@@ -7,6 +7,7 @@ from collections.abc import Callable
 import pytest
 
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+import tools.horadus.python.horadus_workflow.task_workflow_finish._review_refresh as review_refresh_module
 from tests.horadus_cli.v2.helpers import _completed
 
 pytestmark = pytest.mark.unit
@@ -173,6 +174,7 @@ def test_maybe_request_fresh_review_posts_codex_comment(
 ) -> None:
     config = _finish_config()
     called: dict[str, object] = {}
+    reset_calls: list[dict[str, object]] = []
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:4] == ["gh", "pr", "view", PR_URL]:
@@ -185,6 +187,11 @@ def test_maybe_request_fresh_review_posts_codex_comment(
         return _completed(args, stdout="https://example.invalid/comment/trigger\n")
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        review_refresh_module.pr_review_gate_state,
+        "reset_wait_window",
+        lambda **kwargs: reset_calls.append(kwargs),
+    )
 
     assert task_commands_module._maybe_request_fresh_review(
         pr_url=PR_URL,
@@ -199,6 +206,14 @@ def test_maybe_request_fresh_review_posts_codex_comment(
         PR_URL,
         "--body",
         f"@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head={DEFAULT_HEAD} -->",
+    ]
+    assert reset_calls == [
+        {
+            "repo": "example/repo",
+            "pr_number": DEFAULT_PR_NUMBER,
+            "reviewer_login": "chatgpt-codex-connector[bot]",
+            "head_oid": DEFAULT_HEAD,
+        }
     ]
 
 
@@ -258,6 +273,7 @@ def test_maybe_request_fresh_review_dedupes_current_head_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = _finish_config()
+    reset_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
@@ -269,6 +285,11 @@ def test_maybe_request_fresh_review_dedupes_current_head_request(
             )
         ),
     )
+    monkeypatch.setattr(
+        review_refresh_module.pr_review_gate_state,
+        "reset_wait_window",
+        lambda **kwargs: reset_calls.append(kwargs),
+    )
 
     assert task_commands_module._maybe_request_fresh_review(
         pr_url=PR_URL,
@@ -276,6 +297,7 @@ def test_maybe_request_fresh_review_dedupes_current_head_request(
     ) == [
         f"Fresh review already requested for `chatgpt-codex-connector[bot]` on current head {DEFAULT_HEAD}."
     ]
+    assert reset_calls == []
 
 
 @pytest.mark.parametrize(

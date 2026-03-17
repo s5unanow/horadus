@@ -609,6 +609,7 @@ def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
         id=evidence.id,
         trend_id=evidence.trend_id,
         event_id=evidence.event_id,
+        event_claim_id=evidence.event_claim_id,
         signal_type=evidence.signal_type,
         credibility_score=(
             float(evidence.credibility_score) if evidence.credibility_score is not None else None

@@ -313,3 +313,5 @@
 - TASK-205: Requeue retryable pipeline failures instead of permanently erroring items ✅
 - TASK-199: Harden trend config sync against write-on-read and arbitrary path access ✅
 - TASK-342: Close Sprint 4 and Seed Sprint 5 with the Highest-Impact Non-Human Tasks ✅
+## Sprint 5
+- TASK-336: Separate Story Clusters from Stable Event-Claim Identity ✅

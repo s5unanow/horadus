@@ -16,7 +16,7 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
-from src.storage.models import Event, EventItem, RawItem, Source, TrendEvidence
+from src.storage.models import Event, EventClaim, EventItem, RawItem, Source, TrendEvidence
 
 router = APIRouter()
 
@@ -91,6 +91,7 @@ class EventDetailResponse(EventResponse):
     )
 
     sources: list[dict[str, Any]]
+    claims: list[dict[str, Any]]
     trend_impacts: list[dict[str, Any]]
 
 
@@ -198,21 +199,49 @@ async def get_event(
         await session.execute(
             select(
                 TrendEvidence.trend_id,
+                TrendEvidence.event_claim_id,
+                EventClaim.claim_text,
                 TrendEvidence.signal_type,
                 TrendEvidence.delta_log_odds,
             )
+            .join(EventClaim, EventClaim.id == TrendEvidence.event_claim_id)
             .where(TrendEvidence.event_id == event_id)
             .where(TrendEvidence.is_invalidated.is_(False))
             .order_by(TrendEvidence.created_at.desc())
         )
     ).all()
+    claim_rows = (
+        await session.execute(
+            select(
+                EventClaim.id,
+                EventClaim.claim_key,
+                EventClaim.claim_text,
+                EventClaim.claim_type,
+                EventClaim.is_active,
+            )
+            .where(EventClaim.event_id == event_id)
+            .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+        )
+    ).all()
+    claims = [
+        {
+            "id": claim_id,
+            "claim_key": claim_key,
+            "claim_text": claim_text,
+            "claim_type": claim_type,
+            "is_active": is_active,
+        }
+        for claim_id, claim_key, claim_text, claim_type, is_active in claim_rows
+    ]
     trend_impacts = [
         {
             "trend_id": trend_id,
+            "event_claim_id": event_claim_id,
+            "claim_text": claim_text,
             "signal_type": signal_type,
             "direction": "escalatory" if float(delta_log_odds) >= 0 else "de_escalatory",
         }
-        for trend_id, signal_type, delta_log_odds in impact_rows
+        for trend_id, event_claim_id, claim_text, signal_type, delta_log_odds in impact_rows
     ]
 
     return EventDetailResponse(
@@ -230,5 +259,6 @@ async def get_event(
         extracted_what=event.extracted_what,
         extracted_where=event.extracted_where,
         sources=sources,
+        claims=claims,
         trend_impacts=trend_impacts,
     )

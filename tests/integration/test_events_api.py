@@ -7,7 +7,7 @@ import pytest
 
 from src.api.routes.events import list_events
 from src.storage.database import async_session_maker
-from src.storage.models import Event, Trend, TrendEvidence
+from src.storage.models import Event, EventClaim, Trend, TrendEvidence
 
 pytestmark = pytest.mark.integration
 
@@ -59,24 +59,43 @@ async def test_list_events_trend_filter_deduplicates_multi_evidence_rows() -> No
         )
         session.add_all([trend, newest_event, older_event])
         await session.flush()
+        newest_claim = EventClaim(
+            event_id=newest_event.id,
+            claim_key="__event__",
+            claim_text=newest_event.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        older_claim = EventClaim(
+            event_id=older_event.id,
+            claim_key="__event__",
+            claim_text=older_event.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        session.add_all([newest_claim, older_claim])
+        await session.flush()
 
         session.add_all(
             [
                 TrendEvidence(
                     trend_id=trend.id,
                     event_id=newest_event.id,
+                    event_claim_id=newest_claim.id,
                     signal_type="signal_primary",
                     delta_log_odds=0.12,
                 ),
                 TrendEvidence(
                     trend_id=trend.id,
                     event_id=newest_event.id,
+                    event_claim_id=newest_claim.id,
                     signal_type="signal_secondary",
                     delta_log_odds=0.08,
                 ),
                 TrendEvidence(
                     trend_id=trend.id,
                     event_id=older_event.id,
+                    event_claim_id=older_claim.id,
                     signal_type="signal_primary",
                     delta_log_odds=0.05,
                 ),

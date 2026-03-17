@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import ROUND_HALF_UP, Decimal
 from inspect import isawaitable
 from typing import Any
 from uuid import UUID
@@ -15,12 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_config import index_trends_by_runtime_id, trend_runtime_id_for_record
 from src.core.trend_engine import EvidenceFactors, TrendEngine, calculate_evidence_delta
-from src.storage.models import Event, TaxonomyGapReason, Trend, TrendEvidence
+from src.processing.event_claims import FALLBACK_EVENT_CLAIM_KEY, sync_event_claims
+from src.processing.trend_evidence_matching import _evidence_matches
+from src.storage.models import Event, EventClaim, TaxonomyGapReason, Trend, TrendEvidence
 
 logger = structlog.get_logger(__name__)
 
 TREND_IMPACT_RECONCILIATION_KEY = "_trend_impact_reconciliation"
-_FLOAT_TOLERANCE = 1e-6
 
 
 @dataclass(frozen=True)
@@ -33,6 +33,7 @@ class ParsedTrendImpact:
     severity: float
     confidence: float
     rationale: str | None
+    event_claim_key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -41,17 +42,22 @@ class DesiredTrendEvidence:
 
     trend: Trend
     impact: ParsedTrendImpact
+    event_claim: EventClaim
     delta: float
     factors: EvidenceFactors
     reasoning: str
 
     @property
-    def key(self) -> tuple[UUID, str]:
+    def key(self) -> tuple[UUID, UUID, str]:
         trend_id = self.trend.id
         if trend_id is None:
             msg = "Trend must have an id before reconciling impacts"
             raise ValueError(msg)
-        return (trend_id, self.impact.signal_type)
+        event_claim_id = self.event_claim.id
+        if event_claim_id is None:
+            msg = "Event claim must have an id before reconciling impacts"
+            raise ValueError(msg)
+        return (trend_id, event_claim_id, self.impact.signal_type)
 
 
 def parse_trend_impact(payload: Any) -> ParsedTrendImpact | None:
@@ -77,6 +83,12 @@ def parse_trend_impact(payload: Any) -> ParsedTrendImpact | None:
 
     rationale = payload.get("rationale")
     rationale_text = rationale.strip() if isinstance(rationale, str) and rationale.strip() else None
+    event_claim_key = payload.get("event_claim_key")
+    claim_key_text = (
+        event_claim_key.strip()
+        if isinstance(event_claim_key, str) and event_claim_key.strip()
+        else None
+    )
     return ParsedTrendImpact(
         trend_id=trend_id.strip(),
         signal_type=signal_type.strip(),
@@ -84,6 +96,7 @@ def parse_trend_impact(payload: Any) -> ParsedTrendImpact | None:
         severity=max(0.0, min(1.0, severity)),
         confidence=max(0.0, min(1.0, confidence)),
         rationale=rationale_text,
+        event_claim_key=claim_key_text,
     )
 
 
@@ -172,6 +185,11 @@ async def reconcile_event_trend_impacts(
         return (0, 0)
 
     active_evidence = await _load_active_event_evidence(session=session, event_id=event.id)
+    claim_by_key = await sync_event_claims(session=session, event=event)
+    claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+    impacts_payload = claims.get("trend_impacts", [])
+    if not isinstance(impacts_payload, list):
+        return (0, 0)
     (
         desired_by_key,
         impacts_seen,
@@ -181,12 +199,15 @@ async def reconcile_event_trend_impacts(
         event=event,
         trends=trends,
         impacts_payload=impacts_payload,
+        claim_by_key=claim_by_key,
         load_event_source_credibility=load_event_source_credibility,
         load_corroboration_score=load_corroboration_score,
         load_novelty_score=load_novelty_score,
         capture_taxonomy_gap=capture_taxonomy_gap,
     )
-    active_by_key = {(row.trend_id, row.signal_type): row for row in active_evidence}
+    active_by_key = {
+        (row.trend_id, row.event_claim_id, row.signal_type): row for row in active_evidence
+    }
     invalidated_at = datetime.now(tz=UTC)
     updates_applied, lineage_entries = await _reconcile_desired_evidence(
         session=session,
@@ -221,14 +242,15 @@ async def _build_desired_evidence(
     event: Event,
     trends: list[Trend],
     impacts_payload: list[Any],
+    claim_by_key: dict[str, EventClaim],
     load_event_source_credibility: Any,
     load_corroboration_score: Any,
     load_novelty_score: Any,
     capture_taxonomy_gap: Any,
-) -> tuple[dict[tuple[UUID, str], DesiredTrendEvidence], int, bool, dict[UUID, Trend]]:
+) -> tuple[dict[tuple[UUID, UUID, str], DesiredTrendEvidence], int, bool, dict[UUID, Trend]]:
     trend_by_runtime_id = index_trends_by_runtime_id(trends)
     trend_by_uuid = {trend.id: trend for trend in trends if trend.id is not None}
-    desired_by_key: dict[tuple[UUID, str], DesiredTrendEvidence] = {}
+    desired_by_key: dict[tuple[UUID, UUID, str], DesiredTrendEvidence] = {}
     impacts_seen = 0
     safe_to_remove_absent_keys = True
     source_credibility: float | None = None
@@ -246,6 +268,7 @@ async def _build_desired_evidence(
             event=event,
             impact=impact,
             trend_by_runtime_id=trend_by_runtime_id,
+            claim_by_key=claim_by_key,
             load_event_source_credibility=load_event_source_credibility,
             load_corroboration_score=load_corroboration_score,
             load_novelty_score=load_novelty_score,
@@ -275,6 +298,7 @@ async def _build_desired_impact(
     event: Event,
     impact: ParsedTrendImpact,
     trend_by_runtime_id: dict[str, Trend],
+    claim_by_key: dict[str, EventClaim],
     load_event_source_credibility: Any,
     load_corroboration_score: Any,
     load_novelty_score: Any,
@@ -301,6 +325,7 @@ async def _build_desired_impact(
             capture_taxonomy_gap=capture_taxonomy_gap,
         )
         return (None, source_credibility, corroboration_score)
+    event_claim = _event_claim_for_impact(impact=impact, claim_by_key=claim_by_key)
     source_credibility = source_credibility or await load_event_source_credibility(event)
     corroboration_score = corroboration_score or await load_corroboration_score(event)
     novelty_score = await load_novelty_score(
@@ -327,6 +352,7 @@ async def _build_desired_impact(
         DesiredTrendEvidence(
             trend=trend,
             impact=impact,
+            event_claim=event_claim,
             delta=delta,
             factors=factors,
             reasoning=impact_reasoning(impact),
@@ -336,13 +362,25 @@ async def _build_desired_impact(
     )
 
 
+def _event_claim_for_impact(
+    *,
+    impact: ParsedTrendImpact,
+    claim_by_key: dict[str, EventClaim],
+) -> EventClaim:
+    claim_key = impact.event_claim_key or FALLBACK_EVENT_CLAIM_KEY
+    event_claim = claim_by_key.get(claim_key)
+    if event_claim is None:
+        event_claim = claim_by_key[FALLBACK_EVENT_CLAIM_KEY]
+    return event_claim
+
+
 async def _reconcile_desired_evidence(
     *,
     session: AsyncSession,
     trend_engine: TrendEngine,
     event_id: UUID,
-    desired_by_key: dict[tuple[UUID, str], DesiredTrendEvidence],
-    active_by_key: dict[tuple[UUID, str], TrendEvidence],
+    desired_by_key: dict[tuple[UUID, UUID, str], DesiredTrendEvidence],
+    active_by_key: dict[tuple[UUID, UUID, str], TrendEvidence],
     trend_by_uuid: dict[UUID, Trend],
     invalidated_at: datetime,
 ) -> tuple[int, list[dict[str, Any]]]:
@@ -376,6 +414,7 @@ async def _reconcile_desired_evidence(
             trend=desired.trend,
             delta=desired.delta,
             event_id=event_id,
+            event_claim_id=desired.event_claim.id,
             signal_type=desired.impact.signal_type,
             factors=desired.factors,
             reasoning=desired.reasoning,
@@ -391,7 +430,7 @@ async def _invalidate_absent_evidence(
     *,
     session: AsyncSession,
     trend_engine: TrendEngine,
-    active_by_key: dict[tuple[UUID, str], TrendEvidence],
+    active_by_key: dict[tuple[UUID, UUID, str], TrendEvidence],
     trend_by_uuid: dict[UUID, Trend],
     invalidated_at: datetime,
 ) -> tuple[int, list[dict[str, Any]]]:
@@ -628,6 +667,7 @@ def _lineage_entry(
         "change_type": change_type,
         "evidence_id": str(evidence.id) if evidence.id is not None else None,
         "trend_id": trend_runtime_id,
+        "event_claim_id": str(evidence.event_claim_id),
         "signal_type": evidence.signal_type,
         "delta_log_odds": round(float(evidence.delta_log_odds), 6),
         "invalidated_at": invalidated_at.isoformat(),
@@ -635,6 +675,7 @@ def _lineage_entry(
     if replacement is not None:
         entry["replacement"] = {
             "trend_id": trend_runtime_id_for_record(replacement.trend),
+            "event_claim_id": str(replacement.event_claim.id),
             "signal_type": replacement.impact.signal_type,
             "direction": replacement.impact.direction,
             "severity": round(replacement.impact.severity, 6),
@@ -649,51 +690,5 @@ def _taxonomy_gap_details(impact: ParsedTrendImpact) -> dict[str, Any]:
         "severity": impact.severity,
         "confidence": impact.confidence,
         "rationale": impact.rationale,
+        "event_claim_key": impact.event_claim_key,
     }
-
-
-def _evidence_matches(
-    evidence: TrendEvidence,
-    desired: DesiredTrendEvidence,
-    *,
-    desired_hash: str,
-) -> bool:
-    return (
-        evidence.trend_definition_hash == desired_hash
-        and _float_matches(evidence.base_weight, desired.factors.base_weight, places=6)
-        and _float_matches(
-            evidence.direction_multiplier,
-            desired.factors.direction_multiplier,
-            places=1,
-        )
-        and _float_matches(evidence.credibility_score, desired.factors.credibility, places=2)
-        and _float_matches(
-            evidence.corroboration_factor,
-            desired.factors.corroboration,
-            places=2,
-        )
-        and _float_matches(evidence.novelty_score, desired.factors.novelty, places=2)
-        and _float_matches(evidence.evidence_age_days, desired.factors.evidence_age_days, places=2)
-        and _float_matches(
-            evidence.temporal_decay_factor,
-            desired.factors.temporal_decay_multiplier,
-            places=4,
-        )
-        and _float_matches(evidence.severity_score, desired.factors.severity, places=2)
-        and _float_matches(evidence.confidence_score, desired.factors.confidence, places=2)
-        and _float_matches(evidence.delta_log_odds, desired.delta, places=6)
-        and (evidence.reasoning or None) == desired.reasoning
-    )
-
-
-def _float_matches(left: Any, right: Any, *, places: int | None = None) -> bool:
-    if left is None or right is None:
-        return left is None and right is None
-    if places is not None:
-        return _quantize_float(left, places=places) == _quantize_float(right, places=places)
-    return abs(float(left) - float(right)) <= _FLOAT_TOLERANCE
-
-
-def _quantize_float(value: Any, *, places: int) -> Decimal:
-    quantum = Decimal("1").scaleb(-places)
-    return Decimal(str(float(value))).quantize(quantum, rounding=ROUND_HALF_UP)

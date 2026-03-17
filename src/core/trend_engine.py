@@ -503,40 +503,21 @@ class TrendEngine:
         trend: Trend,
         delta: float,
         event_id: UUID,
+        event_claim_id: UUID,
         signal_type: str,
         factors: EvidenceFactors,
         reasoning: str,
     ) -> TrendUpdate:
-        """
-        Apply evidence delta to trend and record it.
-
-        This is the main method for updating trend probabilities.
-        It updates the trend's log-odds, creates an evidence record
-        for audit purposes, and returns the update result.
-
-        Args:
-            trend: Trend to update
-            delta: Log-odds delta to apply
-            event_id: Source event ID
-            signal_type: Type of signal detected
-            factors: Breakdown of calculation factors
-            reasoning: Human-readable explanation from LLM
-
-        Returns:
-            TrendUpdate with previous and new probabilities
-        """
+        """Apply one evidence delta and persist the claim-aware audit row."""
         from src.storage.models import TrendEvidence
 
         prior_log_odds = float(trend.current_log_odds)
         previous_prob = logodds_to_prob(prior_log_odds)
 
         existing = await self.session.execute(
-            # Ensure idempotency: never apply the same (trend, event, signal) twice.
-            # The DB enforces this with a unique constraint, but we want a clean no-op
-            # return instead of "apply delta then fail on commit".
             select(TrendEvidence.id).where(
                 TrendEvidence.trend_id == trend.id,
-                TrendEvidence.event_id == event_id,
+                TrendEvidence.event_claim_id == event_claim_id,
                 TrendEvidence.signal_type == signal_type,
                 TrendEvidence.is_invalidated.is_(False),
             )
@@ -547,6 +528,7 @@ class TrendEngine:
                 trend_id=str(trend.id),
                 trend_name=trend.name,
                 event_id=str(event_id),
+                event_claim_id=str(event_claim_id),
                 signal_type=signal_type,
             )
             return TrendUpdate(
@@ -556,10 +538,10 @@ class TrendEngine:
                 direction="unchanged",
             )
 
-        # Get previous probability
         evidence = TrendEvidence(
             trend_id=trend.id,
             event_id=event_id,
+            event_claim_id=event_claim_id,
             signal_type=signal_type,
             base_weight=factors.base_weight,
             direction_multiplier=factors.direction_multiplier,
@@ -585,6 +567,7 @@ class TrendEngine:
                 trend_id=str(trend.id),
                 trend_name=trend.name,
                 event_id=str(event_id),
+                event_claim_id=str(event_claim_id),
                 signal_type=signal_type,
             )
             return TrendUpdate(
@@ -594,7 +577,6 @@ class TrendEngine:
                 direction="unchanged",
             )
 
-        # Apply delta only after evidence record is guaranteed unique/persistable.
         applied_at = datetime.now(UTC)
         previous_lo, new_lo = await self.apply_log_odds_delta(
             trend_id=trend.id,
@@ -610,7 +592,6 @@ class TrendEngine:
         previous_prob = logodds_to_prob(previous_lo)
         new_prob = logodds_to_prob(new_lo)
 
-        # Determine direction
         if delta > 0.001:
             direction = "up"
         elif delta < -0.001:

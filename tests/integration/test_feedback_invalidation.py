@@ -9,7 +9,7 @@ from sqlalchemy import select
 from src.api.routes.feedback import EventFeedbackRequest, create_event_feedback
 from src.api.routes.trends import list_trend_evidence
 from src.storage.database import async_session_maker
-from src.storage.models import Event, Trend, TrendEvidence
+from src.storage.models import Event, EventClaim, Trend, TrendEvidence
 
 pytestmark = pytest.mark.integration
 
@@ -52,10 +52,20 @@ async def test_event_invalidation_preserves_evidence_lineage_and_reverses_delta(
         )
         session.add_all([trend, event])
         await session.flush()
+        event_claim = EventClaim(
+            event_id=event.id,
+            claim_key="__event__",
+            claim_text=event.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        session.add(event_claim)
+        await session.flush()
 
         evidence_one = TrendEvidence(
             trend_id=trend.id,
             event_id=event.id,
+            event_claim_id=event_claim.id,
             signal_type="signal_primary",
             delta_log_odds=0.20,
             reasoning="Initial corroborated signal",
@@ -63,6 +73,7 @@ async def test_event_invalidation_preserves_evidence_lineage_and_reverses_delta(
         evidence_two = TrendEvidence(
             trend_id=trend.id,
             event_id=event.id,
+            event_claim_id=event_claim.id,
             signal_type="signal_secondary",
             delta_log_odds=0.10,
             reasoning="Follow-on corroborated signal",
@@ -114,3 +125,4 @@ async def test_event_invalidation_preserves_evidence_lineage_and_reverses_delta(
         assert len(lineage_evidence) == 2
         assert all(entry.is_invalidated for entry in lineage_evidence)
         assert all(entry.invalidation_feedback_id == feedback.id for entry in lineage_evidence)
+        assert all(entry.event_claim_id == event_claim.id for entry in lineage_evidence)

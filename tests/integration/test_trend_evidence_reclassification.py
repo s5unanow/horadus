@@ -11,7 +11,7 @@ from sqlalchemy import select
 from src.core.trend_engine import EvidenceFactors, TrendEngine
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
-from src.storage.models import Event, Trend, TrendEvidence
+from src.storage.models import Event, EventClaim, Trend, TrendEvidence
 
 pytestmark = pytest.mark.integration
 
@@ -86,12 +86,22 @@ async def test_reclassification_supersedes_active_evidence_when_severity_changes
         )
         session.add_all([trend, event])
         await session.flush()
+        event_claim = EventClaim(
+            event_id=event.id,
+            claim_key="__event__",
+            claim_text=event.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        session.add(event_claim)
+        await session.flush()
 
         engine = TrendEngine(session=session)
         await engine.apply_evidence(
             trend=trend,
             delta=0.05,
             event_id=event.id,
+            event_claim_id=event_claim.id,
             signal_type="military_movement",
             factors=_factors(severity=0.4, confidence=0.6, corroboration=1.0),
             reasoning="Initial lower-severity classification",
@@ -135,6 +145,8 @@ async def test_reclassification_supersedes_active_evidence_when_severity_changes
         assert float(active_row.severity_score or 0.0) == pytest.approx(0.9)
         assert active_row.reasoning == "Force posture has intensified materially"
         assert float(trend.current_log_odds) == pytest.approx(float(active_row.delta_log_odds))
+        assert active_row.event_claim_id == event_claim.id
+        assert invalidated_row.event_claim_id == event_claim.id
 
         claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         history = claims.get("_trend_impact_reconciliation")
@@ -193,12 +205,22 @@ async def test_reclassification_supersedes_active_evidence_when_event_merge_chan
         )
         session.add_all([trend, event])
         await session.flush()
+        event_claim = EventClaim(
+            event_id=event.id,
+            claim_key="__event__",
+            claim_text=event.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        session.add(event_claim)
+        await session.flush()
 
         engine = TrendEngine(session=session)
         await engine.apply_evidence(
             trend=trend,
             delta=0.04,
             event_id=event.id,
+            event_claim_id=event_claim.id,
             signal_type="military_movement",
             factors=_factors(severity=0.8, confidence=0.9, corroboration=1 / 3),
             reasoning="Original single-source application",
@@ -231,3 +253,5 @@ async def test_reclassification_supersedes_active_evidence_when_event_merge_chan
         )
         assert float(trend.current_log_odds) == pytest.approx(float(active_row.delta_log_odds))
         assert invalidated_row.reasoning == "Original single-source application"
+        assert active_row.event_claim_id == event_claim.id
+        assert invalidated_row.event_claim_id == event_claim.id

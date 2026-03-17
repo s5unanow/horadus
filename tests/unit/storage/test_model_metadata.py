@@ -6,6 +6,7 @@ from sqlalchemy.dialects import postgresql
 from src.storage.models import (
     ApiUsage,
     Event,
+    EventClaim,
     EventItem,
     RawItem,
     Report,
@@ -121,13 +122,25 @@ def test_trend_evidence_factorization_columns_present_in_model_metadata() -> Non
     assert "base_weight" in TrendEvidence.__table__.c
     assert "direction_multiplier" in TrendEvidence.__table__.c
     assert "trend_definition_hash" in TrendEvidence.__table__.c
+    assert "event_claim_id" in TrendEvidence.__table__.c
+
+
+def test_event_claim_constraints_present_in_model_metadata() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in EventClaim.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+
+    assert "check_event_claims_claim_type_allowed" in constraint_names
+    assert "uq_event_claims_event_claim_key" in constraint_names
 
 
 def test_trend_evidence_active_unique_index_present_in_model_metadata() -> None:
     evidence_index = next(
         index
         for index in TrendEvidence.__table__.indexes
-        if index.name == "uq_trend_event_signal_active"
+        if index.name == "uq_trend_event_claim_signal_active"
     )
     where_clause = evidence_index.dialect_options["postgresql"]["where"]
 

@@ -610,11 +610,13 @@ async def test_list_trend_evidence_returns_records(mock_db_session) -> None:
     trend = _build_trend()
     evidence_id = uuid4()
     event_id = uuid4()
+    event_claim_id = uuid4()
     created_at = datetime.now(tz=UTC)
     evidence = TrendEvidence(
         id=evidence_id,
         trend_id=trend.id,
         event_id=event_id,
+        event_claim_id=event_claim_id,
         signal_type="military_movement",
         credibility_score=0.9,
         corroboration_factor=0.67,
@@ -634,6 +636,7 @@ async def test_list_trend_evidence_returns_records(mock_db_session) -> None:
     assert result[0].id == evidence_id
     assert result[0].trend_id == trend.id
     assert result[0].event_id == event_id
+    assert result[0].event_claim_id == event_claim_id
     assert result[0].signal_type == "military_movement"
     assert result[0].credibility_score == pytest.approx(0.9)
     assert result[0].corroboration_factor == pytest.approx(0.67)
@@ -793,6 +796,7 @@ async def test_simulate_trend_removes_event_impact_without_db_mutation(
                 id=uuid4(),
                 trend_id=trend.id,
                 event_id=event_id,
+                event_claim_id=uuid4(),
                 signal_type="military_movement",
                 delta_log_odds=0.02,
             ),
@@ -800,6 +804,7 @@ async def test_simulate_trend_removes_event_impact_without_db_mutation(
                 id=uuid4(),
                 trend_id=trend.id,
                 event_id=event_id,
+                event_claim_id=uuid4(),
                 signal_type="diplomatic_breakdown",
                 delta_log_odds=-0.01,
             ),

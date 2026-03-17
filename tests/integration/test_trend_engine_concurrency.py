@@ -9,7 +9,7 @@ from sqlalchemy import func, select
 
 from src.core.trend_engine import EvidenceFactors, TrendEngine
 from src.storage.database import async_session_maker
-from src.storage.models import Event, Trend, TrendEvidence
+from src.storage.models import Event, EventClaim, Trend, TrendEvidence
 
 pytestmark = pytest.mark.integration
 
@@ -32,7 +32,7 @@ def _sample_factors() -> EvidenceFactors:
 
 async def _create_trend_and_events(
     *, current_log_odds: float, updated_at: datetime
-) -> tuple[UUID, UUID, UUID]:
+) -> tuple[UUID, UUID, UUID, UUID, UUID]:
     async with async_session_maker() as session:
         runtime_trend_id = f"concurrency-{uuid4()}"
         trend = Trend(
@@ -51,17 +51,36 @@ async def _create_trend_and_events(
         event_two = Event(canonical_summary=f"Concurrency event B {uuid4()}")
         session.add_all([trend, event_one, event_two])
         await session.flush()
+        claim_one = EventClaim(
+            event_id=event_one.id,
+            claim_key="__event__",
+            claim_text=event_one.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        claim_two = EventClaim(
+            event_id=event_two.id,
+            claim_key="__event__",
+            claim_text=event_two.canonical_summary,
+            claim_type="fallback",
+            claim_order=0,
+        )
+        session.add_all([claim_one, claim_two])
+        await session.flush()
         trend_id = trend.id
         event_one_id = event_one.id
         event_two_id = event_two.id
+        claim_one_id = claim_one.id
+        claim_two_id = claim_two.id
         await session.commit()
-    return trend_id, event_one_id, event_two_id
+    return trend_id, event_one_id, event_two_id, claim_one_id, claim_two_id
 
 
 async def _apply_evidence_task(
     *,
     trend_id: UUID,
     event_id: UUID,
+    event_claim_id: UUID,
     signal_type: str,
     delta: float,
     ready_queue: asyncio.Queue[None],
@@ -79,6 +98,7 @@ async def _apply_evidence_task(
             trend=trend,
             delta=delta,
             event_id=event_id,
+            event_claim_id=event_claim_id,
             signal_type=signal_type,
             factors=_sample_factors(),
             reasoning="concurrency integration test",
@@ -88,7 +108,13 @@ async def _apply_evidence_task(
 
 @pytest.mark.asyncio
 async def test_apply_evidence_uses_atomic_delta_under_concurrency() -> None:
-    trend_id, event_one_id, event_two_id = await _create_trend_and_events(
+    (
+        trend_id,
+        event_one_id,
+        event_two_id,
+        claim_one_id,
+        claim_two_id,
+    ) = await _create_trend_and_events(
         current_log_odds=0.0,
         updated_at=datetime.now(tz=UTC) - timedelta(days=1),
     )
@@ -100,6 +126,7 @@ async def test_apply_evidence_uses_atomic_delta_under_concurrency() -> None:
             _apply_evidence_task(
                 trend_id=trend_id,
                 event_id=event_one_id,
+                event_claim_id=claim_one_id,
                 signal_type="signal_a",
                 delta=0.2,
                 ready_queue=ready_queue,
@@ -110,6 +137,7 @@ async def test_apply_evidence_uses_atomic_delta_under_concurrency() -> None:
             _apply_evidence_task(
                 trend_id=trend_id,
                 event_id=event_two_id,
+                event_claim_id=claim_two_id,
                 signal_type="signal_b",
                 delta=0.2,
                 ready_queue=ready_queue,
@@ -136,7 +164,13 @@ async def test_apply_evidence_uses_atomic_delta_under_concurrency() -> None:
 
 @pytest.mark.asyncio
 async def test_decay_does_not_overwrite_concurrent_manual_delta() -> None:
-    trend_id, _event_one_id, _event_two_id = await _create_trend_and_events(
+    (
+        trend_id,
+        _event_one_id,
+        _event_two_id,
+        _claim_one_id,
+        _claim_two_id,
+    ) = await _create_trend_and_events(
         current_log_odds=1.0,
         updated_at=datetime.now(tz=UTC) - timedelta(days=30),
     )

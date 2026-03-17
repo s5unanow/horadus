@@ -252,9 +252,11 @@ async def _build_event_invalidation_payload(
 
     invalidation_timestamp = datetime.now(tz=UTC)
     evidence_ids = [str(evidence.id) for evidence in evidences if evidence.id is not None]
+    event_claim_ids = sorted({str(evidence.event_claim_id) for evidence in evidences})
     original_value = {
         "evidence_count": len(evidences),
         "active_evidence_ids": evidence_ids,
+        "active_event_claim_ids": event_claim_ids,
         "trend_deltas": {str(trend_id): delta for trend_id, delta in trend_deltas.items()},
     }
     corrected_value = {
@@ -263,6 +265,7 @@ async def _build_event_invalidation_payload(
         "trend_adjustments": trend_adjustments,
         "invalidated_evidence_count": len(evidence_ids),
         "invalidated_evidence_ids": evidence_ids,
+        "invalidated_event_claim_ids": event_claim_ids,
         "invalidated_at": invalidation_timestamp.isoformat(),
     }
     return original_value, corrected_value, evidences, invalidation_timestamp

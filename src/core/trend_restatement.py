@@ -132,15 +132,15 @@ async def apply_compensating_restatement(
         if baseline_log_odds is None or (prior_updated_at is None and prior_created_at is None):
             decayed_log_odds = prior_log_odds
         else:
+            start_at = prior_updated_at if prior_updated_at is not None else prior_created_at
+            assert start_at is not None
             decayed_log_odds = _decay_log_odds(
                 current_log_odds=prior_log_odds,
                 baseline_log_odds=float(baseline_log_odds),
                 half_life_days=float(
                     getattr(trend, "decay_half_life_days", None) or DEFAULT_DECAY_HALF_LIFE_DAYS
                 ),
-                from_at=_as_utc(
-                    prior_updated_at if prior_updated_at is not None else prior_created_at
-                ),
+                from_at=_as_utc(start_at),
                 to_at=applied_at,
             )
         total_delta = (decayed_log_odds - prior_log_odds) + compensation_delta_log_odds

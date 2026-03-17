@@ -218,6 +218,51 @@ async def test_apply_compensating_restatement_leaves_in_memory_trend_when_delta_
 
 
 @pytest.mark.asyncio
+async def test_apply_compensating_restatement_decays_before_applying_delta() -> None:
+    applied_at = datetime(2026, 3, 17, tzinfo=UTC)
+    prior_updated_at = applied_at - timedelta(days=30)
+    trend = Trend(
+        id=uuid4(),
+        name="Decay First Trend",
+        runtime_trend_id="decay-first-trend",
+        definition={"id": "decay-first-trend"},
+        baseline_log_odds=0.0,
+        current_log_odds=0.4,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+        created_at=prior_updated_at - timedelta(days=1),
+        updated_at=prior_updated_at,
+    )
+    call: dict[str, float] = {}
+
+    class _Engine:
+        session = None
+
+        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
+            call.update(
+                delta=float(kwargs["delta"]),
+                fallback_current_log_odds=float(kwargs["fallback_current_log_odds"]),
+            )
+            previous_lo = float(kwargs["fallback_current_log_odds"])
+            return previous_lo, previous_lo + float(kwargs["delta"])
+
+    await apply_compensating_restatement(
+        trend_engine=_Engine(),
+        trend=trend,
+        compensation_delta_log_odds=0.1,
+        restatement_kind="manual_compensation",
+        source="trend_override",
+        recorded_at=applied_at,
+    )
+
+    assert call["fallback_current_log_odds"] == pytest.approx(0.4)
+    assert call["delta"] == pytest.approx(-0.1)
+    assert float(trend.current_log_odds) == pytest.approx(0.3)
+    assert trend.updated_at == applied_at
+
+
+@pytest.mark.asyncio
 async def test_build_trend_projection_check_requires_trend_id(mock_db_session) -> None:
     trend = Trend(
         id=None,

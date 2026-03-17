@@ -132,6 +132,34 @@ def test_assign_claim_keys_to_impacts_covers_selection_paths() -> None:
 
     assert single_assigned[0]["event_claim_key"] == "single tracked statement"
 
+    shared_prefix = "forces crossed border near checkpoint alpha " * 8
+    first_long_claim = f"{shared_prefix}denial from local officials"
+    second_long_claim = f"{shared_prefix}confirmed by satellite imagery"
+    long_claim_event = Event(
+        extracted_what="Fallback summary",
+        extracted_claims={
+            "claim_graph": {
+                "nodes": [
+                    {"text": first_long_claim},
+                    {"text": second_long_claim},
+                ]
+            }
+        },
+    )
+
+    long_assigned = assign_claim_keys_to_impacts(
+        event=long_claim_event,
+        impacts=[
+            {
+                "signal_type": "military_movement",
+                "direction": "escalatory",
+                "rationale": second_long_claim,
+            }
+        ],
+    )
+
+    assert long_assigned[0]["event_claim_key"] == normalize_claim_key(second_long_claim)
+
 
 @pytest.mark.asyncio
 async def test_sync_event_claims_requires_event_id() -> None:

@@ -174,6 +174,7 @@ def downgrade() -> None:
                         ORDER BY is_invalidated ASC, created_at DESC, id DESC
                     ) AS row_num
                 FROM trend_evidence
+                WHERE is_invalidated = false
             )
             DELETE FROM trend_evidence
             USING ranked

@@ -27,6 +27,7 @@ class EventClaimSpec:
     """Desired claim identity for one event."""
 
     claim_key: str
+    normalized_text: str
     claim_text: str
     claim_type: str
     claim_order: int
@@ -64,6 +65,7 @@ def build_event_claim_specs(event: Event) -> list[EventClaimSpec]:
     specs = [
         EventClaimSpec(
             claim_key=FALLBACK_EVENT_CLAIM_KEY,
+            normalized_text=normalize_claim_text(fallback_claim_text(event)),
             claim_text=fallback_claim_text(event),
             claim_type=EventClaimType.FALLBACK.value,
             claim_order=0,
@@ -98,6 +100,7 @@ def build_event_claim_specs(event: Event) -> list[EventClaimSpec]:
         specs.append(
             EventClaimSpec(
                 claim_key=claim_key,
+                normalized_text=normalize_claim_text(text),
                 claim_text=text,
                 claim_type=EventClaimType.STATEMENT.value,
                 claim_order=index,
@@ -155,14 +158,14 @@ def _select_claim_for_impact(
             str(payload.get("direction", "") or "").replace("_", " "),
         ]
     ).strip()
-    scoring_tokens = set(normalize_claim_key(scoring_text).split())
+    scoring_tokens = set(normalize_claim_text(scoring_text).split())
     if not scoring_tokens:
         return fallback
 
     best: EventClaimSpec | None = None
     best_score = 0
     for spec in statements:
-        overlap = len(scoring_tokens.intersection(spec.claim_key.split()))
+        overlap = len(scoring_tokens.intersection(spec.normalized_text.split()))
         if overlap > best_score:
             best = spec
             best_score = overlap

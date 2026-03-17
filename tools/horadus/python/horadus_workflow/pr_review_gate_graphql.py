@@ -5,6 +5,35 @@ from typing import Any, cast
 
 GraphqlLoader = Callable[[str, dict[str, str], str], object]
 ErrorFactory = Callable[[str], Exception]
+REVIEWS_AND_COMMENTS_QUERY = (
+    "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
+    "repository(owner:$owner,name:$repo){"
+    "pullRequest(number:$number){"
+    "reviews(first:100,after:$after){"
+    "pageInfo{hasNextPage endCursor}"
+    "nodes{"
+    "databaseId state body submittedAt "
+    "author{login} "
+    "commit{oid} "
+    "comments(first:100){nodes{author{login} path line originalLine body url}}"
+    "}"
+    "}"
+    "}"
+    "}"
+    "}"
+)
+REACTIONS_QUERY = (
+    "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
+    "repository(owner:$owner,name:$repo){"
+    "pullRequest(number:$number){"
+    "reactions(first:100,after:$after){"
+    "pageInfo{hasNextPage endCursor}"
+    "nodes{content createdAt user{login}}"
+    "}"
+    "}"
+    "}"
+    "}"
+)
 
 
 def _repo_owner_name(repo: str) -> tuple[str, str]:
@@ -20,23 +49,6 @@ def graphql_reviews_and_comments(
     error_factory: ErrorFactory,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
     owner, repo_name = _repo_owner_name(repo)
-    query = (
-        "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
-        "repository(owner:$owner,name:$repo){"
-        "pullRequest(number:$number){"
-        "reviews(first:100,after:$after){"
-        "pageInfo{hasNextPage endCursor}"
-        "nodes{"
-        "databaseId state body submittedAt "
-        "author{login} "
-        "commit{oid} "
-        "comments(first:100){nodes{author{login} path line originalLine body url}}"
-        "}"
-        "}"
-        "}"
-        "}"
-        "}"
-    )
     after_cursor: str | None = None
     reviews: list[dict[str, object]] = []
     comments: list[dict[str, object]] = []
@@ -44,7 +56,7 @@ def graphql_reviews_and_comments(
         payload = cast(
             "dict[str, Any]",
             load_graphql(
-                query,
+                REVIEWS_AND_COMMENTS_QUERY,
                 {
                     "owner": owner,
                     "repo": repo_name,
@@ -126,25 +138,13 @@ def graphql_reactions(
     error_factory: ErrorFactory,
 ) -> list[dict[str, object]]:
     owner, repo_name = _repo_owner_name(repo)
-    query = (
-        "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
-        "repository(owner:$owner,name:$repo){"
-        "pullRequest(number:$number){"
-        "reactions(first:100,after:$after){"
-        "pageInfo{hasNextPage endCursor}"
-        "nodes{content createdAt user{login}}"
-        "}"
-        "}"
-        "}"
-        "}"
-    )
     after_cursor: str | None = None
     reactions: list[dict[str, object]] = []
     while True:
         payload = cast(
             "dict[str, Any]",
             load_graphql(
-                query,
+                REACTIONS_QUERY,
                 {
                     "owner": owner,
                     "repo": repo_name,

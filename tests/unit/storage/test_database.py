@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 import src.storage.database as database_module
+from src.storage.base import Base
 
 pytestmark = pytest.mark.unit
 
@@ -164,12 +165,11 @@ class _FakeConnection:
 @pytest.mark.asyncio
 async def test_init_db_runs_create_all(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = _FakeConnection()
-    fake_base = SimpleNamespace(metadata=SimpleNamespace(create_all="create-all"))
 
     monkeypatch.setattr(
         database_module, "engine", SimpleNamespace(begin=lambda: _BeginContext(conn))
     )
-    monkeypatch.setattr("src.storage.models.Base", fake_base)
+    monkeypatch.setattr(Base.metadata, "create_all", "create-all")
 
     await database_module.init_db()
 
@@ -179,12 +179,11 @@ async def test_init_db_runs_create_all(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_drop_db_runs_drop_all(monkeypatch: pytest.MonkeyPatch) -> None:
     conn = _FakeConnection()
-    fake_base = SimpleNamespace(metadata=SimpleNamespace(drop_all="drop-all"))
 
     monkeypatch.setattr(
         database_module, "engine", SimpleNamespace(begin=lambda: _BeginContext(conn))
     )
-    monkeypatch.setattr("src.storage.models.Base", fake_base)
+    monkeypatch.setattr(Base.metadata, "drop_all", "drop-all")
 
     await database_module.drop_db()
 

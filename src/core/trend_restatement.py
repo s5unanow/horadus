@@ -140,11 +140,13 @@ async def build_trend_projection_check(
     if trend.id is None:
         raise ValueError("Trend must have an id before projection verification")
 
+    projected_at = _as_utc(as_of if as_of is not None else trend.updated_at)
     evidence_rows = list(
         (
             await session.scalars(
                 select(TrendEvidence)
                 .where(TrendEvidence.trend_id == trend.id)
+                .where(TrendEvidence.created_at <= projected_at)
                 .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
             )
         ).all()
@@ -154,6 +156,7 @@ async def build_trend_projection_check(
             await session.scalars(
                 select(TrendRestatement)
                 .where(TrendRestatement.trend_id == trend.id)
+                .where(TrendRestatement.recorded_at <= projected_at)
                 .order_by(TrendRestatement.recorded_at.asc(), TrendRestatement.id.asc())
             )
         ).all()
@@ -183,7 +186,6 @@ async def build_trend_projection_check(
     current_log_odds = baseline_log_odds
     half_life_days = float(trend.decay_half_life_days or DEFAULT_DECAY_HALF_LIFE_DAYS)
     last_at = _as_utc(trend.created_at)
-    projected_at = _as_utc(as_of if as_of is not None else trend.updated_at)
 
     for entry in entries:
         current_log_odds = _decay_log_odds(

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from math import pow
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -65,6 +66,88 @@ async def test_build_trend_projection_check_replays_evidence_and_restatements_wi
     assert result.projected_log_odds == pytest.approx(0.05, rel=1e-6)
     assert result.drift_log_odds == pytest.approx(0.0, abs=1e-9)
     assert result.matches_projection is True
+
+
+@pytest.mark.asyncio
+async def test_build_trend_projection_check_excludes_rows_after_as_of(
+    mock_db_session,
+) -> None:
+    created_at = datetime(2026, 3, 1, tzinfo=UTC)
+    as_of = created_at + timedelta(days=5)
+    trend = Trend(
+        id=uuid4(),
+        name="Projection Cutoff Trend",
+        runtime_trend_id="projection-cutoff-trend",
+        definition={"id": "projection-cutoff-trend"},
+        baseline_log_odds=0.0,
+        current_log_odds=0.1,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+        created_at=created_at,
+        updated_at=created_at + timedelta(days=20),
+    )
+    in_range_evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=uuid4(),
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.1,
+        created_at=created_at + timedelta(days=1),
+    )
+    future_evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=uuid4(),
+        event_claim_id=uuid4(),
+        signal_type="military_movement",
+        delta_log_odds=0.9,
+        created_at=created_at + timedelta(days=10),
+    )
+    in_range_restatement = TrendRestatement(
+        id=uuid4(),
+        trend_id=trend.id,
+        trend_evidence_id=in_range_evidence.id,
+        restatement_kind="partial_restatement",
+        source="event_feedback",
+        original_evidence_delta_log_odds=0.1,
+        compensation_delta_log_odds=0.0,
+        recorded_at=created_at + timedelta(days=2),
+    )
+    future_restatement = TrendRestatement(
+        id=uuid4(),
+        trend_id=trend.id,
+        trend_evidence_id=future_evidence.id,
+        restatement_kind="partial_restatement",
+        source="event_feedback",
+        original_evidence_delta_log_odds=0.9,
+        compensation_delta_log_odds=-0.4,
+        recorded_at=created_at + timedelta(days=11),
+    )
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [in_range_evidence]),
+        SimpleNamespace(all=lambda: [in_range_restatement]),
+    ]
+
+    result = await build_trend_projection_check(
+        session=mock_db_session,
+        trend=trend,
+        as_of=as_of,
+    )
+
+    expected_projection = 0.1 * pow(0.5, 4 / 30)
+    assert result.as_of == as_of
+    assert result.evidence_count == 1
+    assert result.restatement_count == 1
+    assert result.projected_log_odds == pytest.approx(expected_projection, rel=1e-6)
+    assert result.matches_projection is False
+    evidence_query = mock_db_session.scalars.call_args_list[0].args[0]
+    restatement_query = mock_db_session.scalars.call_args_list[1].args[0]
+    assert "trend_evidence.created_at <=" in str(evidence_query)
+    assert "trend_restatements.recorded_at <=" in str(restatement_query)
+    assert future_evidence.id != in_range_evidence.id
+    assert future_restatement.id != in_range_restatement.id
 
 
 def test_as_utc_normalizes_naive_datetime() -> None:

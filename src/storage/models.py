@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import enum
 from datetime import date, datetime
-from typing import Any, ClassVar
+from typing import Any
 from uuid import UUID, uuid4
 
 from pgvector.sqlalchemy import Vector
@@ -27,17 +27,9 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-
-class Base(DeclarativeBase):
-    """Base class for all models."""
-
-    type_annotation_map: ClassVar[dict[Any, Any]] = {
-        dict[str, Any]: JSONB,
-        list[str]: ARRAY(String),
-        UUID: PGUUID(as_uuid=True),
-    }
+from src.storage.base import Base
 
 
 class SourceType(enum.StrEnum):

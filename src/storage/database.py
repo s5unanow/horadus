@@ -106,7 +106,8 @@ async def init_db() -> None:
     Note: In production, use Alembic migrations instead.
     This is useful for testing or quick setup.
     """
-    from src.storage.models import Base
+    from src.storage import models as _models  # noqa: F401
+    from src.storage.base import Base
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -118,7 +119,8 @@ async def drop_db() -> None:
 
     WARNING: This will delete all data. Use only in testing.
     """
-    from src.storage.models import Base
+    from src.storage import models as _models  # noqa: F401
+    from src.storage.base import Base
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)

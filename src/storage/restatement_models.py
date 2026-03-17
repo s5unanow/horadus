@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.storage.models import Base
+from src.storage.base import Base
 
 RESTATEMENT_KIND_SQL_VALUES = (
     "'full_invalidation', 'partial_restatement', 'manual_compensation', 'reclassification'"

@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import subprocess
+import sys
+from pathlib import Path
+
 import pytest
 from sqlalchemy.dialects import postgresql
 
@@ -181,3 +185,20 @@ def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -
     assert "check_trend_restatements_kind_allowed" in constraint_names
     assert "check_trend_restatements_source_allowed" in constraint_names
     assert "idx_trend_restatements_trend_recorded" in index_names
+
+
+def test_restatement_models_module_imports_without_circular_dependency() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import importlib; importlib.import_module('src.storage.restatement_models')",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr

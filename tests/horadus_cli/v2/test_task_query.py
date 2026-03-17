@@ -22,12 +22,6 @@ from tools.horadus.python.horadus_cli.app import main
 pytestmark = pytest.mark.unit
 
 
-def _live_active_search_query() -> str:
-    active_tasks = task_repo_module.parse_active_tasks()
-    assert active_tasks
-    return active_tasks[0].task_id
-
-
 def test_main_tasks_context_pack_json_output(
     synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],
@@ -168,14 +162,14 @@ def test_main_tasks_search_json_output_is_compact_by_default(
 
 
 def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
+    synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    query = _live_active_search_query()
     result = main(
         [
             "tasks",
             "search",
-            query,
+            LIVE_TASK_ID,
             "--status",
             "active",
             "--include-raw",
@@ -195,28 +189,28 @@ def test_main_tasks_search_json_output_can_filter_active_and_include_raw(
 
 
 def test_main_tasks_search_text_output_remains_compact_by_default(
+    synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    query = _live_active_search_query()
-    result = main(["tasks", "search", query, "--status", "active"])
+    result = main(["tasks", "search", LIVE_TASK_ID, "--status", "active"])
 
     assert result == 0
     output = capsys.readouterr().out
-    assert f"Task search: {query}" in output
+    assert f"Task search: {LIVE_TASK_ID}" in output
     assert "TASK-" in output
     assert "## TASK-" not in output
     assert "Acceptance Criteria" not in output
 
 
 def test_main_tasks_search_text_output_can_include_raw_blocks(
+    synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    query = _live_active_search_query()
     result = main(
         [
             "tasks",
             "search",
-            query,
+            LIVE_TASK_ID,
             "--status",
             "active",
             "--limit",
@@ -599,8 +593,9 @@ def test_handle_list_active_omits_urgency_note_for_pending_blockers(
     assert "[OVERDUE" not in result.lines[1]
 
 
-def test_handle_search_covers_validation_and_raw_output_branches() -> None:
-    query = _live_active_search_query()
+def test_handle_search_covers_validation_and_raw_output_branches(
+    synthetic_task_repo: Path,
+) -> None:
     invalid = task_commands_module.handle_search(
         argparse.Namespace(
             query=["health"],
@@ -612,7 +607,7 @@ def test_handle_search_covers_validation_and_raw_output_branches() -> None:
     )
     raw = task_commands_module.handle_search(
         argparse.Namespace(
-            query=[query],
+            query=[LIVE_TASK_ID],
             status="active",
             limit=1,
             include_raw=True,

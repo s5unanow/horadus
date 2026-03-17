@@ -203,7 +203,8 @@ Taxonomy drift safety:
 - Skipped impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`).
 - This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
 - Active runtime trend routing is pinned to the normalized, unique `trends.runtime_trend_id` value (mirrored in `definition.id`) so duplicate config/API writes fail closed instead of shadowing one trend behind another.
-- Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata for audit/replay.
+- Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed through append-only `trend_restatements`, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata for audit/replay.
+- Operator invalidation, partial restatement, and manual trend compensation use the same append-only restatement ledger, and projection verification can deterministically rebuild `current_log_odds` from chronological evidence/restatement history with decay applied between state changes.
 
 Degraded-mode safety (sustained Tier-2 failover / quality drift):
 - The system tracks Tier-2 failover ratios over rolling windows and runs a small Tier-2 gold-set canary before bulk pipeline runs.

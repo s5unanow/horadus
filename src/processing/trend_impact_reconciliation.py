@@ -14,13 +14,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_config import index_trends_by_runtime_id, trend_runtime_id_for_record
 from src.core.trend_engine import EvidenceFactors, TrendEngine, calculate_evidence_delta
+from src.core.trend_restatement import apply_compensating_restatement
+from src.processing import trend_impact_reconciliation_lineage as reconciliation_lineage
 from src.processing.event_claims import FALLBACK_EVENT_CLAIM_KEY, sync_event_claims
 from src.processing.trend_evidence_matching import _evidence_matches
 from src.storage.models import Event, EventClaim, TaxonomyGapReason, Trend, TrendEvidence
 
 logger = structlog.get_logger(__name__)
-
-TREND_IMPACT_RECONCILIATION_KEY = "_trend_impact_reconciliation"
+TREND_IMPACT_RECONCILIATION_KEY = reconciliation_lineage.TREND_IMPACT_RECONCILIATION_KEY
+_append_reconciliation_history = reconciliation_lineage._append_reconciliation_history
+_lineage_entry = reconciliation_lineage._lineage_entry
+_taxonomy_gap_details = reconciliation_lineage._taxonomy_gap_details
 
 
 @dataclass(frozen=True)
@@ -229,7 +233,7 @@ async def reconcile_event_trend_impacts(
         updates_applied += removed_updates
         lineage_entries.extend(removed_lineage)
     if lineage_entries:
-        _append_reconciliation_history(
+        reconciliation_lineage._append_reconciliation_history(
             event=event,
             invalidated_at=invalidated_at,
             lineage_entries=lineage_entries,
@@ -402,7 +406,7 @@ async def _reconcile_desired_evidence(
             )
             if existing_delta is not None:
                 lineage_entries.append(
-                    _lineage_entry(
+                    reconciliation_lineage._lineage_entry(
                         evidence=existing,
                         trend_runtime_id=trend_runtime_id_for_record(desired.trend),
                         invalidated_at=invalidated_at,
@@ -452,7 +456,7 @@ async def _invalidate_absent_evidence(
         if existing_delta is None:
             continue
         lineage_entries.append(
-            _lineage_entry(
+            reconciliation_lineage._lineage_entry(
                 evidence=existing,
                 trend_runtime_id=(
                     trend_runtime_id_for_record(existing_trend)
@@ -482,7 +486,7 @@ async def _handle_missing_trend(
             trend_id=impact.trend_id,
             signal_type=impact.signal_type,
             reason=TaxonomyGapReason.UNKNOWN_TREND_ID,
-            details=_taxonomy_gap_details(impact),
+            details=reconciliation_lineage._taxonomy_gap_details(impact),
         )
         logger.warning(
             "Skipping unknown trend impact",
@@ -510,7 +514,10 @@ async def _handle_missing_indicator(
         trend_id=trend_runtime_id_for_record(trend),
         signal_type=impact.signal_type,
         reason=TaxonomyGapReason.UNKNOWN_SIGNAL_TYPE,
-        details={"trend_uuid": str(trend.id), **_taxonomy_gap_details(impact)},
+        details={
+            "trend_uuid": str(trend.id),
+            **reconciliation_lineage._taxonomy_gap_details(impact),
+        },
     )
     logger.warning(
         "Skipping trend impact with unknown indicator weight",
@@ -595,17 +602,17 @@ async def _invalidate_active_evidence(
         return None
 
     delta_to_reverse = float(evidence.delta_log_odds)
-    if abs(delta_to_reverse) > 0.0:
-        _previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
-            trend_id=trend.id,
-            trend_name=trend.name,
-            delta=-delta_to_reverse,
-            reason="tier2_reclassification",
-            updated_at=invalidated_at,
-            fallback_current_log_odds=float(trend.current_log_odds),
-        )
-        trend.current_log_odds = new_lo
-        trend.updated_at = invalidated_at
+    await apply_compensating_restatement(
+        trend_engine=trend_engine,
+        trend=trend,
+        compensation_delta_log_odds=-delta_to_reverse,
+        restatement_kind="reclassification",
+        source="tier2_reconciliation",
+        recorded_at=invalidated_at,
+        trend_evidence=evidence,
+        original_evidence_delta_log_odds=delta_to_reverse,
+        details={"reason": "tier2_reclassification"},
+    )
 
     return delta_to_reverse
 
@@ -633,62 +640,3 @@ async def _claim_evidence_invalidation(
     evidence.is_invalidated = True
     evidence.invalidated_at = invalidated_at
     return True
-
-
-def _append_reconciliation_history(
-    *,
-    event: Event,
-    invalidated_at: datetime,
-    lineage_entries: list[dict[str, Any]],
-) -> None:
-    claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-    history_raw = claims.get(TREND_IMPACT_RECONCILIATION_KEY)
-    history = list(history_raw) if isinstance(history_raw, list) else []
-    history.append(
-        {
-            "reason": "tier2_reclassification",
-            "recorded_at": invalidated_at.isoformat(),
-            "superseded_evidence": lineage_entries,
-        }
-    )
-    claims[TREND_IMPACT_RECONCILIATION_KEY] = history
-    event.extracted_claims = claims
-
-
-def _lineage_entry(
-    *,
-    evidence: TrendEvidence,
-    trend_runtime_id: str,
-    invalidated_at: datetime,
-    replacement: DesiredTrendEvidence | None,
-    change_type: str,
-) -> dict[str, Any]:
-    entry: dict[str, Any] = {
-        "change_type": change_type,
-        "evidence_id": str(evidence.id) if evidence.id is not None else None,
-        "trend_id": trend_runtime_id,
-        "event_claim_id": str(evidence.event_claim_id),
-        "signal_type": evidence.signal_type,
-        "delta_log_odds": round(float(evidence.delta_log_odds), 6),
-        "invalidated_at": invalidated_at.isoformat(),
-    }
-    if replacement is not None:
-        entry["replacement"] = {
-            "trend_id": trend_runtime_id_for_record(replacement.trend),
-            "event_claim_id": str(replacement.event_claim.id),
-            "signal_type": replacement.impact.signal_type,
-            "direction": replacement.impact.direction,
-            "severity": round(replacement.impact.severity, 6),
-            "confidence": round(replacement.impact.confidence, 6),
-        }
-    return entry
-
-
-def _taxonomy_gap_details(impact: ParsedTrendImpact) -> dict[str, Any]:
-    return {
-        "direction": impact.direction,
-        "severity": impact.severity,
-        "confidence": impact.confidence,
-        "rationale": impact.rationale,
-        "event_claim_key": impact.event_claim_key,
-    }

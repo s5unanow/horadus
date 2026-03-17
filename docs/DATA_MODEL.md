@@ -391,10 +391,10 @@ Audit trail of all probability updates.
 
 **Invalidation lineage semantics:**
 - Event invalidation no longer deletes evidence rows.
-- Instead, evidence is marked `is_invalidated=true` and linked to the originating `human_feedback` record.
-- Tier-2 reclassification can also supersede an active evidence row; the old row is invalidated, a replacement active row is inserted against the stable `event_claim_id`, and the event stores reconciliation metadata under `extracted_claims`.
+- Instead, evidence is marked `is_invalidated=true` and linked to the originating `human_feedback` record while a separate `trend_restatements` row records the signed compensating delta applied later.
+- Tier-2 reclassification can also supersede an active evidence row; the old row is invalidated, a replacement active row is inserted against the stable `event_claim_id`, and a `trend_restatements` row captures the compensating reversal that kept the projection honest.
 - Operational analytics/reporting queries use only active (`is_invalidated=false`) evidence by default.
-- Audit/replay paths can include invalidated lineage explicitly when needed.
+- Audit/replay paths can include invalidated lineage explicitly when needed, or reconstruct the stored trend value by replaying chronological evidence plus `trend_restatements`.
 
 **Delta calculation:**
 ```
@@ -412,6 +412,42 @@ where:
 Scoring-time provenance:
 - `base_weight`, `direction_multiplier`, and `trend_definition_hash` are persisted to preserve factorization inputs even if trend YAML/definitions change later.
 - Legacy rows (created before `TASK-157`) may have these fields as `NULL`.
+
+---
+
+### trend_restatements
+
+Append-only compensating ledger for corrections applied after original evidence scoring.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| trend_id | UUID | No | | FK to `trends` |
+| event_id | UUID | Yes | | Optional FK to `events` for event-scoped restatements |
+| event_claim_id | UUID | Yes | | Optional FK to `event_claims` for claim-aware lineage |
+| trend_evidence_id | UUID | Yes | | Optional FK to the original compensated evidence row |
+| replacement_evidence_id | UUID | Yes | | Optional FK to the replacement evidence row for reclassification flows |
+| feedback_id | UUID | Yes | | Optional FK to `human_feedback.id` when operator initiated |
+| restatement_kind | VARCHAR(50) | No | | `full_invalidation`, `partial_restatement`, `manual_compensation`, or `reclassification` |
+| source | VARCHAR(50) | No | | Correction source (`event_feedback`, `trend_override`, `tier2_reconciliation`) |
+| original_evidence_delta_log_odds | DECIMAL(10,6) | Yes | | Original evidence delta before compensation |
+| compensation_delta_log_odds | DECIMAL(10,6) | No | | Signed compensating delta applied to the trend |
+| notes | TEXT | Yes | | Analyst/runtime explanation |
+| details | JSONB | Yes | | Structured lineage context |
+| recorded_at | TIMESTAMPTZ | No | NOW() | Ledger timestamp |
+
+**Indexes / constraints:**
+- Primary key: `id`
+- Index: `(trend_id, recorded_at)`
+- Index: `trend_evidence_id`
+- Index: `feedback_id`
+- Check: `restatement_kind`
+- Check: `source`
+
+**Projection contract:**
+- `trend_evidence` remains the append-only record of original scored evidence applications.
+- `trend_restatements` records later signed corrections without rewriting the original evidence rows.
+- Deterministic recompute walks chronological evidence and restatement entries, applying the normal exponential decay between state changes, to verify or rebuild `trends.current_log_odds`.
 
 ---
 
@@ -485,6 +521,10 @@ GROUP BY day
 ORDER BY day;
 ```
 
+**Historical-artifact policy:**
+- `trend_snapshots` remain “belief at the time” artifacts and are not rewritten when later restatements occur.
+- Corrected-history inspection should use the restatement ledger and projection/recompute path rather than mutating prior snapshots.
+
 ---
 
 ### reports
@@ -510,6 +550,10 @@ Generated intelligence reports (weekly/monthly/retrospective).
 - Primary key: `id`
 - Index: `(report_type, period_end)`
 - Index: `trend_id`
+
+**Historical-artifact policy:**
+- Generated reports preserve the deterministic statistics and narrative that were true at report time.
+- Later invalidations/restatements do not rewrite stored report bodies; corrected-history analysis should reference `trend_restatements` plus current projection verification.
 
 ---
 
@@ -574,7 +618,7 @@ Manual corrections/annotations used for governance and evaluation.
 | id | UUID | No | gen_random_uuid() | Primary key |
 | target_type | VARCHAR(50) | No | | Annotation target type (`event`, `trend_evidence`, `classification`) |
 | target_id | UUID | No | | Target entity ID |
-| action | VARCHAR(50) | No | | Feedback action (`pin`, `mark_noise`, `override_delta`, `correct_category`) |
+| action | VARCHAR(50) | No | | Feedback action (`pin`, `mark_noise`, `invalidate`, `restate`, `override_delta`, `correct_category`) |
 | original_value | JSONB | Yes | | Original value snapshot |
 | corrected_value | JSONB | Yes | | Corrected value payload |
 | notes | TEXT | Yes | | Analyst explanation |
@@ -588,15 +632,16 @@ Manual corrections/annotations used for governance and evaluation.
 
 ---
 
-## Model Verification Notes (2026-02-17)
+## Model Verification Notes (2026-03-17)
 
 The sections above were cross-checked against SQLAlchemy runtime model declarations:
 
-- `trend_definition_versions` table: `src/storage/models.py:593`
-- `reports` table: `src/storage/models.py:660`
-- `api_usage` table: `src/storage/models.py:719`
-- `trend_outcomes` table: `src/storage/models.py:791`
-- `human_feedback` table: `src/storage/models.py:866`
+- `trend_definition_versions` table: `src/storage/models.py`
+- `reports` table: `src/storage/models.py`
+- `api_usage` table: `src/storage/models.py`
+- `trend_outcomes` table: `src/storage/models.py`
+- `human_feedback` table: `src/storage/restatement_models.py`
+- `trend_restatements` table: `src/storage/restatement_models.py`
 
 ---
 

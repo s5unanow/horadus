@@ -63,7 +63,6 @@ from src.processing.trend_impact_reconciliation import (
 from src.storage.models import (
     Event,
     EventItem,
-    HumanFeedback,
     LLMReplayQueueItem,
     ProcessingStatus,
     RawItem,
@@ -73,6 +72,7 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
+from src.storage.restatement_models import HumanFeedback
 
 if TYPE_CHECKING:
     from src.processing.degraded_llm_tracker import DegradedLLMStatus, DegradedLLMTracker

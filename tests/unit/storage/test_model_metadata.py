@@ -13,6 +13,7 @@ from src.storage.models import (
     Source,
     TrendDefinitionVersion,
     TrendEvidence,
+    TrendRestatement,
 )
 
 pytestmark = pytest.mark.unit
@@ -165,3 +166,19 @@ def test_trend_evidence_active_unique_index_present_in_model_metadata() -> None:
         )
         == "is_invalidated = false"
     )
+
+
+def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in TrendRestatement.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+    index_names = {index.name for index in TrendRestatement.__table__.indexes}
+
+    assert "trend_evidence_id" in TrendRestatement.__table__.c
+    assert "replacement_evidence_id" in TrendRestatement.__table__.c
+    assert "compensation_delta_log_odds" in TrendRestatement.__table__.c
+    assert "check_trend_restatements_kind_allowed" in constraint_names
+    assert "check_trend_restatements_source_allowed" in constraint_names
+    assert "idx_trend_restatements_trend_recorded" in index_names

@@ -31,13 +31,13 @@ from src.processing.llm_policy import build_safe_payload_content, invoke_with_po
 from src.storage.models import (
     Event,
     EventItem,
-    HumanFeedback,
     RawItem,
     Report,
     Source,
     Trend,
     TrendEvidence,
 )
+from src.storage.restatement_models import HumanFeedback
 
 logger = structlog.get_logger(__name__)
 

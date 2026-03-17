@@ -1,211 +1,53 @@
-"""
-Feedback API endpoints.
-
-Human corrections and annotations for events and trends.
-"""
+"""Feedback API endpoints for human corrections and annotations."""
 
 from __future__ import annotations
 
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
+from src.api.routes.feedback_models import (
+    EventFeedbackRequest,
+    EventRestatementTarget,
+    FeedbackResponse,
+    ReviewQueueItem,
+    ReviewQueueTrendImpact,
+    TaxonomyGapListResponse,
+    TaxonomyGapResponse,
+    TaxonomyGapSummaryRow,
+    TaxonomyGapUpdateRequest,
+    TrendOverrideRequest,
+    to_feedback_response,
+    to_taxonomy_gap_response,
+)
 from src.core.trend_engine import TrendEngine
+from src.core.trend_restatement import (
+    HISTORICAL_ARTIFACT_POLICY,
+    apply_compensating_restatement,
+)
 from src.storage.database import get_session
 from src.storage.models import (
     Event,
     EventLifecycle,
-    HumanFeedback,
     TaxonomyGap,
     TaxonomyGapReason,
     TaxonomyGapStatus,
     Trend,
     TrendEvidence,
 )
+from src.storage.restatement_models import HumanFeedback
 
 router = APIRouter()
 
 
-class FeedbackResponse(BaseModel):
-    """Serialized feedback record."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    target_type: str
-    target_id: UUID
-    action: str
-    original_value: dict[str, Any] | None
-    corrected_value: dict[str, Any] | None
-    notes: str | None
-    created_by: str | None
-    created_at: datetime
-
-
-class EventFeedbackRequest(BaseModel):
-    """Feedback actions supported for an event."""
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "action": "invalidate",
-                "notes": "Conflicting source narratives and analyst override.",
-                "created_by": "analyst@horadus",
-            }
-        }
-    )
-
-    action: Literal["pin", "mark_noise", "invalidate"]
-    notes: str | None = None
-    created_by: str | None = None
-
-
-class TrendOverrideRequest(BaseModel):
-    """Manual trend delta override request."""
-
-    model_config = ConfigDict(
-        json_schema_extra={
-            "example": {
-                "delta_log_odds": -0.12,
-                "notes": "Manual correction after source invalidation.",
-                "created_by": "analyst@horadus",
-            }
-        }
-    )
-
-    delta_log_odds: float = Field(..., description="Manual adjustment in log-odds space")
-    notes: str | None = None
-    created_by: str | None = None
-
-
-class ReviewQueueTrendImpact(BaseModel):
-    """Trend-impact summary included in review queue items."""
-
-    trend_id: UUID
-    trend_name: str
-    signal_type: str
-    delta_log_odds: float
-    confidence_score: float | None
-
-
-class ReviewQueueItem(BaseModel):
-    """Ranked event candidate for analyst review."""
-
-    event_id: UUID
-    summary: str
-    lifecycle_status: str
-    last_mention_at: datetime
-    source_count: int
-    unique_source_count: int
-    has_contradictions: bool
-    contradiction_notes: str | None
-    evidence_count: int
-    projected_delta: float
-    uncertainty_score: float
-    contradiction_risk: float
-    ranking_score: float
-    feedback_count: int
-    feedback_actions: list[str]
-    requires_human_verification: bool
-    trend_impacts: list[ReviewQueueTrendImpact]
-
-
-class TaxonomyGapResponse(BaseModel):
-    """Serialized taxonomy-gap record."""
-
-    model_config = ConfigDict(from_attributes=True)
-
-    id: UUID
-    event_id: UUID | None
-    trend_id: str
-    signal_type: str
-    reason: str
-    source: str
-    details: dict[str, Any]
-    status: str
-    resolution_notes: str | None
-    resolved_by: str | None
-    resolved_at: datetime | None
-    observed_at: datetime
-
-
-class TaxonomyGapSummaryRow(BaseModel):
-    """Grouped unknown signal-type count by trend+signal."""
-
-    trend_id: str
-    signal_type: str
-    count: int
-
-
-class TaxonomyGapListResponse(BaseModel):
-    """Taxonomy-gap list and summary payload."""
-
-    total_count: int
-    open_count: int
-    resolved_count: int
-    rejected_count: int
-    unknown_trend_count: int
-    unknown_signal_count: int
-    top_unknown_signal_keys_by_trend: list[TaxonomyGapSummaryRow]
-    items: list[TaxonomyGapResponse]
-
-
-class TaxonomyGapUpdateRequest(BaseModel):
-    """Analyst update payload for taxonomy-gap triage."""
-
-    status: Literal["open", "resolved", "rejected"]
-    resolution_notes: str | None = None
-    resolved_by: str | None = None
-
-
-def _to_feedback_response(feedback: HumanFeedback) -> FeedbackResponse:
-    feedback_id = feedback.id if feedback.id is not None else uuid4()
-    created_at = feedback.created_at if feedback.created_at is not None else datetime.now(tz=UTC)
-    return FeedbackResponse(
-        id=feedback_id,
-        target_type=feedback.target_type,
-        target_id=feedback.target_id,
-        action=feedback.action,
-        original_value=feedback.original_value,
-        corrected_value=feedback.corrected_value,
-        notes=feedback.notes,
-        created_by=feedback.created_by,
-        created_at=created_at,
-    )
-
-
-def _to_taxonomy_gap_response(gap: TaxonomyGap) -> TaxonomyGapResponse:
-    gap_id = gap.id if gap.id is not None else uuid4()
-    observed_at = gap.observed_at if gap.observed_at is not None else datetime.now(tz=UTC)
-    return TaxonomyGapResponse(
-        id=gap_id,
-        event_id=gap.event_id,
-        trend_id=gap.trend_id,
-        signal_type=gap.signal_type,
-        reason=str(gap.reason),
-        source=gap.source or "pipeline",
-        details=gap.details if isinstance(gap.details, dict) else {},
-        status=str(gap.status),
-        resolution_notes=gap.resolution_notes,
-        resolved_by=gap.resolved_by,
-        resolved_at=gap.resolved_at,
-        observed_at=observed_at,
-    )
-
-
-async def _build_event_invalidation_payload(
-    *,
-    session: AsyncSession,
-    event_id: UUID,
-) -> tuple[dict[str, Any], dict[str, Any], list[TrendEvidence], datetime]:
-    evidences = list(
+async def _active_event_evidence(*, session: AsyncSession, event_id: UUID) -> list[TrendEvidence]:
+    return list(
         (
             await session.scalars(
                 select(TrendEvidence)
@@ -215,60 +57,70 @@ async def _build_event_invalidation_payload(
             )
         ).all()
     )
-    trend_deltas: dict[UUID, float] = {}
+
+
+async def _trend_map(
+    *,
+    session: AsyncSession,
+    trend_ids: set[UUID],
+) -> dict[UUID, Trend]:
+    if not trend_ids:
+        return {}
+    trends = list(
+        (await session.scalars(select(Trend).where(Trend.id.in_(tuple(trend_ids))))).all()
+    )
+    return {trend.id: trend for trend in trends if trend.id is not None}
+
+
+def _event_feedback_original_value(evidences: list[TrendEvidence]) -> dict[str, Any]:
+    trend_deltas: dict[str, float] = {}
     for evidence in evidences:
-        trend_deltas[evidence.trend_id] = trend_deltas.get(evidence.trend_id, 0.0) + float(
-            evidence.delta_log_odds
-        )
+        trend_key = str(evidence.trend_id)
+        trend_deltas[trend_key] = trend_deltas.get(trend_key, 0.0) + float(evidence.delta_log_odds)
+    return {
+        "evidence_count": len(evidences),
+        "active_evidence_ids": [
+            str(evidence.id) for evidence in evidences if evidence.id is not None
+        ],
+        "active_event_claim_ids": sorted({str(evidence.event_claim_id) for evidence in evidences}),
+        "trend_deltas": trend_deltas,
+    }
 
-    trend_adjustments: dict[str, dict[str, float]] = {}
-    if trend_deltas:
-        trend_engine = TrendEngine(session=session)
-        trends = list(
-            (
-                await session.scalars(select(Trend).where(Trend.id.in_(tuple(trend_deltas.keys()))))
-            ).all()
-        )
-        trend_by_id = {trend.id: trend for trend in trends}
-        for trend_id, trend_delta in trend_deltas.items():
-            trend = trend_by_id.get(trend_id)
-            previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
-                trend_id=trend_id,
-                trend_name=trend.name if trend is not None else None,
-                delta=-trend_delta,
-                reason="event_invalidation",
-                fallback_current_log_odds=float(trend.current_log_odds)
-                if trend is not None
-                else None,
-            )
-            if trend is not None:
-                trend.current_log_odds = new_lo
-                trend.updated_at = datetime.now(tz=UTC)
-            trend_adjustments[str(trend_id)] = {
-                "previous_log_odds": previous_lo,
-                "new_log_odds": new_lo,
-                "delta_applied": -trend_delta,
-            }
 
-    invalidation_timestamp = datetime.now(tz=UTC)
+def _event_feedback_corrected_value(
+    *,
+    action: str,
+    event_id: UUID,
+    at: datetime,
+    evidences: list[TrendEvidence],
+    total_compensation_delta: float,
+    trend_adjustments: dict[str, dict[str, float]] | None = None,
+) -> dict[str, Any]:
     evidence_ids = [str(evidence.id) for evidence in evidences if evidence.id is not None]
     event_claim_ids = sorted({str(evidence.event_claim_id) for evidence in evidences})
-    original_value = {
-        "evidence_count": len(evidences),
-        "active_evidence_ids": evidence_ids,
-        "active_event_claim_ids": event_claim_ids,
-        "trend_deltas": {str(trend_id): delta for trend_id, delta in trend_deltas.items()},
+    payload = {
+        "event_id": str(event_id),
+        "action": action,
+        "affected_trend_count": len({evidence.trend_id for evidence in evidences}),
+        "affected_evidence_count": len(evidences),
+        "affected_evidence_ids": evidence_ids,
+        "affected_event_claim_ids": event_claim_ids,
+        "total_compensation_delta_log_odds": total_compensation_delta,
+        "historical_artifact_policy": HISTORICAL_ARTIFACT_POLICY,
+        "recorded_at": at.isoformat(),
     }
-    corrected_value = {
-        "reverted_event_id": str(event_id),
-        "affected_trend_count": len(trend_deltas),
-        "trend_adjustments": trend_adjustments,
-        "invalidated_evidence_count": len(evidence_ids),
-        "invalidated_evidence_ids": evidence_ids,
-        "invalidated_event_claim_ids": event_claim_ids,
-        "invalidated_at": invalidation_timestamp.isoformat(),
-    }
-    return original_value, corrected_value, evidences, invalidation_timestamp
+    if action == "invalidate":
+        payload.update(
+            {
+                "reverted_event_id": str(event_id),
+                "invalidated_evidence_count": len(evidences),
+                "invalidated_evidence_ids": evidence_ids,
+                "invalidated_event_claim_ids": event_claim_ids,
+                "trend_adjustments": trend_adjustments or {},
+                "invalidated_at": at.isoformat(),
+            }
+        )
+    return payload
 
 
 @router.get("/feedback", response_model=list[FeedbackResponse])
@@ -290,7 +142,7 @@ async def list_feedback(
         query = query.where(HumanFeedback.action == action)
 
     records = list((await session.scalars(query)).all())
-    return [_to_feedback_response(record) for record in records]
+    return [to_feedback_response(record) for record in records]
 
 
 @router.get("/taxonomy-gaps", response_model=TaxonomyGapListResponse)
@@ -369,7 +221,7 @@ async def list_taxonomy_gaps(
             )
             for trend_id, signal_type, count in top_unknown_rows
         ],
-        items=[_to_taxonomy_gap_response(record) for record in records],
+        items=[to_taxonomy_gap_response(record) for record in records],
     )
 
 
@@ -405,7 +257,112 @@ async def update_taxonomy_gap(
         gap.resolved_at = datetime.now(tz=UTC)
 
     await session.flush()
-    return _to_taxonomy_gap_response(gap)
+    return to_taxonomy_gap_response(gap)
+
+
+def _restatement_targets_by_evidence_id(
+    targets: list[EventRestatementTarget],
+) -> dict[UUID, EventRestatementTarget]:
+    mapped: dict[UUID, EventRestatementTarget] = {}
+    for target in targets:
+        mapped[target.evidence_id] = target
+    return mapped
+
+
+async def _apply_event_feedback_restatements(
+    *,
+    session: AsyncSession,
+    feedback: HumanFeedback,
+    evidences: list[TrendEvidence],
+    action: str,
+    notes: str | None,
+    invalidate_evidence: bool,
+    target_by_evidence_id: dict[UUID, EventRestatementTarget] | None = None,
+) -> float:
+    trend_engine = TrendEngine(session=session)
+    trend_by_id = await _trend_map(
+        session=session,
+        trend_ids={evidence.trend_id for evidence in evidences},
+    )
+    recorded_at = datetime.now(tz=UTC)
+    total_compensation_delta = 0.0
+    trend_adjustments: dict[str, dict[str, float]] = {}
+
+    for evidence in evidences:
+        if invalidate_evidence:
+            evidence.is_invalidated = True
+            evidence.invalidated_at = recorded_at
+            evidence.invalidation_feedback_id = feedback.id
+
+        target = None
+        if target_by_evidence_id is not None and evidence.id is not None:
+            target = target_by_evidence_id.get(evidence.id)
+
+        compensation_delta = (
+            -float(evidence.delta_log_odds)
+            if invalidate_evidence
+            else float(target.compensation_delta_log_odds if target is not None else 0.0)
+        )
+        trend = trend_by_id.get(evidence.trend_id)
+        if trend is None:
+            try:
+                previous_log_odds, new_log_odds = await trend_engine.apply_log_odds_delta(
+                    trend_id=evidence.trend_id,
+                    trend_name=None,
+                    delta=compensation_delta,
+                    reason=(
+                        "event_invalidation" if invalidate_evidence else "event_partial_restatement"
+                    ),
+                    fallback_current_log_odds=None,
+                )
+            except ValueError:
+                continue
+            trend_adjustments[str(evidence.trend_id)] = {
+                "previous_log_odds": previous_log_odds,
+                "new_log_odds": new_log_odds,
+                "delta_applied": compensation_delta,
+            }
+            total_compensation_delta += compensation_delta
+            continue
+        previous_log_odds = float(trend.current_log_odds)
+        await apply_compensating_restatement(
+            trend_engine=trend_engine,
+            trend=trend,
+            compensation_delta_log_odds=compensation_delta,
+            restatement_kind=(
+                "full_invalidation" if invalidate_evidence else "partial_restatement"
+            ),
+            source="event_feedback",
+            recorded_at=recorded_at,
+            trend_evidence=evidence,
+            feedback_id=feedback.id,
+            original_evidence_delta_log_odds=float(evidence.delta_log_odds),
+            notes=target.notes if target is not None and target.notes is not None else notes,
+            details={"event_action": action},
+        )
+        trend_key = str(trend.id)
+        adjustment = trend_adjustments.get(
+            trend_key,
+            {
+                "previous_log_odds": previous_log_odds,
+                "new_log_odds": float(trend.current_log_odds),
+                "delta_applied": 0.0,
+            },
+        )
+        adjustment["new_log_odds"] = float(trend.current_log_odds)
+        adjustment["delta_applied"] += compensation_delta
+        trend_adjustments[trend_key] = adjustment
+        total_compensation_delta += compensation_delta
+
+    feedback.corrected_value = _event_feedback_corrected_value(
+        action=action,
+        event_id=feedback.target_id,
+        at=recorded_at,
+        evidences=evidences,
+        total_compensation_delta=total_compensation_delta,
+        trend_adjustments=trend_adjustments,
+    )
+    return total_compensation_delta
 
 
 @router.post(
@@ -419,10 +376,10 @@ async def create_event_feedback(
     session: AsyncSession = Depends(get_session),
 ) -> FeedbackResponse:
     """
-    Record event-level feedback (pin, mark_noise, invalidate).
+    Record event-level feedback (pin, mark_noise, invalidate, restate).
 
-    `invalidate` reverses active trend-evidence contributions and marks
-    evidence rows invalidated for lineage/audit replay.
+    `invalidate` fully compensates active evidence and invalidates it.
+    `restate` keeps evidence visible but appends signed compensating deltas.
     """
     event = await session.get(Event, event_id)
     if event is None:
@@ -433,20 +390,51 @@ async def create_event_feedback(
 
     original_value: dict[str, Any] | None = None
     corrected_value: dict[str, Any] | None = None
-    evidences_to_invalidate: list[TrendEvidence] = []
-    invalidation_timestamp: datetime | None = None
+    evidences: list[TrendEvidence] = []
+    restatement_targets: dict[UUID, EventRestatementTarget] | None = None
 
     if payload.action == "mark_noise":
         original_value = {"lifecycle_status": event.lifecycle_status}
         event.lifecycle_status = EventLifecycle.ARCHIVED.value
         corrected_value = {"lifecycle_status": event.lifecycle_status}
-    elif payload.action == "invalidate":
-        (
-            original_value,
-            corrected_value,
-            evidences_to_invalidate,
-            invalidation_timestamp,
-        ) = await _build_event_invalidation_payload(session=session, event_id=event_id)
+    elif payload.action in {"invalidate", "restate"}:
+        evidences = await _active_event_evidence(session=session, event_id=event_id)
+        if payload.action == "restate":
+            if not payload.restatement_targets:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="restate requires at least one restatement_targets entry",
+                )
+            restatement_targets = _restatement_targets_by_evidence_id(payload.restatement_targets)
+            evidence_ids = {evidence.id for evidence in evidences if evidence.id is not None}
+            unknown_targets = [
+                target for target in restatement_targets if target not in evidence_ids
+            ]
+            if unknown_targets:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="restatement_targets must reference active evidence for the event",
+                )
+            evidences = [
+                evidence
+                for evidence in evidences
+                if evidence.id is not None and evidence.id in restatement_targets
+            ]
+
+        original_value = _event_feedback_original_value(evidences)
+        corrected_value = _event_feedback_corrected_value(
+            action=payload.action,
+            event_id=event_id,
+            at=datetime.now(tz=UTC),
+            evidences=evidences,
+            total_compensation_delta=(
+                -sum(float(evidence.delta_log_odds) for evidence in evidences)
+                if payload.action == "invalidate"
+                else sum(
+                    target.compensation_delta_log_odds for target in payload.restatement_targets
+                )
+            ),
+        )
 
     feedback = HumanFeedback(
         target_type="event",
@@ -460,13 +448,20 @@ async def create_event_feedback(
     session.add(feedback)
     await session.flush()
 
-    if payload.action == "invalidate" and evidences_to_invalidate:
-        for evidence in evidences_to_invalidate:
-            evidence.is_invalidated = True
-            evidence.invalidated_at = invalidation_timestamp
-            evidence.invalidation_feedback_id = feedback.id
+    if payload.action in {"invalidate", "restate"} and evidences:
+        await _apply_event_feedback_restatements(
+            session=session,
+            feedback=feedback,
+            evidences=evidences,
+            action=payload.action,
+            notes=payload.notes,
+            invalidate_evidence=payload.action == "invalidate",
+            target_by_evidence_id=restatement_targets,
+        )
+    else:
+        feedback.corrected_value = corrected_value
 
-    return _to_feedback_response(feedback)
+    return to_feedback_response(feedback)
 
 
 def _claim_graph_contradiction_links(event: Event) -> int:
@@ -671,29 +666,33 @@ async def create_trend_override(
         )
 
     previous_log_odds = float(trend.current_log_odds)
-    trend_engine = TrendEngine(session=session)
-    previous_log_odds, new_log_odds = await trend_engine.apply_log_odds_delta(
-        trend_id=trend.id,
-        trend_name=trend.name,
-        delta=float(payload.delta_log_odds),
-        reason="manual_override",
-        fallback_current_log_odds=previous_log_odds,
-    )
-    trend.current_log_odds = new_log_odds
-    trend.updated_at = datetime.now(tz=UTC)
-
+    compensation_delta = float(payload.delta_log_odds)
     feedback = HumanFeedback(
         target_type="trend",
         target_id=trend_id,
         action="override_delta",
         original_value={"current_log_odds": previous_log_odds},
         corrected_value={
-            "delta_log_odds": float(payload.delta_log_odds),
-            "new_log_odds": new_log_odds,
+            "delta_log_odds": compensation_delta,
+            "new_log_odds": previous_log_odds + compensation_delta,
+            "historical_artifact_policy": HISTORICAL_ARTIFACT_POLICY,
         },
         notes=payload.notes,
         created_by=payload.created_by,
     )
     session.add(feedback)
     await session.flush()
-    return _to_feedback_response(feedback)
+    await apply_compensating_restatement(
+        trend_engine=TrendEngine(session=session),
+        trend=trend,
+        compensation_delta_log_odds=compensation_delta,
+        restatement_kind="manual_compensation",
+        source="trend_override",
+        feedback_id=feedback.id,
+        notes=payload.notes,
+        details={"feedback_action": "override_delta"},
+    )
+    corrected_value = feedback.corrected_value if isinstance(feedback.corrected_value, dict) else {}
+    corrected_value["new_log_odds"] = float(trend.current_log_odds)
+    feedback.corrected_value = corrected_value
+    return to_feedback_response(feedback)

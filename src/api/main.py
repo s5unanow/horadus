@@ -26,7 +26,18 @@ from src.api.middleware.agent_runtime import (
     trigger_agent_runtime_shutdown,
 )
 from src.api.middleware.auth import APIKeyAuthMiddleware
-from src.api.routes import auth, budget, events, feedback, health, metrics, reports, sources, trends
+from src.api.routes import (
+    auth,
+    budget,
+    events,
+    feedback,
+    health,
+    metrics,
+    reports,
+    sources,
+    trend_restatements,
+    trends,
+)
 from src.core.config import settings
 from src.core.logging_setup import configure_logging
 from src.core.migration_parity import check_migration_parity
@@ -260,6 +271,11 @@ def register_routes(app: FastAPI) -> None:
 
     app.include_router(
         trends.router,
+        prefix=f"{api_v1_prefix}/trends",
+        tags=["Trends"],
+    )
+    app.include_router(
+        trend_restatements.router,
         prefix=f"{api_v1_prefix}/trends",
         tags=["Trends"],
     )

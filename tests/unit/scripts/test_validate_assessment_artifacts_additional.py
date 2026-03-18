@@ -65,16 +65,12 @@ def test_artifacts_helpers_cover_inline_sections_and_invalid_inputs(tmp_path: Pa
     assert artifacts.proposal_body_text(proposal) == "A\nB\n- make test-unit\n- scripts/"
 
 
-def test_grounding_history_novelty_overlap_and_runner_helper_paths(
+def test_grounding_and_history_helper_paths(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     grounding = _import_internal("grounding")
     history = _import_internal("history")
-    novelty = _import_internal("novelty")
-    overlap = _import_internal("overlap")
-    runner = _import_internal("runner")
-    models = _import_internal("models")
 
     backlog = tmp_path / "tasks" / "BACKLOG.md"
     completed = tmp_path / "tasks" / "COMPLETED.md"
@@ -164,6 +160,14 @@ def test_grounding_history_novelty_overlap_and_runner_helper_paths(
         include_same_role=False,
     )
     assert [artifact.path for artifact in other_role_matches] == [other_role]
+
+
+def test_novelty_helper_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    novelty = _import_internal("novelty")
+    models = _import_internal("models")
 
     first = models.ProposalBlock(
         proposal_id="PROPOSAL-2026-03-10-po-docs-note",
@@ -262,6 +266,21 @@ def test_grounding_history_novelty_overlap_and_runner_helper_paths(
     assert "already captured in task ledger by TASK-351" in novelty_findings[0].message
     assert "no materially new proposals remain" in novelty_findings[1].message
 
+
+def test_overlap_and_runner_helper_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    overlap = _import_internal("overlap")
+    runner = _import_internal("runner")
+    models = _import_internal("models")
+
+    task_proposal = models.ProposalBlock(
+        proposal_id="PROPOSAL-2026-03-18-po-scripts-gate-posture",
+        line_no=3,
+        fields={"verification": "- make agent-check", "blast_radius": "- scripts/"},
+        sections={"problem": "scripts gate posture drift", "proposed_change": "cover scripts"},
+    )
     overlap_report = tmp_path / "overlap.md"
     overlap_report.write_text("# report\n", encoding="utf-8")
     monkeypatch.setattr(

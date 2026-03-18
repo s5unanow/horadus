@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-03-18
-- Current state: In progress
+- Current state: Completed
 - Planning Gates: Required — shared workflow/config gate expansion across repo-owned Python surfaces
 
 ## Goal (1-3 lines)
@@ -71,10 +71,10 @@ CI gate surfaces.
 
 ## Plan (Keep Updated)
 
-1. Preflight (create exec plan, guarded task start, inspect current failures on `scripts/`)
-2. Implement widened lint/type/security/coverage scope plus any narrow script-specific fixes
-3. Validate targeted tests, `make agent-check`, local review, and full local gate
-4. Ship through PR/review/merge/main-sync using the canonical workflow
+1. Completed: created exec plan, ran guarded task start, and inspected the initial `scripts/` gate failures
+2. Completed: widened lint/type/security/coverage scope and fixed script issues required by the stricter posture
+3. Completed: validated targeted tests, `make agent-check`, local review, sub-agent reviews, and the canonical full local gate
+4. In progress: finish PR/review/merge/main-sync via the canonical workflow
 
 ## Decisions (Timestamped)
 

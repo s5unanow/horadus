@@ -460,6 +460,30 @@ def test_collect_eval_audit_and_taxonomy_without_warnings(
     assert taxonomy_exit == ExitCode.OK
 
 
+def test_collect_eval_audit_treats_zero_max_items_as_full_dataset(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def fake_run_gold_set_audit(**kwargs: object) -> SimpleNamespace:
+        captured.update(kwargs)
+        return SimpleNamespace(output_path=tmp_path / "audit.json", warnings=[])
+
+    monkeypatch.setattr(audit_module, "run_gold_set_audit", fake_run_gold_set_audit)
+    _data, _lines, exit_code = runtime_module._collect_eval_audit(
+        SimpleNamespace(
+            gold_set="gold.jsonl",
+            output_dir=str(tmp_path),
+            max_items=0,
+            fail_on_warnings=False,
+        )
+    )
+
+    assert captured["max_items"] is None
+    assert exit_code == ExitCode.OK
+
+
 def test_http_helpers_cover_success_and_error_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

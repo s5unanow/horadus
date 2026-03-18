@@ -28,10 +28,10 @@ def run_gold_set_audit(
     *,
     gold_set_path: str,
     output_dir: str,
-    max_items: int = 200,
+    max_items: int | None = 200,
 ) -> AuditRunResult:
     """Run gold-set quality audit and persist JSON result."""
-    bounded_max_items = max(1, max_items)
+    bounded_max_items = None if max_items is None else max(1, max_items)
     items = load_gold_set(Path(gold_set_path), max_items=bounded_max_items)
     payload = _build_audit_payload(
         items=items,
@@ -47,7 +47,7 @@ def _build_audit_payload(
     *,
     items: list[GoldSetItem],
     gold_set_path: Path,
-    max_items: int,
+    max_items: int | None,
 ) -> dict[str, Any]:
     label_counts = Counter(item.label_verification for item in items)
     content_counts = Counter(_normalize_text(item.content) for item in items)
@@ -89,7 +89,7 @@ def _build_audit_payload(
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "gold_set_path": str(gold_set_path),
         "items_evaluated": total_items,
-        "dataset_scope": {"max_items": max_items},
+        "dataset_scope": {"max_items": max_items, "full_dataset": max_items is None},
         "source_control": provenance.build_source_control_provenance(),
         "gold_set_fingerprint_sha256": provenance.gold_set_fingerprint(items),
         "gold_set_item_ids_sha256": provenance.gold_set_item_ids_fingerprint(items),

@@ -30,7 +30,7 @@ def _audit_eval_gate_command(uv_bin: str) -> str:
         f"{uv_bin} run --no-sync horadus eval audit "
         "--gold-set ai/eval/gold_set.jsonl "
         "--output-dir ai/eval/results "
-        "--max-items 200 "
+        "--max-items 0 "
         "--fail-on-warnings"
     )
 

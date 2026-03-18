@@ -289,7 +289,7 @@ validate-taxonomy-eval: deps ## Validate trend taxonomy contract against eval go
 	$(UV_RUN) horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode subset --signal-type-mode warn --unknown-trend-mode warn
 
 audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and provenance
-	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --fail-on-warnings
+	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 0 --fail-on-warnings
 
 docs-freshness: deps-dev ## Validate docs freshness and runtime consistency invariants
 	$(UV_RUN) python scripts/check_docs_freshness.py
@@ -303,7 +303,7 @@ release-gate: deps-dev ## Run the canonical full local gate plus release-only mi
 		echo "Usage: make release-gate RELEASE_GATE_DATABASE_URL=<target-db-url>"; \
 		exit 1; \
 	fi
-	@$(UV_RUN) horadus tasks local-gate --full
+	@MIGRATION_GATE_VALIDATE_AUTOGEN=true $(UV_RUN) horadus tasks local-gate --full
 	@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"
 	@echo "$(GREEN)Release gate passed.$(RESET)"
 

@@ -45,7 +45,7 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert steps[6].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
     assert steps[7].command == (
         "uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl "
-        "--output-dir ai/eval/results --max-items 200 --fail-on-warnings"
+        "--output-dir ai/eval/results --max-items 0 --fail-on-warnings"
     )
     assert steps[8].command == "./scripts/run_unit_coverage_gate.sh"
     assert steps[9].command == "./scripts/run_secret_scan.sh"
@@ -114,7 +114,7 @@ def test_repo_workflow_configs_include_repo_owned_artifact_validation() -> None:
     assert "python scripts/validate_assessment_artifacts.py" in makefile
     assert (
         "horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir "
-        "ai/eval/results --max-items 200 --fail-on-warnings" in makefile
+        "ai/eval/results --max-items 0 --fail-on-warnings" in makefile
     )
     assert "horadus eval audit \\" in ci_workflow
     assert "--fail-on-warnings" in ci_workflow
@@ -129,7 +129,10 @@ def test_release_gate_reuses_canonical_full_local_gate() -> None:
         "release-gate: deps-dev ## Run the canonical full local gate plus release-only migration validation"
         in makefile
     )
-    assert "@$(UV_RUN) horadus tasks local-gate --full" in makefile
+    assert (
+        "@MIGRATION_GATE_VALIDATE_AUTOGEN=true $(UV_RUN) horadus tasks local-gate --full"
+        in makefile
+    )
     assert (
         '@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"'
         in makefile

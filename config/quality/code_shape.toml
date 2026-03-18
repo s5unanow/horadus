@@ -255,11 +255,6 @@ path = "tests/unit/core/test_observability.py"
 "test_observability_recorders_cover_metric_paths" = 32
 
 [[legacy_files]]
-path = "tests/horadus_cli/v2/test_task_local_review.py"
-[legacy_files.member_max_complexity]
-"test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths" = 26
-
-[[legacy_files]]
 path = "tests/integration/test_processing_pipeline.py"
 [legacy_files.member_max_complexity]
 "test_processing_pipeline_runs_end_to_end" = 28

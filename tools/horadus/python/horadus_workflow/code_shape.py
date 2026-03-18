@@ -152,10 +152,13 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         self.complexity = 1
 
     def visit(self, node: ast.AST) -> None:
-        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            self._visit_nested_callable_definition(node)
+            return
+        if isinstance(node, ast.ClassDef):
             return
         if isinstance(node, ast.Lambda):
-            self.visit(node.body)
+            self._visit_nested_lambda_definition(node)
             return
         if isinstance(node, ast.If):
             self._visit_if(node)
@@ -265,9 +268,28 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         self.complexity += sum(1 for case in node.cases if case.guard is not None)
         self.generic_visit(node)
 
+    def _visit_nested_callable_definition(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        _visit_argument_defaults(self, node.args)
+
+    def _visit_nested_lambda_definition(self, node: ast.Lambda) -> None:
+        _visit_argument_defaults(self, node.args)
+
 
 def _comprehension_complexity(generators: list[ast.comprehension]) -> int:
     return sum(1 + len(generator.ifs) for generator in generators)
+
+
+def _visit_argument_defaults(visitor: _CyclomaticComplexityVisitor, args: ast.arguments) -> None:
+    for default in (
+        *args.defaults,
+        *(default for default in args.kw_defaults if default is not None),
+    ):
+        visitor.visit(default)
 
 
 def _has_match_default_case(cases: list[ast.match_case]) -> bool:

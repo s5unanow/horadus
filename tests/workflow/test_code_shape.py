@@ -508,7 +508,7 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
     assert measurement.member_complexities["assertive"] == 2
 
 
-def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
+def test_measure_python_file_counts_nested_callable_defaults_but_not_lambda_bodies(
     tmp_path: Path,
 ) -> None:
     _write_file(
@@ -516,8 +516,16 @@ def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
         "src/lambda_complexity.py",
         "\n".join(
             [
+                "def deco(value: int):",
+                "    def wrap(func):",
+                "        return func",
+                "    return wrap",
+                "",
                 "def outer(flag: bool, items: list[int]) -> int:",
-                "    picker = lambda value: 0 if flag and value else 1",
+                "    picker = lambda value, default=(0 if flag else 1): default",
+                "    @deco(1 if flag else 0)",
+                "    def helper(value: int = 1 if flag else 0) -> int:",
+                "        return 0 if value else 1",
                 "    return sum(picker(item) for item in items)",
             ]
         )
@@ -526,7 +534,8 @@ def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "lambda_complexity.py")
 
-    assert measurement.member_complexities["outer"] == 4
+    assert measurement.member_complexities["outer"] == 5
+    assert measurement.member_complexities["outer.helper"] == 2
 
 
 def test_irrefutable_match_pattern_helper_recognizes_alias_and_or_defaults() -> None:

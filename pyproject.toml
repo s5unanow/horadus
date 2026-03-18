@@ -134,8 +134,9 @@ filterwarnings = [
 ]
 
 [tool.coverage.run]
-source = ["src", "tools"]
+source = ["src", "tools", "scripts"]
 branch = true
+patch = ["subprocess"]
 omit = [
     "*/tests/*",
     "*/__init__.py",

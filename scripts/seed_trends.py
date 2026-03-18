@@ -15,7 +15,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 from sqlalchemy import select
@@ -82,10 +82,10 @@ async def _get_existing_trend(
     runtime_result = await session.execute(
         select(Trend).where(Trend.runtime_trend_id == runtime_trend_id).limit(1)
     )
-    existing_by_runtime = runtime_result.scalar_one_or_none()
+    existing_by_runtime = cast("Trend | None", runtime_result.scalar_one_or_none())
 
     name_result = await session.execute(select(Trend).where(Trend.name == trend_name).limit(1))
-    existing_by_name = name_result.scalar_one_or_none()
+    existing_by_name = cast("Trend | None", name_result.scalar_one_or_none())
 
     if (
         existing_by_runtime is not None

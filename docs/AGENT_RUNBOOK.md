@@ -80,6 +80,7 @@ to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
 
 5. `make agent-check`
 When: fast local quality gate (lint + typecheck + code-shape + unit tests).
+This covers tracked Python under `src/`, `tools/`, and `scripts/`.
 
 6. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
@@ -88,9 +89,9 @@ The full gate also runs the repo-owned code-shape checker, which enforces the
 current module/function budgets plus ratcheting limits for explicitly tracked
 legacy hotspots in `config/quality/code_shape.toml`.
 The unit-coverage step fails closed at `100%` measured coverage for `src/` and
-the workflow tooling home under `tools/` using the same repo-owned coverage
-gate script that CI and the pre-push hook call, so local and remote
-enforcement stay aligned.
+the workflow tooling home under `tools/`, plus tracked Python under `scripts/`,
+using the same repo-owned coverage gate script that CI and the pre-push hook
+call, so local and remote enforcement stay aligned.
 The matching server-side security substeps also have direct local entry points:
 - `make secret-scan` runs `detect-secrets` against tracked files using the
   repo-owned `.secrets.baseline`

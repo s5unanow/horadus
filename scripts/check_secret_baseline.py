@@ -8,6 +8,7 @@ import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 from detect_secrets.core.secrets_collection import SecretsCollection
 from detect_secrets.settings import configure_settings_from_baseline
@@ -56,7 +57,7 @@ def actionable_findings(
                 findings.append(
                     {
                         "filename": filename,
-                        "line_number": int(entry.get("line_number", 0)),
+                        "line_number": parse_line_number(entry.get("line_number")),
                         "type": str(entry["type"]),
                     }
                 )
@@ -65,6 +66,14 @@ def actionable_findings(
 
 def is_excluded_path(path: str) -> bool:
     return bool(REPO_EXCLUDE_PATTERN.search(path))
+
+
+def parse_line_number(value: object) -> int:
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value)
+    return 0
 
 
 def tracked_files(repo_root: Path) -> list[str]:
@@ -83,12 +92,19 @@ def tracked_files(repo_root: Path) -> list[str]:
 
 
 def scan_results(
-    *, repo_root: Path, baseline: dict[str, object], files: list[str]
+    *, baseline: dict[str, object], files: list[str]
 ) -> dict[str, list[dict[str, object]]]:
     configure_settings_from_baseline(baseline, filename=".secrets.baseline")
     collection = SecretsCollection()
     collection.scan_files(*files)
     return collection.json()
+
+
+def baseline_results(baseline: dict[str, object]) -> dict[str, list[dict[str, object]]]:
+    results = baseline.get("results")
+    if not isinstance(results, dict):
+        raise ValueError(".secrets.baseline is missing a valid 'results' mapping")
+    return cast("dict[str, list[dict[str, object]]]", results)
 
 
 def main() -> int:
@@ -102,8 +118,8 @@ def main() -> int:
 
     print("secret-scan: scanning tracked files against .secrets.baseline")
     findings = actionable_findings(
-        current_results=scan_results(repo_root=repo_root, baseline=baseline, files=files),
-        baseline_results=baseline["results"],
+        current_results=scan_results(baseline=baseline, files=files),
+        baseline_results=baseline_results(baseline),
     )
     if findings:
         print("Secret scan failed: findings outside .secrets.baseline were detected.")

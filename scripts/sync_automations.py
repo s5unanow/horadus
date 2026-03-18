@@ -17,8 +17,10 @@ import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import cast
 
 DROP_KEYS = {"created_at", "updated_at"}
+TomlData = dict[str, object]
 
 
 @dataclass(frozen=True)
@@ -45,10 +47,19 @@ def _read_ids(path: Path) -> list[str]:
     return ids
 
 
-def _load_toml(path: Path) -> dict:
+def _load_toml(path: Path) -> TomlData:
     if not path.exists():
         raise FileNotFoundError(f"toml not found: {path}")
-    return tomllib.loads(path.read_text(encoding="utf-8"))
+    return cast("TomlData", tomllib.loads(path.read_text(encoding="utf-8")))
+
+
+def _toml_int(data: TomlData, key: str, *, default: int) -> int:
+    value = data.get(key)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        return int(value)
+    return default
 
 
 def _toml_scalar(value: object) -> str:
@@ -74,7 +85,9 @@ def _toml_value(value: object) -> str:
     raise TypeError(f"unsupported TOML value type: {type(value).__name__}")
 
 
-def _dump_toml(data: dict, *, created_at: int | None = None, updated_at: int | None = None) -> str:
+def _dump_toml(
+    data: TomlData, *, created_at: int | None = None, updated_at: int | None = None
+) -> str:
     # Stable ordering for readability. Unknown keys (if any) are appended sorted.
     preferred = [
         "version",
@@ -136,7 +149,7 @@ def apply_specs(paths: Paths) -> int:
         created_at: int
         if dest.exists():
             existing = _load_toml(dest)
-            created_at = int(existing.get("created_at") or _now_ms())
+            created_at = _toml_int(existing, "created_at", default=_now_ms())
         else:
             created_at = _now_ms()
 

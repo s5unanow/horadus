@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
+import sys
 from pathlib import Path
+from types import ModuleType
 
+import pytest
+
+pytestmark = pytest.mark.unit
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT_PATH = REPO_ROOT / "scripts" / "assessment_publish_gate.py"
 
@@ -17,6 +23,17 @@ def _run(*args: str | Path, cwd: Path | None = None) -> subprocess.CompletedProc
         text=True,
         check=False,
     )
+
+
+def _load_module() -> ModuleType:
+    module_name = f"assessment_publish_gate_test_{len(sys.modules)}"
+    spec = importlib.util.spec_from_file_location(module_name, SCRIPT_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _write_current_sprint(
@@ -168,3 +185,66 @@ def test_publish_gate_publishes_when_queue_is_mixed(tmp_path: Path) -> None:
     assert "reason=queue_not_fully_human_gated" in result.stdout
     assert "fully_human_gated=false" in result.stdout
     assert "blocker_state_hash:" in memory_file.read_text(encoding="utf-8")
+
+
+def test_parse_current_sprint_skips_malformed_lines_and_sections(tmp_path: Path) -> None:
+    module = _load_module()
+    sprint_file = tmp_path / "tasks" / "CURRENT_SPRINT.md"
+    sprint_file.parent.mkdir(parents=True, exist_ok=True)
+    sprint_file.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- malformed active line",
+                "- `TASK-351` Tighten scripts gate posture [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- malformed blocker metadata",
+                "- TASK-351 | owner=human-operator | malformed-field | next_action=2026-03-19",
+                "",
+                "## Telegram Launch Scope",
+                "- launch_scope: scripts_only",
+                "- malformed launch scope",
+                "",
+                "## Another Section",
+                "- ignored: value",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    active_tasks, blocker_metadata, launch_scope = module._parse_current_sprint(sprint_file)
+
+    assert [(task.task_id, task.requires_human) for task in active_tasks] == [("TASK-351", True)]
+    assert blocker_metadata == {
+        "TASK-351": {"owner": "human-operator", "next_action": "2026-03-19"}
+    }
+    assert launch_scope == {"launch_scope": "scripts_only"}
+
+
+def test_memory_helpers_handle_missing_hash_and_unwritable_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module = _load_module()
+    memory_file = tmp_path / "memory.md"
+    memory_file.write_text("# memory\n", encoding="utf-8")
+    assert module._load_previous_hash(memory_file) is None
+
+    decision = module.GateDecision(
+        role="po",
+        decision="publish",
+        reason="queue_not_fully_human_gated",
+        blocker_state_hash="hash",
+        previous_blocker_state_hash=None,
+        fully_human_gated=False,
+        active_task_ids=(),
+    )
+    target = tmp_path / "nested" / "memory.md"
+    monkeypatch.setattr(module.os, "access", lambda *_args: False)
+
+    with pytest.raises(PermissionError, match="memory directory is not writable"):
+        module._append_memory_entry(target, decision)

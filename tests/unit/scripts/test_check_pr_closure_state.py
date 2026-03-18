@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import importlib.util
 import subprocess
 from pathlib import Path
+from types import ModuleType
+
+import pytest
+
+pytestmark = pytest.mark.unit
 
 SCRIPT_PATH = Path(__file__).resolve().parents[3] / "scripts" / "check_pr_closure_state.py"
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -32,6 +38,15 @@ def _run_guard(repo_root: Path, task_id: str) -> subprocess.CompletedProcess[str
         text=True,
         check=False,
     )
+
+
+def _load_module() -> ModuleType:
+    spec = importlib.util.spec_from_file_location("test_check_pr_closure_state_module", SCRIPT_PATH)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def test_check_pr_closure_state_fails_when_task_is_still_open(tmp_path: Path) -> None:
@@ -97,3 +112,75 @@ def test_check_pr_closure_state_rejects_invalid_task_id(tmp_path: Path) -> None:
 
     assert result.returncode == 2
     assert "Invalid task id 'bad'. Expected TASK-XXX or XXX." in result.stdout
+
+
+def test_check_pr_closure_state_invalid_task_id_without_repo_root_override(tmp_path: Path) -> None:
+    result = subprocess.run(
+        ["python3", str(SCRIPT_PATH), "--task-id", "bad"],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "Invalid task id 'bad'. Expected TASK-XXX or XXX." in result.stdout
+
+
+def test_blocker_lines_only_include_missing_closure_surfaces() -> None:
+    module = _load_module()
+    closure_state = module.TaskClosureState(
+        task_id="TASK-351",
+        present_in_backlog=False,
+        active_sprint_lines=["- `TASK-351` Tighten scripts gate posture"],
+        present_in_completed=False,
+        present_in_closed_archive=False,
+        closed_archive_path=None,
+    )
+
+    assert module._blocker_lines(closure_state) == [
+        "- tasks/CURRENT_SPRINT.md still lists the task under Active Tasks:",
+        "  - `TASK-351` Tighten scripts gate posture",
+        "- tasks/COMPLETED.md is missing the compact completion entry.",
+        "- archive/closed_tasks/*.md is missing the full archived task body.",
+    ]
+
+
+def test_blocker_lines_skip_closed_sections_that_are_already_satisfied() -> None:
+    module = _load_module()
+    closure_state = module.TaskClosureState(
+        task_id="TASK-351",
+        present_in_backlog=True,
+        active_sprint_lines=[],
+        present_in_completed=True,
+        present_in_closed_archive=True,
+        closed_archive_path="archive/closed_tasks/2026-Q1.md",
+    )
+
+    assert module._blocker_lines(closure_state) == [
+        "- tasks/BACKLOG.md still contains the task as open."
+    ]
+
+
+def test_check_pr_closure_state_main_without_repo_override(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    module = _load_module()
+    closure_state = module.TaskClosureState(
+        task_id="TASK-351",
+        present_in_backlog=False,
+        active_sprint_lines=[],
+        present_in_completed=True,
+        present_in_closed_archive=True,
+        closed_archive_path="archive/closed_tasks/2026-Q1.md",
+    )
+    monkeypatch.setattr(
+        module.argparse.ArgumentParser,
+        "parse_args",
+        lambda _self, _argv: type("Args", (), {"task_id": "TASK-351", "repo_root": None})(),
+    )
+    monkeypatch.setattr(module, "task_closure_state", lambda _task_id: closure_state)
+
+    assert module.main([]) == 0
+    assert "closure guard passed: TASK-351 is closed" in capsys.readouterr().out

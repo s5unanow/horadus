@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-354`.
+- Next available task IDs start at `TASK-355`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -83,28 +83,6 @@ health, not advisory reporting.
 
 ---
 
-### TASK-351: Bring `scripts/` under the main lint, type, security, and coverage posture
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-`scripts/` is treated as tracked production-grade Python by the code-shape
-policy, but most repo gates still exclude it from lint, typecheck, Bandit, and
-coverage. That leaves operational entry points and workflow scripts outside the
-main static-analysis posture. The target direction is parity with `src/` and
-`tools/`, not a permanent lower bar for scripts.
-
-**Planning Gates**: Required — shared workflow/config gate expansion across repo-owned Python surfaces
-**Files**: `scripts/`, `Makefile`, `.github/workflows/ci.yml`, `pyproject.toml`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
-
-**Acceptance Criteria**:
-- [ ] Extend canonical lint, typecheck, and security commands so tracked Python under `scripts/` is enforced in the same gate path as `src/` and `tools`
-- [ ] Define the intended coverage posture for `scripts/` and enforce it consistently, defaulting to measured coverage unless a narrower subset is explicitly justified
-- [ ] Keep script-specific false-positive handling narrow and repo-owned instead of skipping `scripts/` wholesale
-- [ ] Avoid adding a blanket carve-out for all scripts; exclusions must be path-specific and justified
-- [ ] Tests or gate-parity assertions cover the expanded `scripts/` inclusion
-
----
-
 ### TASK-353: Align canonical release and local gates with the full repo-owned analyzer set
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours
@@ -124,6 +102,30 @@ strict gate contract with minimal drift between local, release, and CI paths.
 - [ ] Prefer one canonical strict gate contract over multiple partially overlapping target definitions
 - [ ] Cover assessment/provenance validation gaps for real repo artifacts where the repo expects those artifacts to remain trustworthy
 - [ ] Tests cover the updated gate contract so Make targets, workflow helpers, and CI-parity expectations stay aligned
+
+---
+
+### TASK-354: Centralize repo-owned secret-scan policy and exclude rules
+**Priority**: P2 (Medium)
+**Estimate**: 2-3 hours
+
+`TASK-352` added a repo-owned server-side secret scan, but the effective policy
+still lives in more than one place. The filename excludes and scan semantics are
+currently duplicated across pre-commit and the repo-owned baseline-check helper,
+which creates drift risk and makes review catch policy mismatches that local
+verification should have prevented. Move the secret-scan policy to one
+authoritative repo-owned source so local hooks, CI, and workflow helpers apply
+the same contract by construction.
+
+**Planning Gates**: Required — shared workflow/security policy contract change
+**Files**: `.pre-commit-config.yaml`, `scripts/check_secret_baseline.py`, `scripts/run_secret_scan.sh`, `tests/unit/scripts/`, `tests/workflow/`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Define one authoritative repo-owned source for secret-scan excludes and any shared scan-mode semantics that must stay aligned across hook and CI paths
+- [ ] Update the pre-commit hook and server-side secret-scan helper to consume that shared policy instead of duplicating regexes or behavior in multiple files
+- [ ] Preserve the current documented repo policy for excluded low-risk/high-churn surfaces unless a narrower or broader scope is explicitly justified
+- [ ] Add regression coverage that fails when hook-side and server-side secret-scan policy drift apart
+- [ ] Document the canonical ownership point so future secret-scan changes do not require parallel manual edits in multiple workflow surfaces
 
 ---
 

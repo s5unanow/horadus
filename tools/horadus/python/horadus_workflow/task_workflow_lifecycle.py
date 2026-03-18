@@ -443,13 +443,14 @@ def full_local_gate_steps() -> list[LocalGateStep]:
         ),
         LocalGateStep(
             name="ruff-format-check",
-            command=f"{uv_bin} run --no-sync ruff format src/ tools/ tests/ --check",
+            command=f"{uv_bin} run --no-sync ruff format src/ tools/ scripts/ tests/ --check",
         ),
         LocalGateStep(
-            name="ruff-check", command=f"{uv_bin} run --no-sync ruff check src/ tools/ tests/"
+            name="ruff-check",
+            command=f"{uv_bin} run --no-sync ruff check src/ tools/ scripts/ tests/",
         ),
         LocalGateStep(
-            name="mypy", command=f"{uv_bin} run --no-sync mypy src/ tools/horadus/python"
+            name="mypy", command=f"{uv_bin} run --no-sync mypy src/ tools/horadus/python scripts"
         ),
         LocalGateStep(
             name="validate-taxonomy",
@@ -468,7 +469,10 @@ def full_local_gate_steps() -> list[LocalGateStep]:
         LocalGateStep(name="secret-scan", command="./scripts/run_secret_scan.sh"),
         LocalGateStep(
             name="bandit",
-            command=f"{uv_bin} run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python",
+            command=(
+                f"{uv_bin} run --no-sync bandit -c pyproject.toml -r src/ "
+                "tools/horadus/python scripts"
+            ),
         ),
         LocalGateStep(name="dependency-audit", command="./scripts/run_dependency_audit.sh"),
         LocalGateStep(name="lockfile-check", command=f"{uv_bin} lock --check"),

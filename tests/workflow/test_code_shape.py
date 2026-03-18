@@ -360,7 +360,9 @@ def test_measure_python_file_keeps_max_span_for_duplicate_member_names(tmp_path:
                 "class Example:",
                 "    @property",
                 "    def value(self) -> int:",
-                "        return 1",
+                "        if True:",
+                "            return 1",
+                "        return 0",
                 "",
                 "    @value.setter",
                 "    def value(self, new_value: int) -> None:",
@@ -372,7 +374,8 @@ def test_measure_python_file_keeps_max_span_for_duplicate_member_names(tmp_path:
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "duplicate.py")
 
-    assert measurement.member_lines["Example.value"] == 3
+    assert measurement.member_lines["Example.value"] == 5
+    assert measurement.member_complexities["Example.value"] == 2
 
 
 def test_measure_python_file_tracks_member_complexity_without_nested_defs(
@@ -466,6 +469,27 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
     assert measurement.member_complexities["Wrapper.run"] == 17
     assert measurement.member_complexities["iterate"] == 3
     assert measurement.member_complexities["try_only"] == 2
+
+
+def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
+    tmp_path: Path,
+) -> None:
+    _write_file(
+        tmp_path,
+        "src/lambda_complexity.py",
+        "\n".join(
+            [
+                "def outer(flag: bool, items: list[int]) -> int:",
+                "    picker = lambda value: 0 if flag and value else 1",
+                "    return sum(picker(item) for item in items)",
+            ]
+        )
+        + "\n",
+    )
+
+    measurement = measure_python_file(tmp_path, tmp_path / "src" / "lambda_complexity.py")
+
+    assert measurement.member_complexities["outer"] == 4
 
 
 def test_run_code_shape_check_flags_member_complexity_budget_violations(tmp_path: Path) -> None:

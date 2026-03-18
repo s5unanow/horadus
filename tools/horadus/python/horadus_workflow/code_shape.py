@@ -152,7 +152,10 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         self.complexity = 1
 
     def visit(self, node: ast.AST) -> None:
-        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef | ast.Lambda):
+        if isinstance(node, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            return
+        if isinstance(node, ast.Lambda):
+            self.visit(node.body)
             return
         if isinstance(node, ast.If):
             self._visit_if(node)
@@ -266,7 +269,10 @@ def _collect_member_complexities(tree: ast.AST) -> dict[str, int]:
                 visit(child, (*prefix, child.name))
             elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
                 member_name = _member_name(prefix, child.name)
-                member_complexities[member_name] = _member_complexity(child)
+                member_complexities[member_name] = max(
+                    member_complexities.get(member_name, 0),
+                    _member_complexity(child),
+                )
                 visit(child, (*prefix, child.name))
 
     visit(tree, ())

@@ -601,6 +601,7 @@ async def test_build_narrative_fails_over_to_secondary_route(
         client=SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions())),
         secondary_client=SimpleNamespace(chat=SimpleNamespace(completions=SecondaryCompletions())),
         secondary_model="gpt-4.1-nano",
+        report_api_mode="chat_completions",
         cost_tracker=cost_tracker,
         primary_provider="openai",
         secondary_provider="openai-secondary",
@@ -703,7 +704,10 @@ async def test_build_narrative_supports_responses_api_mode_pilot(mock_db_session
 
 
 @pytest.mark.asyncio
-async def test_build_narrative_falls_back_when_grounding_fails(mock_db_session) -> None:
+async def test_build_narrative_falls_back_when_grounding_fails(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     class CompletionsApi:
         async def create(self, **kwargs):
             _ = kwargs
@@ -716,6 +720,26 @@ async def test_build_narrative_falls_back_when_grounding_fails(mock_db_session) 
                 usage=SimpleNamespace(prompt_tokens=9, completion_tokens=5),
             )
 
+    real_evaluate_narrative_grounding = (
+        ReportGenerator._build_fallback_narrative_result.__globals__["evaluate_narrative_grounding"]
+    )
+    evaluation_calls = 0
+
+    def _evaluate_narrative_grounding_once_failed(**kwargs):
+        nonlocal evaluation_calls
+        evaluation_calls += 1
+        if evaluation_calls == 1:
+            return SimpleNamespace(
+                is_grounded=False,
+                violation_count=1,
+                unsupported_claims=("90%",),
+            )
+        return real_evaluate_narrative_grounding(**kwargs)
+
+    monkeypatch.setattr(
+        "src.core.report_generator.evaluate_narrative_grounding",
+        _evaluate_narrative_grounding_once_failed,
+    )
     cost_tracker = SimpleNamespace(
         ensure_within_budget=AsyncMock(return_value=None),
         record_usage=AsyncMock(return_value=None),
@@ -723,6 +747,7 @@ async def test_build_narrative_falls_back_when_grounding_fails(mock_db_session) 
     generator = ReportGenerator(
         session=mock_db_session,
         client=SimpleNamespace(chat=SimpleNamespace(completions=CompletionsApi())),
+        report_api_mode="chat_completions",
         cost_tracker=cost_tracker,
     )
     trend = SimpleNamespace(id=uuid4(), name="Signal Watch", description="desc")
@@ -759,6 +784,7 @@ async def test_build_narrative_falls_back_when_model_returns_blank_content(mock_
     generator = ReportGenerator(
         session=mock_db_session,
         client=SimpleNamespace(chat=SimpleNamespace(completions=CompletionsApi())),
+        report_api_mode="chat_completions",
         cost_tracker=SimpleNamespace(
             ensure_within_budget=AsyncMock(return_value=None),
             record_usage=AsyncMock(return_value=None),
@@ -807,6 +833,7 @@ async def test_build_narrative_falls_back_when_all_routes_fail(
         client=SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions())),
         secondary_client=SimpleNamespace(chat=SimpleNamespace(completions=SecondaryCompletions())),
         secondary_model="gpt-4.1-nano",
+        report_api_mode="chat_completions",
         cost_tracker=SimpleNamespace(
             ensure_within_budget=AsyncMock(return_value=None),
             record_usage=AsyncMock(return_value=None),

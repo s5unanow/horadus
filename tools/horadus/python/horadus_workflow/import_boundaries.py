@@ -174,7 +174,7 @@ class _ImportEdgeCollector(ast.NodeVisitor):
         self._edges = edges
         self._type_checking_depth = 0
 
-    def visit_If(self, node: ast.If) -> None:  # noqa: N802
+    def visit_If(self, node: ast.If) -> None:
         is_type_checking_guard = _is_type_checking_test(node.test)
         if is_type_checking_guard:
             self._type_checking_depth += 1
@@ -185,7 +185,7 @@ class _ImportEdgeCollector(ast.NodeVisitor):
         for child in node.orelse:
             self.visit(child)
 
-    def visit_Import(self, node: ast.Import) -> None:  # noqa: N802
+    def visit_Import(self, node: ast.Import) -> None:
         if self._type_checking_depth:
             return
         for alias in node.names:
@@ -201,7 +201,7 @@ class _ImportEdgeCollector(ast.NodeVisitor):
                 )
             )
 
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:  # noqa: N802
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> None:
         if self._type_checking_depth:
             return
         for imported in _resolve_from_import_targets(

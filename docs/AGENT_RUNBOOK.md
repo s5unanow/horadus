@@ -81,6 +81,9 @@ to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
 5. `make agent-check`
 When: fast local quality gate (lint + typecheck + code-shape + unit tests).
 This covers tracked Python under `src/`, `tools/`, and `scripts/`.
+The workflow unit suite includes the repo-owned import-boundary analyzer for
+`src/` dependency direction, tooling package boundaries, and the explicit
+runtime bridge seam into app code.
 
 6. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity

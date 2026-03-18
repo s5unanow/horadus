@@ -544,4 +544,8 @@ ownership lives under `tools/horadus/python/horadus_workflow/`. The installed
 `horadus` entrypoint points directly at the tooling-home CLI package, and
 app-backed CLI commands cross the explicit runtime bridge at
 `tools/horadus/python/horadus_app_cli_runtime.py` rather than importing
-business-app modules into the tooling package.
+business-app modules into the tooling package. Repo-owned import-boundary
+analysis now enforces that split: `src/` layer dependencies are checked
+against an explicit contract, tooling imports are deny-by-default into `src/`,
+and only the documented runtime bridge keeps a narrow allowlisted seam into
+selected app modules.

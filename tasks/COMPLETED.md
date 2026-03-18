@@ -322,3 +322,4 @@
 - TASK-352: Enforce server-side secret and dependency vulnerability scanning in CI ✅
 - TASK-351: Bring `scripts/` under the main lint, type, security, and coverage posture ✅
 - TASK-350: Add a cyclomatic-complexity ratchet for tracked Python surfaces ✅
+- TASK-349: Add repo-wide dependency direction gates for `src/` and tooling adapter seams ✅

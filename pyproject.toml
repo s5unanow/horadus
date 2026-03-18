@@ -85,6 +85,8 @@ dev = [
 
     # Security
     "bandit[toml]>=1.7.0",
+    "detect-secrets>=1.5.0",
+    "pip-audit>=2.8.0",
 
     # Type Stubs
     "types-redis>=4.6.0",

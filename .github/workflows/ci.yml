@@ -273,8 +273,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev --frozen
 
+      - name: Run detect-secrets against tracked files
+        run: ./scripts/run_secret_scan.sh
+
       - name: Run Bandit (code security)
         run: uv run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python
+
+      - name: Audit locked dependencies for known vulnerabilities
+        run: ./scripts/run_dependency_audit.sh
 
       - name: Validate lockfile
         run: uv lock --check

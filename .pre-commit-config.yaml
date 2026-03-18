@@ -86,7 +86,7 @@ repos:
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        args: [--baseline, .secrets.baseline]
+        args: [--baseline, .secrets.baseline, --no-verify]
         # Exclude low-risk, high-churn docs/task text from secrets scanning.
         # Keep scanning code/config where secrets are most likely to appear.
         exclude: '(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)'

@@ -465,10 +465,12 @@ def full_local_gate_steps() -> list[LocalGateStep]:
             ),
         ),
         LocalGateStep(name="pytest-unit-cov", command="./scripts/run_unit_coverage_gate.sh"),
+        LocalGateStep(name="secret-scan", command="./scripts/run_secret_scan.sh"),
         LocalGateStep(
             name="bandit",
             command=f"{uv_bin} run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python",
         ),
+        LocalGateStep(name="dependency-audit", command="./scripts/run_dependency_audit.sh"),
         LocalGateStep(name="lockfile-check", command=f"{uv_bin} lock --check"),
         LocalGateStep(name="integration-docker", command="./scripts/test_integration_docker.sh"),
         LocalGateStep(

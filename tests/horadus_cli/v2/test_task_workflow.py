@@ -111,6 +111,7 @@ def test_repo_workflow_build_tooling_runs_from_locked_dev_environment() -> None:
     ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
 
+    assert "uv sync --extra dev --frozen" in ci_workflow
     assert "uv run --no-sync python -m build --no-isolation" in ci_workflow
     assert "uv run --no-sync twine check dist/*" in ci_workflow
     assert '"build>=' in pyproject

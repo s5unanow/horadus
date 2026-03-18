@@ -459,6 +459,20 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
                 "        return value",
                 "    except ValueError:",
                 "        return 0",
+                "",
+                "def try_star_only(value: int) -> int:",
+                "    try:",
+                "        result = value",
+                "    except* ValueError:",
+                "        result = 0",
+                "    return result",
+                "",
+                "def match_with_default(value: int) -> int:",
+                "    match value:",
+                "        case 0:",
+                "            return 0",
+                "        case _:",
+                "            return 1",
             ]
         )
         + "\n",
@@ -466,9 +480,11 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "branch_nodes.py")
 
-    assert measurement.member_complexities["Wrapper.run"] == 17
+    assert measurement.member_complexities["Wrapper.run"] == 18
     assert measurement.member_complexities["iterate"] == 3
     assert measurement.member_complexities["try_only"] == 2
+    assert measurement.member_complexities["try_star_only"] == 2
+    assert measurement.member_complexities["match_with_default"] == 2
 
 
 def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(

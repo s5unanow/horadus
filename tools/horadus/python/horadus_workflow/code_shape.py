@@ -172,7 +172,7 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         if isinstance(node, ast.While):
             self._visit_while(node)
             return
-        if isinstance(node, ast.Try):
+        if isinstance(node, ast.Try | ast.TryStar):
             self._visit_try(node)
             return
         if isinstance(node, ast.BoolOp):
@@ -215,7 +215,7 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         self.complexity += 1
         self.generic_visit(node)
 
-    def _visit_try(self, node: ast.Try) -> None:
+    def _visit_try(self, node: ast.Try | ast.TryStar) -> None:
         self.complexity += len(node.handlers)
         if node.orelse:
             self.complexity += 1
@@ -242,13 +242,26 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         self.generic_visit(node)
 
     def _visit_match(self, node: ast.Match) -> None:
-        self.complexity += max(len(node.cases) - 1, 0)
+        self.complexity += len(node.cases) - int(_has_match_default_case(node.cases))
         self.complexity += sum(1 for case in node.cases if case.guard is not None)
         self.generic_visit(node)
 
 
 def _comprehension_complexity(generators: list[ast.comprehension]) -> int:
     return sum(1 + len(generator.ifs) for generator in generators)
+
+
+def _has_match_default_case(cases: list[ast.match_case]) -> bool:
+    for case in cases:
+        pattern = case.pattern
+        if (
+            case.guard is None
+            and isinstance(pattern, ast.MatchAs)
+            and pattern.pattern is None
+            and pattern.name is None
+        ):
+            return True
+    return False
 
 
 def _member_complexity(

@@ -321,3 +321,4 @@
 - TASK-348: Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
 - TASK-352: Enforce server-side secret and dependency vulnerability scanning in CI ✅
 - TASK-351: Bring `scripts/` under the main lint, type, security, and coverage posture ✅
+- TASK-350: Add a cyclomatic-complexity ratchet for tracked Python surfaces ✅

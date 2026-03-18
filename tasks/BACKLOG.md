@@ -61,28 +61,6 @@ documented adapter seams.
 
 ---
 
-### TASK-350: Add a cyclomatic-complexity ratchet for tracked Python surfaces
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-The repo already ratchets module/function line counts, but branch-heavy logic
-can still stay green if it is short enough. Add a bounded cyclomatic-complexity
-gate that matches the repo’s existing code-shape ratchet model instead of
-relying only on manual review. The default direction should be stricter code
-health, not advisory reporting.
-
-**Planning Gates**: Required — shared quality policy and repo-wide static-analysis behavior
-**Files**: `pyproject.toml`, `config/quality/`, `scripts/`, `tools/horadus/python/horadus_workflow/`, `tests/workflow/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
-
-**Acceptance Criteria**:
-- [ ] Choose and document the canonical complexity enforcement surface (for example Ruff McCabe or a repo-owned analyzer) for tracked Python files
-- [ ] Enforce a fail-closed default complexity budget with explicit ratcheted exceptions for legacy hotspots rather than silent global waivers
-- [ ] New and modified code must satisfy the default budget unless a repo-owned exception is documented narrowly and justified
-- [ ] Wire the complexity check into the canonical local and CI gate path alongside existing repo-owned analyzers
-- [ ] Tests cover both default-budget failures and allowlisted legacy-exception behavior
-
----
-
 ### TASK-353: Align canonical release and local gates with the full repo-owned analyzer set
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours

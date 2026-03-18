@@ -86,8 +86,9 @@ This covers tracked Python under `src/`, `tools/`, and `scripts/`.
 When: canonical post-task local gate before push/PR; runs the full CI-parity
 local validation sequence without replacing the fast iteration gate.
 The full gate also runs the repo-owned code-shape checker, which enforces the
-current module/function budgets plus ratcheting limits for explicitly tracked
-legacy hotspots in `config/quality/code_shape.toml`.
+current module/function line budgets, member cyclomatic-complexity budgets,
+and ratcheting limits for explicitly tracked legacy hotspots in
+`config/quality/code_shape.toml`.
 The unit-coverage step fails closed at `100%` measured coverage for `src/` and
 the workflow tooling home under `tools/`, plus tracked Python under `scripts/`,
 using the same repo-owned coverage gate script that CI and the pre-push hook

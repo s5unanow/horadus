@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ast
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from tools.horadus.python.horadus_workflow.code_shape import (
+    _is_irrefutable_match_pattern,
     measure_python_file,
     render_code_shape_issues,
     run_code_shape_check,
@@ -71,6 +73,8 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -110,6 +114,8 @@ production_module_lines = 4
 test_module_lines = 30
 production_function_lines = 4
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -151,6 +157,8 @@ production_module_lines = 4
 test_module_lines = 30
 production_function_lines = 4
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -208,6 +216,8 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
+production_member_complexity = 4
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -218,6 +228,8 @@ path = "src/app.py"
 max_lines = 25
 [legacy_files.member_max_lines]
 "ok" = 12
+[legacy_files.member_max_complexity]
+"ok" = 8
 """.strip(),
     )
 
@@ -228,6 +240,7 @@ max_lines = 25
     assert any(
         "member override is stale: ok now fits the default member budget" in line for line in lines
     )
+    assert any("member complexity override is stale: ok now fits" in line for line in lines)
 
 
 def test_run_code_shape_check_ignores_untracked_python_files(tmp_path: Path) -> None:
@@ -257,6 +270,8 @@ production_module_lines = 4
 test_module_lines = 30
 production_function_lines = 4
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -282,6 +297,8 @@ production_module_lines = 4
 test_module_lines = 30
 production_function_lines = 4
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -345,7 +362,9 @@ def test_measure_python_file_keeps_max_span_for_duplicate_member_names(tmp_path:
                 "class Example:",
                 "    @property",
                 "    def value(self) -> int:",
-                "        return 1",
+                "        if True:",
+                "            return 1",
+                "        return 0",
                 "",
                 "    @value.setter",
                 "    def value(self, new_value: int) -> None:",
@@ -357,7 +376,332 @@ def test_measure_python_file_keeps_max_span_for_duplicate_member_names(tmp_path:
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "duplicate.py")
 
-    assert measurement.member_lines["Example.value"] == 3
+    assert measurement.member_lines["Example.value"] == 5
+    assert measurement.member_complexities["Example.value"] == 2
+
+
+def test_measure_python_file_tracks_member_complexity_without_nested_defs(
+    tmp_path: Path,
+) -> None:
+    _write_file(
+        tmp_path,
+        "src/complexity.py",
+        "\n".join(
+            [
+                "def outer(flag: bool, items: list[int]) -> int:",
+                "    def inner(value: int) -> int:",
+                "        if value > 0:",
+                "            return value",
+                "        return 0",
+                "",
+                "    if flag and items:",
+                "        return sum(item for item in items if item % 2 == 0)",
+                "    return inner(0)",
+            ]
+        )
+        + "\n",
+    )
+
+    measurement = measure_python_file(tmp_path, tmp_path / "src" / "complexity.py")
+
+    assert measurement.member_complexities["outer"] == 5
+    assert measurement.member_complexities["outer.inner"] == 2
+
+
+def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: Path) -> None:
+    _write_file(
+        tmp_path,
+        "src/branch_nodes.py",
+        "\n".join(
+            [
+                "class Wrapper:",
+                "    def run(self, items, stream, flag: bool) -> int:",
+                "        class Local:",
+                "            def branch(self) -> int:",
+                "                return 1",
+                "",
+                "        def helper(value: int) -> int:",
+                "            return value",
+                "",
+                "        async def async_helper() -> int:",
+                "            return 1",
+                "",
+                "        formatter = lambda value: value",
+                "        result = 1 if flag else 0",
+                "        values = [item for item in items if item % 2 == 0]",
+                "        pairs = {item for item in items if item % 3 == 0}",
+                "        lookup = {str(item): item for item in items if item > 1}",
+                "        total = sum(item for item in items if item > 2)",
+                "        for item in items:",
+                "            if item > 5:",
+                "                result += item",
+                "        while result < 3:",
+                "            result += 1",
+                "        with stream:",
+                "            result += 1",
+                "        try:",
+                "            result += formatter(helper(total))",
+                "        except ValueError:",
+                "            result = 0",
+                "        else:",
+                "            result += 1",
+                "        match result:",
+                "            case 0:",
+                "                return len(values)",
+                "            case other if other > 1:",
+                "                return len(pairs) + len(lookup) + total",
+                "        return Local().branch() + async_helper().send(None)",
+                "",
+                "async def iterate(stream) -> int:",
+                "    async for item in stream:",
+                "        if item > 0:",
+                "            return item",
+                "    return 0",
+                "",
+                "async def use_async_with(stream) -> int:",
+                "    async with stream:",
+                "        return 0",
+                "",
+                "def try_only(value: int) -> int:",
+                "    try:",
+                "        return value",
+                "    except ValueError:",
+                "        return 0",
+                "",
+                "def try_star_only(value: int) -> int:",
+                "    try:",
+                "        result = value",
+                "    except* ValueError:",
+                "        result = 0",
+                "    return result",
+                "",
+                "def match_with_default(value: int) -> int:",
+                "    match value:",
+                "        case 0:",
+                "            return 0",
+                "        case _:",
+                "            return 1",
+                "",
+                "def match_with_capture_default(value: int) -> int:",
+                "    match value:",
+                "        case 0:",
+                "            return 0",
+                "        case other:",
+                "            return other",
+                "",
+                "def assertive(flag: bool) -> None:",
+                "    assert flag",
+            ]
+        )
+        + "\n",
+    )
+
+    measurement = measure_python_file(tmp_path, tmp_path / "src" / "branch_nodes.py")
+
+    assert measurement.member_complexities["Wrapper.run"] == 18
+    assert measurement.member_complexities["iterate"] == 3
+    assert measurement.member_complexities["use_async_with"] == 2
+    assert measurement.member_complexities["try_only"] == 2
+    assert measurement.member_complexities["try_star_only"] == 2
+    assert measurement.member_complexities["match_with_default"] == 2
+    assert measurement.member_complexities["match_with_capture_default"] == 2
+    assert measurement.member_complexities["assertive"] == 2
+
+
+def test_measure_python_file_counts_nested_callable_defaults_but_not_lambda_bodies(
+    tmp_path: Path,
+) -> None:
+    _write_file(
+        tmp_path,
+        "src/lambda_complexity.py",
+        "\n".join(
+            [
+                "def deco(value: int):",
+                "    def wrap(func):",
+                "        return func",
+                "    return wrap",
+                "",
+                "def outer(flag: bool, items: list[int]) -> int:",
+                "    picker = lambda value, default=(0 if flag else 1): default",
+                "    @deco(1 if flag else 0)",
+                "    def helper(value: int = 1 if flag else 0) -> int:",
+                "        return 0 if value else 1",
+                "    return sum(picker(item) for item in items)",
+            ]
+        )
+        + "\n",
+    )
+
+    measurement = measure_python_file(tmp_path, tmp_path / "src" / "lambda_complexity.py")
+
+    assert measurement.member_complexities["outer"] == 5
+    assert measurement.member_complexities["outer.helper"] == 2
+
+
+def test_irrefutable_match_pattern_helper_recognizes_alias_and_or_defaults() -> None:
+    alias_pattern = (
+        ast.parse("match value:\n    case _ as other:\n        pass\n").body[0].cases[0].pattern
+    )
+    or_pattern = (
+        ast.parse("match value:\n    case 0 | other:\n        pass\n").body[0].cases[0].pattern
+    )
+
+    assert _is_irrefutable_match_pattern(alias_pattern) is True
+    assert _is_irrefutable_match_pattern(or_pattern) is True
+
+
+def test_run_code_shape_check_flags_member_complexity_budget_violations(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                "def too_branchy(flag: bool, items: list[int]) -> int:",
+                "    if flag and items:",
+                "        return 1",
+                "    if items:",
+                "        return sum(item for item in items if item % 2 == 0)",
+                "    return 0",
+            ]
+        )
+        + "\n",
+    )
+    _track_paths(tmp_path, "src/app.py")
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[budgets]
+production_module_lines = 20
+test_module_lines = 30
+production_function_lines = 10
+test_function_lines = 12
+production_member_complexity = 5
+test_member_complexity = 20
+
+[paths]
+include_roots = ["src", "tests"]
+exclude_globs = ["**/__pycache__/**"]
+""".strip(),
+    )
+
+    result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
+    lines = render_code_shape_issues(result)
+
+    assert any("too_branchy has cyclomatic complexity 6; budget is 5" in line for line in lines)
+
+
+def test_run_code_shape_check_uses_test_member_complexity_budget(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
+    _write_file(
+        tmp_path,
+        "tests/test_branchy.py",
+        "\n".join(
+            [
+                "def too_branchy(flag: bool, items: list[int]) -> int:",
+                "    if flag and items:",
+                "        return 1",
+                "    if items:",
+                "        return sum(item for item in items if item % 2 == 0)",
+                "    return 0",
+            ]
+        )
+        + "\n",
+    )
+    _track_paths(tmp_path, "tests/test_branchy.py")
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[budgets]
+production_module_lines = 20
+test_module_lines = 30
+production_function_lines = 10
+test_function_lines = 12
+production_member_complexity = 99
+test_member_complexity = 5
+
+[paths]
+include_roots = ["tests"]
+exclude_globs = ["**/__pycache__/**"]
+""".strip(),
+    )
+
+    result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
+    lines = render_code_shape_issues(result)
+
+    assert any("too_branchy has cyclomatic complexity 6; budget is 5" in line for line in lines)
+
+
+def test_run_code_shape_check_allows_legacy_member_complexity_but_blocks_regressions(
+    tmp_path: Path,
+) -> None:
+    _init_git_repo(tmp_path)
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                "def too_branchy(flag: bool, items: list[int]) -> int:",
+                "    if flag and items:",
+                "        return 1",
+                "    if items:",
+                "        return sum(item for item in items if item % 2 == 0)",
+                "    return 0",
+            ]
+        )
+        + "\n",
+    )
+    _track_paths(tmp_path, "src/app.py")
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[budgets]
+production_module_lines = 20
+test_module_lines = 30
+production_function_lines = 10
+test_function_lines = 12
+production_member_complexity = 5
+test_member_complexity = 20
+
+[paths]
+include_roots = ["src", "tests"]
+exclude_globs = ["**/__pycache__/**"]
+
+[[legacy_files]]
+path = "src/app.py"
+[legacy_files.member_max_complexity]
+"too_branchy" = 6
+""".strip(),
+    )
+
+    first_result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
+    assert first_result.issues == ()
+
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                "def too_branchy(flag: bool, items: list[int], fallback: int) -> int:",
+                "    if flag and items:",
+                "        return 1",
+                "    if items:",
+                "        return sum(item for item in items if item % 2 == 0)",
+                "    if fallback > 0:",
+                "        return fallback",
+                "    return 0",
+            ]
+        )
+        + "\n",
+    )
+
+    regressed = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
+    lines = render_code_shape_issues(regressed)
+
+    assert any(
+        "too_branchy has cyclomatic complexity 7; allowlisted maximum is 6" in line
+        for line in lines
+    )
 
 
 def test_run_code_shape_check_honors_excludes_and_flags_missing_override_targets(
@@ -375,6 +719,8 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -384,6 +730,8 @@ exclude_globs = ["**/__pycache__/**"]
 path = "src/app.py"
 [legacy_files.member_max_lines]
 "missing_member" = 12
+[legacy_files.member_max_complexity]
+"missing_complexity_member" = 6
 
 [[legacy_files]]
 path = "src/missing.py"
@@ -396,6 +744,10 @@ max_lines = 25
 
     assert any(
         "member override is stale: missing_member no longer exists" in line for line in lines
+    )
+    assert any(
+        "member complexity override is stale: missing_complexity_member no longer exists" in line
+        for line in lines
     )
     assert any("legacy override is stale: file no longer exists" in line for line in lines)
     assert result.errors == result.issues
@@ -420,6 +772,8 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src"]

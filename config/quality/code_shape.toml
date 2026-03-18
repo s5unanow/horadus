@@ -3,6 +3,8 @@ production_module_lines = 700
 test_module_lines = 1200
 production_function_lines = 100
 test_function_lines = 160
+production_member_complexity = 20
+test_member_complexity = 25
 
 [paths]
 include_roots = ["src", "tools", "tests", "scripts"]
@@ -12,6 +14,8 @@ exclude_globs = ["**/__pycache__/**"]
 path = "src/api/routes/feedback.py"
 [legacy_files.member_max_lines]
 "list_review_queue" = 143
+[legacy_files.member_max_complexity]
+"list_review_queue" = 25
 
 [[legacy_files]]
 path = "src/api/routes/reports.py"
@@ -21,6 +25,8 @@ path = "src/api/routes/reports.py"
 [[legacy_files]]
 path = "src/api/routes/trends.py"
 max_lines = 1310
+[legacy_files.member_max_complexity]
+"update_trend" = 21
 
 [[legacy_files]]
 path = "src/core/calibration_dashboard.py"
@@ -71,6 +77,11 @@ max_lines = 898
 "GDELTClient.collect_query" = 122
 
 [[legacy_files]]
+path = "src/processing/embedding_service.py"
+[legacy_files.member_max_complexity]
+"EmbeddingService.embed_texts_with_contexts" = 27
+
+[[legacy_files]]
 path = "src/ingestion/rss_collector.py"
 [legacy_files.member_max_lines]
 "RSSCollector.collect_feed" = 101
@@ -92,6 +103,8 @@ path = "src/processing/tier2_classifier.py"
 max_lines = 868
 [legacy_files.member_max_lines]
 "Tier2Classifier.classify_event" = 119
+[legacy_files.member_max_complexity]
+"Tier2Classifier._trim_trend_payload_for_budget" = 24
 
 [[legacy_files]]
 path = "src/storage/models.py"
@@ -120,26 +133,62 @@ path = "tools/horadus/python/horadus_cli/task_commands.py"
 path = "tools/horadus/python/horadus_workflow/_docs_freshness_current_sprint.py"
 [legacy_files.member_max_lines]
 "check_current_sprint" = 142
+[legacy_files.member_max_complexity]
+"check_current_sprint" = 21
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/_docs_freshness_planning.py"
 [legacy_files.member_max_lines]
 "_validate_planning_artifact" = 180
+[legacy_files.member_max_complexity]
+"_validate_planning_artifact" = 27
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/_task_preflight_guard.py"
 [legacy_files.member_max_lines]
 "task_preflight_data" = 138
+[legacy_files.member_max_complexity]
+"task_preflight_data" = 22
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/pr_review_gate.py"
+[legacy_files.member_max_complexity]
+"_matching_review_comments" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/pr_review_gate_graphql.py"
+[legacy_files.member_max_complexity]
+"graphql_reviews_and_comments" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_gate.py"
+[legacy_files.member_max_complexity]
+"_parse_review_gate_result" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_refresh.py"
+[legacy_files.member_max_complexity]
+"_needs_pre_review_fresh_review_request" = 23
+"_request_timeline" = 27
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_threads.py"
 [legacy_files.member_max_lines]
 "_review_threads" = 102
+[legacy_files.member_max_complexity]
+"_review_threads" = 22
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_window.py"
 [legacy_files.member_max_lines]
 "review_gate_data" = 235
+[legacy_files.member_max_complexity]
+"review_gate_data" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/checks.py"
+[legacy_files.member_max_complexity]
+"_required_checks_state" = 22
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/bootstrap.py"
@@ -160,6 +209,8 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_finish/merge.py"
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/orchestrator.py"
 [legacy_files.member_max_lines]
 "finish_task_data" = 282
+[legacy_files.member_max_complexity]
+"finish_task_data" = 30
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_ledgers.py"
@@ -170,12 +221,22 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_ledgers.py"
 path = "tools/horadus/python/horadus_workflow/task_workflow_lifecycle.py"
 [legacy_files.member_max_lines]
 "resolve_task_lifecycle" = 148
+[legacy_files.member_max_complexity]
+"resolve_task_lifecycle" = 26
+"task_lifecycle_data" = 24
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/triage.py"
+[legacy_files.member_max_complexity]
+"handle_collect" = 26
 
 [[legacy_files]]
 path = "tests/horadus_cli/v2/task_finish/test_finish_data.py"
 max_lines = 4692
 [legacy_files.member_max_lines]
 "test_finish_task_data_covers_auto_merge_timeout_and_failure_paths" = 230
+[legacy_files.member_max_complexity]
+"test_finish_task_data_blocks_on_post_merge_sync_edge_cases.fake_run_command" = 26
 
 [[legacy_files]]
 path = "tests/horadus_cli/v2/task_repo_fixtures.py"
@@ -190,6 +251,23 @@ max_lines = 1911
 path = "tests/unit/core/test_observability.py"
 [legacy_files.member_max_lines]
 "test_observability_recorders_cover_metric_paths" = 169
+[legacy_files.member_max_complexity]
+"test_observability_recorders_cover_metric_paths" = 32
+
+[[legacy_files]]
+path = "tests/integration/test_processing_pipeline.py"
+[legacy_files.member_max_complexity]
+"test_processing_pipeline_runs_end_to_end" = 28
+
+[[legacy_files]]
+path = "tests/unit/eval/test_benchmark.py"
+[legacy_files.member_max_complexity]
+"test_run_gold_set_benchmark_writes_results" = 39
+
+[[legacy_files]]
+path = "tests/unit/ingestion/test_gdelt_client_additional.py"
+[legacy_files.member_max_complexity]
+"test_gdelt_helper_functions_cover_parsing_and_filters" = 55
 
 [[legacy_files]]
 path = "tests/unit/processing/test_pipeline_orchestrator.py"
@@ -200,6 +278,8 @@ path = "tests/unit/processing/test_pipeline_orchestrator_additional.py"
 [legacy_files.member_max_lines]
 "test_process_after_tier1_covers_existing_embedding_degraded_hold_budget_and_error_paths" = 194
 "test_replay_and_impact_helpers_cover_queue_and_prediction_logic" = 199
+[legacy_files.member_max_complexity]
+"test_pipeline_domain_helpers_cover_fallbacks_and_parsers" = 38
 
 [[legacy_files]]
 path = "tests/unit/workers/test_celery_setup.py"
@@ -216,13 +296,19 @@ max_lines = 2159
 "_seed_repo_layout" = 203
 "test_planning_helper_functions_cover_marker_state_and_git_diff_edges" = 200
 "test_validate_planning_artifact_covers_template_and_exec_plan_paths" = 317
+[legacy_files.member_max_complexity]
+"test_planning_helper_functions_cover_marker_state_and_git_diff_edges" = 30
 
 [[legacy_files]]
 path = "tests/workflow/test_workflow_support.py"
 [legacy_files.member_max_lines]
 "test_pr_review_gate_helper_functions_cover_success_and_error_paths" = 217
+[legacy_files.member_max_complexity]
+"test_pr_review_gate_helper_functions_cover_additional_contract_edges" = 29
 
 [[legacy_files]]
 path = "scripts/validate_assessment_artifacts_lib/schema_validation.py"
 [legacy_files.member_max_lines]
 "validate_file" = 167
+[legacy_files.member_max_complexity]
+"validate_file" = 25

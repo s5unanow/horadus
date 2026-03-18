@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-350` Add a Cyclomatic-Complexity Ratchet for Tracked Python Surfaces
 - `TASK-349` Add Repo-Wide Dependency Direction Gates for `src/` and Tooling Adapter Seams
 - `TASK-353` Align Canonical Release and Local Gates with the Full Repo-Owned Analyzer Set
 - `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
@@ -56,3 +55,4 @@
 - `TASK-348` Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
 - `TASK-352` Enforce server-side secret and dependency vulnerability scanning in CI ✅
 - `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture ✅
+- `TASK-350` Add a cyclomatic-complexity ratchet for tracked Python surfaces ✅

@@ -14,6 +14,8 @@ class CodeShapeBudgets:
     test_module_lines: int
     production_function_lines: int
     test_function_lines: int
+    production_member_complexity: int
+    test_member_complexity: int
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,6 +23,7 @@ class LegacyFilePolicy:
     path: str
     max_lines: int | None
     member_max_lines: dict[str, int]
+    member_max_complexity: dict[str, int]
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +39,7 @@ class FileMeasurement:
     path: str
     module_lines: int
     member_lines: dict[str, int]
+    member_complexities: dict[str, int]
     is_test: bool
 
 
@@ -70,6 +74,10 @@ def load_code_shape_policy(policy_path: Path) -> CodeShapePolicy:
                 str(name): int(value)
                 for name, value in (entry.get("member_max_lines") or {}).items()
             },
+            member_max_complexity={
+                str(name): int(value)
+                for name, value in (entry.get("member_max_complexity") or {}).items()
+            },
         )
 
     return CodeShapePolicy(
@@ -78,6 +86,8 @@ def load_code_shape_policy(policy_path: Path) -> CodeShapePolicy:
             test_module_lines=int(budgets_payload["test_module_lines"]),
             production_function_lines=int(budgets_payload["production_function_lines"]),
             test_function_lines=int(budgets_payload["test_function_lines"]),
+            production_member_complexity=int(budgets_payload["production_member_complexity"]),
+            test_member_complexity=int(budgets_payload["test_member_complexity"]),
         ),
         include_roots=tuple(str(item) for item in paths_payload["include_roots"]),
         exclude_globs=tuple(str(item) for item in paths_payload.get("exclude_globs", [])),
@@ -137,6 +147,193 @@ def _collect_member_lines(tree: ast.AST) -> dict[str, int]:
     return member_lines
 
 
+class _CyclomaticComplexityVisitor(ast.NodeVisitor):
+    def __init__(self) -> None:
+        self.complexity = 1
+
+    def visit(self, node: ast.AST) -> None:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            self._visit_nested_callable_definition(node)
+            return
+        if isinstance(node, ast.ClassDef):
+            return
+        if isinstance(node, ast.Lambda):
+            self._visit_nested_lambda_definition(node)
+            return
+        if isinstance(node, ast.If):
+            self._visit_if(node)
+            return
+        if isinstance(node, ast.IfExp):
+            self._visit_if_exp(node)
+            return
+        if isinstance(node, ast.For):
+            self._visit_for(node)
+            return
+        if isinstance(node, ast.AsyncFor):
+            self._visit_async_for(node)
+            return
+        if isinstance(node, ast.While):
+            self._visit_while(node)
+            return
+        if isinstance(node, ast.Try | ast.TryStar):
+            self._visit_try(node)
+            return
+        if isinstance(node, ast.With):
+            self._visit_with(node)
+            return
+        if isinstance(node, ast.AsyncWith):
+            self._visit_async_with(node)
+            return
+        if isinstance(node, ast.Assert):
+            self._visit_assert(node)
+            return
+        if isinstance(node, ast.BoolOp):
+            self._visit_bool_op(node)
+            return
+        if isinstance(node, ast.ListComp):
+            self._visit_list_comp(node)
+            return
+        if isinstance(node, ast.SetComp):
+            self._visit_set_comp(node)
+            return
+        if isinstance(node, ast.DictComp):
+            self._visit_dict_comp(node)
+            return
+        if isinstance(node, ast.GeneratorExp):
+            self._visit_generator_exp(node)
+            return
+        if isinstance(node, ast.Match):
+            self._visit_match(node)
+            return
+        super().visit(node)
+
+    def _visit_if(self, node: ast.If) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_if_exp(self, node: ast.IfExp) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_for(self, node: ast.For) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_async_for(self, node: ast.AsyncFor) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_while(self, node: ast.While) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_try(self, node: ast.Try | ast.TryStar) -> None:
+        self.complexity += len(node.handlers)
+        self.generic_visit(node)
+
+    def _visit_with(self, node: ast.With) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_async_with(self, node: ast.AsyncWith) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_assert(self, node: ast.Assert) -> None:
+        self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_bool_op(self, node: ast.BoolOp) -> None:
+        self.complexity += len(node.values) - 1
+        self.generic_visit(node)
+
+    def _visit_list_comp(self, node: ast.ListComp) -> None:
+        self.complexity += _comprehension_complexity(node.generators)
+        self.generic_visit(node)
+
+    def _visit_set_comp(self, node: ast.SetComp) -> None:
+        self.complexity += _comprehension_complexity(node.generators)
+        self.generic_visit(node)
+
+    def _visit_dict_comp(self, node: ast.DictComp) -> None:
+        self.complexity += _comprehension_complexity(node.generators)
+        self.generic_visit(node)
+
+    def _visit_generator_exp(self, node: ast.GeneratorExp) -> None:
+        self.complexity += _comprehension_complexity(node.generators)
+        self.generic_visit(node)
+
+    def _visit_match(self, node: ast.Match) -> None:
+        self.complexity += len(node.cases) - int(_has_match_default_case(node.cases))
+        self.complexity += sum(1 for case in node.cases if case.guard is not None)
+        self.generic_visit(node)
+
+    def _visit_nested_callable_definition(
+        self,
+        node: ast.FunctionDef | ast.AsyncFunctionDef,
+    ) -> None:
+        for decorator in node.decorator_list:
+            self.visit(decorator)
+        _visit_argument_defaults(self, node.args)
+
+    def _visit_nested_lambda_definition(self, node: ast.Lambda) -> None:
+        _visit_argument_defaults(self, node.args)
+
+
+def _comprehension_complexity(generators: list[ast.comprehension]) -> int:
+    return sum(1 + len(generator.ifs) for generator in generators)
+
+
+def _visit_argument_defaults(visitor: _CyclomaticComplexityVisitor, args: ast.arguments) -> None:
+    for default in (
+        *args.defaults,
+        *(default for default in args.kw_defaults if default is not None),
+    ):
+        visitor.visit(default)
+
+
+def _has_match_default_case(cases: list[ast.match_case]) -> bool:
+    return any(case.guard is None and _is_irrefutable_match_pattern(case.pattern) for case in cases)
+
+
+def _is_irrefutable_match_pattern(pattern: ast.pattern) -> bool:
+    if isinstance(pattern, ast.MatchAs):
+        if pattern.pattern is None:
+            return True
+        return _is_irrefutable_match_pattern(pattern.pattern)
+    if isinstance(pattern, ast.MatchOr):
+        return any(_is_irrefutable_match_pattern(item) for item in pattern.patterns)
+    return False
+
+
+def _member_complexity(
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+) -> int:
+    visitor = _CyclomaticComplexityVisitor()
+    for child in node.body:
+        visitor.visit(child)
+    return visitor.complexity
+
+
+def _collect_member_complexities(tree: ast.AST) -> dict[str, int]:
+    member_complexities: dict[str, int] = {}
+
+    def visit(node: ast.AST, prefix: tuple[str, ...]) -> None:
+        for child in getattr(node, "body", []):
+            if isinstance(child, ast.ClassDef):
+                visit(child, (*prefix, child.name))
+            elif isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+                member_name = _member_name(prefix, child.name)
+                member_complexities[member_name] = max(
+                    member_complexities.get(member_name, 0),
+                    _member_complexity(child),
+                )
+                visit(child, (*prefix, child.name))
+
+    visit(tree, ())
+    return member_complexities
+
+
 def measure_python_file(repo_root: Path, path: Path) -> FileMeasurement:
     relative_path = path.relative_to(repo_root).as_posix()
     text = path.read_text(encoding="utf-8")
@@ -145,6 +342,7 @@ def measure_python_file(repo_root: Path, path: Path) -> FileMeasurement:
         path=relative_path,
         module_lines=len(text.splitlines()),
         member_lines=_collect_member_lines(tree),
+        member_complexities=_collect_member_complexities(tree),
         is_test=relative_path.startswith("tests/"),
     )
 
@@ -155,6 +353,15 @@ def _module_budget(measurement: FileMeasurement, budgets: CodeShapeBudgets) -> i
 
 def _member_budget(measurement: FileMeasurement, budgets: CodeShapeBudgets) -> int:
     return budgets.test_function_lines if measurement.is_test else budgets.production_function_lines
+
+
+def _member_complexity_budget(
+    measurement: FileMeasurement,
+    budgets: CodeShapeBudgets,
+) -> int:
+    if measurement.is_test:
+        return budgets.test_member_complexity
+    return budgets.production_member_complexity
 
 
 def _module_issues(
@@ -257,6 +464,73 @@ def _stale_member_override_issues(
     return issues
 
 
+def _member_complexity_issues(
+    *,
+    measurement: FileMeasurement,
+    budgets: CodeShapeBudgets,
+    legacy_policy: LegacyFilePolicy | None,
+) -> list[CodeShapeIssue]:
+    issues: list[CodeShapeIssue] = []
+    complexity_budget = _member_complexity_budget(measurement, budgets)
+    for member_name, member_complexity in sorted(measurement.member_complexities.items()):
+        override_limit = (
+            legacy_policy.member_max_complexity.get(member_name) if legacy_policy else None
+        )
+        member_limit = override_limit if override_limit is not None else complexity_budget
+        if member_complexity > member_limit:
+            budget_label = "allowlisted maximum" if override_limit is not None else "budget"
+            issues.append(
+                CodeShapeIssue(
+                    kind="member-complexity",
+                    path=measurement.path,
+                    message=(
+                        f"{member_name} has cyclomatic complexity {member_complexity}; "
+                        f"{budget_label} is {member_limit}"
+                    ),
+                )
+            )
+    return issues
+
+
+def _stale_member_complexity_override_issues(
+    *,
+    measurement: FileMeasurement,
+    budgets: CodeShapeBudgets,
+    legacy_policy: LegacyFilePolicy | None,
+) -> list[CodeShapeIssue]:
+    if legacy_policy is None:
+        return []
+
+    issues: list[CodeShapeIssue] = []
+    complexity_budget = _member_complexity_budget(measurement, budgets)
+    for member_name, _override_limit in sorted(legacy_policy.member_max_complexity.items()):
+        actual_complexity = measurement.member_complexities.get(member_name)
+        if actual_complexity is None:
+            issues.append(
+                CodeShapeIssue(
+                    kind="stale-member-complexity-override",
+                    path=measurement.path,
+                    message=(
+                        f"member complexity override is stale: {member_name} no longer exists"
+                    ),
+                )
+            )
+            continue
+        if actual_complexity <= complexity_budget:
+            issues.append(
+                CodeShapeIssue(
+                    kind="stale-member-complexity-override",
+                    path=measurement.path,
+                    message=(
+                        "member complexity override is stale: "
+                        f"{member_name} now fits the default complexity budget "
+                        f"({actual_complexity} <= {complexity_budget})"
+                    ),
+                )
+            )
+    return issues
+
+
 def _issues_for_measurement(
     *,
     measurement: FileMeasurement,
@@ -266,7 +540,17 @@ def _issues_for_measurement(
     return [
         *_module_issues(measurement=measurement, budgets=budgets, legacy_policy=legacy_policy),
         *_member_issues(measurement=measurement, budgets=budgets, legacy_policy=legacy_policy),
+        *_member_complexity_issues(
+            measurement=measurement,
+            budgets=budgets,
+            legacy_policy=legacy_policy,
+        ),
         *_stale_member_override_issues(
+            measurement=measurement,
+            budgets=budgets,
+            legacy_policy=legacy_policy,
+        ),
+        *_stale_member_complexity_override_issues(
             measurement=measurement,
             budgets=budgets,
             legacy_policy=legacy_policy,

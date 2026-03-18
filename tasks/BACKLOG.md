@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-349`.
+- Next available task IDs start at `TASK-354`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -37,6 +37,95 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 ---
 
 ## Open Task Ledger
+
+### TASK-349: Add repo-wide dependency direction gates for `src/` and tooling adapter seams
+**Priority**: P1 (High)
+**Estimate**: 3-5 hours
+
+The repo documents a clear layered architecture, but today only a few narrow
+package seams are AST-checked. There is no repo-owned gate that fails when new
+forbidden `src/*` layer edges, cycles, or tooling-adapter leaks appear, so the
+intended dependency direction is still mostly convention. This should move the
+repo toward fail-closed dependency rules, with explicit allowlists only for
+documented adapter seams.
+
+**Planning Gates**: Required — shared workflow/policy quality gate for repo-wide import rules
+**Files**: `src/`, `tools/horadus/python/`, `docs/ARCHITECTURE.md`, `tests/workflow/`, `tests/horadus_cli/`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Define an explicit allowed-import dependency contract for the main `src/` layers and the `tools` to `src` adapter seam
+- [ ] Add a repo-owned analyzer that fails on forbidden layer edges, reverse-direction imports, and cycles instead of relying on descriptive docs alone
+- [ ] Preserve the intentional runtime bridge pattern by making the allowed `tools` to `src` import surface explicit, narrow, and deny-by-default outside documented seams
+- [ ] Any exception path is recorded as a small repo-owned allowlist with rationale rather than an open-ended global waiver
+- [ ] Tests cover at least one pass case, one forbidden `src` layer edge, and one tooling-adapter regression path
+
+---
+
+### TASK-350: Add a cyclomatic-complexity ratchet for tracked Python surfaces
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+The repo already ratchets module/function line counts, but branch-heavy logic
+can still stay green if it is short enough. Add a bounded cyclomatic-complexity
+gate that matches the repo’s existing code-shape ratchet model instead of
+relying only on manual review. The default direction should be stricter code
+health, not advisory reporting.
+
+**Planning Gates**: Required — shared quality policy and repo-wide static-analysis behavior
+**Files**: `pyproject.toml`, `config/quality/`, `scripts/`, `tools/horadus/python/horadus_workflow/`, `tests/workflow/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Choose and document the canonical complexity enforcement surface (for example Ruff McCabe or a repo-owned analyzer) for tracked Python files
+- [ ] Enforce a fail-closed default complexity budget with explicit ratcheted exceptions for legacy hotspots rather than silent global waivers
+- [ ] New and modified code must satisfy the default budget unless a repo-owned exception is documented narrowly and justified
+- [ ] Wire the complexity check into the canonical local and CI gate path alongside existing repo-owned analyzers
+- [ ] Tests cover both default-budget failures and allowlisted legacy-exception behavior
+
+---
+
+### TASK-351: Bring `scripts/` under the main lint, type, security, and coverage posture
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`scripts/` is treated as tracked production-grade Python by the code-shape
+policy, but most repo gates still exclude it from lint, typecheck, Bandit, and
+coverage. That leaves operational entry points and workflow scripts outside the
+main static-analysis posture. The target direction is parity with `src/` and
+`tools/`, not a permanent lower bar for scripts.
+
+**Planning Gates**: Required — shared workflow/config gate expansion across repo-owned Python surfaces
+**Files**: `scripts/`, `Makefile`, `.github/workflows/ci.yml`, `pyproject.toml`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Extend canonical lint, typecheck, and security commands so tracked Python under `scripts/` is enforced in the same gate path as `src/` and `tools`
+- [ ] Define the intended coverage posture for `scripts/` and enforce it consistently, defaulting to measured coverage unless a narrower subset is explicitly justified
+- [ ] Keep script-specific false-positive handling narrow and repo-owned instead of skipping `scripts/` wholesale
+- [ ] Avoid adding a blanket carve-out for all scripts; exclusions must be path-specific and justified
+- [ ] Tests or gate-parity assertions cover the expanded `scripts/` inclusion
+
+---
+
+### TASK-353: Align canonical release and local gates with the full repo-owned analyzer set
+**Priority**: P2 (Medium)
+**Estimate**: 2-4 hours
+
+The repo already has several custom analyzers and validators, but not all of
+them participate in the canonical release/local gate path. Tighten the gate
+contract so the maintained analyzer set is enforced consistently instead of
+living partly as opt-in commands. The target direction is one authoritative,
+strict gate contract with minimal drift between local, release, and CI paths.
+
+**Planning Gates**: Required — shared workflow/policy gate contract change
+**Files**: `Makefile`, `tools/horadus/python/horadus_workflow/`, `scripts/validate_assessment_artifacts.py`, `src/eval/`, `tests/horadus_cli/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
+
+**Acceptance Criteria**:
+- [ ] Audit the current repo-owned analyzer/validator set and define which ones are mandatory in `agent-check`, the canonical local gate, and `make release-gate`
+- [ ] Promote missing mandatory analyzers into the enforced gate path or explicitly demote them with documented rationale
+- [ ] Prefer one canonical strict gate contract over multiple partially overlapping target definitions
+- [ ] Cover assessment/provenance validation gaps for real repo artifacts where the repo expects those artifacts to remain trustworthy
+- [ ] Tests cover the updated gate contract so Make targets, workflow helpers, and CI-parity expectations stay aligned
+
+---
 
 ### TASK-343: Add caller-aware validation packs for shared helper changes
 **Priority**: P1 (High)

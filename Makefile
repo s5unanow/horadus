@@ -12,7 +12,7 @@
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
         run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness code-shape pre-commit check all \
         db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-context-pack task-start agent-safe-start task-finish local-gate protect-main doctor agent-smoke-run agent-check \
-        check-tracked-artifacts validate-assessments automations-export automations-apply install-horadus-cli-skill
+        check-tracked-artifacts secret-scan dependency-audit validate-assessments automations-export automations-apply install-horadus-cli-skill
 
 # Default target
 .DEFAULT_GOAL := help
@@ -110,6 +110,12 @@ branch-guard: ## Validate current branch naming policy
 
 check-tracked-artifacts: ## Fail if artifacts/ is tracked in git
 	./scripts/check_no_tracked_artifacts.sh
+
+secret-scan: deps-dev ## Scan tracked files for secrets against the repo baseline
+	./scripts/run_secret_scan.sh
+
+dependency-audit: deps-dev ## Audit locked dependencies for known vulnerabilities
+	./scripts/run_dependency_audit.sh
 
 validate-assessments: ## Validate artifacts/assessments/ against minimal schema
 	$(UV_RUN) python scripts/validate_assessment_artifacts.py

@@ -9,6 +9,10 @@
 
 ## Active Tasks
 
+- `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture
+- `TASK-350` Add a Cyclomatic-Complexity Ratchet for Tracked Python Surfaces
+- `TASK-349` Add Repo-Wide Dependency Direction Gates for `src/` and Tooling Adapter Seams
+- `TASK-353` Align Canonical Release and Local Gates with the Full Repo-Owned Analyzer Set
 - `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
 - `TASK-340` Split Event Epistemic State from Activity State
 - `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware
@@ -21,7 +25,16 @@
 
 - Sprint 5 intentionally excludes human-gated work from the active queue unless a human explicitly reactivates it.
 - The selected tasks were chosen for direct impact on stable identity, deterministic semantics, replay/rebuild safety, and production-facing mutation correctness.
+- Sprint 5 now also carries a stricter repo-health lane focused on enforcing architecture, static-analysis, and CI guardrails earlier rather than allowing quality debt to accumulate.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
+
+## Suggested Sequence
+
+1. `TASK-352` Enforce server-side secret and dependency-vulnerability scanning first to close the easiest server-side security gaps with limited repo churn.
+2. `TASK-351` Bring `scripts/` into the main lint/type/security/coverage posture while the script surface is still small enough to harden cheaply.
+3. `TASK-350` Add the cyclomatic-complexity ratchet early so new and modified code starts paying the stricter control-flow budget immediately.
+4. `TASK-349` Add repo-wide dependency-direction gates after the lighter gate expansions, with planning first because this is the most likely task to expose existing architectural drift.
+5. `TASK-353` Align canonical release/local gates last so the stricter analyzer set above becomes one authoritative enforced contract instead of several partially overlapping paths.
 
 ## Human Blocker Metadata
 
@@ -43,3 +56,4 @@
 - `TASK-347` Investigate and stabilize hanging `horadus tasks local-review` runs ✅
 - `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅
 - `TASK-348` Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
+- `TASK-352` Enforce server-side secret and dependency vulnerability scanning in CI ✅

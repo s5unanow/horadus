@@ -11,6 +11,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 AUTOMATION_IDS = REPO_ROOT / "ops" / "automations" / "ids.txt"
 AUTOMATION_SPECS = REPO_ROOT / "ops" / "automations" / "specs"
 AUTOMATION_INSTRUCTIONS = REPO_ROOT / "agents" / "automation"
+AUTOPILOT_INSTRUCTIONS = AUTOMATION_INSTRUCTIONS / "horadus-sprint-autopilot.md"
 
 
 def _read_ids() -> list[str]:
@@ -50,3 +51,11 @@ def test_repo_owned_automation_specs_have_expected_instruction_targets() -> None
         assert repo_relative_instruction.parent == expected_instruction_dir
         if not (REPO_ROOT / repo_relative_instruction).exists():
             pytest.fail(f"missing automation instructions: {repo_relative_instruction}")
+
+
+def test_horadus_sprint_autopilot_instructions_cover_resume_and_main_sync() -> None:
+    instructions = AUTOPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
+
+    assert "git pull --ff-only" in instructions
+    assert "open non-merged task PR" in instructions
+    assert "uv run --no-sync horadus tasks finish TASK-XXX" in instructions

@@ -15,17 +15,28 @@ there as the canonical workflow policy.
    - current branch is exactly `main`
    - working tree is clean
 5. If either repo-idle check fails, stop immediately without changing anything.
+6. Sync local `main` before any start preflight:
+   - run `git pull --ff-only`
+   - if it fails, stop and report the blocker instead of starting or resuming work
+
+## Resume Before Selection
+
+- Before selecting a fresh sprint task, check for an open non-merged task PR
+  owned by the current operator.
+- If one exists, derive its `TASK-XXX` identifier and re-run:
+  - `uv run --no-sync horadus tasks finish TASK-XXX`
+- Do not start a second task while an in-flight task PR still exists.
 
 ## Task Selection
 
-- Read `tasks/CURRENT_SPRINT.md`.
+- Only if no in-flight task PR exists, read `tasks/CURRENT_SPRINT.md`.
 - Pick the next eligible sprint task from the active task list order.
 - Skip any task marked `[REQUIRES_HUMAN]` or otherwise explicitly blocked.
 - Process at most one task in this run.
 
 ## Canonical Workflow
 
-After selecting a candidate task:
+After selecting a fresh candidate task:
 
 1. Run `uv run --no-sync horadus tasks eligibility TASK-XXX --format json`.
 2. If the task is not eligible, stop and report the blocker instead of

@@ -252,15 +252,16 @@ def _comprehension_complexity(generators: list[ast.comprehension]) -> int:
 
 
 def _has_match_default_case(cases: list[ast.match_case]) -> bool:
-    for case in cases:
-        pattern = case.pattern
-        if (
-            case.guard is None
-            and isinstance(pattern, ast.MatchAs)
-            and pattern.pattern is None
-            and pattern.name is None
-        ):
+    return any(case.guard is None and _is_irrefutable_match_pattern(case.pattern) for case in cases)
+
+
+def _is_irrefutable_match_pattern(pattern: ast.pattern) -> bool:
+    if isinstance(pattern, ast.MatchAs):
+        if pattern.pattern is None:
             return True
+        return _is_irrefutable_match_pattern(pattern.pattern)
+    if isinstance(pattern, ast.MatchOr):
+        return any(_is_irrefutable_match_pattern(item) for item in pattern.patterns)
     return False
 
 

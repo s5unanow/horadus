@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import ast
 import subprocess
 from pathlib import Path
 
 import pytest
 
 from tools.horadus.python.horadus_workflow.code_shape import (
+    _is_irrefutable_match_pattern,
     measure_python_file,
     render_code_shape_issues,
     run_code_shape_check,
@@ -473,6 +475,13 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
                 "            return 0",
                 "        case _:",
                 "            return 1",
+                "",
+                "def match_with_capture_default(value: int) -> int:",
+                "    match value:",
+                "        case 0:",
+                "            return 0",
+                "        case other:",
+                "            return other",
             ]
         )
         + "\n",
@@ -485,6 +494,7 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
     assert measurement.member_complexities["try_only"] == 2
     assert measurement.member_complexities["try_star_only"] == 2
     assert measurement.member_complexities["match_with_default"] == 2
+    assert measurement.member_complexities["match_with_capture_default"] == 2
 
 
 def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
@@ -506,6 +516,18 @@ def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "lambda_complexity.py")
 
     assert measurement.member_complexities["outer"] == 4
+
+
+def test_irrefutable_match_pattern_helper_recognizes_alias_and_or_defaults() -> None:
+    alias_pattern = (
+        ast.parse("match value:\n    case _ as other:\n        pass\n").body[0].cases[0].pattern
+    )
+    or_pattern = (
+        ast.parse("match value:\n    case 0 | other:\n        pass\n").body[0].cases[0].pattern
+    )
+
+    assert _is_irrefutable_match_pattern(alias_pattern) is True
+    assert _is_irrefutable_match_pattern(or_pattern) is True
 
 
 def test_run_code_shape_check_flags_member_complexity_budget_violations(tmp_path: Path) -> None:

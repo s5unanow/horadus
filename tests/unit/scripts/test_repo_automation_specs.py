@@ -59,3 +59,4 @@ def test_horadus_sprint_autopilot_instructions_cover_resume_and_main_sync() -> N
     assert "git pull --ff-only" in instructions
     assert "open non-merged task PR" in instructions
     assert "uv run --no-sync horadus tasks finish TASK-XXX" in instructions
+    assert "stop this automation run" in instructions

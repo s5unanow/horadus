@@ -25,6 +25,8 @@ there as the canonical workflow policy.
   owned by the current operator.
 - If one exists, derive its `TASK-XXX` identifier and re-run:
   - `uv run --no-sync horadus tasks finish TASK-XXX`
+- After that resume-path `finish` invocation returns, stop this automation run
+  even if the task PR merged successfully.
 - Do not start a second task while an in-flight task PR still exists.
 
 ## Task Selection

@@ -33,6 +33,11 @@ To validate the most recent assessment artifacts locally:
 - `python scripts/validate_assessment_artifacts.py <target> --check-sprint-grounding`
 - `python scripts/validate_assessment_artifacts.py <target> --check-cross-role-overlap --lookback-days 7`
 
+Gate policy note:
+- This validator remains a standalone pre-publish/manual check because it
+  targets untracked advisory automation output under `artifacts/assessments/`,
+  not canonical repo-owned release artifacts.
+
 Daily artifact integrity enforced by validator:
 - Filename date (`artifacts/assessments/<role>/daily/YYYY-MM-DD.md`) must match the top report
   heading date.

@@ -53,7 +53,7 @@ Required handling:
 - Transitional gate (while taxonomy/gold-set alignment is still in progress): `uv run --no-sync horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode subset --signal-type-mode warn --unknown-trend-mode warn`
 
 2. Validate dataset quality
-- Run: `uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --fail-on-warnings`
+- Run: `uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 0 --fail-on-warnings`
 - If audit fails, do not promote prompt changes.
 
 3. Run benchmark

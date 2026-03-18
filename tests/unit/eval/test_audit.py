@@ -86,7 +86,7 @@ def test_run_gold_set_audit_reports_warnings_for_low_quality_dataset(tmp_path: P
 
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
     assert payload["items_evaluated"] == 4
-    assert payload["dataset_scope"] == {"max_items": 200}
+    assert payload["dataset_scope"] == {"max_items": 200, "full_dataset": False}
     assert payload["source_control"] == _STATIC_SOURCE_CONTROL
     assert len(payload["gold_set_fingerprint_sha256"]) == 64
     assert len(payload["gold_set_item_ids_sha256"]) == 64
@@ -112,7 +112,7 @@ def test_run_gold_set_audit_passes_for_human_verified_diverse_dataset(tmp_path: 
 
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
     assert payload["items_evaluated"] == 4
-    assert payload["dataset_scope"] == {"max_items": 200}
+    assert payload["dataset_scope"] == {"max_items": 200, "full_dataset": False}
     assert payload["source_control"] == _STATIC_SOURCE_CONTROL
     assert len(payload["gold_set_fingerprint_sha256"]) == 64
     assert len(payload["gold_set_item_ids_sha256"]) == 64
@@ -164,6 +164,22 @@ def test_run_gold_set_audit_warns_on_unknown_labels_and_bounds_max_items(tmp_pat
     )
 
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
-    assert payload["dataset_scope"] == {"max_items": 1}
+    assert payload["dataset_scope"] == {"max_items": 1, "full_dataset": False}
     assert payload["items_evaluated"] == 1
     assert "Rows with unknown label_verification value detected." in payload["warnings"]
+
+
+def test_run_gold_set_audit_marks_full_dataset_scope_when_unbounded(tmp_path: Path) -> None:
+    dataset_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_dataset(dataset_path, human_verified=2, llm_seeded=1, duplicate=False)
+
+    result = audit_module.run_gold_set_audit(
+        gold_set_path=str(dataset_path),
+        output_dir=str(output_dir),
+        max_items=None,
+    )
+
+    payload = json.loads(result.output_path.read_text(encoding="utf-8"))
+    assert payload["dataset_scope"] == {"max_items": None, "full_dataset": True}
+    assert payload["items_evaluated"] == 3

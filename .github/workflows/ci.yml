@@ -146,6 +146,14 @@ jobs:
             --signal-type-mode warn \
             --unknown-trend-mode warn
 
+      - name: Audit eval dataset quality and provenance
+        run: |
+          uv run --no-sync horadus eval audit \
+            --gold-set ai/eval/gold_set.jsonl \
+            --output-dir ai/eval/results \
+            --max-items 0 \
+            --fail-on-warnings
+
       - name: Run unit tests
         run: |
           HORADUS_UNIT_COVERAGE_GATE_CMD="uv run --no-sync pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v --cov=src --cov=tools --cov=scripts --cov-config=pyproject.toml --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=100" \

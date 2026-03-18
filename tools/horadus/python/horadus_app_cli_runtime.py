@@ -155,8 +155,9 @@ async def _collect_eval_benchmark(args: Any) -> tuple[dict[str, Any], list[str],
 def _collect_eval_audit(args: Any) -> tuple[dict[str, Any], list[str], int]:
     from src.eval.audit import run_gold_set_audit
 
+    max_items = None if args.max_items <= 0 else args.max_items
     result = run_gold_set_audit(
-        gold_set_path=args.gold_set, output_dir=args.output_dir, max_items=max(1, args.max_items)
+        gold_set_path=args.gold_set, output_dir=args.output_dir, max_items=max_items
     )
     lines = [f"Audit output: {result.output_path}"]
     if result.warnings:

@@ -129,10 +129,10 @@ def register_ops_commands(
         "--gold-set", default="ai/eval/gold_set.jsonl", help="Path to gold-set JSONL file."
     )
     eval_audit_parser.add_argument(
-        "--output-dir", default="ai/eval/results", help="Directory for audit result artifacts."
+        "--output-dir", default="ai/eval/results", help="Directory for audit artifacts."
     )
     eval_audit_parser.add_argument(
-        "--max-items", type=int, default=200, help="Maximum dataset rows to audit."
+        "--max-items", type=int, default=200, help="Maximum audit rows (0 audits the full dataset)."
     )
     eval_audit_parser.add_argument(
         "--fail-on-warnings",

@@ -12,7 +12,9 @@ set -euo pipefail
 # - INTEGRATION_DOCKER_DB_NAME (default: geoint_test)
 # - INTEGRATION_DOCKER_POSTGRES_IMAGE (default: geoint-postgres:it)
 # - INTEGRATION_DOCKER_FORCE_BUILD (default: false)
-# - MIGRATION_GATE_VALIDATE_AUTOGEN (default: true)
+# - INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN
+#   (default: MIGRATION_GATE_VALIDATE_AUTOGEN, else true)
+# - UV_BIN (default: uv)
 # - OPENAI_API_KEY (optional; some integration paths read it)
 
 POSTGRES_PORT="${INTEGRATION_DOCKER_POSTGRES_PORT:-55432}"
@@ -20,6 +22,7 @@ REDIS_PORT="${INTEGRATION_DOCKER_REDIS_PORT:-56379}"
 DB_NAME="${INTEGRATION_DOCKER_DB_NAME:-geoint_test}"
 POSTGRES_IMAGE="${INTEGRATION_DOCKER_POSTGRES_IMAGE:-geoint-postgres:it}"
 FORCE_BUILD="${INTEGRATION_DOCKER_FORCE_BUILD:-false}"
+UV_BIN="${UV_BIN:-uv}"
 
 POSTGRES_CONTAINER="${INTEGRATION_DOCKER_POSTGRES_CONTAINER:-geoint-postgres-it}"
 REDIS_CONTAINER="${INTEGRATION_DOCKER_REDIS_CONTAINER:-geoint-redis-it}"
@@ -33,7 +36,7 @@ require_cmd() {
 }
 
 require_cmd docker
-require_cmd uv
+require_cmd "${UV_BIN}"
 
 cleanup() {
   docker rm -f "${POSTGRES_CONTAINER}" "${REDIS_CONTAINER}" >/dev/null 2>&1 || true
@@ -94,14 +97,14 @@ fi
 
 export DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:${POSTGRES_PORT}/${DB_NAME}" # pragma: allowlist secret
 export REDIS_URL="redis://localhost:${REDIS_PORT}/0"
-export MIGRATION_GATE_VALIDATE_AUTOGEN="${MIGRATION_GATE_VALIDATE_AUTOGEN:-true}"
+export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-${MIGRATION_GATE_VALIDATE_AUTOGEN:-true}}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-test-key}"
 
 echo "Applying migrations..."
-uv run --no-sync alembic upgrade head
+"${UV_BIN}" run --no-sync alembic upgrade head
 
 echo "Running migration drift gate..."
 ./scripts/check_migration_drift.sh
 
 echo "Running integration tests..."
-uv run --no-sync pytest tests/integration/ -v -m integration
+"${UV_BIN}" run --no-sync pytest tests/integration/ -v -m integration

@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-353` Align Canonical Release and Local Gates with the Full Repo-Owned Analyzer Set
 - `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
 - `TASK-340` Split Event Epistemic State from Activity State
 - `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware
@@ -56,3 +55,4 @@
 - `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture ✅
 - `TASK-350` Add a cyclomatic-complexity ratchet for tracked Python surfaces ✅
 - `TASK-349` Add repo-wide dependency direction gates for `src/` and tooling adapter seams ✅
+- `TASK-353` Align canonical release and local gates with the full repo-owned analyzer set ✅

@@ -27,6 +27,7 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
         "ruff-check",
         "mypy",
         "validate-taxonomy",
+        "audit-eval",
         "pytest-unit-cov",
         "secret-scan",
         "bandit",
@@ -42,14 +43,18 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert steps[4].command == "uv run --no-sync ruff check src/ tools/ scripts/ tests/"
     assert steps[5].command == "uv run --no-sync mypy src/ tools/horadus/python scripts"
     assert steps[6].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
-    assert steps[7].command == "./scripts/run_unit_coverage_gate.sh"
-    assert steps[8].command == "./scripts/run_secret_scan.sh"
-    assert steps[9].command == (
+    assert steps[7].command == (
+        "uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl "
+        "--output-dir ai/eval/results --max-items 0 --fail-on-warnings"
+    )
+    assert steps[8].command == "./scripts/run_unit_coverage_gate.sh"
+    assert steps[9].command == "./scripts/run_secret_scan.sh"
+    assert steps[10].command == (
         "uv run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python scripts"
     )
-    assert steps[10].command == "./scripts/run_dependency_audit.sh"
-    assert steps[12].command == "./scripts/test_integration_docker.sh"
-    assert steps[13].command == (
+    assert steps[11].command == "./scripts/run_dependency_audit.sh"
+    assert steps[13].command == "./scripts/test_integration_docker.sh"
+    assert steps[14].command == (
         "rm -rf dist build *.egg-info && "
         "uv run --no-sync python -m build --no-isolation && "
         "uv run --no-sync twine check dist/*"
@@ -95,6 +100,53 @@ def test_repo_workflow_configs_include_repo_owned_security_scans() -> None:
     assert "dependency-audit: deps-dev" in makefile
     assert "./scripts/run_dependency_audit.sh" in makefile
     assert "bandit -c pyproject.toml -r src/ tools/horadus/python scripts" in makefile
+
+
+def test_repo_workflow_configs_include_repo_owned_artifact_validation() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
+
+    assert (
+        "validate-assessments: ## Validate artifacts/assessments/ against minimal schema"
+        in makefile
+    )
+    assert "python scripts/validate_assessment_artifacts.py" in makefile
+    assert (
+        "horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir "
+        "ai/eval/results --max-items 0 --fail-on-warnings" in makefile
+    )
+    assert "horadus eval audit \\" in ci_workflow
+    assert "--fail-on-warnings" in ci_workflow
+    assert "Validate assessment artifacts" not in ci_workflow
+
+
+def test_release_gate_reuses_canonical_full_local_gate() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
+    integration_script = (repo_root / "scripts" / "test_integration_docker.sh").read_text(
+        encoding="utf-8"
+    )
+
+    assert (
+        "release-gate: deps-dev ## Run the canonical full local gate plus release-only migration validation"
+        in makefile
+    )
+    assert '@UV_BIN="$(UV)" $(UV_RUN) horadus tasks local-gate --full' in makefile
+    assert (
+        '@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"'
+        in makefile
+    )
+    assert (
+        'export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-${MIGRATION_GATE_VALIDATE_AUTOGEN:-true}}"'
+        in integration_script
+    )
+    assert 'UV_BIN="${UV_BIN:-uv}"' in integration_script
+    assert (
+        '"${UV_BIN}" run --no-sync pytest tests/integration/ -v -m integration'
+        in integration_script
+    )
+    assert "RELEASE_GATE_INCLUDE_EVAL" not in makefile
 
 
 def test_local_gate_data_dry_run_reports_custom_absolute_uv_bin_for_build_steps(

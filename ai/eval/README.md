@@ -66,7 +66,7 @@ uv run --no-sync horadus eval validate-taxonomy --gold-set ai/eval/gold_set.json
 Run audit with failing exit code when warnings are present:
 
 ```bash
-uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --fail-on-warnings
+uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 0 --fail-on-warnings
 ```
 
 Run benchmark on only human-reviewed rows:
@@ -119,8 +119,14 @@ Notes:
 - Use LLM-seeded labels as silver/pre-label drafts, then human-correct.
 - Keep gold data small, curated, and representative.
 - Avoid storing sensitive content.
-- CI and `make audit-eval` currently run taxonomy validation in transitional mode
-  (`subset`/`warn`) until human-gated taxonomy/gold-set harmonization is complete.
+- CI, `horadus tasks local-gate --full`, and `make release-gate` currently run
+  taxonomy validation in transitional mode (`subset`/`warn`) until human-gated
+  taxonomy/gold-set harmonization is complete.
+- Those same strict gates also run `horadus eval audit --fail-on-warnings`, so
+  dataset-quality/provenance regressions fail closed without needing a separate
+  opt-in release flag.
+- In canonical strict gates, `--max-items 0` means audit the full tracked gold
+  set rather than a sampled prefix.
 
 ## TASK-044 Labeling Rubric (Human Review)
 

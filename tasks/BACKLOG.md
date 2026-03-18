@@ -38,29 +38,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Open Task Ledger
 
-### TASK-349: Add repo-wide dependency direction gates for `src/` and tooling adapter seams
-**Priority**: P1 (High)
-**Estimate**: 3-5 hours
-
-The repo documents a clear layered architecture, but today only a few narrow
-package seams are AST-checked. There is no repo-owned gate that fails when new
-forbidden `src/*` layer edges, cycles, or tooling-adapter leaks appear, so the
-intended dependency direction is still mostly convention. This should move the
-repo toward fail-closed dependency rules, with explicit allowlists only for
-documented adapter seams.
-
-**Planning Gates**: Required — shared workflow/policy quality gate for repo-wide import rules
-**Files**: `src/`, `tools/horadus/python/`, `docs/ARCHITECTURE.md`, `tests/workflow/`, `tests/horadus_cli/`, `docs/AGENT_RUNBOOK.md`
-
-**Acceptance Criteria**:
-- [ ] Define an explicit allowed-import dependency contract for the main `src/` layers and the `tools` to `src` adapter seam
-- [ ] Add a repo-owned analyzer that fails on forbidden layer edges, reverse-direction imports, and cycles instead of relying on descriptive docs alone
-- [ ] Preserve the intentional runtime bridge pattern by making the allowed `tools` to `src` import surface explicit, narrow, and deny-by-default outside documented seams
-- [ ] Any exception path is recorded as a small repo-owned allowlist with rationale rather than an open-ended global waiver
-- [ ] Tests cover at least one pass case, one forbidden `src` layer edge, and one tooling-adapter regression path
-
----
-
 ### TASK-353: Align canonical release and local gates with the full repo-owned analyzer set
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours

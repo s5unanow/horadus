@@ -202,6 +202,7 @@ known-first-party = ["src", "tools"]
 "tests/*" = ["ARG001", "ARG002"]  # Unused arguments OK in tests
 "alembic/*" = ["ERA001"]  # Comments OK in migrations
 "src/api/routes/*" = ["ARG001", "ARG002"]  # Unused arguments OK in stub endpoints
+"tools/horadus/python/horadus_workflow/import_boundaries.py" = ["N802"]  # ast.NodeVisitor API requires visit_* method names
 
 [tool.mypy]
 python_version = "3.12"

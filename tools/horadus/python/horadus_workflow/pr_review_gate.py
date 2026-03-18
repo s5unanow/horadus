@@ -489,7 +489,6 @@ def _review_gate_once(
             current_head_oid=current_head_oid,
             timeout_seconds=args.timeout_seconds,
         )
-    current_time = time.time()
     (
         _matching_reviews,
         matching_comments,
@@ -509,6 +508,7 @@ def _review_gate_once(
     )
     if feedback_outcome is not None:
         return feedback_outcome
+    current_time = time.time()
     return pr_review_gate_outcomes.approval_or_timeout_outcome(
         reviewer_login=args.reviewer_login,
         loop_context=loop_context,

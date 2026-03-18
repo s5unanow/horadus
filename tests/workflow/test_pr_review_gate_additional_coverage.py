@@ -110,7 +110,7 @@ def test_emit_outcome_waiting_prints_informational_lines_and_json_wait_branch(
         lambda **_kwargs: ([], [], []),
     )
     monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: False)
-    values = iter([0.0, 0.0, 2.0, 2.0, 2.0, 2.0])
+    values = iter([0.0, 0.0, 0.0, 2.0, 2.0, 2.0])
     sleep_calls: list[int] = []
     monkeypatch.setattr(pr_review_gate_module.time, "time", lambda: next(values, 2.0))
     monkeypatch.setattr(
@@ -156,6 +156,46 @@ def test_pr_review_gate_outcomes_waiting_path_uses_current_time() -> None:
     )
 
     assert outcome.status == "waiting"
+
+
+def test_emit_outcome_block_timeout_prints_summary(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    outcome = pr_review_gate_module.ReviewGateOutcome(
+        status="block",
+        reason="timeout_fail",
+        reviewer_login="bot",
+        reviewed_head_oid="head-sha",
+        current_head_oid="head-sha",
+        clean_current_head_review=False,
+        summary_thumbs_up=False,
+        actionable_comment_count=0,
+        actionable_review_count=0,
+        timeout_seconds=1,
+        timed_out=True,
+        summary="timeout summary",
+    )
+
+    assert pr_review_gate_module._emit_outcome(outcome, output_format="text") == 1
+    assert "timeout summary" in capsys.readouterr().out
+
+
+def test_validate_main_args_rejects_non_positive_timeout_and_negative_poll() -> None:
+    parser = pr_review_gate_module.argparse.ArgumentParser()
+    parser.add_argument("--timeout-seconds", type=int)
+    parser.add_argument("--poll-seconds", type=int)
+
+    with pytest.raises(SystemExit):
+        pr_review_gate_module._validate_main_args(
+            parser,
+            parser.parse_args(["--timeout-seconds", "0", "--poll-seconds", "0"]),
+        )
+
+    with pytest.raises(SystemExit):
+        pr_review_gate_module._validate_main_args(
+            parser,
+            parser.parse_args(["--timeout-seconds", "1", "--poll-seconds", "-1"]),
+        )
 
 
 def test_run_gh_graphql_json_builds_expected_command(

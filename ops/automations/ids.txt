@@ -4,6 +4,7 @@
 agents-adoption
 daily-horadus-friction-summary
 daily-sprint-health
+horadus-sprint-autopilot
 repo-state-po
 repo-state-sa
 repo-state-security

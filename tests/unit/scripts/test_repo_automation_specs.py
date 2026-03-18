@@ -1,0 +1,45 @@
+from __future__ import annotations
+
+import tomllib
+from pathlib import Path
+
+import pytest
+
+pytestmark = pytest.mark.unit
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+AUTOMATION_IDS = REPO_ROOT / "ops" / "automations" / "ids.txt"
+AUTOMATION_SPECS = REPO_ROOT / "ops" / "automations" / "specs"
+AUTOMATION_INSTRUCTIONS = REPO_ROOT / "agents" / "automation"
+
+
+def _read_ids() -> list[str]:
+    ids: list[str] = []
+    for raw in AUTOMATION_IDS.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        ids.append(line)
+    return ids
+
+
+def test_repo_owned_automation_specs_have_expected_instruction_targets() -> None:
+    ids = _read_ids()
+
+    for automation_id in ids:
+        spec_path = AUTOMATION_SPECS / f"{automation_id}.toml"
+        assert spec_path.exists(), f"missing automation spec: {spec_path}"
+
+        spec = tomllib.loads(spec_path.read_text(encoding="utf-8"))
+        assert spec["id"] == automation_id
+
+        prompt = spec["prompt"]
+        assert isinstance(prompt, str)
+        assert prompt.startswith(
+            "Open and follow: "
+        ), f"{automation_id} should keep the spec prompt minimal"
+
+        instruction_path_raw = prompt.splitlines()[0].removeprefix("Open and follow: ").strip()
+        instruction_path = Path(instruction_path_raw)
+        assert instruction_path.exists(), f"missing automation instructions: {instruction_path}"
+        assert instruction_path.is_relative_to(AUTOMATION_INSTRUCTIONS)

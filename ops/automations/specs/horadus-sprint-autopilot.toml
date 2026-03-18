@@ -1,0 +1,8 @@
+version = 1
+id = "horadus-sprint-autopilot"
+name = "Horadus sprint autopilot"
+prompt = "Open and follow: /Users/s5una/projects/horadus/agents/automation/horadus-sprint-autopilot.md\n\nIf the file is missing, fail with a clear error."
+status = "ACTIVE"
+rrule = "FREQ=HOURLY;INTERVAL=2"
+execution_environment = "local"
+cwds = ["/Users/s5una/projects/horadus"]

@@ -36,20 +36,17 @@ def test_repo_owned_automation_specs_have_expected_instruction_targets() -> None
 
         prompt = spec["prompt"]
         assert isinstance(prompt, str)
-        assert prompt.startswith(
-            "Open and follow: "
-        ), f"{automation_id} should keep the spec prompt minimal"
+        if not prompt.startswith("Open and follow: "):
+            pytest.fail(f"{automation_id} should keep the spec prompt minimal")
 
         instruction_path_raw = prompt.splitlines()[0].removeprefix("Open and follow: ").strip()
         instruction_path = Path(instruction_path_raw)
-        assert (
-            instruction_path.is_absolute()
-        ), f"instruction path should be absolute: {instruction_path}"
+        if not instruction_path.is_absolute():
+            pytest.fail(f"instruction path should be absolute: {instruction_path}")
 
         repo_relative_instruction = Path(
             *instruction_path.parts[-len(expected_instruction_dir.parts) - 1 :]
         )
         assert repo_relative_instruction.parent == expected_instruction_dir
-        assert (
-            REPO_ROOT / repo_relative_instruction
-        ).exists(), f"missing automation instructions: {repo_relative_instruction}"
+        if not (REPO_ROOT / repo_relative_instruction).exists():
+            pytest.fail(f"missing automation instructions: {repo_relative_instruction}")

@@ -101,6 +101,9 @@ class ReviewGateResult:
     summary: str
     informational_lines: list[str]
     actionable_lines: list[str]
+    wait_window_started_at: str | None = None
+    deadline_at: str | None = None
+    remaining_seconds: int | None = None
 
 
 @dataclass(slots=True)

@@ -38,6 +38,38 @@ def test_persisted_wait_window_started_at_reuses_same_head_state(
     assert persisted_started_at == original_started_at
 
 
+def test_persisted_wait_window_started_at_clamps_future_same_head_state(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_path = tmp_path / "review-gate-state.json"
+    future_started_at = datetime(2026, 3, 15, 20, 0, tzinfo=UTC)
+    now = datetime(2026, 3, 15, 19, 0, tzinfo=UTC)
+    state_path.write_text(
+        json.dumps(
+            {
+                "example/repo#215#bot": {
+                    "head_oid": "head-sha",
+                    "started_at": future_started_at.isoformat(),
+                }
+            }
+        )
+    )
+    monkeypatch.setenv("HORADUS_REVIEW_GATE_STATE_PATH", str(state_path))
+
+    persisted_started_at = review_gate_state_module.persisted_wait_window_started_at(
+        repo="example/repo",
+        pr_number=215,
+        reviewer_login="bot",
+        head_oid="head-sha",
+        now=now,
+    )
+
+    assert persisted_started_at == now
+    payload = json.loads(state_path.read_text())
+    assert payload["example/repo#215#bot"]["started_at"] == now.isoformat()
+
+
 def test_persisted_wait_window_started_at_resets_for_new_head(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
@@ -265,3 +297,76 @@ def test_start_wait_window_delegates_with_utc_now(
         "head_oid": "head-sha",
         "now": expected,
     }
+
+
+def test_reset_wait_window_persists_fresh_same_head_start(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_path = tmp_path / "review-gate-state.json"
+    monkeypatch.setenv("HORADUS_REVIEW_GATE_STATE_PATH", str(state_path))
+    started_at = datetime(2026, 3, 15, 20, 0, tzinfo=UTC)
+
+    persisted_started_at = review_gate_state_module.reset_wait_window(
+        repo="example/repo",
+        pr_number=215,
+        reviewer_login="bot",
+        head_oid="head-sha",
+        now=started_at,
+    )
+
+    assert persisted_started_at == started_at
+    payload = json.loads(state_path.read_text())
+    assert payload["example/repo#215#bot"] == {
+        "head_oid": "head-sha",
+        "started_at": started_at.isoformat(),
+    }
+
+
+def test_reset_wait_window_recovers_from_invalid_existing_payload(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_path = tmp_path / "review-gate-state.json"
+    state_path.write_text("{bad")
+    monkeypatch.setenv("HORADUS_REVIEW_GATE_STATE_PATH", str(state_path))
+    started_at = datetime(2026, 3, 15, 20, 0, tzinfo=UTC)
+
+    persisted_started_at = review_gate_state_module.reset_wait_window(
+        repo="example/repo",
+        pr_number=215,
+        reviewer_login="bot",
+        head_oid="head-sha",
+        now=started_at,
+    )
+
+    assert persisted_started_at == started_at
+    payload = json.loads(state_path.read_text())
+    assert payload["example/repo#215#bot"]["started_at"] == started_at.isoformat()
+
+
+def test_reset_wait_window_returns_started_at_when_write_fails(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state_path = tmp_path / "review-gate-state.json"
+    monkeypatch.setenv("HORADUS_REVIEW_GATE_STATE_PATH", str(state_path))
+    started_at = datetime(2026, 3, 15, 20, 0, tzinfo=UTC)
+
+    def _raise_write_error(self: Path, *_args, **_kwargs) -> int:
+        if self == state_path:
+            raise OSError("disk full")
+        return original_write_text(self, *_args, **_kwargs)
+
+    original_write_text = Path.write_text
+    monkeypatch.setattr(Path, "write_text", _raise_write_error)
+
+    persisted_started_at = review_gate_state_module.reset_wait_window(
+        repo="example/repo",
+        pr_number=215,
+        reviewer_login="bot",
+        head_oid="head-sha",
+        now=started_at,
+    )
+
+    assert persisted_started_at == started_at

@@ -8,10 +8,15 @@ import json
 import subprocess  # nosec B404
 import sys
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import UTC, datetime
 
-from tools.horadus.python.horadus_workflow import pr_review_gate_state
+from tools.horadus.python.horadus_workflow import (
+    pr_review_gate_graphql,
+    pr_review_gate_outcomes,
+    pr_review_gate_state,
+    pr_review_gate_window,
+)
 from tools.horadus.python.horadus_workflow.review_defaults import (
     DEFAULT_REVIEW_TIMEOUT_SECONDS,
 )
@@ -28,22 +33,8 @@ class GhError(RuntimeError):
     """Raised when a gh invocation fails."""
 
 
-@dataclass(frozen=True, slots=True)
-class ReviewGateOutcome:
-    status: str
-    reason: str
-    reviewer_login: str
-    reviewed_head_oid: str
-    current_head_oid: str
-    clean_current_head_review: bool
-    summary_thumbs_up: bool
-    actionable_comment_count: int
-    actionable_review_count: int
-    timeout_seconds: int
-    timed_out: bool
-    summary: str
-    informational_lines: tuple[str, ...] = ()
-    actionable_lines: tuple[str, ...] = ()
+ReviewGateOutcome = pr_review_gate_outcomes.ReviewGateOutcome
+_actionable_review_lines = pr_review_gate_outcomes.actionable_review_lines
 
 
 def _run_gh(*args: str) -> str:
@@ -59,18 +50,65 @@ def _run_gh(*args: str) -> str:
     return result.stdout
 
 
+def _infer_json_context(args: tuple[str, ...] | list[str]) -> str:
+    command = tuple(args)
+    if command[:2] == ("repo", "view"):
+        return "repository metadata"
+    if command[:2] == ("pr", "view"):
+        return (
+            "pull request metadata"
+            if any(field in command for field in ("number,headRefOid,url", "number,headRefOid"))
+            else "current PR head metadata"
+        )
+    if len(command) >= 2 and command[0] == "api":
+        endpoint = command[1]
+        if endpoint.endswith("/reviews"):
+            return "review summaries"
+        if "/pulls/" in endpoint and endpoint.endswith("/comments"):
+            return "review comments"
+        if endpoint.endswith("/reactions"):
+            return "PR summary reactions"
+        if endpoint.endswith("/comments"):
+            return "issue comments"
+    return "GitHub JSON payload"
+
+
 def _run_gh_json(*args: str) -> object:
-    output = _run_gh(*args).strip()
-    if not output:
-        return None
-    return json.loads(output)
+    return _run_gh_json_command(args, context=_infer_json_context(args))
 
 
 def _run_gh_paginated_json(*args: str) -> object:
-    output = _run_gh("api", *args, "--paginate", "--slurp").strip()
-    if not output:
-        return None
-    return json.loads(output)
+    command = ("api", *args, "--paginate", "--slurp")
+    return _run_gh_json_command(command, context=_infer_json_context(command))
+
+
+def _run_gh_json_command(args: tuple[str, ...] | list[str], *, context: str) -> object:
+    last_error: GhError | None = None
+    for _attempt in range(2):
+        try:
+            output = _run_gh(*args).strip()
+        except GhError as exc:
+            last_error = GhError(f"Unable to load {context}: {exc}")
+            continue
+        if not output:
+            return None
+        try:
+            return json.loads(output)
+        except json.JSONDecodeError as exc:
+            last_error = GhError(f"Unable to parse {context} from gh output: {exc.msg}.")
+    assert last_error is not None
+    raise last_error
+
+
+def _is_rate_limit_error(exc: GhError) -> bool:
+    return "API rate limit exceeded" in str(exc)
+
+
+def _run_gh_graphql_json(*, query: str, fields: dict[str, str], context: str) -> object:
+    args = ["api", "graphql", "-f", f"query={query}"]
+    for key, value in fields.items():
+        args.extend(["-F", f"{key}={value}"])
+    return _run_gh_json_command(args, context=context)
 
 
 def _review_context(pr_url: str) -> tuple[str, int, str]:
@@ -133,21 +171,6 @@ def _review_order_key(review: dict[str, object]) -> tuple[datetime, int]:
     return submitted_at, order
 
 
-def _actionable_review_lines(reviews: list[dict[str, object]]) -> list[str]:
-    lines: list[str] = []
-    for review in reviews:
-        state = str(review.get("state") or "").strip() or "UNKNOWN"
-        url = str(review.get("html_url") or "").strip()
-        body = " ".join(str(review.get("body") or "").strip().split())
-        header = f"- {state}"
-        if url:
-            header = f"{header} {url}"
-        lines.append(header)
-        if body:
-            lines.append(f"  {body}")
-    return lines
-
-
 def _matching_review_comments(
     *,
     repo: str,
@@ -155,14 +178,28 @@ def _matching_review_comments(
     head_oid: str,
     reviewer_login: str,
 ) -> tuple[list[dict[str, object]], list[dict[str, object]], list[dict[str, object]]]:
-    reviews = _flatten_paginated_list(
-        _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/reviews"),
-        label="reviews",
-    )
-    comments = _flatten_paginated_list(
-        _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/comments"),
-        label="comments",
-    )
+    try:
+        reviews = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/reviews"),
+            label="reviews",
+        )
+        comments = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/pulls/{pr_number}/comments"),
+            label="comments",
+        )
+    except GhError as exc:
+        if not _is_rate_limit_error(exc):
+            raise
+        reviews, comments = pr_review_gate_graphql.graphql_reviews_and_comments(
+            repo=repo,
+            pr_number=pr_number,
+            load_graphql=lambda query, fields, context: _run_gh_graphql_json(
+                query=query,
+                fields=fields,
+                context=context,
+            ),
+            error_factory=GhError,
+        )
 
     matching_reviews = [
         review
@@ -264,7 +301,7 @@ def _parse_github_timestamp(value: object) -> datetime | None:
 
 def _initial_review_loop_state(
     *, pr_url: str, reviewer_login: str, timeout_seconds: int
-) -> tuple[str, int, str, datetime, float]:
+) -> pr_review_gate_window.ReviewLoopContext:
     repo, pr_number, head_oid = _review_context(pr_url)
     wait_window_started_at = pr_review_gate_state.start_wait_window(
         repo=repo,
@@ -272,7 +309,17 @@ def _initial_review_loop_state(
         reviewer_login=reviewer_login,
         head_oid=head_oid,
     )
-    return repo, pr_number, head_oid, wait_window_started_at, time.time() + timeout_seconds
+    current_epoch = time.time()
+    started_epoch = min(wait_window_started_at.timestamp(), current_epoch)
+    if started_epoch != wait_window_started_at.timestamp():
+        wait_window_started_at = datetime.fromtimestamp(started_epoch, tz=UTC)
+    return pr_review_gate_window.ReviewLoopContext(
+        repo=repo,
+        pr_number=pr_number,
+        head_oid=head_oid,
+        wait_window_started_at=wait_window_started_at,
+        deadline_epoch=started_epoch + timeout_seconds,
+    )
 
 
 def _has_pr_summary_thumbs_up(
@@ -283,10 +330,24 @@ def _has_pr_summary_thumbs_up(
     head_oid: str,
     wait_window_started_at: datetime,
 ) -> bool:
-    reactions = _flatten_paginated_list(
-        _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/reactions"),
-        label="reactions",
-    )
+    try:
+        reactions = _flatten_paginated_list(
+            _run_gh_paginated_json(f"repos/{repo}/issues/{pr_number}/reactions"),
+            label="reactions",
+        )
+    except GhError as exc:
+        if not _is_rate_limit_error(exc):
+            raise
+        reactions = pr_review_gate_graphql.graphql_reactions(
+            repo=repo,
+            pr_number=pr_number,
+            load_graphql=lambda query, fields, context: _run_gh_graphql_json(
+                query=query,
+                fields=fields,
+                context=context,
+            ),
+            error_factory=GhError,
+        )
     signal_started_at = _latest_current_head_review_request_at(
         repo=repo,
         pr_number=pr_number,
@@ -306,18 +367,6 @@ def _has_pr_summary_thumbs_up(
     )
 
 
-def _print_actionable_comments(comments: list[dict[str, object]]) -> None:
-    print("review gate failed: actionable current-head review comments found:")
-    for comment in comments:
-        path = str(comment.get("path") or "<unknown>")
-        line = comment.get("line") or comment.get("original_line") or "?"
-        url = str(comment.get("html_url") or "")
-        body = " ".join(str(comment.get("body") or "").strip().split())
-        print(f"- {path}:{line} {url}".rstrip())
-        if body:
-            print(f"  {body}")
-
-
 def _informational_issue_comment_lines(comments: list[dict[str, object]]) -> list[str]:
     lines: list[str] = []
     for comment in comments:
@@ -332,6 +381,18 @@ def _informational_issue_comment_lines(comments: list[dict[str, object]]) -> lis
     return lines
 
 
+def _print_actionable_comments(comments: list[dict[str, object]]) -> None:
+    print("review gate failed: actionable current-head review comments found:")
+    for comment in comments:
+        path = str(comment.get("path") or "<unknown>")
+        line = comment.get("line") or comment.get("original_line") or "?"
+        url = str(comment.get("html_url") or "")
+        body = " ".join(str(comment.get("body") or "").strip().split())
+        print(f"- {path}:{line} {url}".rstrip())
+        if body:
+            print(f"  {body}")
+
+
 def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
     if output_format == "json":
         print(json.dumps(asdict(outcome), sort_keys=True))
@@ -343,6 +404,12 @@ def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
                 if outcome.reason != "timeout_fail"
                 else EXIT_TIMEOUT_FAILURE
             )
+        return 0
+
+    if outcome.status == "waiting":
+        print(outcome.summary)
+        for line in outcome.informational_lines:
+            print(line)
         return 0
 
     if outcome.status == "block":
@@ -366,6 +433,92 @@ def _emit_outcome(outcome: ReviewGateOutcome, *, output_format: str) -> int:
             EXIT_ACTIONABLE_FEEDBACK if outcome.reason != "timeout_fail" else EXIT_TIMEOUT_FAILURE
         )
     return 0
+
+
+def _matching_review_state(
+    *, args: argparse.Namespace, loop_context: pr_review_gate_window.ReviewLoopContext
+) -> tuple[
+    list[dict[str, object]],
+    list[dict[str, object]],
+    list[dict[str, object]],
+    tuple[str, ...],
+    bool,
+    bool,
+]:
+    matching_reviews, matching_comments, actionable_reviews = _matching_review_comments(
+        repo=loop_context.repo,
+        pr_number=loop_context.pr_number,
+        head_oid=loop_context.head_oid,
+        reviewer_login=args.reviewer_login,
+    )
+    matching_issue_comments = _matching_issue_comments(
+        repo=loop_context.repo,
+        pr_number=loop_context.pr_number,
+        reviewer_login=args.reviewer_login,
+        wait_window_started_at=loop_context.wait_window_started_at,
+    )
+    has_pr_summary_thumbs_up = _has_pr_summary_thumbs_up(
+        repo=loop_context.repo,
+        pr_number=loop_context.pr_number,
+        reviewer_login=args.reviewer_login,
+        head_oid=loop_context.head_oid,
+        wait_window_started_at=loop_context.wait_window_started_at,
+    )
+    informational_lines = tuple(_informational_issue_comment_lines(matching_issue_comments))
+    saw_clean_current_head_review = any(
+        str(review.get("state") or "").strip().upper() == "APPROVED" for review in matching_reviews
+    )
+    return (
+        matching_reviews,
+        matching_comments,
+        actionable_reviews,
+        informational_lines,
+        has_pr_summary_thumbs_up,
+        saw_clean_current_head_review,
+    )
+
+
+def _review_gate_once(
+    *, args: argparse.Namespace, loop_context: pr_review_gate_window.ReviewLoopContext
+) -> ReviewGateOutcome:
+    current_head_oid = _current_head_oid(args.pr_url)
+    if current_head_oid != loop_context.head_oid:
+        return pr_review_gate_outcomes.head_changed_outcome(
+            reviewer_login=args.reviewer_login,
+            loop_context=loop_context,
+            current_head_oid=current_head_oid,
+            timeout_seconds=args.timeout_seconds,
+        )
+    (
+        _matching_reviews,
+        matching_comments,
+        actionable_reviews,
+        informational_lines,
+        has_pr_summary_thumbs_up,
+        saw_clean_current_head_review,
+    ) = _matching_review_state(args=args, loop_context=loop_context)
+    feedback_outcome = pr_review_gate_outcomes.feedback_outcome(
+        reviewer_login=args.reviewer_login,
+        loop_context=loop_context,
+        timeout_seconds=args.timeout_seconds,
+        matching_comments=matching_comments,
+        actionable_reviews=actionable_reviews,
+        informational_lines=informational_lines,
+        has_pr_summary_thumbs_up=has_pr_summary_thumbs_up,
+    )
+    if feedback_outcome is not None:
+        return feedback_outcome
+    current_time = time.time()
+    return pr_review_gate_outcomes.approval_or_timeout_outcome(
+        reviewer_login=args.reviewer_login,
+        loop_context=loop_context,
+        timeout_seconds=args.timeout_seconds,
+        timeout_policy=args.timeout_policy,
+        informational_lines=informational_lines,
+        has_pr_summary_thumbs_up=has_pr_summary_thumbs_up,
+        saw_clean_current_head_review=saw_clean_current_head_review,
+        current_time=current_time,
+    )
 
 
 def _validate_main_args(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
@@ -407,243 +560,31 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_OUTPUT_FORMAT,
         help="Output format for the final gate result.",
     )
+    parser.add_argument(
+        "--single-poll",
+        action="store_true",
+        help="Evaluate the current review state once and return a waiting status when the review window is still open.",
+    )
     args = parser.parse_args(argv)
     _validate_main_args(parser, args)
 
     try:
-        repo, pr_number, head_oid, wait_window_started_at, deadline = _initial_review_loop_state(
+        loop_context = _initial_review_loop_state(
             pr_url=args.pr_url,
             reviewer_login=args.reviewer_login,
             timeout_seconds=args.timeout_seconds,
         )
+        while True:
+            outcome = _review_gate_once(args=args, loop_context=loop_context)
+            if args.single_poll or outcome.status != "waiting":
+                return _emit_outcome(outcome, output_format=args.format)
+            if args.format == "text":
+                _emit_outcome(outcome, output_format=args.format)
+            if args.poll_seconds:  # pragma: no branch
+                time.sleep(args.poll_seconds)
     except GhError as exc:
         print(str(exc), file=sys.stderr)
         return EXIT_TIMEOUT_FAILURE
-    saw_clean_current_head_review = False
-    has_pr_summary_thumbs_up = False
-
-    while True:
-        try:
-            current_head_oid = _current_head_oid(args.pr_url)
-            if current_head_oid != head_oid:
-                return _emit_outcome(
-                    ReviewGateOutcome(
-                        status="head_changed",
-                        reason="head_changed",
-                        reviewer_login=args.reviewer_login,
-                        reviewed_head_oid=head_oid,
-                        current_head_oid=current_head_oid,
-                        clean_current_head_review=saw_clean_current_head_review,
-                        summary_thumbs_up=has_pr_summary_thumbs_up,
-                        actionable_comment_count=0,
-                        actionable_review_count=0,
-                        timeout_seconds=args.timeout_seconds,
-                        timed_out=False,
-                        summary=(
-                            "review gate deferred: "
-                            f"PR head changed from {head_oid} to {current_head_oid} during the review window."
-                        ),
-                    ),
-                    output_format=args.format,
-                )
-
-            matching_reviews, matching_comments, actionable_reviews = _matching_review_comments(
-                repo=repo,
-                pr_number=pr_number,
-                head_oid=head_oid,
-                reviewer_login=args.reviewer_login,
-            )
-            matching_issue_comments = _matching_issue_comments(
-                repo=repo,
-                pr_number=pr_number,
-                reviewer_login=args.reviewer_login,
-                wait_window_started_at=wait_window_started_at,
-            )
-            has_pr_summary_thumbs_up = _has_pr_summary_thumbs_up(
-                repo=repo,
-                pr_number=pr_number,
-                reviewer_login=args.reviewer_login,
-                head_oid=head_oid,
-                wait_window_started_at=wait_window_started_at,
-            )
-        except GhError as exc:
-            print(str(exc), file=sys.stderr)
-            return EXIT_TIMEOUT_FAILURE
-        informational_lines = tuple(_informational_issue_comment_lines(matching_issue_comments))
-
-        if matching_comments:
-            return _emit_outcome(
-                ReviewGateOutcome(
-                    status="block",
-                    reason="actionable_comments",
-                    reviewer_login=args.reviewer_login,
-                    reviewed_head_oid=head_oid,
-                    current_head_oid=head_oid,
-                    clean_current_head_review=False,
-                    summary_thumbs_up=has_pr_summary_thumbs_up,
-                    actionable_comment_count=len(matching_comments),
-                    actionable_review_count=len(actionable_reviews),
-                    timeout_seconds=args.timeout_seconds,
-                    timed_out=False,
-                    summary="review gate failed: actionable current-head review comments found:",
-                    informational_lines=informational_lines,
-                    actionable_lines=tuple(
-                        line
-                        for comment in matching_comments
-                        for line in (
-                            f"- {comment.get('path') or '<unknown>'!s}:{comment.get('line') or comment.get('original_line') or '?'} "
-                            f"{str(comment.get('html_url') or '').strip()}".rstrip(),
-                            *(
-                                [f"  {' '.join(str(comment.get('body') or '').strip().split())}"]
-                                if str(comment.get("body") or "").strip()
-                                else []
-                            ),
-                        )
-                    ),
-                ),
-                output_format=args.format,
-            )
-        if actionable_reviews:
-            return _emit_outcome(
-                ReviewGateOutcome(
-                    status="block",
-                    reason="actionable_reviews",
-                    reviewer_login=args.reviewer_login,
-                    reviewed_head_oid=head_oid,
-                    current_head_oid=head_oid,
-                    clean_current_head_review=False,
-                    summary_thumbs_up=has_pr_summary_thumbs_up,
-                    actionable_comment_count=0,
-                    actionable_review_count=len(actionable_reviews),
-                    timeout_seconds=args.timeout_seconds,
-                    timed_out=False,
-                    summary="review gate failed: actionable current-head review summary feedback found:",
-                    informational_lines=informational_lines,
-                    actionable_lines=tuple(_actionable_review_lines(actionable_reviews)),
-                ),
-                output_format=args.format,
-            )
-        if any(
-            str(review.get("state") or "").strip().upper() == "APPROVED"
-            for review in matching_reviews
-        ):
-            saw_clean_current_head_review = True
-
-        if has_pr_summary_thumbs_up:
-            if saw_clean_current_head_review:
-                return _emit_outcome(
-                    ReviewGateOutcome(
-                        status="pass",
-                        reason="clean_review_and_thumbs_up",
-                        reviewer_login=args.reviewer_login,
-                        reviewed_head_oid=head_oid,
-                        current_head_oid=head_oid,
-                        clean_current_head_review=True,
-                        summary_thumbs_up=True,
-                        actionable_comment_count=0,
-                        actionable_review_count=0,
-                        timeout_seconds=args.timeout_seconds,
-                        timed_out=False,
-                        summary=(
-                            "review gate passed early: "
-                            f"{args.reviewer_login} approved current head {head_oid} and reacted THUMBS_UP "
-                            "on the PR summary during the active review window."
-                        ),
-                        informational_lines=informational_lines,
-                    ),
-                    output_format=args.format,
-                )
-            return _emit_outcome(
-                ReviewGateOutcome(
-                    status="pass",
-                    reason="thumbs_up",
-                    reviewer_login=args.reviewer_login,
-                    reviewed_head_oid=head_oid,
-                    current_head_oid=head_oid,
-                    clean_current_head_review=False,
-                    summary_thumbs_up=True,
-                    actionable_comment_count=0,
-                    actionable_review_count=0,
-                    timeout_seconds=args.timeout_seconds,
-                    timed_out=False,
-                    summary=(
-                        "review gate passed early: "
-                        f"{args.reviewer_login} reacted THUMBS_UP on the PR summary during the active review window."
-                    ),
-                    informational_lines=informational_lines,
-                ),
-                output_format=args.format,
-            )
-
-        if time.time() >= deadline:
-            if saw_clean_current_head_review:
-                return _emit_outcome(
-                    ReviewGateOutcome(
-                        status="pass",
-                        reason="clean_review",
-                        reviewer_login=args.reviewer_login,
-                        reviewed_head_oid=head_oid,
-                        current_head_oid=head_oid,
-                        clean_current_head_review=True,
-                        summary_thumbs_up=False,
-                        actionable_comment_count=0,
-                        actionable_review_count=0,
-                        timeout_seconds=args.timeout_seconds,
-                        timed_out=True,
-                        summary=(
-                            "review gate passed: "
-                            f"{args.reviewer_login} approved current head {head_oid} during the "
-                            f"{args.timeout_seconds}s wait window."
-                        ),
-                        informational_lines=informational_lines,
-                    ),
-                    output_format=args.format,
-                )
-            message = (
-                "review gate timeout: "
-                f"no actionable current-head review feedback from {args.reviewer_login} for {head_oid} "
-                f"within {args.timeout_seconds}s."
-            )
-            if args.timeout_policy == "allow":
-                return _emit_outcome(
-                    ReviewGateOutcome(
-                        status="pass",
-                        reason="silent_timeout_allow",
-                        reviewer_login=args.reviewer_login,
-                        reviewed_head_oid=head_oid,
-                        current_head_oid=head_oid,
-                        clean_current_head_review=False,
-                        summary_thumbs_up=False,
-                        actionable_comment_count=0,
-                        actionable_review_count=0,
-                        timeout_seconds=args.timeout_seconds,
-                        timed_out=True,
-                        summary=f"{message} Continuing due to timeout policy=allow.",
-                        informational_lines=informational_lines,
-                    ),
-                    output_format=args.format,
-                )
-            return _emit_outcome(
-                ReviewGateOutcome(
-                    status="block",
-                    reason="timeout_fail",
-                    reviewer_login=args.reviewer_login,
-                    reviewed_head_oid=head_oid,
-                    current_head_oid=head_oid,
-                    clean_current_head_review=False,
-                    summary_thumbs_up=False,
-                    actionable_comment_count=0,
-                    actionable_review_count=0,
-                    timeout_seconds=args.timeout_seconds,
-                    timed_out=True,
-                    summary=f"{message} Failing due to timeout policy=fail.",
-                    informational_lines=informational_lines,
-                ),
-                output_format=args.format,
-            )
-
-        if args.poll_seconds:  # pragma: no branch
-            time.sleep(args.poll_seconds)
 
 
 if __name__ == "__main__":  # pragma: no cover

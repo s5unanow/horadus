@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess  # nosec B404
+import time
 
 from tools.horadus.python.horadus_workflow import task_workflow_lifecycle as lifecycle
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
@@ -97,9 +98,6 @@ def _prepare_current_head_review_window(
             ),
         )
 
-    if not needs_fresh_review_request:
-        return ([], None)
-
     review_refresh_lines: list[str] = []
     if stale_thread_ids:
         resolved_ok, stale_thread_lines = threads_module._resolve_review_threads(
@@ -116,6 +114,37 @@ def _prepare_current_head_review_window(
                 ),
             )
         review_refresh_lines.extend(stale_thread_lines)
+    unresolved_review_lines, unresolved_blocker = _unresolved_review_threads_or_blocker(
+        pr_url=pr_url,
+        config=config,
+    )
+    if unresolved_blocker is not None:
+        return (review_refresh_lines, unresolved_blocker)
+    if unresolved_review_lines:
+        return (
+            review_refresh_lines,
+            (
+                "PR still has unresolved review threads marked current on GitHub."
+                if needs_fresh_review_request
+                else "PR is blocked by unresolved review comments.",
+                {"manual_thread_inspection_required": needs_fresh_review_request},
+                [
+                    *(
+                        [
+                            "GitHub still marks these threads as current after review-state refresh; "
+                            "inspect whether they are stale older-head threads that now require "
+                            "manual resolution."
+                        ]
+                        if needs_fresh_review_request
+                        else []
+                    ),
+                    *unresolved_review_lines,
+                ],
+            ),
+        )
+    if not needs_fresh_review_request:
+        return (review_refresh_lines, None)
+
     request_lines, request_blocker = refresh_module._fresh_review_request_blocker(
         pr_url=pr_url,
         config=config,
@@ -169,6 +198,139 @@ def _review_gate_debug_lines(
     ]
 
 
+def _review_gate_parse_blocker_message(review_result: subprocess.CompletedProcess[str]) -> str:
+    output_lines = shared._output_lines(review_result)
+    if any(line.startswith(("Unable to ", "gh ")) for line in output_lines):
+        return "review gate could not load current GitHub review state."
+    return "review gate returned an unreadable result."
+
+
+def _run_review_gate_once(
+    *, context: shared.FinishContext, pr_url: str, config: shared.FinishConfig
+) -> tuple[
+    shared.ReviewGateResult | None, list[str], tuple[int, dict[str, object], list[str]] | None
+]:
+    debug_lines: list[str] = []
+    last_error: ValueError | None = None
+    last_result: subprocess.CompletedProcess[str] | None = None
+    for _attempt in range(2):
+        try:
+            review_result = gate_module._run_review_gate(
+                pr_url=pr_url,
+                config=config,
+                single_poll=True,
+            )
+        except shared.CommandTimeoutError as exc:
+            return (
+                None,
+                [],
+                shared._task_blocked(
+                    "review gate command did not exit after the configured wait window.",
+                    next_action=(
+                        "Inspect GitHub/Codex review delivery and re-run `horadus tasks finish` "
+                        "if the review gate keeps hanging."
+                    ),
+                    data={
+                        "task_id": context.task_id,
+                        "branch_name": context.branch_name,
+                        "pr_url": pr_url,
+                    },
+                    exit_code=ExitCode.ENVIRONMENT_ERROR,
+                    extra_lines=[str(exc), *exc.output_lines()],
+                ),
+            )
+        debug_lines.extend(_review_gate_debug_lines(pr_url=pr_url, review_result=review_result))
+        try:
+            review_gate = gate_module._parse_review_gate_result(review_result)
+        except ValueError as exc:
+            last_error = exc
+            last_result = review_result
+            continue
+        debug_lines.extend(_review_gate_debug_lines(pr_url=pr_url, review_gate=review_gate))
+        return (review_gate, debug_lines, None)
+    assert last_error is not None
+    assert last_result is not None
+    return (
+        None,
+        debug_lines,
+        shared._task_blocked(
+            _review_gate_parse_blocker_message(last_result),
+            next_action="Resolve the GitHub review-state read failure, then re-run `horadus tasks finish`.",
+            data={
+                "task_id": context.task_id,
+                "branch_name": context.branch_name,
+                "pr_url": pr_url,
+            },
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            extra_lines=[str(last_error), *shared._output_lines(last_result)],
+        ),
+    )
+
+
+def _unresolved_review_threads_or_blocker(
+    *, pr_url: str, config: shared.FinishConfig
+) -> tuple[list[str], tuple[str, dict[str, object], list[str]] | None]:
+    unresolved_thread_lines = shared._compat_attr(
+        "_unresolved_review_thread_lines",
+        threads_module,
+    )
+    try:
+        return (
+            unresolved_thread_lines(pr_url=pr_url, config=config),
+            None,
+        )
+    except ValueError as exc:
+        return (
+            [],
+            (
+                "unable to determine unresolved review thread state on the current head.",
+                {},
+                [str(exc)],
+            ),
+        )
+
+
+def _unresolved_review_thread_blocker(
+    *,
+    context: shared.FinishContext,
+    pr_url: str,
+    review_lines: list[str],
+    unresolved_review_lines: list[str],
+    refreshed_review_state: bool,
+) -> tuple[int, dict[str, object], list[str]]:
+    manual_inspection = refreshed_review_state
+    intro_line = (
+        "GitHub still marks these threads as current after review-state refresh; inspect whether "
+        "they are stale older-head threads that now require manual resolution."
+        if manual_inspection
+        else None
+    )
+    extra_lines = [*review_lines]
+    if intro_line is not None:
+        extra_lines.append(intro_line)
+    extra_lines.extend(unresolved_review_lines)
+    return shared._task_blocked(
+        (
+            "PR still has unresolved review threads marked current on GitHub."
+            if manual_inspection
+            else "PR is blocked by unresolved review comments."
+        ),
+        next_action=(
+            "Inspect the unresolved threads in GitHub. Resolve stale threads that no longer "
+            "apply or address still-applicable feedback, then re-run `horadus tasks finish`."
+            if manual_inspection
+            else "Resolve the current-head review threads in GitHub, then re-run `horadus tasks finish`."
+        ),
+        data={
+            "task_id": context.task_id,
+            "branch_name": context.branch_name,
+            "pr_url": pr_url,
+            "manual_thread_inspection_required": manual_inspection,
+        },
+        extra_lines=extra_lines,
+    )
+
+
 def review_gate_data(
     *, context: shared.FinishContext, pr_url: str, config: shared.FinishConfig
 ) -> tuple[int, dict[str, object], list[str]]:
@@ -181,6 +343,7 @@ def review_gate_data(
             ExitCode.ENVIRONMENT_ERROR
             if blocker_message.startswith(
                 (
+                    "unable to determine unresolved",
                     "unable to determine outdated",
                     "unable to request a fresh current-head review",
                     "PR still has outdated unresolved review threads",
@@ -188,12 +351,23 @@ def review_gate_data(
             )
             else ExitCode.VALIDATION_ERROR
         )
+        next_action = (
+            "Ensure the current PR head is merge-ready and GitHub review state is readable, "
+            "then re-run `horadus tasks finish`."
+        )
+        if blocker_message.startswith(
+            (
+                "PR still has unresolved review threads marked current on GitHub.",
+                "PR is blocked by unresolved current-head review threads.",
+            )
+        ):
+            next_action = (
+                "Inspect the unresolved threads in GitHub. Resolve stale threads that no longer "
+                "apply or address still-applicable feedback, then re-run `horadus tasks finish`."
+            )
         return shared._task_blocked(
             blocker_message,
-            next_action=(
-                "Ensure the current PR head is merge-ready and GitHub review state is readable, "
-                "then re-run `horadus tasks finish`."
-            ),
+            next_action=next_action,
             data={
                 "task_id": context.task_id,
                 "branch_name": context.branch_name,
@@ -205,46 +379,28 @@ def review_gate_data(
         )
 
     lines = list(refresh_lines)
+    refreshed_review_state = bool(refresh_lines)
     while True:
         lines.append(
             "Waiting for review gate "
             f"(reviewer={config.review_bot_login}, timeout={config.review_timeout_seconds}s)..."
         )
-        try:
-            review_result = gate_module._run_review_gate(pr_url=pr_url, config=config)
-        except shared.CommandTimeoutError as exc:
-            return shared._task_blocked(
-                "review gate command did not exit after the configured wait window.",
-                next_action=(
-                    "Inspect GitHub/Codex review delivery and re-run `horadus tasks finish` "
-                    "if the review gate keeps hanging."
-                ),
-                data={
-                    "task_id": context.task_id,
-                    "branch_name": context.branch_name,
-                    "pr_url": pr_url,
-                },
-                exit_code=ExitCode.ENVIRONMENT_ERROR,
-                extra_lines=[str(exc), *exc.output_lines()],
-            )
-        lines.extend(_review_gate_debug_lines(pr_url=pr_url, review_result=review_result))
-
-        try:
-            review_gate = gate_module._parse_review_gate_result(review_result)
-        except ValueError as exc:
-            return shared._task_blocked(
-                "review gate returned an unreadable result.",
-                next_action="Resolve the review gate script failure, then re-run `horadus tasks finish`.",
-                data={
-                    "task_id": context.task_id,
-                    "branch_name": context.branch_name,
-                    "pr_url": pr_url,
-                },
-                exit_code=ExitCode.ENVIRONMENT_ERROR,
-                extra_lines=[str(exc), *shared._output_lines(review_result)],
-            )
-        lines.extend(_review_gate_debug_lines(pr_url=pr_url, review_gate=review_gate))
+        review_gate, gate_lines, gate_blocker = _run_review_gate_once(
+            context=context,
+            pr_url=pr_url,
+            config=config,
+        )
+        lines.extend(gate_lines)
+        if gate_blocker is not None:
+            return gate_blocker
+        assert review_gate is not None
         review_lines = _review_gate_lines(review_gate)
+
+        if review_gate.status == "waiting":
+            lines.extend(review_lines)
+            if config.review_poll_seconds:  # pragma: no branch
+                time.sleep(config.review_poll_seconds)
+            continue
 
         if review_gate.status == "head_changed":
             blocker = _head_changed_review_gate_blocker(
@@ -278,6 +434,7 @@ def review_gate_data(
                     extra_lines=[*review_lines, *blocker_lines],
                 )
             lines.extend(request_lines)
+            refreshed_review_state = True
             continue
 
         if review_gate.status == "block":
@@ -299,50 +456,37 @@ def review_gate_data(
                     "branch_name": context.branch_name,
                     "pr_url": pr_url,
                 },
-                exit_code=review_result.returncode,
+                exit_code=ExitCode.VALIDATION_ERROR,
                 extra_lines=review_lines,
             )
 
         lines.extend(review_lines)
 
-        try:
-            unresolved_review_lines = threads_module._unresolved_review_thread_lines(
-                pr_url=pr_url,
-                config=config,
-            )
-        except ValueError as exc:
+        unresolved_review_lines, unresolved_blocker = _unresolved_review_threads_or_blocker(
+            pr_url=pr_url,
+            config=config,
+        )
+        if unresolved_blocker is not None:
+            blocker_message, blocker_data, blocker_lines = unresolved_blocker
             return shared._task_blocked(
-                "unable to determine unresolved review thread state on the current head.",
+                blocker_message,
                 next_action="Resolve the GitHub review-thread query issue, then re-run `horadus tasks finish`.",
                 data={
                     "task_id": context.task_id,
                     "branch_name": context.branch_name,
                     "pr_url": pr_url,
+                    **blocker_data,
                 },
                 exit_code=ExitCode.ENVIRONMENT_ERROR,
-                extra_lines=[*review_lines, str(exc)],
+                extra_lines=[*review_lines, *blocker_lines],
             )
         if unresolved_review_lines:
-            extra_lines = [*review_lines, *unresolved_review_lines]
-            if review_gate.timed_out:
-                extra_lines.extend(
-                    refresh_module._maybe_request_fresh_review(pr_url=pr_url, config=config)
-                )
-            return shared._task_blocked(
-                "PR is blocked by unresolved review comments.",
-                next_action=(
-                    "Resolve the unresolved review threads in GitHub and wait for a fresh "
-                    "current-head review, then re-run `horadus tasks finish`."
-                    if review_gate.timed_out
-                    else "Resolve the unresolved review threads in GitHub, then re-run "
-                    "`horadus tasks finish`."
-                ),
-                data={
-                    "task_id": context.task_id,
-                    "branch_name": context.branch_name,
-                    "pr_url": pr_url,
-                },
-                extra_lines=extra_lines,
+            return _unresolved_review_thread_blocker(
+                context=context,
+                pr_url=pr_url,
+                review_lines=review_lines,
+                unresolved_review_lines=unresolved_review_lines,
+                refreshed_review_state=refreshed_review_state,
             )
 
         try:
@@ -380,6 +524,7 @@ def review_gate_data(
                     extra_lines=[*review_lines, *stale_thread_lines],
                 )
             lines.extend(stale_thread_lines)
+            refreshed_review_state = True
 
         post_review_blocker = checks._current_required_checks_blocker(
             pr_url=pr_url,

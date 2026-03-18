@@ -7,6 +7,7 @@ from collections.abc import Callable
 import pytest
 
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+import tools.horadus.python.horadus_workflow.task_workflow_finish._review_refresh as review_refresh_module
 from tests.horadus_cli.v2.helpers import _completed
 
 pytestmark = pytest.mark.unit
@@ -124,6 +125,12 @@ def _pre_review_run_command_factory(
     timeline_returncode: int = 0,
     reviews_stdout: str = "[]\n",
     reviews_returncode: int = 0,
+    reviews_stderr: str = "",
+    graphql_reviews_stdout: str = (
+        '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":{"hasNextPage":false,'
+        '"endCursor":null},"nodes":[]}}}}}\n'
+    ),
+    graphql_reviews_returncode: int = 0,
 ) -> Callable[[list[str]], subprocess.CompletedProcess[str]]:
     repo_calls = {"count": 0}
 
@@ -144,8 +151,20 @@ def _pre_review_run_command_factory(
                 returncode=second_repo_returncode,
             )
         if args[:3] == ["gh", "api", "graphql"]:
-            return _completed(args, stdout=timeline_stdout, returncode=timeline_returncode)
-        return _completed(args, stdout=reviews_stdout, returncode=reviews_returncode)
+            joined = " ".join(args)
+            if "timelineItems(" in joined:
+                return _completed(args, stdout=timeline_stdout, returncode=timeline_returncode)
+            return _completed(
+                args,
+                stdout=graphql_reviews_stdout,
+                returncode=graphql_reviews_returncode,
+            )
+        return _completed(
+            args,
+            stdout=reviews_stdout,
+            stderr=reviews_stderr,
+            returncode=reviews_returncode,
+        )
 
     return fake_run_command
 
@@ -155,6 +174,7 @@ def test_maybe_request_fresh_review_posts_codex_comment(
 ) -> None:
     config = _finish_config()
     called: dict[str, object] = {}
+    reset_calls: list[dict[str, object]] = []
 
     def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
         if args[:4] == ["gh", "pr", "view", PR_URL]:
@@ -167,6 +187,11 @@ def test_maybe_request_fresh_review_posts_codex_comment(
         return _completed(args, stdout="https://example.invalid/comment/trigger\n")
 
     monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(
+        review_refresh_module.pr_review_gate_state,
+        "reset_wait_window",
+        lambda **kwargs: reset_calls.append(kwargs),
+    )
 
     assert task_commands_module._maybe_request_fresh_review(
         pr_url=PR_URL,
@@ -181,6 +206,14 @@ def test_maybe_request_fresh_review_posts_codex_comment(
         PR_URL,
         "--body",
         f"@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head={DEFAULT_HEAD} -->",
+    ]
+    assert reset_calls == [
+        {
+            "repo": "example/repo",
+            "pr_number": DEFAULT_PR_NUMBER,
+            "reviewer_login": "chatgpt-codex-connector[bot]",
+            "head_oid": DEFAULT_HEAD,
+        }
     ]
 
 
@@ -240,6 +273,7 @@ def test_maybe_request_fresh_review_dedupes_current_head_request(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     config = _finish_config()
+    reset_calls: list[dict[str, object]] = []
     monkeypatch.setattr(
         task_commands_module,
         "_run_command",
@@ -251,6 +285,11 @@ def test_maybe_request_fresh_review_dedupes_current_head_request(
             )
         ),
     )
+    monkeypatch.setattr(
+        review_refresh_module.pr_review_gate_state,
+        "reset_wait_window",
+        lambda **kwargs: reset_calls.append(kwargs),
+    )
 
     assert task_commands_module._maybe_request_fresh_review(
         pr_url=PR_URL,
@@ -258,6 +297,7 @@ def test_maybe_request_fresh_review_dedupes_current_head_request(
     ) == [
         f"Fresh review already requested for `chatgpt-codex-connector[bot]` on current head {DEFAULT_HEAD}."
     ]
+    assert reset_calls == []
 
 
 @pytest.mark.parametrize(
@@ -673,6 +713,40 @@ def test_needs_pre_review_fresh_review_request_detects_plain_request_on_older_he
     )
 
 
+def test_needs_pre_review_fresh_review_request_falls_back_to_graphql_reviews_on_rate_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        _pre_review_run_command_factory(
+            timeline_stdout=_timeline_payload(
+                _issue_comment_node(
+                    "@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-old -->"
+                )
+            ),
+            reviews_returncode=1,
+            reviews_stderr="gh: API rate limit exceeded (HTTP 403)\n",
+            graphql_reviews_stdout=(
+                '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":'
+                '{"hasNextPage":false,"endCursor":null},"nodes":['
+                '{"author":{"login":"chatgpt-codex-connector[bot]"},"commit":{"oid":"head-sha-old"}},'
+                '{"author":{"login":"other-reviewer"},"commit":{"oid":"head-sha-current"}},'
+                '{"author":null,"commit":null}'
+                "]}}}}}\n"
+            ),
+        ),
+    )
+
+    assert (
+        task_commands_module._needs_pre_review_fresh_review_request(
+            pr_url=PR_URL,
+            config=_finish_config(),
+        )
+        is True
+    )
+
+
 def test_maybe_request_fresh_review_ignores_non_matching_head_events(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -787,6 +861,149 @@ def test_needs_pre_review_fresh_review_request_handles_metadata_and_review_failu
         )
 
 
+@pytest.mark.parametrize(
+    ("graphql_reviews_stdout", "graphql_reviews_returncode", "expected"),
+    [
+        ("{bad}\n", 0, "Unable to parse prior reviewer activity"),
+        (
+            '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":[],"nodes":[]}}}}}\n',
+            0,
+            "Unexpected prior reviewer activity payload",
+        ),
+        (
+            '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":{"hasNextPage":true,"endCursor":null},"nodes":[]}}}}}\n',
+            0,
+            "Unexpected prior reviewer activity payload",
+        ),
+        ("", 1, "Unable to inspect prior reviewer activity"),
+    ],
+)
+def test_needs_pre_review_fresh_review_request_handles_graphql_review_fallback_failures(
+    monkeypatch: pytest.MonkeyPatch,
+    graphql_reviews_stdout: str,
+    graphql_reviews_returncode: int,
+    expected: str,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        _pre_review_run_command_factory(
+            reviews_returncode=1,
+            reviews_stderr="gh: API rate limit exceeded (HTTP 403)\n",
+            graphql_reviews_stdout=graphql_reviews_stdout,
+            graphql_reviews_returncode=graphql_reviews_returncode,
+        ),
+    )
+
+    with pytest.raises(ValueError, match=expected):
+        task_commands_module._needs_pre_review_fresh_review_request(
+            pr_url=PR_URL,
+            config=_finish_config(),
+        )
+
+
+def test_needs_pre_review_fresh_review_request_handles_graphql_review_key_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        _pre_review_run_command_factory(
+            reviews_returncode=1,
+            reviews_stderr="gh: API rate limit exceeded (HTTP 403)\n",
+            graphql_reviews_stdout='{"data":{"repository":{"pullRequest":{}}}}\n',
+        ),
+    )
+
+    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
+        task_commands_module._needs_pre_review_fresh_review_request(
+            pr_url=PR_URL,
+            config=_finish_config(),
+        )
+
+
+def test_needs_pre_review_fresh_review_request_handles_graphql_non_dict_review_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        task_commands_module,
+        "_run_command",
+        _pre_review_run_command_factory(
+            reviews_returncode=1,
+            reviews_stderr="gh: API rate limit exceeded (HTTP 403)\n",
+            graphql_reviews_stdout=(
+                '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":'
+                '{"hasNextPage":false,"endCursor":null},"nodes":[1]}}}}}\n'
+            ),
+        ),
+    )
+
+    with pytest.raises(ValueError, match="Unexpected prior reviewer activity payload"):
+        task_commands_module._needs_pre_review_fresh_review_request(
+            pr_url=PR_URL,
+            config=_finish_config(),
+        )
+
+
+def test_needs_pre_review_fresh_review_request_handles_paginated_graphql_reviews(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graphql_review_calls = {"count": 0}
+
+    def fake_run_command(args: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        if args[:4] == ["gh", "pr", "view", PR_URL]:
+            return _completed(args, stdout=_pr_payload(head_oid=DEFAULT_CURRENT_HEAD))
+        if args[:6] == ["gh", "repo", "view", "--json", "nameWithOwner", "--jq"]:
+            return _completed(args, stdout=DEFAULT_REPO)
+        if args[:3] == ["gh", "api", "graphql"]:
+            joined = " ".join(args)
+            if "timelineItems(" in joined:
+                return _completed(
+                    args,
+                    stdout=_timeline_payload(
+                        _issue_comment_node(
+                            "@codex review\n<!-- horadus:fresh-review reviewer=chatgpt-codex-connector[bot] head=head-sha-old -->"
+                        )
+                    ),
+                )
+            graphql_review_calls["count"] += 1
+            if graphql_review_calls["count"] == 1:
+                return _completed(
+                    args,
+                    stdout=(
+                        '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":'
+                        '{"hasNextPage":true,"endCursor":"cursor-1"},"nodes":['
+                        '{"author":{"login":"chatgpt-codex-connector[bot]"},"commit":{"oid":"head-sha-old"}}'
+                        "]}}}}}\n"
+                    ),
+                )
+            return _completed(
+                args,
+                stdout=(
+                    '{"data":{"repository":{"pullRequest":{"reviews":{"pageInfo":'
+                    '{"hasNextPage":false,"endCursor":null},"nodes":['
+                    '{"author":{"login":"chatgpt-codex-connector[bot]"},"commit":{"oid":"head-sha-current"}}'
+                    "]}}}}}\n"
+                ),
+            )
+        return _completed(
+            args,
+            returncode=1,
+            stderr="gh: API rate limit exceeded (HTTP 403)\n",
+        )
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    assert (
+        task_commands_module._needs_pre_review_fresh_review_request(
+            pr_url=PR_URL,
+            config=_finish_config(),
+        )
+        is False
+    )
+    assert graphql_review_calls["count"] == 2
+
+
 def test_prepare_current_head_review_window_uses_compat_exports_across_split_modules(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -824,6 +1041,11 @@ def test_prepare_current_head_review_window_uses_compat_exports_across_split_mod
         task_commands_module,
         "_fresh_review_request_blocker",
         lambda **_kwargs: (["Requested fresh review."], None),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
     )
 
     refresh_lines, blocker = task_commands_module._prepare_current_head_review_window(

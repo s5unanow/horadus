@@ -749,7 +749,7 @@ def test_pr_review_gate_main_covers_review_outcomes_and_validation(
         pr_review_gate_module, "_matching_review_comments", lambda **_kwargs: ([], [], [])
     )
     monkeypatch.setattr(pr_review_gate_module, "_has_pr_summary_thumbs_up", lambda **_kwargs: False)
-    _install_fake_time([0.0, 0.0, 2.0])
+    _install_fake_time([0.0, 0.0, 0.0, 2.0])
     sleep_calls: list[int] = []
     monkeypatch.setattr(
         pr_review_gate_module.time, "sleep", lambda seconds: sleep_calls.append(seconds)

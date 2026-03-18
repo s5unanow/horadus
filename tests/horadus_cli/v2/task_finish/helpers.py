@@ -57,6 +57,11 @@ def _disable_outdated_thread_auto_resolution(monkeypatch: pytest.MonkeyPatch) ->
         "_branch_head_alignment_blocker",
         lambda **_kwargs: None,
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [],
+    )
 
 
 def _review_gate_process(
@@ -71,6 +76,9 @@ def _review_gate_process(
     actionable_lines: list[str] | None = None,
     timed_out: bool = False,
     returncode: int = 0,
+    wait_window_started_at: str | None = None,
+    deadline_at: str | None = None,
+    remaining_seconds: int | None = None,
 ) -> subprocess.CompletedProcess[str]:
     payload = {
         "status": status,
@@ -93,5 +101,8 @@ def _review_gate_process(
             else "review gate passed"
         ),
         "actionable_lines": actionable_lines or [],
+        "wait_window_started_at": wait_window_started_at,
+        "deadline_at": deadline_at,
+        "remaining_seconds": remaining_seconds,
     }
     return _completed(["review"], returncode=returncode, stdout=json.dumps(payload))

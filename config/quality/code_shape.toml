@@ -132,11 +132,6 @@ path = "tools/horadus/python/horadus_workflow/_task_preflight_guard.py"
 "task_preflight_data" = 138
 
 [[legacy_files]]
-path = "tools/horadus/python/horadus_workflow/pr_review_gate.py"
-[legacy_files.member_max_lines]
-"main" = 271
-
-[[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_threads.py"
 [legacy_files.member_max_lines]
 "_review_threads" = 102

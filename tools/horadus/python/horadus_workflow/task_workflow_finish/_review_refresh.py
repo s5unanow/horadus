@@ -3,7 +3,25 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
+from tools.horadus.python.horadus_workflow import (
+    pr_review_gate_state,
+)
+from tools.horadus.python.horadus_workflow import (
+    task_workflow_shared as shared,
+)
+
+PRE_REVIEW_GRAPHQL_REVIEWS_QUERY = (
+    "query($owner:String!, $repo:String!, $number:Int!, $after:String){"
+    "repository(owner:$owner,name:$repo){"
+    "pullRequest(number:$number){"
+    "reviews(first:100,after:$after){"
+    "pageInfo{hasNextPage endCursor}"
+    "nodes{author{login} commit{oid}}"
+    "}"
+    "}"
+    "}"
+    "}"
+)
 
 
 def _review_request_command(config: shared.FinishConfig) -> str:
@@ -22,7 +40,7 @@ def _marker_for_head(*, config: shared.FinishConfig, head_oid: str) -> str:
 
 def _request_timeline(
     pr_url: str, *, config: shared.FinishConfig
-) -> tuple[int, str, list[dict[str, Any]]]:
+) -> tuple[int, str, str, list[dict[str, Any]]]:
     pr_result = shared._run_command(
         [config.gh_bin, "pr", "view", pr_url, "--json", "number,headRefOid", "--jq", "."]
     )
@@ -116,7 +134,7 @@ def _request_timeline(
         if not isinstance(end_cursor, str) or not end_cursor.strip():
             raise ValueError("Fresh-review request history pagination is incomplete.")
         after_cursor = end_cursor
-    return (pr_number, head_oid, timeline_items)
+    return (pr_number, repo_name, head_oid, timeline_items)
 
 
 def _request_comment_state(
@@ -162,7 +180,7 @@ def _request_comment_state(
 
 def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> list[str]:
     try:
-        _pr_number, head_oid, timeline_items = _request_timeline(pr_url, config=config)
+        pr_number, repo_name, head_oid, timeline_items = _request_timeline(pr_url, config=config)
     except ValueError as exc:
         message = str(exc)
         if message.startswith("Unable to parse PR metadata"):
@@ -192,6 +210,12 @@ def _maybe_request_fresh_review(*, pr_url: str, config: shared.FinishConfig) -> 
             f"Failed to request a fresh review from `{config.review_bot_login}` automatically.",
             *shared._output_lines(result),
         ]
+    pr_review_gate_state.reset_wait_window(
+        repo=repo_name,
+        pr_number=pr_number,
+        reviewer_login=config.review_bot_login,
+        head_oid=head_oid,
+    )
     return [
         f"Requested a fresh review from `{config.review_bot_login}` with `{request_command}` for head {head_oid}."
     ]
@@ -213,9 +237,82 @@ def _fresh_review_request_blocker(
     return (request_lines, None)
 
 
+def _review_entries_from_payload(reviews_payload: object) -> list[dict[str, Any]]:
+    review_entries: list[dict[str, Any]] = []
+    if isinstance(reviews_payload, list):
+        if all(isinstance(entry, dict) for entry in reviews_payload):
+            return [entry for entry in reviews_payload if isinstance(entry, dict)]
+        for page in reviews_payload:
+            if not isinstance(page, list):
+                raise ValueError("Unexpected prior reviewer activity payload.")
+            for entry in page:
+                if not isinstance(entry, dict):
+                    raise ValueError("Unexpected prior reviewer activity payload.")
+                review_entries.append(entry)
+        return review_entries
+    raise ValueError("Unexpected prior reviewer activity payload.")
+
+
+def _graphql_review_entries(
+    *, repo_name: str, pr_number: int, config: shared.FinishConfig
+) -> list[dict[str, Any]]:
+    owner, repo = repo_name.split("/", 1)
+    review_entries: list[dict[str, Any]] = []
+    after_cursor: str | None = None
+    while True:
+        args = [
+            config.gh_bin,
+            "api",
+            "graphql",
+            "-f",
+            f"query={PRE_REVIEW_GRAPHQL_REVIEWS_QUERY}",
+            "-F",
+            f"owner={owner}",
+            "-F",
+            f"repo={repo}",
+            "-F",
+            f"number={pr_number}",
+            "-F",
+            f"after={after_cursor or ''}",
+        ]
+        reviews_result = shared._run_command(args)
+        if reviews_result.returncode != 0:
+            raise ValueError("Unable to inspect prior reviewer activity for pre-review refresh.")
+        try:
+            payload = json.loads(reviews_result.stdout or "{}")
+            reviews_payload = payload["data"]["repository"]["pullRequest"]["reviews"]
+            page_info = reviews_payload["pageInfo"]
+            page_nodes = reviews_payload["nodes"]
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "Unable to parse prior reviewer activity for pre-review refresh."
+            ) from exc
+        except (KeyError, TypeError) as exc:
+            raise ValueError("Unexpected prior reviewer activity payload.") from exc
+        if not isinstance(page_info, dict) or not isinstance(page_nodes, list):
+            raise ValueError("Unexpected prior reviewer activity payload.")
+        for review in page_nodes:
+            if not isinstance(review, dict):
+                raise ValueError("Unexpected prior reviewer activity payload.")
+            user = review.get("author")
+            commit = review.get("commit")
+            review_entries.append(
+                {
+                    "user": {"login": user.get("login")} if isinstance(user, dict) else {},
+                    "commit_id": commit.get("oid") if isinstance(commit, dict) else "",
+                }
+            )
+        if page_info.get("hasNextPage") is not True:
+            return review_entries
+        end_cursor = page_info.get("endCursor")
+        if not isinstance(end_cursor, str) or not end_cursor.strip():
+            raise ValueError("Unexpected prior reviewer activity payload.")
+        after_cursor = end_cursor
+
+
 def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.FinishConfig) -> bool:
     try:
-        pr_number, head_oid, timeline_items = _request_timeline(pr_url, config=config)
+        pr_number, _repo_name, head_oid, timeline_items = _request_timeline(pr_url, config=config)
     except ValueError as exc:
         message = str(exc)
         if message.startswith("Unable to parse PR metadata"):
@@ -248,26 +345,21 @@ def _needs_pre_review_fresh_review_request(*, pr_url: str, config: shared.Finish
         ]
     )
     if reviews_result.returncode != 0:
-        raise ValueError("Unable to inspect prior reviewer activity for pre-review refresh.")
-    try:
-        reviews_payload = json.loads(reviews_result.stdout or "[]")
-    except json.JSONDecodeError as exc:
-        raise ValueError("Unable to parse prior reviewer activity for pre-review refresh.") from exc
-
-    review_entries: list[dict[str, Any]] = []
-    if isinstance(reviews_payload, list):
-        if all(isinstance(entry, dict) for entry in reviews_payload):
-            review_entries = [entry for entry in reviews_payload if isinstance(entry, dict)]
-        else:
-            for page in reviews_payload:
-                if not isinstance(page, list):
-                    raise ValueError("Unexpected prior reviewer activity payload.")
-                for entry in page:
-                    if not isinstance(entry, dict):
-                        raise ValueError("Unexpected prior reviewer activity payload.")
-                    review_entries.append(entry)
+        rate_limit_message = reviews_result.stderr.strip() or reviews_result.stdout.strip()
+        if "API rate limit exceeded" not in rate_limit_message:
+            raise ValueError("Unable to inspect prior reviewer activity for pre-review refresh.")
+        review_entries = _graphql_review_entries(
+            repo_name=repo_name,
+            pr_number=pr_number,
+            config=config,
+        )
     else:
-        raise ValueError("Unexpected prior reviewer activity payload.")
+        try:
+            review_entries = _review_entries_from_payload(json.loads(reviews_result.stdout or "[]"))
+        except json.JSONDecodeError as exc:
+            raise ValueError(
+                "Unable to parse prior reviewer activity for pre-review refresh."
+            ) from exc
 
     saw_current_head_review = False
     saw_other_head_review = False

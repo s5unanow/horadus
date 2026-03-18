@@ -81,3 +81,53 @@ def test_actionable_findings_report_new_fingerprint() -> None:
             "type": "Basic Auth Credentials",
         }
     ]
+
+
+def test_actionable_findings_report_duplicate_occurrence_beyond_baseline_count() -> None:
+    baseline_results = {
+        "tests/conftest.py": [
+            {
+                "type": "Hex High Entropy String",
+                "hashed_secret": "abc123",  # pragma: allowlist secret
+                "is_verified": False,
+                "line_number": 10,
+            }
+        ]
+    }
+    current_results = {
+        "tests/conftest.py": [
+            {
+                "type": "Hex High Entropy String",
+                "hashed_secret": "abc123",  # pragma: allowlist secret
+                "is_verified": False,
+                "line_number": 10,
+            },
+            {
+                "type": "Hex High Entropy String",
+                "hashed_secret": "abc123",  # pragma: allowlist secret
+                "is_verified": False,
+                "line_number": 11,
+            },
+        ]
+    }
+
+    findings = secret_scan_module.actionable_findings(
+        current_results=current_results,
+        baseline_results=baseline_results,
+    )
+
+    assert findings == [
+        {
+            "filename": "tests/conftest.py",
+            "line_number": 11,
+            "type": "Hex High Entropy String",
+        }
+    ]
+
+
+def test_is_excluded_path_matches_repo_owned_secret_scan_policy() -> None:
+    assert secret_scan_module.is_excluded_path("docs/runbook.md") is True
+    assert secret_scan_module.is_excluded_path("tasks/CURRENT_SPRINT.md") is True
+    assert secret_scan_module.is_excluded_path("ai/eval/baselines/example.json") is True
+    assert secret_scan_module.is_excluded_path(".env.example") is True
+    assert secret_scan_module.is_excluded_path("src/core/config.py") is False

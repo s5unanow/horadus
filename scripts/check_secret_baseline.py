@@ -1,14 +1,18 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess  # nosec B404 - fixed git argv only, no shell execution
 import sys
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
 from detect_secrets.core.secrets_collection import SecretsCollection
 from detect_secrets.settings import configure_settings_from_baseline
+
+REPO_EXCLUDE_PATTERN = re.compile(r"(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)")
 
 
 @dataclass(frozen=True, order=True)
@@ -19,18 +23,18 @@ class SecretFingerprint:
     is_verified: bool
 
 
-def fingerprint_results(results: dict[str, list[dict[str, object]]]) -> set[SecretFingerprint]:
-    fingerprints: set[SecretFingerprint] = set()
+def fingerprint_counts(results: dict[str, list[dict[str, object]]]) -> Counter[SecretFingerprint]:
+    fingerprints: Counter[SecretFingerprint] = Counter()
     for filename, findings in results.items():
         for finding in findings:
-            fingerprints.add(
+            fingerprints[
                 SecretFingerprint(
                     filename=filename,
                     secret_type=str(finding["type"]),
                     hashed_secret=str(finding["hashed_secret"]),
                     is_verified=bool(finding.get("is_verified", False)),
                 )
-            )
+            ] += 1
     return fingerprints
 
 
@@ -39,7 +43,8 @@ def actionable_findings(
     current_results: dict[str, list[dict[str, object]]],
     baseline_results: dict[str, list[dict[str, object]]],
 ) -> list[dict[str, object]]:
-    baseline_fingerprints = fingerprint_results(baseline_results)
+    baseline_counts = fingerprint_counts(baseline_results)
+    seen_counts: Counter[SecretFingerprint] = Counter()
     findings: list[dict[str, object]] = []
     for filename, entries in sorted(current_results.items()):
         for entry in entries:
@@ -49,7 +54,8 @@ def actionable_findings(
                 hashed_secret=str(entry["hashed_secret"]),
                 is_verified=bool(entry.get("is_verified", False)),
             )
-            if fingerprint not in baseline_fingerprints:
+            seen_counts[fingerprint] += 1
+            if seen_counts[fingerprint] > baseline_counts[fingerprint]:
                 findings.append(
                     {
                         "filename": filename,
@@ -58,6 +64,10 @@ def actionable_findings(
                     }
                 )
     return findings
+
+
+def is_excluded_path(path: str) -> bool:
+    return bool(REPO_EXCLUDE_PATTERN.search(path))
 
 
 def tracked_files(repo_root: Path) -> list[str]:
@@ -72,7 +82,7 @@ def tracked_files(repo_root: Path) -> list[str]:
         check=True,
     )
     output = result.stdout.decode("utf-8")
-    return [path for path in output.split("\0") if path]
+    return [path for path in output.split("\0") if path and not is_excluded_path(path)]
 
 
 def scan_results(

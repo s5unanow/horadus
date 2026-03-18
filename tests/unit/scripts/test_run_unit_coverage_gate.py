@@ -37,3 +37,11 @@ def test_run_unit_coverage_gate_propagates_failures_from_override_command() -> N
     assert result.returncode != 0
     assert "running overridden coverage gate command" in result.stdout
     assert "missing lines" in result.stdout
+
+
+def test_run_unit_coverage_gate_default_command_measures_scripts_scope() -> None:
+    script_text = SCRIPT_PATH.read_text(encoding="utf-8")
+
+    assert "src/, tools/, and scripts/" in script_text
+    assert "--cov=scripts" in script_text
+    assert "--cov-config=pyproject.toml" in script_text

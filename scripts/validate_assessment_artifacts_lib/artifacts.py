@@ -67,11 +67,10 @@ def parse_block_content(
         if current_key is None:
             return
         content = "\n".join(line.rstrip() for line in current_values).strip()
-        if content:
-            if current_kind == "field":
-                fields[current_key] = content
-            elif current_kind == "section":
-                sections[current_key] = content
+        if content and current_kind == "field":
+            fields[current_key] = content
+        if content and current_kind == "section":
+            sections[current_key] = content
         current_kind = None
         current_key = None
         current_values = []

@@ -38,10 +38,15 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert steps[0].command == "./scripts/check_no_tracked_artifacts.sh"
     assert steps[1].command == "uv run --no-sync python scripts/check_docs_freshness.py"
     assert steps[2].command == "uv run --no-sync python scripts/check_code_shape.py"
-    assert steps[3].command == "uv run --no-sync ruff format src/ tools/ tests/ --check"
+    assert steps[3].command == "uv run --no-sync ruff format src/ tools/ scripts/ tests/ --check"
+    assert steps[4].command == "uv run --no-sync ruff check src/ tools/ scripts/ tests/"
+    assert steps[5].command == "uv run --no-sync mypy src/ tools/horadus/python scripts"
     assert steps[6].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
     assert steps[7].command == "./scripts/run_unit_coverage_gate.sh"
     assert steps[8].command == "./scripts/run_secret_scan.sh"
+    assert steps[9].command == (
+        "uv run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python scripts"
+    )
     assert steps[10].command == "./scripts/run_dependency_audit.sh"
     assert steps[12].command == "./scripts/test_integration_docker.sh"
     assert steps[13].command == (
@@ -56,16 +61,23 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     precommit = (repo_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
+    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
 
     assert "./scripts/run_unit_coverage_gate.sh" in precommit
     assert "stages: [pre-push]" in precommit
     assert "./scripts/run_unit_coverage_gate.sh" in ci_workflow
+    assert "--cov=scripts" in ci_workflow
+    assert "--cov-config=pyproject.toml" in ci_workflow
     assert "python scripts/check_code_shape.py" in ci_workflow
     assert "--cov-fail-under=100" in ci_workflow
+    assert "--cov=scripts" in makefile
+    assert "--cov-config=pyproject.toml" in makefile
     assert "code-shape: deps-dev" in makefile
     assert "python scripts/check_code_shape.py" in makefile
     assert "test-unit-cov: deps-dev" in makefile
     assert "./scripts/run_unit_coverage_gate.sh" in makefile
+    assert 'source = ["src", "tools", "scripts"]' in pyproject
+    assert 'patch = ["subprocess"]' in pyproject
 
 
 def test_repo_workflow_configs_include_repo_owned_security_scans() -> None:
@@ -77,10 +89,12 @@ def test_repo_workflow_configs_include_repo_owned_security_scans() -> None:
     assert "--baseline, .secrets.baseline, --no-verify" in precommit
     assert "./scripts/run_secret_scan.sh" in ci_workflow
     assert "./scripts/run_dependency_audit.sh" in ci_workflow
+    assert "bandit -c pyproject.toml -r src/ tools/horadus/python scripts" in ci_workflow
     assert "secret-scan: deps-dev" in makefile
     assert "./scripts/run_secret_scan.sh" in makefile
     assert "dependency-audit: deps-dev" in makefile
     assert "./scripts/run_dependency_audit.sh" in makefile
+    assert "bandit -c pyproject.toml -r src/ tools/horadus/python scripts" in makefile
 
 
 def test_local_gate_data_dry_run_reports_custom_absolute_uv_bin_for_build_steps(

@@ -14,9 +14,11 @@ fi
 
 UV_BIN="${UV_BIN:-uv}"
 
-echo "unit-coverage: enforcing 100% measured coverage for src/ and tools/"
+echo "unit-coverage: enforcing 100% measured coverage for src/, tools/, and scripts/"
 exec "${UV_BIN}" run --no-sync pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v \
   --cov=src \
   --cov=tools \
+  --cov=scripts \
+  --cov-config=pyproject.toml \
   --cov-report=term-missing:skip-covered \
   --cov-fail-under=100

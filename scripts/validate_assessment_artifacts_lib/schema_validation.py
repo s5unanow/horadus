@@ -51,8 +51,7 @@ def validate_file(path: Path) -> list[Finding]:
                     path=path,
                     line_no=1,
                     message=(
-                        "daily report title missing date: "
-                        f"expected {filename_date} in top heading"
+                        f"daily report title missing date: expected {filename_date} in top heading"
                     ),
                 )
             )

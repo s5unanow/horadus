@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture
 - `TASK-350` Add a Cyclomatic-Complexity Ratchet for Tracked Python Surfaces
 - `TASK-349` Add Repo-Wide Dependency Direction Gates for `src/` and Tooling Adapter Seams
 - `TASK-353` Align Canonical Release and Local Gates with the Full Repo-Owned Analyzer Set
@@ -31,10 +30,9 @@
 ## Suggested Sequence
 
 1. `TASK-352` Enforce server-side secret and dependency-vulnerability scanning first to close the easiest server-side security gaps with limited repo churn.
-2. `TASK-351` Bring `scripts/` into the main lint/type/security/coverage posture while the script surface is still small enough to harden cheaply.
-3. `TASK-350` Add the cyclomatic-complexity ratchet early so new and modified code starts paying the stricter control-flow budget immediately.
-4. `TASK-349` Add repo-wide dependency-direction gates after the lighter gate expansions, with planning first because this is the most likely task to expose existing architectural drift.
-5. `TASK-353` Align canonical release/local gates last so the stricter analyzer set above becomes one authoritative enforced contract instead of several partially overlapping paths.
+2. `TASK-350` Add the cyclomatic-complexity ratchet early so new and modified code starts paying the stricter control-flow budget immediately.
+3. `TASK-349` Add repo-wide dependency-direction gates after the lighter gate expansions, with planning first because this is the most likely task to expose existing architectural drift.
+4. `TASK-353` Align canonical release/local gates last so the stricter analyzer set above becomes one authoritative enforced contract instead of several partially overlapping paths.
 
 ## Human Blocker Metadata
 
@@ -57,3 +55,4 @@
 - `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅
 - `TASK-348` Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
 - `TASK-352` Enforce server-side secret and dependency vulnerability scanning in CI ✅
+- `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture ✅

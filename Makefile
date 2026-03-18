@@ -84,21 +84,21 @@ setup: deps-dev hooks docker-up db-upgrade ## Full development setup
 # =============================================================================
 
 format: deps-dev ## Format code with ruff
-	$(UV_RUN) ruff format src/ tools/ tests/
-	$(UV_RUN) ruff check src/ tools/ tests/ --fix
+	$(UV_RUN) ruff format src/ tools/ scripts/ tests/
+	$(UV_RUN) ruff check src/ tools/ scripts/ tests/ --fix
 
 lint: deps-dev ## Run linter (ruff)
-	$(UV_RUN) ruff check src/ tools/ tests/
+	$(UV_RUN) ruff check src/ tools/ scripts/ tests/
 
 typecheck: deps-dev ## Run type checker (mypy)
-	$(UV_RUN) mypy src/ tools/horadus/python
+	$(UV_RUN) mypy src/ tools/horadus/python scripts
 
 check: format lint typecheck ## Run all code quality checks
 	@echo "$(GREEN)All checks passed!$(RESET)"
 
 agent-check: deps-dev ## Fast local gate for agent iteration (ruff, mypy, unit tests)
-	./scripts/run_with_backpressure.sh ruff-check $(UV_RUN) ruff check src/ tools/ tests/
-	./scripts/run_with_backpressure.sh mypy $(UV_RUN) mypy src/ tools/horadus/python
+	./scripts/run_with_backpressure.sh ruff-check $(UV_RUN) ruff check src/ tools/ scripts/ tests/
+	./scripts/run_with_backpressure.sh mypy $(UV_RUN) mypy src/ tools/horadus/python scripts
 	./scripts/run_with_backpressure.sh code-shape $(UV_RUN) python scripts/check_code_shape.py
 	./scripts/run_with_backpressure.sh pytest-unit $(UV_RUN) pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v -m unit
 
@@ -197,7 +197,7 @@ test-integration-docker: deps-dev ## Run integration tests in an ephemeral Docke
 	./scripts/test_integration_docker.sh
 
 test-cov: deps-dev ## Run tests with the hard 100% coverage gate and HTML report
-	$(UV_RUN) pytest tests/ --cov=src --cov=tools --cov-report=term-missing --cov-report=html --cov-fail-under=100 --allow-hosts=127.0.0.1,localhost
+	$(UV_RUN) pytest tests/ --cov=src --cov=tools --cov=scripts --cov-config=pyproject.toml --cov-report=term-missing --cov-report=html --cov-fail-under=100 --allow-hosts=127.0.0.1,localhost
 	@echo "$(GREEN)Coverage report: htmlcov/index.html$(RESET)"
 
 # =============================================================================
@@ -323,7 +323,7 @@ release-gate-runtime: deps-dev ## Evaluate runtime SLO/error-budget gate from me
 # =============================================================================
 
 security: deps-dev ## Run security checks (bandit)
-	$(UV_RUN) bandit -c pyproject.toml -r src/ tools/horadus/python
+	$(UV_RUN) bandit -c pyproject.toml -r src/ tools/horadus/python scripts
 
 # =============================================================================
 # Cleanup
@@ -350,7 +350,7 @@ all: check test ## Run all checks and tests
 	@echo "$(GREEN)All checks and tests passed!$(RESET)"
 
 ci: ## CI pipeline (format check, lint, typecheck, test)
-	$(UV_RUN) ruff format src/ tools/ tests/ --check
-	$(UV_RUN) ruff check src/ tools/ tests/
-	$(UV_RUN) mypy src/ tools/horadus/python
-	$(UV_RUN) pytest tests/ -v --cov=src --cov=tools --allow-hosts=127.0.0.1,localhost
+	$(UV_RUN) ruff format src/ tools/ scripts/ tests/ --check
+	$(UV_RUN) ruff check src/ tools/ scripts/ tests/
+	$(UV_RUN) mypy src/ tools/horadus/python scripts
+	$(UV_RUN) pytest tests/ -v --cov=src --cov=tools --cov=scripts --allow-hosts=127.0.0.1,localhost

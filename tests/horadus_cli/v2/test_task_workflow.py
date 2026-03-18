@@ -67,9 +67,11 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     assert "stages: [pre-push]" in precommit
     assert "./scripts/run_unit_coverage_gate.sh" in ci_workflow
     assert "--cov=scripts" in ci_workflow
+    assert "--cov-config=pyproject.toml" in ci_workflow
     assert "python scripts/check_code_shape.py" in ci_workflow
     assert "--cov-fail-under=100" in ci_workflow
     assert "--cov=scripts" in makefile
+    assert "--cov-config=pyproject.toml" in makefile
     assert "code-shape: deps-dev" in makefile
     assert "python scripts/check_code_shape.py" in makefile
     assert "test-unit-cov: deps-dev" in makefile

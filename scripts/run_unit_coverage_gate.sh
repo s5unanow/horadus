@@ -19,5 +19,6 @@ exec "${UV_BIN}" run --no-sync pytest tests/unit/ tests/horadus_cli/ tests/workf
   --cov=src \
   --cov=tools \
   --cov=scripts \
+  --cov-config=pyproject.toml \
   --cov-report=term-missing:skip-covered \
   --cov-fail-under=100

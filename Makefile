@@ -197,7 +197,7 @@ test-integration-docker: deps-dev ## Run integration tests in an ephemeral Docke
 	./scripts/test_integration_docker.sh
 
 test-cov: deps-dev ## Run tests with the hard 100% coverage gate and HTML report
-	$(UV_RUN) pytest tests/ --cov=src --cov=tools --cov-report=term-missing --cov-report=html --cov-fail-under=100 --allow-hosts=127.0.0.1,localhost
+	$(UV_RUN) pytest tests/ --cov=src --cov=tools --cov=scripts --cov-config=pyproject.toml --cov-report=term-missing --cov-report=html --cov-fail-under=100 --allow-hosts=127.0.0.1,localhost
 	@echo "$(GREEN)Coverage report: htmlcov/index.html$(RESET)"
 
 # =============================================================================

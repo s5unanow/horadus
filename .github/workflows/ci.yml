@@ -148,7 +148,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          HORADUS_UNIT_COVERAGE_GATE_CMD="uv run --no-sync pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v --cov=src --cov=tools --cov=scripts --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=100" \
+          HORADUS_UNIT_COVERAGE_GATE_CMD="uv run --no-sync pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v --cov=src --cov=tools --cov=scripts --cov-config=pyproject.toml --cov-report=term-missing:skip-covered --cov-report=xml --cov-fail-under=100" \
             ./scripts/run_unit_coverage_gate.sh
 
       - name: Upload coverage to Codecov

@@ -44,3 +44,4 @@ def test_run_unit_coverage_gate_default_command_measures_scripts_scope() -> None
 
     assert "src/, tools/, and scripts/" in script_text
     assert "--cov=scripts" in script_text
+    assert "--cov-config=pyproject.toml" in script_text

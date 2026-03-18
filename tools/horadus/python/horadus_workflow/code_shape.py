@@ -175,6 +175,9 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
         if isinstance(node, ast.Try | ast.TryStar):
             self._visit_try(node)
             return
+        if isinstance(node, ast.Assert):
+            self._visit_assert(node)
+            return
         if isinstance(node, ast.BoolOp):
             self._visit_bool_op(node)
             return
@@ -217,8 +220,10 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
 
     def _visit_try(self, node: ast.Try | ast.TryStar) -> None:
         self.complexity += len(node.handlers)
-        if node.orelse:
-            self.complexity += 1
+        self.generic_visit(node)
+
+    def _visit_assert(self, node: ast.Assert) -> None:
+        self.complexity += 1
         self.generic_visit(node)
 
     def _visit_bool_op(self, node: ast.BoolOp) -> None:
@@ -248,7 +253,7 @@ class _CyclomaticComplexityVisitor(ast.NodeVisitor):
 
 
 def _comprehension_complexity(generators: list[ast.comprehension]) -> int:
-    return sum(1 + len(generator.ifs) for generator in generators)
+    return int(bool(generators))
 
 
 def _has_match_default_case(cases: list[ast.match_case]) -> bool:

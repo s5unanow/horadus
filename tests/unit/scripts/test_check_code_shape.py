@@ -157,7 +157,7 @@ def test_check_code_shape_script_reports_member_complexity_failures(tmp_path: Pa
         "\n".join(
             [
                 "def too_branchy(flag: bool, items: list[int]) -> int:",
-                "    if flag:",
+                "    if flag and items:",
                 "        return 1",
                 "    if items:",
                 "        return sum(item for item in items if item % 2 == 0)",

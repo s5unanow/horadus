@@ -404,7 +404,7 @@ def test_measure_python_file_tracks_member_complexity_without_nested_defs(
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "complexity.py")
 
-    assert measurement.member_complexities["outer"] == 5
+    assert measurement.member_complexities["outer"] == 4
     assert measurement.member_complexities["outer.inner"] == 2
 
 
@@ -482,6 +482,9 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
                 "            return 0",
                 "        case other:",
                 "            return other",
+                "",
+                "def assertive(flag: bool) -> None:",
+                "    assert flag",
             ]
         )
         + "\n",
@@ -489,12 +492,13 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "branch_nodes.py")
 
-    assert measurement.member_complexities["Wrapper.run"] == 18
+    assert measurement.member_complexities["Wrapper.run"] == 13
     assert measurement.member_complexities["iterate"] == 3
     assert measurement.member_complexities["try_only"] == 2
     assert measurement.member_complexities["try_star_only"] == 2
     assert measurement.member_complexities["match_with_default"] == 2
     assert measurement.member_complexities["match_with_capture_default"] == 2
+    assert measurement.member_complexities["assertive"] == 2
 
 
 def test_measure_python_file_counts_lambda_branches_toward_enclosing_complexity(
@@ -538,7 +542,7 @@ def test_run_code_shape_check_flags_member_complexity_budget_violations(tmp_path
         "\n".join(
             [
                 "def too_branchy(flag: bool, items: list[int]) -> int:",
-                "    if flag:",
+                "    if flag and items:",
                 "        return 1",
                 "    if items:",
                 "        return sum(item for item in items if item % 2 == 0)",
@@ -579,7 +583,7 @@ def test_run_code_shape_check_uses_test_member_complexity_budget(tmp_path: Path)
         "\n".join(
             [
                 "def too_branchy(flag: bool, items: list[int]) -> int:",
-                "    if flag:",
+                "    if flag and items:",
                 "        return 1",
                 "    if items:",
                 "        return sum(item for item in items if item % 2 == 0)",
@@ -622,7 +626,7 @@ def test_run_code_shape_check_allows_legacy_member_complexity_but_blocks_regress
         "\n".join(
             [
                 "def too_branchy(flag: bool, items: list[int]) -> int:",
-                "    if flag:",
+                "    if flag and items:",
                 "        return 1",
                 "    if items:",
                 "        return sum(item for item in items if item % 2 == 0)",
@@ -663,7 +667,7 @@ path = "src/app.py"
         "\n".join(
             [
                 "def too_branchy(flag: bool, items: list[int], fallback: int) -> int:",
-                "    if flag:",
+                "    if flag and items:",
                 "        return 1",
                 "    if items:",
                 "        return sum(item for item in items if item % 2 == 0)",

@@ -44,8 +44,8 @@ class AllowedImportException:
     rationale: str
 
     def matches(self, importer: str, imported: str) -> bool:
-        return importer.startswith(self.importer_prefix) and imported.startswith(
-            self.imported_prefix
+        return _matches_module_pattern(importer, self.importer_prefix) and _matches_module_pattern(
+            imported, self.imported_prefix
         )
 
 
@@ -381,6 +381,13 @@ def _matches_any_exception(
     return any(exception.matches(edge.importer, edge.imported) for exception in exceptions)
 
 
+def _matches_module_pattern(module_name: str, pattern: str) -> bool:
+    if pattern.endswith("."):
+        base_pattern = pattern[:-1]
+        return module_name == base_pattern or module_name.startswith(f"{base_pattern}.")
+    return module_name == pattern
+
+
 def _cycle_violations(
     tracked_modules: dict[str, TrackedModule],
     import_edges: tuple[ImportEdge, ...],
@@ -393,8 +400,9 @@ def _cycle_violations(
     for component in components:
         if len(component) == 1:
             continue
-        display_cycle = " -> ".join((*component, component[0]))
-        tracked_module = tracked_modules[component[0]]
+        cycle_path = _cycle_path_for_component(component, graph)
+        display_cycle = " -> ".join(cycle_path)
+        tracked_module = tracked_modules[cycle_path[0]]
         violations.append(
             BoundaryViolation(
                 kind="import-cycle",
@@ -444,6 +452,42 @@ def _strongly_connected_components(
         if module_name not in indices:
             visit(module_name)
     return tuple(sorted(components))
+
+
+def _cycle_path_for_component(
+    component: tuple[str, ...],
+    graph: dict[str, set[str]],
+) -> tuple[str, ...]:
+    component_nodes = set(component)
+    visited: set[str] = set()
+    path: list[str] = []
+    path_index: dict[str, int] = {}
+
+    def visit(module_name: str) -> tuple[str, ...] | None:
+        visited.add(module_name)
+        path_index[module_name] = len(path)
+        path.append(module_name)
+        for imported in sorted(graph.get(module_name, ())):
+            if imported not in component_nodes:
+                continue
+            if imported in path_index:
+                cycle_start = path_index[imported]
+                return (*path[cycle_start:], imported)
+            if imported not in visited:
+                cycle = visit(imported)
+                if cycle is not None:
+                    return cycle
+        path.pop()
+        path_index.pop(module_name)
+        return None
+
+    for module_name in sorted(component):
+        if module_name in visited:
+            continue
+        cycle = visit(module_name)
+        if cycle is not None:
+            return cycle
+    return (*component, component[0])
 
 
 def _module_kind(module_name: str) -> str | None:

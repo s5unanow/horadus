@@ -93,6 +93,18 @@ def test_import_boundary_analyzer_rejects_cycles(tmp_path: Path) -> None:
     )
 
 
+def test_import_boundary_analyzer_reports_a_real_cycle_path(tmp_path: Path) -> None:
+    _write_module(tmp_path, "src.core.a", "from src.core import b\nfrom src.core import c\n")
+    _write_module(tmp_path, "src.core.b", "from src.core import a\n")
+    _write_module(tmp_path, "src.core.c", "from src.core import a\n")
+
+    violations = analyze_repo_import_boundaries(tmp_path)
+    messages = "\n".join(format_boundary_violations(violations))
+
+    assert "src.core.a -> src.core.b -> src.core.a" in messages
+    assert "src.core.a -> src.core.b -> src.core.c -> src.core.a" not in messages
+
+
 def test_import_boundary_analyzer_rejects_src_to_tools_and_cross_tool_group_edges(
     tmp_path: Path,
 ) -> None:
@@ -207,6 +219,30 @@ def test_import_boundary_helper_edges_cover_resolution_and_skip_paths(tmp_path: 
     assert import_boundaries_module._module_kind("external.module") is None
     assert import_boundaries_module._src_layer("external.module") is None
     assert import_boundaries_module._tool_group("external.module") is None
+    assert import_boundaries_module._matches_module_pattern(
+        "src.processing.pipeline",
+        "src.processing.",
+    )
+    assert not import_boundaries_module._matches_module_pattern(
+        "src.core.report_generator_extra",
+        "src.core.report_generator",
+    )
+    assert import_boundaries_module._cycle_path_for_component(
+        ("src.core.a", "src.core.b", "src.core.c"),
+        {
+            "src.core.a": {"src.core.b"},
+            "src.core.b": {"src.core.a"},
+            "src.core.c": set(),
+        },
+    ) == ("src.core.a", "src.core.b", "src.core.a")
+    assert import_boundaries_module._cycle_path_for_component(
+        ("src.core.a", "src.core.b", "src.core.c"),
+        {
+            "src.core.a": {"src.core.b"},
+            "src.core.b": set(),
+            "src.core.c": {"outside.module"},
+        },
+    ) == ("src.core.a", "src.core.b", "src.core.c", "src.core.a")
     assert (
         import_boundaries_module._dependency_direction_violations(
             (
@@ -220,6 +256,28 @@ def test_import_boundary_helper_edges_cover_resolution_and_skip_paths(tmp_path: 
         )
         == ()
     )
+
+
+def test_cycle_path_helper_continues_after_recursive_dead_end() -> None:
+    assert import_boundaries_module._cycle_path_for_component(
+        ("src.core.a", "src.core.b", "src.core.c"),
+        {
+            "src.core.a": {"src.core.b", "src.core.c"},
+            "src.core.b": set(),
+            "src.core.c": {"src.core.a"},
+        },
+    ) == ("src.core.a", "src.core.c", "src.core.a")
+
+
+def test_cycle_path_helper_skips_already_visited_non_path_import() -> None:
+    assert import_boundaries_module._cycle_path_for_component(
+        ("src.core.a", "src.core.b", "src.core.c"),
+        {
+            "src.core.a": {"src.core.b", "src.core.c"},
+            "src.core.b": set(),
+            "src.core.c": {"src.core.b"},
+        },
+    ) == ("src.core.a", "src.core.b", "src.core.c", "src.core.a")
 
 
 def _write_module(repo_root: Path, module_name: str, content: str) -> None:

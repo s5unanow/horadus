@@ -175,7 +175,7 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
-production_member_complexity = 4
+production_member_complexity = 5
 test_member_complexity = 20
 
 [paths]
@@ -201,8 +201,8 @@ exclude_globs = ["**/__pycache__/**"]
 
     assert result.returncode == 2
     assert (
-        "ERROR [member-complexity] src/app.py: too_branchy has cyclomatic complexity 5; "
-        "budget is 4" in result.stdout
+        "ERROR [member-complexity] src/app.py: too_branchy has cyclomatic complexity 6; "
+        "budget is 5" in result.stdout
     )
 
 

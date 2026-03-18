@@ -404,7 +404,7 @@ def test_measure_python_file_tracks_member_complexity_without_nested_defs(
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "complexity.py")
 
-    assert measurement.member_complexities["outer"] == 4
+    assert measurement.member_complexities["outer"] == 5
     assert measurement.member_complexities["outer.inner"] == 2
 
 
@@ -437,6 +437,8 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
                 "                result += item",
                 "        while result < 3:",
                 "            result += 1",
+                "        with stream:",
+                "            result += 1",
                 "        try:",
                 "            result += formatter(helper(total))",
                 "        except ValueError:",
@@ -455,6 +457,10 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
                 "        if item > 0:",
                 "            return item",
                 "    return 0",
+                "",
+                "async def use_async_with(stream) -> int:",
+                "    async with stream:",
+                "        return 0",
                 "",
                 "def try_only(value: int) -> int:",
                 "    try:",
@@ -492,8 +498,9 @@ def test_measure_python_file_tracks_supported_complexity_branch_nodes(tmp_path: 
 
     measurement = measure_python_file(tmp_path, tmp_path / "src" / "branch_nodes.py")
 
-    assert measurement.member_complexities["Wrapper.run"] == 13
+    assert measurement.member_complexities["Wrapper.run"] == 18
     assert measurement.member_complexities["iterate"] == 3
+    assert measurement.member_complexities["use_async_with"] == 2
     assert measurement.member_complexities["try_only"] == 2
     assert measurement.member_complexities["try_star_only"] == 2
     assert measurement.member_complexities["match_with_default"] == 2
@@ -560,7 +567,7 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
-production_member_complexity = 4
+production_member_complexity = 5
 test_member_complexity = 20
 
 [paths]
@@ -572,7 +579,7 @@ exclude_globs = ["**/__pycache__/**"]
     result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
     lines = render_code_shape_issues(result)
 
-    assert any("too_branchy has cyclomatic complexity 5; budget is 4" in line for line in lines)
+    assert any("too_branchy has cyclomatic complexity 6; budget is 5" in line for line in lines)
 
 
 def test_run_code_shape_check_uses_test_member_complexity_budget(tmp_path: Path) -> None:
@@ -602,7 +609,7 @@ test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
 production_member_complexity = 99
-test_member_complexity = 4
+test_member_complexity = 5
 
 [paths]
 include_roots = ["tests"]
@@ -613,7 +620,7 @@ exclude_globs = ["**/__pycache__/**"]
     result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
     lines = render_code_shape_issues(result)
 
-    assert any("too_branchy has cyclomatic complexity 5; budget is 4" in line for line in lines)
+    assert any("too_branchy has cyclomatic complexity 6; budget is 5" in line for line in lines)
 
 
 def test_run_code_shape_check_allows_legacy_member_complexity_but_blocks_regressions(
@@ -644,7 +651,7 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
-production_member_complexity = 4
+production_member_complexity = 5
 test_member_complexity = 20
 
 [paths]
@@ -654,7 +661,7 @@ exclude_globs = ["**/__pycache__/**"]
 [[legacy_files]]
 path = "src/app.py"
 [legacy_files.member_max_complexity]
-"too_branchy" = 5
+"too_branchy" = 6
 """.strip(),
     )
 
@@ -683,7 +690,7 @@ path = "src/app.py"
     lines = render_code_shape_issues(regressed)
 
     assert any(
-        "too_branchy has cyclomatic complexity 6; allowlisted maximum is 5" in line
+        "too_branchy has cyclomatic complexity 7; allowlisted maximum is 6" in line
         for line in lines
     )
 

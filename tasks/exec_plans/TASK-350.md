@@ -160,9 +160,10 @@ ratcheted, and reviewable in the same policy artifact.
 - 2026-03-18: Use separate production/test default budgets so the contract
   stays strict for runtime code without forcing a large test cleanup sweep in
   the same task.
-- 2026-03-18: Start with default member-complexity budgets of `18` for
-  production/tooling/scripts and `20` for tests, then seed only the current
-  outliers as explicit ratcheted overrides.
+- 2026-03-18: Finalize default member-complexity budgets at `20` for
+  production/tooling/scripts and `25` for tests after aligning the counting
+  rules with the reviewed branch constructs and rebuilding the explicit legacy
+  override inventory from that baseline.
 
 ## Risks / Foot-guns
 

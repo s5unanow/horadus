@@ -3,7 +3,7 @@ production_module_lines = 700
 test_module_lines = 1200
 production_function_lines = 100
 test_function_lines = 160
-production_member_complexity = 18
+production_member_complexity = 20
 test_member_complexity = 25
 
 [paths]
@@ -15,7 +15,7 @@ path = "src/api/routes/feedback.py"
 [legacy_files.member_max_lines]
 "list_review_queue" = 143
 [legacy_files.member_max_complexity]
-"list_review_queue" = 24
+"list_review_queue" = 25
 
 [[legacy_files]]
 path = "src/api/routes/reports.py"
@@ -79,7 +79,7 @@ max_lines = 898
 [[legacy_files]]
 path = "src/processing/embedding_service.py"
 [legacy_files.member_max_complexity]
-"EmbeddingService.embed_texts_with_contexts" = 23
+"EmbeddingService.embed_texts_with_contexts" = 27
 
 [[legacy_files]]
 path = "src/ingestion/rss_collector.py"
@@ -134,7 +134,7 @@ path = "tools/horadus/python/horadus_workflow/_docs_freshness_current_sprint.py"
 [legacy_files.member_max_lines]
 "check_current_sprint" = 142
 [legacy_files.member_max_complexity]
-"check_current_sprint" = 20
+"check_current_sprint" = 21
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/_docs_freshness_planning.py"
@@ -149,6 +149,11 @@ path = "tools/horadus/python/horadus_workflow/_task_preflight_guard.py"
 "task_preflight_data" = 138
 [legacy_files.member_max_complexity]
 "task_preflight_data" = 22
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/pr_review_gate.py"
+[legacy_files.member_max_complexity]
+"_matching_review_comments" = 21
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/pr_review_gate_graphql.py"
@@ -194,15 +199,11 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_finish/bootstrap.py"
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/context.py"
 [legacy_files.member_max_lines]
 "_resolve_finish_context" = 136
-[legacy_files.member_max_complexity]
-"_resolve_finish_context" = 20
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/merge.py"
 [legacy_files.member_max_lines]
 "complete_merge_data" = 246
-[legacy_files.member_max_complexity]
-"complete_merge_data" = 19
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/orchestrator.py"
@@ -227,7 +228,7 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_lifecycle.py"
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/triage.py"
 [legacy_files.member_max_complexity]
-"handle_collect" = 25
+"handle_collect" = 26
 
 [[legacy_files]]
 path = "tests/horadus_cli/v2/task_finish/test_finish_data.py"
@@ -261,7 +262,7 @@ path = "tests/horadus_cli/v2/test_task_local_review.py"
 [[legacy_files]]
 path = "tests/integration/test_processing_pipeline.py"
 [legacy_files.member_max_complexity]
-"test_processing_pipeline_runs_end_to_end" = 27
+"test_processing_pipeline_runs_end_to_end" = 28
 
 [[legacy_files]]
 path = "tests/unit/eval/test_benchmark.py"
@@ -307,6 +308,8 @@ max_lines = 2159
 path = "tests/workflow/test_workflow_support.py"
 [legacy_files.member_max_lines]
 "test_pr_review_gate_helper_functions_cover_success_and_error_paths" = 217
+[legacy_files.member_max_complexity]
+"test_pr_review_gate_helper_functions_cover_additional_contract_edges" = 29
 
 [[legacy_files]]
 path = "scripts/validate_assessment_artifacts_lib/schema_validation.py"

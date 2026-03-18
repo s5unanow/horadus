@@ -7,7 +7,7 @@ there as the canonical workflow policy.
 
 1. Resolve `CODEX_HOME_RESOLVED="${CODEX_HOME:-$HOME/.codex}"`.
 2. Acquire exclusive ownership of the external lock at:
-   - `$CODEX_HOME_RESOLVED/locks/horadus-sprint-autopilot`
+   - `$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock`
 3. If the lock is already held, cannot be acquired cleanly, or appears stale or
    broken, stop immediately and report a concise blocker instead of forcing
    takeover.

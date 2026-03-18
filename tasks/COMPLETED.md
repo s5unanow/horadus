@@ -325,3 +325,4 @@
 - TASK-349: Add repo-wide dependency direction gates for `src/` and tooling adapter seams ✅
 - TASK-353: Align canonical release and local gates with the full repo-owned analyzer set ✅
 - TASK-355: Add repo-owned sprint autopilot automation with external locking ✅
+- TASK-356: Move autopilot lock into the automation-owned Codex path ✅

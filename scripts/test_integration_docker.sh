@@ -12,7 +12,8 @@ set -euo pipefail
 # - INTEGRATION_DOCKER_DB_NAME (default: geoint_test)
 # - INTEGRATION_DOCKER_POSTGRES_IMAGE (default: geoint-postgres:it)
 # - INTEGRATION_DOCKER_FORCE_BUILD (default: false)
-# - INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN (default: true)
+# - INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN
+#   (default: MIGRATION_GATE_VALIDATE_AUTOGEN, else true)
 # - OPENAI_API_KEY (optional; some integration paths read it)
 
 POSTGRES_PORT="${INTEGRATION_DOCKER_POSTGRES_PORT:-55432}"
@@ -94,7 +95,7 @@ fi
 
 export DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:${POSTGRES_PORT}/${DB_NAME}" # pragma: allowlist secret
 export REDIS_URL="redis://localhost:${REDIS_PORT}/0"
-export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-true}"
+export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-${MIGRATION_GATE_VALIDATE_AUTOGEN:-true}}"
 export OPENAI_API_KEY="${OPENAI_API_KEY:-test-key}"
 
 echo "Applying migrations..."

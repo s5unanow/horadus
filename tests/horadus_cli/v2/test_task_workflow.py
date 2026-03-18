@@ -138,7 +138,7 @@ def test_release_gate_reuses_canonical_full_local_gate() -> None:
         in makefile
     )
     assert (
-        'export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-true}"'
+        'export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-${MIGRATION_GATE_VALIDATE_AUTOGEN:-true}}"'
         in integration_script
     )
     assert "RELEASE_GATE_INCLUDE_EVAL" not in makefile

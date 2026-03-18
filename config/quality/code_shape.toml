@@ -3,6 +3,8 @@ production_module_lines = 700
 test_module_lines = 1200
 production_function_lines = 100
 test_function_lines = 160
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tools", "tests", "scripts"]
@@ -12,6 +14,8 @@ exclude_globs = ["**/__pycache__/**"]
 path = "src/api/routes/feedback.py"
 [legacy_files.member_max_lines]
 "list_review_queue" = 143
+[legacy_files.member_max_complexity]
+"list_review_queue" = 25
 
 [[legacy_files]]
 path = "src/api/routes/reports.py"
@@ -21,6 +25,8 @@ path = "src/api/routes/reports.py"
 [[legacy_files]]
 path = "src/api/routes/trends.py"
 max_lines = 1310
+[legacy_files.member_max_complexity]
+"update_trend" = 21
 
 [[legacy_files]]
 path = "src/core/calibration_dashboard.py"
@@ -69,6 +75,14 @@ path = "src/ingestion/gdelt_client.py"
 max_lines = 898
 [legacy_files.member_max_lines]
 "GDELTClient.collect_query" = 122
+[legacy_files.member_max_complexity]
+"GDELTClient._matches_filters" = 19
+"GDELTClient.collect_query" = 19
+
+[[legacy_files]]
+path = "src/processing/embedding_service.py"
+[legacy_files.member_max_complexity]
+"EmbeddingService.embed_texts_with_contexts" = 27
 
 [[legacy_files]]
 path = "src/ingestion/rss_collector.py"
@@ -92,6 +106,8 @@ path = "src/processing/tier2_classifier.py"
 max_lines = 868
 [legacy_files.member_max_lines]
 "Tier2Classifier.classify_event" = 119
+[legacy_files.member_max_complexity]
+"Tier2Classifier._trim_trend_payload_for_budget" = 24
 
 [[legacy_files]]
 path = "src/storage/models.py"
@@ -120,26 +136,73 @@ path = "tools/horadus/python/horadus_cli/task_commands.py"
 path = "tools/horadus/python/horadus_workflow/_docs_freshness_current_sprint.py"
 [legacy_files.member_max_lines]
 "check_current_sprint" = 142
+[legacy_files.member_max_complexity]
+"check_current_sprint" = 22
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/_docs_freshness_planning.py"
 [legacy_files.member_max_lines]
 "_validate_planning_artifact" = 180
+[legacy_files.member_max_complexity]
+"_validate_planning_artifact" = 27
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/_task_preflight_guard.py"
 [legacy_files.member_max_lines]
 "task_preflight_data" = 138
+[legacy_files.member_max_complexity]
+"task_preflight_data" = 22
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/_task_preflight_intake.py"
+[legacy_files.member_max_complexity]
+"_task_ledger_intake_state" = 19
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/pr_review_gate.py"
+[legacy_files.member_max_complexity]
+"_matching_review_comments" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/pr_review_gate_graphql.py"
+[legacy_files.member_max_complexity]
+"graphql_reviews_and_comments" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_repo.py"
+[legacy_files.member_max_complexity]
+"_parse_task_block" = 19
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_gate.py"
+[legacy_files.member_max_complexity]
+"_parse_review_gate_result" = 21
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_refresh.py"
+[legacy_files.member_max_complexity]
+"_needs_pre_review_fresh_review_request" = 23
+"_request_timeline" = 27
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_threads.py"
 [legacy_files.member_max_lines]
 "_review_threads" = 102
+[legacy_files.member_max_complexity]
+"_review_thread_lines" = 19
+"_review_threads" = 22
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/_review_window.py"
 [legacy_files.member_max_lines]
 "review_gate_data" = 235
+[legacy_files.member_max_complexity]
+"review_gate_data" = 20
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_finish/checks.py"
+[legacy_files.member_max_complexity]
+"_required_checks_state" = 22
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/bootstrap.py"
@@ -150,16 +213,22 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_finish/bootstrap.py"
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/context.py"
 [legacy_files.member_max_lines]
 "_resolve_finish_context" = 136
+[legacy_files.member_max_complexity]
+"_resolve_finish_context" = 20
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/merge.py"
 [legacy_files.member_max_lines]
 "complete_merge_data" = 246
+[legacy_files.member_max_complexity]
+"complete_merge_data" = 19
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_finish/orchestrator.py"
 [legacy_files.member_max_lines]
 "finish_task_data" = 282
+[legacy_files.member_max_complexity]
+"finish_task_data" = 29
 
 [[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/task_workflow_ledgers.py"
@@ -170,12 +239,48 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_ledgers.py"
 path = "tools/horadus/python/horadus_workflow/task_workflow_lifecycle.py"
 [legacy_files.member_max_lines]
 "resolve_task_lifecycle" = 148
+[legacy_files.member_max_complexity]
+"resolve_task_lifecycle" = 26
+"task_lifecycle_data" = 24
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/task_workflow_query.py"
+[legacy_files.member_max_complexity]
+"handle_list_active" = 19
+
+[[legacy_files]]
+path = "tools/horadus/python/horadus_workflow/triage.py"
+[legacy_files.member_max_complexity]
+"handle_collect" = 26
 
 [[legacy_files]]
 path = "tests/horadus_cli/v2/task_finish/test_finish_data.py"
 max_lines = 4692
 [legacy_files.member_max_lines]
 "test_finish_task_data_covers_auto_merge_timeout_and_failure_paths" = 230
+[legacy_files.member_max_complexity]
+"test_finish_task_data_allows_early_merge_on_pr_summary_thumbs_up.fake_run_command" = 21
+"test_finish_task_data_allows_merge_when_review_gate_times_out_silently.fake_run_command" = 21
+"test_finish_task_data_allows_review_timeout_override_with_human_approval.fake_run_command" = 21
+"test_finish_task_data_auto_resolves_outdated_threads_before_merge.fake_run_command" = 22
+"test_finish_task_data_blocks_on_post_merge_sync_edge_cases.fake_run_command" = 26
+"test_finish_task_data_covers_auto_merge_timeout_and_failure_paths.make_fake_run_command.fake_run_command" = 25
+"test_finish_task_data_deletes_local_branch_when_it_still_exists.fake_run_command" = 21
+"test_finish_task_data_enables_auto_merge_when_branch_policy_requires_it.fake_run_command" = 22
+"test_finish_task_data_refreshes_stale_review_state_before_waiting_for_review.fake_run_command" = 21
+"test_finish_task_data_restarts_review_window_after_pr_head_changes.fake_run_command" = 21
+"test_finish_task_data_retries_fresh_review_request_without_stale_threads.fake_run_command" = 21
+"test_finish_task_data_uses_non_blocking_pending_check_mode_after_review.fake_run_command" = 22
+
+[[legacy_files]]
+path = "tests/horadus_cli/v2/task_finish/test_finish_debug.py"
+[legacy_files.member_max_complexity]
+"test_finish_task_data_emits_debug_lines_when_finish_debug_enabled.fake_run_command" = 21
+
+[[legacy_files]]
+path = "tests/horadus_cli/v2/task_finish/test_review_window_recovery.py"
+[legacy_files.member_max_complexity]
+"_pr_merge_run_command" = 21
 
 [[legacy_files]]
 path = "tests/horadus_cli/v2/task_repo_fixtures.py"
@@ -226,3 +331,5 @@ path = "tests/workflow/test_workflow_support.py"
 path = "scripts/validate_assessment_artifacts_lib/schema_validation.py"
 [legacy_files.member_max_lines]
 "validate_file" = 167
+[legacy_files.member_max_complexity]
+"validate_file" = 25

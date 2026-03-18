@@ -66,6 +66,8 @@ production_module_lines = 20
 test_module_lines = 30
 production_function_lines = 10
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -118,6 +120,8 @@ production_module_lines = 4
 test_module_lines = 30
 production_function_lines = 4
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]
@@ -143,6 +147,63 @@ exclude_globs = ["**/__pycache__/**"]
     assert result.returncode == 2
     assert "ERROR [module-lines] src/app.py: module has 6 lines; budget is 4" in result.stdout
     assert "ERROR [member-lines] src/app.py: too_long spans 6 lines; budget is 4" in result.stdout
+
+
+def test_check_code_shape_script_reports_member_complexity_failures(tmp_path: Path) -> None:
+    _init_git_repo(tmp_path)
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                "def too_branchy(flag: bool, items: list[int]) -> int:",
+                "    if flag:",
+                "        return 1",
+                "    if items:",
+                "        return sum(item for item in items if item % 2 == 0)",
+                "    return 0",
+            ]
+        )
+        + "\n",
+    )
+    _track_paths(tmp_path, "src/app.py")
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[budgets]
+production_module_lines = 20
+test_module_lines = 30
+production_function_lines = 10
+test_function_lines = 12
+production_member_complexity = 4
+test_member_complexity = 20
+
+[paths]
+include_roots = ["src", "tests"]
+exclude_globs = ["**/__pycache__/**"]
+""".strip(),
+    )
+
+    result = subprocess.run(
+        [
+            "python",
+            str(SCRIPT_PATH),
+            "--repo-root",
+            str(tmp_path),
+            "--policy-file",
+            str(policy_path.relative_to(tmp_path)),
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert (
+        "ERROR [member-complexity] src/app.py: too_branchy has cyclomatic complexity 5; "
+        "budget is 4" in result.stdout
+    )
 
 
 def test_check_code_shape_script_ignores_untracked_python_files(tmp_path: Path) -> None:
@@ -172,6 +233,8 @@ production_module_lines = 4
 test_module_lines = 30
 production_function_lines = 4
 test_function_lines = 12
+production_member_complexity = 18
+test_member_complexity = 20
 
 [paths]
 include_roots = ["src", "tests"]

@@ -92,6 +92,8 @@ The full gate also runs the repo-owned code-shape checker, which enforces the
 current module/function line budgets, member cyclomatic-complexity budgets,
 and ratcheting limits for explicitly tracked legacy hotspots in
 `config/quality/code_shape.toml`.
+It also fail-closes on repo-owned eval dataset-quality/provenance checks that
+previously lived partly as opt-in commands.
 The unit-coverage step fails closed at `100%` measured coverage for `src/` and
 the workflow tooling home under `tools/`, plus tracked Python under `scripts/`,
 using the same repo-owned coverage gate script that CI and the pre-push hook
@@ -130,6 +132,8 @@ When: deterministic no-network/no-LLM regression exercise.
 
 11. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
 When: full pre-release checks before promotion.
+This now reuses the canonical `horadus tasks local-gate --full` contract and
+then adds the release-only migration-drift gate for the target database.
 
 12. `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
 When: inspect machine-checkable task lifecycle state.

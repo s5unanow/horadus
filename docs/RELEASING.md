@@ -44,18 +44,11 @@ make release-gate RELEASE_GATE_DATABASE_URL="<target-db-url>"
 ```
 
 What it runs (fail-closed, in order):
-- `make check`
-- `make test`
-- `make docs-freshness`
+- `uv run --no-sync horadus tasks local-gate --full`
 - `make db-migration-gate MIGRATION_GATE_DATABASE_URL="<target-db-url>"`
-
-Optional prompt/model gate:
-
-```bash
-make release-gate RELEASE_GATE_DATABASE_URL="<target-db-url>" RELEASE_GATE_INCLUDE_EVAL=true
-```
-
-This additionally runs `make audit-eval`.
+The canonical full local gate now includes taxonomy validation and the eval
+dataset-quality/provenance audit, so the release gate extends one strict
+analyzer contract instead of redefining a partial subset.
 
 ## Runtime SLO Gate (Cross-Stage)
 
@@ -196,9 +189,7 @@ runs `alembic check`. Use `MIGRATION_GATE_VALIDATE_AUTOGEN=false` only as a
 temporary emergency bypass with explicit documentation in release notes.
 
 3. Evaluation policy gates (prompt/model changes only):
-```bash
-make audit-eval
-```
+The release gate already includes `make audit-eval`.
 - If prompt/model changes are included, also run benchmark per `docs/PROMPT_EVAL_POLICY.md`.
 - Do not promote prompt/model changes if required evaluation gates fail.
 

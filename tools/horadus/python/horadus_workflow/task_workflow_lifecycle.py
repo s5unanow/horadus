@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import shlex
 import sys
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
@@ -11,12 +10,10 @@ from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_ledgers as ledgers
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
-
-
-@dataclass(slots=True)
-class LocalGateStep:
-    name: str
-    command: str
+from tools.horadus.python.horadus_workflow.task_workflow_gate_steps import (
+    LocalGateStep,
+    full_local_gate_steps,
+)
 
 
 @dataclass(slots=True)
@@ -425,67 +422,6 @@ def resolve_task_lifecycle(
     snapshot.lifecycle_state = task_lifecycle_state(snapshot)
     snapshot.strict_complete = snapshot.lifecycle_state == "local-main-synced"
     return snapshot
-
-
-def full_local_gate_steps() -> list[LocalGateStep]:
-    uv_bin = shlex.quote(shared.getenv("UV_BIN") or "uv")
-    return [
-        LocalGateStep(
-            name="check-tracked-artifacts", command="./scripts/check_no_tracked_artifacts.sh"
-        ),
-        LocalGateStep(
-            name="docs-freshness",
-            command=f"{uv_bin} run --no-sync python scripts/check_docs_freshness.py",
-        ),
-        LocalGateStep(
-            name="code-shape",
-            command=f"{uv_bin} run --no-sync python scripts/check_code_shape.py",
-        ),
-        LocalGateStep(
-            name="ruff-format-check",
-            command=f"{uv_bin} run --no-sync ruff format src/ tools/ scripts/ tests/ --check",
-        ),
-        LocalGateStep(
-            name="ruff-check",
-            command=f"{uv_bin} run --no-sync ruff check src/ tools/ scripts/ tests/",
-        ),
-        LocalGateStep(
-            name="mypy", command=f"{uv_bin} run --no-sync mypy src/ tools/horadus/python scripts"
-        ),
-        LocalGateStep(
-            name="validate-taxonomy",
-            command=(
-                f"{uv_bin} run --no-sync horadus eval validate-taxonomy "
-                "--gold-set ai/eval/gold_set.jsonl "
-                "--trend-config-dir config/trends "
-                "--output-dir ai/eval/results "
-                "--max-items 200 "
-                "--tier1-trend-mode subset "
-                "--signal-type-mode warn "
-                "--unknown-trend-mode warn"
-            ),
-        ),
-        LocalGateStep(name="pytest-unit-cov", command="./scripts/run_unit_coverage_gate.sh"),
-        LocalGateStep(name="secret-scan", command="./scripts/run_secret_scan.sh"),
-        LocalGateStep(
-            name="bandit",
-            command=(
-                f"{uv_bin} run --no-sync bandit -c pyproject.toml -r src/ "
-                "tools/horadus/python scripts"
-            ),
-        ),
-        LocalGateStep(name="dependency-audit", command="./scripts/run_dependency_audit.sh"),
-        LocalGateStep(name="lockfile-check", command=f"{uv_bin} lock --check"),
-        LocalGateStep(name="integration-docker", command="./scripts/test_integration_docker.sh"),
-        LocalGateStep(
-            name="build-package",
-            command=(
-                "rm -rf dist build *.egg-info && "
-                f"{uv_bin} run --no-sync python -m build --no-isolation && "
-                f"{uv_bin} run --no-sync twine check dist/*"
-            ),
-        ),
-    ]
 
 
 def local_gate_data(*, full: bool, dry_run: bool) -> tuple[int, dict[str, object], list[str]]:

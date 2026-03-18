@@ -323,3 +323,4 @@
 - TASK-351: Bring `scripts/` under the main lint, type, security, and coverage posture ✅
 - TASK-350: Add a cyclomatic-complexity ratchet for tracked Python surfaces ✅
 - TASK-349: Add repo-wide dependency direction gates for `src/` and tooling adapter seams ✅
+- TASK-353: Align canonical release and local gates with the full repo-owned analyzer set ✅

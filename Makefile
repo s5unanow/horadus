@@ -31,7 +31,6 @@ INTEGRATION_REDIS_URL ?= redis://localhost:6379/0
 MIGRATION_GATE_DATABASE_URL ?= $(INTEGRATION_DATABASE_URL)
 MIGRATION_GATE_VALIDATE_AUTOGEN ?= true
 RELEASE_GATE_DATABASE_URL ?=
-RELEASE_GATE_INCLUDE_EVAL ?= false
 
 # Colors for terminal output
 BLUE := \033[34m
@@ -290,7 +289,7 @@ validate-taxonomy-eval: deps ## Validate trend taxonomy contract against eval go
 	$(UV_RUN) horadus eval validate-taxonomy --gold-set ai/eval/gold_set.jsonl --trend-config-dir config/trends --output-dir ai/eval/results --max-items 200 --tier1-trend-mode subset --signal-type-mode warn --unknown-trend-mode warn
 
 audit-eval: validate-taxonomy-eval ## Audit evaluation dataset quality and provenance
-	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
+	$(UV_RUN) horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200 --fail-on-warnings
 
 docs-freshness: deps-dev ## Validate docs freshness and runtime consistency invariants
 	$(UV_RUN) python scripts/check_docs_freshness.py
@@ -298,21 +297,14 @@ docs-freshness: deps-dev ## Validate docs freshness and runtime consistency inva
 code-shape: deps-dev ## Validate repo code-shape budgets and ratchets
 	$(UV_RUN) python scripts/check_code_shape.py
 
-release-gate: deps-dev ## Run release gates (check + test + docs + migration gate [+ optional eval audit])
+release-gate: deps-dev ## Run the canonical full local gate plus release-only migration validation
 	@if [ -z "$(RELEASE_GATE_DATABASE_URL)" ]; then \
 		echo "$(RED)RELEASE_GATE_DATABASE_URL is required$(RESET)"; \
-		echo "Usage: make release-gate RELEASE_GATE_DATABASE_URL=<target-db-url> [RELEASE_GATE_INCLUDE_EVAL=true]"; \
+		echo "Usage: make release-gate RELEASE_GATE_DATABASE_URL=<target-db-url>"; \
 		exit 1; \
 	fi
-	@$(MAKE) check
-	@$(MAKE) test
-	@$(MAKE) docs-freshness
+	@$(UV_RUN) horadus tasks local-gate --full
 	@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"
-	@if [ "$(RELEASE_GATE_INCLUDE_EVAL)" = "true" ]; then \
-		$(MAKE) audit-eval; \
-	else \
-		echo "$(BLUE)Skipping eval audit gate (set RELEASE_GATE_INCLUDE_EVAL=true to enable).$(RESET)"; \
-	fi
 	@echo "$(GREEN)Release gate passed.$(RESET)"
 
 release-gate-runtime: deps-dev ## Evaluate runtime SLO/error-budget gate from metrics JSON

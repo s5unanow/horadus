@@ -119,8 +119,12 @@ Notes:
 - Use LLM-seeded labels as silver/pre-label drafts, then human-correct.
 - Keep gold data small, curated, and representative.
 - Avoid storing sensitive content.
-- CI and `make audit-eval` currently run taxonomy validation in transitional mode
-  (`subset`/`warn`) until human-gated taxonomy/gold-set harmonization is complete.
+- CI, `horadus tasks local-gate --full`, and `make release-gate` currently run
+  taxonomy validation in transitional mode (`subset`/`warn`) until human-gated
+  taxonomy/gold-set harmonization is complete.
+- Those same strict gates also run `horadus eval audit --fail-on-warnings`, so
+  dataset-quality/provenance regressions fail closed without needing a separate
+  opt-in release flag.
 
 ## TASK-044 Labeling Rubric (Human Review)
 

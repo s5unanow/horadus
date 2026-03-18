@@ -38,28 +38,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Open Task Ledger
 
-### TASK-353: Align canonical release and local gates with the full repo-owned analyzer set
-**Priority**: P2 (Medium)
-**Estimate**: 2-4 hours
-
-The repo already has several custom analyzers and validators, but not all of
-them participate in the canonical release/local gate path. Tighten the gate
-contract so the maintained analyzer set is enforced consistently instead of
-living partly as opt-in commands. The target direction is one authoritative,
-strict gate contract with minimal drift between local, release, and CI paths.
-
-**Planning Gates**: Required — shared workflow/policy gate contract change
-**Files**: `Makefile`, `tools/horadus/python/horadus_workflow/`, `scripts/validate_assessment_artifacts.py`, `src/eval/`, `tests/horadus_cli/`, `tests/unit/scripts/`, `docs/AGENT_RUNBOOK.md`
-
-**Acceptance Criteria**:
-- [ ] Audit the current repo-owned analyzer/validator set and define which ones are mandatory in `agent-check`, the canonical local gate, and `make release-gate`
-- [ ] Promote missing mandatory analyzers into the enforced gate path or explicitly demote them with documented rationale
-- [ ] Prefer one canonical strict gate contract over multiple partially overlapping target definitions
-- [ ] Cover assessment/provenance validation gaps for real repo artifacts where the repo expects those artifacts to remain trustworthy
-- [ ] Tests cover the updated gate contract so Make targets, workflow helpers, and CI-parity expectations stay aligned
-
----
-
 ### TASK-354: Centralize repo-owned secret-scan policy and exclude rules
 **Priority**: P2 (Medium)
 **Estimate**: 2-3 hours

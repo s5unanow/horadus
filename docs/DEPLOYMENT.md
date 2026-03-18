@@ -86,7 +86,9 @@ deployment steps.
    ```bash
    make release-gate RELEASE_GATE_DATABASE_URL="<staging-db-url>"
    ```
-   - add `RELEASE_GATE_INCLUDE_EVAL=true` when prompt/model changes are included
+   - prompt/model changes still require the benchmark workflow from
+     `docs/PROMPT_EVAL_POLICY.md`; the release gate already includes the
+     eval audit and taxonomy validation
 5. Perform post-deploy smoke checks in staging (`/health`, `/health/ready`,
    `/metrics`, auth-protected endpoints) and only then promote the same commit
    to production.

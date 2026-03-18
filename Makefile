@@ -303,7 +303,7 @@ release-gate: deps-dev ## Run the canonical full local gate plus release-only mi
 		echo "Usage: make release-gate RELEASE_GATE_DATABASE_URL=<target-db-url>"; \
 		exit 1; \
 	fi
-	@MIGRATION_GATE_VALIDATE_AUTOGEN=true $(UV_RUN) horadus tasks local-gate --full
+	@UV_BIN="$(UV)" $(UV_RUN) horadus tasks local-gate --full
 	@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"
 	@echo "$(GREEN)Release gate passed.$(RESET)"
 

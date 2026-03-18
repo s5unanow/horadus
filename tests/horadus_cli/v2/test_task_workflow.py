@@ -124,18 +124,22 @@ def test_repo_workflow_configs_include_repo_owned_artifact_validation() -> None:
 def test_release_gate_reuses_canonical_full_local_gate() -> None:
     repo_root = Path(__file__).resolve().parents[3]
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
+    integration_script = (repo_root / "scripts" / "test_integration_docker.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert (
         "release-gate: deps-dev ## Run the canonical full local gate plus release-only migration validation"
         in makefile
     )
-    assert (
-        "@MIGRATION_GATE_VALIDATE_AUTOGEN=true $(UV_RUN) horadus tasks local-gate --full"
-        in makefile
-    )
+    assert '@UV_BIN="$(UV)" $(UV_RUN) horadus tasks local-gate --full' in makefile
     assert (
         '@$(MAKE) db-migration-gate MIGRATION_GATE_DATABASE_URL="$(RELEASE_GATE_DATABASE_URL)" MIGRATION_GATE_VALIDATE_AUTOGEN="$(MIGRATION_GATE_VALIDATE_AUTOGEN)"'
         in makefile
+    )
+    assert (
+        'export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-true}"'
+        in integration_script
     )
     assert "RELEASE_GATE_INCLUDE_EVAL" not in makefile
 

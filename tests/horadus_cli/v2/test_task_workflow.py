@@ -46,8 +46,8 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert steps[12].command == "./scripts/test_integration_docker.sh"
     assert steps[13].command == (
         "rm -rf dist build *.egg-info && "
-        "uv run --no-sync --with build python -m build && "
-        "uv run --no-sync --with twine twine check dist/*"
+        "uv run --no-sync python -m build --no-isolation && "
+        "uv run --no-sync twine check dist/*"
     )
 
 
@@ -100,10 +100,22 @@ def test_local_gate_data_dry_run_reports_custom_absolute_uv_bin_for_build_steps(
     build_step = next(step for step in data["steps"] if step["name"] == "build-package")
     assert build_step["command"] == (
         "rm -rf dist build *.egg-info && "
-        f"{custom_uv} run --no-sync --with build python -m build && "
-        f"{custom_uv} run --no-sync --with twine twine check dist/*"
+        f"{custom_uv} run --no-sync python -m build --no-isolation && "
+        f"{custom_uv} run --no-sync twine check dist/*"
     )
     assert f"- build-package: {build_step['command']}" in lines
+
+
+def test_repo_workflow_build_tooling_runs_from_locked_dev_environment() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
+
+    assert "uv run --no-sync python -m build --no-isolation" in ci_workflow
+    assert "uv run --no-sync twine check dist/*" in ci_workflow
+    assert '"build>=' in pyproject
+    assert '"twine>=' in pyproject
+    assert '"hatchling>=' in pyproject
 
 
 def test_local_gate_data_requires_full_mode() -> None:

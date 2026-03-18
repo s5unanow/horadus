@@ -477,8 +477,8 @@ def full_local_gate_steps() -> list[LocalGateStep]:
             name="build-package",
             command=(
                 "rm -rf dist build *.egg-info && "
-                f"{uv_bin} run --no-sync --with build python -m build && "
-                f"{uv_bin} run --no-sync --with twine twine check dist/*"
+                f"{uv_bin} run --no-sync python -m build --no-isolation && "
+                f"{uv_bin} run --no-sync twine check dist/*"
             ),
         ),
     ]

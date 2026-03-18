@@ -319,3 +319,4 @@
 - TASK-347: Investigate and stabilize hanging `horadus tasks local-review` runs ✅
 - TASK-228: Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅
 - TASK-348: Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
+- TASK-352: Enforce server-side secret and dependency vulnerability scanning in CI ✅

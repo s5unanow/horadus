@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-352` Enforce Server-Side Secret and Dependency Vulnerability Scanning in CI
 - `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture
 - `TASK-350` Add a Cyclomatic-Complexity Ratchet for Tracked Python Surfaces
 - `TASK-349` Add Repo-Wide Dependency Direction Gates for `src/` and Tooling Adapter Seams
@@ -57,3 +56,4 @@
 - `TASK-347` Investigate and stabilize hanging `horadus tasks local-review` runs ✅
 - `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅
 - `TASK-348` Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
+- `TASK-352` Enforce server-side secret and dependency vulnerability scanning in CI ✅

@@ -105,28 +105,6 @@ main static-analysis posture. The target direction is parity with `src/` and
 
 ---
 
-### TASK-352: Enforce server-side secret and dependency vulnerability scanning in CI
-**Priority**: P2 (Medium)
-**Estimate**: 2-3 hours
-
-Secret scanning currently depends on local hooks, and dependency checks only
-validate lockfile consistency. CI should fail closed on real secret-scan and
-dependency-vulnerability findings so bypassing local hooks does not silently
-weaken the repo’s security posture. The target state is server-side enforcement,
-not best-effort local hygiene.
-
-**Planning Gates**: Required — shared CI/security policy change
-**Files**: `.pre-commit-config.yaml`, `.github/workflows/ci.yml`, `pyproject.toml`, `Makefile`, `docs/AGENT_RUNBOOK.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Add a CI-enforced secret-scanning step that uses the repo-owned baseline/policy rather than relying only on pre-commit
-- [ ] Add a CI-enforced dependency-vulnerability check rather than treating `uv lock --check` as a security substitute
-- [ ] Both checks fail closed in CI for actionable findings, with only narrow repo-owned suppressions or baselines where justified
-- [ ] Keep developer ergonomics reasonable by documenting the local command path that matches the server-side checks
-- [ ] Tests or workflow-policy assertions cover the new required CI security steps where the repo already validates gate parity
-
----
-
 ### TASK-353: Align canonical release and local gates with the full repo-owned analyzer set
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours

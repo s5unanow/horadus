@@ -125,6 +125,36 @@ def test_actionable_findings_report_duplicate_occurrence_beyond_baseline_count()
     ]
 
 
+def test_actionable_findings_ignore_verification_state_changes() -> None:
+    baseline_results = {
+        "src/example.py": [
+            {
+                "type": "AWS Access Key",
+                "hashed_secret": "verified-secret",  # pragma: allowlist secret
+                "is_verified": False,
+                "line_number": 12,
+            }
+        ]
+    }
+    current_results = {
+        "src/example.py": [
+            {
+                "type": "AWS Access Key",
+                "hashed_secret": "verified-secret",  # pragma: allowlist secret
+                "is_verified": True,
+                "line_number": 12,
+            }
+        ]
+    }
+
+    findings = secret_scan_module.actionable_findings(
+        current_results=current_results,
+        baseline_results=baseline_results,
+    )
+
+    assert findings == []
+
+
 def test_is_excluded_path_matches_repo_owned_secret_scan_policy() -> None:
     assert secret_scan_module.is_excluded_path("docs/runbook.md") is True
     assert secret_scan_module.is_excluded_path("tasks/CURRENT_SPRINT.md") is True

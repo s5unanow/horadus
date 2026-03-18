@@ -20,7 +20,6 @@ class SecretFingerprint:
     filename: str
     secret_type: str
     hashed_secret: str
-    is_verified: bool
 
 
 def fingerprint_counts(results: dict[str, list[dict[str, object]]]) -> Counter[SecretFingerprint]:
@@ -32,7 +31,6 @@ def fingerprint_counts(results: dict[str, list[dict[str, object]]]) -> Counter[S
                     filename=filename,
                     secret_type=str(finding["type"]),
                     hashed_secret=str(finding["hashed_secret"]),
-                    is_verified=bool(finding.get("is_verified", False)),
                 )
             ] += 1
     return fingerprints
@@ -52,7 +50,6 @@ def actionable_findings(
                 filename=filename,
                 secret_type=str(entry["type"]),
                 hashed_secret=str(entry["hashed_secret"]),
-                is_verified=bool(entry.get("is_verified", False)),
             )
             seen_counts[fingerprint] += 1
             if seen_counts[fingerprint] > baseline_counts[fingerprint]:

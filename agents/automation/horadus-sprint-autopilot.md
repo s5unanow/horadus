@@ -67,4 +67,4 @@ After selecting a fresh candidate task:
   blocker summary.
 - Do not begin a second task in the same run.
 - Release the external lock on exit.
-  - run `uv run --no-sync horadus tasks automation-lock unlock --path "$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock"`
+  - run `uv run --no-sync horadus tasks automation-lock unlock --path "$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock" --owner-pid $$`

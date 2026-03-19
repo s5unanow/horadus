@@ -143,6 +143,12 @@ def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
     )
     add_leaf_cli_options(unlock_parser)
     unlock_parser.add_argument("--path", required=True, help="Lock path to release.")
+    unlock_parser.add_argument(
+        "--owner-pid",
+        type=int,
+        default=None,
+        help="Optional owner PID required to release a live automation lock safely.",
+    )
     unlock_parser.set_defaults(handler=handle_automation_lock_unlock)
 
 

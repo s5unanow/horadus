@@ -61,6 +61,10 @@ def test_horadus_sprint_autopilot_instructions_cover_resume_and_main_sync() -> N
     assert "horadus tasks automation-lock lock --path" in instructions
     assert "--owner-pid $$" in instructions
     assert "horadus tasks automation-lock unlock --path" in instructions
+    assert (
+        'automation-lock unlock --path "$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock" --owner-pid $$'
+        in instructions
+    )
     assert "git pull --ff-only" in instructions
     assert "open non-merged task PR" in instructions
     assert "uv run --no-sync horadus tasks finish TASK-XXX" in instructions

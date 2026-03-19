@@ -101,6 +101,21 @@ def test_task_commands_registers_automation_lock_subcommands() -> None:
     assert args.dry_run is True
     assert args.handler is task_commands_module.handle_automation_lock_lock
 
+    unlock_args = parser.parse_args(
+        [
+            "tasks",
+            "automation-lock",
+            "unlock",
+            "--path",
+            "/tmp/horadus-lock",
+            "--owner-pid",
+            "123",
+        ]
+    )
+    assert unlock_args.automation_lock_command == "unlock"
+    assert unlock_args.owner_pid == 123
+    assert unlock_args.handler is task_commands_module.handle_automation_lock_unlock
+
 
 def test_command_handlers_wrap_data_functions_and_validation_errors(
     monkeypatch: pytest.MonkeyPatch,
@@ -198,10 +213,10 @@ def test_command_handlers_wrap_data_functions_and_validation_errors(
         argparse.Namespace(path="/tmp/check", dry_run=False)
     ).lines == ["check"]
     assert task_commands_module.handle_automation_lock_lock(
-        argparse.Namespace(path="/tmp/lock", dry_run=False)
+        argparse.Namespace(path="/tmp/lock", owner_pid=None, dry_run=False)
     ).lines == ["lock"]
     assert task_commands_module.handle_automation_lock_unlock(
-        argparse.Namespace(path="/tmp/unlock", dry_run=False)
+        argparse.Namespace(path="/tmp/unlock", owner_pid=123, dry_run=False)
     ).lines == ["unlock"]
 
     assert task_commands_module.handle_finish(

@@ -20,6 +20,7 @@ from src.processing.pipeline_orchestrator import (
 )
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Usage
+from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY
 from src.storage.models import Event, ProcessingStatus, RawItem, TaxonomyGapReason
 
 pytestmark = pytest.mark.unit
@@ -175,6 +176,57 @@ async def test_process_items_rejects_duplicate_active_runtime_trend_ids(mock_db_
         ValueError, match="Duplicate active runtime_trend_id 'duplicate-runtime-id'"
     ):
         await pipeline.process_items([_item()], trends=[duplicate_a, duplicate_b])
+
+
+@pytest.mark.asyncio
+async def test_capture_unresolved_trend_mapping_covers_guard_paths(mock_db_session) -> None:
+    pipeline = _pipeline(mock_db_session)
+    pipeline._capture_taxonomy_gap = AsyncMock()
+
+    await pipeline._capture_unresolved_trend_mapping(event=Event(extracted_claims={}))
+    pipeline._capture_taxonomy_gap.assert_not_awaited()
+
+    event = Event(
+        id=uuid4(),
+        extracted_claims={
+            TREND_IMPACT_MAPPING_KEY: {
+                "unresolved": [
+                    {"reason": " ", "trend_id": "__unmapped__", "signal_type": "indicator"},
+                    {
+                        "reason": "no_matching_indicator",
+                        "trend_id": None,
+                        "signal_type": "indicator",
+                    },
+                    {
+                        "reason": "no_matching_indicator",
+                        "trend_id": "__unmapped__",
+                        "signal_type": " ",
+                    },
+                    {
+                        "reason": "no_matching_indicator",
+                        "trend_id": "__unmapped__",
+                        "signal_type": "__no_matching_indicator__",
+                        "details": "bad",
+                        "event_claim_key": "__event__",
+                        "event_claim_text": "Claim text",
+                    },
+                ]
+            }
+        },
+    )
+
+    await pipeline._capture_unresolved_trend_mapping(event=event)
+
+    pipeline._capture_taxonomy_gap.assert_awaited_once_with(
+        event_id=event.id,
+        trend_id="__unmapped__",
+        signal_type="__no_matching_indicator__",
+        reason=TaxonomyGapReason.NO_MATCHING_INDICATOR,
+        details={
+            "event_claim_key": "__event__",
+            "event_claim_text": "Claim text",
+        },
+    )
 
 
 def test_pipeline_usage_and_result_counter_helpers_cover_pending_and_flags() -> None:
@@ -618,6 +670,37 @@ async def test_event_and_trend_helper_methods_cover_remaining_paths(
             tier2_usage=SimpleNamespace(),
         )
         is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_capture_unresolved_trend_mapping_records_taxonomy_gaps(mock_db_session) -> None:
+    pipeline = _pipeline(mock_db_session)
+    pipeline._capture_taxonomy_gap = AsyncMock(return_value=None)
+    event = Event(
+        id=uuid4(),
+        extracted_claims={
+            TREND_IMPACT_MAPPING_KEY: {
+                "unresolved": [
+                    {
+                        "reason": "ambiguous_mapping",
+                        "trend_id": "__ambiguous__",
+                        "signal_type": "__ambiguous__",
+                        "event_claim_key": "claim-key",
+                        "event_claim_text": "Claim text",
+                        "details": {"candidate_count": 2},
+                    }
+                ]
+            }
+        },
+    )
+
+    await pipeline._capture_unresolved_trend_mapping(event=event)
+
+    pipeline._capture_taxonomy_gap.assert_awaited_once()
+    assert (
+        pipeline._capture_taxonomy_gap.await_args.kwargs["reason"]
+        == TaxonomyGapReason.AMBIGUOUS_MAPPING
     )
 
 

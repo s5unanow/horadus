@@ -212,7 +212,7 @@ async def test_load_event_context_skips_empty_and_truncates_long_chunks(mock_db_
     assert len(chunks) == 2
 
 
-def test_build_payload_budget_and_indicator_fallbacks(
+def test_build_payload_budget_behaviour_without_taxonomy_context(
     mock_db_session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     classifier = _build_classifier(mock_db_session)
@@ -220,41 +220,24 @@ def test_build_payload_budget_and_indicator_fallbacks(
     classifier._PAYLOAD_HEADROOM_TOKENS = 0
     classifier._MIN_CONTEXT_CHUNK_TOKENS = 1
     event = Event(id=uuid4(), canonical_summary="summary")
-    trend = _build_trend(
-        definition={},
-        indicators={
-            "one": {
-                "direction": "escalatory",
-                "description": "x" * 200,
-                "keywords": ["keyword"] * 50,
-            },
-            "two": {"direction": "escalatory"},
-            "three": "bad",
-        },
-    )
-
     original_estimate = classifier._estimate_payload_tokens
 
     payload = classifier._build_payload(
         event=event,
-        trends=[trend],
+        trends=[_build_trend()],
         context_chunks=["first chunk", "second chunk"],
     )
 
-    assert payload["trends"][0]["trend_id"] == "eu-russia"
-    assert payload["trends"][0]["indicators"][0]["keywords"] == []
-    assert payload["trends"][0]["indicators"][0]["description"] == "x" * 200
-    assert (
-        payload["trends"][0]["indicators"][1]["description"]
-        == "Signals of two relevant to this trend."
-    )
+    assert "trends" not in payload
     assert len(payload["context_chunks"]) == 2
     assert payload["context_chunks"][0].startswith("<UNTRUSTED_EVENT_CONTEXT>")
     assert original_estimate(payload) <= classifier._MAX_REQUEST_INPUT_TOKENS
 
     classifier._MAX_REQUEST_INPUT_TOKENS = 80
-    with pytest.raises(ValueError, match="exceeds safe input budget"):
-        classifier._build_payload(event=event, trends=[trend], context_chunks=["   "])
+    payload = classifier._build_payload(
+        event=event, trends=[_build_trend()], context_chunks=["   "]
+    )
+    assert "[TRUNCATED]" in payload["context_chunks"][0]
 
     payload = {"context_chunks": "bad"}
     classifier._enforce_payload_budget(payload)
@@ -291,43 +274,12 @@ def test_enforce_payload_budget_raises_when_truncation_still_cannot_fit(
     classifier = _build_classifier(mock_db_session)
     classifier._MAX_REQUEST_INPUT_TOKENS = 10
     classifier._PAYLOAD_HEADROOM_TOKENS = 0
-    payload = {"context_chunks": ["one", "two"], "trends": []}
-    estimates = iter([999, 999, 999, 999, 999])
+    payload = {"context_chunks": ["one", "two"]}
+    estimates = iter([999, 999, 999, 999])
     monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
 
     with pytest.raises(ValueError, match="exceeds safe input budget"):
         classifier._enforce_payload_budget(payload)
-
-
-def test_trim_trend_payload_for_budget_tolerates_malformed_entries(
-    mock_db_session,
-) -> None:
-    classifier = _build_classifier(mock_db_session)
-    payload = {
-        "trends": [
-            "bad-trend",
-            {"indicators": "bad-indicators"},
-            {"indicators": ["bad-indicator"]},
-            {
-                "trend_id": "eu-russia",
-                "name": "EU Russia",
-                "indicators": [
-                    {"keywords": ["x"], "description": None},
-                    {
-                        "keywords": ["y"],
-                        "description": "  short description  ",
-                    },
-                ],
-            },
-        ]
-    }
-
-    classifier._trim_trend_payload_for_budget(payload, budget_limit=0)
-
-    trend_payload = payload["trends"][3]
-    assert trend_payload["name"] == "eu-russia"
-    assert trend_payload["indicators"][0]["keywords"] == []
-    assert trend_payload["indicators"][1]["description"] == "short description"
 
 
 def test_enforce_payload_budget_returns_when_context_chunks_is_not_a_list(
@@ -336,39 +288,12 @@ def test_enforce_payload_budget_returns_when_context_chunks_is_not_a_list(
     classifier = _build_classifier(mock_db_session)
     classifier._MAX_REQUEST_INPUT_TOKENS = 10
     classifier._PAYLOAD_HEADROOM_TOKENS = 0
-    payload = {"context_chunks": "bad", "trends": []}
+    payload = {"context_chunks": "bad"}
     monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: 999)
 
     classifier._enforce_payload_budget(payload)
 
     assert payload["context_chunks"] == "bad"
-
-
-def test_trim_trend_payload_returns_after_description_compaction_fits_budget(
-    mock_db_session, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    classifier = _build_classifier(mock_db_session)
-    payload = {
-        "trends": [
-            {
-                "trend_id": "eu-russia",
-                "name": "EU Russia",
-                "indicators": [
-                    {
-                        "keywords": [],
-                        "description": "x" * 200,
-                    }
-                ],
-            }
-        ]
-    }
-    estimates = iter([1])
-    monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
-
-    classifier._trim_trend_payload_for_budget(payload, budget_limit=10)
-
-    assert payload["trends"][0]["name"] == "EU Russia"
-    assert payload["trends"][0]["indicators"][0]["description"].endswith("...")
 
 
 def test_build_payload_current_taxonomy_stays_within_safe_budget(mock_db_session) -> None:
@@ -385,21 +310,7 @@ def test_build_payload_current_taxonomy_stays_within_safe_budget(mock_db_session
     )
 
     assert classifier._estimate_payload_tokens(payload) <= classifier._MAX_REQUEST_INPUT_TOKENS
-    assert all(
-        indicator["keywords"] == []
-        for trend_payload in payload["trends"]
-        for indicator in trend_payload["indicators"]
-    )
-
-
-def test_indicator_description_and_trend_identifier_fallbacks(mock_db_session) -> None:
-    classifier = _build_classifier(mock_db_session)
-    assert (
-        classifier._indicator_description(signal_type="", config={})
-        == "Signal relevant to this trend."
-    )
-    trend = _build_trend(definition={})
-    assert classifier._trend_identifier(trend) == "eu-russia"
+    assert "trends" not in payload
 
 
 def test_parse_output_and_alignment_guard_invalid_responses(mock_db_session) -> None:
@@ -422,61 +333,19 @@ def test_parse_output_and_alignment_guard_invalid_responses(mock_db_session) -> 
         {
             "summary": "summary",
             "extracted_who": [],
-            "extracted_what": "what",
+            "extracted_what": "   ",
             "extracted_where": None,
             "extracted_when": None,
             "claims": [],
             "categories": [],
             "has_contradictions": False,
             "contradiction_notes": None,
-            "trend_impacts": [
-                {
-                    "trend_id": "unknown",
-                    "signal_type": "signal",
-                    "direction": "escalatory",
-                    "severity": 0.5,
-                    "confidence": 0.5,
-                    "rationale": "x",
-                }
-            ],
         }
     )
-    with pytest.raises(ValueError, match="unknown trend id"):
+    with pytest.raises(ValueError, match="extracted_what or at least one claim"):
         classifier._validate_output_alignment(output, trends=[_build_trend()])
-
-    output = tier2_module._Tier2Output.model_validate(
-        {
-            "summary": "summary",
-            "extracted_who": [],
-            "extracted_what": "what",
-            "extracted_where": None,
-            "extracted_when": None,
-            "claims": [],
-            "categories": [],
-            "has_contradictions": False,
-            "contradiction_notes": None,
-            "trend_impacts": [
-                {
-                    "trend_id": "eu-russia",
-                    "signal_type": "signal",
-                    "direction": "escalatory",
-                    "severity": 0.5,
-                    "confidence": 0.5,
-                    "rationale": "x",
-                },
-                {
-                    "trend_id": "eu-russia",
-                    "signal_type": "signal",
-                    "direction": "escalatory",
-                    "severity": 0.5,
-                    "confidence": 0.5,
-                    "rationale": "y",
-                },
-            ],
-        }
-    )
-    with pytest.raises(ValueError, match="duplicated trend/signal pair"):
-        classifier._validate_output_alignment(output, trends=[_build_trend()])
+    with pytest.raises(ValueError, match="At least one trend"):
+        classifier._validate_output_alignment(output, trends=[])
 
 
 def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None:
@@ -493,11 +362,10 @@ def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None
             "categories": [" military ", "military", ""],
             "has_contradictions": True,
             "contradiction_notes": " ",
-            "trend_impacts": [],
         }
     )
 
-    classifier._apply_output(event=event, output=output)
+    classifier._apply_output(event=event, output=output, trends=[_build_trend()])
 
     assert event.canonical_summary == "updated summary"
     assert event.extracted_who == ["NATO"]
@@ -505,6 +373,7 @@ def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None
     assert event.extracted_when == datetime(2026, 2, 7, 12, 0, tzinfo=UTC)
     assert event.categories == ["military"]
     assert event.contradiction_notes == "Potential contradiction detected across source claims."
+    assert event.extracted_claims["trend_impacts"] == []
     assert classifier._dedupe_strings([" a ", "a", "b", ""]) == ["a", "b"]
     assert classifier._claim_relation("Alpha moved", "Beta stayed") is None
     assert (
@@ -567,7 +436,6 @@ async def test_classify_event_ignores_invalid_cached_content_and_skips_cache_sto
             "categories": [],
             "has_contradictions": False,
             "contradiction_notes": None,
-            "trend_impacts": [],
         }
     )
 

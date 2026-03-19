@@ -12,7 +12,13 @@ import pytest
 
 from src.core.config import settings
 from src.processing.cost_tracker import BudgetExceededError
-from src.processing.tier2_classifier import Tier2Classifier, Tier2EventResult, Tier2Usage
+from src.processing.tier2_classifier import (
+    Tier2Classifier,
+    Tier2EventResult,
+    Tier2Usage,
+    _mapped_impacts_count,
+)
+from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY
 from src.storage.models import Event
 
 pytestmark = pytest.mark.unit
@@ -31,29 +37,17 @@ class FakeChatCompletions:
                 "</UNTRUSTED_TIER2_PAYLOAD>",
                 "",
             )
-        payload = json.loads(user_message)
-
-        trend_id = payload["trends"][0]["trend_id"]
+        _payload = json.loads(user_message)
         response_payload = {
             "summary": "Troop movements intensified near the border. Diplomatic channels remain open.",
             "extracted_who": ["NATO", "Russia"],
             "extracted_what": "Troop movement near the border",
             "extracted_where": "Baltic region",
             "extracted_when": "2026-02-07T12:00:00Z",
-            "claims": ["Multiple units were redeployed", "Talks are ongoing"],
+            "claims": ["Troop deployment increased near the border."],
             "categories": ["military", "security"],
             "has_contradictions": True,
             "contradiction_notes": "One source reports withdrawal while another reports mobilization.",
-            "trend_impacts": [
-                {
-                    "trend_id": trend_id,
-                    "signal_type": "military_movement",
-                    "direction": "escalatory",
-                    "severity": 0.8,
-                    "confidence": 0.9,
-                    "rationale": "Observed force posture increase",
-                }
-            ],
         }
         return SimpleNamespace(
             choices=[
@@ -180,28 +174,40 @@ def _build_classifier(
     return classifier, chat, cost_tracker
 
 
-def _build_trend(trend_id: str, name: str):
+def _build_trend(
+    trend_id: str,
+    name: str,
+    *,
+    indicators: dict[str, dict[str, object]] | None = None,
+    actors: list[str] | None = None,
+    regions: list[str] | None = None,
+):
     return SimpleNamespace(
         id=uuid4(),
         name=name,
-        definition={"id": trend_id},
-        indicators={
+        definition={
+            "id": trend_id,
+            "actors": actors or ["NATO", "Russia"],
+            "regions": regions or ["Baltic region"],
+        },
+        indicators=indicators
+        or {
             "military_movement": {
                 "direction": "escalatory",
                 "description": "Force repositioning without direct hostile contact.",
-                "keywords": ["troops", "deployment"],
+                "keywords": ["troop deployment", "deployment"],
             }
         },
     )
 
 
 @pytest.mark.asyncio
-async def test_classify_event_updates_event_fields_and_usage(mock_db_session) -> None:
+async def test_classify_event_updates_event_fields(mock_db_session) -> None:
     classifier, chat, cost_tracker = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trends = [_build_trend("eu-russia", "EU-Russia")]
 
-    result, usage = await classifier.classify_event(
+    result, _usage = await classifier.classify_event(
         event=event,
         trends=trends,
         context_chunks=["Context paragraph"],
@@ -218,21 +224,44 @@ async def test_classify_event_updates_event_fields_and_usage(mock_db_session) ->
     assert event.contradiction_notes is not None
     assert isinstance(event.extracted_claims, dict)
     assert "claim_graph" in event.extracted_claims
+    assert TREND_IMPACT_MAPPING_KEY in event.extracted_claims
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"] == []
     claim_graph = event.extracted_claims["claim_graph"]
     assert isinstance(claim_graph, dict)
     assert isinstance(claim_graph["nodes"], list)
-    assert len(claim_graph["nodes"]) == 2
+    assert len(claim_graph["nodes"]) == 1
     assert isinstance(claim_graph["links"], list)
     assert len(event.extracted_claims["trend_impacts"]) == 1
-    assert usage.api_calls == 1
-    assert usage.prompt_tokens == 120
-    assert usage.completion_tokens == 80
-    assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
+    assert event.extracted_claims["trend_impacts"][0]["signal_type"] == "military_movement"
     assert len(chat.calls) == 1
     assert chat.calls[0]["response_format"]["type"] == "json_schema"
     assert mock_db_session.flush.await_count >= 2
     cost_tracker.ensure_within_budget.assert_awaited_once()
     cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_event_tracks_usage_metadata(mock_db_session) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    _result, usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert usage.api_calls == 1
+    assert usage.prompt_tokens == 120
+    assert usage.completion_tokens == 80
+    assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
+
+
+def test_mapped_impacts_count_returns_zero_for_non_list_payloads() -> None:
+    assert _mapped_impacts_count(Event(extracted_claims={})) == 0
+    assert _mapped_impacts_count(Event(extracted_claims={"trend_impacts": "bad"})) == 0
+    assert _mapped_impacts_count(Event(extracted_claims={"trend_impacts": [1, 2]})) == 2
 
 
 @pytest.mark.asyncio
@@ -322,7 +351,7 @@ async def test_classify_events_resets_reasoning_metadata_when_later_event_has_no
     assert result.usage.active_reasoning_effort is None
 
 
-def test_build_payload_includes_indicator_descriptions_and_fallbacks(mock_db_session) -> None:
+def test_build_payload_omits_trend_taxonomy_context(mock_db_session) -> None:
     classifier, _, _ = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trend = SimpleNamespace(
@@ -348,21 +377,10 @@ def test_build_payload_includes_indicator_descriptions_and_fallbacks(mock_db_ses
         context_chunks=["Context paragraph"],
     )
 
-    indicators = payload["trends"][0]["indicators"]
-    assert indicators == [
-        {
-            "signal_type": "military_movement",
-            "direction": "escalatory",
-            "description": "Force repositioning without direct hostile contact.",
-            "keywords": ["troops", "deployment"],
-        },
-        {
-            "signal_type": "military_incident",
-            "direction": "escalatory",
-            "description": "Signals of military incident relevant to this trend.",
-            "keywords": ["fired upon", "collision"],
-        },
-    ]
+    assert payload["event_id"] == str(event.id)
+    assert payload["summary"] == "Initial summary"
+    assert "trends" not in payload
+    assert len(payload["context_chunks"]) == 1
 
 
 @pytest.mark.asyncio
@@ -543,12 +561,12 @@ async def test_classify_events_classifies_unstructured_events(mock_db_session) -
 
 
 @pytest.mark.asyncio
-async def test_classify_event_rejects_unknown_trend_ids(mock_db_session) -> None:
+async def test_classify_event_records_unmapped_mapping_diagnostics(mock_db_session) -> None:
     classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trends = [_build_trend("eu-russia", "EU-Russia")]
 
-    class BadCompletions:
+    class NoMatchCompletions:
         async def create(self, **kwargs):
             _ = kwargs
             payload = {
@@ -557,78 +575,17 @@ async def test_classify_event_rejects_unknown_trend_ids(mock_db_session) -> None
                 "extracted_what": "W",
                 "extracted_where": None,
                 "extracted_when": None,
-                "claims": [],
+                "claims": ["Economic officials discussed a budget package."],
                 "categories": [],
                 "has_contradictions": False,
                 "contradiction_notes": None,
-                "trend_impacts": [
-                    {
-                        "trend_id": "unknown",
-                        "signal_type": "x",
-                        "direction": "escalatory",
-                        "severity": 0.4,
-                        "confidence": 0.6,
-                        "rationale": None,
-                    }
-                ],
             }
             return SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
                 usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
             )
 
-    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=BadCompletions()))
-
-    with pytest.raises(ValueError, match="unknown trend id"):
-        await classifier.classify_event(event=event, trends=trends, context_chunks=["Context"])
-
-
-@pytest.mark.asyncio
-async def test_classify_event_allows_multiple_signals_for_same_trend(
-    mock_db_session,
-) -> None:
-    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
-    event = Event(id=uuid4(), canonical_summary="Initial summary")
-    trends = [_build_trend("eu-russia", "EU-Russia")]
-
-    class MultiImpactCompletions:
-        async def create(self, **kwargs):
-            _ = kwargs
-            payload = {
-                "summary": "S1. S2.",
-                "extracted_who": ["A"],
-                "extracted_what": "W",
-                "extracted_where": None,
-                "extracted_when": None,
-                "claims": [],
-                "categories": ["security"],
-                "has_contradictions": False,
-                "contradiction_notes": None,
-                "trend_impacts": [
-                    {
-                        "trend_id": "eu-russia",
-                        "signal_type": "military_movement",
-                        "direction": "escalatory",
-                        "severity": 0.7,
-                        "confidence": 0.8,
-                        "rationale": "Signal one",
-                    },
-                    {
-                        "trend_id": "eu-russia",
-                        "signal_type": "diplomatic_breakdown",
-                        "direction": "escalatory",
-                        "severity": 0.6,
-                        "confidence": 0.7,
-                        "rationale": "Signal two",
-                    },
-                ],
-            }
-            return SimpleNamespace(
-                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
-                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
-            )
-
-    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=MultiImpactCompletions()))
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=NoMatchCompletions()))
 
     result, _usage = await classifier.classify_event(
         event=event,
@@ -636,20 +593,166 @@ async def test_classify_event_allows_multiple_signals_for_same_trend(
         context_chunks=["Context"],
     )
 
-    assert result.trend_impacts_count == 2
-    assert isinstance(event.extracted_claims, dict)
-    assert len(event.extracted_claims["trend_impacts"]) == 2
+    assert result.trend_impacts_count == 0
+    diagnostics = event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"]
+    assert diagnostics[0]["reason"] == "no_matching_indicator"
+    assert diagnostics[0]["signal_type"] == "__no_matching_indicator__"
 
 
 @pytest.mark.asyncio
-async def test_classify_event_rejects_duplicate_trend_signal_pairs(
+async def test_classify_event_maps_non_english_claims_from_canonical_context(
     mock_db_session,
 ) -> None:
     classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trends = [_build_trend("eu-russia", "EU-Russia")]
 
-    class DuplicatePairCompletions:
+    class NonEnglishClaimCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "Military movement near the border intensified. Diplomatic contacts continued.",
+                "extracted_who": ["NATO", "Russia"],
+                "extracted_what": "Force repositioning without direct hostile contact",
+                "extracted_where": "Baltic region",
+                "extracted_when": None,
+                "claims": ["Розгортання військ біля кордону посилилося."],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=NonEnglishClaimCompletions())
+    )
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert event.extracted_claims["trend_impacts"][0]["signal_type"] == "military_movement"
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"] == []
+
+
+@pytest.mark.asyncio
+async def test_classify_event_skips_negative_claim_mapping(mock_db_session) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class NegativeClaimCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "Officials denied a border deployment report. Monitoring continued.",
+                "extracted_who": ["NATO", "Russia"],
+                "extracted_what": "Troop deployment near the border",
+                "extracted_where": "Baltic region",
+                "extracted_when": None,
+                "claims": ["Officials denied troop deployment near the border."],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=NegativeClaimCompletions())
+    )
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert event.extracted_claims["trend_impacts"][0]["event_claim_key"] == "__event__"
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"] == []
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["skipped"][0]["reason"] == (
+        "negative_claim"
+    )
+
+
+@pytest.mark.asyncio
+async def test_classify_event_deduplicates_duplicate_indicator_matches(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class DuplicateIndicatorCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "Troop deployment increased near the border. Monitoring continued.",
+                "extracted_who": ["NATO", "Russia"],
+                "extracted_what": "Troop deployment near the border",
+                "extracted_where": "Baltic region",
+                "extracted_when": None,
+                "claims": [
+                    "Troop deployment increased near the border.",
+                    "Deployment activity also intensified near the border.",
+                ],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=DuplicateIndicatorCompletions())
+    )
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert len(event.extracted_claims["trend_impacts"]) == 1
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["deduplicated"][0]["reason"] == (
+        "duplicate_event_indicator"
+    )
+
+
+@pytest.mark.asyncio
+async def test_classify_event_records_ambiguous_mapping_diagnostics(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [
+        _build_trend(
+            "eu-russia",
+            "EU-Russia",
+            actors=[],
+            regions=[],
+        ),
+        _build_trend(
+            "us-china",
+            "US-China",
+            actors=[],
+            regions=[],
+        ),
+    ]
+
+    class AmbiguousCompletions:
         async def create(self, **kwargs):
             _ = kwargs
             payload = {
@@ -658,44 +761,70 @@ async def test_classify_event_rejects_duplicate_trend_signal_pairs(
                 "extracted_what": "W",
                 "extracted_where": None,
                 "extracted_when": None,
-                "claims": [],
-                "categories": [],
+                "claims": ["Troop deployment increased near the border."],
+                "categories": ["security"],
                 "has_contradictions": False,
                 "contradiction_notes": None,
-                "trend_impacts": [
-                    {
-                        "trend_id": "eu-russia",
-                        "signal_type": "military_movement",
-                        "direction": "escalatory",
-                        "severity": 0.5,
-                        "confidence": 0.8,
-                        "rationale": None,
-                    },
-                    {
-                        "trend_id": "eu-russia",
-                        "signal_type": "military_movement",
-                        "direction": "escalatory",
-                        "severity": 0.6,
-                        "confidence": 0.7,
-                        "rationale": None,
-                    },
-                ],
             }
             return SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
                 usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
             )
 
-    classifier.client = SimpleNamespace(
-        chat=SimpleNamespace(completions=DuplicatePairCompletions())
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=AmbiguousCompletions()))
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
     )
 
-    with pytest.raises(ValueError, match="duplicated trend/signal pair"):
-        await classifier.classify_event(
-            event=event,
-            trends=trends,
-            context_chunks=["Context"],
-        )
+    assert result.trend_impacts_count == 0
+    diagnostics = event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"]
+    assert diagnostics[0]["reason"] == "ambiguous_mapping"
+    assert diagnostics[0]["trend_id"] == "__ambiguous__"
+    assert len(diagnostics[0]["details"]["candidates"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_classify_event_mapping_stays_stable_across_model_variants(
+    mock_db_session,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+    first_classifier, _chat_one, _cost_tracker = _build_classifier(
+        mock_db_session,
+        model="gpt-4o-mini",
+    )
+    second_classifier, _chat_two, _cost_tracker_two = _build_classifier(
+        mock_db_session,
+        model="gpt-5-mini",
+    )
+
+    first_event = Event(id=event.id, canonical_summary=event.canonical_summary)
+    second_event = Event(id=event.id, canonical_summary=event.canonical_summary)
+    first_result, _first_usage = await first_classifier.classify_event(
+        event=first_event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+    second_result, _second_usage = await second_classifier.classify_event(
+        event=second_event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert first_result.trend_impacts_count == 1
+    assert second_result.trend_impacts_count == 1
+    first_impacts = [
+        {k: v for k, v in impact.items() if k != "event_claim_id"}
+        for impact in first_event.extracted_claims["trend_impacts"]
+    ]
+    second_impacts = [
+        {k: v for k, v in impact.items() if k != "event_claim_id"}
+        for impact in second_event.extracted_claims["trend_impacts"]
+    ]
+    assert first_impacts == second_impacts
 
 
 @pytest.mark.asyncio
@@ -737,7 +866,6 @@ async def test_classify_event_clears_contradiction_note_when_not_contradicted(
                 "categories": [],
                 "has_contradictions": False,
                 "contradiction_notes": "Should be ignored",
-                "trend_impacts": [],
             }
             return SimpleNamespace(
                 choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
@@ -822,20 +950,10 @@ async def test_classify_event_falls_back_when_strict_schema_mode_unavailable(
                     "extracted_what": "W",
                     "extracted_where": None,
                     "extracted_when": None,
-                    "claims": [],
+                    "claims": ["Troop deployment increased near the border."],
                     "categories": ["security"],
                     "has_contradictions": False,
                     "contradiction_notes": None,
-                    "trend_impacts": [
-                        {
-                            "trend_id": "eu-russia",
-                            "signal_type": "military_movement",
-                            "direction": "escalatory",
-                            "severity": 0.3,
-                            "confidence": 0.8,
-                            "rationale": "match",
-                        }
-                    ],
                 }
                 return SimpleNamespace(
                     choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],

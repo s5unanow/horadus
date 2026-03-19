@@ -52,6 +52,10 @@ from src.processing.pipeline_types import (
 )
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Classifier
+from src.processing.trend_impact_mapping import (
+    iter_unresolved_mapping_gaps,
+    taxonomy_gap_reason_for_mapping,
+)
 from src.processing.trend_impact_reconciliation import (
     event_age_days,
     impact_reasoning,
@@ -613,7 +617,7 @@ class ProcessingPipeline:
             usage.tier2_completion_tokens += tier2_usage.completion_tokens
             usage.tier2_api_calls += tier2_usage.api_calls
             usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
-
+            await self._capture_unresolved_trend_mapping(event=event)
             degraded_hold = False
             replay_enqueued = False
             trend_impacts_seen = 0
@@ -1003,6 +1007,34 @@ class ProcessingPipeline:
                 trend_id=trend_id,
                 signal_type=signal_type,
                 reason=reason.value,
+            )
+
+    async def _capture_unresolved_trend_mapping(self, *, event: Event) -> None:
+        if event.id is None:
+            return
+        for diagnostic in iter_unresolved_mapping_gaps(event):
+            reason_value = diagnostic.get("reason")
+            if not isinstance(reason_value, str) or not reason_value.strip():
+                continue
+            trend_id = diagnostic.get("trend_id")
+            signal_type = diagnostic.get("signal_type")
+            details = diagnostic.get("details")
+            if not isinstance(trend_id, str) or not trend_id.strip():
+                continue
+            if not isinstance(signal_type, str) or not signal_type.strip():
+                continue
+            if not isinstance(details, dict):
+                details = {}
+            await self._capture_taxonomy_gap(
+                event_id=event.id,
+                trend_id=trend_id.strip(),
+                signal_type=signal_type.strip(),
+                reason=taxonomy_gap_reason_for_mapping(reason_value.strip()),
+                details={
+                    **details,
+                    "event_claim_key": diagnostic.get("event_claim_key"),
+                    "event_claim_text": diagnostic.get("event_claim_text"),
+                },
             )
 
     async def _load_event_source_credibility(self, event: Event) -> float:

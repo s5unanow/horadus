@@ -1,14 +1,16 @@
 # Taxonomy Gap Triage
 
-**Last Verified**: 2026-02-18
+**Last Verified**: 2026-03-19
 
 ## Purpose
 
-`taxonomy_gaps` records runtime cases where Tier-2 emitted a trend impact that was
-not scoreable against current trend taxonomy:
+`taxonomy_gaps` records runtime cases where deterministic trend-impact mapping
+could not produce a safe, scoreable indicator assignment:
 
 - `unknown_trend_id`
 - `unknown_signal_type`
+- `ambiguous_mapping`
+- `no_matching_indicator`
 
 Safety rule: these impacts are never applied to trend log-odds deltas.
 
@@ -51,10 +53,11 @@ curl -sS -X PATCH "$BASE_URL/api/v1/taxonomy-gaps/$GAP_ID" \
 
 For each open gap:
 
-1. Validate whether the emitted signal maps to an existing indicator.
-2. If equivalent, normalize prompt/config and close as `resolved`.
-3. If new-but-valid, add indicator in `config/trends/*.yaml`, sync trends, close as `resolved`.
-4. If out-of-scope/noisy, close as `rejected` with rationale.
+1. Inspect `details` to see the extracted claim text and any candidate mappings.
+2. If the deterministic mapper was missing an equivalent indicator, normalize config and close as `resolved`.
+3. If the gap is a genuine new signal, add the indicator in `config/trends/*.yaml`, sync trends, and close as `resolved`.
+4. If the case is ambiguous, refine the trend metadata or extraction contract so one unique mapping becomes possible.
+5. If the case is out-of-scope/noisy, close as `rejected` with rationale.
 
 ## Benchmark Guard
 

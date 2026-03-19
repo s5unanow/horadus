@@ -160,6 +160,19 @@ def test_assign_claim_keys_to_impacts_covers_selection_paths() -> None:
 
     assert long_assigned[0]["event_claim_key"] == normalize_claim_key(second_long_claim)
 
+    no_overlap_assigned = assign_claim_keys_to_impacts(
+        event=multi_claim_event,
+        impacts=[
+            {
+                "signal_type": "military_movement",
+                "direction": "escalatory",
+                "rationale": "Totally unrelated rationale",
+            }
+        ],
+    )
+
+    assert no_overlap_assigned[0]["event_claim_key"] == FALLBACK_EVENT_CLAIM_KEY
+
 
 @pytest.mark.asyncio
 async def test_sync_event_claims_requires_event_id() -> None:

@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code
 - `TASK-340` Split Event Epistemic State from Activity State
 - `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware
 - `TASK-235` Add Event Split/Merge Lineage for Evolving Stories
@@ -59,3 +58,4 @@
 - `TASK-355` Add repo-owned sprint autopilot automation with external locking ✅
 - `TASK-356` Move autopilot lock into the automation-owned Codex path ✅
 - `TASK-357` Version a repo-owned Codex rules baseline for autopilot workflow commands ✅
+- `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code ✅

@@ -273,6 +273,33 @@ def test_map_event_trend_impacts_skips_negative_claims() -> None:
     )
 
 
+def test_map_event_trend_impacts_does_not_treat_without_as_negative() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Summary",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Force repositioning without direct hostile contact",
+        extracted_claims={
+            "claims": ["Forces repositioned near the border without direct hostile contact."],
+            "claim_graph": {
+                "nodes": [
+                    {
+                        "claim_id": "claim_1",
+                        "text": "Forces repositioned near the border without direct hostile contact.",
+                    }
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert len(result.impacts) == 1
+    assert "skipped" not in result.diagnostics
+
+
 def test_map_event_trend_impacts_does_not_skip_unknown_language_claims() -> None:
     event = Event(
         id=uuid4(),
@@ -297,6 +324,102 @@ def test_map_event_trend_impacts_does_not_skip_unknown_language_claims() -> None
     assert result.impacts == []
     assert result.diagnostics["unresolved"][0]["reason"] == "no_matching_indicator"
     assert "skipped" not in result.diagnostics
+
+
+def test_map_event_trend_impacts_uses_canonical_context_for_english_paraphrases() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Troop deployment increased near the border.",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Troop deployment near the border",
+        extracted_claims={
+            "claims": ["Forces moved again near the frontier."],
+            "claim_graph": {
+                "nodes": [{"claim_id": "claim_1", "text": "Forces moved again near the frontier."}],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert len(result.impacts) == 1
+    assert result.impacts[0]["signal_type"] == "military_movement"
+    assert result.diagnostics["unresolved"] == []
+
+
+def test_map_event_trend_impacts_deduplicates_duplicate_indicator_matches() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Summary",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Troop deployment near the border",
+        extracted_claims={
+            "claims": [
+                "Troop deployment increased near the border.",
+                "Deployment activity also intensified near the border.",
+            ],
+            "claim_graph": {
+                "nodes": [
+                    {
+                        "claim_id": "claim_1",
+                        "text": "Troop deployment increased near the border.",
+                    },
+                    {
+                        "claim_id": "claim_2",
+                        "text": "Deployment activity also intensified near the border.",
+                    },
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert len(result.impacts) == 1
+    assert result.impacts[0]["event_claim_key"] == "troop deployment increased near the border"
+    assert result.diagnostics["deduplicated"][0]["reason"] == "duplicate_event_indicator"
+    assert result.diagnostics["deduplicated"][0]["signal_type"] == "military_movement"
+
+
+def test_map_event_trend_impacts_replaces_weaker_duplicate_indicator_match() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Troop deployment increased near the border.",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Troop deployment near the border",
+        extracted_claims={
+            "claims": [
+                "Forces moved again near the frontier.",
+                "Troop deployment increased near the border.",
+            ],
+            "claim_graph": {
+                "nodes": [
+                    {"claim_id": "claim_1", "text": "Forces moved again near the frontier."},
+                    {
+                        "claim_id": "claim_2",
+                        "text": "Troop deployment increased near the border.",
+                    },
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert len(result.impacts) == 1
+    assert result.impacts[0]["event_claim_key"] == "troop deployment increased near the border"
+    assert result.diagnostics["deduplicated"][0]["event_claim_key"] == (
+        "forces moved again near the frontier"
+    )
+    assert result.diagnostics["deduplicated"][0]["details"]["kept_event_claim_key"] == (
+        "troop deployment increased near the border"
+    )
 
 
 def test_map_event_trend_impacts_uses_default_indicator_description_and_multi_keyword_signal() -> (

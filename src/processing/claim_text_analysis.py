@@ -15,7 +15,6 @@ _CLAIM_NEGATIVE_MARKERS: dict[str, tuple[str, ...]] = {
         " refuted",
         " refutes",
         " false",
-        " without ",
         "did not",
         "didn't",
     ),

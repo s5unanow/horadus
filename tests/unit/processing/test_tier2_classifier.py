@@ -685,6 +685,53 @@ async def test_classify_event_skips_negative_claim_mapping(mock_db_session) -> N
 
 
 @pytest.mark.asyncio
+async def test_classify_event_deduplicates_duplicate_indicator_matches(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class DuplicateIndicatorCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "Troop deployment increased near the border. Monitoring continued.",
+                "extracted_who": ["NATO", "Russia"],
+                "extracted_what": "Troop deployment near the border",
+                "extracted_where": "Baltic region",
+                "extracted_when": None,
+                "claims": [
+                    "Troop deployment increased near the border.",
+                    "Deployment activity also intensified near the border.",
+                ],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=DuplicateIndicatorCompletions())
+    )
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert len(event.extracted_claims["trend_impacts"]) == 1
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["deduplicated"][0]["reason"] == (
+        "duplicate_event_indicator"
+    )
+
+
+@pytest.mark.asyncio
 async def test_classify_event_records_ambiguous_mapping_diagnostics(
     mock_db_session,
 ) -> None:

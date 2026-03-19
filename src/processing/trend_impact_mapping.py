@@ -94,6 +94,13 @@ class _IndicatorMatchSignals:
         return bool(self.canonical_keyword_matches or len(self.canonical_overlap) >= 2)
 
 
+@dataclass(frozen=True)
+class _SelectedImpact:
+    impact: dict[str, Any]
+    score: int
+    claim_order: int
+
+
 def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpactMappingResult:
     """Map extracted claims onto eligible trend indicators."""
 
@@ -101,9 +108,10 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
     event_context = _event_context_text(event)
     indicators = _indicator_contexts(trends)
 
-    mapped_impacts: list[dict[str, Any]] = []
+    selected_impacts: dict[tuple[str, str], _SelectedImpact] = {}
     unresolved: list[dict[str, Any]] = []
     skipped: list[dict[str, Any]] = []
+    deduplicated: list[dict[str, Any]] = []
     for claim in claim_specs:
         if _is_negative_claim(claim):
             skipped.append(_negative_claim_diagnostic(claim=claim, event=event))
@@ -127,8 +135,47 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
                 )
             )
             continue
-        mapped_impacts.append(_build_impact(best=best, runner_up=runner_up))
+        selected = _SelectedImpact(
+            impact=_build_impact(best=best, runner_up=runner_up),
+            score=best.score,
+            claim_order=best.claim.claim_order,
+        )
+        impact_key = _impact_key(best)
+        existing = selected_impacts.get(impact_key)
+        if existing is None:
+            selected_impacts[impact_key] = selected
+            continue
+        if _prefer_selected_impact(candidate=selected, current=existing):
+            deduplicated.append(
+                _deduplicated_impact_diagnostic(
+                    kept=selected,
+                    suppressed=existing,
+                    trend_id=impact_key[0],
+                    signal_type=impact_key[1],
+                )
+            )
+            selected_impacts[impact_key] = selected
+            continue
+        deduplicated.append(
+            _deduplicated_impact_diagnostic(
+                kept=existing,
+                suppressed=selected,
+                trend_id=impact_key[0],
+                signal_type=impact_key[1],
+            )
+        )
 
+    mapped_impacts = [
+        selection.impact
+        for selection in sorted(
+            selected_impacts.values(),
+            key=lambda selection: (
+                selection.claim_order,
+                str(selection.impact["trend_id"]),
+                str(selection.impact["signal_type"]),
+            ),
+        )
+    ]
     diagnostics = {
         "version": _MAPPING_VERSION,
         "strategy": "keyword-metadata-canonical-context",
@@ -136,6 +183,8 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
     }
     if skipped:
         diagnostics["skipped"] = skipped
+    if deduplicated:
+        diagnostics["deduplicated"] = deduplicated
     return TrendImpactMappingResult(impacts=mapped_impacts, diagnostics=diagnostics)
 
 
@@ -255,8 +304,7 @@ def _rank_candidates(
 ) -> list[_Candidate]:
     claim_text = normalize_claim_text(claim.claim_text)
     claim_terms = set(claim_text.split())
-    claim_language_code = claim_language(claim.claim_text)
-    canonical_context = event_context if claim_language_code != "en" else ""
+    canonical_context = event_context
     canonical_terms = set(canonical_context.split())
     event_terms = set(event_context.split())
     candidates: list[_Candidate] = []
@@ -362,6 +410,22 @@ def _candidate_score(
     )
 
 
+def _impact_key(candidate: _Candidate) -> tuple[str, str]:
+    return candidate.indicator.trend_id, candidate.indicator.signal_type
+
+
+def _prefer_selected_impact(*, candidate: _SelectedImpact, current: _SelectedImpact) -> bool:
+    return (
+        candidate.score,
+        -candidate.claim_order,
+        str(candidate.impact["event_claim_key"]),
+    ) > (
+        current.score,
+        -current.claim_order,
+        str(current.impact["event_claim_key"]),
+    )
+
+
 def _is_negative_claim(claim: EventClaimSpec) -> bool:
     language = claim_language(claim.claim_text)
     if language not in {"en", "uk", "ru"}:
@@ -438,6 +502,28 @@ def _negative_claim_diagnostic(*, claim: EventClaimSpec, event: Event) -> dict[s
             "claim_order": claim.claim_order,
             "event_where": event.extracted_where,
             "event_when": extracted_when.isoformat() if extracted_when is not None else None,
+        },
+    }
+
+
+def _deduplicated_impact_diagnostic(
+    *,
+    kept: _SelectedImpact,
+    suppressed: _SelectedImpact,
+    trend_id: str,
+    signal_type: str,
+) -> dict[str, Any]:
+    return {
+        "reason": "duplicate_event_indicator",
+        "trend_id": trend_id,
+        "signal_type": signal_type,
+        "event_claim_key": suppressed.impact["event_claim_key"],
+        "event_claim_text": suppressed.impact["event_claim_text"],
+        "details": {
+            "kept_event_claim_key": kept.impact["event_claim_key"],
+            "kept_event_claim_text": kept.impact["event_claim_text"],
+            "kept_score": kept.score,
+            "suppressed_score": suppressed.score,
         },
     }
 

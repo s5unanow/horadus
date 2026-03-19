@@ -5,6 +5,11 @@ there as the canonical workflow policy.
 
 ## Safety Gates Before Any Repo Work
 
+The required Codex sandbox-escape baseline lives at
+`codex/rules/default.rules`. If a command needed below is blocked by sandbox
+policy, stop and report that the operator must install the repo-owned Codex
+rules baseline before the automation can proceed.
+
 1. Resolve `CODEX_HOME_RESOLVED="${CODEX_HOME:-$HOME/.codex}"`.
 2. Acquire exclusive ownership of the external lock at:
    - `$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock`

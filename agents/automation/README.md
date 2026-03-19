@@ -11,6 +11,10 @@ the sprint autopilot task runner, and the outputs/reporting flows that write und
 Automations should keep their configured prompt minimal: open the relevant file
 here and follow it exactly.
 
+Codex app automations that need to escape the default sandbox should use the
+repo-owned baseline in `codex/rules/default.rules`; operators still need to
+install that rules file into an active Codex rules layer locally.
+
 Related policy:
 - `docs/ASSESSMENTS.md`
 

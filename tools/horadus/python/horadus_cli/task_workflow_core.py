@@ -8,6 +8,9 @@ import types
 
 from tools.horadus.python.horadus_workflow import result as result_module
 from tools.horadus.python.horadus_workflow import task_repo
+from tools.horadus.python.horadus_workflow import (
+    task_workflow_automation_lock as automation_lock_module,
+)
 from tools.horadus.python.horadus_workflow import task_workflow_finish as finish_module
 from tools.horadus.python.horadus_workflow import task_workflow_friction as friction_module
 from tools.horadus.python.horadus_workflow import task_workflow_ledgers as ledgers_module
@@ -54,6 +57,7 @@ _MODULE_EXPORTS: dict[object, list[str]] = {
     preflight_module: list(preflight_module.__all__),
     ledgers_module: list(ledgers_module.__all__),
     lifecycle_module: list(lifecycle_module.__all__),
+    automation_lock_module: list(automation_lock_module.__all__),
     local_review_module: list(local_review_module.__all__),
     finish_module: list(finish_module.__all__),
     query_module: list(query_module.__all__),

@@ -75,6 +75,33 @@ def test_task_commands_registers_local_review_and_keeps_local_gate_wiring() -> N
     assert gate_args.handler is task_commands_module.handle_local_gate
 
 
+def test_task_commands_registers_automation_lock_subcommands() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+
+    task_parser_module.register_task_commands(subparsers)
+    args = parser.parse_args(
+        [
+            "tasks",
+            "automation-lock",
+            "lock",
+            "--path",
+            "/tmp/horadus-lock",
+            "--format",
+            "json",
+            "--dry-run",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "automation-lock"
+    assert args.automation_lock_command == "lock"
+    assert args.path == "/tmp/horadus-lock"
+    assert args.output_format == "json"
+    assert args.dry_run is True
+    assert args.handler is task_commands_module.handle_automation_lock_lock
+
+
 def test_command_handlers_wrap_data_functions_and_validation_errors(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -117,6 +144,21 @@ def test_command_handlers_wrap_data_functions_and_validation_errors(
         "local_review_data",
         lambda **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["review"]),
     )
+    monkeypatch.setattr(
+        task_commands_module,
+        "automation_lock_check_data",
+        lambda *_args, **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["check"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "automation_lock_lock_data",
+        lambda *_args, **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["lock"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "automation_lock_unlock_data",
+        lambda *_args, **_kwargs: (task_commands_module.ExitCode.OK, {"ok": True}, ["unlock"]),
+    )
 
     assert task_commands_module.handle_finish(
         argparse.Namespace(task_id="257", dry_run=False)
@@ -152,6 +194,15 @@ def test_command_handlers_wrap_data_functions_and_validation_errors(
             dry_run=False,
         )
     ).lines == ["review"]
+    assert task_commands_module.handle_automation_lock_check(
+        argparse.Namespace(path="/tmp/check", dry_run=False)
+    ).lines == ["check"]
+    assert task_commands_module.handle_automation_lock_lock(
+        argparse.Namespace(path="/tmp/lock", dry_run=False)
+    ).lines == ["lock"]
+    assert task_commands_module.handle_automation_lock_unlock(
+        argparse.Namespace(path="/tmp/unlock", dry_run=False)
+    ).lines == ["unlock"]
 
     assert task_commands_module.handle_finish(
         argparse.Namespace(task_id="bad-task", dry_run=False)

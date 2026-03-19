@@ -188,14 +188,19 @@ Use this only for genuine friction or forced fallback after sensible recovery
 attempts, not routine success cases or expected empty results, and do not
 treat the log as required reading during normal task flow.
 
-15. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
+15. `uv run --no-sync horadus tasks automation-lock check --path "$CODEX_HOME/automations/<id>/lock"`
+When: inspect or recover the repo-owned external lock path used by a Codex automation.
+Use `automation-lock lock` to acquire the lock and `automation-lock unlock` to release it.
+This is the portable replacement for host-specific `flock` usage in the sprint autopilot path.
+
+16. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
 When: generate the compact daily friction report at
 `artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`.
 The report groups duplicate patterns, highlights candidate CLI/skill
 improvements, and keeps follow-up work in human-review-only form. Do not
 auto-create backlog tasks from the report.
 
-16. `make test-integration-docker`
+17. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

@@ -15,6 +15,9 @@ def test_repo_owned_codex_rules_baseline_covers_autopilot_prefixes() -> None:
     rules = RULES_FILE.read_text(encoding="utf-8")
 
     assert 'pattern = ["uv", "run", "--no-sync", "horadus"]' in rules
+    assert "tasks automation-lock check --path" in rules
+    assert "tasks automation-lock lock --path" in rules
+    assert "tasks automation-lock unlock --path" in rules
     assert 'pattern = ["git", "status"]' in rules
     assert 'pattern = ["git", "rev-parse"]' in rules
     assert 'pattern = ["git", "fetch"]' in rules

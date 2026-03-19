@@ -72,6 +72,27 @@ def test_build_parser_accepts_task_local_gate_command() -> None:
     assert args.full is True
 
 
+def test_build_parser_accepts_task_automation_lock_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "automation-lock",
+            "check",
+            "--path",
+            "/tmp/horadus-lock",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "automation-lock"
+    assert args.automation_lock_command == "check"
+    assert args.path == "/tmp/horadus-lock"
+    assert args.output_format == "json"
+
+
 def test_build_parser_accepts_task_local_review_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(

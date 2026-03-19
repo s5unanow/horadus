@@ -58,6 +58,8 @@ def test_horadus_sprint_autopilot_instructions_cover_resume_and_main_sync() -> N
 
     assert "codex/rules/default.rules" in instructions
     assert "automations/horadus-sprint-autopilot/lock" in instructions
+    assert "horadus tasks automation-lock lock --path" in instructions
+    assert "horadus tasks automation-lock unlock --path" in instructions
     assert "git pull --ff-only" in instructions
     assert "open non-merged task PR" in instructions
     assert "uv run --no-sync horadus tasks finish TASK-XXX" in instructions

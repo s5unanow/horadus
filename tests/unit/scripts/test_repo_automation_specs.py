@@ -56,6 +56,7 @@ def test_repo_owned_automation_specs_have_expected_instruction_targets() -> None
 def test_horadus_sprint_autopilot_instructions_cover_resume_and_main_sync() -> None:
     instructions = AUTOPILOT_INSTRUCTIONS.read_text(encoding="utf-8")
 
+    assert "codex/rules/default.rules" in instructions
     assert "automations/horadus-sprint-autopilot/lock" in instructions
     assert "git pull --ff-only" in instructions
     assert "open non-merged task PR" in instructions

@@ -1,0 +1,88 @@
+# Horadus sprint autopilot baseline.
+# Source of truth: codex/rules/default.rules in the repo.
+
+prefix_rule(
+    pattern = ["uv", "run", "--no-sync", "horadus"],
+    decision = "allow",
+    justification = "Allow Horadus workflow commands required by repo-owned Codex automations.",
+    match = [
+        "uv run --no-sync horadus tasks preflight",
+        "uv run --no-sync horadus tasks safe-start TASK-357 --name codex-rules-baseline",
+        "uv run --no-sync horadus tasks finish TASK-357",
+    ],
+    not_match = [
+        "uv run horadus tasks preflight",
+        "uv sync",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "fetch"],
+    decision = "allow",
+    justification = "Allow remote sync checks required by the Horadus workflow.",
+    match = [
+        "git fetch origin",
+        "git fetch --all --prune",
+    ],
+    not_match = [
+        "git pull --ff-only",
+        "git push origin main",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "pull", "--ff-only"],
+    decision = "allow",
+    justification = "Allow fast-forward-only main sync before and after task work.",
+    match = [
+        "git pull --ff-only",
+        "git pull --ff-only origin main",
+    ],
+    not_match = [
+        "git pull",
+        "git fetch origin",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push"],
+    decision = "allow",
+    justification = "Allow publishing task branches and merge-ready heads to origin.",
+    match = [
+        "git push origin codex/task-357-codex-rules-baseline",
+        "git push --set-upstream origin codex/task-357-codex-rules-baseline",
+    ],
+    not_match = [
+        "git pull --ff-only",
+        "git fetch origin",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "pr"],
+    decision = "allow",
+    justification = "Allow PR state, checks, and review status queries for the task lifecycle.",
+    match = [
+        "gh pr list --state open --base main --author @me",
+        "gh pr view 290 --json title,body,comments",
+        "gh pr checks 290",
+    ],
+    not_match = [
+        "gh api graphql",
+        "gh auth status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "api"],
+    decision = "allow",
+    justification = "Allow review-thread inspection and resolution through the GitHub API.",
+    match = [
+        "gh api graphql -f query=query",
+        "gh api repos/s5unanow/horadus/pulls/290/comments",
+    ],
+    not_match = [
+        "gh pr view 290",
+        "gh auth status",
+    ],
+)

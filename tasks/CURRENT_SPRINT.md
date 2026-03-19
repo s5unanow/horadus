@@ -58,3 +58,4 @@
 - `TASK-353` Align canonical release and local gates with the full repo-owned analyzer set ✅
 - `TASK-355` Add repo-owned sprint autopilot automation with external locking ✅
 - `TASK-356` Move autopilot lock into the automation-owned Codex path ✅
+- `TASK-357` Version a repo-owned Codex rules baseline for autopilot workflow commands ✅

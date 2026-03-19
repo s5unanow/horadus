@@ -148,8 +148,8 @@ prefix_rule(
         "git push origin codex/task-357-codex-rules-baseline",
     ],
     not_match = [
-        "git push origin main",
-        "git push --force origin codex/task-357-codex-rules-baseline",
+        "git push backup codex/task-357-codex-rules-baseline",
+        "git fetch origin",
     ],
 )
 
@@ -161,8 +161,8 @@ prefix_rule(
         "git push -u origin codex/task-357-codex-rules-baseline",
     ],
     not_match = [
-        "git push -u origin main",
-        "git push origin codex/task-357-codex-rules-baseline",
+        "git push -u backup codex/task-357-codex-rules-baseline",
+        "git fetch origin",
     ],
 )
 
@@ -174,8 +174,8 @@ prefix_rule(
         "git push --set-upstream origin codex/task-357-codex-rules-baseline",
     ],
     not_match = [
-        "git push --set-upstream origin main",
-        "git push origin codex/task-357-codex-rules-baseline",
+        "git push --set-upstream backup codex/task-357-codex-rules-baseline",
+        "git fetch origin",
     ],
 )
 

@@ -12,6 +12,14 @@ from typing import Any
 
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
+_fcntl: Any
+try:
+    import fcntl as _fcntl
+except ImportError:  # pragma: no cover - unavailable on Windows.
+    _fcntl = None
+
+fcntl = _fcntl
+
 _LOCK_METADATA_NAME = "metadata.json"
 
 
@@ -28,6 +36,7 @@ class AutomationLockInfo:
     cwd: str | None = None
     owner_pid: int | None = None
     owner_pid_running: bool | None = None
+    legacy_lock_active: bool | None = None
     error: str | None = None
 
 
@@ -85,6 +94,29 @@ def _looks_like_legacy_flock_lock(raw_content: str) -> bool:
     return stripped == "" or stripped[0] not in "[{"
 
 
+def _legacy_flock_lock_active(lock_path: Path) -> bool | None:
+    if fcntl is None:
+        return None
+    try:
+        handle = os.open(lock_path, os.O_RDWR)
+    except OSError:
+        return None
+    try:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        except OSError:
+            return None
+        try:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+        except OSError:
+            return None
+        return False
+    finally:
+        os.close(handle)
+
+
 def _load_lock_info(lock_path: Path) -> AutomationLockInfo:
     if not lock_path.exists():
         return AutomationLockInfo(path=str(lock_path), status="available", exists=False)
@@ -120,11 +152,13 @@ def _load_lock_info(lock_path: Path) -> AutomationLockInfo:
         payload = json.loads(raw_payload)
     except json.JSONDecodeError as exc:
         if _looks_like_legacy_flock_lock(raw_payload):
+            legacy_lock_active = _legacy_flock_lock_active(lock_path)
             return AutomationLockInfo(
                 path=str(lock_path),
                 status="legacy",
                 exists=True,
                 metadata_path=str(metadata_path),
+                legacy_lock_active=legacy_lock_active,
                 error="legacy flock lock file",
             )
         return AutomationLockInfo(
@@ -195,6 +229,8 @@ def _check_lines(info: AutomationLockInfo) -> list[str]:
         lines.append(f"- owner_pid: {info.owner_pid}")
     if info.owner_pid_running is not None:
         lines.append(f"- owner_pid_running: {'yes' if info.owner_pid_running else 'no'}")
+    if info.legacy_lock_active is not None:
+        lines.append(f"- legacy_lock_active: {'yes' if info.legacy_lock_active else 'no'}")
     if info.error is not None:
         lines.append(f"- error: {info.error}")
     return lines
@@ -253,6 +289,109 @@ def _unlock_validation_error(
     else:
         lines.extend(_check_lines(info))
     return (ExitCode.VALIDATION_ERROR, asdict(info) | {"dry_run": False}, lines)
+
+
+def _unlock_environment_error(
+    *,
+    info: AutomationLockInfo,
+    message: str,
+    exc: OSError,
+) -> tuple[int, dict[str, object], list[str]]:
+    return (
+        ExitCode.ENVIRONMENT_ERROR,
+        asdict(info) | {"dry_run": False, "error": str(exc)},
+        [
+            "Automation lock release failed.",
+            message,
+            str(exc),
+        ],
+    )
+
+
+def _unlock_file_lock(
+    lock_path: Path,
+    *,
+    info: AutomationLockInfo,
+    owner_pid: int | None,
+) -> tuple[int, dict[str, object], list[str]]:
+    if info.status == "broken":
+        return _unlock_validation_error(info)
+    if info.status == "held" and info.owner_pid is not None:
+        if owner_pid is None:
+            return _unlock_validation_error(
+                info,
+                message="Unlock requires --owner-pid to release a live automation lock.",
+            )
+        if owner_pid != info.owner_pid:
+            return _unlock_validation_error(
+                info,
+                message=f"Unlock owner mismatch: lock is owned by pid {info.owner_pid}, not {owner_pid}.",
+            )
+    try:
+        lock_path.unlink()
+    except OSError as exc:
+        return _unlock_environment_error(
+            info=info,
+            message=f"Unable to remove the automation lock file: {lock_path}",
+            exc=exc,
+        )
+    return (
+        ExitCode.OK,
+        {
+            "path": str(lock_path),
+            "status": "released",
+            "dry_run": False,
+            "removed_file": True,
+        },
+        [f"Automation lock file removed: {lock_path}"],
+    )
+
+
+def _unlock_directory_lock(
+    lock_path: Path,
+    *,
+    info: AutomationLockInfo,
+) -> tuple[int, dict[str, object], list[str]]:
+    metadata_path = _metadata_path(lock_path)
+    try:
+        unexpected_entries = sorted(
+            entry.name for entry in lock_path.iterdir() if entry.name != _LOCK_METADATA_NAME
+        )
+    except OSError as exc:
+        return _unlock_environment_error(
+            info=info,
+            message=f"Unable to inspect the automation lock directory: {lock_path}",
+            exc=exc,
+        )
+    if unexpected_entries:
+        return (
+            ExitCode.VALIDATION_ERROR,
+            asdict(info) | {"dry_run": False, "unexpected_entries": unexpected_entries},
+            [
+                "Automation lock release failed.",
+                f"Lock directory contains unexpected entries: {', '.join(unexpected_entries)}",
+            ],
+        )
+    try:
+        if metadata_path.exists():
+            metadata_path.unlink()
+        lock_path.rmdir()
+    except OSError as exc:
+        return _unlock_environment_error(
+            info=info,
+            message=f"Unable to remove the automation lock directory: {lock_path}",
+            exc=exc,
+        )
+    return (
+        ExitCode.OK,
+        {
+            "path": str(lock_path),
+            "status": "released",
+            "dry_run": False,
+            "removed_file": False,
+        },
+        [f"Automation lock released: {lock_path}"],
+    )
 
 
 def _attempt_lock_publish(
@@ -319,6 +458,28 @@ def automation_lock_lock_data(
         )
 
     info = _load_lock_info(lock_path)
+    if info.status == "legacy":
+        if info.legacy_lock_active is not False:
+            return _lock_validation_error(info, dry_run=dry_run)
+        if dry_run:
+            return (
+                ExitCode.OK,
+                asdict(info) | {"dry_run": True},
+                [
+                    *_check_lines(info),
+                    f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
+                ],
+            )
+        try:
+            lock_path.unlink()
+        except OSError as exc:
+            return _lock_environment_error(
+                lock_path,
+                info=info,
+                message=f"Unable to clear the inactive legacy lock file: {lock_path}",
+                exc=exc,
+            )
+        info = _load_lock_info(lock_path)
     if info.status != "available":
         return _lock_validation_error(info, dry_run=dry_run)
     if dry_run:
@@ -367,43 +528,7 @@ def automation_lock_unlock_data(
         )
 
     if lock_path.is_file():
-        if info.status == "broken":
-            return _unlock_validation_error(info)
-        if info.status == "held" and info.owner_pid is not None:
-            if owner_pid is None:
-                return _unlock_validation_error(
-                    info,
-                    message="Unlock requires --owner-pid to release a live automation lock.",
-                )
-            if owner_pid != info.owner_pid:
-                return _unlock_validation_error(
-                    info,
-                    message=(
-                        f"Unlock owner mismatch: lock is owned by pid {info.owner_pid}, not {owner_pid}."
-                    ),
-                )
-        try:
-            lock_path.unlink()
-        except OSError as exc:
-            return (
-                ExitCode.ENVIRONMENT_ERROR,
-                asdict(info) | {"dry_run": False, "error": str(exc)},
-                [
-                    "Automation lock release failed.",
-                    f"Unable to remove the automation lock file: {lock_path}",
-                    str(exc),
-                ],
-            )
-        return (
-            ExitCode.OK,
-            {
-                "path": str(lock_path),
-                "status": "released",
-                "dry_run": False,
-                "removed_file": True,
-            },
-            [f"Automation lock file removed: {lock_path}"],
-        )
+        return _unlock_file_lock(lock_path, info=info, owner_pid=owner_pid)
 
     if not lock_path.is_dir():
         return (
@@ -415,33 +540,7 @@ def automation_lock_unlock_data(
             ],
         )
 
-    metadata_path = _metadata_path(lock_path)
-    unexpected_entries = sorted(
-        entry.name for entry in lock_path.iterdir() if entry.name != _LOCK_METADATA_NAME
-    )
-    if unexpected_entries:
-        return (
-            ExitCode.VALIDATION_ERROR,
-            asdict(info) | {"dry_run": False, "unexpected_entries": unexpected_entries},
-            [
-                "Automation lock release failed.",
-                f"Lock directory contains unexpected entries: {', '.join(unexpected_entries)}",
-            ],
-        )
-
-    if metadata_path.exists():
-        metadata_path.unlink()
-    lock_path.rmdir()
-    return (
-        ExitCode.OK,
-        {
-            "path": str(lock_path),
-            "status": "released",
-            "dry_run": False,
-            "removed_file": False,
-        },
-        [f"Automation lock released: {lock_path}"],
-    )
+    return _unlock_directory_lock(lock_path, info=info)
 
 
 def handle_automation_lock_check(args: Any) -> CommandResult:

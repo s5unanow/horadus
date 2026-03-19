@@ -12,6 +12,9 @@ alongside the repo workflow.
 - Coverage: the repo-owned Horadus CLI entrypoint plus the git and GitHub CLI
   subcommands that the current preflight, safe-start, and finish lifecycle
   shells out to.
+- Guardrails: the baseline also carries explicit `forbidden` rules for direct
+  `main` pushes, force-push variants, and destructive `gh api --method ...`
+  admin writes so the escape hatch stays aligned with the autopilot contract.
 
 ## Operator Setup
 

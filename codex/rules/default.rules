@@ -141,19 +141,78 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "push", "origin"],
+    decision = "allow",
+    justification = "Allow publishing updates to task branches that already track origin.",
+    match = [
+        "git push origin codex/task-357-codex-rules-baseline",
+    ],
+    not_match = [
+        "git push origin main",
+        "git push --force origin codex/task-357-codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "push", "-u", "origin"],
     decision = "allow",
-    justification = "Allow publishing task branches and merge-ready heads to origin.",
+    justification = "Allow first push of a new task branch to origin with upstream tracking.",
     match = [
-        "git push --set-upstream origin codex/task-357-codex-rules-baseline",
         "git push -u origin codex/task-357-codex-rules-baseline",
     ],
     not_match = [
+        "git push -u origin main",
         "git push origin codex/task-357-codex-rules-baseline",
-        "git push origin main",
-        "git pull --ff-only",
-        "git fetch origin",
     ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--set-upstream", "origin"],
+    decision = "allow",
+    justification = "Allow first push of a new task branch when git renders the long upstream flag.",
+    match = [
+        "git push --set-upstream origin codex/task-357-codex-rules-baseline",
+    ],
+    not_match = [
+        "git push --set-upstream origin main",
+        "git push origin codex/task-357-codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "push", "origin", "main"],
+    decision = "forbidden",
+    justification = "Do not push directly to main from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "-u", "origin", "main"],
+    decision = "forbidden",
+    justification = "Do not publish main as a tracked branch from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--set-upstream", "origin", "main"],
+    decision = "forbidden",
+    justification = "Do not publish main as a tracked branch from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force"],
+    decision = "forbidden",
+    justification = "Do not allow force-pushes from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "-f"],
+    decision = "forbidden",
+    justification = "Do not allow force-pushes from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["git", "push", "--force-with-lease"],
+    decision = "forbidden",
+    justification = "Do not allow force-pushes from Codex automations.",
 )
 
 prefix_rule(
@@ -185,16 +244,37 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["gh", "api", "graphql"],
+    pattern = ["gh", "api"],
     decision = "allow",
-    justification = "Allow review-thread inspection and resolution through the GraphQL calls used by the finish workflow.",
+    justification = "Allow the review-gate REST and GraphQL calls used by Horadus finish for this repo.",
     match = [
+        "gh api repos/s5unanow/horadus/pulls/290/reviews",
+        "gh api repos/s5unanow/horadus/pulls/290/comments",
+        "gh api repos/s5unanow/horadus/issues/290/comments",
+        "gh api repos/s5unanow/horadus/issues/290/reactions",
         "gh api graphql -f query=query",
         "gh api graphql -f query=mutation",
     ],
     not_match = [
-        "gh api repos/s5unanow/horadus/pulls/290/comments",
         "gh pr view 290",
         "gh auth status",
     ],
+)
+
+prefix_rule(
+    pattern = ["gh", "api", "--method", "PATCH"],
+    decision = "forbidden",
+    justification = "Do not allow repository-admin REST mutations from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["gh", "api", "--method", "PUT"],
+    decision = "forbidden",
+    justification = "Do not allow repository-admin REST mutations from Codex automations.",
+)
+
+prefix_rule(
+    pattern = ["gh", "api", "--method", "DELETE"],
+    decision = "forbidden",
+    justification = "Do not allow destructive REST mutations from Codex automations.",
 )

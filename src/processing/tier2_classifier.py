@@ -1,4 +1,4 @@
-"""Tier 2 LLM classifier for detailed event extraction and trend impacts."""
+"""Tier 2 LLM classifier for detailed event extraction."""
 
 # ruff: noqa: RUF001
 
@@ -18,7 +18,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.core.trend_config import trend_runtime_id_for_record
 from src.processing.cost_tracker import TIER2, CostTracker
 from src.processing.event_claims import (
     assign_claim_keys_to_impacts,
@@ -39,30 +38,9 @@ from src.processing.llm_policy import (
     invoke_with_policy,
 )
 from src.processing.semantic_cache import LLMSemanticCache
+from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY, map_event_trend_impacts
 from src.processing.trend_impact_reconciliation import TREND_IMPACT_RECONCILIATION_KEY
 from src.storage.models import Event, EventItem, RawItem, Trend
-
-
-@dataclass(slots=True)
-class TrendImpact:
-    """Per-trend impact extracted by Tier 2."""
-
-    trend_id: str
-    signal_type: str
-    direction: str
-    severity: float
-    confidence: float
-    rationale: str | None = None
-
-    def as_dict(self) -> dict[str, Any]:
-        return {
-            "trend_id": self.trend_id,
-            "signal_type": self.signal_type,
-            "direction": self.direction,
-            "severity": self.severity,
-            "confidence": self.confidence,
-            "rationale": self.rationale,
-        }
 
 
 @dataclass(slots=True)
@@ -98,17 +76,6 @@ class Tier2RunResult:
     usage: Tier2Usage = field(default_factory=Tier2Usage)
 
 
-class _TrendImpactOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    trend_id: str = Field(min_length=1)
-    signal_type: str = Field(min_length=1)
-    direction: str = Field(pattern="^(escalatory|de_escalatory)$")
-    severity: float = Field(ge=0.0, le=1.0)
-    confidence: float = Field(ge=0.0, le=1.0)
-    rationale: str | None = None
-
-
 class _Tier2Output(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -121,7 +88,6 @@ class _Tier2Output(BaseModel):
     categories: list[str] = Field(default_factory=list)
     has_contradictions: bool = False
     contradiction_notes: str | None = None
-    trend_impacts: list[_TrendImpactOutput] = Field(default_factory=list)
 
 
 class Tier2Classifier:
@@ -133,7 +99,6 @@ class Tier2Classifier:
     _PAYLOAD_HEADROOM_TOKENS: ClassVar[int] = 256
     _MAX_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 350
     _MIN_CONTEXT_CHUNK_TOKENS: ClassVar[int] = 64
-    _MAX_INDICATOR_DESCRIPTION_CHARS: ClassVar[int] = 96
     _CHARS_PER_TOKEN: ClassVar[int] = DEFAULT_CHARS_PER_TOKEN
     _TRUNCATION_MARKER: ClassVar[str] = DEFAULT_TRUNCATION_MARKER
     _STRICT_RESPONSE_FORMAT: ClassVar[dict[str, Any]] = {
@@ -386,14 +351,14 @@ class Tier2Classifier:
             try:
                 cached_output = _Tier2Output.model_validate(json.loads(cached_content))
                 self._validate_output_alignment(cached_output, trends=trends)
-                self._apply_output(event=event, output=cached_output)
+                self._apply_output(event=event, output=cached_output, trends=trends)
                 await sync_event_claims(session=self.session, event=event)
                 await self.session.flush()
                 return (
                     Tier2EventResult(
                         event_id=event.id,
                         categories_count=len(event.categories or []),
-                        trend_impacts_count=len(cached_output.trend_impacts),
+                        trend_impacts_count=_mapped_impacts_count(event),
                     ),
                     Tier2Usage(),
                 )
@@ -452,7 +417,7 @@ class Tier2Classifier:
 
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, trends=trends)
-        self._apply_output(event=event, output=output)
+        self._apply_output(event=event, output=output, trends=trends)
         await sync_event_claims(session=self.session, event=event)
         response_choices = getattr(invocation.response, "choices", None)
         if isinstance(response_choices, list) and response_choices:
@@ -472,7 +437,7 @@ class Tier2Classifier:
         result = Tier2EventResult(
             event_id=event.id,
             categories_count=len(event.categories or []),
-            trend_impacts_count=len(output.trend_impacts),
+            trend_impacts_count=_mapped_impacts_count(event),
         )
         return (result, usage)
 
@@ -518,6 +483,7 @@ class Tier2Classifier:
         trends: list[Trend],
         context_chunks: list[str],
     ) -> dict[str, Any]:
+        _ = trends
         sanitized_chunks = [
             truncate_to_token_limit(
                 text=chunk,
@@ -536,7 +502,6 @@ class Tier2Classifier:
             "event_id": str(event.id),
             "summary": event.canonical_summary,
             "context_chunks": sanitized_chunks,
-            "trends": [self._trend_payload(trend) for trend in trends],
         }
         self._enforce_payload_budget(payload)
         payload["context_chunks"] = [
@@ -550,10 +515,6 @@ class Tier2Classifier:
 
     def _enforce_payload_budget(self, payload: dict[str, Any]) -> None:
         budget_limit = self._payload_budget_limit()
-        if self._estimate_payload_tokens(payload) <= budget_limit:
-            return
-
-        self._trim_trend_payload_for_budget(payload, budget_limit=budget_limit)
         if self._estimate_payload_tokens(payload) <= budget_limit:
             return
 
@@ -584,106 +545,6 @@ class Tier2Classifier:
     def _payload_budget_limit(self) -> int:
         return max(1, self._MAX_REQUEST_INPUT_TOKENS - self._PAYLOAD_HEADROOM_TOKENS)
 
-    def _trim_trend_payload_for_budget(self, payload: dict[str, Any], *, budget_limit: int) -> None:
-        trends = payload.get("trends")
-        if not isinstance(trends, list):
-            return
-
-        keywords_trimmed = False
-        for trend in trends:
-            if not isinstance(trend, dict):
-                continue
-            indicators = trend.get("indicators")
-            if not isinstance(indicators, list):
-                continue
-            for indicator in indicators:
-                if not isinstance(indicator, dict):
-                    continue
-                keywords = indicator.get("keywords")
-                if isinstance(keywords, list) and keywords:
-                    indicator["keywords"] = []
-                    keywords_trimmed = True
-        if keywords_trimmed and self._estimate_payload_tokens(payload) <= budget_limit:
-            return
-
-        descriptions_trimmed = False
-        for trend in trends:
-            if not isinstance(trend, dict):
-                continue
-            indicators = trend.get("indicators")
-            if not isinstance(indicators, list):
-                continue
-            for indicator in indicators:
-                if not isinstance(indicator, dict):
-                    continue
-                description = indicator.get("description")
-                if not isinstance(description, str):
-                    continue
-                compact_description = self._compact_indicator_description(description)
-                if compact_description != description:
-                    indicator["description"] = compact_description
-                    descriptions_trimmed = True
-        if descriptions_trimmed and self._estimate_payload_tokens(payload) <= budget_limit:
-            return
-
-        for trend in trends:
-            if not isinstance(trend, dict):
-                continue
-            trend_id = trend.get("trend_id")
-            if isinstance(trend_id, str) and trend.get("name") != trend_id:
-                trend["name"] = trend_id
-
-    def _compact_indicator_description(self, description: str) -> str:
-        normalized = " ".join(description.strip().split())
-        if len(normalized) <= self._MAX_INDICATOR_DESCRIPTION_CHARS:
-            return normalized
-        return f"{normalized[: self._MAX_INDICATOR_DESCRIPTION_CHARS - 3].rstrip()}..."
-
-    @staticmethod
-    def _trend_payload(trend: Trend) -> dict[str, Any]:
-        trend_id = Tier2Classifier._trend_identifier(trend)
-        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
-        serialized_indicators: list[dict[str, Any]] = []
-        for signal_type, config in indicators.items():
-            if not isinstance(config, dict):
-                continue
-            raw_keywords = config.get("keywords", [])
-            keywords = [
-                value.strip() for value in raw_keywords if isinstance(value, str) and value.strip()
-            ]
-            serialized_indicators.append(
-                {
-                    "signal_type": signal_type,
-                    "direction": str(config.get("direction", "")),
-                    "description": Tier2Classifier._indicator_description(
-                        signal_type=signal_type,
-                        config=config,
-                    ),
-                    "keywords": keywords,
-                }
-            )
-
-        return {
-            "trend_id": trend_id,
-            "name": trend.name,
-            "indicators": serialized_indicators,
-        }
-
-    @staticmethod
-    def _indicator_description(*, signal_type: str, config: dict[str, Any]) -> str:
-        raw_description = config.get("description")
-        if isinstance(raw_description, str) and raw_description.strip():
-            return raw_description.strip()
-
-        humanized_signal = signal_type.replace("_", " ").strip()
-        if not humanized_signal:
-            return "Signal relevant to this trend."
-        return f"Signals of {humanized_signal} relevant to this trend."
-
-    @staticmethod
-    def _trend_identifier(trend: Trend) -> str:
-        return trend_runtime_id_for_record(trend)
-
     @staticmethod
     def _parse_output(response: Any) -> _Tier2Output:
         choices = getattr(response, "choices", None)
@@ -705,28 +566,19 @@ class Tier2Classifier:
 
     @staticmethod
     def _validate_output_alignment(output: _Tier2Output, *, trends: list[Trend]) -> None:
-        expected_trend_ids = {Tier2Classifier._trend_identifier(trend) for trend in trends}
-        seen_pairs: set[tuple[str, str]] = set()
-        for impact in output.trend_impacts:
-            if impact.trend_id not in expected_trend_ids:
-                msg = f"Tier 2 response returned unknown trend id {impact.trend_id}"
-                raise ValueError(msg)
-            pair = (impact.trend_id, impact.signal_type)
-            if pair in seen_pairs:
-                msg = (
-                    "Tier 2 response duplicated trend/signal pair "
-                    f"{impact.trend_id}/{impact.signal_type}"
-                )
-                raise ValueError(msg)
-            seen_pairs.add(pair)
+        if not trends:
+            msg = "At least one trend is required for deterministic trend mapping"
+            raise ValueError(msg)
+        if not output.claims and not output.extracted_what.strip():
+            msg = "Tier 2 output must include extracted_what or at least one claim"
+            raise ValueError(msg)
 
-    def _apply_output(self, *, event: Event, output: _Tier2Output) -> None:
+    def _apply_output(self, *, event: Event, output: _Tier2Output, trends: list[Trend]) -> None:
         existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         system_claims = {}
-        if TREND_IMPACT_RECONCILIATION_KEY in existing_claims:
-            system_claims[TREND_IMPACT_RECONCILIATION_KEY] = existing_claims[
-                TREND_IMPACT_RECONCILIATION_KEY
-            ]
+        for system_key in (TREND_IMPACT_RECONCILIATION_KEY,):
+            if system_key in existing_claims:
+                system_claims[system_key] = existing_claims[system_key]
         event.canonical_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
@@ -735,17 +587,6 @@ class Tier2Classifier:
         event.categories = self._dedupe_strings(output.categories)
         claims = self._dedupe_strings(output.claims)
         claim_graph = self._build_claim_graph(claims)
-        trend_impacts = [
-            TrendImpact(
-                trend_id=impact.trend_id,
-                signal_type=impact.signal_type,
-                direction=impact.direction,
-                severity=impact.severity,
-                confidence=impact.confidence,
-                rationale=impact.rationale,
-            ).as_dict()
-            for impact in output.trend_impacts
-        ]
         contradiction_notes = (
             output.contradiction_notes.strip()
             if isinstance(output.contradiction_notes, str) and output.contradiction_notes.strip()
@@ -757,9 +598,12 @@ class Tier2Classifier:
         event.has_contradictions = has_contradictions
         event.contradiction_notes = contradiction_notes if has_contradictions else None
         event.extracted_claims = {"claims": claims, "claim_graph": claim_graph, **system_claims}
+        mapping = map_event_trend_impacts(event=event, trends=trends)
         event.extracted_claims["trend_impacts"] = assign_claim_keys_to_impacts(
-            event=event, impacts=trend_impacts
+            event=event,
+            impacts=mapping.impacts,
         )
+        event.extracted_claims[TREND_IMPACT_MAPPING_KEY] = mapping.diagnostics
 
     @staticmethod
     def _dedupe_strings(values: list[str]) -> list[str]:
@@ -865,3 +709,11 @@ class Tier2Classifier:
         if parsed.tzinfo is None:
             return parsed.replace(tzinfo=UTC)
         return parsed.astimezone(UTC)
+
+
+def _mapped_impacts_count(event: Event) -> int:
+    claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+    impacts = claims.get("trend_impacts")
+    if not isinstance(impacts, list):
+        return 0
+    return len(impacts)

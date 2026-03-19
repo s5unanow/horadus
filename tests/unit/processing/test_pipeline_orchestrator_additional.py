@@ -20,6 +20,7 @@ from src.processing.pipeline_orchestrator import (
 )
 from src.processing.tier1_classifier import Tier1ItemResult, Tier1Usage
 from src.processing.tier2_classifier import Tier2Usage
+from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY
 from src.storage.models import Event, ProcessingStatus, RawItem, TaxonomyGapReason
 
 pytestmark = pytest.mark.unit
@@ -618,6 +619,37 @@ async def test_event_and_trend_helper_methods_cover_remaining_paths(
             tier2_usage=SimpleNamespace(),
         )
         is False
+    )
+
+
+@pytest.mark.asyncio
+async def test_capture_unresolved_trend_mapping_records_taxonomy_gaps(mock_db_session) -> None:
+    pipeline = _pipeline(mock_db_session)
+    pipeline._capture_taxonomy_gap = AsyncMock(return_value=None)
+    event = Event(
+        id=uuid4(),
+        extracted_claims={
+            TREND_IMPACT_MAPPING_KEY: {
+                "unresolved": [
+                    {
+                        "reason": "ambiguous_mapping",
+                        "trend_id": "__ambiguous__",
+                        "signal_type": "__ambiguous__",
+                        "event_claim_key": "claim-key",
+                        "event_claim_text": "Claim text",
+                        "details": {"candidate_count": 2},
+                    }
+                ]
+            }
+        },
+    )
+
+    await pipeline._capture_unresolved_trend_mapping(event=event)
+
+    pipeline._capture_taxonomy_gap.assert_awaited_once()
+    assert (
+        pipeline._capture_taxonomy_gap.await_args.kwargs["reason"]
+        == TaxonomyGapReason.AMBIGUOUS_MAPPING
     )
 
 

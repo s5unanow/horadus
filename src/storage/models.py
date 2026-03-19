@@ -121,6 +121,8 @@ class TaxonomyGapReason(enum.StrEnum):
 
     UNKNOWN_TREND_ID = "unknown_trend_id"
     UNKNOWN_SIGNAL_TYPE = "unknown_signal_type"
+    AMBIGUOUS_MAPPING = "ambiguous_mapping"
+    NO_MATCHING_INDICATOR = "no_matching_indicator"
 
 
 class TaxonomyGapStatus(enum.StrEnum):

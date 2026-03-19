@@ -13,19 +13,18 @@ def _load_prompt() -> str:
     return PROMPT_PATH.read_text(encoding="utf-8")
 
 
-def test_tier2_prompt_requires_specific_supported_signal_or_abstention() -> None:
+def test_tier2_prompt_requires_extraction_only_contract() -> None:
     prompt = _load_prompt()
 
-    assert "Choose the most specific supported `signal_type`" in prompt
-    assert "omit that impact instead of forcing the closest keyword match" in prompt
-    assert "Do not infer missing actors, dates, locations, or impacts." in prompt
+    assert "Make each claim specific enough that deterministic code can later map it" in prompt
+    assert "Do not infer missing actors, dates, locations, or causal implications." in prompt
+    assert '"trend_impacts"' not in prompt
 
 
-def test_tier2_prompt_calibrates_ambiguous_signal_pairs() -> None:
+def test_tier2_prompt_excludes_taxonomy_payload_shape() -> None:
     prompt = _load_prompt().lower()
 
-    assert "military_movement" in prompt
-    assert "military_incident" in prompt
-    assert "weapons_transfer" in prompt
-    assert "hostile contact" in prompt
-    assert "troop repositioning" in prompt or "force posture" in prompt
+    assert "context_chunks" in prompt
+    assert "claims" in prompt
+    assert "categories" in prompt
+    assert "trends[]" not in prompt

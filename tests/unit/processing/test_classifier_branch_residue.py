@@ -122,7 +122,6 @@ async def test_tier2_skips_cache_store_when_model_message_content_is_non_string(
             "categories": [],
             "has_contradictions": False,
             "contradiction_notes": None,
-            "trend_impacts": [],
         }
     )
     monkeypatch.setattr(

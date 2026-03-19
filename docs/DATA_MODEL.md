@@ -453,17 +453,18 @@ Append-only compensating ledger for corrections applied after original evidence 
 
 ### taxonomy_gaps
 
-Runtime triage queue for skipped Tier-2 trend impacts caused by taxonomy mismatch.
+Runtime triage queue for deterministic trend-impact mappings that could not be
+scored safely.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | id | UUID | No | gen_random_uuid() | Primary key |
 | event_id | UUID | Yes | | Optional FK to `events` (`SET NULL` on delete) |
-| trend_id | VARCHAR(255) | No | | Trend identifier emitted by Tier-2 payload |
-| signal_type | VARCHAR(255) | No | | Indicator key emitted by Tier-2 payload |
-| reason | ENUM | No | | `unknown_trend_id` or `unknown_signal_type` |
+| trend_id | VARCHAR(255) | No | | Trend identifier or deterministic placeholder for unresolved mapping |
+| signal_type | VARCHAR(255) | No | | Indicator key or deterministic placeholder for unresolved mapping |
+| reason | ENUM | No | | `unknown_trend_id`, `unknown_signal_type`, `ambiguous_mapping`, or `no_matching_indicator` |
 | source | VARCHAR(50) | No | `pipeline` | Runtime source that recorded the gap |
-| details | JSONB | No | `{}` | Structured context (`direction`, `severity`, `confidence`, etc.) |
+| details | JSONB | No | `{}` | Structured context (`event_claim_key`, candidate mappings, prior extracted evidence, etc.) |
 | status | ENUM | No | `open` | Analyst triage status (`open`, `resolved`, `rejected`) |
 | resolution_notes | TEXT | Yes | | Analyst notes for resolution decision |
 | resolved_by | VARCHAR(255) | Yes | | Reviewer identity |

@@ -199,8 +199,9 @@ Retry semantics:
 - The processing task keeps one database transaction for the batch; when a retryable failure escapes, the session rollback restores item/event/trend writes so replay is safe and idempotent at current scale.
 
 Taxonomy drift safety:
-- If Tier-2 emits an unknown `trend_id` or unknown `signal_type` mapping, the impact is skipped.
-- Skipped impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`).
+- Tier-2 now emits extracted facts/claims only; deterministic code maps those facts onto eligible trend indicators after classification.
+- If deterministic mapping cannot resolve a unique indicator (`unknown_trend_id`, `unknown_signal_type`, `ambiguous_mapping`, or `no_matching_indicator`), the impact is skipped.
+- Skipped or unresolved impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`) with structured mapping details.
 - This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
 - Active runtime trend routing is pinned to the normalized, unique `trends.runtime_trend_id` value (mirrored in `definition.id`) so duplicate config/API writes fail closed instead of shadowing one trend behind another.
 - Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed through append-only `trend_restatements`, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata for audit/replay.

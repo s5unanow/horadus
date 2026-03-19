@@ -22,7 +22,6 @@ from src.processing.tier2_classifier import (
     Tier2EventResult,
     Tier2RunResult,
     Tier2Usage,
-    TrendImpact,
 )
 
 __all__ = [
@@ -46,6 +45,5 @@ __all__ = [
     "Tier2EventResult",
     "Tier2RunResult",
     "Tier2Usage",
-    "TrendImpact",
     "TrendRelevanceScore",
 ]

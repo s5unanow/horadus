@@ -116,6 +116,23 @@ def test_automation_lock_check_and_helpers_cover_broken_payload_edges(
         "- error: bad lock",
     ]
 
+    unlock_exit_code, unlock_data, unlock_lines = automation_lock_impl._unlock_validation_error(
+        automation_lock_module.AutomationLockInfo(
+            path=str(lock_path),
+            status="broken",
+            exists=True,
+            error="bad lock",
+        )
+    )
+    assert unlock_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert unlock_data["status"] == "broken"
+    assert unlock_lines == [
+        "Automation lock release failed.",
+        "Automation lock status: broken",
+        f"- path: {lock_path}",
+        "- error: bad lock",
+    ]
+
 
 def test_automation_lock_helper_edges_cover_pid_probe_windows_fallback_and_flaky_file_states(
     monkeypatch: pytest.MonkeyPatch,
@@ -649,6 +666,42 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(tmp_path
     assert mismatch_lines[1] == (
         f"Unlock owner mismatch: lock is owned by pid {os.getpid()}, not 99999."
     )
+
+
+def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    broken_path = tmp_path / "automation" / "broken-lock"
+    broken_path.parent.mkdir(parents=True, exist_ok=True)
+    broken_path.write_text("{bad-json}", encoding="utf-8")
+
+    broken_exit_code, broken_data, broken_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(broken_path), owner_pid=None, dry_run=False
+        )
+    )
+    assert broken_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert broken_data["status"] == "broken"
+    assert broken_lines[0] == "Automation lock release failed."
+
+    unlink_path = tmp_path / "automation" / "unlink-error-lock"
+    _write_lock_file(unlink_path, {"lock_id": "held"})
+    original_unlink = Path.unlink
+
+    def _raising_unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == unlink_path:
+            raise OSError("unlink blocked")
+        return original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", _raising_unlink)
+    unlink_exit_code, unlink_data, unlink_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(unlink_path), owner_pid=None, dry_run=False
+        )
+    )
+    assert unlink_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
+    assert unlink_data["error"] == "unlink blocked"
+    assert unlink_lines[1] == f"Unable to remove the automation lock file: {unlink_path}"
 
 
 def test_automation_lock_handlers_wrap_data_functions(monkeypatch: pytest.MonkeyPatch) -> None:

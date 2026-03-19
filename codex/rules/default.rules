@@ -6,9 +6,6 @@ prefix_rule(
     decision = "allow",
     justification = "Allow Horadus workflow commands required by repo-owned Codex automations.",
     match = [
-        "uv run --no-sync horadus tasks automation-lock check --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock",
-        "uv run --no-sync horadus tasks automation-lock lock --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock",
-        "uv run --no-sync horadus tasks automation-lock unlock --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock",
         "uv run --no-sync horadus tasks preflight",
         "uv run --no-sync horadus tasks safe-start TASK-357 --name codex-rules-baseline",
         "uv run --no-sync horadus tasks finish TASK-357",
@@ -17,6 +14,12 @@ prefix_rule(
         "uv run horadus tasks preflight",
         "uv sync",
     ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "automation-lock"],
+    decision = "allow",
+    justification = "Allow the repo-owned automation lock helper across resolved CODEX_HOME paths.",
 )
 
 prefix_rule(

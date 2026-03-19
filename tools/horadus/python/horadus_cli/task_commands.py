@@ -129,6 +129,12 @@ def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
     )
     add_leaf_cli_options(lock_parser)
     lock_parser.add_argument("--path", required=True, help="Lock path to acquire.")
+    lock_parser.add_argument(
+        "--owner-pid",
+        type=int,
+        default=None,
+        help="Optional long-lived owner PID used for stale-lock detection and recovery.",
+    )
     lock_parser.set_defaults(handler=handle_automation_lock_lock)
 
     unlock_parser = automation_lock_subparsers.add_parser(

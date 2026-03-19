@@ -13,7 +13,7 @@ rules baseline before the automation can proceed.
 1. Resolve `CODEX_HOME_RESOLVED="${CODEX_HOME:-$HOME/.codex}"`.
 2. Acquire exclusive ownership of the external lock at:
    - `$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock`
-   - run `uv run --no-sync horadus tasks automation-lock lock --path "$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock"`
+   - run `uv run --no-sync horadus tasks automation-lock lock --path "$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock" --owner-pid $$`
 3. If the lock is already held, cannot be acquired cleanly, or appears stale or
    broken, stop immediately and report a concise blocker instead of forcing
    takeover.

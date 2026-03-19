@@ -141,14 +141,16 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["git", "push"],
+    pattern = ["git", "push", "-u", "origin"],
     decision = "allow",
     justification = "Allow publishing task branches and merge-ready heads to origin.",
     match = [
-        "git push origin codex/task-357-codex-rules-baseline",
         "git push --set-upstream origin codex/task-357-codex-rules-baseline",
+        "git push -u origin codex/task-357-codex-rules-baseline",
     ],
     not_match = [
+        "git push origin codex/task-357-codex-rules-baseline",
+        "git push origin main",
         "git pull --ff-only",
         "git fetch origin",
     ],
@@ -183,14 +185,15 @@ prefix_rule(
 )
 
 prefix_rule(
-    pattern = ["gh", "api"],
+    pattern = ["gh", "api", "graphql"],
     decision = "allow",
-    justification = "Allow review-thread inspection and resolution through the GitHub API.",
+    justification = "Allow review-thread inspection and resolution through the GraphQL calls used by the finish workflow.",
     match = [
         "gh api graphql -f query=query",
-        "gh api repos/s5unanow/horadus/pulls/290/comments",
+        "gh api graphql -f query=mutation",
     ],
     not_match = [
+        "gh api repos/s5unanow/horadus/pulls/290/comments",
         "gh pr view 290",
         "gh auth status",
     ],

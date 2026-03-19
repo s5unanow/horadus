@@ -24,10 +24,10 @@ def test_repo_owned_codex_rules_baseline_covers_autopilot_prefixes() -> None:
     assert 'pattern = ["git", "pull", "--ff-only"]' in rules
     assert 'pattern = ["git", "cat-file"]' in rules
     assert 'pattern = ["git", "branch"]' in rules
-    assert 'pattern = ["git", "push"]' in rules
+    assert 'pattern = ["git", "push", "-u", "origin"]' in rules
     assert 'pattern = ["gh", "pr"]' in rules
     assert 'pattern = ["gh", "repo"]' in rules
-    assert 'pattern = ["gh", "api"]' in rules
+    assert 'pattern = ["gh", "api", "graphql"]' in rules
     assert rules.count('decision = "allow"') == 14
 
 

@@ -316,10 +316,14 @@ def _unlock_file_lock(
 ) -> tuple[int, dict[str, object], list[str]]:
     if info.status == "broken":
         return _unlock_validation_error(info)
-    if info.status == "legacy" and info.legacy_lock_active is True:
+    if info.status == "legacy" and info.legacy_lock_active is not False:
         return _unlock_validation_error(
             info,
-            message="Unlock requires the active legacy flock holder to exit before cleanup.",
+            message=(
+                "Unlock requires the active legacy flock holder to exit before cleanup."
+                if info.legacy_lock_active
+                else "Unlock requires manual review because legacy flock status is indeterminate."
+            ),
         )
     if info.status == "held" and info.owner_pid is not None:
         if owner_pid is None:

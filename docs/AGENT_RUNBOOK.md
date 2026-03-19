@@ -190,7 +190,8 @@ treat the log as required reading during normal task flow.
 
 15. `uv run --no-sync horadus tasks automation-lock check --path "$CODEX_HOME/automations/<id>/lock"`
 When: inspect or recover the repo-owned external lock path used by a Codex automation.
-Use `automation-lock lock --owner-pid $$` to acquire the lock and `automation-lock unlock --owner-pid $$` to release it.
+Use `automation-lock lock` to acquire the lock and `automation-lock unlock` to release it.
+Pass `--owner-pid <stable-process-pid>` only when the caller can provide a long-lived owner PID.
 This is the portable replacement for host-specific `flock` usage in the sprint autopilot path.
 
 16. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`

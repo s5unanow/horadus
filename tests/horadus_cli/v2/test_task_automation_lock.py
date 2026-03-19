@@ -641,7 +641,9 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert odd_lines[0] == "Automation lock release failed."
 
 
-def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(tmp_path: Path) -> None:
+def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     lock_path = tmp_path / "automation" / "lock"
     _write_lock_file(lock_path, {"lock_id": "held", "owner_pid": os.getpid()})
 
@@ -681,6 +683,18 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(tmp_path
     assert legacy_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert (
         legacy_lines[1] == "Unlock requires the active legacy flock holder to exit before cleanup."
+    )
+
+    unknown_legacy_path = tmp_path / "automation" / "unknown-legacy-lock"
+    unknown_legacy_path.write_text("", encoding="utf-8")
+    monkeypatch.setattr(automation_lock_impl, "_legacy_flock_lock_active", lambda _path: None)
+    unknown_exit_code, _, unknown_lines = automation_lock_module.automation_lock_unlock_data(
+        str(unknown_legacy_path), owner_pid=None, dry_run=False
+    )
+    assert unknown_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert (
+        unknown_lines[1]
+        == "Unlock requires manual review because legacy flock status is indeterminate."
     )
 
 

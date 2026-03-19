@@ -133,6 +133,25 @@ def test_automation_lock_check_and_helpers_cover_broken_payload_edges(
         "- error: bad lock",
     ]
 
+    env_exit_code, env_data, env_lines = automation_lock_impl._lock_environment_error(
+        lock_path,
+        info=automation_lock_module.AutomationLockInfo(
+            path=str(lock_path),
+            status="stale",
+            exists=True,
+        ),
+        message="env failure",
+        exc=OSError("blocked"),
+    )
+    assert env_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
+    assert env_data["status"] == "stale"
+    assert env_data["error"] == "blocked"
+    assert env_lines == [
+        "Automation lock acquisition failed.",
+        "env failure",
+        "blocked",
+    ]
+
 
 def test_automation_lock_helper_edges_cover_pid_probe_windows_fallback_and_flaky_file_states(
     monkeypatch: pytest.MonkeyPatch,
@@ -255,9 +274,7 @@ def test_automation_lock_lock_dry_run_and_live_held_paths(tmp_path: Path) -> Non
     assert held_lines[0] == "Automation lock acquisition failed."
 
 
-def test_automation_lock_lock_reclaims_stale_file_and_reports_stale_dry_run(
-    tmp_path: Path,
-) -> None:
+def test_automation_lock_lock_surfaces_stale_file_without_reclaiming(tmp_path: Path) -> None:
     lock_path = tmp_path / "automation" / "lock"
     _write_lock_file(
         lock_path,
@@ -277,19 +294,20 @@ def test_automation_lock_lock_reclaims_stale_file_and_reports_stale_dry_run(
             str(lock_path), owner_pid=os.getpid(), dry_run=True
         )
     )
-    assert dry_run_exit_code == automation_lock_module.ExitCode.OK
+    assert dry_run_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert dry_run_data["status"] == "stale"
-    assert dry_run_lines[-1] == f"Dry run: would replace the stale automation lock at {lock_path}."
+    assert dry_run_lines[0] == "Automation lock acquisition failed."
 
-    live_exit_code, live_data, _live_lines = automation_lock_module.automation_lock_lock_data(
+    live_exit_code, live_data, live_lines = automation_lock_module.automation_lock_lock_data(
         str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
-    assert live_exit_code == automation_lock_module.ExitCode.OK
-    assert live_data["status"] == "held"
-    assert live_data["owner_pid"] == os.getpid()
+    assert live_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert live_data["status"] == "stale"
+    assert live_lines[0] == "Automation lock acquisition failed."
+    assert lock_path.exists()
 
 
-def test_automation_lock_lock_reclaims_legacy_flock_file(tmp_path: Path) -> None:
+def test_automation_lock_lock_surfaces_legacy_flock_file_without_reclaiming(tmp_path: Path) -> None:
     lock_path = tmp_path / "automation" / "lock"
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text("", encoding="utf-8")
@@ -299,19 +317,20 @@ def test_automation_lock_lock_reclaims_legacy_flock_file(tmp_path: Path) -> None
             str(lock_path), owner_pid=os.getpid(), dry_run=True
         )
     )
-    assert dry_run_exit_code == automation_lock_module.ExitCode.OK
+    assert dry_run_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert dry_run_data["status"] == "legacy"
-    assert dry_run_lines[-1] == f"Dry run: would replace the legacy automation lock at {lock_path}."
+    assert dry_run_lines[0] == "Automation lock acquisition failed."
 
-    live_exit_code, live_data, _live_lines = automation_lock_module.automation_lock_lock_data(
+    live_exit_code, live_data, live_lines = automation_lock_module.automation_lock_lock_data(
         str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
-    assert live_exit_code == automation_lock_module.ExitCode.OK
-    assert live_data["status"] == "held"
-    assert live_data["owner_pid"] == os.getpid()
+    assert live_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert live_data["status"] == "legacy"
+    assert live_lines[0] == "Automation lock acquisition failed."
+    assert lock_path.exists()
 
 
-def test_automation_lock_lock_handles_prepare_write_and_stale_cleanup_failures(
+def test_automation_lock_lock_handles_prepare_and_write_failures(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     lock_path = tmp_path / "automation" / "lock"
@@ -354,67 +373,6 @@ def test_automation_lock_lock_handles_prepare_write_and_stale_cleanup_failures(
     assert write_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
     assert write_data["status"] == "error"
     assert write_lines[1] == f"Unable to write lock metadata for {lock_path}."
-
-    _write_lock_file(
-        lock_path,
-        {
-            "lock_id": "stale",
-            "acquired_at": "2026-03-19T00:00:00+00:00",
-            "hostname": "host",
-            "username": "user",
-            "cwd": "/tmp",
-            "path": str(lock_path),
-            "owner_pid": -1,
-        },
-    )
-    original_unlink = Path.unlink
-
-    def _raising_unlink(self: Path, missing_ok: bool = False) -> None:
-        if self == lock_path:
-            raise OSError("stale cleanup blocked")
-        return original_unlink(self, missing_ok=missing_ok)
-
-    monkeypatch.setattr(Path, "unlink", _raising_unlink)
-    stale_exit_code, stale_data, stale_lines = automation_lock_module.automation_lock_lock_data(
-        "ignored", owner_pid=None, dry_run=False
-    )
-    assert stale_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
-    assert stale_data["status"] == "stale"
-    assert stale_lines[1] == f"Unable to clear the stale lock file: {lock_path}"
-
-
-def test_automation_lock_lock_retries_when_stale_lock_disappears_mid_cleanup(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lock_path = tmp_path / "automation" / "lock"
-    _write_lock_file(
-        lock_path,
-        {
-            "lock_id": "stale-disappearing",
-            "acquired_at": "2026-03-19T00:00:00+00:00",
-            "hostname": "host",
-            "username": "user",
-            "cwd": "/tmp",
-            "path": str(lock_path),
-            "owner_pid": -1,
-        },
-    )
-    original_unlink = Path.unlink
-    calls = {"count": 0}
-
-    def _raise_after_delete(self: Path, missing_ok: bool = False) -> None:
-        if self == lock_path and calls["count"] == 0:
-            calls["count"] += 1
-            original_unlink(self, missing_ok=missing_ok)
-            raise FileNotFoundError("gone")
-        return original_unlink(self, missing_ok=missing_ok)
-
-    monkeypatch.setattr(Path, "unlink", _raise_after_delete)
-    exit_code, data, _lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
-    )
-    assert exit_code == automation_lock_module.ExitCode.OK
-    assert data["status"] == "held"
 
 
 def test_automation_lock_lock_handles_contention_races(
@@ -472,89 +430,12 @@ def test_automation_lock_lock_handles_contention_races(
         return original_link(src, dst, follow_symlinks=follow_symlinks)
 
     monkeypatch.setattr(automation_lock_impl.os, "link", _stale_race)
-    stale_exit_code, stale_data, _stale_lines = automation_lock_module.automation_lock_lock_data(
+    stale_exit_code, stale_data, stale_lines = automation_lock_module.automation_lock_lock_data(
         str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
-    assert stale_exit_code == automation_lock_module.ExitCode.OK
-    assert stale_data["status"] == "held"
-    assert stale_data["owner_pid"] == os.getpid()
-
-
-def test_automation_lock_lock_reports_stale_cleanup_error_from_contention_path(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lock_path = tmp_path / "automation" / "lock"
-    original_unlink = Path.unlink
-
-    def _stale_race(src: str, dst: str, *, follow_symlinks: bool = True) -> None:
-        _write_lock_file(
-            Path(dst),
-            {
-                "lock_id": "stale-race",
-                "acquired_at": "2026-03-19T00:00:00+00:00",
-                "hostname": "host",
-                "username": "user",
-                "cwd": "/tmp",
-                "path": str(dst),
-                "owner_pid": -1,
-            },
-        )
-        raise FileExistsError("race")
-
-    def _raising_unlink(self: Path, missing_ok: bool = False) -> None:
-        if self == lock_path:
-            raise OSError("blocked")
-        return original_unlink(self, missing_ok=missing_ok)
-
-    monkeypatch.setattr(automation_lock_impl.os, "link", _stale_race)
-    monkeypatch.setattr(Path, "unlink", _raising_unlink)
-    exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
-    )
-    assert exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
-    assert data["status"] == "stale"
-    assert lines[1] == f"Unable to clear the stale lock file: {lock_path}"
-
-
-def test_automation_lock_lock_retries_when_stale_contention_file_is_already_gone(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    lock_path = tmp_path / "automation" / "lock"
-    original_unlink = Path.unlink
-    original_link = os.link
-    calls = {"count": 0}
-
-    def _stale_race(src: str, dst: str, *, follow_symlinks: bool = True) -> None:
-        if calls["count"] == 0:
-            calls["count"] += 1
-            _write_lock_file(
-                Path(dst),
-                {
-                    "lock_id": "stale-race",
-                    "acquired_at": "2026-03-19T00:00:00+00:00",
-                    "hostname": "host",
-                    "username": "user",
-                    "cwd": "/tmp",
-                    "path": str(dst),
-                    "owner_pid": -1,
-                },
-            )
-            raise FileExistsError("race")
-        return original_link(src, dst, follow_symlinks=follow_symlinks)
-
-    def _raise_file_not_found(self: Path, missing_ok: bool = False) -> None:
-        if self == lock_path:
-            original_unlink(self, missing_ok=missing_ok)
-            raise FileNotFoundError("gone")
-        return original_unlink(self, missing_ok=missing_ok)
-
-    monkeypatch.setattr(automation_lock_impl.os, "link", _stale_race)
-    monkeypatch.setattr(Path, "unlink", _raise_file_not_found)
-    exit_code, data, _lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
-    )
-    assert exit_code == automation_lock_module.ExitCode.OK
-    assert data["status"] == "held"
+    assert stale_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert stale_data["status"] == "stale"
+    assert stale_lines[0] == "Automation lock acquisition failed."
 
 
 def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_and_fake_path(

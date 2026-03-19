@@ -255,28 +255,6 @@ def _unlock_validation_error(
     return (ExitCode.VALIDATION_ERROR, asdict(info) | {"dry_run": False}, lines)
 
 
-def _clear_stale_lock(
-    lock_path: Path,
-    *,
-    info: AutomationLockInfo,
-) -> tuple[bool, tuple[int, dict[str, object], list[str]] | None]:
-    try:
-        lock_path.unlink()
-    except FileNotFoundError:
-        return (True, None)
-    except OSError as exc:
-        return (
-            False,
-            _lock_environment_error(
-                lock_path,
-                info=info,
-                message=f"Unable to clear the {info.status} lock file: {lock_path}",
-                exc=exc,
-            ),
-        )
-    return (True, None)
-
-
 def _attempt_lock_publish(
     lock_path: Path,
     *,
@@ -340,51 +318,29 @@ def automation_lock_lock_data(
             exc=exc,
         )
 
-    while True:
-        info = _load_lock_info(lock_path)
-        if info.status in {"legacy", "stale"}:
-            if dry_run:
-                return (
-                    ExitCode.OK,
-                    asdict(info) | {"dry_run": True},
-                    [
-                        *_check_lines(info),
-                        f"Dry run: would replace the {info.status} automation lock at {info.path}.",
-                    ],
-                )
-            can_retry, stale_result = _clear_stale_lock(lock_path, info=info)
-            if not can_retry:
-                assert stale_result is not None
-                return stale_result
-            continue
-        if info.status != "available":
-            return _lock_validation_error(info, dry_run=dry_run)
-        if dry_run:
-            return (
-                ExitCode.OK,
-                asdict(info) | {"dry_run": True, "status": "available"},
-                [
-                    f"Automation lock is available: {info.path}",
-                    f"Dry run: would acquire the automation lock at {info.path}.",
-                ],
-            )
+    info = _load_lock_info(lock_path)
+    if info.status != "available":
+        return _lock_validation_error(info, dry_run=dry_run)
+    if dry_run:
+        return (
+            ExitCode.OK,
+            asdict(info) | {"dry_run": True, "status": "available"},
+            [
+                f"Automation lock is available: {info.path}",
+                f"Dry run: would acquire the automation lock at {info.path}.",
+            ],
+        )
 
-        publish_state, publish_result = _attempt_lock_publish(lock_path, owner_pid=owner_pid)
-        if publish_state == "acquired":
-            assert publish_result is not None
-            return publish_result
-        if publish_state == "error":
-            assert publish_result is not None
-            return publish_result
+    publish_state, publish_result = _attempt_lock_publish(lock_path, owner_pid=owner_pid)
+    if publish_state == "acquired":
+        assert publish_result is not None
+        return publish_result
+    if publish_state == "error":
+        assert publish_result is not None
+        return publish_result
 
-        info = _load_lock_info(lock_path)
-        if info.status in {"legacy", "stale"}:
-            can_retry, stale_result = _clear_stale_lock(lock_path, info=info)
-            if not can_retry:
-                assert stale_result is not None
-                return stale_result
-            continue
-        return _lock_validation_error(info, dry_run=False)
+    info = _load_lock_info(lock_path)
+    return _lock_validation_error(info, dry_run=False)
 
 
 def automation_lock_unlock_data(

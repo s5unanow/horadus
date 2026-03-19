@@ -653,7 +653,7 @@ async def test_classify_event_skips_negative_claim_mapping(mock_db_session) -> N
             payload = {
                 "summary": "Officials denied a border deployment report. Monitoring continued.",
                 "extracted_who": ["NATO", "Russia"],
-                "extracted_what": "Troop movement near the border",
+                "extracted_what": "Troop deployment near the border",
                 "extracted_where": "Baltic region",
                 "extracted_when": None,
                 "claims": ["Officials denied troop deployment near the border."],
@@ -676,8 +676,8 @@ async def test_classify_event_skips_negative_claim_mapping(mock_db_session) -> N
         context_chunks=["Context"],
     )
 
-    assert result.trend_impacts_count == 0
-    assert event.extracted_claims["trend_impacts"] == []
+    assert result.trend_impacts_count == 1
+    assert event.extracted_claims["trend_impacts"][0]["event_claim_key"] == "__event__"
     assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"] == []
     assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["skipped"][0]["reason"] == (
         "negative_claim"

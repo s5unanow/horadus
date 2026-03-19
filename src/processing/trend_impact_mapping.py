@@ -99,6 +99,7 @@ class _SelectedImpact:
     impact: dict[str, Any]
     score: int
     claim_order: int
+    claim_type: str
 
 
 def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpactMappingResult:
@@ -139,6 +140,7 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
             impact=_build_impact(best=best, runner_up=runner_up),
             score=best.score,
             claim_order=best.claim.claim_order,
+            claim_type=best.claim.claim_type,
         )
         impact_key = _impact_key(best)
         existing = selected_impacts.get(impact_key)
@@ -176,6 +178,8 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
             ),
         )
     ]
+    if mapped_impacts:
+        unresolved = []
     diagnostics = {
         "version": _MAPPING_VERSION,
         "strategy": "keyword-metadata-canonical-context",
@@ -212,9 +216,10 @@ def taxonomy_gap_reason_for_mapping(reason: str) -> TaxonomyGapReason:
 def _claim_specs_for_mapping(event: Event) -> list[EventClaimSpec]:
     specs = build_event_claim_specs(event)
     statement_specs = [spec for spec in specs if spec.claim_type == "statement"]
-    if statement_specs:
-        return statement_specs
-    return specs[:1]
+    fallback_specs = specs[:1]
+    if not statement_specs:
+        return fallback_specs
+    return statement_specs + fallback_specs
 
 
 def _event_context_text(event: Event) -> str:
@@ -304,7 +309,9 @@ def _rank_candidates(
 ) -> list[_Candidate]:
     claim_text = normalize_claim_text(claim.claim_text)
     claim_terms = set(claim_text.split())
-    canonical_context = event_context
+    canonical_context = ""
+    if claim.claim_type != "statement" or claim_language(claim.claim_text) != "en":
+        canonical_context = event_context
     canonical_terms = set(canonical_context.split())
     event_terms = set(event_context.split())
     candidates: list[_Candidate] = []
@@ -417,10 +424,12 @@ def _impact_key(candidate: _Candidate) -> tuple[str, str]:
 def _prefer_selected_impact(*, candidate: _SelectedImpact, current: _SelectedImpact) -> bool:
     return (
         candidate.score,
+        1 if candidate.claim_type == "statement" else 0,
         -candidate.claim_order,
         str(candidate.impact["event_claim_key"]),
     ) > (
         current.score,
+        1 if current.claim_type == "statement" else 0,
         -current.claim_order,
         str(current.impact["event_claim_key"]),
     )

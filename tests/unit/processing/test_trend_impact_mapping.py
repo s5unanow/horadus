@@ -19,6 +19,11 @@ from src.storage.models import Event, TaxonomyGapReason
 
 pytestmark = pytest.mark.unit
 
+_UKRAINIAN_MOVEMENT_CLAIM = (
+    "\u0420\u0443\u0445 \u0441\u0438\u043b \u0431\u0456\u043b\u044f "
+    "\u043a\u043e\u0440\u0434\u043e\u043d\u0443 \u043f\u043e\u0441\u0438\u043b\u0438\u0432\u0441\u044f."
+)
+
 
 def _trend(
     *,
@@ -245,10 +250,10 @@ def test_map_event_trend_impacts_uses_canonical_english_context_for_non_english_
 def test_map_event_trend_impacts_skips_negative_claims() -> None:
     event = Event(
         id=uuid4(),
-        canonical_summary="Summary",
+        canonical_summary="Troop deployment increased near the border.",
         extracted_who=["NATO", "Russia"],
         extracted_where="Baltic region",
-        extracted_what="Troop movement near the border",
+        extracted_what="Troop deployment near the border",
         extracted_claims={
             "claims": ["Officials denied troop deployment near the border."],
             "claim_graph": {
@@ -265,7 +270,8 @@ def test_map_event_trend_impacts_skips_negative_claims() -> None:
 
     result = map_event_trend_impacts(event=event, trends=[_trend()])
 
-    assert result.impacts == []
+    assert len(result.impacts) == 1
+    assert result.impacts[0]["event_claim_key"] == "__event__"
     assert result.diagnostics["unresolved"] == []
     assert result.diagnostics["skipped"][0]["reason"] == "negative_claim"
     assert result.diagnostics["skipped"][0]["event_claim_key"] == (
@@ -345,6 +351,7 @@ def test_map_event_trend_impacts_uses_canonical_context_for_english_paraphrases(
     result = map_event_trend_impacts(event=event, trends=[_trend()])
 
     assert len(result.impacts) == 1
+    assert result.impacts[0]["event_claim_key"] == "__event__"
     assert result.impacts[0]["signal_type"] == "military_movement"
     assert result.diagnostics["unresolved"] == []
 
@@ -394,12 +401,12 @@ def test_map_event_trend_impacts_replaces_weaker_duplicate_indicator_match() -> 
         extracted_what="Troop deployment near the border",
         extracted_claims={
             "claims": [
-                "Forces moved again near the frontier.",
+                _UKRAINIAN_MOVEMENT_CLAIM,
                 "Troop deployment increased near the border.",
             ],
             "claim_graph": {
                 "nodes": [
-                    {"claim_id": "claim_1", "text": "Forces moved again near the frontier."},
+                    {"claim_id": "claim_1", "text": _UKRAINIAN_MOVEMENT_CLAIM},
                     {
                         "claim_id": "claim_2",
                         "text": "Troop deployment increased near the border.",
@@ -415,10 +422,46 @@ def test_map_event_trend_impacts_replaces_weaker_duplicate_indicator_match() -> 
     assert len(result.impacts) == 1
     assert result.impacts[0]["event_claim_key"] == "troop deployment increased near the border"
     assert result.diagnostics["deduplicated"][0]["event_claim_key"] == (
-        "forces moved again near the frontier"
+        "\u0440\u0443\u0445 \u0441\u0438\u043b \u0431\u0456\u043b\u044f "
+        "\u043a\u043e\u0440\u0434\u043e\u043d\u0443 \u043f\u043e\u0441\u0438\u043b\u0438\u0432\u0441\u044f"
     )
     assert result.diagnostics["deduplicated"][0]["details"]["kept_event_claim_key"] == (
         "troop deployment increased near the border"
+    )
+
+
+def test_map_event_trend_impacts_prefers_direct_statement_over_fallback_event_claim() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Troop deployment increased near the border.",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Troop deployment near the border",
+        extracted_claims={
+            "claims": [
+                "Budget talks continued among ministers.",
+                "Troop deployment increased near the border.",
+            ],
+            "claim_graph": {
+                "nodes": [
+                    {"claim_id": "claim_1", "text": "Budget talks continued among ministers."},
+                    {
+                        "claim_id": "claim_2",
+                        "text": "Troop deployment increased near the border.",
+                    },
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert len(result.impacts) == 1
+    assert result.impacts[0]["event_claim_key"] == "troop deployment increased near the border"
+    assert all(
+        diagnostic["event_claim_key"] != "budget talks continued among ministers"
+        for diagnostic in result.diagnostics.get("deduplicated", [])
     )
 
 

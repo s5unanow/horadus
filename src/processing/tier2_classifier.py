@@ -18,6 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.processing.claim_text_analysis import (
+    claim_language,
+    claim_polarity,
+    supported_claim_heuristic_languages,
+)
 from src.processing.cost_tracker import TIER2, CostTracker
 from src.processing.event_claims import (
     assign_claim_keys_to_impacts,
@@ -110,7 +115,6 @@ class Tier2Classifier:
         },
     }
     _JSON_OBJECT_RESPONSE_FORMAT: ClassVar[dict[str, str]] = {"type": "json_object"}
-    _SUPPORTED_CLAIM_HEURISTIC_LANGUAGES: ClassVar[set[str]] = {"en", "uk", "ru"}
     _CLAIM_STOP_WORDS: ClassVar[dict[str, set[str]]] = {
         "en": {
             "a",
@@ -175,39 +179,7 @@ class Tier2Classifier:
             "это",
         },
     }
-    _CLAIM_NEGATIVE_MARKERS: ClassVar[dict[str, tuple[str, ...]]] = {
-        "en": (
-            " not ",
-            " no ",
-            " never ",
-            " deny",
-            " denied",
-            " denies",
-            " refute",
-            " refuted",
-            " refutes",
-            " false",
-            " without ",
-            "did not",
-            "didn't",
-        ),
-        "uk": (
-            " не ",
-            " ніколи ",
-            " запереч",
-            " спрост",
-            " хибн",
-            " без ",
-        ),
-        "ru": (
-            " не ",
-            " никогда ",
-            " отрица",
-            " опроверг",
-            " ложн",
-            " без ",
-        ),
-    }
+    _SUPPORTED_CLAIM_HEURISTIC_LANGUAGES: ClassVar[set[str]] = supported_claim_heuristic_languages()
 
     def __init__(
         self,
@@ -674,31 +646,11 @@ class Tier2Classifier:
         }
 
     def _claim_polarity(self, value: str, *, language: str) -> str:
-        lowered = value.lower()
-        negative_markers = self._CLAIM_NEGATIVE_MARKERS.get(language, ())
-        for marker in negative_markers:
-            if marker in f" {lowered} ":
-                return "negative"
-        return "positive"
+        return claim_polarity(value, language=language)
 
     @staticmethod
     def _claim_language(value: str) -> str:
-        lowered = value.lower()
-        has_cyrillic = any("а" <= ch <= "я" or ch == "ё" for ch in lowered)
-        if has_cyrillic:
-            ukrainian_specific = {"і", "ї", "є", "ґ"}
-            russian_specific = {"ы", "э", "ъ", "ё"}
-            if any(ch in ukrainian_specific for ch in lowered):
-                return "uk"
-            if any(ch in russian_specific for ch in lowered):
-                return "ru"
-            return "ru"
-
-        has_ascii_letters = any("a" <= ch <= "z" for ch in lowered)
-        has_non_ascii_letters = any(ch.isalpha() and not ch.isascii() for ch in lowered)
-        if has_ascii_letters and not has_non_ascii_letters:
-            return "en"
-        return "unknown"
+        return claim_language(value)
 
     @staticmethod
     def _parse_datetime(raw_value: str | None) -> datetime | None:

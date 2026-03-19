@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.core.trend_config import normalize_definition_payload, trend_runtime_id_for_record
+from src.processing.claim_text_analysis import claim_language, claim_polarity
 from src.processing.event_claims import (
     EventClaimSpec,
     build_event_claim_specs,
@@ -72,6 +73,27 @@ class _Candidate:
     region_matches: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class _IndicatorMatchSignals:
+    claim_keyword_matches: tuple[str, ...]
+    canonical_keyword_matches: tuple[str, ...]
+    claim_overlap: tuple[str, ...]
+    canonical_overlap: tuple[str, ...]
+
+    @property
+    def matched_keywords(self) -> tuple[str, ...]:
+        return self.claim_keyword_matches + self.canonical_keyword_matches
+
+    @property
+    def description_overlap(self) -> tuple[str, ...]:
+        return self.claim_overlap + self.canonical_overlap
+
+    def is_match(self) -> bool:
+        if self.claim_keyword_matches or len(self.claim_overlap) >= 2:
+            return True
+        return bool(self.canonical_keyword_matches or len(self.canonical_overlap) >= 2)
+
+
 def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpactMappingResult:
     """Map extracted claims onto eligible trend indicators."""
 
@@ -81,7 +103,11 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
 
     mapped_impacts: list[dict[str, Any]] = []
     unresolved: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
     for claim in claim_specs:
+        if _is_negative_claim(claim):
+            skipped.append(_negative_claim_diagnostic(claim=claim, event=event))
+            continue
         candidates = _rank_candidates(
             claim=claim,
             event_context=event_context,
@@ -105,9 +131,11 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
 
     diagnostics = {
         "version": _MAPPING_VERSION,
-        "strategy": "keyword-and-metadata",
+        "strategy": "keyword-metadata-canonical-context",
         "unresolved": unresolved,
     }
+    if skipped:
+        diagnostics["skipped"] = skipped
     return TrendImpactMappingResult(impacts=mapped_impacts, diagnostics=diagnostics)
 
 
@@ -227,16 +255,20 @@ def _rank_candidates(
 ) -> list[_Candidate]:
     claim_text = normalize_claim_text(claim.claim_text)
     claim_terms = set(claim_text.split())
+    claim_language_code = claim_language(claim.claim_text)
+    canonical_context = event_context if claim_language_code != "en" else ""
+    canonical_terms = set(canonical_context.split())
     event_terms = set(event_context.split())
     candidates: list[_Candidate] = []
     for indicator in indicators:
-        matched_keywords = tuple(
-            keyword for keyword in indicator.keywords if keyword and keyword in claim_text
+        match_signals = _match_indicator(
+            indicator=indicator,
+            claim_text=claim_text,
+            claim_terms=claim_terms,
+            canonical_context=canonical_context,
+            canonical_terms=canonical_terms,
         )
-        description_overlap = tuple(
-            sorted(term for term in claim_terms if term in indicator.description_terms)
-        )
-        if not matched_keywords and len(description_overlap) < 2:
+        if not match_signals.is_match():
             continue
         actor_matches = tuple(
             phrase for phrase in indicator.actor_phrases if phrase and phrase in event_context
@@ -244,20 +276,20 @@ def _rank_candidates(
         region_matches = tuple(
             phrase for phrase in indicator.region_phrases if phrase and phrase in event_context
         )
-        score = (
-            len(matched_keywords) * 100
-            + len(description_overlap) * 10
-            + len(actor_matches) * 4
-            + len(region_matches) * 3
-            + len(event_terms.intersection(set(indicator.description_terms[:3])))
+        score = _candidate_score(
+            indicator=indicator,
+            match_signals=match_signals,
+            actor_matches=actor_matches,
+            region_matches=region_matches,
+            event_terms=event_terms,
         )
         candidates.append(
             _Candidate(
                 indicator=indicator,
                 claim=claim,
                 score=score,
-                matched_keywords=matched_keywords,
-                description_overlap=description_overlap,
+                matched_keywords=match_signals.matched_keywords,
+                description_overlap=match_signals.description_overlap,
                 actor_matches=actor_matches,
                 region_matches=region_matches,
             )
@@ -270,6 +302,71 @@ def _rank_candidates(
         )
     )
     return candidates
+
+
+def _match_indicator(
+    *,
+    indicator: _IndicatorContext,
+    claim_text: str,
+    claim_terms: set[str],
+    canonical_context: str,
+    canonical_terms: set[str],
+) -> _IndicatorMatchSignals:
+    claim_keyword_matches = tuple(
+        keyword for keyword in indicator.keywords if keyword and keyword in claim_text
+    )
+    canonical_keyword_matches = tuple(
+        keyword
+        for keyword in indicator.keywords
+        if (
+            keyword
+            and keyword not in claim_keyword_matches
+            and canonical_context
+            and keyword in canonical_context
+        )
+    )
+    claim_overlap = tuple(
+        sorted(term for term in claim_terms if term in indicator.description_terms)
+    )
+    canonical_overlap = tuple(
+        sorted(
+            term
+            for term in canonical_terms
+            if term in indicator.description_terms and term not in claim_overlap
+        )
+    )
+    return _IndicatorMatchSignals(
+        claim_keyword_matches=claim_keyword_matches,
+        canonical_keyword_matches=canonical_keyword_matches,
+        claim_overlap=claim_overlap,
+        canonical_overlap=canonical_overlap,
+    )
+
+
+def _candidate_score(
+    *,
+    indicator: _IndicatorContext,
+    match_signals: _IndicatorMatchSignals,
+    actor_matches: tuple[str, ...],
+    region_matches: tuple[str, ...],
+    event_terms: set[str],
+) -> int:
+    return (
+        len(match_signals.claim_keyword_matches) * 100
+        + len(match_signals.canonical_keyword_matches) * 60
+        + len(match_signals.claim_overlap) * 10
+        + len(match_signals.canonical_overlap) * 4
+        + len(actor_matches) * 4
+        + len(region_matches) * 3
+        + len(event_terms.intersection(set(indicator.description_terms[:3])))
+    )
+
+
+def _is_negative_claim(claim: EventClaimSpec) -> bool:
+    language = claim_language(claim.claim_text)
+    if language not in {"en", "uk", "ru"}:
+        return False
+    return claim_polarity(claim.claim_text, language=language) == "negative"
 
 
 def _build_impact(*, best: _Candidate, runner_up: _Candidate | None) -> dict[str, Any]:
@@ -319,6 +416,21 @@ def _no_match_diagnostic(*, claim: EventClaimSpec, event: Event) -> dict[str, An
         "reason": TaxonomyGapReason.NO_MATCHING_INDICATOR.value,
         "trend_id": _UNMAPPED_TREND_ID,
         "signal_type": _UNMAPPED_SIGNAL_TYPE,
+        "event_claim_key": claim.claim_key,
+        "event_claim_text": claim.claim_text,
+        "details": {
+            "claim_type": claim.claim_type,
+            "claim_order": claim.claim_order,
+            "event_where": event.extracted_where,
+            "event_when": extracted_when.isoformat() if extracted_when is not None else None,
+        },
+    }
+
+
+def _negative_claim_diagnostic(*, claim: EventClaimSpec, event: Event) -> dict[str, Any]:
+    extracted_when = getattr(event, "extracted_when", None)
+    return {
+        "reason": "negative_claim",
         "event_claim_key": claim.claim_key,
         "event_claim_text": claim.claim_text,
         "details": {

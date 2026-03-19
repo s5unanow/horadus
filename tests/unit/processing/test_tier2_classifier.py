@@ -600,6 +600,91 @@ async def test_classify_event_records_unmapped_mapping_diagnostics(mock_db_sessi
 
 
 @pytest.mark.asyncio
+async def test_classify_event_maps_non_english_claims_from_canonical_context(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class NonEnglishClaimCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "Military movement near the border intensified. Diplomatic contacts continued.",
+                "extracted_who": ["NATO", "Russia"],
+                "extracted_what": "Force repositioning without direct hostile contact",
+                "extracted_where": "Baltic region",
+                "extracted_when": None,
+                "claims": ["Розгортання військ біля кордону посилилося."],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=NonEnglishClaimCompletions())
+    )
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 1
+    assert event.extracted_claims["trend_impacts"][0]["signal_type"] == "military_movement"
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"] == []
+
+
+@pytest.mark.asyncio
+async def test_classify_event_skips_negative_claim_mapping(mock_db_session) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    event = Event(id=uuid4(), canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    class NegativeClaimCompletions:
+        async def create(self, **kwargs):
+            _ = kwargs
+            payload = {
+                "summary": "Officials denied a border deployment report. Monitoring continued.",
+                "extracted_who": ["NATO", "Russia"],
+                "extracted_what": "Troop movement near the border",
+                "extracted_where": "Baltic region",
+                "extracted_when": None,
+                "claims": ["Officials denied troop deployment near the border."],
+                "categories": ["security"],
+                "has_contradictions": False,
+                "contradiction_notes": None,
+            }
+            return SimpleNamespace(
+                choices=[SimpleNamespace(message=SimpleNamespace(content=json.dumps(payload)))],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier.client = SimpleNamespace(
+        chat=SimpleNamespace(completions=NegativeClaimCompletions())
+    )
+
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=trends,
+        context_chunks=["Context"],
+    )
+
+    assert result.trend_impacts_count == 0
+    assert event.extracted_claims["trend_impacts"] == []
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["unresolved"] == []
+    assert event.extracted_claims[TREND_IMPACT_MAPPING_KEY]["skipped"][0]["reason"] == (
+        "negative_claim"
+    )
+
+
+@pytest.mark.asyncio
 async def test_classify_event_records_ambiguous_mapping_diagnostics(
     mock_db_session,
 ) -> None:

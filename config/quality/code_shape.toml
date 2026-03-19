@@ -100,7 +100,6 @@ path = "src/processing/tier2_canary.py"
 
 [[legacy_files]]
 path = "src/processing/tier2_classifier.py"
-max_lines = 868
 [legacy_files.member_max_lines]
 "Tier2Classifier.classify_event" = 119
 

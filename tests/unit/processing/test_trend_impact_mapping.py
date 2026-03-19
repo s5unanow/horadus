@@ -203,6 +203,102 @@ def test_map_event_trend_impacts_uses_description_only_and_skips_invalid_indicat
     assert result.impacts[0]["rationale"].startswith("Matched indicator terms:")
 
 
+def test_map_event_trend_impacts_uses_canonical_english_context_for_non_english_claims() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Military movement near the border intensified.",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Cross-border military force movement",
+        extracted_claims={
+            "claims": ["Розгортання військ біля кордону посилилося."],
+            "claim_graph": {
+                "nodes": [
+                    {"claim_id": "claim_1", "text": "Розгортання військ біля кордону посилилося."}
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(
+        event=event,
+        trends=[
+            _trend(
+                indicators={
+                    "military_movement": {
+                        "direction": "escalatory",
+                        "description": "Cross-border military force movement near the border",
+                        "keywords": [],
+                    }
+                }
+            )
+        ],
+    )
+
+    assert result.diagnostics["unresolved"] == []
+    assert len(result.impacts) == 1
+    assert result.impacts[0]["signal_type"] == "military_movement"
+    assert "Matched indicator terms" in result.impacts[0]["rationale"]
+
+
+def test_map_event_trend_impacts_skips_negative_claims() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Summary",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="Troop movement near the border",
+        extracted_claims={
+            "claims": ["Officials denied troop deployment near the border."],
+            "claim_graph": {
+                "nodes": [
+                    {
+                        "claim_id": "claim_1",
+                        "text": "Officials denied troop deployment near the border.",
+                    }
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert result.impacts == []
+    assert result.diagnostics["unresolved"] == []
+    assert result.diagnostics["skipped"][0]["reason"] == "negative_claim"
+    assert result.diagnostics["skipped"][0]["event_claim_key"] == (
+        "officials denied troop deployment near the border"
+    )
+
+
+def test_map_event_trend_impacts_does_not_skip_unknown_language_claims() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Summary",
+        extracted_what="Economic talks resumed",
+        extracted_claims={
+            "claims": ["Déploiement de troupes près de la frontière."],
+            "claim_graph": {
+                "nodes": [
+                    {
+                        "claim_id": "claim_1",
+                        "text": "Déploiement de troupes près de la frontière.",
+                    }
+                ],
+                "links": [],
+            },
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=[_trend()])
+
+    assert result.impacts == []
+    assert result.diagnostics["unresolved"][0]["reason"] == "no_matching_indicator"
+    assert "skipped" not in result.diagnostics
+
+
 def test_map_event_trend_impacts_uses_default_indicator_description_and_multi_keyword_signal() -> (
     None
 ):

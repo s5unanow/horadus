@@ -27,6 +27,7 @@ def test_automation_lock_check_reports_available_path(tmp_path: Path) -> None:
     assert exit_code == automation_lock_module.ExitCode.OK
     assert data["status"] == "available"
     assert data["dry_run"] is True
+    assert not lock_path.parent.exists()
     assert lines == [
         f"Automation lock is available: {lock_path}",
         "Dry run: inspected the current lock state without changing it.",
@@ -660,6 +661,26 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(tmp_path
     assert mismatch_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert mismatch_lines[1] == (
         f"Unlock owner mismatch: lock is owned by pid {os.getpid()}, not 99999."
+    )
+
+    legacy_path = tmp_path / "automation" / "legacy-lock"
+    legacy_path.write_text("", encoding="utf-8")
+    with open(legacy_path, "r+", encoding="utf-8") as legacy_stream:
+        automation_lock_impl.fcntl.flock(
+            legacy_stream.fileno(),
+            automation_lock_impl.fcntl.LOCK_EX | automation_lock_impl.fcntl.LOCK_NB,
+        )
+        try:
+            legacy_exit_code, _, legacy_lines = automation_lock_module.automation_lock_unlock_data(
+                str(legacy_path), owner_pid=None, dry_run=False
+            )
+        finally:
+            automation_lock_impl.fcntl.flock(
+                legacy_stream.fileno(), automation_lock_impl.fcntl.LOCK_UN
+            )
+    assert legacy_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert (
+        legacy_lines[1] == "Unlock requires the active legacy flock holder to exit before cleanup."
     )
 
 

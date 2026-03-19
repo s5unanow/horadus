@@ -316,6 +316,11 @@ def _unlock_file_lock(
 ) -> tuple[int, dict[str, object], list[str]]:
     if info.status == "broken":
         return _unlock_validation_error(info)
+    if info.status == "legacy" and info.legacy_lock_active is True:
+        return _unlock_validation_error(
+            info,
+            message="Unlock requires the active legacy flock holder to exit before cleanup.",
+        )
     if info.status == "held" and info.owner_pid is not None:
         if owner_pid is None:
             return _unlock_validation_error(
@@ -448,6 +453,28 @@ def automation_lock_lock_data(
     path_value: str, *, owner_pid: int | None, dry_run: bool
 ) -> tuple[int, dict[str, object], list[str]]:
     lock_path = _normalize_lock_path(path_value)
+    info = _load_lock_info(lock_path)
+    if dry_run:
+        if info.status == "legacy" and info.legacy_lock_active is False:
+            return (
+                ExitCode.OK,
+                asdict(info) | {"dry_run": True},
+                [
+                    *_check_lines(info),
+                    f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
+                ],
+            )
+        if info.status != "available":
+            return _lock_validation_error(info, dry_run=True)
+        return (
+            ExitCode.OK,
+            asdict(info) | {"dry_run": True, "status": "available"},
+            [
+                f"Automation lock is available: {info.path}",
+                f"Dry run: would acquire the automation lock at {info.path}.",
+            ],
+        )
+
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
@@ -461,15 +488,6 @@ def automation_lock_lock_data(
     if info.status == "legacy":
         if info.legacy_lock_active is not False:
             return _lock_validation_error(info, dry_run=dry_run)
-        if dry_run:
-            return (
-                ExitCode.OK,
-                asdict(info) | {"dry_run": True},
-                [
-                    *_check_lines(info),
-                    f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
-                ],
-            )
         try:
             lock_path.unlink()
         except OSError as exc:
@@ -482,15 +500,6 @@ def automation_lock_lock_data(
         info = _load_lock_info(lock_path)
     if info.status != "available":
         return _lock_validation_error(info, dry_run=dry_run)
-    if dry_run:
-        return (
-            ExitCode.OK,
-            asdict(info) | {"dry_run": True, "status": "available"},
-            [
-                f"Automation lock is available: {info.path}",
-                f"Dry run: would acquire the automation lock at {info.path}.",
-            ],
-        )
 
     publish_state, publish_result = _attempt_lock_publish(lock_path, owner_pid=owner_pid)
     if publish_state == "acquired":

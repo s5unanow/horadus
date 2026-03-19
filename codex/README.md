@@ -9,6 +9,9 @@ alongside the repo workflow.
 - Purpose: allow the Horadus sprint autopilot to run the canonical workflow
   commands outside the default automation sandbox when the operator chooses to
   activate the baseline.
+- Coverage: the repo-owned Horadus CLI entrypoint plus the git and GitHub CLI
+  subcommands that the current preflight, safe-start, and finish lifecycle
+  shells out to.
 
 ## Operator Setup
 

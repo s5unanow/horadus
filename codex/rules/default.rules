@@ -17,6 +17,34 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "status"],
+    decision = "allow",
+    justification = "Allow preflight and finish working-tree state checks used by the Horadus workflow.",
+    match = [
+        "git status --porcelain",
+    ],
+    not_match = [
+        "git fetch origin",
+        "git rev-parse HEAD",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "rev-parse"],
+    decision = "allow",
+    justification = "Allow branch and commit resolution used by the Horadus workflow lifecycle.",
+    match = [
+        "git rev-parse --abbrev-ref HEAD",
+        "git rev-parse HEAD",
+        "git rev-parse origin/main",
+    ],
+    not_match = [
+        "git status --porcelain",
+        "git cat-file -e deadbeef",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "fetch"],
     decision = "allow",
     justification = "Allow remote sync checks required by the Horadus workflow.",
@@ -31,6 +59,48 @@ prefix_rule(
 )
 
 prefix_rule(
+    pattern = ["git", "show-ref"],
+    decision = "allow",
+    justification = "Allow task-branch existence checks before start and cleanup after merge.",
+    match = [
+        "git show-ref --verify --quiet refs/heads/codex/task-357-codex-rules-baseline",
+        "git show-ref --verify refs/heads/codex/task-357-codex-rules-baseline",
+    ],
+    not_match = [
+        "git ls-remote --heads origin codex/task-357-codex-rules-baseline",
+        "git branch -d codex/task-357-codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "ls-remote"],
+    decision = "allow",
+    justification = "Allow remote branch checks and branch-head alignment validation.",
+    match = [
+        "git ls-remote --exit-code --heads origin codex/task-357-codex-rules-baseline",
+        "git ls-remote --heads origin codex/task-357-codex-rules-baseline",
+    ],
+    not_match = [
+        "git fetch origin",
+        "git show-ref --verify refs/heads/codex/task-357-codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "switch"],
+    decision = "allow",
+    justification = "Allow the workflow to create task branches and resync local main after merge.",
+    match = [
+        "git switch -c codex/task-357-codex-rules-baseline",
+        "git switch main",
+    ],
+    not_match = [
+        "git branch -d codex/task-357-codex-rules-baseline",
+        "git pull --ff-only",
+    ],
+)
+
+prefix_rule(
     pattern = ["git", "pull", "--ff-only"],
     decision = "allow",
     justification = "Allow fast-forward-only main sync before and after task work.",
@@ -41,6 +111,32 @@ prefix_rule(
     not_match = [
         "git pull",
         "git fetch origin",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "cat-file"],
+    decision = "allow",
+    justification = "Allow post-merge verification that the merge commit exists locally.",
+    match = [
+        "git cat-file -e 29b9ae3ad9daa17c249e48930af2383e8afade7d",
+    ],
+    not_match = [
+        "git rev-parse HEAD",
+        "git branch -d codex/task-357-codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["git", "branch"],
+    decision = "allow",
+    justification = "Allow local deletion of merged task branches after main is synced.",
+    match = [
+        "git branch -d codex/task-357-codex-rules-baseline",
+    ],
+    not_match = [
+        "git switch main",
+        "git push origin codex/task-357-codex-rules-baseline",
     ],
 )
 
@@ -70,6 +166,19 @@ prefix_rule(
     not_match = [
         "gh api graphql",
         "gh auth status",
+    ],
+)
+
+prefix_rule(
+    pattern = ["gh", "repo"],
+    decision = "allow",
+    justification = "Allow repository metadata lookups used by review-thread and review-refresh helpers.",
+    match = [
+        "gh repo view --json nameWithOwner --jq .nameWithOwner",
+    ],
+    not_match = [
+        "gh pr view 291",
+        "gh api graphql -f query=query",
     ],
 )
 

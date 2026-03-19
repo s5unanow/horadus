@@ -1,7 +1,7 @@
 """extend taxonomy gap reasons for deterministic mapping
 
 Revision ID: 0025_extend_taxonomy_gap_reasons
-Revises: 0024_add_trend_restatement_ledger
+Revises: 0024_trend_restatement_ledger
 Create Date: 2026-03-19 14:20:00.000000
 """
 
@@ -12,7 +12,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by Alembic.
 revision = "0025_extend_taxonomy_gap_reasons"
-down_revision = "0024_add_trend_restatement_ledger"
+down_revision = "0024_trend_restatement_ledger"
 branch_labels = None
 depends_on = None
 

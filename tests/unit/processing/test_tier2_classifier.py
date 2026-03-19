@@ -12,7 +12,12 @@ import pytest
 
 from src.core.config import settings
 from src.processing.cost_tracker import BudgetExceededError
-from src.processing.tier2_classifier import Tier2Classifier, Tier2EventResult, Tier2Usage
+from src.processing.tier2_classifier import (
+    Tier2Classifier,
+    Tier2EventResult,
+    Tier2Usage,
+    _mapped_impacts_count,
+)
 from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY
 from src.storage.models import Event
 
@@ -251,6 +256,12 @@ async def test_classify_event_tracks_usage_metadata(mock_db_session) -> None:
     assert usage.prompt_tokens == 120
     assert usage.completion_tokens == 80
     assert usage.estimated_cost_usd == pytest.approx(0.000066, rel=0.001)
+
+
+def test_mapped_impacts_count_returns_zero_for_non_list_payloads() -> None:
+    assert _mapped_impacts_count(Event(extracted_claims={})) == 0
+    assert _mapped_impacts_count(Event(extracted_claims={"trend_impacts": "bad"})) == 0
+    assert _mapped_impacts_count(Event(extracted_claims={"trend_impacts": [1, 2]})) == 2
 
 
 @pytest.mark.asyncio

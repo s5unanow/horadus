@@ -178,6 +178,57 @@ async def test_process_items_rejects_duplicate_active_runtime_trend_ids(mock_db_
         await pipeline.process_items([_item()], trends=[duplicate_a, duplicate_b])
 
 
+@pytest.mark.asyncio
+async def test_capture_unresolved_trend_mapping_covers_guard_paths(mock_db_session) -> None:
+    pipeline = _pipeline(mock_db_session)
+    pipeline._capture_taxonomy_gap = AsyncMock()
+
+    await pipeline._capture_unresolved_trend_mapping(event=Event(extracted_claims={}))
+    pipeline._capture_taxonomy_gap.assert_not_awaited()
+
+    event = Event(
+        id=uuid4(),
+        extracted_claims={
+            TREND_IMPACT_MAPPING_KEY: {
+                "unresolved": [
+                    {"reason": " ", "trend_id": "__unmapped__", "signal_type": "indicator"},
+                    {
+                        "reason": "no_matching_indicator",
+                        "trend_id": None,
+                        "signal_type": "indicator",
+                    },
+                    {
+                        "reason": "no_matching_indicator",
+                        "trend_id": "__unmapped__",
+                        "signal_type": " ",
+                    },
+                    {
+                        "reason": "no_matching_indicator",
+                        "trend_id": "__unmapped__",
+                        "signal_type": "__no_matching_indicator__",
+                        "details": "bad",
+                        "event_claim_key": "__event__",
+                        "event_claim_text": "Claim text",
+                    },
+                ]
+            }
+        },
+    )
+
+    await pipeline._capture_unresolved_trend_mapping(event=event)
+
+    pipeline._capture_taxonomy_gap.assert_awaited_once_with(
+        event_id=event.id,
+        trend_id="__unmapped__",
+        signal_type="__no_matching_indicator__",
+        reason=TaxonomyGapReason.NO_MATCHING_INDICATOR,
+        details={
+            "event_claim_key": "__event__",
+            "event_claim_text": "Claim text",
+        },
+    )
+
+
 def test_pipeline_usage_and_result_counter_helpers_cover_pending_and_flags() -> None:
     run_result = PipelineRunResult()
     ProcessingPipeline._accumulate_usage(

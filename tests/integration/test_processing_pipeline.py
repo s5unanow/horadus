@@ -91,8 +91,7 @@ class FakeTier2Completions:
         self.calls += 1
         messages = kwargs.get("messages", [])
         user_content = messages[-1]["content"] if messages else "{}"
-        payload = _load_wrapped_json_payload(user_content)
-        trend_id = payload["trends"][0]["trend_id"]
+        _payload = _load_wrapped_json_payload(user_content)
 
         response_payload = {
             "summary": "Forces moved closer to the border area. Diplomatic contacts continued.",
@@ -100,18 +99,8 @@ class FakeTier2Completions:
             "extracted_what": "Cross-border military force movement",
             "extracted_where": "Baltic region",
             "extracted_when": "2026-02-07T12:00:00Z",
-            "claims": ["Mechanized units were redeployed"],
+            "claims": ["Troop deployment increased near the border."],
             "categories": ["military", "security"],
-            "trend_impacts": [
-                {
-                    "trend_id": trend_id,
-                    "signal_type": "military_movement",
-                    "direction": "escalatory",
-                    "severity": 0.8,
-                    "confidence": 0.9,
-                    "rationale": "Visible force buildup pattern",
-                }
-            ],
         }
 
         return SimpleNamespace(

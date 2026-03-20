@@ -47,8 +47,6 @@ EVENT_ACTIVITY_STATE_SQL_VALUES = sql_string_literals(EVENT_ACTIVITY_STATE_VALUE
 def legacy_lifecycle_status_for_states(*, epistemic_state: str, activity_state: str) -> str:
     """Project split states onto the deprecated legacy lifecycle field."""
 
-    if epistemic_state == EventEpistemicState.RETRACTED.value:
-        return "archived"
     if activity_state == EventActivityState.CLOSED.value:
         return "archived"
     if activity_state == EventActivityState.DORMANT.value:
@@ -62,6 +60,8 @@ def epistemic_state_from_legacy(*, lifecycle_status: str | None, has_contradicti
     """Backfill or resolve epistemic state when only legacy fields are populated."""
 
     normalized = (lifecycle_status or "").strip().lower()
+    if normalized in {"fading", "archived"}:
+        return EventEpistemicState.CONFIRMED.value
     if has_contradictions:
         return EventEpistemicState.CONTESTED.value
     if normalized == EventEpistemicState.EMERGING.value:

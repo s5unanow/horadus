@@ -7,8 +7,9 @@ Create Date: 2026-03-20 15:25:00.000000
 
 from __future__ import annotations
 
-from alembic import op
 import sqlalchemy as sa
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision = "0026_split_event_state_axes"
@@ -57,6 +58,7 @@ def upgrade() -> None:
                   AND hf.target_id = events.id
                   AND hf.action IN ('mark_noise', 'invalidate')
             ) THEN 'retracted'
+            WHEN lifecycle_status IN ('fading', 'archived') THEN 'confirmed'
             WHEN has_contradictions = true THEN 'contested'
             WHEN lifecycle_status = 'emerging' THEN 'emerging'
             ELSE 'confirmed'

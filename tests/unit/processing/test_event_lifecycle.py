@@ -75,7 +75,7 @@ def test_on_event_mention_preserves_retracted_epistemic_state(mock_db_session) -
     assert changed is True
     assert event.epistemic_state == EventEpistemicState.RETRACTED.value
     assert event.activity_state == EventActivityState.ACTIVE.value
-    assert event.lifecycle_status == EventLifecycle.ARCHIVED.value
+    assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
 
 
 @pytest.mark.asyncio

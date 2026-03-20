@@ -8,6 +8,7 @@ from src.storage.event_state import (
     EventActivityState,
     EventEpistemicState,
     activity_state_from_legacy,
+    epistemic_state_from_legacy,
     event_state_snapshot,
     legacy_lifecycle_status_for_states,
 )
@@ -33,6 +34,10 @@ def test_event_state_helpers_cover_closed_and_dormant_compatibility() -> None:
     )
     assert (
         activity_state_from_legacy(lifecycle_status="archived") == EventActivityState.CLOSED.value
+    )
+    assert (
+        epistemic_state_from_legacy(lifecycle_status="archived", has_contradictions=True)
+        == EventEpistemicState.CONFIRMED.value
     )
 
 

@@ -16,6 +16,10 @@ from sqlalchemy import exists, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
+from src.storage.event_state import (
+    resolved_event_activity_state,
+    resolved_event_epistemic_state,
+)
 from src.storage.models import Event, EventClaim, EventItem, RawItem, Source, TrendEvidence
 
 router = APIRouter()
@@ -37,6 +41,8 @@ class EventResponse(BaseModel):
                 "categories": ["military"],
                 "source_count": 5,
                 "unique_source_count": 4,
+                "epistemic_state": "contested",
+                "activity_state": "active",
                 "lifecycle_status": "confirmed",
                 "has_contradictions": True,
                 "contradiction_notes": "Source A reports a withdrawal while Source B reports escalation.",
@@ -54,6 +60,8 @@ class EventResponse(BaseModel):
     categories: list[str]
     source_count: int
     unique_source_count: int
+    epistemic_state: str
+    activity_state: str
     lifecycle_status: str
     has_contradictions: bool
     contradiction_notes: str | None
@@ -104,6 +112,8 @@ class EventDetailResponse(EventResponse):
 async def list_events(
     category: str | None = None,
     trend_id: UUID | None = None,
+    epistemic: Literal["emerging", "confirmed", "contested", "retracted"] | None = None,
+    activity: Literal["active", "dormant", "closed"] | None = None,
     lifecycle: Literal["emerging", "confirmed", "fading", "archived"] | None = None,
     contradicted: bool | None = Query(
         default=None,
@@ -125,6 +135,10 @@ async def list_events(
         .order_by(Event.last_mention_at.desc())
         .limit(limit)
     )
+    if epistemic is not None:
+        query = query.where(Event.epistemic_state == epistemic)
+    if activity is not None:
+        query = query.where(Event.activity_state == activity)
     if lifecycle is not None:
         query = query.where(Event.lifecycle_status == lifecycle)
     if contradicted is not None:
@@ -150,6 +164,8 @@ async def list_events(
             categories=list(event.categories or []),
             source_count=event.source_count,
             unique_source_count=event.unique_source_count,
+            epistemic_state=resolved_event_epistemic_state(event),
+            activity_state=resolved_event_activity_state(event),
             lifecycle_status=event.lifecycle_status,
             has_contradictions=event.has_contradictions,
             contradiction_notes=event.contradiction_notes,
@@ -194,7 +210,6 @@ async def get_event(
         for source_name, url in source_rows
         if source_name is not None
     ]
-
     impact_rows = (
         await session.execute(
             select(
@@ -243,13 +258,14 @@ async def get_event(
         }
         for trend_id, event_claim_id, claim_text, signal_type, delta_log_odds in impact_rows
     ]
-
     return EventDetailResponse(
         id=event.id,
         summary=event.canonical_summary,
         categories=list(event.categories or []),
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,
+        epistemic_state=resolved_event_epistemic_state(event),
+        activity_state=resolved_event_activity_state(event),
         lifecycle_status=event.lifecycle_status,
         has_contradictions=event.has_contradictions,
         contradiction_notes=event.contradiction_notes,

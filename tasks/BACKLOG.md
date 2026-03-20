@@ -653,29 +653,6 @@ and scoring math so operators can explain why two runs or two artifacts differ.
 
 ---
 
-### TASK-340: Split Event Epistemic State from Activity State
-**Priority**: P1 (High)
-**Estimate**: 4-6 hours
-
-Current event lifecycle status still overloads at least two different meanings:
-how well-supported the event is and how recently it has been active. Separate
-epistemic state from activity state so corroboration, contradiction, retraction,
-dormancy, and closure do not fight over one field.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/processing/event_lifecycle.py`, `src/api/routes/events.py`, `src/api/routes/feedback.py`, `docs/DATA_MODEL.md`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Replace the single event lifecycle field with explicit epistemic and activity state contracts, or add those contracts alongside a clearly deprecated compatibility field
-- [ ] Put corroboration/contestation/retraction on the epistemic axis and recency/dormancy/closure on the activity axis
-- [ ] Keep operator review, invalidation, and reporting surfaces explicit about which axis changed and why
-- [ ] Add migration/backfill guidance for current `emerging`/`confirmed`/`fading`/`archived` rows
-- [ ] Add regression coverage for corroboration promotion, contradiction/retraction, dormancy, and reactivation
-
----
-
 ### TASK-341: Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records
 **Priority**: P1 (High)
 **Estimate**: 6-8 hours

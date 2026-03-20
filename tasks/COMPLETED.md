@@ -329,3 +329,4 @@
 - TASK-357: Version a repo-owned Codex rules baseline for autopilot workflow commands ✅
 - TASK-335: Move Trend-Impact Mapping Fully Into Deterministic Code ✅
 - TASK-358: Replace autopilot `flock` dependency with a repo-owned automation lock helper ✅
+- TASK-340: Split Event Epistemic State from Activity State ✅

@@ -12,7 +12,7 @@ import pytest
 
 import src.workers.tasks as tasks_module
 from src.core.source_freshness import SourceFreshnessReport, SourceFreshnessRow
-from src.storage.models import EventLifecycle
+from src.storage.event_state import EventActivityState
 
 pytestmark = pytest.mark.unit
 
@@ -333,13 +333,13 @@ def test_retention_eligibility_helpers_handle_missing_event_dates() -> None:
 
     assert not tasks_module._is_raw_item_archived_event_retention_eligible(
         fetched_at=datetime(2025, 10, 1, tzinfo=UTC),
-        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_activity_state=EventActivityState.CLOSED.value,
         event_last_mention_at=None,
         cutoffs=cutoffs,
     )
     assert not tasks_module._is_trend_evidence_retention_eligible(
         created_at=datetime(2025, 1, 1, tzinfo=UTC),
-        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_activity_state=EventActivityState.CLOSED.value,
         event_last_mention_at=None,
         cutoffs=cutoffs,
     )

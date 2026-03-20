@@ -92,6 +92,8 @@ class ReviewQueueItem(BaseModel):
 
     event_id: UUID
     summary: str
+    epistemic_state: str
+    activity_state: str
     lifecycle_status: str
     last_mention_at: datetime
     source_count: int

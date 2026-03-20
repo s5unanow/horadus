@@ -326,48 +326,45 @@ def _is_raw_item_noise_retention_eligible(
 def _is_raw_item_archived_event_retention_eligible(
     *,
     fetched_at: datetime,
-    event_lifecycle_status: str,
+    event_activity_state: str,
     event_last_mention_at: datetime | None,
     cutoffs: RetentionCutoffs,
 ) -> bool:
     return retention_helpers.is_raw_item_archived_event_retention_eligible(
         fetched_at=fetched_at,
-        event_lifecycle_status=event_lifecycle_status,
+        event_activity_state=event_activity_state,
         event_last_mention_at=event_last_mention_at,
         cutoffs=cutoffs,
-        archived_status=EventLifecycle.ARCHIVED.value,
     )
 
 
 def _is_trend_evidence_retention_eligible(
     *,
     created_at: datetime,
-    event_lifecycle_status: str,
+    event_activity_state: str,
     event_last_mention_at: datetime | None,
     cutoffs: RetentionCutoffs,
 ) -> bool:
     return retention_helpers.is_trend_evidence_retention_eligible(
         created_at=created_at,
-        event_lifecycle_status=event_lifecycle_status,
+        event_activity_state=event_activity_state,
         event_last_mention_at=event_last_mention_at,
         cutoffs=cutoffs,
-        archived_status=EventLifecycle.ARCHIVED.value,
     )
 
 
 def _is_archived_event_retention_eligible(
     *,
-    lifecycle_status: str,
+    activity_state: str,
     last_mention_at: datetime,
     has_remaining_evidence: bool,
     cutoffs: RetentionCutoffs,
 ) -> bool:
     return retention_helpers.is_archived_event_retention_eligible(
-        lifecycle_status=lifecycle_status,
+        activity_state=activity_state,
         last_mention_at=last_mention_at,
         has_remaining_evidence=has_remaining_evidence,
         cutoffs=cutoffs,
-        archived_status=EventLifecycle.ARCHIVED.value,
     )
 
 

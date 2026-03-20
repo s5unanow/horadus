@@ -22,6 +22,7 @@ from src.core.source_credibility import (
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
+from src.storage.event_state import EventActivityState, EventEpistemicState
 from src.storage.models import Event, EventItem, RawItem, Source
 from src.storage.restatement_models import HumanFeedback
 
@@ -164,6 +165,8 @@ class EventClusterer:
             embedding_generated_at=item.embedding_generated_at,
             source_count=1,
             unique_source_count=1,
+            epistemic_state=EventEpistemicState.EMERGING.value,
+            activity_state=EventActivityState.ACTIVE.value,
             first_seen_at=timestamp,
             last_mention_at=timestamp,
             primary_item_id=item.id,

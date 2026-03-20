@@ -55,6 +55,8 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
 
     assert len(result) == 1
     assert result[0].id == event.id
+    assert result[0].epistemic_state == "confirmed"
+    assert result[0].activity_state == "active"
     assert result[0].lifecycle_status == "confirmed"
     assert result[0].unique_source_count == 3
     assert result[0].summary == event.canonical_summary
@@ -87,6 +89,7 @@ async def test_list_events_allows_unfiltered_queries(mock_db_session) -> None:
     )
 
     assert len(result) == 1
+    assert result[0].epistemic_state == "confirmed"
     assert result[0].categories == []
     assert result[0].extracted_who is None
     query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
@@ -144,6 +147,8 @@ async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session
     result = await get_event(event_id=event.id, session=mock_db_session)
 
     assert result.id == event.id
+    assert result.epistemic_state == "contested"
+    assert result.activity_state == "active"
     assert result.has_contradictions is True
     assert "conflict" in (result.contradiction_notes or "").lower()
     assert len(result.sources) == 2

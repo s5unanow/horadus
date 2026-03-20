@@ -45,6 +45,13 @@ from src.processing.llm_policy import (
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY, map_event_trend_impacts
 from src.processing.trend_impact_reconciliation import TREND_IMPACT_RECONCILIATION_KEY
+from src.storage.event_state import (
+    EventEpistemicState,
+    apply_event_state_update,
+    derived_epistemic_state,
+    resolved_event_activity_state,
+    resolved_event_epistemic_state,
+)
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -569,6 +576,15 @@ class Tier2Classifier:
             contradiction_notes = "Potential contradiction detected across source claims."
         event.has_contradictions = has_contradictions
         event.contradiction_notes = contradiction_notes if has_contradictions else None
+        if resolved_event_epistemic_state(event) != EventEpistemicState.RETRACTED.value:
+            apply_event_state_update(
+                event,
+                epistemic_state=derived_epistemic_state(
+                    unique_source_count=event.unique_source_count,
+                    has_contradictions=has_contradictions,
+                ),
+                activity_state=resolved_event_activity_state(event),
+            )
         event.extracted_claims = {"claims": claims, "claim_graph": claim_graph, **system_claims}
         mapping = map_event_trend_impacts(event=event, trends=trends)
         event.extracted_claims["trend_impacts"] = assign_claim_keys_to_impacts(

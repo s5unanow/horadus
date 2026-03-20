@@ -179,7 +179,9 @@ Clustered news events (multiple raw_items about the same story).
 | categories | TEXT[] | Yes | | Classification categories |
 | source_count | INTEGER | No | 1 | Number of sources reporting this |
 | unique_source_count | INTEGER | No | 1 | Number of distinct sources represented in the event |
-| lifecycle_status | VARCHAR(20) | No | 'emerging' | Event lifecycle state: emerging, confirmed, fading, archived |
+| epistemic_state | VARCHAR(20) | No | 'emerging' | Evidence/support axis: emerging, confirmed, contested, retracted |
+| activity_state | VARCHAR(20) | No | 'active' | Recency/activity axis: active, dormant, closed |
+| lifecycle_status | VARCHAR(20) | No | 'emerging' | Deprecated compatibility projection derived from the split axes |
 | first_seen_at | TIMESTAMPTZ | No | NOW() | First time we saw this event |
 | last_mention_at | TIMESTAMPTZ | No | NOW() | Most recent mention timestamp used for lifecycle transitions |
 | last_updated_at | TIMESTAMPTZ | No | NOW() | Last time event was updated |
@@ -194,6 +196,7 @@ Clustered news events (multiple raw_items about the same story).
 - IVFFlat: `embedding` (vector_cosine_ops, lists=64)
 - GIN: `categories`
 - Index: `first_seen_at DESC`
+- Index: `(activity_state, last_mention_at)`
 - Index: `(lifecycle_status, last_mention_at)`
 
 **Vector search example:**
@@ -211,6 +214,11 @@ LIMIT 5;
 Operational note:
 - Use `uv run horadus eval embedding-lineage` to detect mixed model populations and estimate re-embed scope.
 - Follow `docs/EMBEDDING_MODEL_UPGRADE.md` for cutover/backfill/rollback workflow.
+- Lifecycle split/backfill guidance:
+  - legacy `emerging` -> `epistemic_state=emerging`, `activity_state=active`
+  - legacy `confirmed` -> `epistemic_state=confirmed`, `activity_state=active`
+  - legacy `fading` -> `epistemic_state=confirmed`, `activity_state=dormant`
+  - legacy `archived` -> `activity_state=closed`; `epistemic_state=retracted` only when event feedback recorded `mark_noise` or `invalidate`, otherwise `confirmed`
 
 ---
 

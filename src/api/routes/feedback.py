@@ -12,12 +12,16 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
+from src.api.routes.feedback_event_helpers import (
+    build_review_queue_item,
+    event_feedback_corrected_value,
+    event_feedback_original_value,
+)
 from src.api.routes.feedback_models import (
     EventFeedbackRequest,
     EventRestatementTarget,
     FeedbackResponse,
     ReviewQueueItem,
-    ReviewQueueTrendImpact,
     TaxonomyGapListResponse,
     TaxonomyGapResponse,
     TaxonomyGapSummaryRow,
@@ -33,14 +37,17 @@ from src.api.routes.feedback_restatement import (
     validate_restatement_targets,
 )
 from src.core.trend_engine import TrendEngine
-from src.core.trend_restatement import (
-    HISTORICAL_ARTIFACT_POLICY,
-    apply_compensating_restatement,
-)
+from src.core.trend_restatement import HISTORICAL_ARTIFACT_POLICY, apply_compensating_restatement
 from src.storage.database import get_session
+from src.storage.event_state import (
+    EventActivityState,
+    EventEpistemicState,
+    apply_event_state_update,
+    event_state_snapshot,
+    resolved_event_activity_state,
+)
 from src.storage.models import (
     Event,
-    EventLifecycle,
     TaxonomyGap,
     TaxonomyGapReason,
     TaxonomyGapStatus,
@@ -76,57 +83,6 @@ async def _trend_map(
         (await session.scalars(select(Trend).where(Trend.id.in_(tuple(trend_ids))))).all()
     )
     return {trend.id: trend for trend in trends if trend.id is not None}
-
-
-def _event_feedback_original_value(evidences: list[TrendEvidence]) -> dict[str, Any]:
-    trend_deltas: dict[str, float] = {}
-    for evidence in evidences:
-        trend_key = str(evidence.trend_id)
-        trend_deltas[trend_key] = trend_deltas.get(trend_key, 0.0) + float(evidence.delta_log_odds)
-    return {
-        "evidence_count": len(evidences),
-        "active_evidence_ids": [
-            str(evidence.id) for evidence in evidences if evidence.id is not None
-        ],
-        "active_event_claim_ids": sorted({str(evidence.event_claim_id) for evidence in evidences}),
-        "trend_deltas": trend_deltas,
-    }
-
-
-def _event_feedback_corrected_value(
-    *,
-    action: str,
-    event_id: UUID,
-    at: datetime,
-    evidences: list[TrendEvidence],
-    total_compensation_delta: float,
-    trend_adjustments: dict[str, dict[str, float]] | None = None,
-) -> dict[str, Any]:
-    evidence_ids = [str(evidence.id) for evidence in evidences if evidence.id is not None]
-    event_claim_ids = sorted({str(evidence.event_claim_id) for evidence in evidences})
-    payload = {
-        "event_id": str(event_id),
-        "action": action,
-        "affected_trend_count": len({evidence.trend_id for evidence in evidences}),
-        "affected_evidence_count": len(evidences),
-        "affected_evidence_ids": evidence_ids,
-        "affected_event_claim_ids": event_claim_ids,
-        "total_compensation_delta_log_odds": total_compensation_delta,
-        "historical_artifact_policy": HISTORICAL_ARTIFACT_POLICY,
-        "recorded_at": at.isoformat(),
-    }
-    if action == "invalidate":
-        payload.update(
-            {
-                "reverted_event_id": str(event_id),
-                "invalidated_evidence_count": len(evidences),
-                "invalidated_evidence_ids": evidence_ids,
-                "invalidated_event_claim_ids": event_claim_ids,
-                "trend_adjustments": trend_adjustments or {},
-                "invalidated_at": at.isoformat(),
-            }
-        )
-    return payload
 
 
 @router.get("/feedback", response_model=list[FeedbackResponse])
@@ -269,17 +225,19 @@ async def update_taxonomy_gap(
 async def _apply_event_feedback_restatements(
     *,
     session: AsyncSession,
+    event: Event,
     feedback: HumanFeedback,
     evidences: list[TrendEvidence],
     action: str,
     notes: str | None,
     invalidate_evidence: bool,
     target_by_evidence_id: dict[UUID, EventRestatementTarget] | None = None,
+    changed_axes: tuple[str, ...] = (),
+    axis_reasons: dict[str, str] | None = None,
 ) -> float:
     trend_engine = TrendEngine(session=session)
     trend_by_id = await _trend_map(
-        session=session,
-        trend_ids={evidence.trend_id for evidence in evidences},
+        session=session, trend_ids={evidence.trend_id for evidence in evidences}
     )
     prior_compensation_by_evidence_id = await load_prior_compensation_by_evidence_id(
         session=session,
@@ -288,19 +246,16 @@ async def _apply_event_feedback_restatements(
     recorded_at = datetime.now(tz=UTC)
     total_compensation_delta = 0.0
     trend_adjustments: dict[str, dict[str, float]] = {}
-
     for evidence in evidences:
         if invalidate_evidence:
             evidence.is_invalidated = True
             evidence.invalidated_at = recorded_at
             evidence.invalidation_feedback_id = feedback.id
-
         target = (
             target_by_evidence_id.get(evidence.id)
             if target_by_evidence_id and evidence.id is not None
             else None
         )
-
         compensation_delta = (
             invalidation_compensation_delta(
                 evidence=evidence,
@@ -356,14 +311,16 @@ async def _apply_event_feedback_restatements(
         adjustment["delta_applied"] += compensation_delta
         trend_adjustments[trend_key] = adjustment
         total_compensation_delta += compensation_delta
-
-    feedback.corrected_value = _event_feedback_corrected_value(
+    feedback.corrected_value = event_feedback_corrected_value(
         action=action,
         event_id=feedback.target_id,
         at=recorded_at,
         evidences=evidences,
         total_compensation_delta=total_compensation_delta,
         trend_adjustments=trend_adjustments,
+        event=event,
+        changed_axes=changed_axes,
+        axis_reasons=axis_reasons,
     )
     return total_compensation_delta
 
@@ -378,28 +335,32 @@ async def create_event_feedback(
     payload: EventFeedbackRequest,
     session: AsyncSession = Depends(get_session),
 ) -> FeedbackResponse:
-    """
-    Record event-level feedback (pin, mark_noise, invalidate, restate).
-
-    `invalidate` fully compensates active evidence and invalidates it.
-    `restate` keeps evidence visible but appends signed compensating deltas.
-    """
+    """Record event feedback; `invalidate` reverses evidence and `restate` adds compensation."""
     event = await session.get(Event, event_id)
     if event is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Event '{event_id}' not found",
         )
-
     original_value: dict[str, Any] | None = None
     corrected_value: dict[str, Any] | None = None
     evidences: list[TrendEvidence] = []
     restatement_targets: dict[UUID, EventRestatementTarget] | None = None
-
     if payload.action == "mark_noise":
-        original_value = {"lifecycle_status": event.lifecycle_status}
-        event.lifecycle_status = EventLifecycle.ARCHIVED.value
-        corrected_value = {"lifecycle_status": event.lifecycle_status}
+        original_value = event_state_snapshot(event)
+        apply_event_state_update(
+            event,
+            epistemic_state=EventEpistemicState.RETRACTED.value,
+            activity_state=EventActivityState.CLOSED.value,
+        )
+        corrected_value = {
+            **event_state_snapshot(event),
+            "changed_axes": ["epistemic", "activity"],
+            "axis_reasons": {
+                "epistemic": "operator_mark_noise",
+                "activity": "operator_mark_noise",
+            },
+        }
     elif payload.action in {"invalidate", "restate"}:
         evidences = await _active_event_evidence(session=session, event_id=event_id)
         if payload.action == "restate":
@@ -407,9 +368,18 @@ async def create_event_feedback(
                 evidences=evidences,
                 targets=payload.restatement_targets,
             )
-
-        original_value = _event_feedback_original_value(evidences)
-        corrected_value = _event_feedback_corrected_value(
+        original_value = event_feedback_original_value(evidences, event=event)
+        changed_axes: tuple[str, ...] = ()
+        axis_reasons: dict[str, str] | None = None
+        if payload.action == "invalidate":
+            apply_event_state_update(
+                event,
+                epistemic_state=EventEpistemicState.RETRACTED.value,
+                activity_state=resolved_event_activity_state(event),
+            )
+            changed_axes = ("epistemic",)
+            axis_reasons = {"epistemic": "operator_invalidation"}
+        corrected_value = event_feedback_corrected_value(
             action=payload.action,
             event_id=event_id,
             at=datetime.now(tz=UTC),
@@ -421,8 +391,10 @@ async def create_event_feedback(
                     target.compensation_delta_log_odds for target in payload.restatement_targets
                 )
             ),
+            event=event,
+            changed_axes=changed_axes,
+            axis_reasons=axis_reasons,
         )
-
     feedback = HumanFeedback(
         target_type="event",
         target_id=event_id,
@@ -434,57 +406,22 @@ async def create_event_feedback(
     )
     session.add(feedback)
     await session.flush()
-
     if payload.action in {"invalidate", "restate"} and evidences:
         await _apply_event_feedback_restatements(
             session=session,
+            event=event,
             feedback=feedback,
             evidences=evidences,
             action=payload.action,
             notes=payload.notes,
             invalidate_evidence=payload.action == "invalidate",
             target_by_evidence_id=restatement_targets,
+            changed_axes=changed_axes,
+            axis_reasons=axis_reasons,
         )
     else:
         feedback.corrected_value = corrected_value
-
     return to_feedback_response(feedback)
-
-
-def _claim_graph_contradiction_links(event: Event) -> int:
-    if not isinstance(event.extracted_claims, dict):
-        return 0
-    claim_graph = event.extracted_claims.get("claim_graph")
-    if not isinstance(claim_graph, dict):
-        return 0
-    links = claim_graph.get("links")
-    if not isinstance(links, list):
-        return 0
-    return sum(
-        1
-        for link in links
-        if isinstance(link, dict) and str(link.get("relation", "")).strip().lower() == "contradict"
-    )
-
-
-def _uncertainty_score(evidence_rows: list[tuple[Any, ...]]) -> float:
-    confidences = [float(row[5]) for row in evidence_rows if row[5] is not None]
-    corroborations = [float(row[6]) for row in evidence_rows if row[6] is not None]
-    avg_confidence = sum(confidences) / len(confidences) if confidences else 0.5
-    avg_corroboration = sum(corroborations) / len(corroborations) if corroborations else 0.33
-
-    confidence_uncertainty = max(0.0, 1.0 - avg_confidence)
-    corroboration_uncertainty = max(0.0, 1.0 - min(1.0, avg_corroboration))
-    uncertainty = 0.7 * confidence_uncertainty + 0.3 * corroboration_uncertainty
-    return max(0.1, min(1.0, uncertainty))
-
-
-def _contradiction_risk(event: Event) -> float:
-    link_count = _claim_graph_contradiction_links(event)
-    risk = 1.0 + min(1.5, 0.25 * link_count)
-    if event.has_contradictions:
-        risk += 0.5
-    return min(3.0, risk)
 
 
 @router.get("/review-queue", response_model=list[ReviewQueueItem])
@@ -575,49 +512,13 @@ async def list_review_queue(
         if unreviewed_only_value and feedback_actions:
             continue
 
-        projected_delta = sum(abs(float(row[4])) for row in event_evidence)
-        if projected_delta <= 0:
+        if sum(abs(float(row[4])) for row in event_evidence) <= 0:
             continue
-
-        uncertainty_score = _uncertainty_score(event_evidence)
-        contradiction_risk = _contradiction_risk(event)
-        ranking_score = uncertainty_score * projected_delta * contradiction_risk
-        last_mention_at = event.last_mention_at or event.created_at or datetime.now(tz=UTC)
-
-        impacts = sorted(
-            (
-                ReviewQueueTrendImpact(
-                    trend_id=row[1],
-                    trend_name=str(row[2]),
-                    signal_type=str(row[3]),
-                    delta_log_odds=float(row[4]),
-                    confidence_score=float(row[5]) if row[5] is not None else None,
-                )
-                for row in event_evidence
-            ),
-            key=lambda impact: abs(impact.delta_log_odds),
-            reverse=True,
-        )
-
         queue_items.append(
-            ReviewQueueItem(
-                event_id=event.id,
-                summary=event.canonical_summary,
-                lifecycle_status=event.lifecycle_status,
-                last_mention_at=last_mention_at,
-                source_count=event.source_count,
-                unique_source_count=event.unique_source_count,
-                has_contradictions=bool(event.has_contradictions),
-                contradiction_notes=event.contradiction_notes,
-                evidence_count=len(event_evidence),
-                projected_delta=projected_delta,
-                uncertainty_score=uncertainty_score,
-                contradiction_risk=contradiction_risk,
-                ranking_score=ranking_score,
-                feedback_count=len(feedback_actions),
+            build_review_queue_item(
+                event=event,
+                event_evidence=event_evidence,
                 feedback_actions=feedback_actions,
-                requires_human_verification=len(feedback_actions) == 0,
-                trend_impacts=impacts[:3],
             )
         )
 

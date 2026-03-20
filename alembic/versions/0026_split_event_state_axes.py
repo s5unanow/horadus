@@ -65,6 +65,8 @@ def upgrade() -> None:
     )
     op.alter_column("events", "epistemic_state", nullable=False)
     op.alter_column("events", "activity_state", nullable=False)
+    op.alter_column("events", "epistemic_state", server_default=None)
+    op.alter_column("events", "activity_state", server_default=None)
     op.create_check_constraint(
         "check_events_epistemic_state_allowed",
         "events",

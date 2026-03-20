@@ -64,6 +64,20 @@ def test_on_event_mention_keeps_emerging_event_when_under_threshold(mock_db_sess
     assert event.lifecycle_status == EventLifecycle.EMERGING.value
 
 
+def test_on_event_mention_preserves_retracted_epistemic_state(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    event = _build_event(unique_source_count=5, lifecycle_status=EventLifecycle.ARCHIVED.value)
+    event.epistemic_state = EventEpistemicState.RETRACTED.value
+    event.activity_state = EventActivityState.DORMANT.value
+
+    changed = manager.on_event_mention(event)
+
+    assert changed is True
+    assert event.epistemic_state == EventEpistemicState.RETRACTED.value
+    assert event.activity_state == EventActivityState.ACTIVE.value
+    assert event.lifecycle_status == EventLifecycle.ARCHIVED.value
+
+
 @pytest.mark.asyncio
 async def test_run_decay_check_returns_transition_counts(mock_db_session) -> None:
     manager = EventLifecycleManager(mock_db_session)

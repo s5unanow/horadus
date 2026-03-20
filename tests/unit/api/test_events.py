@@ -72,6 +72,23 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_events_applies_epistemic_and_activity_filters(mock_db_session) -> None:
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+
+    await list_events(
+        epistemic="contested",
+        activity="dormant",
+        days=7,
+        limit=10,
+        session=mock_db_session,
+    )
+
+    query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
+    assert "events.epistemic_state" in query_text
+    assert "events.activity_state" in query_text
+
+
+@pytest.mark.asyncio
 async def test_list_events_allows_unfiltered_queries(mock_db_session) -> None:
     event = _build_event()
     event.categories = None

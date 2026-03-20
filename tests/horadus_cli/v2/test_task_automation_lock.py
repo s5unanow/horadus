@@ -27,6 +27,21 @@ def _write_lock_file(path: Path, payload: dict[str, object]) -> None:
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
+def _valid_lock_payload(path: Path, **overrides: object) -> dict[str, object]:
+    payload: dict[str, object] = {
+        "lock_id": "test-lock",
+        "acquired_at": "2026-03-20T00:00:00+00:00",
+        "hostname": "host",
+        "username": "user",
+        "cwd": "/tmp",
+        "path": str(path),
+        "owner_pid": None,
+        "owner_started_at": None,
+    }
+    payload.update(overrides)
+    return payload
+
+
 def test_automation_lock_check_reports_available_path(tmp_path: Path) -> None:
     lock_path = _automation_lock_path(tmp_path)
 
@@ -133,10 +148,33 @@ def test_automation_lock_reports_invalid_payload_shapes(tmp_path: Path) -> None:
     assert non_mapping_info.status == "broken"
     assert non_mapping_info.error == "invalid metadata.json: expected a JSON object"
 
-    _write_lock_file(lock_path, {"owner_pid": "bad"})
+    _write_lock_file(lock_path, {})
+    missing_required_fields_info = automation_lock_module._load_lock_info(lock_path)
+    assert missing_required_fields_info.status == "broken"
+    assert (
+        missing_required_fields_info.error
+        == "invalid metadata.json: expected non-empty string lock_id"
+    )
+
+    _write_lock_file(lock_path, _valid_lock_payload(lock_path, owner_pid="bad"))
     bad_owner_info = automation_lock_module._load_lock_info(lock_path)
     assert bad_owner_info.status == "broken"
     assert bad_owner_info.error == "invalid metadata.json: expected integer owner_pid"
+
+
+@pytest.mark.parametrize("missing_key", ["acquired_at", "hostname", "username", "cwd", "path"])
+def test_automation_lock_reports_missing_required_string_fields(
+    tmp_path: Path, missing_key: str
+) -> None:
+    lock_path = _automation_lock_path(tmp_path)
+    payload = _valid_lock_payload(lock_path)
+    payload[missing_key] = ""
+    _write_lock_file(lock_path, payload)
+
+    info = automation_lock_module._load_lock_info(lock_path)
+
+    assert info.status == "broken"
+    assert info.error == f"invalid metadata.json: expected non-empty string {missing_key}"
 
 
 def test_automation_lock_helper_error_lines_cover_broken_and_environment_cases(
@@ -492,11 +530,9 @@ def test_automation_lock_load_info_marks_pid_reuse_as_stale(
     lock_path = _automation_lock_path(tmp_path)
     _write_lock_file(
         lock_path,
-        {
-            "lock_id": "stale",
-            "owner_pid": 123,
-            "owner_started_at": "old-start",
-        },
+        _valid_lock_payload(
+            lock_path, lock_id="stale", owner_pid=123, owner_started_at="old-start"
+        ),
     )
     monkeypatch.setattr(automation_lock_impl, "_owner_pid_running", lambda _pid: True)
     monkeypatch.setattr(automation_lock_impl, "_owner_pid_started_at", lambda _pid: "new-start")
@@ -510,7 +546,7 @@ def test_automation_lock_load_info_marks_pid_reuse_as_stale(
 
 def test_automation_lock_load_info_rejects_non_string_owner_started_at(tmp_path: Path) -> None:
     lock_path = _automation_lock_path(tmp_path)
-    _write_lock_file(lock_path, {"owner_pid": 123, "owner_started_at": 456})
+    _write_lock_file(lock_path, _valid_lock_payload(lock_path, owner_pid=123, owner_started_at=456))
 
     info = automation_lock_module._load_lock_info(lock_path)
 
@@ -590,7 +626,9 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert missing_data["status"] == "available"
     assert missing_lines == [f"Automation lock was already absent: {file_path}"]
 
-    _write_lock_file(file_path, {"lock_id": "unlock", "owner_pid": os.getpid()})
+    _write_lock_file(
+        file_path, _valid_lock_payload(file_path, lock_id="unlock", owner_pid=os.getpid())
+    )
     held_dry_run_exit_code, held_dry_run_data, held_dry_run_lines = (
         automation_lock_module.automation_lock_unlock_data(
             str(file_path), owner_pid=os.getpid(), dry_run=True
@@ -707,7 +745,9 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     lock_path = _automation_lock_path(tmp_path)
-    _write_lock_file(lock_path, {"lock_id": "held", "owner_pid": os.getpid()})
+    _write_lock_file(
+        lock_path, _valid_lock_payload(lock_path, lock_id="held", owner_pid=os.getpid())
+    )
 
     missing_owner_exit_code, _, missing_owner_lines = (
         automation_lock_module.automation_lock_unlock_data(
@@ -790,7 +830,7 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     assert broken_lines[0] == "Automation lock release failed."
 
     unlink_path = _automation_lock_path(tmp_path, "unlink-error-lock")
-    _write_lock_file(unlink_path, {"lock_id": "held"})
+    _write_lock_file(unlink_path, _valid_lock_payload(unlink_path, lock_id="held"))
     original_unlink = Path.unlink
 
     def _raising_unlink(self: Path, missing_ok: bool = False) -> None:

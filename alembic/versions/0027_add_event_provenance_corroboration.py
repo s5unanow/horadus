@@ -7,11 +7,10 @@ Create Date: 2026-03-20 17:10:00.000000
 
 from __future__ import annotations
 
-from collections import Counter
-from collections import defaultdict
 import hashlib
 import json
 import re
+from collections import Counter, defaultdict
 from typing import Any
 from urllib.parse import urlparse
 
@@ -314,6 +313,8 @@ def _source_family_key_from_url(value: str | None) -> str | None:
         segments = [
             segment.strip().lower() for segment in parsed.path.split("/") if segment.strip()
         ]
+        if len(segments) >= 2 and segments[0] == "s":
+            return f"{hostname}/{segments[1]}"
         if segments:
             return f"{hostname}/{segments[0]}"
     return hostname or None

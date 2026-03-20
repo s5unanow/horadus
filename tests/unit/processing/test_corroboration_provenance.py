@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import uuid4
@@ -7,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 import src.processing.corroboration_provenance as provenance_module
+import src.processing.corroboration_refresh_support as refresh_support_module
 from src.processing.corroboration_provenance import (
     EventSourceProvenance,
     fallback_event_provenance_summary,
@@ -386,6 +388,42 @@ def test_provenance_helper_provider_and_reporting_paths() -> None:
 
 
 @pytest.mark.asyncio
+async def test_refresh_support_loaders_cover_snapshot_and_item_queries(mock_db_session) -> None:
+    trend_id = uuid4()
+    first_event_id = uuid4()
+    second_event_id = uuid4()
+    first_seen = datetime.now(tz=UTC)
+    second_seen = datetime.now(tz=UTC)
+    raw_item = RawItem(id=uuid4(), title="Item", raw_content="Body")
+    mock_db_session.execute.return_value = SimpleNamespace(
+        all=lambda: [
+            (trend_id, "signal", first_event_id, first_seen),
+            (trend_id, "signal", uuid4(), None),
+            (trend_id, "signal", second_event_id, second_seen),
+        ]
+    )
+    mock_db_session.scalar.return_value = raw_item
+
+    snapshot = await refresh_support_module._load_novelty_snapshot_for_refresh(
+        session=mock_db_session
+    )
+    missing_item = await refresh_support_module._load_item_for_refresh(
+        session=mock_db_session,
+        item_id=None,
+    )
+    loaded_item = await refresh_support_module._load_item_for_refresh(
+        session=mock_db_session,
+        item_id=raw_item.id,
+    )
+
+    assert snapshot == {
+        (trend_id, "signal"): ((first_event_id, first_seen), (second_event_id, second_seen))
+    }
+    assert missing_item is None
+    assert loaded_item is raw_item
+
+
+@pytest.mark.asyncio
 async def test_refresh_event_provenance_persists_summary(mock_db_session) -> None:
     first_source_id = uuid4()
     second_source_id = uuid4()
@@ -447,9 +485,12 @@ async def test_refresh_events_for_source_recomputes_linked_events(mock_db_sessio
         lifecycle_status="emerging",
     )
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])
+    mock_db_session.execute.return_value = SimpleNamespace(all=list)
     refresh_mock = AsyncMock(side_effect=_fake_refresh_event_provenance)
     refresh_primary_mock = AsyncMock()
     refresh_trends_mock = AsyncMock(return_value=(1, 1))
+    load_trends_mock = AsyncMock(return_value=[])
+    load_novelty_snapshot_mock = AsyncMock(return_value={})
     call_order: list[tuple[str, str]] = []
 
     async def wrapped_refresh_event_provenance(*, session, event):  # type: ignore[no-untyped-def]
@@ -460,24 +501,40 @@ async def test_refresh_events_for_source_recomputes_linked_events(mock_db_sessio
         call_order.append(("primary", event.canonical_summary))
         await refresh_primary_mock(session=session, event=event)
 
-    async def wrapped_refresh_trends(*, session, event):  # type: ignore[no-untyped-def]
+    async def wrapped_refresh_trends(  # type: ignore[no-untyped-def]
+        *,
+        session,
+        event,
+        trends=None,
+        novelty_snapshot=None,
+    ):
         call_order.append(("trends", event.canonical_summary))
+        assert trends == []
+        assert novelty_snapshot == {}
         return await refresh_trends_mock(session=session, event=event)
 
     original_refresh = provenance_module.refresh_event_provenance
     original_refresh_primary = provenance_module._refresh_event_primary_item
     original_refresh_trends = provenance_module._refresh_event_trend_impacts
+    original_load_trends = provenance_module._load_active_trends_for_refresh
+    original_load_novelty_snapshot = provenance_module._load_novelty_snapshot_for_refresh
     provenance_module.refresh_event_provenance = wrapped_refresh_event_provenance
     provenance_module._refresh_event_primary_item = wrapped_refresh_primary
     provenance_module._refresh_event_trend_impacts = wrapped_refresh_trends
+    provenance_module._load_active_trends_for_refresh = load_trends_mock
+    provenance_module._load_novelty_snapshot_for_refresh = load_novelty_snapshot_mock
     try:
         refreshed = await refresh_events_for_source(session=mock_db_session, source_id=uuid4())
     finally:
         provenance_module.refresh_event_provenance = original_refresh
         provenance_module._refresh_event_primary_item = original_refresh_primary
         provenance_module._refresh_event_trend_impacts = original_refresh_trends
+        provenance_module._load_active_trends_for_refresh = original_load_trends
+        provenance_module._load_novelty_snapshot_for_refresh = original_load_novelty_snapshot
 
     assert refreshed == 2
+    load_trends_mock.assert_awaited_once_with(session=mock_db_session)
+    load_novelty_snapshot_mock.assert_awaited_once_with(session=mock_db_session)
     assert refresh_mock.await_count == 2
     assert refresh_primary_mock.await_count == 2
     assert refresh_trends_mock.await_count == 2
@@ -503,27 +560,44 @@ async def test_refresh_events_for_source_returns_zero_when_source_is_missing() -
 
 @pytest.mark.asyncio
 async def test_refresh_event_primary_item_reselects_most_credible_item(mock_db_session) -> None:
-    current_primary_id = uuid4()
-    primary_item = RawItem(
+    candidate_item = RawItem(
         id=uuid4(),
         title=" Fresh canonical summary ",
+        raw_content="ignored",
+    )
+    current_primary = RawItem(
+        id=uuid4(),
+        title="Current summary",
         raw_content="ignored",
     )
     event = Event(
         id=uuid4(),
         canonical_summary="Old summary",
-        primary_item_id=current_primary_id,
+        primary_item_id=current_primary.id,
         source_count=2,
         unique_source_count=2,
     )
-    mock_db_session.scalar.return_value = primary_item
-
-    await provenance_module._refresh_event_primary_item(
-        session=mock_db_session,
-        event=event,
+    original_load_candidate = provenance_module._load_most_credible_event_item_for_refresh
+    original_load_item = provenance_module._load_item_for_refresh
+    original_load_credibility = provenance_module._load_item_effective_credibility_for_refresh
+    provenance_module._load_most_credible_event_item_for_refresh = AsyncMock(
+        return_value=candidate_item
     )
+    provenance_module._load_item_for_refresh = AsyncMock(return_value=current_primary)
+    provenance_module._load_item_effective_credibility_for_refresh = AsyncMock(
+        side_effect=[0.9, 0.7]
+    )
+    try:
+        await provenance_module._refresh_event_primary_item(
+            session=mock_db_session,
+            event=event,
+        )
+    finally:
+        provenance_module._load_most_credible_event_item_for_refresh = original_load_candidate
+        provenance_module._load_item_for_refresh = original_load_item
+        provenance_module._load_item_effective_credibility_for_refresh = original_load_credibility
 
-    assert event.primary_item_id == primary_item.id
+    assert event.primary_item_id == candidate_item.id
     assert event.canonical_summary == "Fresh canonical summary"
 
 
@@ -560,6 +634,86 @@ async def test_refresh_event_primary_item_skips_missing_query_results(mock_db_se
     )
 
     assert event.canonical_summary == "Old summary"
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_primary_item_uses_candidate_when_current_primary_is_missing(
+    mock_db_session,
+) -> None:
+    candidate_item = RawItem(
+        id=uuid4(),
+        title="Candidate summary",
+        raw_content="ignored",
+    )
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Old summary",
+        primary_item_id=uuid4(),
+        source_count=2,
+        unique_source_count=2,
+    )
+    original_load_candidate = provenance_module._load_most_credible_event_item_for_refresh
+    original_load_item = provenance_module._load_item_for_refresh
+    provenance_module._load_most_credible_event_item_for_refresh = AsyncMock(
+        return_value=candidate_item
+    )
+    provenance_module._load_item_for_refresh = AsyncMock(return_value=None)
+    try:
+        await provenance_module._refresh_event_primary_item(
+            session=mock_db_session,
+            event=event,
+        )
+    finally:
+        provenance_module._load_most_credible_event_item_for_refresh = original_load_candidate
+        provenance_module._load_item_for_refresh = original_load_item
+
+    assert event.primary_item_id == candidate_item.id
+    assert event.canonical_summary == "Candidate summary"
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_primary_item_preserves_current_primary_on_credibility_tie(
+    mock_db_session,
+) -> None:
+    candidate_item = RawItem(
+        id=uuid4(),
+        title="Candidate summary",
+        raw_content="ignored",
+    )
+    current_primary = RawItem(
+        id=uuid4(),
+        title=" Current summary ",
+        raw_content="ignored",
+    )
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Old summary",
+        primary_item_id=current_primary.id,
+        source_count=2,
+        unique_source_count=2,
+    )
+    original_load_candidate = provenance_module._load_most_credible_event_item_for_refresh
+    original_load_item = provenance_module._load_item_for_refresh
+    original_load_credibility = provenance_module._load_item_effective_credibility_for_refresh
+    provenance_module._load_most_credible_event_item_for_refresh = AsyncMock(
+        return_value=candidate_item
+    )
+    provenance_module._load_item_for_refresh = AsyncMock(return_value=current_primary)
+    provenance_module._load_item_effective_credibility_for_refresh = AsyncMock(
+        side_effect=[0.8, 0.8]
+    )
+    try:
+        await provenance_module._refresh_event_primary_item(
+            session=mock_db_session,
+            event=event,
+        )
+    finally:
+        provenance_module._load_most_credible_event_item_for_refresh = original_load_candidate
+        provenance_module._load_item_for_refresh = original_load_item
+        provenance_module._load_item_effective_credibility_for_refresh = original_load_credibility
+
+    assert event.primary_item_id == current_primary.id
+    assert event.canonical_summary == "Current summary"
 
 
 def test_build_canonical_summary_falls_back_to_trimmed_raw_content() -> None:
@@ -640,6 +794,52 @@ async def test_refresh_event_trend_impacts_reconciles_active_trends(
 
 
 @pytest.mark.asyncio
+async def test_refresh_event_trend_impacts_uses_supplied_trends_without_reloading(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Event", source_count=1, unique_source_count=1)
+    trend = object()
+
+    async def fake_reconcile(**kwargs):  # type: ignore[no-untyped-def]
+        assert kwargs["trends"] == [trend]
+        assert await kwargs["load_novelty_score"](
+            trend_id=uuid4(),
+            signal_type="signal",
+            event_id=event.id,
+        ) == pytest.approx(0.24)
+        return (1, 1)
+
+    load_trends_mock = AsyncMock(side_effect=AssertionError("should not reload trends"))
+    monkeypatch.setattr(provenance_module, "_load_active_trends_for_refresh", load_trends_mock)
+    monkeypatch.setattr(
+        provenance_module,
+        "_load_event_source_credibility_for_refresh",
+        AsyncMock(return_value=0.8),
+    )
+    monkeypatch.setattr(
+        provenance_module,
+        "_load_novelty_score_for_refresh",
+        AsyncMock(return_value=0.24),
+    )
+    monkeypatch.setattr(provenance_module, "reconcile_event_trend_impacts", fake_reconcile)
+    monkeypatch.setattr(
+        provenance_module,
+        "TrendEngine",
+        lambda *, session: SimpleNamespace(session=session),
+    )
+
+    refreshed = await provenance_module._refresh_event_trend_impacts(
+        session=mock_db_session,
+        event=event,
+        trends=[trend],
+        novelty_snapshot={},
+    )
+
+    assert refreshed == (1, 1)
+
+
+@pytest.mark.asyncio
 async def test_load_active_trends_for_refresh_returns_session_scalars(mock_db_session) -> None:
     trend = object()
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
@@ -685,7 +885,7 @@ async def test_load_novelty_score_and_taxonomy_gap_helpers_cover_refresh_paths(
     seen_at = object()
     mock_db_session.scalar.return_value = seen_at
     monkeypatch.setattr(
-        provenance_module,
+        refresh_support_module,
         "calculate_recency_novelty",
         lambda *, last_seen_at: 0.42 if last_seen_at is seen_at else 0.0,
     )
@@ -698,6 +898,33 @@ async def test_load_novelty_score_and_taxonomy_gap_helpers_cover_refresh_paths(
     )
 
     assert score == pytest.approx(0.42)
+    snapshot_score = await provenance_module._load_novelty_score_for_refresh(
+        session=mock_db_session,
+        trend_id=uuid4(),
+        signal_type="signal",
+        event_id=uuid4(),
+        snapshot={
+            (uuid4(), "other"): ((uuid4(), datetime.now(tz=UTC)),),
+            (uuid4(), "signal"): (),
+        },
+    )
+    assert snapshot_score == pytest.approx(0.0)
+    snapshot_trend_id = uuid4()
+    current_event_id = uuid4()
+    other_event_id = uuid4()
+    snapshot_score = await provenance_module._load_novelty_score_for_refresh(
+        session=mock_db_session,
+        trend_id=snapshot_trend_id,
+        signal_type="signal",
+        event_id=current_event_id,
+        snapshot={
+            (snapshot_trend_id, "signal"): (
+                (current_event_id, datetime.now(tz=UTC)),
+                (other_event_id, seen_at),
+            )
+        },
+    )
+    assert snapshot_score == pytest.approx(0.42)
     assert await provenance_module._capture_taxonomy_gap_for_refresh() is None
 
 

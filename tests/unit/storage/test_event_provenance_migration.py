@@ -129,3 +129,12 @@ def test_event_provenance_migration_backfills_historical_events() -> None:
     assert second_event_update["corroboration_mode"] == "fallback"
     assert second_event_update["independent_evidence_count"] == 1
     assert second_event_summary["reason"] == "migration_backfill_no_event_items"
+
+
+def test_event_provenance_migration_normalizes_telegram_preview_channel_urls() -> None:
+    migration = _load_migration_module()
+
+    assert (
+        migration._source_family_key_from_url("https://t.me/s/channel_name/123")
+        == "t.me/channel_name"
+    )

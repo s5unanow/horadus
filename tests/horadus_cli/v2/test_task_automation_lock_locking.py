@@ -348,7 +348,9 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
     monkeypatch.setattr(automation_lock_impl, "_normalize_lock_path", lambda _value: FakePath())
     monkeypatch.setattr(automation_lock_impl, "_validate_lock_path", lambda _path: None)
     prepare_exit_code, prepare_data, prepare_lines = (
-        automation_lock_module.automation_lock_lock_data("ignored", owner_pid=None, dry_run=False)
+        automation_lock_module.automation_lock_lock_data(
+            "ignored", owner_pid=os.getpid(), dry_run=False
+        )
     )
     assert prepare_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
     assert prepare_data["status"] == "error"
@@ -362,7 +364,7 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
     monkeypatch.setattr(automation_lock_impl, "_normalize_lock_path", lambda _value: lock_path)
     monkeypatch.setattr(automation_lock_impl, "_write_metadata", _failing_write)
     write_exit_code, write_data, write_lines = automation_lock_module.automation_lock_lock_data(
-        "ignored", owner_pid=None, dry_run=False
+        "ignored", owner_pid=os.getpid(), dry_run=False
     )
     assert write_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
     assert write_data["status"] == "error"
@@ -379,7 +381,7 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
 
     monkeypatch.setattr(Path, "unlink", _raising_unlink)
     legacy_exit_code, legacy_data, legacy_lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
+        str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
     assert legacy_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
     assert legacy_data["status"] == "legacy"
@@ -443,7 +445,7 @@ def test_automation_lock_lock_rechecks_legacy_state_during_migration(
     monkeypatch.setattr(automation_lock_impl, "_release_legacy_flock_handle", lambda _handle: None)
 
     exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
+        str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
 
     assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
@@ -473,7 +475,7 @@ def test_automation_lock_lock_reports_legacy_verification_failure(
     monkeypatch.setattr(automation_lock_impl, "_release_legacy_flock_handle", lambda _handle: None)
 
     exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
+        str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
 
     assert exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
@@ -498,7 +500,7 @@ def test_automation_lock_lock_reports_when_legacy_handle_cannot_be_acquired(
     monkeypatch.setattr(automation_lock_impl, "_acquire_legacy_flock_handle", lambda _path: None)
 
     exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
+        str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
 
     assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
@@ -533,7 +535,7 @@ def test_automation_lock_lock_handles_contention_races(
 
     monkeypatch.setattr(automation_lock_impl.os, "link", _held_race)
     held_exit_code, held_data, held_lines = automation_lock_module.automation_lock_lock_data(
-        str(lock_path), owner_pid=None, dry_run=False
+        str(lock_path), owner_pid=os.getpid(), dry_run=False
     )
     assert held_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert held_data["status"] == "held"

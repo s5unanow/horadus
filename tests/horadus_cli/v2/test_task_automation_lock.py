@@ -967,6 +967,20 @@ def test_automation_lock_lock_rejects_non_positive_owner_pid(
     assert not lock_path.exists()
 
 
+def test_automation_lock_lock_requires_owner_pid(tmp_path: Path) -> None:
+    lock_path = _automation_lock_path(tmp_path, "missing-owner")
+
+    exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
+        str(lock_path), owner_pid=None, dry_run=False
+    )
+
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["status"] == "broken"
+    assert data["error"] == "Lock acquisition requires --owner-pid to record the owning process."
+    assert lines[0] == "Automation lock acquisition failed."
+    assert not lock_path.exists()
+
+
 def test_attempt_lock_publish_rejects_non_positive_owner_pid(tmp_path: Path) -> None:
     lock_path = _automation_lock_path(tmp_path, "invalid-owner-publish")
 
@@ -978,6 +992,94 @@ def test_attempt_lock_publish_rejects_non_positive_owner_pid(tmp_path: Path) -> 
     assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert data["error"] == "Lock requires --owner-pid to be a positive integer when provided."
     assert lines[0] == "Automation lock acquisition failed."
+
+
+def test_attempt_lock_publish_requires_owner_pid(tmp_path: Path) -> None:
+    lock_path = _automation_lock_path(tmp_path, "missing-owner-publish")
+
+    state, result = automation_lock_impl._attempt_lock_publish(lock_path, owner_pid=None)
+
+    assert state == "missing-owner-pid"
+    assert result is not None
+    exit_code, data, lines = result
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["error"] == "Lock acquisition requires --owner-pid to record the owning process."
+    assert lines[0] == "Automation lock acquisition failed."
+
+
+def test_attempt_lock_publish_rejects_immediately_stale_lock(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = _automation_lock_path(tmp_path, "stale-publish")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    stale_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="stale",
+        exists=True,
+        lock_id="stale-lock",
+        acquired_at="2026-03-20T00:00:00+00:00",
+        hostname="host",
+        username="user",
+        cwd="/tmp",
+        owner_pid=123,
+        owner_started_at=None,
+        owner_pid_running=False,
+        owner_pid_identity_matches=None,
+    )
+    monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: stale_info)
+
+    state, result = automation_lock_impl._attempt_lock_publish(lock_path, owner_pid=123)
+
+    assert state == "stale-owner-pid"
+    assert result is not None
+    exit_code, data, lines = result
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["error"] == "Lock owner pid 123 is not a live process on this host."
+    assert lines[0] == "Automation lock acquisition failed."
+    assert not lock_path.exists()
+
+
+def test_attempt_lock_publish_reports_immediately_stale_cleanup_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = _automation_lock_path(tmp_path, "stale-publish-cleanup-error")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    stale_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="stale",
+        exists=True,
+        lock_id="stale-lock",
+        acquired_at="2026-03-20T00:00:00+00:00",
+        hostname="host",
+        username="user",
+        cwd="/tmp",
+        owner_pid=123,
+        owner_started_at=None,
+        owner_pid_running=False,
+        owner_pid_identity_matches=None,
+    )
+    monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: stale_info)
+    original_unlink = Path.unlink
+
+    def _raising_unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == lock_path:
+            raise OSError("cleanup blocked")
+        return original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", _raising_unlink)
+
+    state, result = automation_lock_impl._attempt_lock_publish(lock_path, owner_pid=123)
+
+    assert state == "error"
+    assert result is not None
+    exit_code, data, lines = result
+    assert exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["status"] == "stale"
+    assert data["error"] == "cleanup blocked"
+    assert (
+        lines[1]
+        == f"Published automation lock was immediately stale and cleanup failed: {lock_path}"
+    )
 
 
 def test_automation_lock_check_rejects_incomplete_json_metadata(tmp_path: Path) -> None:

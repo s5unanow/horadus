@@ -87,6 +87,8 @@ def test_task_commands_registers_automation_lock_subcommands() -> None:
             "lock",
             "--path",
             "/tmp/horadus-lock",
+            "--owner-pid",
+            "123",
             "--format",
             "json",
             "--dry-run",
@@ -97,9 +99,21 @@ def test_task_commands_registers_automation_lock_subcommands() -> None:
     assert args.tasks_command == "automation-lock"
     assert args.automation_lock_command == "lock"
     assert args.path == "/tmp/horadus-lock"
+    assert args.owner_pid == 123
     assert args.output_format == "json"
     assert args.dry_run is True
     assert args.handler is task_commands_module.handle_automation_lock_lock
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "tasks",
+                "automation-lock",
+                "lock",
+                "--path",
+                "/tmp/horadus-lock",
+            ]
+        )
 
     unlock_args = parser.parse_args(
         [

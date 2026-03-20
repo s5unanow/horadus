@@ -33,7 +33,16 @@ from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support
     load_lock_info as _support_load_lock_info,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    lock_dry_run_result as _lock_dry_run_result,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
     lock_metadata_payload as _support_lock_metadata_payload,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    lock_owner_pid_validation_error as _lock_owner_pid_validation_error,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    lock_validation_error as _lock_validation_error,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
     looks_like_legacy_flock_lock as _support_looks_like_legacy_flock_lock,
@@ -187,21 +196,6 @@ def _lock_environment_error(
     )
 
 
-def _lock_validation_error(
-    info: AutomationLockInfo,
-    *,
-    dry_run: bool,
-) -> tuple[int, dict[str, object], list[str]]:
-    return (
-        ExitCode.VALIDATION_ERROR,
-        asdict(info) | {"dry_run": dry_run},
-        [
-            "Automation lock acquisition failed.",
-            *_check_lines(info),
-        ],
-    )
-
-
 def _unlock_validation_error(
     info: AutomationLockInfo,
     *,
@@ -278,27 +272,20 @@ def _unlock_file_lock(
     )
 
 
-def _lock_owner_pid_validation_error(
-    lock_path: Path,
-    *,
-    dry_run: bool,
-) -> tuple[int, dict[str, object], list[str]]:
-    return _lock_validation_error(
-        AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=lock_path.exists(),
-            error="Lock requires --owner-pid to be a positive integer when provided.",
-        ),
-        dry_run=dry_run,
-    )
-
-
 def _attempt_lock_publish(
     lock_path: Path,
     *,
     owner_pid: int | None,
 ) -> tuple[str, tuple[int, dict[str, object], list[str]] | None]:
+    if owner_pid is None:
+        return (
+            "missing-owner-pid",
+            _lock_owner_pid_validation_error(
+                lock_path,
+                dry_run=False,
+                message="Lock acquisition requires --owner-pid to record the owning process.",
+            ),
+        )
     if owner_pid is not None and owner_pid <= 0:
         return ("invalid-owner-pid", _lock_owner_pid_validation_error(lock_path, dry_run=False))
     temp_path = lock_path.with_name(f".{lock_path.name}.tmp-{uuid.uuid4().hex}")
@@ -321,6 +308,30 @@ def _attempt_lock_publish(
         temp_path.unlink(missing_ok=True)
 
     info = _load_lock_info(lock_path)
+    if info.status == "stale":
+        try:
+            lock_path.unlink()
+        except OSError as exc:
+            return (
+                "error",
+                _lock_environment_error(
+                    lock_path,
+                    info=info,
+                    message=(
+                        "Published automation lock was immediately stale and cleanup failed: "
+                        f"{lock_path}"
+                    ),
+                    exc=exc,
+                ),
+            )
+        return (
+            "stale-owner-pid",
+            _lock_owner_pid_validation_error(
+                lock_path,
+                dry_run=False,
+                message=f"Lock owner pid {owner_pid} is not a live process on this host.",
+            ),
+        )
     return (
         "acquired",
         (
@@ -415,39 +426,6 @@ def automation_lock_check_data(
         lines.append("Dry run: inspected the current lock state without changing it.")
     exit_code = ExitCode.OK if info.status != "broken" else ExitCode.VALIDATION_ERROR
     return (exit_code, asdict(info) | {"dry_run": dry_run}, lines)
-
-
-def _lock_dry_run_result(
-    info: AutomationLockInfo,
-) -> tuple[int, dict[str, object], list[str]]:
-    if info.status == "legacy" and info.legacy_lock_active is False:
-        return (
-            ExitCode.OK,
-            asdict(info) | {"dry_run": True},
-            [
-                *_check_lines(info),
-                f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
-            ],
-        )
-    if info.status == "stale":
-        return (
-            ExitCode.OK,
-            asdict(info) | {"dry_run": True},
-            [
-                *_check_lines(info),
-                f"Dry run: would replace the stale automation lock at {info.path}.",
-            ],
-        )
-    if info.status != "available":
-        return _lock_validation_error(info, dry_run=True)
-    return (
-        ExitCode.OK,
-        asdict(info) | {"dry_run": True, "status": "available"},
-        [
-            f"Automation lock is available: {info.path}",
-            f"Dry run: would acquire the automation lock at {info.path}.",
-        ],
-    )
 
 
 def _stale_lock_identity(info: AutomationLockInfo) -> tuple[object, ...]:
@@ -550,6 +528,12 @@ def automation_lock_lock_data(
             error=path_error,
         )
         return _lock_validation_error(info, dry_run=dry_run)
+    if owner_pid is None:
+        return _lock_owner_pid_validation_error(
+            lock_path,
+            dry_run=dry_run,
+            message="Lock acquisition requires --owner-pid to record the owning process.",
+        )
     if owner_pid is not None and owner_pid <= 0:
         return _lock_owner_pid_validation_error(lock_path, dry_run=dry_run)
     info = _load_lock_info(lock_path)

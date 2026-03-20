@@ -4,9 +4,11 @@ import json
 import os
 import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
+
+from tools.horadus.python.horadus_workflow.result import ExitCode
 
 _LOCK_METADATA_NAME = "metadata.json"
 
@@ -583,3 +585,68 @@ def check_lines(info: AutomationLockInfo) -> list[str]:
     if info.error is not None:
         lines.append(f"- error: {info.error}")
     return lines
+
+
+def lock_validation_error(
+    info: AutomationLockInfo,
+    *,
+    dry_run: bool,
+) -> tuple[int, dict[str, object], list[str]]:
+    return (
+        ExitCode.VALIDATION_ERROR,
+        asdict(info) | {"dry_run": dry_run},
+        [
+            "Automation lock acquisition failed.",
+            *check_lines(info),
+        ],
+    )
+
+
+def lock_owner_pid_validation_error(
+    lock_path: Path,
+    *,
+    dry_run: bool,
+    message: str = "Lock requires --owner-pid to be a positive integer when provided.",
+) -> tuple[int, dict[str, object], list[str]]:
+    return lock_validation_error(
+        AutomationLockInfo(
+            path=str(lock_path),
+            status="broken",
+            exists=lock_path.exists(),
+            error=message,
+        ),
+        dry_run=dry_run,
+    )
+
+
+def lock_dry_run_result(
+    info: AutomationLockInfo,
+) -> tuple[int, dict[str, object], list[str]]:
+    if info.status == "legacy" and info.legacy_lock_active is False:
+        return (
+            ExitCode.OK,
+            asdict(info) | {"dry_run": True},
+            [
+                *check_lines(info),
+                f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
+            ],
+        )
+    if info.status == "stale":
+        return (
+            ExitCode.OK,
+            asdict(info) | {"dry_run": True},
+            [
+                *check_lines(info),
+                f"Dry run: would replace the stale automation lock at {info.path}.",
+            ],
+        )
+    if info.status != "available":
+        return lock_validation_error(info, dry_run=True)
+    return (
+        ExitCode.OK,
+        asdict(info) | {"dry_run": True, "status": "available"},
+        [
+            f"Automation lock is available: {info.path}",
+            f"Dry run: would acquire the automation lock at {info.path}.",
+        ],
+    )

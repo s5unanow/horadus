@@ -142,8 +142,8 @@ def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
     lock_parser.add_argument(
         "--owner-pid",
         type=int,
-        default=None,
-        help="Optional long-lived owner PID used for stale-lock detection and recovery.",
+        required=True,
+        help="Owner PID used for stale-lock detection and safe release.",
     )
     lock_parser.set_defaults(handler=handle_automation_lock_lock)
 

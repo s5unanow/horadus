@@ -618,6 +618,8 @@ def _source_family_key_from_url(value: str | None) -> str | None:
         segments = [
             segment.strip().lower() for segment in parsed.path.split("/") if segment.strip()
         ]
+        if len(segments) >= 2 and segments[0] == "s":
+            return f"{hostname}/{segments[1]}"
         if segments:
             return f"{hostname}/{segments[0]}"
     return hostname or None

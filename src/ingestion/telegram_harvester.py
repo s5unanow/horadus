@@ -400,7 +400,10 @@ class TelegramHarvester:
 
         url_changed = source.url != channel_url
         name_changed = source.name != channel.name
-        credibility_changed = source.credibility_score != channel.credibility
+        existing_credibility = (
+            float(source.credibility_score) if source.credibility_score is not None else None
+        )
+        credibility_changed = existing_credibility != float(channel.credibility)
         source_tier_changed = source.source_tier != channel.source_tier
         reporting_type_changed = source.reporting_type != channel.reporting_type
         source.name = channel.name

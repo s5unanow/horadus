@@ -378,7 +378,10 @@ class RSSCollector:
             return source
 
         name_changed = source.name != feed.name
-        credibility_changed = source.credibility_score != feed.credibility
+        existing_credibility = (
+            float(source.credibility_score) if source.credibility_score is not None else None
+        )
+        credibility_changed = existing_credibility != float(feed.credibility)
         source_tier_changed = source.source_tier != feed.source_tier
         reporting_type_changed = source.reporting_type != feed.reporting_type
         source.name = feed.name

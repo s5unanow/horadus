@@ -147,7 +147,6 @@ class GDELTClient:
         started = time.monotonic()
         result = GDELTCollectionResult(query_name=query.name)
         source = await self._get_or_create_source(query)
-
         now_utc = datetime.now(tz=UTC)
         expected_start, window_start = self._determine_collection_window(
             source=source,
@@ -173,7 +172,6 @@ class GDELTClient:
             gap_seconds=gap_seconds,
             overlap_seconds=overlap_seconds,
         )
-
         try:
             async with asyncio.timeout(self.total_timeout_seconds):
                 while result.pages_fetched < query.max_pages:
@@ -190,7 +188,6 @@ class GDELTClient:
                     result.items_fetched += len(articles)
 
                     oldest_published = self._oldest_published_at(articles)
-
                     for article in articles:
                         published_at = self._parse_article_datetime(article)
                         if published_at is not None and (
@@ -360,7 +357,10 @@ class GDELTClient:
             return source
         url_changed = source.url != self.api_url
         name_changed = source.name != query.name
-        credibility_changed = source.credibility_score != query.credibility
+        existing_credibility = (
+            float(source.credibility_score) if source.credibility_score is not None else None
+        )
+        credibility_changed = existing_credibility != float(query.credibility)
         source_tier_changed = source.source_tier != query.source_tier
         reporting_type_changed = source.reporting_type != query.reporting_type
         source.name = query.name

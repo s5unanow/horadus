@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -817,7 +818,7 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
     existing = SimpleNamespace(
         id=uuid4(),
         name="Feed",
-        credibility_score=feed.credibility,
+        credibility_score=Decimal(str(feed.credibility)),
         source_tier="tier1",
         reporting_type="primary",
         config={},
@@ -850,7 +851,7 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
     existing = SimpleNamespace(
         id=uuid4(),
         name="Feed",
-        credibility_score=0.1,
+        credibility_score=Decimal("0.1"),
         source_tier="tier1",
         reporting_type="primary",
         config={},

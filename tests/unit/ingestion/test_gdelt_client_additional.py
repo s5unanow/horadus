@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -249,7 +250,7 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
         id=uuid4(),
         name="Query",
         url=client.api_url,
-        credibility_score=query.credibility,
+        credibility_score=Decimal(str(query.credibility)),
         source_tier="official",
         reporting_type="firsthand",
         config={},
@@ -283,7 +284,7 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
         id=uuid4(),
         name="Query",
         url=client.api_url,
-        credibility_score=0.1,
+        credibility_score=Decimal("0.1"),
         source_tier="official",
         reporting_type="firsthand",
         config={},

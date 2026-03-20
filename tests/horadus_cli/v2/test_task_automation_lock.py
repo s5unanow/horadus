@@ -43,6 +43,15 @@ def test_automation_lock_check_reports_available_path(tmp_path: Path) -> None:
     ]
 
 
+def test_automation_lock_codex_home_path_falls_back_to_home_when_env_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("CODEX_HOME")
+    monkeypatch.setattr(automation_lock_impl.Path, "home", lambda: tmp_path)
+
+    assert automation_lock_impl._codex_home_path() == (tmp_path / ".codex").resolve(strict=False)
+
+
 def test_automation_lock_lock_and_unlock_round_trip(tmp_path: Path) -> None:
     lock_path = _automation_lock_path(tmp_path)
 
@@ -368,6 +377,17 @@ def test_automation_lock_rejects_paths_outside_codex_home_contract(tmp_path: Pat
     assert unlock_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert unlock_data["status"] == "broken"
     assert unlock_lines[0] == "Automation lock release failed."
+
+    dry_run_unlock_exit_code, dry_run_unlock_data, dry_run_unlock_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(invalid_path), owner_pid=None, dry_run=True
+        )
+    )
+    assert dry_run_unlock_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert dry_run_unlock_data["dry_run"] is True
+    assert dry_run_unlock_lines[-1] == (
+        f"Dry run: would release the automation lock at {invalid_path.resolve(strict=False)}."
+    )
 
 
 def test_automation_lock_rejects_non_lock_leaf_under_automations(tmp_path: Path) -> None:

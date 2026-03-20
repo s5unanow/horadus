@@ -17,8 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.database import get_session
 from src.storage.event_state import (
+    resolved_corroboration_mode,
+    resolved_corroboration_score,
     resolved_event_activity_state,
     resolved_event_epistemic_state,
+    resolved_independent_evidence_count,
 )
 from src.storage.models import Event, EventClaim, EventItem, RawItem, Source, TrendEvidence
 
@@ -251,8 +254,8 @@ async def list_events(
             categories=list(event.categories or []),
             source_count=event.source_count,
             unique_source_count=event.unique_source_count,
-            independent_evidence_count=int(event.independent_evidence_count or 0),
-            corroboration_mode=str(event.corroboration_mode or "fallback"),
+            independent_evidence_count=resolved_independent_evidence_count(event),
+            corroboration_mode=resolved_corroboration_mode(event),
             epistemic_state=resolved_event_epistemic_state(event),
             activity_state=resolved_event_activity_state(event),
             lifecycle_status=event.lifecycle_status,
@@ -294,8 +297,8 @@ async def get_event(
         categories=list(event.categories or []),
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,
-        independent_evidence_count=int(event.independent_evidence_count or 0),
-        corroboration_mode=str(event.corroboration_mode or "fallback"),
+        independent_evidence_count=resolved_independent_evidence_count(event),
+        corroboration_mode=resolved_corroboration_mode(event),
         epistemic_state=resolved_event_epistemic_state(event),
         activity_state=resolved_event_activity_state(event),
         lifecycle_status=event.lifecycle_status,
@@ -306,7 +309,7 @@ async def get_event(
         extracted_who=list(event.extracted_who) if event.extracted_who else None,
         extracted_what=event.extracted_what,
         extracted_where=event.extracted_where,
-        corroboration_score=float(event.corroboration_score or 0.0),
+        corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
         sources=sources,
         claims=claims,

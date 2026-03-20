@@ -7,16 +7,24 @@ import re
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import datetime
 from inspect import isawaitable
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.source_credibility import (
+    DEFAULT_SOURCE_CREDIBILITY,
+    source_multiplier_expression,
+)
+from src.core.trend_engine import TrendEngine, calculate_recency_novelty
 from src.processing.event_lifecycle import EventLifecycleManager
-from src.storage.models import Event, EventItem, RawItem, Source
+from src.processing.trend_impact_reconciliation import reconcile_event_trend_impacts
+from src.storage.event_state import resolved_corroboration_score
+from src.storage.models import Event, EventItem, RawItem, Source, Trend, TrendEvidence
 
 PROVENANCE_AWARE_MODE = "provenance_aware"
 FALLBACK_MODE = "fallback"
@@ -350,7 +358,122 @@ async def refresh_events_for_source(
     for event in events:
         await refresh_event_provenance(session=session, event=event)
         lifecycle_manager.sync_event_state(event)
+        await _refresh_event_trend_impacts(session=session, event=event)
     return len(events)
+
+
+async def _refresh_event_trend_impacts(
+    *,
+    session: AsyncSession,
+    event: Event,
+) -> tuple[int, int]:
+    trends = await _load_active_trends_for_refresh(session=session)
+    if not trends:
+        return (0, 0)
+    trend_engine = TrendEngine(session=session)
+
+    async def load_event_source_credibility(target_event: Event) -> float:
+        return await _load_event_source_credibility_for_refresh(
+            session=session,
+            event=target_event,
+        )
+
+    async def load_corroboration_score(target_event: Event) -> float:
+        return await _load_corroboration_score_for_refresh(target_event)
+
+    async def load_novelty_score(*, trend_id: UUID, signal_type: str, event_id: UUID) -> float:
+        return await _load_novelty_score_for_refresh(
+            session=session,
+            trend_id=trend_id,
+            signal_type=signal_type,
+            event_id=event_id,
+        )
+
+    return await reconcile_event_trend_impacts(
+        session=session,
+        trend_engine=trend_engine,
+        event=event,
+        trends=trends,
+        load_event_source_credibility=load_event_source_credibility,
+        load_corroboration_score=load_corroboration_score,
+        load_novelty_score=load_novelty_score,
+        capture_taxonomy_gap=_capture_taxonomy_gap_for_refresh,
+    )
+
+
+async def _load_active_trends_for_refresh(*, session: AsyncSession) -> list[Trend]:
+    query = select(Trend).where(Trend.is_active.is_(True)).order_by(Trend.name.asc())
+    return list((await session.scalars(query)).all())
+
+
+async def _load_event_source_credibility_for_refresh(
+    *,
+    session: AsyncSession,
+    event: Event,
+) -> float:
+    if event.primary_item_id is None:
+        return DEFAULT_SOURCE_CREDIBILITY
+    query = (
+        select(
+            (
+                func.coalesce(Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY)
+                * source_multiplier_expression(
+                    source_tier_col=Source.source_tier,
+                    reporting_type_col=Source.reporting_type,
+                )
+            ).label("effective_credibility")
+        )
+        .join(RawItem, RawItem.source_id == Source.id)
+        .where(RawItem.id == event.primary_item_id)
+        .limit(1)
+    )
+    credibility = await session.scalar(query)
+    try:
+        return float(credibility) if credibility is not None else DEFAULT_SOURCE_CREDIBILITY
+    except (TypeError, ValueError):
+        return DEFAULT_SOURCE_CREDIBILITY
+
+
+async def _load_corroboration_score_for_refresh(event: Event) -> float:
+    return max(0.1, resolved_corroboration_score(event) * _contradiction_penalty(event))
+
+
+async def _load_novelty_score_for_refresh(
+    *,
+    session: AsyncSession,
+    trend_id: UUID,
+    signal_type: str,
+    event_id: UUID,
+) -> float:
+    query = (
+        select(func.max(TrendEvidence.created_at))
+        .where(TrendEvidence.trend_id == trend_id)
+        .where(TrendEvidence.signal_type == signal_type)
+        .where(TrendEvidence.event_id != event_id)
+        .where(TrendEvidence.is_invalidated.is_(False))
+    )
+    last_seen_at: datetime | None = await session.scalar(query)
+    return calculate_recency_novelty(last_seen_at=last_seen_at)
+
+
+async def _capture_taxonomy_gap_for_refresh(**_: Any) -> None:
+    return None
+
+
+def _contradiction_penalty(event: Event) -> float:
+    claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+    claim_graph = claims.get("claim_graph", {})
+    links = claim_graph.get("links", []) if isinstance(claim_graph, dict) else []
+    contradiction_links = 0
+    if isinstance(links, list):
+        contradiction_links = sum(
+            1 for link in links if isinstance(link, dict) and link.get("relation") == "contradict"
+        )
+    if contradiction_links > 0:
+        return max(0.4, 1.0 - 0.15 * contradiction_links)
+    if event.has_contradictions:
+        return 0.7
+    return 1.0
 
 
 def infer_source_family(observation: EventSourceProvenance) -> str | None:

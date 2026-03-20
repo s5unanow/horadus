@@ -444,16 +444,21 @@ async def test_refresh_events_for_source_recomputes_linked_events(mock_db_sessio
     )
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])
     refresh_mock = AsyncMock(side_effect=_fake_refresh_event_provenance)
+    refresh_trends_mock = AsyncMock(return_value=(1, 1))
 
     original_refresh = provenance_module.refresh_event_provenance
+    original_refresh_trends = provenance_module._refresh_event_trend_impacts
     provenance_module.refresh_event_provenance = refresh_mock
+    provenance_module._refresh_event_trend_impacts = refresh_trends_mock
     try:
         refreshed = await refresh_events_for_source(session=mock_db_session, source_id=uuid4())
     finally:
         provenance_module.refresh_event_provenance = original_refresh
+        provenance_module._refresh_event_trend_impacts = original_refresh_trends
 
     assert refreshed == 2
     assert refresh_mock.await_count == 2
+    assert refresh_trends_mock.await_count == 2
     assert first_event.epistemic_state == "confirmed"
     assert first_event.lifecycle_status == "confirmed"
     assert second_event.epistemic_state == "emerging"
@@ -464,6 +469,178 @@ async def test_refresh_events_for_source_returns_zero_when_source_is_missing() -
     refreshed = await refresh_events_for_source(session=AsyncMock(), source_id=None)
 
     assert refreshed == 0
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_trend_impacts_skips_when_no_active_trends(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Event", source_count=1, unique_source_count=1)
+    load_trends_mock = AsyncMock(return_value=[])
+    reconcile_mock = AsyncMock(return_value=(9, 9))
+    monkeypatch.setattr(provenance_module, "_load_active_trends_for_refresh", load_trends_mock)
+    monkeypatch.setattr(provenance_module, "reconcile_event_trend_impacts", reconcile_mock)
+
+    refreshed = await provenance_module._refresh_event_trend_impacts(
+        session=mock_db_session,
+        event=event,
+    )
+
+    assert refreshed == (0, 0)
+    reconcile_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_trend_impacts_reconciles_active_trends(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Event", source_count=1, unique_source_count=1)
+    trend = object()
+    load_trends_mock = AsyncMock(return_value=[trend])
+
+    async def fake_reconcile(**kwargs):  # type: ignore[no-untyped-def]
+        assert kwargs["trends"] == [trend]
+        assert await kwargs["load_event_source_credibility"](event) == pytest.approx(0.8)
+        assert await kwargs["load_corroboration_score"](event) == pytest.approx(1.0)
+        assert await kwargs["load_novelty_score"](
+            trend_id=uuid4(),
+            signal_type="signal",
+            event_id=event.id,
+        ) == pytest.approx(0.33)
+        assert await kwargs["capture_taxonomy_gap"]() is None
+        return (2, 1)
+
+    def trend_engine_factory(*, session):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(session=session)
+
+    monkeypatch.setattr(provenance_module, "_load_active_trends_for_refresh", load_trends_mock)
+    monkeypatch.setattr(
+        provenance_module,
+        "_load_event_source_credibility_for_refresh",
+        AsyncMock(return_value=0.8),
+    )
+    monkeypatch.setattr(
+        provenance_module,
+        "_load_novelty_score_for_refresh",
+        AsyncMock(return_value=0.33),
+    )
+    monkeypatch.setattr(provenance_module, "reconcile_event_trend_impacts", fake_reconcile)
+    monkeypatch.setattr(provenance_module, "TrendEngine", trend_engine_factory)
+
+    refreshed = await provenance_module._refresh_event_trend_impacts(
+        session=mock_db_session,
+        event=event,
+    )
+
+    assert refreshed == (2, 1)
+
+
+@pytest.mark.asyncio
+async def test_load_active_trends_for_refresh_returns_session_scalars(mock_db_session) -> None:
+    trend = object()
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
+
+    loaded = await provenance_module._load_active_trends_for_refresh(session=mock_db_session)
+
+    assert loaded == [trend]
+
+
+@pytest.mark.asyncio
+async def test_load_event_source_credibility_for_refresh_handles_missing_and_invalid_values(
+    mock_db_session,
+) -> None:
+    missing_primary = Event(canonical_summary="Missing", source_count=1, unique_source_count=1)
+    assert await provenance_module._load_event_source_credibility_for_refresh(
+        session=mock_db_session,
+        event=missing_primary,
+    ) == pytest.approx(provenance_module.DEFAULT_SOURCE_CREDIBILITY)
+
+    event = Event(
+        canonical_summary="Credibility",
+        source_count=1,
+        unique_source_count=1,
+        primary_item_id=uuid4(),
+    )
+    mock_db_session.scalar.side_effect = [0.85, "bad"]
+
+    assert await provenance_module._load_event_source_credibility_for_refresh(
+        session=mock_db_session,
+        event=event,
+    ) == pytest.approx(0.85)
+    assert await provenance_module._load_event_source_credibility_for_refresh(
+        session=mock_db_session,
+        event=event,
+    ) == pytest.approx(provenance_module.DEFAULT_SOURCE_CREDIBILITY)
+
+
+@pytest.mark.asyncio
+async def test_load_novelty_score_and_taxonomy_gap_helpers_cover_refresh_paths(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen_at = object()
+    mock_db_session.scalar.return_value = seen_at
+    monkeypatch.setattr(
+        provenance_module,
+        "calculate_recency_novelty",
+        lambda *, last_seen_at: 0.42 if last_seen_at is seen_at else 0.0,
+    )
+
+    score = await provenance_module._load_novelty_score_for_refresh(
+        session=mock_db_session,
+        trend_id=uuid4(),
+        signal_type="signal",
+        event_id=uuid4(),
+    )
+
+    assert score == pytest.approx(0.42)
+    assert await provenance_module._capture_taxonomy_gap_for_refresh() is None
+
+
+@pytest.mark.asyncio
+async def test_load_corroboration_score_for_refresh_applies_penalties() -> None:
+    contradiction_graph_event = Event(
+        canonical_summary="Graph",
+        source_count=1,
+        unique_source_count=1,
+        corroboration_score=2.0,
+        extracted_claims={"claim_graph": {"links": [{"relation": "contradict"}]}},
+    )
+    contradicted_event = Event(
+        canonical_summary="Contradicted",
+        source_count=1,
+        unique_source_count=1,
+        corroboration_score=2.0,
+        has_contradictions=True,
+    )
+    malformed_graph_event = Event(
+        canonical_summary="Malformed",
+        source_count=1,
+        unique_source_count=1,
+        corroboration_score=2.0,
+        extracted_claims={"claim_graph": {"links": "not-a-list"}},
+    )
+    calm_event = Event(
+        canonical_summary="Calm",
+        source_count=1,
+        unique_source_count=1,
+        corroboration_score=2.0,
+    )
+
+    assert await provenance_module._load_corroboration_score_for_refresh(
+        contradiction_graph_event
+    ) == pytest.approx(1.7)
+    assert await provenance_module._load_corroboration_score_for_refresh(
+        contradicted_event
+    ) == pytest.approx(1.4)
+    assert await provenance_module._load_corroboration_score_for_refresh(
+        malformed_graph_event
+    ) == pytest.approx(2.0)
+    assert await provenance_module._load_corroboration_score_for_refresh(
+        calm_event
+    ) == pytest.approx(2.0)
 
 
 async def _fake_refresh_event_provenance(*, session, event):  # type: ignore[no-untyped-def]

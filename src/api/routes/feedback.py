@@ -240,8 +240,7 @@ async def _apply_event_feedback_restatements(
         session=session, trend_ids={evidence.trend_id for evidence in evidences}
     )
     prior_compensation_by_evidence_id = await load_prior_compensation_by_evidence_id(
-        session=session,
-        evidences=evidences,
+        session=session, evidences=evidences
     )
     recorded_at = datetime.now(tz=UTC)
     total_compensation_delta = 0.0

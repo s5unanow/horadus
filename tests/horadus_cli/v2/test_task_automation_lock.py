@@ -8,6 +8,7 @@ import pytest
 
 import tools.horadus.python.horadus_cli.task_automation_lock as automation_lock_module
 import tools.horadus.python.horadus_workflow.task_workflow_automation_lock as automation_lock_impl
+import tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support as automation_lock_support
 
 pytestmark = pytest.mark.unit
 
@@ -218,7 +219,39 @@ def test_automation_lock_helper_edges_cover_pid_probe_windows_fallback_and_flaky
     )
     assert automation_lock_impl._owner_pid_running(123) is False
 
+    assert (
+        automation_lock_support.owner_pid_running(
+            123,
+            os_name="nt",
+            kill=os.kill,
+            run_process=None,
+        )
+        is None
+    )
     monkeypatch.setattr(automation_lock_impl.os, "name", "nt", raising=False)
+    monkeypatch.setattr(
+        automation_lock_impl.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 0})(),
+    )
+    assert automation_lock_impl._owner_pid_running(123) is True
+    monkeypatch.setattr(
+        automation_lock_impl.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 1})(),
+    )
+    assert automation_lock_impl._owner_pid_running(123) is False
+    monkeypatch.setattr(
+        automation_lock_impl.subprocess,
+        "run",
+        lambda *_args, **_kwargs: type("Result", (), {"returncode": 2})(),
+    )
+    assert automation_lock_impl._owner_pid_running(123) is None
+    monkeypatch.setattr(
+        automation_lock_impl.subprocess,
+        "run",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("powershell missing")),
+    )
     assert automation_lock_impl._owner_pid_running(123) is None
     assert automation_lock_impl._owner_pid_started_at(123) is None
     monkeypatch.setattr(automation_lock_impl.os, "name", "posix", raising=False)

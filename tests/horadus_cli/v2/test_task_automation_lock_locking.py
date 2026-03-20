@@ -217,7 +217,7 @@ def test_automation_lock_lock_reports_stale_cleanup_failure(
         owner_pid=-1,
         owner_pid_running=False,
     )
-    states = iter([stale_info, stale_info, stale_info])
+    states = iter([stale_info, stale_info, stale_info, stale_info])
 
     monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: next(states))
     original_unlink = Path.unlink
@@ -237,6 +237,43 @@ def test_automation_lock_lock_reports_stale_cleanup_failure(
     assert data["status"] == "stale"
     assert data["error"] == "stale cleanup blocked"
     assert lines[1] == f"Unable to clear the stale automation lock file: {lock_path}"
+
+
+def test_prepare_stale_lock_for_acquire_reloads_after_cleanup_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = _automation_lock_path(tmp_path)
+    stale_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="stale",
+        exists=True,
+        lock_id="stale-lock",
+        acquired_at="2026-03-19T00:00:00+00:00",
+        hostname="host",
+        username="user",
+        cwd="/tmp",
+        owner_pid=-1,
+        owner_pid_running=False,
+    )
+    available_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="available",
+        exists=False,
+    )
+    states = iter([stale_info, available_info])
+
+    monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: next(states))
+    monkeypatch.setattr(
+        type(lock_path),
+        "unlink",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError("gone")),
+        raising=False,
+    )
+
+    info, error = automation_lock_impl._prepare_stale_lock_for_acquire(lock_path, info=stale_info)
+
+    assert error is None
+    assert info.status == "available"
 
 
 def test_automation_lock_lock_migrates_inactive_legacy_flock_file(

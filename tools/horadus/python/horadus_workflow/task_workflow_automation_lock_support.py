@@ -96,12 +96,36 @@ def owner_pid_running(
     *,
     os_name: str,
     kill: Callable[[int, int], None],
+    run_process: Callable[..., Any] | None = None,
 ) -> bool | None:
     if owner_pid is None:
         return None
     if owner_pid <= 0:
         return False
     if os_name == "nt":
+        if run_process is None:
+            return None
+        try:
+            result = run_process(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    (
+                        f"$p = Get-Process -Id {owner_pid} -ErrorAction SilentlyContinue; "
+                        "if ($null -eq $p) { exit 1 } else { exit 0 }"
+                    ),
+                ],
+                capture_output=True,
+                check=False,
+                text=True,
+            )
+        except OSError:
+            return None
+        if result.returncode == 0:
+            return True
+        if result.returncode == 1:
+            return False
         return None
     try:
         kill(owner_pid, 0)

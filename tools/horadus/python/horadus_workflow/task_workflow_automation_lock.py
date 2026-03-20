@@ -105,7 +105,12 @@ def _write_metadata(metadata_path: Path, payload: dict[str, object]) -> None:
 
 
 def _owner_pid_running(owner_pid: int | None) -> bool | None:
-    return _support_owner_pid_running(owner_pid, os_name=os.name, kill=os.kill)
+    return _support_owner_pid_running(
+        owner_pid,
+        os_name=os.name,
+        kill=os.kill,
+        run_process=subprocess.run,
+    )
 
 
 def _owner_pid_started_at(owner_pid: int | None) -> str | None:
@@ -517,6 +522,9 @@ def _prepare_stale_lock_for_acquire(
     try:
         lock_path.unlink()
     except OSError as exc:
+        reloaded_info = _load_lock_info(lock_path)
+        if reloaded_info.status != "stale" or _stale_lock_identity(reloaded_info) != stale_identity:
+            return reloaded_info, None
         return info, _lock_environment_error(
             lock_path,
             info=info,

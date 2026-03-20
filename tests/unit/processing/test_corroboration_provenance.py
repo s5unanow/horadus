@@ -708,6 +708,7 @@ async def test_load_corroboration_score_for_refresh_applies_penalties() -> None:
         source_count=1,
         unique_source_count=1,
         corroboration_score=2.0,
+        corroboration_mode="provenance_aware",
         extracted_claims={"claim_graph": {"links": [{"relation": "contradict"}]}},
     )
     contradicted_event = Event(
@@ -715,6 +716,7 @@ async def test_load_corroboration_score_for_refresh_applies_penalties() -> None:
         source_count=1,
         unique_source_count=1,
         corroboration_score=2.0,
+        corroboration_mode="provenance_aware",
         has_contradictions=True,
     )
     malformed_graph_event = Event(
@@ -722,6 +724,7 @@ async def test_load_corroboration_score_for_refresh_applies_penalties() -> None:
         source_count=1,
         unique_source_count=1,
         corroboration_score=2.0,
+        corroboration_mode="provenance_aware",
         extracted_claims={"claim_graph": {"links": "not-a-list"}},
     )
     calm_event = Event(
@@ -729,6 +732,7 @@ async def test_load_corroboration_score_for_refresh_applies_penalties() -> None:
         source_count=1,
         unique_source_count=1,
         corroboration_score=2.0,
+        corroboration_mode="provenance_aware",
     )
 
     assert await provenance_module._load_corroboration_score_for_refresh(
@@ -748,6 +752,7 @@ async def test_load_corroboration_score_for_refresh_applies_penalties() -> None:
 async def _fake_refresh_event_provenance(*, session, event):  # type: ignore[no-untyped-def]
     del session
     event.independent_evidence_count = 3 if event.canonical_summary == "First" else 1
+    event.corroboration_mode = "provenance_aware"
     return fallback_event_provenance_summary(
         raw_source_count=event.source_count,
         unique_source_count=event.unique_source_count,

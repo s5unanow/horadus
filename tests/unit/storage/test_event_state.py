@@ -91,6 +91,20 @@ def test_corroboration_helpers_fall_back_to_legacy_counts() -> None:
     assert resolved_corroboration_mode(event) == FALLBACK_CORROBORATION_MODE
 
 
+def test_corroboration_helpers_ignore_persisted_defaults_in_fallback_mode() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Fallback stored defaults",
+        unique_source_count=4,
+        independent_evidence_count=1,
+        corroboration_score=1.0,
+        corroboration_mode=FALLBACK_CORROBORATION_MODE,
+    )
+
+    assert resolved_independent_evidence_count(event) == 4
+    assert resolved_corroboration_score(event) == pytest.approx(4.0)
+
+
 def test_corroboration_helpers_cover_source_count_and_invalid_score_paths() -> None:
     source_only_event = Event(
         id=uuid4(),
@@ -105,6 +119,30 @@ def test_corroboration_helpers_cover_source_count_and_invalid_score_paths() -> N
         unique_source_count=2,
         corroboration_score="bad",
     )
+    provenance_aware_missing_independent = Event(
+        id=uuid4(),
+        canonical_summary="Missing provenance-aware evidence count",
+        unique_source_count=4,
+        independent_evidence_count=None,
+        corroboration_mode="provenance_aware",
+    )
+    provenance_aware_missing_score = Event(
+        id=uuid4(),
+        canonical_summary="Missing provenance-aware score",
+        unique_source_count=2,
+        corroboration_score=None,
+        corroboration_mode="provenance_aware",
+    )
+    provenance_aware_invalid_score = Event(
+        id=uuid4(),
+        canonical_summary="Invalid provenance-aware score",
+        unique_source_count=2,
+        corroboration_score="bad",
+        corroboration_mode="provenance_aware",
+    )
 
     assert resolved_independent_evidence_count(source_only_event) == 3
     assert resolved_corroboration_score(invalid_score_event) == pytest.approx(2.0)
+    assert resolved_independent_evidence_count(provenance_aware_missing_independent) == 4
+    assert resolved_corroboration_score(provenance_aware_missing_score) == pytest.approx(2.0)
+    assert resolved_corroboration_score(provenance_aware_invalid_score) == pytest.approx(2.0)

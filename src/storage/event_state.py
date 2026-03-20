@@ -116,9 +116,10 @@ def derived_epistemic_state(*, unique_source_count: int | None, has_contradictio
 def resolved_independent_evidence_count(event: Any) -> int:
     """Return the effective independent-evidence count with conservative fallback."""
 
-    explicit = getattr(event, "independent_evidence_count", None)
-    if explicit is not None and int(explicit) > 0:
-        return int(explicit)
+    if resolved_corroboration_mode(event) != FALLBACK_CORROBORATION_MODE:
+        explicit = getattr(event, "independent_evidence_count", None)
+        if explicit is not None and int(explicit) > 0:
+            return int(explicit)
     unique_source_count = getattr(event, "unique_source_count", None)
     if unique_source_count is not None and int(unique_source_count) > 0:
         return int(unique_source_count)
@@ -131,14 +132,15 @@ def resolved_independent_evidence_count(event: Any) -> int:
 def resolved_corroboration_score(event: Any) -> float:
     """Return the effective corroboration score with conservative fallback."""
 
-    explicit = getattr(event, "corroboration_score", None)
-    if explicit is not None:
-        try:
-            value = float(explicit)
-        except (TypeError, ValueError):
-            value = 0.0
-        if value > 0:
-            return value
+    if resolved_corroboration_mode(event) != FALLBACK_CORROBORATION_MODE:
+        explicit = getattr(event, "corroboration_score", None)
+        if explicit is not None:
+            try:
+                value = float(explicit)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 0:
+                return value
     return float(resolved_independent_evidence_count(event))
 
 

@@ -77,6 +77,7 @@ def test_on_event_mention_uses_independent_evidence_count_for_confirmation(mock_
         independent_evidence_count=2,
         lifecycle_status=EventLifecycle.EMERGING.value,
     )
+    event.corroboration_mode = "provenance_aware"
 
     changed = manager.on_event_mention(event)
 
@@ -104,6 +105,7 @@ def test_sync_event_state_promotes_without_touching_last_mention(mock_db_session
     event = _build_event(unique_source_count=1, lifecycle_status=EventLifecycle.EMERGING.value)
     original_last_mention = event.last_mention_at
     event.independent_evidence_count = 3
+    event.corroboration_mode = "provenance_aware"
 
     changed = manager.sync_event_state(event)
 

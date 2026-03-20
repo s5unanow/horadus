@@ -379,6 +379,123 @@ def automation_lock_check_data(
     return (exit_code, asdict(info) | {"dry_run": dry_run}, lines)
 
 
+def _lock_dry_run_result(
+    info: AutomationLockInfo,
+) -> tuple[int, dict[str, object], list[str]]:
+    if info.status == "legacy" and info.legacy_lock_active is False:
+        return (
+            ExitCode.OK,
+            asdict(info) | {"dry_run": True},
+            [
+                *_check_lines(info),
+                f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
+            ],
+        )
+    if info.status == "stale":
+        return (
+            ExitCode.OK,
+            asdict(info) | {"dry_run": True},
+            [
+                *_check_lines(info),
+                f"Dry run: would replace the stale automation lock at {info.path}.",
+            ],
+        )
+    if info.status != "available":
+        return _lock_validation_error(info, dry_run=True)
+    return (
+        ExitCode.OK,
+        asdict(info) | {"dry_run": True, "status": "available"},
+        [
+            f"Automation lock is available: {info.path}",
+            f"Dry run: would acquire the automation lock at {info.path}.",
+        ],
+    )
+
+
+def _stale_lock_identity(info: AutomationLockInfo) -> tuple[object, ...]:
+    return (
+        info.lock_id,
+        info.acquired_at,
+        info.owner_pid,
+        info.owner_started_at,
+        info.hostname,
+        info.username,
+        info.cwd,
+    )
+
+
+def _prepare_legacy_lock_for_acquire(
+    lock_path: Path,
+    *,
+    info: AutomationLockInfo,
+) -> tuple[AutomationLockInfo, tuple[int, dict[str, object], list[str]] | None]:
+    if info.legacy_lock_active is not False:
+        return info, _lock_validation_error(info, dry_run=False)
+    legacy_handle = _acquire_legacy_flock_handle(lock_path)
+    if legacy_handle is None:
+        info = _load_lock_info(lock_path)
+        return info, _lock_validation_error(info, dry_run=False)
+    try:
+        try:
+            legacy_handle_matches_path = _legacy_handle_matches_current_path(
+                lock_path, legacy_handle
+            )
+        except OSError as exc:
+            return info, _lock_environment_error(
+                lock_path,
+                info=info,
+                message=f"Unable to verify the legacy lock file before cleanup: {lock_path}",
+                exc=exc,
+            )
+        if not legacy_handle_matches_path:
+            return _load_lock_info(lock_path), None
+        try:
+            lock_path.unlink()
+        except OSError as exc:
+            return info, _lock_environment_error(
+                lock_path,
+                info=info,
+                message=f"Unable to clear the inactive legacy lock file: {lock_path}",
+                exc=exc,
+            )
+        return _load_lock_info(lock_path), None
+    finally:
+        _release_legacy_flock_handle(legacy_handle)
+
+
+def _prepare_stale_lock_for_acquire(
+    lock_path: Path,
+    *,
+    info: AutomationLockInfo,
+) -> tuple[AutomationLockInfo, tuple[int, dict[str, object], list[str]] | None]:
+    stale_identity = _stale_lock_identity(info)
+    info = _load_lock_info(lock_path)
+    if info.status != "stale" or _stale_lock_identity(info) != stale_identity:
+        return info, None
+    try:
+        lock_path.unlink()
+    except OSError as exc:
+        return info, _lock_environment_error(
+            lock_path,
+            info=info,
+            message=f"Unable to clear the stale automation lock file: {lock_path}",
+            exc=exc,
+        )
+    return _load_lock_info(lock_path), None
+
+
+def _prepare_lock_for_acquire(
+    lock_path: Path,
+    *,
+    info: AutomationLockInfo,
+) -> tuple[AutomationLockInfo, tuple[int, dict[str, object], list[str]] | None]:
+    if info.status == "legacy":
+        return _prepare_legacy_lock_for_acquire(lock_path, info=info)
+    if info.status == "stale":
+        return _prepare_stale_lock_for_acquire(lock_path, info=info)
+    return info, None
+
+
 def automation_lock_lock_data(
     path_value: str, *, owner_pid: int | None, dry_run: bool
 ) -> tuple[int, dict[str, object], list[str]]:
@@ -394,25 +511,7 @@ def automation_lock_lock_data(
         return _lock_validation_error(info, dry_run=dry_run)
     info = _load_lock_info(lock_path)
     if dry_run:
-        if info.status == "legacy" and info.legacy_lock_active is False:
-            return (
-                ExitCode.OK,
-                asdict(info) | {"dry_run": True},
-                [
-                    *_check_lines(info),
-                    f"Dry run: would replace the inactive legacy automation lock at {info.path}.",
-                ],
-            )
-        if info.status != "available":
-            return _lock_validation_error(info, dry_run=True)
-        return (
-            ExitCode.OK,
-            asdict(info) | {"dry_run": True, "status": "available"},
-            [
-                f"Automation lock is available: {info.path}",
-                f"Dry run: would acquire the automation lock at {info.path}.",
-            ],
-        )
+        return _lock_dry_run_result(info)
 
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
@@ -423,42 +522,9 @@ def automation_lock_lock_data(
             exc=exc,
         )
 
-    info = _load_lock_info(lock_path)
-    legacy_handle: int | None = None
-    if info.status == "legacy":
-        if info.legacy_lock_active is not False:
-            return _lock_validation_error(info, dry_run=dry_run)
-        legacy_handle = _acquire_legacy_flock_handle(lock_path)
-        if legacy_handle is None:
-            info = _load_lock_info(lock_path)
-            return _lock_validation_error(info, dry_run=dry_run)
-        try:
-            try:
-                legacy_handle_matches_path = _legacy_handle_matches_current_path(
-                    lock_path, legacy_handle
-                )
-            except OSError as exc:
-                return _lock_environment_error(
-                    lock_path,
-                    info=info,
-                    message=f"Unable to verify the legacy lock file before cleanup: {lock_path}",
-                    exc=exc,
-                )
-            if not legacy_handle_matches_path:
-                info = _load_lock_info(lock_path)
-            else:
-                try:
-                    lock_path.unlink()
-                except OSError as exc:
-                    return _lock_environment_error(
-                        lock_path,
-                        info=info,
-                        message=f"Unable to clear the inactive legacy lock file: {lock_path}",
-                        exc=exc,
-                    )
-                info = _load_lock_info(lock_path)
-        finally:
-            _release_legacy_flock_handle(legacy_handle)
+    info, preparation_error = _prepare_lock_for_acquire(lock_path, info=_load_lock_info(lock_path))
+    if preparation_error is not None:
+        return preparation_error
     if info.status != "available":
         return _lock_validation_error(info, dry_run=dry_run)
 

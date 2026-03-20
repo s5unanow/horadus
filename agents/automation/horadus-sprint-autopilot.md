@@ -14,9 +14,11 @@ rules baseline before the automation can proceed.
 2. Acquire exclusive ownership of the external lock at:
    - `$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock`
    - run `uv run --no-sync horadus tasks automation-lock lock --path "$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock" --owner-pid "$PPID"`
-3. If the lock is already held, cannot be acquired cleanly, or appears stale or
-   broken, stop immediately and report a concise blocker instead of forcing
-   takeover.
+3. If the lock is already held, cannot be acquired cleanly, or is broken, stop
+   immediately and report a concise blocker.
+   - Dead-owner stale metadata is reclaimed automatically by the helper during
+     `lock`, so only report stale state when `check` still shows it after a
+     failed acquire attempt.
 4. After the lock is acquired, confirm the repo is idle:
    - current branch is exactly `main`
    - working tree is clean

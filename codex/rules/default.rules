@@ -2,24 +2,61 @@
 # Source of truth: codex/rules/default.rules in the repo.
 
 prefix_rule(
-    pattern = ["uv", "run", "--no-sync", "horadus"],
+    pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "preflight"],
     decision = "allow",
-    justification = "Allow Horadus workflow commands required by repo-owned Codex automations.",
+    justification = "Allow the Horadus workflow preflight required by repo-owned Codex automations.",
     match = [
         "uv run --no-sync horadus tasks preflight",
+    ],
+    not_match = [
+        "uv run --no-sync horadus tasks eligibility TASK-357 --format json",
         "uv run --no-sync horadus tasks safe-start TASK-357 --name codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "eligibility"],
+    decision = "allow",
+    justification = "Allow the Horadus task-eligibility check required before sprint-autopilot starts work.",
+    match = [
+        "uv run --no-sync horadus tasks eligibility TASK-357 --format json",
+    ],
+    not_match = [
+        "uv run --no-sync horadus tasks preflight",
+        "uv run --no-sync horadus tasks safe-start TASK-357 --name codex-rules-baseline",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "safe-start"],
+    decision = "allow",
+    justification = "Allow the Horadus guarded task-start command required by repo-owned Codex automations.",
+    match = [
+        "uv run --no-sync horadus tasks safe-start TASK-357 --name codex-rules-baseline",
+    ],
+    not_match = [
+        "uv run --no-sync horadus tasks preflight",
+        "uv run --no-sync horadus tasks finish TASK-357",
+    ],
+)
+
+prefix_rule(
+    pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "finish"],
+    decision = "allow",
+    justification = "Allow the Horadus task-finish command used to resume or close autopilot work.",
+    match = [
         "uv run --no-sync horadus tasks finish TASK-357",
     ],
     not_match = [
-        "uv run horadus tasks preflight",
-        "uv sync",
+        "uv run --no-sync horadus tasks safe-start TASK-357 --name codex-rules-baseline",
+        "uv run --no-sync horadus tasks automation-lock lock --path /tmp/lock",
     ],
 )
 
 prefix_rule(
     pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "automation-lock"],
     decision = "allow",
-    justification = "Allow the repo-owned automation lock helper for CODEX_HOME automation lock paths enforced by the helper.",
+    justification = "Allow the repo-owned automation lock helper for the sprint-autopilot CODEX_HOME lock path only.",
     match = [
         "uv run --no-sync horadus tasks automation-lock check --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock",
         "uv run --no-sync horadus tasks automation-lock lock --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock --owner-pid 4242",

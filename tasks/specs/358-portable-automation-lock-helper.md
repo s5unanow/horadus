@@ -28,7 +28,8 @@ repo CLI itself can run.
 
 ## Non-Goals
 
-- Adding lock expiry or forced stale-lock takeover
+- Adding lock expiry or arbitrary forced stale-lock takeover beyond reclaiming
+  dead-owner metadata left behind by a crashed automation run
 - Reworking the autopilot task-selection or finish lifecycle
 - General-purpose distributed locking outside the local automation path
 

@@ -79,8 +79,8 @@ def test_build_parser_accepts_task_automation_lock_command() -> None:
             "tasks",
             "automation-lock",
             "check",
-            "--path",
-            "/tmp/horadus-lock",
+            "--automation-id",
+            "horadus-sprint-autopilot",
             "--format",
             "json",
         ]
@@ -89,7 +89,7 @@ def test_build_parser_accepts_task_automation_lock_command() -> None:
     assert args.command == "tasks"
     assert args.tasks_command == "automation-lock"
     assert args.automation_lock_command == "check"
-    assert args.path == "/tmp/horadus-lock"
+    assert args.automation_id == "horadus-sprint-autopilot"
     assert args.output_format == "json"
 
 

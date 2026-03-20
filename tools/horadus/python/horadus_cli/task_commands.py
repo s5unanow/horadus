@@ -120,7 +120,12 @@ def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
         help="Inspect the current state of an automation lock path.",
     )
     add_leaf_cli_options(check_parser)
-    check_parser.add_argument("--path", required=True, help="Lock path to inspect.")
+    check_target_group = check_parser.add_mutually_exclusive_group(required=True)
+    check_target_group.add_argument("--path", help="Lock path to inspect.")
+    check_target_group.add_argument(
+        "--automation-id",
+        help="Automation id whose lock path should be resolved from CODEX_HOME.",
+    )
     check_parser.set_defaults(handler=handle_automation_lock_check)
 
     lock_parser = automation_lock_subparsers.add_parser(
@@ -128,7 +133,12 @@ def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
         help="Acquire an automation lock path if it is currently available.",
     )
     add_leaf_cli_options(lock_parser)
-    lock_parser.add_argument("--path", required=True, help="Lock path to acquire.")
+    lock_target_group = lock_parser.add_mutually_exclusive_group(required=True)
+    lock_target_group.add_argument("--path", help="Lock path to acquire.")
+    lock_target_group.add_argument(
+        "--automation-id",
+        help="Automation id whose lock path should be resolved from CODEX_HOME.",
+    )
     lock_parser.add_argument(
         "--owner-pid",
         type=int,
@@ -142,7 +152,12 @@ def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
         help="Release an automation lock path.",
     )
     add_leaf_cli_options(unlock_parser)
-    unlock_parser.add_argument("--path", required=True, help="Lock path to release.")
+    unlock_target_group = unlock_parser.add_mutually_exclusive_group(required=True)
+    unlock_target_group.add_argument("--path", help="Lock path to release.")
+    unlock_target_group.add_argument(
+        "--automation-id",
+        help="Automation id whose lock path should be resolved from CODEX_HOME.",
+    )
     unlock_parser.add_argument(
         "--owner-pid",
         type=int,

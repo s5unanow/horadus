@@ -116,6 +116,30 @@ def test_task_commands_registers_automation_lock_subcommands() -> None:
     assert unlock_args.owner_pid == 123
     assert unlock_args.handler is task_commands_module.handle_automation_lock_unlock
 
+    automation_args = parser.parse_args(
+        [
+            "tasks",
+            "automation-lock",
+            "check",
+            "--automation-id",
+            "horadus-sprint-autopilot",
+        ]
+    )
+    assert automation_args.automation_id == "horadus-sprint-autopilot"
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "tasks",
+                "automation-lock",
+                "check",
+                "--path",
+                "/tmp/horadus-lock",
+                "--automation-id",
+                "horadus-sprint-autopilot",
+            ]
+        )
+
 
 def test_command_handlers_wrap_data_functions_and_validation_errors(
     monkeypatch: pytest.MonkeyPatch,

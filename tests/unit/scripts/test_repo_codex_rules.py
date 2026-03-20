@@ -22,8 +22,9 @@ def test_repo_owned_codex_rules_baseline_covers_autopilot_prefixes() -> None:
     assert '"check",' in rules
     assert '"lock",' in rules
     assert '"unlock",' in rules
-    assert "/Users/s5una/.codex/automations/horadus-sprint-autopilot/lock" in rules
-    assert "/Users/s5una/.codex/automations/other-automation/lock" in rules
+    assert '"--automation-id",' in rules
+    assert '"horadus-sprint-autopilot"' in rules
+    assert "other-automation" in rules
     assert "automation-lock lock --path /tmp/lock" in rules
     assert (
         'pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "automation-lock"]' not in rules

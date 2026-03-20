@@ -320,6 +320,23 @@ def test_automation_lock_helper_edges_cover_pid_probe_windows_fallback_and_flaky
     monkeypatch.setattr(automation_lock_impl, "fcntl", None)
     assert automation_lock_impl._legacy_flock_lock_active(Path("/tmp/legacy-lock")) is None
     assert automation_lock_impl._acquire_legacy_flock_handle(Path("/tmp/legacy-lock")) is None
+    with pytest.raises(ValueError, match="automation lock target is required"):
+        automation_lock_support.automation_lock_path_arg(
+            path_value=None,
+            automation_id=None,
+            codex_home=Path("/tmp/.codex"),
+        )
+    assert (
+        automation_lock_support.unlock_block_reason(
+            automation_lock_module.AutomationLockInfo(
+                path="/tmp/lock",
+                status="available",
+                exists=False,
+            ),
+            owner_pid=None,
+        )
+        is None
+    )
 
     class FlakyFilePath:
         def __init__(self) -> None:
@@ -770,6 +787,17 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
         == "Unlock requires --owner-pid to release a live automation lock."
     )
 
+    ownerless_lock_path = _automation_lock_path(tmp_path, "ownerless-lock")
+    _write_lock_file(ownerless_lock_path, _valid_lock_payload(ownerless_lock_path, owner_pid=None))
+    ownerless_exit_code, _, ownerless_lines = automation_lock_module.automation_lock_unlock_data(
+        str(ownerless_lock_path), owner_pid=99999, dry_run=False
+    )
+    assert ownerless_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert (
+        ownerless_lines[1]
+        == "Unlock requires manual review because the live automation lock has no recorded owner PID."
+    )
+
     mismatch_exit_code, _, mismatch_lines = automation_lock_module.automation_lock_unlock_data(
         str(lock_path), owner_pid=99999, dry_run=False
     )
@@ -830,7 +858,9 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     assert broken_lines[0] == "Automation lock release failed."
 
     unlink_path = _automation_lock_path(tmp_path, "unlink-error-lock")
-    _write_lock_file(unlink_path, _valid_lock_payload(unlink_path, lock_id="held"))
+    _write_lock_file(
+        unlink_path, _valid_lock_payload(unlink_path, lock_id="held", owner_pid=os.getpid())
+    )
     original_unlink = Path.unlink
 
     def _raising_unlink(self: Path, missing_ok: bool = False) -> None:
@@ -841,7 +871,7 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     monkeypatch.setattr(Path, "unlink", _raising_unlink)
     unlink_exit_code, unlink_data, unlink_lines = (
         automation_lock_module.automation_lock_unlock_data(
-            str(unlink_path), owner_pid=None, dry_run=False
+            str(unlink_path), owner_pid=os.getpid(), dry_run=False
         )
     )
     assert unlink_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
@@ -896,20 +926,39 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
 
 
 def test_automation_lock_handlers_wrap_data_functions(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_paths: list[str] = []
+
     monkeypatch.setattr(
         automation_lock_impl,
         "automation_lock_check_data",
-        lambda *_args, **_kwargs: (automation_lock_module.ExitCode.OK, {"ok": True}, ["check"]),
+        lambda path, **_kwargs: (
+            captured_paths.append(path) or automation_lock_module.ExitCode.OK,
+            {"ok": True},
+            ["check"],
+        ),
     )
     monkeypatch.setattr(
         automation_lock_impl,
         "automation_lock_lock_data",
-        lambda *_args, **_kwargs: (automation_lock_module.ExitCode.OK, {"ok": True}, ["lock"]),
+        lambda path, **_kwargs: (
+            captured_paths.append(path) or automation_lock_module.ExitCode.OK,
+            {"ok": True},
+            ["lock"],
+        ),
     )
     monkeypatch.setattr(
         automation_lock_impl,
         "automation_lock_unlock_data",
-        lambda *_args, **_kwargs: (automation_lock_module.ExitCode.OK, {"ok": True}, ["unlock"]),
+        lambda path, **_kwargs: (
+            captured_paths.append(path) or automation_lock_module.ExitCode.OK,
+            {"ok": True},
+            ["unlock"],
+        ),
+    )
+    monkeypatch.setattr(
+        automation_lock_impl,
+        "_codex_home_path",
+        lambda: Path("/tmp/.codex"),
     )
 
     assert automation_lock_module.handle_automation_lock_check(
@@ -921,3 +970,13 @@ def test_automation_lock_handlers_wrap_data_functions(monkeypatch: pytest.Monkey
     assert automation_lock_module.handle_automation_lock_unlock(
         type("Args", (), {"path": "/tmp/unlock", "owner_pid": 123, "dry_run": False})()
     ).lines == ["unlock"]
+    assert automation_lock_module.handle_automation_lock_check(
+        type(
+            "Args",
+            (),
+            {"path": None, "automation_id": "horadus-sprint-autopilot", "dry_run": False},
+        )()
+    ).lines == ["check"]
+    assert captured_paths[-1] == str(
+        Path("/tmp/.codex/automations/horadus-sprint-autopilot/lock").resolve(strict=False)
+    )

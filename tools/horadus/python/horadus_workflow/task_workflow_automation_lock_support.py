@@ -62,6 +62,34 @@ def validate_lock_path(lock_path: Path, *, codex_home: Path) -> str | None:
     return None
 
 
+def automation_lock_path_arg(
+    *, path_value: str | None, automation_id: str | None, codex_home: Path
+) -> str:
+    if automation_id:
+        return str((codex_home / "automations" / automation_id / "lock").resolve(strict=False))
+    if path_value is None:
+        raise ValueError("automation lock target is required")
+    return path_value
+
+
+def unlock_block_reason(info: AutomationLockInfo, *, owner_pid: int | None) -> str | None:
+    if info.status == "legacy" and info.legacy_lock_active is not False:
+        return (
+            "Unlock requires the active legacy flock holder to exit before cleanup."
+            if info.legacy_lock_active
+            else "Unlock requires manual review because legacy flock status is indeterminate."
+        )
+    if info.status != "held":
+        return None
+    if info.owner_pid is None:
+        return "Unlock requires manual review because the live automation lock has no recorded owner PID."
+    if owner_pid is None:
+        return "Unlock requires --owner-pid to release a live automation lock."
+    if owner_pid != info.owner_pid:
+        return f"Unlock owner mismatch: lock is owned by pid {info.owner_pid}, not {owner_pid}."
+    return None
+
+
 def lock_metadata_payload(
     lock_path: Path,
     *,

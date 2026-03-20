@@ -18,6 +18,9 @@ from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support
     acquire_legacy_flock_handle as _support_acquire_legacy_flock_handle,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    automation_lock_path_arg as _support_automation_lock_path_arg,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
     check_lines as _support_check_lines,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
@@ -49,6 +52,9 @@ from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support
 )
 from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
     release_legacy_flock_handle as _support_release_legacy_flock_handle,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    unlock_block_reason as _support_unlock_block_reason,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
     validate_lock_path as _support_validate_lock_path,
@@ -237,26 +243,10 @@ def _unlock_file_lock(
     result: tuple[int, dict[str, object], list[str]] | None = None
     if info.status == "broken":
         result = _unlock_validation_error(info)
-    elif info.status == "legacy" and info.legacy_lock_active is not False:
-        result = _unlock_validation_error(
-            info,
-            message=(
-                "Unlock requires the active legacy flock holder to exit before cleanup."
-                if info.legacy_lock_active
-                else "Unlock requires manual review because legacy flock status is indeterminate."
-            ),
-        )
-    elif info.status == "held" and info.owner_pid is not None:
-        if owner_pid is None:
-            result = _unlock_validation_error(
-                info,
-                message="Unlock requires --owner-pid to release a live automation lock.",
-            )
-        elif owner_pid != info.owner_pid:
-            result = _unlock_validation_error(
-                info,
-                message=f"Unlock owner mismatch: lock is owned by pid {info.owner_pid}, not {owner_pid}.",
-            )
+    else:
+        block_reason = _support_unlock_block_reason(info, owner_pid=owner_pid)
+        if block_reason is not None:
+            result = _unlock_validation_error(info, message=block_reason)
     if result is not None:
         exit_code, data, lines = result
         return (exit_code, data | {"dry_run": dry_run}, lines)
@@ -655,13 +645,24 @@ def automation_lock_unlock_data(
 
 
 def handle_automation_lock_check(args: Any) -> CommandResult:
-    exit_code, data, lines = automation_lock_check_data(args.path, dry_run=bool(args.dry_run))
+    exit_code, data, lines = automation_lock_check_data(
+        _support_automation_lock_path_arg(
+            path_value=getattr(args, "path", None),
+            automation_id=getattr(args, "automation_id", None),
+            codex_home=_codex_home_path(),
+        ),
+        dry_run=bool(args.dry_run),
+    )
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
 def handle_automation_lock_lock(args: Any) -> CommandResult:
     exit_code, data, lines = automation_lock_lock_data(
-        args.path,
+        _support_automation_lock_path_arg(
+            path_value=getattr(args, "path", None),
+            automation_id=getattr(args, "automation_id", None),
+            codex_home=_codex_home_path(),
+        ),
         owner_pid=getattr(args, "owner_pid", None),
         dry_run=bool(args.dry_run),
     )
@@ -670,7 +671,11 @@ def handle_automation_lock_lock(args: Any) -> CommandResult:
 
 def handle_automation_lock_unlock(args: Any) -> CommandResult:
     exit_code, data, lines = automation_lock_unlock_data(
-        args.path,
+        _support_automation_lock_path_arg(
+            path_value=getattr(args, "path", None),
+            automation_id=getattr(args, "automation_id", None),
+            codex_home=_codex_home_path(),
+        ),
         owner_pid=getattr(args, "owner_pid", None),
         dry_run=bool(args.dry_run),
     )

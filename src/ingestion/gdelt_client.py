@@ -1,7 +1,3 @@
-"""
-GDELT DOC 2.0 ingestion client with filtering, pagination, and persistence.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -21,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.ingestion.rate_limiter import DomainRateLimiter
+from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
@@ -29,8 +26,6 @@ logger = structlog.get_logger(__name__)
 
 @dataclass(slots=True)
 class GDELTQueryConfig:
-    """GDELT query configuration loaded from YAML."""
-
     name: str
     query: str = ""
     credibility: float = 0.5
@@ -49,8 +44,6 @@ class GDELTQueryConfig:
 
 @dataclass(slots=True)
 class GDELTSettings:
-    """Global GDELT settings from YAML."""
-
     request_timeout_seconds: int = 30
     user_agent: str = "GeopoliticalIntel/1.0 (GDELT Client)"
     default_lookback_hours: int = 12
@@ -60,8 +53,6 @@ class GDELTSettings:
 
 @dataclass(slots=True)
 class GDELTCollectionResult:
-    """Outcome metrics for one GDELT query collection run."""
-
     query_name: str
     pages_fetched: int = 0
     items_fetched: int = 0
@@ -78,10 +69,6 @@ class GDELTCollectionResult:
 
 
 class GDELTClient:
-    """
-    Collects and stores items from configured GDELT DOC 2.0 queries.
-    """
-
     def __init__(
         self,
         session: AsyncSession,
@@ -342,8 +329,7 @@ class GDELTClient:
 
     async def _get_or_create_source(self, query: GDELTQueryConfig) -> Source:
         existing_query = select(Source).where(
-            Source.type == SourceType.GDELT,
-            Source.name == query.name,
+            Source.type == SourceType.GDELT, Source.name == query.name
         )
         source = await self.session.scalar(existing_query)
         config_payload = {
@@ -372,13 +358,22 @@ class GDELTClient:
             self.session.add(source)
             await self.session.flush()
             return source
-
+        url_changed = source.url != self.api_url
+        name_changed = source.name != query.name
+        source_tier_changed = source.source_tier != query.source_tier
+        reporting_type_changed = source.reporting_type != query.reporting_type
+        source.name = query.name
         source.url = self.api_url
         source.credibility_score = query.credibility
         source.source_tier = query.source_tier
         source.reporting_type = query.reporting_type
         source.config = config_payload
         source.is_active = query.enabled
+        if (
+            url_changed or name_changed or source_tier_changed or reporting_type_changed
+        ) and source.id is not None:
+            await self.session.flush()
+            await refresh_events_for_source(session=self.session, source_id=source.id)
         return source
 
     async def _store_article(

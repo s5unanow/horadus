@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -652,7 +653,10 @@ async def test_store_item_returns_none_on_insert_race(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_get_or_create_source_creates_and_updates_records(mock_db_session) -> None:
+async def test_get_or_create_source_creates_and_updates_records(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     harvester = TelegramHarvester(
         session=mock_db_session,
         client=FakeTelegramClient(),
@@ -671,6 +675,8 @@ async def test_get_or_create_source_creates_and_updates_records(mock_db_session)
         enabled=False,
         extra={"region": "EMEA"},
     )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
     mock_db_session.scalar.return_value = None
 
     created = await harvester._get_or_create_source(channel)
@@ -680,8 +686,11 @@ async def test_get_or_create_source_creates_and_updates_records(mock_db_session)
     assert created.credibility_score == 0.9
     assert created.config["region"] == "EMEA"
     assert created.is_active is False
+    refresh_mock.assert_not_awaited()
 
     existing = SimpleNamespace(
+        id=uuid4(),
+        name="Old Feed",
         url=None,
         credibility_score=0.1,
         source_tier="regional",
@@ -700,6 +709,50 @@ async def test_get_or_create_source_creates_and_updates_records(mock_db_session)
     assert existing.reporting_type == "primary"
     assert existing.config["categories"] == ["conflict"]
     assert existing.is_active is False
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_unchanged(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harvester = TelegramHarvester(
+        session=mock_db_session,
+        client=FakeTelegramClient(),
+    )
+    channel = ChannelConfig(
+        name="Intel Feed",
+        channel="@intel_feed",
+        credibility=0.9,
+        categories=["conflict"],
+        check_interval_minutes=20,
+        max_messages_per_fetch=50,
+        include_media=False,
+        language="en",
+        source_tier="tier1",
+        reporting_type="primary",
+        enabled=False,
+        extra={"region": "EMEA"},
+    )
+    refresh_mock = AsyncMock(return_value=0)
+    monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Intel Feed",
+        url="https://t.me/intel_feed",
+        credibility_score=0.1,
+        source_tier="tier1",
+        reporting_type="primary",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar.return_value = existing
+
+    updated = await harvester._get_or_create_source(channel)
+
+    assert updated is existing
+    refresh_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio

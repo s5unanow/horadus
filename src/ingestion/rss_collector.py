@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.ingestion.content_extractor import ContentExtractor
 from src.ingestion.rate_limiter import DomainRateLimiter
+from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
@@ -376,6 +377,9 @@ class RSSCollector:
             await self.session.flush()
             return source
 
+        name_changed = source.name != feed.name
+        source_tier_changed = source.source_tier != feed.source_tier
+        reporting_type_changed = source.reporting_type != feed.reporting_type
         source.name = feed.name
         source.credibility_score = feed.credibility
         source.source_tier = feed.source_tier
@@ -388,6 +392,11 @@ class RSSCollector:
             **feed.extra,
         }
         source.is_active = feed.enabled
+        if (
+            name_changed or source_tier_changed or reporting_type_changed
+        ) and source.id is not None:
+            await self.session.flush()
+            await refresh_events_for_source(session=self.session, source_id=source.id)
         return source
 
     async def _is_duplicate(self, normalized_url: str, content_hash: str) -> bool:

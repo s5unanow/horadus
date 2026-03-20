@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.api.middleware.auth import require_privileged_access
 from src.core.config import settings
 from src.core.source_freshness import build_source_freshness_report
+from src.processing.corroboration_provenance import refresh_events_for_source
 from src.storage.database import get_session
 from src.storage.models import ReportingType, Source, SourceTier, SourceType
 
@@ -316,10 +317,15 @@ async def update_source(
     if "reporting_type" in updates and updates["reporting_type"] is not None:
         updates["reporting_type"] = updates["reporting_type"].value
 
+    needs_provenance_refresh = any(
+        field_name in {"name", "url", "source_tier", "reporting_type"} for field_name in updates
+    )
     for field_name, field_value in updates.items():
         setattr(source_record, field_name, field_value)
 
     await session.flush()
+    if needs_provenance_refresh:
+        await refresh_events_for_source(session=session, source_id=source_record.id)
     return _to_response(source_record)
 
 

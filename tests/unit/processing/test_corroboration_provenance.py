@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
@@ -9,8 +11,11 @@ from src.processing.corroboration_provenance import (
     EventSourceProvenance,
     fallback_event_provenance_summary,
     parse_event_provenance_row,
+    refresh_event_provenance,
+    refresh_events_for_source,
     summarize_event_provenance,
 )
+from src.storage.models import Event
 
 pytestmark = pytest.mark.unit
 
@@ -329,3 +334,86 @@ def test_provenance_helpers_cover_fallback_and_internal_normalization_paths() ->
         unique_source_count=1,
     )
     assert summary_without_reporting.groups[0]["reporting_types"] == []
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_provenance_persists_summary(mock_db_session) -> None:
+    first_source_id = uuid4()
+    second_source_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(
+        all=lambda: [
+            (
+                first_source_id,
+                "Regional Outlet A",
+                "https://a.example.test",
+                "major",
+                "secondary",
+                "https://a.example.test/story",
+                "Forces moved near the eastern border overnight",
+                "Reuters staff",
+                "a" * 64,
+            ),
+            (
+                second_source_id,
+                "Regional Outlet B",
+                "https://b.example.test",
+                "major",
+                "secondary",
+                "https://b.example.test/story",
+                "Forces moved near the eastern border overnight",
+                "Reuters",
+                "a" * 64,
+            ),
+        ]
+    )
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Event",
+        source_count=2,
+        unique_source_count=2,
+    )
+
+    summary = await refresh_event_provenance(session=mock_db_session, event=event)
+
+    assert summary.method == "provenance_aware"
+    assert summary.independent_evidence_count == 1
+    assert event.corroboration_mode == "provenance_aware"
+    assert event.provenance_summary["independent_evidence_count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_refresh_events_for_source_recomputes_linked_events(mock_db_session) -> None:
+    first_event = Event(
+        id=uuid4(), canonical_summary="First", source_count=1, unique_source_count=1
+    )
+    second_event = Event(
+        id=uuid4(),
+        canonical_summary="Second",
+        source_count=2,
+        unique_source_count=2,
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])
+    refresh_mock = AsyncMock(
+        return_value=fallback_event_provenance_summary(
+            raw_source_count=1,
+            unique_source_count=1,
+            reason="test",
+        )
+    )
+
+    original_refresh = provenance_module.refresh_event_provenance
+    provenance_module.refresh_event_provenance = refresh_mock
+    try:
+        refreshed = await refresh_events_for_source(session=mock_db_session, source_id=uuid4())
+    finally:
+        provenance_module.refresh_event_provenance = original_refresh
+
+    assert refreshed == 2
+    assert refresh_mock.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_refresh_events_for_source_returns_zero_when_source_is_missing() -> None:
+    refreshed = await refresh_events_for_source(session=AsyncMock(), source_id=None)
+
+    assert refreshed == 0

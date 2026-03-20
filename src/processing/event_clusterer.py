@@ -6,7 +6,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from inspect import isawaitable
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -21,11 +20,7 @@ from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
 )
-from src.processing.corroboration_provenance import (
-    fallback_event_provenance_summary,
-    parse_event_provenance_row,
-    summarize_event_provenance,
-)
+from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.event_state import EventActivityState, EventEpistemicState
@@ -204,47 +199,7 @@ class EventClusterer:
         await self.session.flush()
 
     async def _refresh_event_provenance(self, event: Event) -> None:
-        if event.id is None:
-            summary = fallback_event_provenance_summary(
-                raw_source_count=event.source_count,
-                unique_source_count=event.unique_source_count,
-                reason="missing_event_id",
-            )
-        else:
-            query = (
-                select(
-                    Source.id.label("source_id"),
-                    Source.name.label("source_name"),
-                    Source.url.label("source_url"),
-                    Source.source_tier.label("source_tier"),
-                    Source.reporting_type.label("reporting_type"),
-                    RawItem.url.label("item_url"),
-                    RawItem.title.label("title"),
-                    RawItem.author.label("author"),
-                    RawItem.content_hash.label("content_hash"),
-                )
-                .join(RawItem, RawItem.source_id == Source.id)
-                .join(EventItem, EventItem.item_id == RawItem.id)
-                .where(EventItem.event_id == event.id)
-                .order_by(EventItem.added_at.asc())
-            )
-            rows = (await self.session.execute(query)).all()
-            if isawaitable(rows):
-                rows = await rows
-            observations = [
-                observation
-                for observation in (parse_event_provenance_row(row) for row in rows)
-                if observation is not None
-            ]
-            summary = summarize_event_provenance(
-                observations=observations,
-                raw_source_count=event.source_count,
-                unique_source_count=event.unique_source_count,
-            )
-        event.independent_evidence_count = summary.independent_evidence_count
-        event.corroboration_score = summary.weighted_corroboration_score
-        event.corroboration_mode = summary.method
-        event.provenance_summary = summary.as_dict()
+        await refresh_event_provenance(session=self.session, event=event)
 
     async def _find_matching_event(
         self,

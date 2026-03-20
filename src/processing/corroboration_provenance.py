@@ -7,9 +7,15 @@ import re
 from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from inspect import isawaitable
 from typing import Any
 from urllib.parse import urlparse
 from uuid import UUID
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.storage.models import Event, EventItem, RawItem, Source
 
 PROVENANCE_AWARE_MODE = "provenance_aware"
 FALLBACK_MODE = "fallback"
@@ -259,6 +265,89 @@ def parse_event_provenance_row(row: Any) -> EventSourceProvenance | None:
         author=_maybe_str(mapping.get("author")),
         content_hash=_maybe_str(mapping.get("content_hash")),
     )
+
+
+async def load_event_provenance_observations(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> list[EventSourceProvenance]:
+    """Load normalized provenance observations for one event."""
+
+    query = (
+        select(
+            Source.id.label("source_id"),
+            Source.name.label("source_name"),
+            Source.url.label("source_url"),
+            Source.source_tier.label("source_tier"),
+            Source.reporting_type.label("reporting_type"),
+            RawItem.url.label("item_url"),
+            RawItem.title.label("title"),
+            RawItem.author.label("author"),
+            RawItem.content_hash.label("content_hash"),
+        )
+        .join(RawItem, RawItem.source_id == Source.id)
+        .join(EventItem, EventItem.item_id == RawItem.id)
+        .where(EventItem.event_id == event_id)
+        .order_by(EventItem.added_at.asc())
+    )
+    rows = (await session.execute(query)).all()
+    if isawaitable(rows):
+        rows = await rows
+    return [
+        observation
+        for observation in (parse_event_provenance_row(row) for row in rows)
+        if observation is not None
+    ]
+
+
+async def refresh_event_provenance(
+    *,
+    session: AsyncSession,
+    event: Event,
+) -> EventProvenanceSummary:
+    """Recompute and persist one event's provenance-aware corroboration summary."""
+
+    if event.id is None:
+        summary = fallback_event_provenance_summary(
+            raw_source_count=event.source_count,
+            unique_source_count=event.unique_source_count,
+            reason="missing_event_id",
+        )
+    else:
+        observations = await load_event_provenance_observations(session=session, event_id=event.id)
+        summary = summarize_event_provenance(
+            observations=observations,
+            raw_source_count=event.source_count,
+            unique_source_count=event.unique_source_count,
+        )
+    event.independent_evidence_count = summary.independent_evidence_count
+    event.corroboration_score = summary.weighted_corroboration_score
+    event.corroboration_mode = summary.method
+    event.provenance_summary = summary.as_dict()
+    return summary
+
+
+async def refresh_events_for_source(
+    *,
+    session: AsyncSession,
+    source_id: UUID | None,
+) -> int:
+    """Refresh provenance summaries for all events linked to one source."""
+
+    if source_id is None:
+        return 0
+    query = (
+        select(Event)
+        .join(EventItem, EventItem.event_id == Event.id)
+        .join(RawItem, RawItem.id == EventItem.item_id)
+        .where(RawItem.source_id == source_id)
+        .distinct()
+    )
+    events = list((await session.scalars(query)).all())
+    for event in events:
+        await refresh_event_provenance(session=session, event=event)
+    return len(events)
 
 
 def infer_source_family(observation: EventSourceProvenance) -> str | None:

@@ -541,6 +541,31 @@ def test_automation_lock_check_reports_stale_owner_pid(tmp_path: Path) -> None:
     assert "- owner_pid_running: no" in lines
 
 
+def test_automation_lock_check_marks_windows_owner_as_stale_when_powershell_reports_missing(
+    tmp_path: Path,
+) -> None:
+    lock_path = _automation_lock_path(tmp_path)
+    _write_lock_file(
+        lock_path,
+        _valid_lock_payload(lock_path, lock_id="windows-stale", owner_pid=123),
+    )
+    info = automation_lock_support.load_lock_info(
+        lock_path,
+        legacy_lock_active_fn=lambda _path: None,
+        owner_pid_running_fn=lambda owner_pid: automation_lock_support.owner_pid_running(
+            owner_pid,
+            os_name="nt",
+            kill=os.kill,
+            run_process=lambda *_args, **_kwargs: type("Result", (), {"returncode": 1})(),
+        ),
+        owner_pid_started_at_fn=lambda _pid: None,
+    )
+
+    assert info.status == "stale"
+    assert info.owner_pid_running is False
+    assert "- owner_pid_running: no" in automation_lock_module._check_lines(info)
+
+
 def test_automation_lock_load_info_marks_pid_reuse_as_stale(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -923,6 +948,90 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     assert rmdir_lines[1] == (
         f"Unable to remove the automation lock directory: {removable_directory}"
     )
+
+
+@pytest.mark.parametrize("owner_pid", [0, -1])
+def test_automation_lock_lock_rejects_non_positive_owner_pid(
+    tmp_path: Path, owner_pid: int
+) -> None:
+    lock_path = _automation_lock_path(tmp_path, f"invalid-owner-{owner_pid}")
+
+    exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
+        str(lock_path), owner_pid=owner_pid, dry_run=False
+    )
+
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["status"] == "broken"
+    assert data["error"] == "Lock requires --owner-pid to be a positive integer when provided."
+    assert lines[0] == "Automation lock acquisition failed."
+    assert not lock_path.exists()
+
+
+def test_attempt_lock_publish_rejects_non_positive_owner_pid(tmp_path: Path) -> None:
+    lock_path = _automation_lock_path(tmp_path, "invalid-owner-publish")
+
+    state, result = automation_lock_impl._attempt_lock_publish(lock_path, owner_pid=0)
+
+    assert state == "invalid-owner-pid"
+    assert result is not None
+    exit_code, data, lines = result
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["error"] == "Lock requires --owner-pid to be a positive integer when provided."
+    assert lines[0] == "Automation lock acquisition failed."
+
+
+def test_automation_lock_check_rejects_incomplete_json_metadata(tmp_path: Path) -> None:
+    lock_path = _automation_lock_path(tmp_path, "incomplete-metadata")
+    _write_lock_file(lock_path, {})
+
+    exit_code, data, lines = automation_lock_module.automation_lock_check_data(
+        str(lock_path), dry_run=False
+    )
+
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["status"] == "broken"
+    assert data["error"] == "invalid metadata.json: expected non-empty string lock_id"
+    assert lines[0] == "Automation lock status: broken"
+
+
+def test_prepare_stale_lock_for_acquire_tolerates_concurrent_cleanup_race(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = _automation_lock_path(tmp_path, "stale-race")
+    stale_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="stale",
+        exists=True,
+        lock_id="stale",
+        acquired_at="2026-03-20T00:00:00+00:00",
+        hostname="host",
+        username="user",
+        cwd="/tmp",
+        owner_pid=123,
+        owner_started_at=None,
+        owner_pid_running=False,
+        owner_pid_identity_matches=None,
+    )
+    available_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="available",
+        exists=False,
+    )
+    load_results = iter([stale_info, available_info])
+    monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: next(load_results))
+    original_unlink = Path.unlink
+
+    def _raising_unlink(self: Path, missing_ok: bool = False) -> None:
+        if self == lock_path:
+            raise FileNotFoundError("already removed")
+        return original_unlink(self, missing_ok=missing_ok)
+
+    monkeypatch.setattr(Path, "unlink", _raising_unlink)
+
+    info, result = automation_lock_impl._prepare_stale_lock_for_acquire(lock_path, info=stale_info)
+
+    assert result is None
+    assert info.status == "available"
 
 
 def test_automation_lock_handlers_wrap_data_functions(monkeypatch: pytest.MonkeyPatch) -> None:

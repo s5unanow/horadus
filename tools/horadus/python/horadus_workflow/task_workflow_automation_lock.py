@@ -68,7 +68,6 @@ try:
     import fcntl as _fcntl
 except ImportError:  # pragma: no cover - unavailable on Windows.
     _fcntl = None
-
 fcntl = _fcntl
 
 _LOCK_METADATA_NAME = "metadata.json"
@@ -300,6 +299,8 @@ def _attempt_lock_publish(
     *,
     owner_pid: int | None,
 ) -> tuple[str, tuple[int, dict[str, object], list[str]] | None]:
+    if owner_pid is not None and owner_pid <= 0:
+        return ("invalid-owner-pid", _lock_owner_pid_validation_error(lock_path, dry_run=False))
     temp_path = lock_path.with_name(f".{lock_path.name}.tmp-{uuid.uuid4().hex}")
     payload = _lock_metadata_payload(lock_path, owner_pid=owner_pid)
     try:

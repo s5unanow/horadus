@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from inspect import isawaitable
 from typing import cast
 from uuid import UUID, uuid4
 
@@ -19,6 +20,11 @@ from src.core.observability import record_processing_event_suppression
 from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
+)
+from src.processing.corroboration_provenance import (
+    fallback_event_provenance_summary,
+    parse_event_provenance_row,
+    summarize_event_provenance,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
@@ -64,15 +70,11 @@ class EventClusterer:
             )
 
         if item.embedding is None:
-            event = await self._create_event(item)
-            await self._add_event_link(event.id, item_id)
-            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+            return await self._create_linked_event(item)
 
         item_embedding_model = item.embedding_model.strip() if item.embedding_model else None
         if not item_embedding_model:
-            event = await self._create_event(item)
-            await self._add_event_link(event.id, item_id)
-            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+            return await self._create_linked_event(item)
 
         matched = await self._find_matching_event(
             item.embedding,
@@ -80,9 +82,7 @@ class EventClusterer:
             self._item_timestamp(item),
         )
         if matched is None:
-            event = await self._create_event(item)
-            await self._add_event_link(event.id, item_id)
-            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+            return await self._create_linked_event(item)
 
         event, similarity = matched
         suppression_action = await self._event_suppression_action(event_id=event.id)
@@ -142,6 +142,13 @@ class EventClusterer:
             similarity=similarity,
         )
 
+    async def _create_linked_event(self, item: RawItem) -> ClusterResult:
+        event = await self._create_event(item)
+        await self._add_event_link(event.id, item.id)
+        await self._refresh_event_provenance(event)
+        await self.session.flush()
+        return ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+
     async def cluster_unlinked_items(self, limit: int = 100) -> list[ClusterResult]:
         """Cluster raw items not yet attached to an event."""
         query = (
@@ -192,8 +199,52 @@ class EventClusterer:
             event.canonical_summary = self._build_canonical_summary(item)
 
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
+        await self._refresh_event_provenance(event)
         self.lifecycle_manager.on_event_mention(event, mentioned_at=mention_time)
         await self.session.flush()
+
+    async def _refresh_event_provenance(self, event: Event) -> None:
+        if event.id is None:
+            summary = fallback_event_provenance_summary(
+                raw_source_count=event.source_count,
+                unique_source_count=event.unique_source_count,
+                reason="missing_event_id",
+            )
+        else:
+            query = (
+                select(
+                    Source.id.label("source_id"),
+                    Source.name.label("source_name"),
+                    Source.url.label("source_url"),
+                    Source.source_tier.label("source_tier"),
+                    Source.reporting_type.label("reporting_type"),
+                    RawItem.url.label("item_url"),
+                    RawItem.title.label("title"),
+                    RawItem.author.label("author"),
+                    RawItem.content_hash.label("content_hash"),
+                )
+                .join(RawItem, RawItem.source_id == Source.id)
+                .join(EventItem, EventItem.item_id == RawItem.id)
+                .where(EventItem.event_id == event.id)
+                .order_by(EventItem.added_at.asc())
+            )
+            rows = (await self.session.execute(query)).all()
+            if isawaitable(rows):
+                rows = await rows
+            observations = [
+                observation
+                for observation in (parse_event_provenance_row(row) for row in rows)
+                if observation is not None
+            ]
+            summary = summarize_event_provenance(
+                observations=observations,
+                raw_source_count=event.source_count,
+                unique_source_count=event.unique_source_count,
+            )
+        event.independent_evidence_count = summary.independent_evidence_count
+        event.corroboration_score = summary.weighted_corroboration_score
+        event.corroboration_mode = summary.method
+        event.provenance_summary = summary.as_dict()
 
     async def _find_matching_event(
         self,

@@ -16,12 +16,18 @@ def _build_event(
     *,
     lifecycle_status: str = EventLifecycle.EMERGING.value,
     unique_source_count: int = 1,
+    independent_evidence_count: int | None = None,
 ) -> Event:
     now = datetime.now(tz=UTC)
     return Event(
         canonical_summary="Event summary",
         source_count=unique_source_count,
         unique_source_count=unique_source_count,
+        independent_evidence_count=(
+            independent_evidence_count
+            if independent_evidence_count is not None
+            else unique_source_count
+        ),
         lifecycle_status=lifecycle_status,
         first_seen_at=now,
         last_mention_at=now,
@@ -61,6 +67,21 @@ def test_on_event_mention_keeps_emerging_event_when_under_threshold(mock_db_sess
     assert changed is False
     assert event.epistemic_state == EventEpistemicState.EMERGING.value
     assert event.activity_state == EventActivityState.ACTIVE.value
+    assert event.lifecycle_status == EventLifecycle.EMERGING.value
+
+
+def test_on_event_mention_uses_independent_evidence_count_for_confirmation(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    event = _build_event(
+        unique_source_count=5,
+        independent_evidence_count=2,
+        lifecycle_status=EventLifecycle.EMERGING.value,
+    )
+
+    changed = manager.on_event_mention(event)
+
+    assert changed is False
+    assert event.epistemic_state == EventEpistemicState.EMERGING.value
     assert event.lifecycle_status == EventLifecycle.EMERGING.value
 
 

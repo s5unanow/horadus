@@ -235,7 +235,8 @@ Tier-2 payload budget strategy:
 │                                                                 │
 │   delta_log_odds = base_weight                                  │
 │                    × credibility        (0.0 - 1.0)             │
-│                    × corroboration      (sqrt(sources) / 3)     │
+│                    × corroboration      (sqrt(independent        │
+│                    │                    score) / 3)              │
 │                    × novelty            (1.0 new, 0.3 repeat)   │
 │                    × severity           (0.0 - 1.0 magnitude)   │
 │                    × confidence         (0.0 - 1.0 LLM score)   │
@@ -244,7 +245,8 @@ Tier-2 payload budget strategy:
 │   Example:                                                      │
 │   - Military movement signal (weight: 0.04)                     │
 │   - From Reuters (credibility: 0.95)                            │
-│   - 3 sources (corroboration: √3/3 = 0.58)                      │
+│   - 3 likely independent firsthand reports                      │
+│     (corroboration: √3/3 = 0.58)                                │
 │   - New information (novelty: 1.0)                              │
 │   - Major event (severity: 0.9)                                 │
 │   - High confidence (confidence: 0.95)                          │
@@ -306,7 +308,7 @@ Benefit: Evidence is additive, always produces valid probabilities.
 
 Why: Same story appears in 50 sources.
 How: Cluster by embedding similarity (cosine > 0.88 within 48h).
-Benefit: One event with corroboration count, not 50 duplicate items.
+Benefit: One event with provenance-aware corroboration, not 50 duplicate items.
 Safety: Similarity matching is constrained to vectors with the same `embedding_model`
 lineage value to avoid cross-model drift.
 

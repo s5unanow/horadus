@@ -275,8 +275,6 @@ path = "tests/unit/processing/test_pipeline_orchestrator_additional.py"
 [legacy_files.member_max_lines]
 "test_process_after_tier1_covers_existing_embedding_degraded_hold_budget_and_error_paths" = 194
 "test_replay_and_impact_helpers_cover_queue_and_prediction_logic" = 199
-[legacy_files.member_max_complexity]
-"test_pipeline_domain_helpers_cover_fallbacks_and_parsers" = 38
 
 [[legacy_files]]
 path = "tests/unit/workers/test_celery_setup.py"

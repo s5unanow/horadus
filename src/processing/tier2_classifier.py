@@ -51,6 +51,7 @@ from src.storage.event_state import (
     derived_epistemic_state,
     resolved_event_activity_state,
     resolved_event_epistemic_state,
+    resolved_independent_evidence_count,
 )
 from src.storage.models import Event, EventItem, RawItem, Trend
 
@@ -580,7 +581,7 @@ class Tier2Classifier:
             apply_event_state_update(
                 event,
                 epistemic_state=derived_epistemic_state(
-                    unique_source_count=event.unique_source_count,
+                    unique_source_count=resolved_independent_evidence_count(event),
                     has_contradictions=has_contradictions,
                 ),
                 activity_state=resolved_event_activity_state(event),

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import create_engine, literal, select
 
 import src.processing.pipeline_orchestrator as orchestrator_module
 from src.core.trend_engine import TrendUpdate
@@ -570,66 +569,18 @@ async def test_process_items_applies_trend_impacts(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_corroboration_score_prevents_derivative_overcount(mock_db_session) -> None:
-    event = Event(
-        id=uuid4(),
-        canonical_summary="Corroboration test",
-        source_count=5,
-        unique_source_count=5,
-    )
-    rows = [
-        (uuid4(), "wire", "aggregator"),
-        (uuid4(), "wire", "aggregator"),
-        (uuid4(), "wire", "aggregator"),
-        (uuid4(), "wire", "aggregator"),
-        (uuid4(), "wire", "firsthand"),
-    ]
-    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
-
-    pipeline = ProcessingPipeline(
-        session=mock_db_session,
-        deduplication_service=SimpleNamespace(),
-        embedding_service=SimpleNamespace(),
-        event_clusterer=SimpleNamespace(),
-        tier1_classifier=SimpleNamespace(),
-        tier2_classifier=SimpleNamespace(),
-        trend_engine=SimpleNamespace(),
-    )
-
-    score = await pipeline._corroboration_score(event)
-
-    assert score == pytest.approx(1.35, rel=0.01)
-    assert score < 5.0
-
-
-@pytest.mark.asyncio
-async def test_corroboration_score_parses_sqlalchemy_rows(
+async def test_corroboration_score_uses_persisted_event_provenance(
     mock_db_session,
     monkeypatch,
 ) -> None:
     event = Event(
         id=uuid4(),
-        canonical_summary="Corroboration row parsing test",
-        source_count=2,
-        unique_source_count=2,
-    )
-    with create_engine("sqlite+pysqlite:///:memory:").connect() as connection:
-        row_aggregator = connection.execute(
-            select(
-                literal(str(uuid4())).label("source_id"),
-                literal("wire").label("source_tier"),
-                literal("aggregator").label("reporting_type"),
-            )
-        ).one()
-        row_firsthand = connection.execute(
-            select(
-                literal(str(uuid4())).label("source_id"),
-                literal("wire").label("source_tier"),
-                literal("firsthand").label("reporting_type"),
-            )
-        ).one()
-    mock_db_session.execute = AsyncMock(
-        return_value=SimpleNamespace(all=lambda: [row_aggregator, row_firsthand])
+        canonical_summary="Corroboration test",
+        source_count=5,
+        unique_source_count=5,
+        independent_evidence_count=2,
+        corroboration_score=1.35,
+        corroboration_mode="provenance_aware",
     )
     corroboration_path_calls: list[tuple[str, str]] = []
 
@@ -651,11 +602,12 @@ async def test_corroboration_score_parses_sqlalchemy_rows(
     score = await pipeline._corroboration_score(event)
 
     assert score == pytest.approx(1.35, rel=0.01)
-    assert corroboration_path_calls == [("cluster_aware", "source_cluster_fields_present")]
+    assert score < 5.0
+    assert corroboration_path_calls == [("provenance_aware", "persisted_event_provenance")]
 
 
 @pytest.mark.asyncio
-async def test_corroboration_score_falls_back_when_source_id_absent(
+async def test_corroboration_score_falls_back_to_legacy_counts(
     mock_db_session,
     monkeypatch,
 ) -> None:
@@ -664,15 +616,8 @@ async def test_corroboration_score_falls_back_when_source_id_absent(
         canonical_summary="Fallback corroboration test",
         source_count=4,
         unique_source_count=4,
+        corroboration_mode="fallback",
     )
-    with create_engine("sqlite+pysqlite:///:memory:").connect() as connection:
-        malformed_row = connection.execute(
-            select(
-                literal("wire").label("source_tier"),
-                literal("aggregator").label("reporting_type"),
-            )
-        ).one()
-    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [malformed_row]))
     corroboration_path_calls: list[tuple[str, str]] = []
 
     def _record_path(*, mode: str, reason: str) -> None:
@@ -693,17 +638,11 @@ async def test_corroboration_score_falls_back_when_source_id_absent(
     score = await pipeline._corroboration_score(event)
 
     assert score == pytest.approx(4.0, rel=0.01)
-    assert corroboration_path_calls == [("fallback", "missing_source_cluster_fields")]
+    assert corroboration_path_calls == [("fallback", "missing_event_provenance")]
 
 
 @pytest.mark.asyncio
 async def test_corroboration_score_applies_contradiction_penalty(mock_db_session) -> None:
-    rows = [
-        (uuid4(), "wire", "firsthand"),
-        (uuid4(), "major", "firsthand"),
-    ]
-    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
-
     pipeline = ProcessingPipeline(
         session=mock_db_session,
         deduplication_service=SimpleNamespace(),
@@ -714,10 +653,17 @@ async def test_corroboration_score_applies_contradiction_penalty(mock_db_session
         trend_engine=SimpleNamespace(),
     )
 
-    baseline_event = Event(id=uuid4(), canonical_summary="Baseline")
+    baseline_event = Event(
+        id=uuid4(),
+        canonical_summary="Baseline",
+        corroboration_score=2.0,
+        corroboration_mode="provenance_aware",
+    )
     contradiction_event = Event(
         id=uuid4(),
         canonical_summary="Contradiction",
+        corroboration_score=2.0,
+        corroboration_mode="provenance_aware",
         has_contradictions=True,
         extracted_claims={
             "claim_graph": {

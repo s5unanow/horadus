@@ -98,6 +98,8 @@ class ReviewQueueItem(BaseModel):
     last_mention_at: datetime
     source_count: int
     unique_source_count: int
+    independent_evidence_count: int
+    corroboration_mode: str
     has_contradictions: bool
     contradiction_notes: str | None
     evidence_count: int

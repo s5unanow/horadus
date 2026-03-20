@@ -17,6 +17,7 @@ from src.storage.event_state import (
     derived_epistemic_state,
     resolved_event_activity_state,
     resolved_event_epistemic_state,
+    resolved_independent_evidence_count,
 )
 from src.storage.models import Event, EventLifecycle
 
@@ -44,7 +45,7 @@ class EventLifecycleManager:
         next_epistemic = previous_epistemic
         if previous_epistemic != EventEpistemicState.RETRACTED.value:
             next_epistemic = derived_epistemic_state(
-                unique_source_count=event.unique_source_count,
+                unique_source_count=resolved_independent_evidence_count(event),
                 has_contradictions=bool(event.has_contradictions),
             )
         if next_epistemic in {

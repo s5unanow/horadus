@@ -152,6 +152,8 @@ def build_review_queue_item(
         last_mention_at=event.last_mention_at or event.created_at or datetime.now(tz=UTC),
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,
+        independent_evidence_count=int(event.independent_evidence_count or 0),
+        corroboration_mode=str(event.corroboration_mode or "fallback"),
         has_contradictions=bool(event.has_contradictions),
         contradiction_notes=event.contradiction_notes,
         evidence_count=len(event_evidence),

@@ -125,6 +125,10 @@ def test_dimension_check_constraints_present_in_model_metadata() -> None:
     assert "check_events_activity_state_allowed" in event_constraint_names
     assert "epistemic_state" in Event.__table__.c
     assert "activity_state" in Event.__table__.c
+    assert "independent_evidence_count" in Event.__table__.c
+    assert "corroboration_score" in Event.__table__.c
+    assert "corroboration_mode" in Event.__table__.c
+    assert "provenance_summary" in Event.__table__.c
     assert "idx_events_activity" in {index.name for index in Event.__table__.indexes}
 
 

@@ -41,6 +41,8 @@ class EventResponse(BaseModel):
                 "categories": ["military"],
                 "source_count": 5,
                 "unique_source_count": 4,
+                "independent_evidence_count": 2,
+                "corroboration_mode": "provenance_aware",
                 "epistemic_state": "contested",
                 "activity_state": "active",
                 "lifecycle_status": "confirmed",
@@ -60,6 +62,8 @@ class EventResponse(BaseModel):
     categories: list[str]
     source_count: int
     unique_source_count: int
+    independent_evidence_count: int
+    corroboration_mode: str
     epistemic_state: str
     activity_state: str
     lifecycle_status: str
@@ -82,10 +86,21 @@ class EventDetailResponse(EventResponse):
                 "summary": "Border force movement observed across multiple sources.",
                 "categories": ["military"],
                 "source_count": 5,
+                "unique_source_count": 4,
+                "independent_evidence_count": 2,
+                "corroboration_mode": "provenance_aware",
+                "corroboration_score": 1.35,
                 "first_seen_at": "2026-02-07T12:10:00Z",
                 "extracted_who": ["Country A", "Country B"],
                 "extracted_what": "Military units repositioned near border.",
                 "extracted_where": "Eastern sector",
+                "provenance_summary": {
+                    "method": "provenance_aware",
+                    "raw_source_count": 5,
+                    "unique_source_count": 4,
+                    "independent_evidence_count": 2,
+                    "weighted_corroboration_score": 1.35,
+                },
                 "sources": [{"source_name": "Reuters", "url": "https://example.com/article-1"}],
                 "trend_impacts": [
                     {
@@ -101,11 +116,83 @@ class EventDetailResponse(EventResponse):
     sources: list[dict[str, Any]]
     claims: list[dict[str, Any]]
     trend_impacts: list[dict[str, Any]]
+    corroboration_score: float
+    provenance_summary: dict[str, Any]
 
 
 # =============================================================================
 # Endpoints
 # =============================================================================
+
+
+async def _load_event_detail_payloads(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    source_rows = (
+        await session.execute(
+            select(Source.name, RawItem.url)
+            .join(RawItem, RawItem.source_id == Source.id)
+            .join(EventItem, EventItem.item_id == RawItem.id)
+            .where(EventItem.event_id == event_id)
+            .order_by(Source.name.asc())
+        )
+    ).all()
+    impact_rows = (
+        await session.execute(
+            select(
+                TrendEvidence.trend_id,
+                TrendEvidence.event_claim_id,
+                EventClaim.claim_text,
+                TrendEvidence.signal_type,
+                TrendEvidence.delta_log_odds,
+            )
+            .join(EventClaim, EventClaim.id == TrendEvidence.event_claim_id)
+            .where(TrendEvidence.event_id == event_id)
+            .where(TrendEvidence.is_invalidated.is_(False))
+            .order_by(TrendEvidence.created_at.desc())
+        )
+    ).all()
+    claim_rows = (
+        await session.execute(
+            select(
+                EventClaim.id,
+                EventClaim.claim_key,
+                EventClaim.claim_text,
+                EventClaim.claim_type,
+                EventClaim.is_active,
+            )
+            .where(EventClaim.event_id == event_id)
+            .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+        )
+    ).all()
+    sources = [
+        {"source_name": source_name, "url": url}
+        for source_name, url in source_rows
+        if source_name is not None
+    ]
+    claims = [
+        {
+            "id": claim_id,
+            "claim_key": claim_key,
+            "claim_text": claim_text,
+            "claim_type": claim_type,
+            "is_active": is_active,
+        }
+        for claim_id, claim_key, claim_text, claim_type, is_active in claim_rows
+    ]
+    trend_impacts = [
+        {
+            "trend_id": trend_id,
+            "event_claim_id": event_claim_id,
+            "claim_text": claim_text,
+            "signal_type": signal_type,
+            "direction": "escalatory" if float(delta_log_odds) >= 0 else "de_escalatory",
+        }
+        for trend_id, event_claim_id, claim_text, signal_type, delta_log_odds in impact_rows
+    ]
+    return (sources, claims, trend_impacts)
 
 
 @router.get("", response_model=list[EventResponse])
@@ -164,6 +251,8 @@ async def list_events(
             categories=list(event.categories or []),
             source_count=event.source_count,
             unique_source_count=event.unique_source_count,
+            independent_evidence_count=int(event.independent_evidence_count or 0),
+            corroboration_mode=str(event.corroboration_mode or "fallback"),
             epistemic_state=resolved_event_epistemic_state(event),
             activity_state=resolved_event_activity_state(event),
             lifecycle_status=event.lifecycle_status,
@@ -195,75 +284,18 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Event '{event_id}' not found",
         )
-
-    source_rows = (
-        await session.execute(
-            select(Source.name, RawItem.url)
-            .join(RawItem, RawItem.source_id == Source.id)
-            .join(EventItem, EventItem.item_id == RawItem.id)
-            .where(EventItem.event_id == event_id)
-            .order_by(Source.name.asc())
-        )
-    ).all()
-    sources = [
-        {"source_name": source_name, "url": url}
-        for source_name, url in source_rows
-        if source_name is not None
-    ]
-    impact_rows = (
-        await session.execute(
-            select(
-                TrendEvidence.trend_id,
-                TrendEvidence.event_claim_id,
-                EventClaim.claim_text,
-                TrendEvidence.signal_type,
-                TrendEvidence.delta_log_odds,
-            )
-            .join(EventClaim, EventClaim.id == TrendEvidence.event_claim_id)
-            .where(TrendEvidence.event_id == event_id)
-            .where(TrendEvidence.is_invalidated.is_(False))
-            .order_by(TrendEvidence.created_at.desc())
-        )
-    ).all()
-    claim_rows = (
-        await session.execute(
-            select(
-                EventClaim.id,
-                EventClaim.claim_key,
-                EventClaim.claim_text,
-                EventClaim.claim_type,
-                EventClaim.is_active,
-            )
-            .where(EventClaim.event_id == event_id)
-            .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
-        )
-    ).all()
-    claims = [
-        {
-            "id": claim_id,
-            "claim_key": claim_key,
-            "claim_text": claim_text,
-            "claim_type": claim_type,
-            "is_active": is_active,
-        }
-        for claim_id, claim_key, claim_text, claim_type, is_active in claim_rows
-    ]
-    trend_impacts = [
-        {
-            "trend_id": trend_id,
-            "event_claim_id": event_claim_id,
-            "claim_text": claim_text,
-            "signal_type": signal_type,
-            "direction": "escalatory" if float(delta_log_odds) >= 0 else "de_escalatory",
-        }
-        for trend_id, event_claim_id, claim_text, signal_type, delta_log_odds in impact_rows
-    ]
+    sources, claims, trend_impacts = await _load_event_detail_payloads(
+        session=session,
+        event_id=event_id,
+    )
     return EventDetailResponse(
         id=event.id,
         summary=event.canonical_summary,
         categories=list(event.categories or []),
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,
+        independent_evidence_count=int(event.independent_evidence_count or 0),
+        corroboration_mode=str(event.corroboration_mode or "fallback"),
         epistemic_state=resolved_event_epistemic_state(event),
         activity_state=resolved_event_activity_state(event),
         lifecycle_status=event.lifecycle_status,
@@ -274,6 +306,8 @@ async def get_event(
         extracted_who=list(event.extracted_who) if event.extracted_who else None,
         extracted_what=event.extracted_what,
         extracted_where=event.extracted_where,
+        corroboration_score=float(event.corroboration_score or 0.0),
+        provenance_summary=dict(event.provenance_summary or {}),
         sources=sources,
         claims=claims,
         trend_impacts=trend_impacts,

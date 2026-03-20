@@ -558,6 +558,16 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert missing_lines == [f"Automation lock was already absent: {file_path}"]
 
     _write_lock_file(file_path, {"lock_id": "unlock", "owner_pid": os.getpid()})
+    held_dry_run_exit_code, held_dry_run_data, held_dry_run_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(file_path), owner_pid=os.getpid(), dry_run=True
+        )
+    )
+    assert held_dry_run_exit_code == automation_lock_module.ExitCode.OK
+    assert held_dry_run_data["dry_run"] is True
+    assert held_dry_run_lines[-1] == f"Dry run: would release the automation lock at {file_path}."
+    assert file_path.exists()
+
     file_exit_code, file_data, file_lines = automation_lock_module.automation_lock_unlock_data(
         str(file_path), owner_pid=os.getpid(), dry_run=False
     )
@@ -565,8 +575,22 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert file_data["removed_file"] is True
     assert file_lines == [f"Automation lock file removed: {file_path}"]
 
+
+def test_automation_lock_unlock_covers_directory_cleanup_and_fake_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     directory_lock = _automation_lock_path(tmp_path, "legacy-lock")
     directory_lock.mkdir(parents=True)
+    directory_dry_run_exit_code, directory_dry_run_data, directory_dry_run_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(directory_lock), owner_pid=None, dry_run=True
+        )
+    )
+    assert directory_dry_run_exit_code == automation_lock_module.ExitCode.OK
+    assert directory_dry_run_data["dry_run"] is True
+    assert directory_dry_run_lines[-1] == (
+        f"Dry run: would release the automation lock at {directory_lock}."
+    )
     directory_exit_code, directory_data, directory_lines = (
         automation_lock_module.automation_lock_unlock_data(
             str(directory_lock), owner_pid=None, dry_run=False
@@ -626,6 +650,26 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert odd_lines[0] == "Automation lock release failed."
 
 
+def test_automation_lock_unlock_directory_dry_run_validates_unexpected_entries(
+    tmp_path: Path,
+) -> None:
+    unexpected_lock = _automation_lock_path(tmp_path, "unexpected-lock-dry-run")
+    unexpected_lock.mkdir(parents=True)
+    (unexpected_lock / "extra.txt").write_text("extra", encoding="utf-8")
+    unexpected_exit_code, unexpected_data, unexpected_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(unexpected_lock), owner_pid=None, dry_run=True
+        )
+    )
+    assert unexpected_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert unexpected_data["dry_run"] is True
+    assert unexpected_data["unexpected_entries"] == ["extra.txt"]
+    assert unexpected_lines == [
+        "Automation lock release failed.",
+        "Lock directory contains unexpected entries: extra.txt",
+    ]
+
+
 def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -640,6 +684,17 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
     assert missing_owner_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
     assert (
         missing_owner_lines[1] == "Unlock requires --owner-pid to release a live automation lock."
+    )
+    dry_run_missing_owner_exit_code, dry_run_missing_owner_data, dry_run_missing_owner_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(lock_path), owner_pid=None, dry_run=True
+        )
+    )
+    assert dry_run_missing_owner_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert dry_run_missing_owner_data["dry_run"] is True
+    assert (
+        dry_run_missing_owner_lines[1]
+        == "Unlock requires --owner-pid to release a live automation lock."
     )
 
     mismatch_exit_code, _, mismatch_lines = automation_lock_module.automation_lock_unlock_data(

@@ -349,6 +349,32 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
     assert legacy_lines[1] == f"Unable to clear the inactive legacy lock file: {lock_path}"
 
 
+def test_automation_lock_lock_rejects_non_positive_owner_pid(tmp_path: Path) -> None:
+    lock_path = _automation_lock_path(tmp_path)
+
+    dry_run_exit_code, dry_run_data, dry_run_lines = (
+        automation_lock_module.automation_lock_lock_data(str(lock_path), owner_pid=0, dry_run=True)
+    )
+    assert dry_run_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert dry_run_data["dry_run"] is True
+    assert dry_run_data["error"] == (
+        "Lock requires --owner-pid to be a positive integer when provided."
+    )
+    assert dry_run_lines[0] == "Automation lock acquisition failed."
+    assert not lock_path.exists()
+
+    live_exit_code, live_data, live_lines = automation_lock_module.automation_lock_lock_data(
+        str(lock_path), owner_pid=0, dry_run=False
+    )
+    assert live_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert live_data["dry_run"] is False
+    assert live_data["error"] == (
+        "Lock requires --owner-pid to be a positive integer when provided."
+    )
+    assert live_lines[0] == "Automation lock acquisition failed."
+    assert not lock_path.exists()
+
+
 def test_automation_lock_lock_rechecks_legacy_state_during_migration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

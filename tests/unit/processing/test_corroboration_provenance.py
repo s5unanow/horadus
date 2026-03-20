@@ -112,6 +112,39 @@ def test_summarize_event_provenance_collapses_reposted_channel_content() -> None
     assert summary.near_duplicate_group_count == 1
 
 
+def test_summarize_event_provenance_keeps_distinct_telegram_channels_independent() -> None:
+    observations = [
+        _observation(
+            source_name="Channel A",
+            source_url="https://t.me/channel_a",
+            item_url="https://t.me/channel_a/111",
+            reporting_type="secondary",
+            title="Channel A reported artillery fire near the frontier overnight",
+            content_hash=None,
+        ),
+        _observation(
+            source_name="Channel B",
+            source_url="https://t.me/channel_b",
+            item_url="https://t.me/channel_b/222",
+            reporting_type="secondary",
+            title="Channel B reported checkpoint closures near the frontier overnight",
+            content_hash=None,
+        ),
+    ]
+
+    summary = summarize_event_provenance(
+        observations=observations,
+        raw_source_count=2,
+        unique_source_count=2,
+    )
+
+    assert summary.independent_evidence_count == 2
+    assert {group["key"] for group in summary.groups} == {
+        "family:t.me/channel_a",
+        "family:t.me/channel_b",
+    }
+
+
 def test_summarize_event_provenance_keeps_distinct_firsthand_sources_independent() -> None:
     observations = [
         _observation(
@@ -289,17 +322,29 @@ def test_provenance_helpers_cover_fallback_and_internal_normalization_paths() ->
     )
     assert long_title_summary.groups[0]["key"].startswith("family:long.example.test")
 
+
+def test_provenance_helper_normalization_paths() -> None:
     assert provenance_module.reporting_type_weight("aggregator") == pytest.approx(0.35)
     assert provenance_module.reporting_type_weight("other") == pytest.approx(0.5)
     assert provenance_module._maybe_str(7) == "7"
     assert (
         provenance_module._normalized_hostname("https://www.example.test/story") == "example.test"
     )
+    assert provenance_module._normalized_hostname("example.test") == "example.test"
+    assert provenance_module._normalized_hostname(None) is None
+    assert (
+        provenance_module._source_family_key_from_url("https://t.me/channel_name/123")
+        == "t.me/channel_name"
+    )
+    assert provenance_module._source_family_key_from_url("https://t.me") == "t.me"
     assert provenance_module._slug_text(None) is None
     assert provenance_module._slug_text("   !!!   ") is None
     assert provenance_module._normalized_text(None) == ""
     assert provenance_module._normalized_text(" Mixed   CASE ") == "mixed case"
     assert provenance_module._normalized_value(None) is None
+
+
+def test_provenance_helper_provider_and_reporting_paths() -> None:
     assert (
         provenance_module._syndication_provider(
             EventSourceProvenance(
@@ -384,22 +429,21 @@ async def test_refresh_event_provenance_persists_summary(mock_db_session) -> Non
 @pytest.mark.asyncio
 async def test_refresh_events_for_source_recomputes_linked_events(mock_db_session) -> None:
     first_event = Event(
-        id=uuid4(), canonical_summary="First", source_count=1, unique_source_count=1
+        id=uuid4(),
+        canonical_summary="First",
+        source_count=1,
+        unique_source_count=1,
+        lifecycle_status="emerging",
     )
     second_event = Event(
         id=uuid4(),
         canonical_summary="Second",
         source_count=2,
         unique_source_count=2,
+        lifecycle_status="emerging",
     )
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])
-    refresh_mock = AsyncMock(
-        return_value=fallback_event_provenance_summary(
-            raw_source_count=1,
-            unique_source_count=1,
-            reason="test",
-        )
-    )
+    refresh_mock = AsyncMock(side_effect=_fake_refresh_event_provenance)
 
     original_refresh = provenance_module.refresh_event_provenance
     provenance_module.refresh_event_provenance = refresh_mock
@@ -410,6 +454,9 @@ async def test_refresh_events_for_source_recomputes_linked_events(mock_db_sessio
 
     assert refreshed == 2
     assert refresh_mock.await_count == 2
+    assert first_event.epistemic_state == "confirmed"
+    assert first_event.lifecycle_status == "confirmed"
+    assert second_event.epistemic_state == "emerging"
 
 
 @pytest.mark.asyncio
@@ -417,3 +464,13 @@ async def test_refresh_events_for_source_returns_zero_when_source_is_missing() -
     refreshed = await refresh_events_for_source(session=AsyncMock(), source_id=None)
 
     assert refreshed == 0
+
+
+async def _fake_refresh_event_provenance(*, session, event):  # type: ignore[no-untyped-def]
+    del session
+    event.independent_evidence_count = 3 if event.canonical_summary == "First" else 1
+    return fallback_event_provenance_summary(
+        raw_source_count=event.source_count,
+        unique_source_count=event.unique_source_count,
+        reason="test",
+    )

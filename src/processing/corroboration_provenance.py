@@ -15,6 +15,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.models import Event, EventItem, RawItem, Source
 
 PROVENANCE_AWARE_MODE = "provenance_aware"
@@ -345,8 +346,10 @@ async def refresh_events_for_source(
         .distinct()
     )
     events = list((await session.scalars(query)).all())
+    lifecycle_manager = EventLifecycleManager(session)
     for event in events:
         await refresh_event_provenance(session=session, event=event)
+        lifecycle_manager.sync_event_state(event)
     return len(events)
 
 
@@ -354,9 +357,9 @@ def infer_source_family(observation: EventSourceProvenance) -> str | None:
     """Infer a bounded source-family key from URLs or the configured source name."""
 
     for candidate in (observation.item_url, observation.source_url):
-        hostname = _normalized_hostname(candidate)
-        if hostname is not None:
-            return hostname
+        family_key = _source_family_key_from_url(candidate)
+        if family_key is not None:
+            return family_key
     return _slug_text(observation.source_name)
 
 
@@ -436,6 +439,23 @@ def _normalized_hostname(value: str | None) -> str | None:
     hostname = parsed.hostname.lower() if parsed.hostname else ""
     if hostname.startswith("www."):
         hostname = hostname[4:]
+    return hostname or None
+
+
+def _source_family_key_from_url(value: str | None) -> str | None:
+    normalized = _maybe_str(value)
+    if normalized is None:
+        return None
+    parsed = urlparse(normalized if "://" in normalized else f"https://{normalized}")
+    hostname = parsed.hostname.lower() if parsed.hostname else ""
+    if hostname.startswith("www."):
+        hostname = hostname[4:]
+    if hostname in {"t.me", "telegram.me"}:
+        segments = [
+            segment.strip().lower() for segment in parsed.path.split("/") if segment.strip()
+        ]
+        if segments:
+            return f"{hostname}/{segments[0]}"
     return hostname or None
 
 

@@ -99,6 +99,21 @@ def test_on_event_mention_preserves_retracted_epistemic_state(mock_db_session) -
     assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
 
 
+def test_sync_event_state_promotes_without_touching_last_mention(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    event = _build_event(unique_source_count=1, lifecycle_status=EventLifecycle.EMERGING.value)
+    original_last_mention = event.last_mention_at
+    event.independent_evidence_count = 3
+
+    changed = manager.sync_event_state(event)
+
+    assert changed is True
+    assert event.last_mention_at == original_last_mention
+    assert event.epistemic_state == EventEpistemicState.CONFIRMED.value
+    assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
+    assert event.confirmed_at == original_last_mention
+
+
 @pytest.mark.asyncio
 async def test_run_decay_check_returns_transition_counts(mock_db_session) -> None:
     manager = EventLifecycleManager(mock_db_session)

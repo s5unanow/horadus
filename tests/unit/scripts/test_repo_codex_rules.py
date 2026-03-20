@@ -14,7 +14,27 @@ RULES_README = REPO_ROOT / "codex" / "README.md"
 def test_repo_owned_codex_rules_baseline_covers_autopilot_prefixes() -> None:
     rules = RULES_FILE.read_text(encoding="utf-8")
 
-    assert 'pattern = ["uv", "run", "--no-sync", "horadus"]' in rules
+    assert 'pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "preflight"]' in rules
+    assert 'pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "eligibility"]' in rules
+    assert 'pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "safe-start"]' in rules
+    assert 'pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "finish"]' in rules
+    assert '"automation-lock",' in rules
+    assert '"check",' in rules
+    assert '"lock",' in rules
+    assert '"unlock",' in rules
+    assert '"--automation-id",' in rules
+    assert '"horadus-sprint-autopilot"' in rules
+    assert "other-automation" in rules
+    assert "automation-lock lock --path /tmp/lock" in rules
+    assert (
+        'pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "automation-lock"]' not in rules
+    )
+    assert 'pattern = ["uv", "run", "--no-sync", "horadus"]' not in rules
+
+
+def test_repo_owned_codex_rules_baseline_covers_git_prefixes() -> None:
+    rules = RULES_FILE.read_text(encoding="utf-8")
+
     assert 'pattern = ["git", "status"]' in rules
     assert 'pattern = ["git", "rev-parse"]' in rules
     assert 'pattern = ["git", "fetch"]' in rules
@@ -27,6 +47,11 @@ def test_repo_owned_codex_rules_baseline_covers_autopilot_prefixes() -> None:
     assert 'pattern = ["git", "push", "origin"]' in rules
     assert 'pattern = ["git", "push", "-u", "origin"]' in rules
     assert 'pattern = ["git", "push", "--set-upstream", "origin"]' in rules
+
+
+def test_repo_owned_codex_rules_baseline_covers_gh_and_forbidden_prefixes() -> None:
+    rules = RULES_FILE.read_text(encoding="utf-8")
+
     assert 'pattern = ["gh", "pr"]' in rules
     assert 'pattern = ["gh", "repo"]' in rules
     assert 'pattern = ["gh", "api"]' in rules

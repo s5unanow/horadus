@@ -3,6 +3,11 @@ from __future__ import annotations
 import argparse
 from typing import Any
 
+from tools.horadus.python.horadus_cli.task_automation_lock import (
+    handle_automation_lock_check,
+    handle_automation_lock_lock,
+    handle_automation_lock_unlock,
+)
 from tools.horadus.python.horadus_cli.task_finish import handle_finish
 from tools.horadus.python.horadus_cli.task_friction import (
     handle_record_friction,
@@ -99,6 +104,67 @@ def _register_local_gate_parser(tasks_subparsers: Any) -> None:
         help="Run the full CI-parity local gate.",
     )
     local_gate_parser.set_defaults(handler=handle_local_gate)
+
+
+def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
+    automation_lock_parser = tasks_subparsers.add_parser(
+        "automation-lock",
+        help="Check, acquire, or release a repo-owned automation lock path.",
+    )
+    automation_lock_subparsers = automation_lock_parser.add_subparsers(
+        dest="automation_lock_command"
+    )
+
+    check_parser = automation_lock_subparsers.add_parser(
+        "check",
+        help="Inspect the current state of an automation lock path.",
+    )
+    add_leaf_cli_options(check_parser)
+    check_target_group = check_parser.add_mutually_exclusive_group(required=True)
+    check_target_group.add_argument("--path", help="Lock path to inspect.")
+    check_target_group.add_argument(
+        "--automation-id",
+        help="Automation id whose lock path should be resolved from CODEX_HOME.",
+    )
+    check_parser.set_defaults(handler=handle_automation_lock_check)
+
+    lock_parser = automation_lock_subparsers.add_parser(
+        "lock",
+        help="Acquire an automation lock path if it is currently available.",
+    )
+    add_leaf_cli_options(lock_parser)
+    lock_target_group = lock_parser.add_mutually_exclusive_group(required=True)
+    lock_target_group.add_argument("--path", help="Lock path to acquire.")
+    lock_target_group.add_argument(
+        "--automation-id",
+        help="Automation id whose lock path should be resolved from CODEX_HOME.",
+    )
+    lock_parser.add_argument(
+        "--owner-pid",
+        type=int,
+        required=True,
+        help="Owner PID used for stale-lock detection and safe release.",
+    )
+    lock_parser.set_defaults(handler=handle_automation_lock_lock)
+
+    unlock_parser = automation_lock_subparsers.add_parser(
+        "unlock",
+        help="Release an automation lock path.",
+    )
+    add_leaf_cli_options(unlock_parser)
+    unlock_target_group = unlock_parser.add_mutually_exclusive_group(required=True)
+    unlock_target_group.add_argument("--path", help="Lock path to release.")
+    unlock_target_group.add_argument(
+        "--automation-id",
+        help="Automation id whose lock path should be resolved from CODEX_HOME.",
+    )
+    unlock_parser.add_argument(
+        "--owner-pid",
+        type=int,
+        default=None,
+        help="Optional owner PID required to release a live automation lock safely.",
+    )
+    unlock_parser.set_defaults(handler=handle_automation_lock_unlock)
 
 
 def register_task_commands(subparsers: Any) -> None:
@@ -285,5 +351,6 @@ def register_task_commands(subparsers: Any) -> None:
     )
     lifecycle_parser.set_defaults(handler=handle_lifecycle)
 
+    _register_automation_lock_parser(tasks_subparsers)
     _register_local_review_parser(tasks_subparsers)
     _register_local_gate_parser(tasks_subparsers)

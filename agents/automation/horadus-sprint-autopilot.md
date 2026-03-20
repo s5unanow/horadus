@@ -10,12 +10,16 @@ The required Codex sandbox-escape baseline lives at
 policy, stop and report that the operator must install the repo-owned Codex
 rules baseline before the automation can proceed.
 
-1. Resolve `CODEX_HOME_RESOLVED="${CODEX_HOME:-$HOME/.codex}"`.
-2. Acquire exclusive ownership of the external lock at:
-   - `$CODEX_HOME_RESOLVED/automations/horadus-sprint-autopilot/lock`
-3. If the lock is already held, cannot be acquired cleanly, or appears stale or
-   broken, stop immediately and report a concise blocker instead of forcing
-   takeover.
+1. Let the helper resolve the external lock from `CODEX_HOME` (or `$HOME/.codex`)
+   for automation id `horadus-sprint-autopilot`.
+2. Acquire exclusive ownership of the external lock at
+   `$CODEX_HOME/automations/horadus-sprint-autopilot/lock` by running:
+   - `uv run --no-sync horadus tasks automation-lock lock --automation-id horadus-sprint-autopilot --owner-pid "$PPID"`
+3. If the lock is already held, cannot be acquired cleanly, or is broken, stop
+   immediately and report a concise blocker.
+   - Dead-owner stale metadata is reclaimed automatically by the helper during
+     `lock`, so only report stale state when `check` still shows it after a
+     failed acquire attempt.
 4. After the lock is acquired, confirm the repo is idle:
    - current branch is exactly `main`
    - working tree is clean
@@ -66,3 +70,4 @@ After selecting a fresh candidate task:
   blocker summary.
 - Do not begin a second task in the same run.
 - Release the external lock on exit.
+  - run `uv run --no-sync horadus tasks automation-lock unlock --automation-id horadus-sprint-autopilot --owner-pid "$PPID"`

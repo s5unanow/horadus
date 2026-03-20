@@ -159,6 +159,7 @@ def _legacy_handle_matches_current_path(lock_path: Path, legacy_handle: int) -> 
 def _load_lock_info(lock_path: Path) -> AutomationLockInfo:
     return _support_load_lock_info(
         lock_path,
+        current_hostname=socket.gethostname(),
         legacy_lock_active_fn=_legacy_flock_lock_active,
         owner_pid_running_fn=_owner_pid_running,
         owner_pid_started_at_fn=_owner_pid_started_at,

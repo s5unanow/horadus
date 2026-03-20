@@ -174,11 +174,23 @@ def owner_pid_started_at(
     os_name: str,
     run_ps: Callable[..., Any],
 ) -> str | None:
-    if owner_pid is None or owner_pid <= 0 or os_name == "nt":
+    if owner_pid is None or owner_pid <= 0:
         return None
+    command = ["ps", "-p", str(owner_pid), "-o", "lstart="]
+    if os_name == "nt":
+        command = [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            (
+                f"$p = Get-Process -Id {owner_pid} -ErrorAction SilentlyContinue; "
+                "if ($null -eq $p) { exit 1 } "
+                'else { $p.StartTime.ToUniversalTime().ToString("o") }'
+            ),
+        ]
     try:
         result = run_ps(
-            ["ps", "-p", str(owner_pid), "-o", "lstart="],
+            command,
             capture_output=True,
             check=False,
             text=True,
@@ -475,6 +487,7 @@ def _payload_metadata_state(
 def load_lock_info(
     lock_path: Path,
     *,
+    current_hostname: str,
     legacy_lock_active_fn: Callable[[Path], bool | None],
     owner_pid_running_fn: Callable[[int | None], bool | None],
     owner_pid_started_at_fn: Callable[[int | None], str | None],
@@ -529,6 +542,9 @@ def load_lock_info(
     )
     if owner_identity_error is not None:
         return owner_identity_error
+    if owner_pid is not None and hostname_value != current_hostname:
+        owner_pid_running_value = None
+        owner_pid_identity_matches = None
     status = "held"
     if owner_pid is not None and (
         owner_pid_running_value is False or owner_pid_identity_matches is False

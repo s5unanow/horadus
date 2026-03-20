@@ -95,6 +95,8 @@ def test_automation_lock_metadata_payload_and_legacy_file_edges(
     assert payload["username"] == "unknown"
     assert payload["owner_pid"] == 123
     assert payload["owner_started_at"] == "started-at"
+    assert automation_lock_impl._looks_like_legacy_flock_lock("\n") is True
+    assert automation_lock_impl._looks_like_legacy_flock_lock("not legacy") is False
 
     broken_dir = tmp_path / ".codex" / "automations" / "directory-lock"
     broken_dir.mkdir(parents=True)

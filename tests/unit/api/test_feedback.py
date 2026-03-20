@@ -14,15 +14,17 @@ from src.api.routes.feedback import (
     EventRestatementTarget,
     TaxonomyGapUpdateRequest,
     TrendOverrideRequest,
-    _claim_graph_contradiction_links,
-    _contradiction_risk,
-    _uncertainty_score,
     create_event_feedback,
     create_trend_override,
     list_feedback,
     list_review_queue,
     list_taxonomy_gaps,
     update_taxonomy_gap,
+)
+from src.api.routes.feedback_event_helpers import (
+    _claim_graph_contradiction_links,
+    _contradiction_risk,
+    _uncertainty_score,
 )
 from src.storage.models import (
     Event,
@@ -115,10 +117,15 @@ async def test_create_event_feedback_marks_noise_and_archives_event(mock_db_sess
         session=mock_db_session,
     )
 
+    assert event.epistemic_state == "retracted"
+    assert event.activity_state == "closed"
     assert event.lifecycle_status == "archived"
     assert result.action == "mark_noise"
     assert result.corrected_value is not None
+    assert result.corrected_value["epistemic_state"] == "retracted"
+    assert result.corrected_value["activity_state"] == "closed"
     assert result.corrected_value["lifecycle_status"] == "archived"
+    assert result.corrected_value["changed_axes"] == ["epistemic", "activity"]
 
 
 @pytest.mark.asyncio
@@ -192,6 +199,7 @@ async def test_create_event_feedback_invalidates_evidence_and_reverts_trends(
     )
 
     assert float(trend.current_log_odds) == pytest.approx(-1.3)
+    assert event.epistemic_state == "retracted"
     assert evidence_one.is_invalidated is True
     assert evidence_two.is_invalidated is True
     assert evidence_one.invalidated_at is not None
@@ -201,6 +209,8 @@ async def test_create_event_feedback_invalidates_evidence_and_reverts_trends(
     assert result.original_value is not None
     assert result.original_value["evidence_count"] == 2
     assert result.corrected_value is not None
+    assert result.corrected_value["epistemic_state"] == "retracted"
+    assert result.corrected_value["changed_axes"] == ["epistemic"]
     assert result.corrected_value["invalidated_evidence_count"] == 2
 
 
@@ -702,6 +712,8 @@ async def test_list_review_queue_orders_by_ranking_score(mock_db_session) -> Non
 
     assert len(result) == 2
     assert result[0].event_id == high_event.id
+    assert result[0].epistemic_state == "contested"
+    assert result[0].activity_state == "active"
     assert result[0].ranking_score > result[1].ranking_score
 
 

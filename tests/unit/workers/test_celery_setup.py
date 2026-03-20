@@ -12,10 +12,10 @@ from celery.schedules import crontab
 
 import src.workers.tasks as tasks_module
 from src.core.source_freshness import SourceFreshnessReport, SourceFreshnessRow
-from src.storage.models import EventLifecycle, ProcessingStatus, RawItem
+from src.storage.event_state import EventActivityState
+from src.storage.models import ProcessingStatus, RawItem
 
 celery_app_module = importlib.import_module("src.workers.celery_app")
-
 pytestmark = pytest.mark.unit
 
 
@@ -907,19 +907,19 @@ def test_raw_item_archived_event_retention_eligibility() -> None:
 
     assert tasks_module._is_raw_item_archived_event_retention_eligible(
         fetched_at=now - timedelta(days=91),
-        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_activity_state=EventActivityState.CLOSED.value,
         event_last_mention_at=now - timedelta(days=91),
         cutoffs=cutoffs,
     )
     assert not tasks_module._is_raw_item_archived_event_retention_eligible(
         fetched_at=now - timedelta(days=91),
-        event_lifecycle_status=EventLifecycle.CONFIRMED.value,
+        event_activity_state=EventActivityState.ACTIVE.value,
         event_last_mention_at=now - timedelta(days=91),
         cutoffs=cutoffs,
     )
     assert not tasks_module._is_raw_item_archived_event_retention_eligible(
         fetched_at=now - timedelta(days=10),
-        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_activity_state=EventActivityState.CLOSED.value,
         event_last_mention_at=now - timedelta(days=91),
         cutoffs=cutoffs,
     )
@@ -939,24 +939,24 @@ def test_trend_evidence_and_event_retention_eligibility() -> None:
 
     assert tasks_module._is_trend_evidence_retention_eligible(
         created_at=now - timedelta(days=366),
-        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_activity_state=EventActivityState.CLOSED.value,
         event_last_mention_at=now - timedelta(days=200),
         cutoffs=cutoffs,
     )
     assert not tasks_module._is_trend_evidence_retention_eligible(
         created_at=now - timedelta(days=20),
-        event_lifecycle_status=EventLifecycle.ARCHIVED.value,
+        event_activity_state=EventActivityState.CLOSED.value,
         event_last_mention_at=now - timedelta(days=200),
         cutoffs=cutoffs,
     )
     assert tasks_module._is_archived_event_retention_eligible(
-        lifecycle_status=EventLifecycle.ARCHIVED.value,
+        activity_state=EventActivityState.CLOSED.value,
         last_mention_at=now - timedelta(days=200),
         has_remaining_evidence=False,
         cutoffs=cutoffs,
     )
     assert not tasks_module._is_archived_event_retention_eligible(
-        lifecycle_status=EventLifecycle.ARCHIVED.value,
+        activity_state=EventActivityState.CLOSED.value,
         last_mention_at=now - timedelta(days=200),
         has_remaining_evidence=True,
         cutoffs=cutoffs,

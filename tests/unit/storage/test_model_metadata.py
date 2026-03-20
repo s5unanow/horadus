@@ -121,6 +121,11 @@ def test_dimension_check_constraints_present_in_model_metadata() -> None:
     assert "check_sources_source_tier_allowed" in source_constraint_names
     assert "check_sources_reporting_type_allowed" in source_constraint_names
     assert "check_events_lifecycle_status_allowed" in event_constraint_names
+    assert "check_events_epistemic_state_allowed" in event_constraint_names
+    assert "check_events_activity_state_allowed" in event_constraint_names
+    assert "epistemic_state" in Event.__table__.c
+    assert "activity_state" in Event.__table__.c
+    assert "idx_events_activity" in {index.name for index in Event.__table__.indexes}
 
 
 def test_trend_evidence_factorization_columns_present_in_model_metadata() -> None:

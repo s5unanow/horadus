@@ -30,6 +30,12 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
+from src.storage.event_state import (
+    EVENT_ACTIVITY_STATE_SQL_VALUES,
+    EVENT_EPISTEMIC_STATE_SQL_VALUES,
+    EventActivityState,
+    EventEpistemicState,
+)
 
 
 class SourceType(enum.StrEnum):
@@ -347,6 +353,16 @@ class Event(Base):
         default=EventLifecycle.EMERGING.value,
         nullable=False,
     )
+    epistemic_state: Mapped[str] = mapped_column(
+        String(20),
+        default=EventEpistemicState.EMERGING.value,
+        nullable=False,
+    )
+    activity_state: Mapped[str] = mapped_column(
+        String(20),
+        default=EventActivityState.ACTIVE.value,
+        nullable=False,
+    )
 
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -398,9 +414,18 @@ class Event(Base):
             f"lifecycle_status IN ({EVENT_LIFECYCLE_SQL_VALUES})",
             name="check_events_lifecycle_status_allowed",
         ),
+        CheckConstraint(
+            f"epistemic_state IN ({EVENT_EPISTEMIC_STATE_SQL_VALUES})",
+            name="check_events_epistemic_state_allowed",
+        ),
+        CheckConstraint(
+            f"activity_state IN ({EVENT_ACTIVITY_STATE_SQL_VALUES})",
+            name="check_events_activity_state_allowed",
+        ),
         Index("idx_events_first_seen", "first_seen_at"),
         Index("idx_events_categories", "categories", postgresql_using="gin"),
         Index("idx_events_lifecycle", "lifecycle_status", "last_mention_at"),
+        Index("idx_events_activity", "activity_state", "last_mention_at"),
         # Keep model metadata aligned with migration-managed pgvector index.
         Index(
             "idx_events_embedding",

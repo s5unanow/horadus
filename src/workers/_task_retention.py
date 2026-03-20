@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from src.storage.event_state import EventActivityState
+
 
 @dataclass(frozen=True, slots=True)
 class RetentionCutoffs:
@@ -50,15 +52,14 @@ def is_raw_item_noise_retention_eligible(
 def is_raw_item_archived_event_retention_eligible(
     *,
     fetched_at: datetime,
-    event_lifecycle_status: str,
+    event_activity_state: str,
     event_last_mention_at: datetime | None,
     cutoffs: RetentionCutoffs,
-    archived_status: str,
 ) -> bool:
     if event_last_mention_at is None:
         return False
     return (
-        event_lifecycle_status == archived_status
+        event_activity_state == EventActivityState.CLOSED.value
         and event_last_mention_at <= cutoffs.raw_item_archived_event_before
         and fetched_at <= cutoffs.raw_item_archived_event_before
     )
@@ -67,15 +68,14 @@ def is_raw_item_archived_event_retention_eligible(
 def is_trend_evidence_retention_eligible(
     *,
     created_at: datetime,
-    event_lifecycle_status: str,
+    event_activity_state: str,
     event_last_mention_at: datetime | None,
     cutoffs: RetentionCutoffs,
-    archived_status: str,
 ) -> bool:
     if event_last_mention_at is None:
         return False
     return (
-        event_lifecycle_status == archived_status
+        event_activity_state == EventActivityState.CLOSED.value
         and event_last_mention_at <= cutoffs.archived_event_before
         and created_at <= cutoffs.trend_evidence_before
     )
@@ -83,14 +83,13 @@ def is_trend_evidence_retention_eligible(
 
 def is_archived_event_retention_eligible(
     *,
-    lifecycle_status: str,
+    activity_state: str,
     last_mention_at: datetime,
     has_remaining_evidence: bool,
     cutoffs: RetentionCutoffs,
-    archived_status: str,
 ) -> bool:
     return (
-        lifecycle_status == archived_status
+        activity_state == EventActivityState.CLOSED.value
         and last_mention_at <= cutoffs.archived_event_before
         and not has_remaining_evidence
     )
@@ -132,7 +131,7 @@ async def select_archived_event_raw_item_ids(
                     deps.select(deps.RawItem.id)
                     .join(deps.EventItem, deps.EventItem.item_id == deps.RawItem.id)
                     .join(deps.Event, deps.Event.id == deps.EventItem.event_id)
-                    .where(deps.Event.lifecycle_status == deps.EventLifecycle.ARCHIVED.value)
+                    .where(deps.Event.activity_state == EventActivityState.CLOSED.value)
                     .where(deps.Event.last_mention_at <= cutoff)
                     .where(deps.RawItem.fetched_at <= cutoff)
                     .order_by(deps.RawItem.fetched_at.asc())
@@ -156,7 +155,7 @@ async def select_trend_evidence_ids(
                     deps.select(deps.TrendEvidence.id)
                     .join(deps.Event, deps.Event.id == deps.TrendEvidence.event_id)
                     .where(deps.TrendEvidence.created_at <= evidence_cutoff)
-                    .where(deps.Event.lifecycle_status == deps.EventLifecycle.ARCHIVED.value)
+                    .where(deps.Event.activity_state == EventActivityState.CLOSED.value)
                     .where(deps.Event.last_mention_at <= archived_event_cutoff)
                     .order_by(deps.TrendEvidence.created_at.asc())
                     .limit(max(1, batch_size))
@@ -217,7 +216,7 @@ async def run_data_retention_cleanup_async(
             (
                 await session.scalars(
                     deps.select(deps.Event.id)
-                    .where(deps.Event.lifecycle_status == deps.EventLifecycle.ARCHIVED.value)
+                    .where(deps.Event.activity_state == EventActivityState.CLOSED.value)
                     .where(deps.Event.last_mention_at <= cutoffs.archived_event_before)
                     .where(~has_evidence)
                     .order_by(deps.Event.last_mention_at.asc())

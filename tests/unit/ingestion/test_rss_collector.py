@@ -817,7 +817,7 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
     existing = SimpleNamespace(
         id=uuid4(),
         name="Feed",
-        credibility_score=0.1,
+        credibility_score=feed.credibility,
         source_tier="tier1",
         reporting_type="primary",
         config={},
@@ -829,6 +829,39 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
 
     assert updated is existing
     refresh_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_refreshes_provenance_when_credibility_changes(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
+    feed = FeedConfig(
+        name="Feed",
+        url="https://example.com/rss",
+        credibility=0.9,
+        source_tier="tier1",
+        reporting_type="primary",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.rss_collector.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Feed",
+        credibility_score=0.1,
+        source_tier="tier1",
+        reporting_type="primary",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar.return_value = existing
+
+    await collector._get_or_create_source(feed)
+
+    assert existing.credibility_score == pytest.approx(0.9)
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 
 @pytest.mark.asyncio

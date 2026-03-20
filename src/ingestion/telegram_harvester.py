@@ -400,6 +400,7 @@ class TelegramHarvester:
 
         url_changed = source.url != channel_url
         name_changed = source.name != channel.name
+        credibility_changed = source.credibility_score != channel.credibility
         source_tier_changed = source.source_tier != channel.source_tier
         reporting_type_changed = source.reporting_type != channel.reporting_type
         source.name = channel.name
@@ -410,7 +411,11 @@ class TelegramHarvester:
         source.config = config_payload
         source.is_active = channel.enabled
         if (
-            url_changed or name_changed or source_tier_changed or reporting_type_changed
+            url_changed
+            or name_changed
+            or credibility_changed
+            or source_tier_changed
+            or reporting_type_changed
         ) and source.id is not None:
             await self.session.flush()
             await refresh_events_for_source(session=self.session, source_id=source.id)

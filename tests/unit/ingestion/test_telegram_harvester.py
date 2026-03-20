@@ -741,7 +741,7 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
         id=uuid4(),
         name="Intel Feed",
         url="https://t.me/intel_feed",
-        credibility_score=0.1,
+        credibility_score=channel.credibility,
         source_tier="tier1",
         reporting_type="primary",
         config={},
@@ -753,6 +753,42 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
 
     assert updated is existing
     refresh_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_refreshes_provenance_when_credibility_changes(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harvester = TelegramHarvester(
+        session=mock_db_session,
+        client=FakeTelegramClient(),
+    )
+    channel = ChannelConfig(
+        name="Intel Feed",
+        channel="@intel_feed",
+        credibility=0.9,
+        source_tier="tier1",
+        reporting_type="primary",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Intel Feed",
+        url="https://t.me/intel_feed",
+        credibility_score=0.1,
+        source_tier="tier1",
+        reporting_type="primary",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar.return_value = existing
+
+    await harvester._get_or_create_source(channel)
+
+    assert existing.credibility_score == pytest.approx(0.9)
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 
 @pytest.mark.asyncio

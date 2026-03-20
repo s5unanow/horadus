@@ -209,14 +209,33 @@ async def test_update_source_skips_provenance_refresh_for_non_metadata_changes(
 
     result = await update_source(
         source_id=source.id,
-        source=SourceUpdate(credibility_score=0.4, is_active=False),
+        source=SourceUpdate(is_active=False),
+        session=mock_db_session,
+    )
+
+    assert source.is_active is False
+    assert result.name == "Stable Name"
+    refresh_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_source_refreshes_provenance_for_credibility_only_changes(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = _build_source(name="Stable Name")
+    mock_db_session.get.return_value = source
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr(sources_route, "refresh_events_for_source", refresh_mock)
+
+    await update_source(
+        source_id=source.id,
+        source=SourceUpdate(credibility_score=0.4),
         session=mock_db_session,
     )
 
     assert float(source.credibility_score) == pytest.approx(0.4)
-    assert source.is_active is False
-    assert result.name == "Stable Name"
-    refresh_mock.assert_not_awaited()
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=source.id)
 
 
 @pytest.mark.asyncio

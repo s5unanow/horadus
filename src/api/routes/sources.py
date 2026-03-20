@@ -318,7 +318,8 @@ async def update_source(
         updates["reporting_type"] = updates["reporting_type"].value
 
     needs_provenance_refresh = any(
-        field_name in {"name", "url", "source_tier", "reporting_type"} for field_name in updates
+        field_name in {"name", "url", "source_tier", "reporting_type", "credibility_score"}
+        for field_name in updates
     )
     for field_name, field_value in updates.items():
         setattr(source_record, field_name, field_value)

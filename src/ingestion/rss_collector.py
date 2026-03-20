@@ -378,6 +378,7 @@ class RSSCollector:
             return source
 
         name_changed = source.name != feed.name
+        credibility_changed = source.credibility_score != feed.credibility
         source_tier_changed = source.source_tier != feed.source_tier
         reporting_type_changed = source.reporting_type != feed.reporting_type
         source.name = feed.name
@@ -393,7 +394,7 @@ class RSSCollector:
         }
         source.is_active = feed.enabled
         if (
-            name_changed or source_tier_changed or reporting_type_changed
+            name_changed or credibility_changed or source_tier_changed or reporting_type_changed
         ) and source.id is not None:
             await self.session.flush()
             await refresh_events_for_source(session=self.session, source_id=source.id)

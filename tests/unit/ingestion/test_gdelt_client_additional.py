@@ -249,7 +249,7 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
         id=uuid4(),
         name="Query",
         url=client.api_url,
-        credibility_score=0.1,
+        credibility_score=query.credibility,
         source_tier="official",
         reporting_type="firsthand",
         config={},
@@ -261,6 +261,40 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
 
     assert updated is existing
     refresh_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_refreshes_provenance_when_credibility_changes(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    query = GDELTQueryConfig(
+        name="Query",
+        query="ukraine",
+        credibility=0.9,
+        source_tier="official",
+        reporting_type="firsthand",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Query",
+        url=client.api_url,
+        credibility_score=0.1,
+        source_tier="official",
+        reporting_type="firsthand",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+
+    await client._get_or_create_source(query)
+
+    assert existing.credibility_score == pytest.approx(0.9)
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 
 def test_gdelt_helper_functions_cover_parsing_and_filters() -> None:

@@ -15,7 +15,7 @@ from src.processing.corroboration_provenance import (
     refresh_events_for_source,
     summarize_event_provenance,
 )
-from src.storage.models import Event
+from src.storage.models import Event, RawItem
 
 pytestmark = pytest.mark.unit
 
@@ -444,21 +444,47 @@ async def test_refresh_events_for_source_recomputes_linked_events(mock_db_sessio
     )
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])
     refresh_mock = AsyncMock(side_effect=_fake_refresh_event_provenance)
+    refresh_primary_mock = AsyncMock()
     refresh_trends_mock = AsyncMock(return_value=(1, 1))
+    call_order: list[tuple[str, str]] = []
+
+    async def wrapped_refresh_event_provenance(*, session, event):  # type: ignore[no-untyped-def]
+        call_order.append(("provenance", event.canonical_summary))
+        return await refresh_mock(session=session, event=event)
+
+    async def wrapped_refresh_primary(*, session, event):  # type: ignore[no-untyped-def]
+        call_order.append(("primary", event.canonical_summary))
+        await refresh_primary_mock(session=session, event=event)
+
+    async def wrapped_refresh_trends(*, session, event):  # type: ignore[no-untyped-def]
+        call_order.append(("trends", event.canonical_summary))
+        return await refresh_trends_mock(session=session, event=event)
 
     original_refresh = provenance_module.refresh_event_provenance
+    original_refresh_primary = provenance_module._refresh_event_primary_item
     original_refresh_trends = provenance_module._refresh_event_trend_impacts
-    provenance_module.refresh_event_provenance = refresh_mock
-    provenance_module._refresh_event_trend_impacts = refresh_trends_mock
+    provenance_module.refresh_event_provenance = wrapped_refresh_event_provenance
+    provenance_module._refresh_event_primary_item = wrapped_refresh_primary
+    provenance_module._refresh_event_trend_impacts = wrapped_refresh_trends
     try:
         refreshed = await refresh_events_for_source(session=mock_db_session, source_id=uuid4())
     finally:
         provenance_module.refresh_event_provenance = original_refresh
+        provenance_module._refresh_event_primary_item = original_refresh_primary
         provenance_module._refresh_event_trend_impacts = original_refresh_trends
 
     assert refreshed == 2
     assert refresh_mock.await_count == 2
+    assert refresh_primary_mock.await_count == 2
     assert refresh_trends_mock.await_count == 2
+    assert call_order == [
+        ("provenance", "First"),
+        ("primary", "First"),
+        ("trends", "First"),
+        ("provenance", "Second"),
+        ("primary", "Second"),
+        ("trends", "Second"),
+    ]
     assert first_event.epistemic_state == "confirmed"
     assert first_event.lifecycle_status == "confirmed"
     assert second_event.epistemic_state == "emerging"
@@ -469,6 +495,78 @@ async def test_refresh_events_for_source_returns_zero_when_source_is_missing() -
     refreshed = await refresh_events_for_source(session=AsyncMock(), source_id=None)
 
     assert refreshed == 0
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_primary_item_reselects_most_credible_item(mock_db_session) -> None:
+    current_primary_id = uuid4()
+    primary_item = RawItem(
+        id=uuid4(),
+        title=" Fresh canonical summary ",
+        raw_content="ignored",
+    )
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Old summary",
+        primary_item_id=current_primary_id,
+        source_count=2,
+        unique_source_count=2,
+    )
+    mock_db_session.scalar.return_value = primary_item
+
+    await provenance_module._refresh_event_primary_item(
+        session=mock_db_session,
+        event=event,
+    )
+
+    assert event.primary_item_id == primary_item.id
+    assert event.canonical_summary == "Fresh canonical summary"
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_primary_item_skips_events_without_ids(mock_db_session) -> None:
+    event = Event(
+        canonical_summary="Old summary",
+        source_count=1,
+        unique_source_count=1,
+    )
+
+    await provenance_module._refresh_event_primary_item(
+        session=mock_db_session,
+        event=event,
+    )
+
+    mock_db_session.scalar.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_primary_item_skips_missing_query_results(mock_db_session) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Old summary",
+        primary_item_id=uuid4(),
+        source_count=1,
+        unique_source_count=1,
+    )
+    mock_db_session.scalar.return_value = SimpleNamespace(id=None)
+
+    await provenance_module._refresh_event_primary_item(
+        session=mock_db_session,
+        event=event,
+    )
+
+    assert event.canonical_summary == "Old summary"
+
+
+def test_build_canonical_summary_falls_back_to_trimmed_raw_content() -> None:
+    item = RawItem(
+        title="   ",
+        raw_content=f"  {'x' * 450}  ",
+    )
+
+    summary = provenance_module._build_canonical_summary(item)
+
+    assert summary == "x" * 400
 
 
 @pytest.mark.asyncio

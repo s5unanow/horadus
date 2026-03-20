@@ -357,9 +357,43 @@ async def refresh_events_for_source(
     lifecycle_manager = EventLifecycleManager(session)
     for event in events:
         await refresh_event_provenance(session=session, event=event)
+        await _refresh_event_primary_item(session=session, event=event)
         lifecycle_manager.sync_event_state(event)
         await _refresh_event_trend_impacts(session=session, event=event)
     return len(events)
+
+
+async def _refresh_event_primary_item(
+    *,
+    session: AsyncSession,
+    event: Event,
+) -> None:
+    if event.id is None:
+        return
+    effective_credibility = func.coalesce(
+        Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY
+    ) * source_multiplier_expression(
+        source_tier_col=Source.source_tier,
+        reporting_type_col=Source.reporting_type,
+    )
+    freshness = func.coalesce(RawItem.published_at, RawItem.fetched_at)
+    query = (
+        select(RawItem)
+        .join(EventItem, EventItem.item_id == RawItem.id)
+        .join(Source, Source.id == RawItem.source_id)
+        .where(EventItem.event_id == event.id)
+        .order_by(
+            effective_credibility.desc(),
+            freshness.desc(),
+            RawItem.id.asc(),
+        )
+        .limit(1)
+    )
+    primary_item = await session.scalar(query)
+    if primary_item is None or primary_item.id is None:
+        return
+    event.primary_item_id = primary_item.id
+    event.canonical_summary = _build_canonical_summary(primary_item)
 
 
 async def _refresh_event_trend_impacts(
@@ -474,6 +508,13 @@ def _contradiction_penalty(event: Event) -> float:
     if event.has_contradictions:
         return 0.7
     return 1.0
+
+
+def _build_canonical_summary(item: RawItem) -> str:
+    if item.title and item.title.strip():
+        return item.title.strip()
+    content = item.raw_content.strip()
+    return content[:400] if len(content) > 400 else content
 
 
 def infer_source_family(observation: EventSourceProvenance) -> str | None:

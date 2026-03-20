@@ -360,6 +360,7 @@ class GDELTClient:
             return source
         url_changed = source.url != self.api_url
         name_changed = source.name != query.name
+        credibility_changed = source.credibility_score != query.credibility
         source_tier_changed = source.source_tier != query.source_tier
         reporting_type_changed = source.reporting_type != query.reporting_type
         source.name = query.name
@@ -370,7 +371,11 @@ class GDELTClient:
         source.config = config_payload
         source.is_active = query.enabled
         if (
-            url_changed or name_changed or source_tier_changed or reporting_type_changed
+            url_changed
+            or name_changed
+            or credibility_changed
+            or source_tier_changed
+            or reporting_type_changed
         ) and source.id is not None:
             await self.session.flush()
             await refresh_events_for_source(session=self.session, source_id=source.id)

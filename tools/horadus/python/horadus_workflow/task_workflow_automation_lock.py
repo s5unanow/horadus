@@ -48,6 +48,31 @@ def _metadata_path(lock_path: Path) -> Path:
     return lock_path / _LOCK_METADATA_NAME
 
 
+def _codex_home_path() -> Path:
+    codex_home = os.environ.get("CODEX_HOME")
+    if codex_home:
+        return Path(codex_home).expanduser().resolve(strict=False)
+    return (Path.home() / ".codex").resolve(strict=False)
+
+
+def _validate_lock_path(lock_path: Path) -> str | None:
+    codex_home_path = _codex_home_path()
+    try:
+        relative_path = lock_path.relative_to(codex_home_path)
+    except ValueError:
+        return (
+            "Automation lock path must stay under "
+            f"{codex_home_path / 'automations' / '<automation-id>' / 'lock'}."
+        )
+    parts = relative_path.parts
+    if len(parts) != 3 or parts[0] != "automations" or parts[2] != "lock" or not parts[1]:
+        return (
+            "Automation lock path must use the "
+            f"{codex_home_path / 'automations' / '<automation-id>' / 'lock'} contract."
+        )
+    return None
+
+
 def _lock_metadata_payload(lock_path: Path, *, owner_pid: int | None) -> dict[str, object]:
     try:
         username = getpass.getuser()
@@ -90,8 +115,7 @@ def _owner_pid_running(owner_pid: int | None) -> bool | None:
 
 
 def _looks_like_legacy_flock_lock(raw_content: str) -> bool:
-    stripped = raw_content.lstrip()
-    return stripped == "" or stripped[0] not in "[{"
+    return raw_content.strip() == ""
 
 
 def _legacy_flock_lock_active(lock_path: Path) -> bool | None:
@@ -445,6 +469,18 @@ def automation_lock_check_data(
     path_value: str, *, dry_run: bool
 ) -> tuple[int, dict[str, object], list[str]]:
     lock_path = _normalize_lock_path(path_value)
+    path_error = _validate_lock_path(lock_path)
+    if path_error is not None:
+        info = AutomationLockInfo(
+            path=str(lock_path),
+            status="broken",
+            exists=lock_path.exists(),
+            error=path_error,
+        )
+        lines = _check_lines(info)
+        if dry_run:
+            lines.append("Dry run: inspected the current lock state without changing it.")
+        return (ExitCode.VALIDATION_ERROR, asdict(info) | {"dry_run": dry_run}, lines)
     info = _load_lock_info(lock_path)
     lines = _check_lines(info)
     if dry_run:
@@ -457,6 +493,15 @@ def automation_lock_lock_data(
     path_value: str, *, owner_pid: int | None, dry_run: bool
 ) -> tuple[int, dict[str, object], list[str]]:
     lock_path = _normalize_lock_path(path_value)
+    path_error = _validate_lock_path(lock_path)
+    if path_error is not None:
+        info = AutomationLockInfo(
+            path=str(lock_path),
+            status="broken",
+            exists=lock_path.exists(),
+            error=path_error,
+        )
+        return _lock_validation_error(info, dry_run=dry_run)
     info = _load_lock_info(lock_path)
     if dry_run:
         if info.status == "legacy" and info.legacy_lock_active is False:
@@ -521,6 +566,31 @@ def automation_lock_unlock_data(
     path_value: str, *, owner_pid: int | None, dry_run: bool
 ) -> tuple[int, dict[str, object], list[str]]:
     lock_path = _normalize_lock_path(path_value)
+    path_error = _validate_lock_path(lock_path)
+    if path_error is not None:
+        info = AutomationLockInfo(
+            path=str(lock_path),
+            status="broken",
+            exists=lock_path.exists(),
+            error=path_error,
+        )
+        if dry_run:
+            return (
+                ExitCode.VALIDATION_ERROR,
+                asdict(info) | {"dry_run": True},
+                [
+                    *_check_lines(info),
+                    f"Dry run: would release the automation lock at {info.path}.",
+                ],
+            )
+        return (
+            ExitCode.VALIDATION_ERROR,
+            asdict(info) | {"dry_run": False},
+            [
+                "Automation lock release failed.",
+                *_check_lines(info),
+            ],
+        )
     info = _load_lock_info(lock_path)
 
     if dry_run:

@@ -12,13 +12,22 @@ import tools.horadus.python.horadus_workflow.task_workflow_automation_lock as au
 pytestmark = pytest.mark.unit
 
 
+def _automation_lock_path(tmp_path: Path, automation_id: str = "test-automation") -> Path:
+    return tmp_path / ".codex" / "automations" / automation_id / "lock"
+
+
+@pytest.fixture(autouse=True)
+def _set_test_codex_home(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    monkeypatch.setenv("CODEX_HOME", str(tmp_path / ".codex"))
+
+
 def _write_lock_file(path: Path, payload: dict[str, object]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload), encoding="utf-8")
 
 
 def test_automation_lock_check_reports_available_path(tmp_path: Path) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
 
     exit_code, data, lines = automation_lock_module.automation_lock_check_data(
         str(lock_path), dry_run=True
@@ -35,7 +44,7 @@ def test_automation_lock_check_reports_available_path(tmp_path: Path) -> None:
 
 
 def test_automation_lock_lock_and_unlock_round_trip(tmp_path: Path) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
 
     lock_exit_code, lock_data, lock_lines = automation_lock_module.automation_lock_lock_data(
         str(lock_path), owner_pid=os.getpid(), dry_run=False
@@ -62,10 +71,10 @@ def test_automation_lock_lock_and_unlock_round_trip(tmp_path: Path) -> None:
     assert unlock_lines == [f"Automation lock file removed: {lock_path}"]
 
 
-def test_automation_lock_check_and_helpers_cover_broken_payload_edges(
+def test_automation_lock_metadata_payload_and_legacy_file_edges(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
 
     monkeypatch.setattr(
         automation_lock_impl.getpass,
@@ -76,19 +85,29 @@ def test_automation_lock_check_and_helpers_cover_broken_payload_edges(
     assert payload["username"] == "unknown"
     assert payload["owner_pid"] == 123
 
-    broken_dir = tmp_path / "directory-lock"
-    broken_dir.mkdir()
+    broken_dir = tmp_path / ".codex" / "automations" / "directory-lock"
+    broken_dir.mkdir(parents=True)
     directory_info = automation_lock_module._load_lock_info(broken_dir)
     assert directory_info.status == "broken"
     assert directory_info.error == "lock path exists but is not a regular file"
 
     monkeypatch.setattr(automation_lock_impl, "_legacy_flock_lock_active", lambda _path: False)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path.write_text("legacy flock", encoding="utf-8")
+    lock_path.write_text("", encoding="utf-8")
     legacy_info = automation_lock_module._load_lock_info(lock_path)
     assert legacy_info.status == "legacy"
     assert legacy_info.legacy_lock_active is False
     assert legacy_info.error == "legacy flock lock file"
+
+    lock_path.write_text("legacy flock", encoding="utf-8")
+    arbitrary_text_info = automation_lock_module._load_lock_info(lock_path)
+    assert arbitrary_text_info.status == "broken"
+    assert "invalid metadata.json" in (arbitrary_text_info.error or "")
+
+
+def test_automation_lock_reports_invalid_payload_shapes(tmp_path: Path) -> None:
+    lock_path = _automation_lock_path(tmp_path)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
 
     lock_path.write_text("{bad-json}", encoding="utf-8")
     invalid_json_info = automation_lock_module._load_lock_info(lock_path)
@@ -104,6 +123,12 @@ def test_automation_lock_check_and_helpers_cover_broken_payload_edges(
     bad_owner_info = automation_lock_module._load_lock_info(lock_path)
     assert bad_owner_info.status == "broken"
     assert bad_owner_info.error == "invalid metadata.json: expected integer owner_pid"
+
+
+def test_automation_lock_helper_error_lines_cover_broken_and_environment_cases(
+    tmp_path: Path,
+) -> None:
+    lock_path = _automation_lock_path(tmp_path)
 
     lines = automation_lock_module._check_lines(
         automation_lock_module.AutomationLockInfo(
@@ -293,7 +318,7 @@ def test_automation_lock_helper_edges_cover_legacy_flock_probe_branches(
 
 
 def test_automation_lock_check_reports_stale_owner_pid(tmp_path: Path) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
     _write_lock_file(
         lock_path,
         {
@@ -317,8 +342,49 @@ def test_automation_lock_check_reports_stale_owner_pid(tmp_path: Path) -> None:
     assert "- owner_pid_running: no" in lines
 
 
+def test_automation_lock_rejects_paths_outside_codex_home_contract(tmp_path: Path) -> None:
+    invalid_path = tmp_path / "outside-lock"
+
+    check_exit_code, check_data, check_lines = automation_lock_module.automation_lock_check_data(
+        str(invalid_path), dry_run=False
+    )
+    assert check_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert check_data["status"] == "broken"
+    assert "must stay under" in (check_data["error"] or "")
+    assert check_lines[0] == "Automation lock status: broken"
+
+    lock_exit_code, lock_data, lock_lines = automation_lock_module.automation_lock_lock_data(
+        str(invalid_path), owner_pid=None, dry_run=False
+    )
+    assert lock_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert lock_data["status"] == "broken"
+    assert lock_lines[0] == "Automation lock acquisition failed."
+
+    unlock_exit_code, unlock_data, unlock_lines = (
+        automation_lock_module.automation_lock_unlock_data(
+            str(invalid_path), owner_pid=None, dry_run=False
+        )
+    )
+    assert unlock_exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert unlock_data["status"] == "broken"
+    assert unlock_lines[0] == "Automation lock release failed."
+
+
+def test_automation_lock_rejects_non_lock_leaf_under_automations(tmp_path: Path) -> None:
+    invalid_path = tmp_path / ".codex" / "automations" / "test-automation" / "metadata.json"
+
+    exit_code, data, lines = automation_lock_module.automation_lock_check_data(
+        str(invalid_path), dry_run=True
+    )
+
+    assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
+    assert data["status"] == "broken"
+    assert "must use the" in (data["error"] or "")
+    assert lines[-1] == "Dry run: inspected the current lock state without changing it."
+
+
 def test_automation_lock_lock_dry_run_and_live_held_paths(tmp_path: Path) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
 
     dry_run_exit_code, dry_run_data, dry_run_lines = (
         automation_lock_module.automation_lock_lock_data(
@@ -351,7 +417,7 @@ def test_automation_lock_lock_dry_run_and_live_held_paths(tmp_path: Path) -> Non
 
 
 def test_automation_lock_lock_surfaces_stale_file_without_reclaiming(tmp_path: Path) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
     _write_lock_file(
         lock_path,
         {
@@ -386,7 +452,7 @@ def test_automation_lock_lock_surfaces_stale_file_without_reclaiming(tmp_path: P
 def test_automation_lock_lock_migrates_inactive_legacy_flock_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(automation_lock_impl, "_legacy_flock_lock_active", lambda _path: False)
@@ -414,7 +480,7 @@ def test_automation_lock_lock_migrates_inactive_legacy_flock_file(
 def test_automation_lock_lock_blocks_active_legacy_flock_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     lock_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(automation_lock_impl, "_legacy_flock_lock_active", lambda _path: True)
@@ -431,7 +497,7 @@ def test_automation_lock_lock_blocks_active_legacy_flock_file(
 def test_automation_lock_lock_handles_prepare_and_write_failures(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
 
     class RaisingParent:
         def mkdir(self, *, parents: bool, exist_ok: bool) -> None:
@@ -441,7 +507,7 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
         parent = RaisingParent()
 
         def __str__(self) -> str:
-            return "/tmp/fake-lock"
+            return str(_automation_lock_path(tmp_path, "fake-lock"))
 
         def exists(self) -> bool:
             return False
@@ -453,12 +519,15 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
             return Path("/tmp/unused")
 
     monkeypatch.setattr(automation_lock_impl, "_normalize_lock_path", lambda _value: FakePath())
+    monkeypatch.setattr(automation_lock_impl, "_validate_lock_path", lambda _path: None)
     prepare_exit_code, prepare_data, prepare_lines = (
         automation_lock_module.automation_lock_lock_data("ignored", owner_pid=None, dry_run=False)
     )
     assert prepare_exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
     assert prepare_data["status"] == "error"
-    assert prepare_lines[1] == "Unable to prepare the lock path: /tmp/fake-lock"
+    assert prepare_lines[1] == (
+        f"Unable to prepare the lock path: {_automation_lock_path(tmp_path, 'fake-lock')}"
+    )
 
     def _failing_write(_path: Path, _payload: dict[str, object]) -> None:
         raise OSError("metadata blocked")
@@ -493,7 +562,7 @@ def test_automation_lock_lock_handles_prepare_and_write_failures(
 def test_automation_lock_lock_handles_contention_races(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
     original_link = os.link
     calls = {"count": 0}
 
@@ -556,7 +625,7 @@ def test_automation_lock_lock_handles_contention_races(
 def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_and_fake_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    file_path = tmp_path / "automation" / "lock"
+    file_path = _automation_lock_path(tmp_path)
     dry_exit_code, dry_data, dry_lines = automation_lock_module.automation_lock_unlock_data(
         str(file_path), owner_pid=None, dry_run=True
     )
@@ -581,7 +650,7 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert file_data["removed_file"] is True
     assert file_lines == [f"Automation lock file removed: {file_path}"]
 
-    directory_lock = tmp_path / "automation" / "legacy-lock"
+    directory_lock = _automation_lock_path(tmp_path, "legacy-lock")
     directory_lock.mkdir(parents=True)
     directory_exit_code, directory_data, directory_lines = (
         automation_lock_module.automation_lock_unlock_data(
@@ -592,7 +661,7 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert directory_data["removed_file"] is False
     assert directory_lines == [f"Automation lock released: {directory_lock}"]
 
-    directory_with_metadata = tmp_path / "automation" / "legacy-lock-with-metadata"
+    directory_with_metadata = _automation_lock_path(tmp_path, "legacy-lock-with-metadata")
     directory_with_metadata.mkdir(parents=True)
     (directory_with_metadata / "metadata.json").write_text("{}", encoding="utf-8")
     metadata_exit_code, metadata_data, metadata_lines = (
@@ -604,7 +673,7 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
     assert metadata_data["removed_file"] is False
     assert metadata_lines == [f"Automation lock released: {directory_with_metadata}"]
 
-    unexpected_lock = tmp_path / "automation" / "unexpected-lock"
+    unexpected_lock = _automation_lock_path(tmp_path, "unexpected-lock")
     unexpected_lock.mkdir(parents=True)
     (unexpected_lock / "extra.txt").write_text("extra", encoding="utf-8")
     unexpected_exit_code, unexpected_data, unexpected_lines = (
@@ -621,7 +690,7 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
 
     class FakeOddPath:
         def __str__(self) -> str:
-            return "/tmp/odd-lock"
+            return str(_automation_lock_path(tmp_path, "odd-lock"))
 
         def exists(self) -> bool:
             return True
@@ -633,6 +702,7 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
             return False
 
     monkeypatch.setattr(automation_lock_impl, "_normalize_lock_path", lambda _value: FakeOddPath())
+    monkeypatch.setattr(automation_lock_impl, "_validate_lock_path", lambda _path: None)
     odd_exit_code, odd_data, odd_lines = automation_lock_module.automation_lock_unlock_data(
         "ignored", owner_pid=None, dry_run=False
     )
@@ -644,7 +714,7 @@ def test_automation_lock_unlock_covers_dry_run_missing_file_directory_cleanup_an
 def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    lock_path = tmp_path / "automation" / "lock"
+    lock_path = _automation_lock_path(tmp_path)
     _write_lock_file(lock_path, {"lock_id": "held", "owner_pid": os.getpid()})
 
     missing_owner_exit_code, _, missing_owner_lines = (
@@ -665,7 +735,8 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
         f"Unlock owner mismatch: lock is owned by pid {os.getpid()}, not 99999."
     )
 
-    legacy_path = tmp_path / "automation" / "legacy-lock"
+    legacy_path = _automation_lock_path(tmp_path, "legacy-lock")
+    legacy_path.parent.mkdir(parents=True, exist_ok=True)
     legacy_path.write_text("", encoding="utf-8")
     with open(legacy_path, "r+", encoding="utf-8") as legacy_stream:
         automation_lock_impl.fcntl.flock(
@@ -685,7 +756,8 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
         legacy_lines[1] == "Unlock requires the active legacy flock holder to exit before cleanup."
     )
 
-    unknown_legacy_path = tmp_path / "automation" / "unknown-legacy-lock"
+    unknown_legacy_path = _automation_lock_path(tmp_path, "unknown-legacy-lock")
+    unknown_legacy_path.parent.mkdir(parents=True, exist_ok=True)
     unknown_legacy_path.write_text("", encoding="utf-8")
     monkeypatch.setattr(automation_lock_impl, "_legacy_flock_lock_active", lambda _path: None)
     unknown_exit_code, _, unknown_lines = automation_lock_module.automation_lock_unlock_data(
@@ -701,7 +773,7 @@ def test_automation_lock_unlock_rejects_missing_or_mismatched_owner_pid(
 def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    broken_path = tmp_path / "automation" / "broken-lock"
+    broken_path = _automation_lock_path(tmp_path, "broken-lock")
     broken_path.parent.mkdir(parents=True, exist_ok=True)
     broken_path.write_text("{bad-json}", encoding="utf-8")
 
@@ -714,7 +786,7 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     assert broken_data["status"] == "broken"
     assert broken_lines[0] == "Automation lock release failed."
 
-    unlink_path = tmp_path / "automation" / "unlink-error-lock"
+    unlink_path = _automation_lock_path(tmp_path, "unlink-error-lock")
     _write_lock_file(unlink_path, {"lock_id": "held"})
     original_unlink = Path.unlink
 
@@ -733,7 +805,7 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
     assert unlink_data["error"] == "unlink blocked"
     assert unlink_lines[1] == f"Unable to remove the automation lock file: {unlink_path}"
 
-    directory_path = tmp_path / "automation" / "legacy-dir-lock"
+    directory_path = _automation_lock_path(tmp_path, "legacy-dir-lock")
     directory_path.mkdir(parents=True)
     original_iterdir = Path.iterdir
 
@@ -754,7 +826,7 @@ def test_automation_lock_unlock_rejects_broken_file_and_reports_unlink_errors(
         directory_lines[1] == f"Unable to inspect the automation lock directory: {directory_path}"
     )
 
-    removable_directory = tmp_path / "automation" / "legacy-dir-with-metadata"
+    removable_directory = _automation_lock_path(tmp_path, "legacy-dir-with-metadata")
     removable_directory.mkdir(parents=True)
     (removable_directory / "metadata.json").write_text("{}", encoding="utf-8")
     original_rmdir = Path.rmdir

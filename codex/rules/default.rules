@@ -19,7 +19,16 @@ prefix_rule(
 prefix_rule(
     pattern = ["uv", "run", "--no-sync", "horadus", "tasks", "automation-lock"],
     decision = "allow",
-    justification = "Allow the repo-owned automation lock helper across resolved CODEX_HOME paths.",
+    justification = "Allow the repo-owned automation lock helper for CODEX_HOME automation lock paths enforced by the helper.",
+    match = [
+        "uv run --no-sync horadus tasks automation-lock check --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock",
+        "uv run --no-sync horadus tasks automation-lock lock --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock --owner-pid 4242",
+        "uv run --no-sync horadus tasks automation-lock unlock --path /Users/s5una/.codex/automations/horadus-sprint-autopilot/lock --owner-pid 4242",
+    ],
+    not_match = [
+        "uv run --no-sync horadus tasks automation-lock lock --path /tmp/lock",
+        "uv run --no-sync horadus tasks automation-lock unlock --path /etc/passwd",
+    ],
 )
 
 prefix_rule(

@@ -412,6 +412,36 @@ def _owner_identity_state(
     )
 
 
+def _payload_metadata_state(
+    lock_path: Path,
+    *,
+    metadata_path_value: Path,
+    payload: dict[str, object],
+) -> tuple[str, str, str, str, str, str, AutomationLockInfo | None]:
+    values: list[str] = []
+    for key in ("lock_id", "acquired_at", "hostname", "username", "cwd"):
+        value, error = _required_payload_string(
+            lock_path,
+            metadata_path_value=metadata_path_value,
+            payload=payload,
+            key=key,
+        )
+        if error is not None:
+            return ("", "", "", "", "", "", error)
+        assert value is not None
+        values.append(value)
+    path_value, path_error = _required_payload_string(
+        lock_path,
+        metadata_path_value=metadata_path_value,
+        payload=payload,
+        key="path",
+    )
+    if path_error is not None:
+        return ("", "", "", "", "", "", path_error)
+    assert path_value is not None
+    return (values[0], values[1], values[2], values[3], values[4], path_value, None)
+
+
 def load_lock_info(
     lock_path: Path,
     *,
@@ -439,54 +469,21 @@ def load_lock_info(
     if payload_error is not None:
         return payload_error
     assert payload is not None
-    lock_id_value, lock_id_error = _required_payload_string(
+    (
+        lock_id_value,
+        acquired_at_value,
+        hostname_value,
+        username_value,
+        cwd_value,
+        _path_value,
+        payload_metadata_error,
+    ) = _payload_metadata_state(
         lock_path,
         metadata_path_value=metadata_path_value,
         payload=payload,
-        key="lock_id",
     )
-    if lock_id_error is not None:
-        return lock_id_error
-    acquired_at_value, acquired_at_error = _required_payload_string(
-        lock_path,
-        metadata_path_value=metadata_path_value,
-        payload=payload,
-        key="acquired_at",
-    )
-    if acquired_at_error is not None:
-        return acquired_at_error
-    hostname_value, hostname_error = _required_payload_string(
-        lock_path,
-        metadata_path_value=metadata_path_value,
-        payload=payload,
-        key="hostname",
-    )
-    if hostname_error is not None:
-        return hostname_error
-    username_value, username_error = _required_payload_string(
-        lock_path,
-        metadata_path_value=metadata_path_value,
-        payload=payload,
-        key="username",
-    )
-    if username_error is not None:
-        return username_error
-    cwd_value, cwd_error = _required_payload_string(
-        lock_path,
-        metadata_path_value=metadata_path_value,
-        payload=payload,
-        key="cwd",
-    )
-    if cwd_error is not None:
-        return cwd_error
-    _, path_error = _required_payload_string(
-        lock_path,
-        metadata_path_value=metadata_path_value,
-        payload=payload,
-        key="path",
-    )
-    if path_error is not None:
-        return path_error
+    if payload_metadata_error is not None:
+        return payload_metadata_error
     (
         owner_pid,
         owner_started_at_value,
@@ -521,6 +518,8 @@ def load_lock_info(
         owner_started_at=owner_started_at_value,
         owner_pid_running=owner_pid_running_value,
         owner_pid_identity_matches=owner_pid_identity_matches,
+        legacy_lock_active=None,
+        error=None,
     )
 
 

@@ -128,6 +128,15 @@ def _release_legacy_flock_handle(handle: int) -> None:
     _support_release_legacy_flock_handle(handle, fcntl_module=fcntl, os_module=os)
 
 
+def _legacy_handle_matches_current_path(lock_path: Path, legacy_handle: int) -> bool:
+    try:
+        current_stat = lock_path.stat()
+    except FileNotFoundError:
+        return False
+    held_stat = os.fstat(legacy_handle)
+    return current_stat.st_dev == held_stat.st_dev and current_stat.st_ino == held_stat.st_ino
+
+
 def _load_lock_info(lock_path: Path) -> AutomationLockInfo:
     return _support_load_lock_info(
         lock_path,
@@ -424,19 +433,30 @@ def automation_lock_lock_data(
             info = _load_lock_info(lock_path)
             return _lock_validation_error(info, dry_run=dry_run)
         try:
-            info = _load_lock_info(lock_path)
-            if info.status != "legacy" or info.legacy_lock_active is not False:
-                return _lock_validation_error(info, dry_run=dry_run)  # pragma: no cover
             try:
-                lock_path.unlink()
+                legacy_handle_matches_path = _legacy_handle_matches_current_path(
+                    lock_path, legacy_handle
+                )
             except OSError as exc:
                 return _lock_environment_error(
                     lock_path,
                     info=info,
-                    message=f"Unable to clear the inactive legacy lock file: {lock_path}",
+                    message=f"Unable to verify the legacy lock file before cleanup: {lock_path}",
                     exc=exc,
                 )
-            info = _load_lock_info(lock_path)
+            if not legacy_handle_matches_path:
+                info = _load_lock_info(lock_path)
+            else:
+                try:
+                    lock_path.unlink()
+                except OSError as exc:
+                    return _lock_environment_error(
+                        lock_path,
+                        info=info,
+                        message=f"Unable to clear the inactive legacy lock file: {lock_path}",
+                        exc=exc,
+                    )
+                info = _load_lock_info(lock_path)
         finally:
             _release_legacy_flock_handle(legacy_handle)
     if info.status != "available":

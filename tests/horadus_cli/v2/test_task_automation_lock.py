@@ -405,6 +405,28 @@ def test_automation_lock_helper_edges_cover_legacy_flock_probe_branches(
     )
     assert automation_lock_impl._acquire_legacy_flock_handle(lock_path) is None
 
+    same_stat = lock_path.stat()
+    monkeypatch.setattr(
+        automation_lock_impl.os,
+        "fstat",
+        lambda _handle: type(
+            "StatResult", (), {"st_dev": same_stat.st_dev, "st_ino": same_stat.st_ino}
+        )(),
+    )
+    assert automation_lock_impl._legacy_handle_matches_current_path(lock_path, 5) is True
+
+    monkeypatch.setattr(
+        automation_lock_impl.os,
+        "fstat",
+        lambda _handle: type(
+            "StatResult", (), {"st_dev": same_stat.st_dev, "st_ino": same_stat.st_ino + 1}
+        )(),
+    )
+    assert automation_lock_impl._legacy_handle_matches_current_path(lock_path, 5) is False
+
+    lock_path.unlink()
+    assert automation_lock_impl._legacy_handle_matches_current_path(lock_path, 5) is False
+
 
 def test_automation_lock_check_reports_stale_owner_pid(tmp_path: Path) -> None:
     lock_path = _automation_lock_path(tmp_path)
@@ -695,24 +717,30 @@ def test_automation_lock_lock_rechecks_legacy_state_during_migration(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     lock_path = _automation_lock_path(tmp_path)
-    legacy_info = automation_lock_module.AutomationLockInfo(
-        path=str(lock_path),
-        status="legacy",
-        exists=True,
-        legacy_lock_active=False,
-        error="legacy flock lock file",
-    )
-    active_legacy_info = automation_lock_module.AutomationLockInfo(
-        path=str(lock_path),
-        status="legacy",
-        exists=True,
-        legacy_lock_active=True,
-        error="legacy flock lock file",
-    )
-    states = iter([legacy_info, active_legacy_info])
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path.write_text("", encoding="utf-8")
 
-    monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: next(states))
+    monkeypatch.setattr(automation_lock_impl, "_legacy_flock_lock_active", lambda _path: False)
     monkeypatch.setattr(automation_lock_impl, "_acquire_legacy_flock_handle", lambda _path: 7)
+    monkeypatch.setattr(
+        automation_lock_impl,
+        "_legacy_handle_matches_current_path",
+        lambda *_args: (
+            _write_lock_file(
+                lock_path,
+                {
+                    "lock_id": "replacement",
+                    "acquired_at": "2026-03-20T00:00:00+00:00",
+                    "hostname": "host",
+                    "username": "user",
+                    "cwd": "/tmp",
+                    "path": str(lock_path),
+                    "owner_pid": os.getpid(),
+                },
+            )
+            or False
+        ),
+    )
     monkeypatch.setattr(automation_lock_impl, "_release_legacy_flock_handle", lambda _handle: None)
 
     exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
@@ -720,8 +748,39 @@ def test_automation_lock_lock_rechecks_legacy_state_during_migration(
     )
 
     assert exit_code == automation_lock_module.ExitCode.VALIDATION_ERROR
-    assert data["status"] == "legacy"
+    assert data["status"] == "held"
     assert lines[0] == "Automation lock acquisition failed."
+
+
+def test_automation_lock_lock_reports_legacy_verification_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lock_path = _automation_lock_path(tmp_path)
+    legacy_info = automation_lock_module.AutomationLockInfo(
+        path=str(lock_path),
+        status="legacy",
+        exists=True,
+        legacy_lock_active=False,
+        error="legacy flock lock file",
+    )
+
+    monkeypatch.setattr(automation_lock_impl, "_load_lock_info", lambda _path: legacy_info)
+    monkeypatch.setattr(automation_lock_impl, "_acquire_legacy_flock_handle", lambda _path: 7)
+    monkeypatch.setattr(
+        automation_lock_impl,
+        "_legacy_handle_matches_current_path",
+        lambda *_args: (_ for _ in ()).throw(OSError("verify failed")),
+    )
+    monkeypatch.setattr(automation_lock_impl, "_release_legacy_flock_handle", lambda _handle: None)
+
+    exit_code, data, lines = automation_lock_module.automation_lock_lock_data(
+        str(lock_path), owner_pid=None, dry_run=False
+    )
+
+    assert exit_code == automation_lock_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["status"] == "legacy"
+    assert data["error"] == "verify failed"
+    assert lines[1] == f"Unable to verify the legacy lock file before cleanup: {lock_path}"
 
 
 def test_automation_lock_lock_reports_when_legacy_handle_cannot_be_acquired(

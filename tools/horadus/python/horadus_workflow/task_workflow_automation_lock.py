@@ -1,16 +1,61 @@
 from __future__ import annotations
 
 import getpass
-import json
 import os
 import socket
+import subprocess  # nosec B404 - fixed argv `ps` probe only; no shell execution.
 import uuid
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    AutomationLockInfo,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    acquire_legacy_flock_handle as _support_acquire_legacy_flock_handle,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    check_lines as _support_check_lines,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    codex_home_path as _support_codex_home_path,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    legacy_flock_lock_active as _support_legacy_flock_lock_active,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    load_lock_info as _support_load_lock_info,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    lock_metadata_payload as _support_lock_metadata_payload,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    looks_like_legacy_flock_lock as _support_looks_like_legacy_flock_lock,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    metadata_path as _support_metadata_path,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    normalize_lock_path as _support_normalize_lock_path,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    owner_pid_running as _support_owner_pid_running,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    owner_pid_started_at as _support_owner_pid_started_at,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    release_legacy_flock_handle as _support_release_legacy_flock_handle,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    validate_lock_path as _support_validate_lock_path,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_automation_lock_support import (
+    write_metadata as _support_write_metadata,
+)
 
 _fcntl: Any
 try:
@@ -23,54 +68,20 @@ fcntl = _fcntl
 _LOCK_METADATA_NAME = "metadata.json"
 
 
-@dataclass(slots=True)
-class AutomationLockInfo:
-    path: str
-    status: str
-    exists: bool
-    metadata_path: str | None = None
-    lock_id: str | None = None
-    acquired_at: str | None = None
-    hostname: str | None = None
-    username: str | None = None
-    cwd: str | None = None
-    owner_pid: int | None = None
-    owner_pid_running: bool | None = None
-    legacy_lock_active: bool | None = None
-    error: str | None = None
-
-
 def _normalize_lock_path(path_value: str) -> Path:
-    return Path(path_value).expanduser().resolve(strict=False)
+    return _support_normalize_lock_path(path_value)
 
 
 def _metadata_path(lock_path: Path) -> Path:
-    return lock_path / _LOCK_METADATA_NAME
+    return _support_metadata_path(lock_path)
 
 
 def _codex_home_path() -> Path:
-    codex_home = os.environ.get("CODEX_HOME")
-    if codex_home:
-        return Path(codex_home).expanduser().resolve(strict=False)
-    return (Path.home() / ".codex").resolve(strict=False)
+    return _support_codex_home_path(environ=os.environ, home_path=Path.home)
 
 
 def _validate_lock_path(lock_path: Path) -> str | None:
-    codex_home_path = _codex_home_path()
-    try:
-        relative_path = lock_path.relative_to(codex_home_path)
-    except ValueError:
-        return (
-            "Automation lock path must stay under "
-            f"{codex_home_path / 'automations' / '<automation-id>' / 'lock'}."
-        )
-    parts = relative_path.parts
-    if len(parts) != 3 or parts[0] != "automations" or parts[2] != "lock" or not parts[1]:
-        return (
-            "Automation lock path must use the "
-            f"{codex_home_path / 'automations' / '<automation-id>' / 'lock'} contract."
-        )
-    return None
+    return _support_validate_lock_path(lock_path, codex_home=_codex_home_path())
 
 
 def _lock_metadata_payload(lock_path: Path, *, owner_pid: int | None) -> dict[str, object]:
@@ -78,186 +89,56 @@ def _lock_metadata_payload(lock_path: Path, *, owner_pid: int | None) -> dict[st
         username = getpass.getuser()
     except OSError:
         username = "unknown"
-    return {
-        "lock_id": str(uuid.uuid4()),
-        "acquired_at": datetime.now(tz=UTC).isoformat(timespec="seconds"),
-        "hostname": socket.gethostname(),
-        "username": username,
-        "cwd": str(Path.cwd()),
-        "path": str(lock_path),
-        "owner_pid": owner_pid,
-    }
+    return _support_lock_metadata_payload(
+        lock_path,
+        owner_pid=owner_pid,
+        username=username,
+        hostname=socket.gethostname(),
+        cwd=Path.cwd(),
+        acquired_at=datetime.now(tz=UTC).isoformat(timespec="seconds"),
+        owner_started_at=_owner_pid_started_at(owner_pid),
+    )
 
 
 def _write_metadata(metadata_path: Path, payload: dict[str, object]) -> None:
-    handle = os.open(metadata_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(handle, "w", encoding="utf-8") as stream:
-        json.dump(payload, stream, indent=2, sort_keys=True)
-        stream.write("\n")
+    _support_write_metadata(metadata_path, payload)
 
 
 def _owner_pid_running(owner_pid: int | None) -> bool | None:
-    if owner_pid is None:
-        return None
-    if owner_pid <= 0:
-        return False
-    if os.name == "nt":
-        return None
-    try:
-        os.kill(owner_pid, 0)
-    except ProcessLookupError:
-        return False
-    except PermissionError:
-        return True
-    except OSError:
-        return False
-    return True
+    return _support_owner_pid_running(owner_pid, os_name=os.name, kill=os.kill)
+
+
+def _owner_pid_started_at(owner_pid: int | None) -> str | None:
+    return _support_owner_pid_started_at(owner_pid, os_name=os.name, run_ps=subprocess.run)
 
 
 def _looks_like_legacy_flock_lock(raw_content: str) -> bool:
-    return raw_content.strip() == ""
+    return _support_looks_like_legacy_flock_lock(raw_content)
 
 
 def _legacy_flock_lock_active(lock_path: Path) -> bool | None:
-    if fcntl is None:
-        return None
-    try:
-        handle = os.open(lock_path, os.O_RDWR)
-    except OSError:
-        return None
-    try:
-        try:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError:
-            return True
-        except OSError:
-            return None
-        try:
-            fcntl.flock(handle, fcntl.LOCK_UN)
-        except OSError:
-            return None
-        return False
-    finally:
-        os.close(handle)
+    return _support_legacy_flock_lock_active(lock_path, fcntl_module=fcntl, os_module=os)
+
+
+def _acquire_legacy_flock_handle(lock_path: Path) -> int | None:
+    return _support_acquire_legacy_flock_handle(lock_path, fcntl_module=fcntl, os_module=os)
+
+
+def _release_legacy_flock_handle(handle: int) -> None:
+    _support_release_legacy_flock_handle(handle, fcntl_module=fcntl, os_module=os)
 
 
 def _load_lock_info(lock_path: Path) -> AutomationLockInfo:
-    if not lock_path.exists():
-        return AutomationLockInfo(path=str(lock_path), status="available", exists=False)
-    if not lock_path.is_file():
-        return AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=True,
-            error="lock path exists but is not a regular file",
-        )
-
-    metadata_path = lock_path
-    if not metadata_path.is_file():
-        return AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=True,
-            metadata_path=str(metadata_path),
-            error=f"missing {_LOCK_METADATA_NAME}",
-        )
-
-    try:
-        raw_payload = metadata_path.read_text(encoding="utf-8")
-    except OSError as exc:
-        return AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=True,
-            metadata_path=str(metadata_path),
-            error=f"invalid {_LOCK_METADATA_NAME}: {exc}",
-        )
-    try:
-        payload = json.loads(raw_payload)
-    except json.JSONDecodeError as exc:
-        if _looks_like_legacy_flock_lock(raw_payload):
-            legacy_lock_active = _legacy_flock_lock_active(lock_path)
-            return AutomationLockInfo(
-                path=str(lock_path),
-                status="legacy",
-                exists=True,
-                metadata_path=str(metadata_path),
-                legacy_lock_active=legacy_lock_active,
-                error="legacy flock lock file",
-            )
-        return AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=True,
-            metadata_path=str(metadata_path),
-            error=f"invalid {_LOCK_METADATA_NAME}: {exc}",
-        )
-
-    if not isinstance(payload, dict):
-        return AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=True,
-            metadata_path=str(metadata_path),
-            error=f"invalid {_LOCK_METADATA_NAME}: expected a JSON object",
-        )
-
-    raw_owner_pid = payload.get("owner_pid")
-    if raw_owner_pid is not None and not isinstance(raw_owner_pid, int):
-        return AutomationLockInfo(
-            path=str(lock_path),
-            status="broken",
-            exists=True,
-            metadata_path=str(metadata_path),
-            error=f"invalid {_LOCK_METADATA_NAME}: expected integer owner_pid",
-        )
-    owner_pid = raw_owner_pid if isinstance(raw_owner_pid, int) else None
-    owner_pid_running = _owner_pid_running(owner_pid)
-    status = "stale" if owner_pid is not None and owner_pid_running is False else "held"
-
-    return AutomationLockInfo(
-        path=str(lock_path),
-        status=status,
-        exists=True,
-        metadata_path=str(metadata_path),
-        lock_id=str(payload.get("lock_id")) if payload.get("lock_id") is not None else None,
-        acquired_at=(
-            str(payload.get("acquired_at")) if payload.get("acquired_at") is not None else None
-        ),
-        hostname=str(payload.get("hostname")) if payload.get("hostname") is not None else None,
-        username=str(payload.get("username")) if payload.get("username") is not None else None,
-        cwd=str(payload.get("cwd")) if payload.get("cwd") is not None else None,
-        owner_pid=owner_pid,
-        owner_pid_running=owner_pid_running,
+    return _support_load_lock_info(
+        lock_path,
+        legacy_lock_active_fn=_legacy_flock_lock_active,
+        owner_pid_running_fn=_owner_pid_running,
+        owner_pid_started_at_fn=_owner_pid_started_at,
     )
 
 
 def _check_lines(info: AutomationLockInfo) -> list[str]:
-    if info.status == "available":
-        return [f"Automation lock is available: {info.path}"]
-
-    lines = [f"Automation lock status: {info.status}", f"- path: {info.path}"]
-    if info.metadata_path is not None:
-        lines.append(f"- metadata: {info.metadata_path}")
-    if info.lock_id is not None:
-        lines.append(f"- lock_id: {info.lock_id}")
-    if info.acquired_at is not None:
-        lines.append(f"- acquired_at: {info.acquired_at}")
-    if info.hostname is not None:
-        lines.append(f"- hostname: {info.hostname}")
-    if info.username is not None:
-        lines.append(f"- username: {info.username}")
-    if info.cwd is not None:
-        lines.append(f"- cwd: {info.cwd}")
-    if info.owner_pid is not None:
-        lines.append(f"- owner_pid: {info.owner_pid}")
-    if info.owner_pid_running is not None:
-        lines.append(f"- owner_pid_running: {'yes' if info.owner_pid_running else 'no'}")
-    if info.legacy_lock_active is not None:
-        lines.append(f"- legacy_lock_active: {'yes' if info.legacy_lock_active else 'no'}")
-    if info.error is not None:
-        lines.append(f"- error: {info.error}")
-    return lines
+    return _support_check_lines(info)
 
 
 def _lock_environment_error(
@@ -534,19 +415,30 @@ def automation_lock_lock_data(
         )
 
     info = _load_lock_info(lock_path)
+    legacy_handle: int | None = None
     if info.status == "legacy":
         if info.legacy_lock_active is not False:
             return _lock_validation_error(info, dry_run=dry_run)
+        legacy_handle = _acquire_legacy_flock_handle(lock_path)
+        if legacy_handle is None:
+            info = _load_lock_info(lock_path)
+            return _lock_validation_error(info, dry_run=dry_run)
         try:
-            lock_path.unlink()
-        except OSError as exc:
-            return _lock_environment_error(
-                lock_path,
-                info=info,
-                message=f"Unable to clear the inactive legacy lock file: {lock_path}",
-                exc=exc,
-            )
-        info = _load_lock_info(lock_path)
+            info = _load_lock_info(lock_path)
+            if info.status != "legacy" or info.legacy_lock_active is not False:
+                return _lock_validation_error(info, dry_run=dry_run)  # pragma: no cover
+            try:
+                lock_path.unlink()
+            except OSError as exc:
+                return _lock_environment_error(
+                    lock_path,
+                    info=info,
+                    message=f"Unable to clear the inactive legacy lock file: {lock_path}",
+                    exc=exc,
+                )
+            info = _load_lock_info(lock_path)
+        finally:
+            _release_legacy_flock_handle(legacy_handle)
     if info.status != "available":
         return _lock_validation_error(info, dry_run=dry_run)
 

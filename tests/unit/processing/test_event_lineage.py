@@ -722,6 +722,31 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
 
 
 @pytest.mark.asyncio
+async def test_enqueue_event_replay_does_not_reset_processing_row(mock_db_session) -> None:
+    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    existing = LLMReplayQueueItem(
+        stage="tier2",
+        event_id=event.id,
+        status="processing",
+        priority=25,
+        locked_by="worker-2",
+        locked_at=datetime.now(tz=UTC),
+        details={"stale": True},
+    )
+    mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+    mock_db_session.flush = AsyncMock()
+
+    assert (
+        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
+        is False
+    )
+    assert existing.status == "processing"
+    assert existing.locked_by == "worker-2"
+    mock_db_session.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_enqueue_event_replay_returns_false_when_conflict_cannot_resolve(
     mock_db_session,
 ) -> None:
@@ -739,6 +764,36 @@ async def test_enqueue_event_replay_returns_false_when_conflict_cannot_resolve(
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
         is False
     )
+
+
+@pytest.mark.asyncio
+async def test_enqueue_event_replay_returns_false_for_conflicted_processing_row(
+    mock_db_session,
+) -> None:
+    @asynccontextmanager
+    async def _begin_nested():
+        yield
+
+    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    existing = LLMReplayQueueItem(
+        stage="tier2",
+        event_id=event.id,
+        status="processing",
+        priority=25,
+        locked_by="worker-2",
+        locked_at=datetime.now(tz=UTC),
+        details={"stale": True},
+    )
+    mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.begin_nested = _begin_nested
+    mock_db_session.scalar = AsyncMock(side_effect=[None, existing])
+    mock_db_session.flush = AsyncMock(side_effect=[IntegrityError("x", "y", "z")])
+
+    assert (
+        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
+        is False
+    )
+    assert existing.status == "processing"
 
 
 @pytest.mark.asyncio

@@ -12,7 +12,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import exists, func, select
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
@@ -205,20 +205,30 @@ async def _load_event_detail_payloads(
             .order_by(TrendEvidence.created_at.desc())
         )
     ).all()
-    claim_rows = (
-        await session.execute(
-            select(
-                EventClaim.id,
-                EventClaim.claim_key,
-                EventClaim.claim_text,
-                EventClaim.claim_type,
-                EventClaim.is_active,
-            )
-            .where(EventClaim.event_id == event_id)
-            .where(EventClaim.is_active.is_(True))
-            .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+    referenced_claim_ids = {
+        event_claim_id for _, event_claim_id, _, _, _ in impact_rows if event_claim_id is not None
+    }
+    claim_query = (
+        select(
+            EventClaim.id,
+            EventClaim.claim_key,
+            EventClaim.claim_text,
+            EventClaim.claim_type,
+            EventClaim.is_active,
         )
-    ).all()
+        .where(EventClaim.event_id == event_id)
+        .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+    )
+    if referenced_claim_ids:
+        claim_query = claim_query.where(
+            or_(
+                EventClaim.is_active.is_(True),
+                EventClaim.id.in_(tuple(referenced_claim_ids)),
+            )
+        )
+    else:
+        claim_query = claim_query.where(EventClaim.is_active.is_(True))
+    claim_rows = (await session.execute(claim_query)).all()
     sources = [
         {"source_name": source_name, "url": url}
         for source_name, url in source_rows

@@ -534,6 +534,8 @@ async def _enqueue_event_replay(
         .limit(1)
     )
     if existing is not None:
+        if existing.status == "processing":
+            return False
         _reset_replay_queue_item(existing=existing, details=details)
         await session.flush()
         return True
@@ -556,7 +558,7 @@ async def _enqueue_event_replay(
             .where(LLMReplayQueueItem.event_id == event_id)
             .limit(1)
         )
-        if existing is None:
+        if existing is None or existing.status == "processing":
             return False
         _reset_replay_queue_item(existing=existing, details=details)
         await session.flush()

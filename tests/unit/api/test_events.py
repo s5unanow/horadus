@@ -166,6 +166,7 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
         contradiction_notes="Source narratives conflict on withdrawal timeline.",
     )
     mock_db_session.get.return_value = event
+    impacted_claim_id = uuid4()
     responses = iter(
         [
             [
@@ -173,17 +174,23 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
                 ("BBC", "https://example.com/a2"),
             ],
             [
-                (uuid4(), uuid4(), "Troops advanced into border region", "military_movement", 0.12),
+                (
+                    uuid4(),
+                    impacted_claim_id,
+                    "Troops advanced into border region",
+                    "military_movement",
+                    0.12,
+                ),
                 (uuid4(), uuid4(), "Negotiators resumed talks", "diplomatic_talks", -0.05),
             ],
             [
                 (uuid4(), "__event__", "Cluster summary", "fallback", True),
                 (
-                    uuid4(),
+                    impacted_claim_id,
                     "troops advanced into border region",
                     "Troops advanced into border region",
                     "statement",
-                    True,
+                    False,
                 ),
             ],
         ]
@@ -223,7 +230,7 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
     assert result.sources[0]["source_name"] == "Reuters"
     assert len(result.claims) == 2
     assert result.claims[0]["claim_key"] == "__event__"
-    assert all(claim["is_active"] is True for claim in result.claims)
+    assert result.claims[1]["is_active"] is False
     assert len(result.trend_impacts) == 2
     assert "event_claim_id" in result.trend_impacts[0]
     assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"
@@ -232,6 +239,9 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
     assert result.lineage[0]["lineage_kind"] == "merge"
     assert result.cluster_cohesion_score == pytest.approx(1.0)
     assert result.split_risk_score == pytest.approx(0.0)
+    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    assert "event_claims.is_active is true" in claim_query_text
+    assert "event_claims.id in" in claim_query_text
 
 
 @pytest.mark.asyncio

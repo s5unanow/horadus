@@ -25,7 +25,6 @@ from src.processing.event_lineage import (
     _load_trends_for_evidence,
     _mark_event_claims_stale,
     _mark_event_replay_pending,
-    _move_suppression_feedback,
     _pick_primary_item,
     _refresh_event_after_item_change,
     _repair_affected_events,
@@ -183,16 +182,10 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
     monkeypatch.setattr(event_lineage_module, "_refresh_event_after_item_change", AsyncMock())
     monkeypatch.setattr(event_lineage_module, "_close_empty_merged_event", AsyncMock())
     delete_replay_queue_items = AsyncMock()
-    move_suppression_feedback = AsyncMock()
     monkeypatch.setattr(
         event_lineage_module,
         "_delete_event_replay_queue_items",
         delete_replay_queue_items,
-    )
-    monkeypatch.setattr(
-        event_lineage_module,
-        "_move_suppression_feedback",
-        move_suppression_feedback,
     )
     monkeypatch.setattr(event_lineage_module, "_mark_event_claims_stale", AsyncMock())
     monkeypatch.setattr(
@@ -224,11 +217,6 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
     delete_replay_queue_items.assert_awaited_once_with(
         session=mock_db_session,
         event_id=source_event.id,
-    )
-    move_suppression_feedback.assert_awaited_once_with(
-        session=mock_db_session,
-        source_event_id=source_event.id,
-        target_event_id=target_event.id,
     )
 
 
@@ -587,11 +575,19 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
     assert existing.locked_by is None
     assert existing.last_error is None
     assert existing.details["repair_kind"] == "split"
+    assert existing.details["original_extraction_provenance"] == {"old": True}
 
 
 @pytest.mark.asyncio
 async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session) -> None:
-    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    event = Event(
+        id=uuid4(),
+        canonical_summary="event",
+        extraction_provenance={
+            "status": "replay_pending",
+            "original_extraction_provenance": {"stage": "tier2"},
+        },
+    )
     existing = LLMReplayQueueItem(
         stage="tier2",
         event_id=event.id,
@@ -614,6 +610,7 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
     assert existing.locked_by is None
     assert existing.last_error is None
     assert existing.details["repair_kind"] == "merge"
+    assert existing.details["original_extraction_provenance"] == {"stage": "tier2"}
 
 
 @pytest.mark.asyncio
@@ -646,26 +643,6 @@ async def test_delete_event_replay_queue_items_executes_delete(mock_db_session) 
     assert "delete from llm_replay_queue" in str(statement).lower()
     assert statement.compile().params["stage_1"] == "tier2"
     assert statement.compile().params["event_id_1"] == event_id
-
-
-@pytest.mark.asyncio
-async def test_move_suppression_feedback_executes_update(mock_db_session) -> None:
-    source_event_id = uuid4()
-    target_event_id = uuid4()
-
-    await _move_suppression_feedback(
-        session=mock_db_session,
-        source_event_id=source_event_id,
-        target_event_id=target_event_id,
-    )
-
-    statement = mock_db_session.execute.await_args.args[0]
-    query_text = str(statement).lower()
-    params = statement.compile().params
-    assert "update human_feedback" in query_text
-    assert params["target_type_1"] == "event"
-    assert params["target_id_1"] == source_event_id
-    assert params["target_id"] == target_event_id
 
 
 @pytest.mark.asyncio

@@ -25,7 +25,7 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
-from src.storage.restatement_models import HumanFeedback, TrendRestatement
+from src.storage.restatement_models import TrendRestatement
 
 pytestmark = pytest.mark.integration
 
@@ -145,14 +145,6 @@ async def _seed_merge_repair_fixture(session):
             details={"reason": "prior-repair"},
         )
     )
-    session.add(
-        HumanFeedback(
-            target_type="event",
-            target_id=source_event.id,
-            action="mark_noise",
-            created_by="analyst@horadus",
-        )
-    )
     await session.commit()
     return source_event, target_event, source_item, target_item, trend
 
@@ -229,11 +221,6 @@ async def _assert_merge_repair_side_effects(
     assert len(replay_rows) == 1
     assert replay_rows[0].event_id == target_event_id
     assert replay_rows[0].stage == "tier2"
-
-    feedback_rows = list((await session.scalars(select(HumanFeedback))).all())
-    assert len(feedback_rows) == 1
-    assert feedback_rows[0].target_id == target_event_id
-    assert feedback_rows[0].action == "mark_noise"
 
     restatement_rows = list((await session.scalars(select(TrendRestatement))).all())
     assert len(restatement_rows) == 2

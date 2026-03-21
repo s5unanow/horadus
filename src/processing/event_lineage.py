@@ -63,7 +63,11 @@ async def split_event(
 
     source_event_id = _require_event_id(source_event)
     source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
-    selected_rows = [row for row in source_rows if row.item.id in set(item_ids)]
+    requested_item_ids = tuple(dict.fromkeys(item_ids))
+    current_item_ids = {row.item.id for row in source_rows}
+    if any(item_id not in current_item_ids for item_id in requested_item_ids):
+        raise ValueError("split item_ids must all belong to the source event")
+    selected_rows = [row for row in source_rows if row.item.id in set(requested_item_ids)]
     if not selected_rows:
         raise ValueError("split requires at least one current event item")
     if len(selected_rows) >= len(source_rows):
@@ -318,6 +322,7 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     event.last_mention_at = max(_item_timestamp(row.item) for row in rows)
     await refresh_event_provenance(session=session, event=event)
     apply_default_cluster_health(event)
+    _clear_stale_event_extractions(event)
     EventLifecycleManager(session).sync_event_state(
         event,
         confirmed_at=event.last_mention_at,
@@ -478,13 +483,13 @@ async def _mark_event_claims_stale(*, session: AsyncSession, event_id: UUID) -> 
 
 async def _mark_event_replay_pending(*, event: Event, reason: str) -> None:
     prior = dict(event.extraction_provenance or {})
+    _clear_stale_event_extractions(event)
     event.extraction_provenance = {
         "status": "replay_pending",
         "stage": "tier2",
         "reason": reason,
         "original_extraction_provenance": prior,
     }
-    event.extracted_claims = None
 
 
 async def _enqueue_event_replay(
@@ -600,3 +605,14 @@ async def _delete_event_replay_queue_items(*, session: AsyncSession, event_id: U
         .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
         .where(LLMReplayQueueItem.event_id == event_id)
     )
+
+
+def _clear_stale_event_extractions(event: Event) -> None:
+    event.extracted_claims = None
+    event.extracted_who = None
+    event.extracted_what = None
+    event.extracted_where = None
+    event.extracted_when = None
+    event.categories = []
+    event.has_contradictions = False
+    event.contradiction_notes = None

@@ -66,9 +66,12 @@ async def test_split_event_validates_selected_items(mock_db_session) -> None:
     row = _EventItemRow(
         link=EventItem(event_id=source_event.id, item_id=uuid4()), item=_build_item()
     )
+    other_row = _EventItemRow(
+        link=EventItem(event_id=source_event.id, item_id=uuid4()), item=_build_item(title="Other")
+    )
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(
-        event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=[row])
+        event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=[row, other_row])
     )
 
     with pytest.raises(ValueError, match="at least one current event item"):
@@ -80,11 +83,20 @@ async def test_split_event_validates_selected_items(mock_db_session) -> None:
             created_by=None,
         )
 
+    with pytest.raises(ValueError, match="must all belong"):
+        await split_event(
+            session=mock_db_session,
+            source_event=source_event,
+            item_ids=[row.item.id, uuid4()],
+            notes=None,
+            created_by=None,
+        )
+
     with pytest.raises(ValueError, match="leave at least one item"):
         await split_event(
             session=mock_db_session,
             source_event=source_event,
-            item_ids=[row.item.id],
+            item_ids=[row.item.id, other_row.item.id],
             notes=None,
             created_by=None,
         )
@@ -322,6 +334,14 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
         canonical_summary="old",
         epistemic_state="confirmed",
         activity_state="closed",
+        categories=["legacy"],
+        extracted_who=["stale"],
+        extracted_what="stale",
+        extracted_where="stale",
+        extracted_when=datetime.now(tz=UTC),
+        has_contradictions=True,
+        contradiction_notes="stale",
+        extracted_claims={"claim_graph": {"old": True}},
     )
     rows = [
         _EventItemRow(link=EventItem(event_id=event.id, item_id=item_one.id), item=item_one),
@@ -348,6 +368,14 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     assert event.embedding_truncation_strategy == "tail"
     assert event.epistemic_state == "emerging"
     assert event.activity_state == "active"
+    assert event.categories == []
+    assert event.extracted_who is None
+    assert event.extracted_what is None
+    assert event.extracted_where is None
+    assert event.extracted_when is None
+    assert event.has_contradictions is False
+    assert event.contradiction_notes is None
+    assert event.extracted_claims is None
 
 
 @pytest.mark.asyncio

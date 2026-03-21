@@ -307,6 +307,7 @@ async def list_events(
     query = (
         select(Event)
         .where(Event.last_mention_at >= since)
+        .where(~((Event.activity_state == "closed") & (Event.source_count == 0)))
         .order_by(Event.last_mention_at.desc())
         .limit(limit)
     )

@@ -136,6 +136,17 @@ async def test_list_events_allows_unfiltered_queries(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
+async def test_list_events_excludes_closed_zero_source_stubs(mock_db_session) -> None:
+    mock_db_session.scalars.return_value = SimpleNamespace(all=list)
+
+    await list_events(days=7, limit=10, session=mock_db_session)
+
+    query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
+    assert "events.activity_state = :activity_state_1" in query_text
+    assert "events.source_count = :source_count_1" in query_text
+
+
+@pytest.mark.asyncio
 async def test_get_event_returns_404_when_missing(mock_db_session) -> None:
     mock_db_session.get.return_value = None
 

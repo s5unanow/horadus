@@ -1012,6 +1012,57 @@ async def test_classify_event_fails_over_to_secondary_on_timeout(
 
 
 @pytest.mark.asyncio
+async def test_classify_event_reuses_secondary_route_cache_entries(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_BACKOFF_SECONDS", 0.0)
+    semantic_cache = InMemorySemanticCache(entries={})
+    primary_calls: list[dict[str, object]] = []
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            primary_calls.append(kwargs)
+            raise TimeoutError("primary timeout")
+
+    secondary_chat = FakeChatCompletions(calls=[])
+    classifier, _chat, cost_tracker = _build_classifier(
+        mock_db_session,
+        semantic_cache=semantic_cache,
+    )
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions()))
+    classifier.secondary_client = SimpleNamespace(chat=SimpleNamespace(completions=secondary_chat))
+    classifier.secondary_model = "gpt-4.1-nano"
+    classifier.secondary_provider = "openai-secondary"
+    first_event = Event(id=uuid4(), canonical_summary="Initial summary")
+    second_event = Event(id=first_event.id, canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    first_result, first_usage = await classifier.classify_event(
+        event=first_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+    second_result, second_usage = await classifier.classify_event(
+        event=second_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+
+    assert first_result.trend_impacts_count == 1
+    assert second_result.trend_impacts_count == 1
+    assert first_usage.api_calls == 1
+    assert second_usage.api_calls == 0
+    assert len(primary_calls) == 2
+    assert len(secondary_chat.calls) == 1
+    assert cost_tracker.ensure_within_budget.await_count == 2
+    assert second_event.extraction_provenance["active_route"]["provider"] == "openai-secondary"
+    assert second_event.extraction_provenance["active_route"]["model"] == "gpt-4.1-nano"
+    assert second_event.extraction_provenance["derivation"]["cache_hit"] is True
+
+
+@pytest.mark.asyncio
 async def test_classify_event_falls_back_when_strict_schema_mode_unavailable(
     mock_db_session,
 ) -> None:

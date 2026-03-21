@@ -89,6 +89,10 @@ async def build_report_generation_manifest(
         period_start=period_start,
         period_end=period_end,
     )
+    live_state_evidence_ids, live_state_event_ids = await _load_active_trend_input_ids(
+        session=session,
+        trend_id=getattr(trend, "id", None),
+    )
     return {
         "report_type": report_type,
         "period": {
@@ -103,6 +107,8 @@ async def build_report_generation_manifest(
         "inputs": {
             "evidence_ids": evidence_ids,
             "event_ids": event_ids,
+            "live_state_evidence_ids": live_state_evidence_ids,
+            "live_state_event_ids": live_state_event_ids,
             "top_event_ids": [
                 str(event_id)
                 for event_id in (row.get("event_id") for row in top_events)
@@ -111,6 +117,8 @@ async def build_report_generation_manifest(
             "counts": {
                 "evidence": len(evidence_ids),
                 "events": len(event_ids),
+                "live_state_evidence": len(live_state_evidence_ids),
+                "live_state_events": len(live_state_event_ids),
                 "top_events": len(top_events),
             },
         },
@@ -139,6 +147,29 @@ async def _load_report_input_ids(
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.created_at >= period_start)
             .where(TrendEvidence.created_at <= period_end)
+            .where(TrendEvidence.is_invalidated.is_(False))
+            .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
+        )
+    ).all()
+    if isawaitable(rows):
+        rows = await rows
+    evidence_ids = [str(evidence_id) for evidence_id, _ in rows if evidence_id is not None]
+    event_ids = sorted({str(event_id) for _, event_id in rows if event_id is not None})
+    return (evidence_ids, event_ids)
+
+
+async def _load_active_trend_input_ids(
+    *,
+    session: AsyncSession,
+    trend_id: UUID | None,
+) -> tuple[list[str], list[str]]:
+    if trend_id is None:
+        return ([], [])
+
+    rows = (
+        await session.execute(
+            select(TrendEvidence.id, TrendEvidence.event_id)
+            .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.is_invalidated.is_(False))
             .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
         )

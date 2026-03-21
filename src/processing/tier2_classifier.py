@@ -329,22 +329,33 @@ class Tier2Classifier:
         payload: dict[str, Any],
         provenance_derivation: dict[str, Any] | None,
     ) -> Tier2EventResult | None:
-        cache_kwargs = build_semantic_cache_kwargs(
-            stage=TIER2,
-            provider=self.primary_provider,
-            model=self.model,
-            prompt_path=self.prompt_path,
-            prompt_template=self.prompt_template,
-            schema_name="tier2_event_classification",
-            schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
-            request_overrides=self.request_overrides,
-        )
-        cached_content = await asyncio.to_thread(
-            self.semantic_cache.get,
-            **cache_kwargs,
-            payload=payload,
-        )
-        if not isinstance(cached_content, str) or not cached_content.strip():
+        cached_content: str | None = None
+        cache_provider = self.primary_provider
+        cache_model = self.model
+        cache_reasoning_effort = self.reasoning_effort
+        for provider, model, reasoning_effort in self._semantic_cache_read_routes():
+            cache_kwargs = build_semantic_cache_kwargs(
+                stage=TIER2,
+                provider=provider,
+                model=model,
+                prompt_path=self.prompt_path,
+                prompt_template=self.prompt_template,
+                schema_name="tier2_event_classification",
+                schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+                request_overrides=self.request_overrides,
+            )
+            candidate = await asyncio.to_thread(
+                self.semantic_cache.get,
+                **cache_kwargs,
+                payload=payload,
+            )
+            if isinstance(candidate, str) and candidate.strip():
+                cached_content = candidate
+                cache_provider = provider
+                cache_model = model
+                cache_reasoning_effort = reasoning_effort
+                break
+        if cached_content is None:
             return None
         cached_output = parse_tier2_output(
             raw_content=cached_content,
@@ -365,9 +376,9 @@ class Tier2Classifier:
                 requested_provider=self.primary_provider,
                 requested_model=self.model,
                 requested_reasoning_effort=self.reasoning_effort,
-                active_provider=self.primary_provider,
-                active_model=self.model,
-                active_reasoning_effort=self.reasoning_effort,
+                active_provider=cache_provider,
+                active_model=cache_model,
+                active_reasoning_effort=cache_reasoning_effort,
                 prompt_path=self.prompt_path,
                 prompt_template=self.prompt_template,
                 schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
@@ -381,6 +392,17 @@ class Tier2Classifier:
             categories_count=categories_count,
             trend_impacts_count=trend_impacts_count,
         )
+
+    def _semantic_cache_read_routes(self) -> list[tuple[str | None, str, str | None]]:
+        routes = [(self.primary_provider, self.model, self.reasoning_effort)]
+        secondary_route = (
+            self.secondary_provider or self.primary_provider,
+            self.secondary_model,
+            self.secondary_reasoning_effort,
+        )
+        if self.secondary_model is not None and secondary_route not in routes:
+            routes.append(secondary_route)
+        return routes
 
     async def _invoke_event_model(
         self,

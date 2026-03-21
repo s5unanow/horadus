@@ -396,14 +396,16 @@ async def test_refresh_support_loaders_cover_snapshot_and_item_queries(mock_db_s
     trend_id = uuid4()
     first_event_id = uuid4()
     second_event_id = uuid4()
-    first_seen = datetime.now(tz=UTC)
-    second_seen = datetime.now(tz=UTC)
+    first_seen = datetime(2026, 1, 1, tzinfo=UTC)
+    second_seen = datetime(2026, 1, 2, tzinfo=UTC)
     raw_item = RawItem(id=uuid4(), title="Item", raw_content="Body")
     mock_db_session.execute.return_value = SimpleNamespace(
         all=lambda: [
+            (trend_id, "signal", second_event_id, first_seen),
             (trend_id, "signal", first_event_id, first_seen),
             (trend_id, "signal", uuid4(), None),
             (trend_id, "signal", second_event_id, second_seen),
+            (trend_id, "signal", second_event_id, first_seen),
         ]
     )
     mock_db_session.scalar.return_value = raw_item
@@ -421,10 +423,49 @@ async def test_refresh_support_loaders_cover_snapshot_and_item_queries(mock_db_s
     )
 
     assert snapshot == {
-        (trend_id, "signal"): ((first_event_id, first_seen), (second_event_id, second_seen))
+        (trend_id, "signal"): ((second_event_id, second_seen), (first_event_id, first_seen))
     }
     assert missing_item is None
     assert loaded_item is raw_item
+
+
+@pytest.mark.asyncio
+async def test_refresh_support_sync_novelty_snapshot_preserves_existing_event_timestamps(
+    mock_db_session,
+) -> None:
+    trend_id = uuid4()
+    event_id = uuid4()
+    other_event_id = uuid4()
+    old_seen = datetime(2026, 1, 1, tzinfo=UTC)
+    newer_seen = datetime(2026, 1, 2, tzinfo=UTC)
+    new_trend_id = uuid4()
+    newest_seen = datetime(2026, 1, 3, tzinfo=UTC)
+    mock_db_session.execute.return_value = SimpleNamespace(
+        all=lambda: [
+            (trend_id, "signal", None),
+            (trend_id, "signal", newest_seen),
+            (new_trend_id, "signal", newest_seen),
+        ]
+    )
+
+    snapshot = await refresh_support_module._sync_novelty_snapshot_for_refresh(
+        session=mock_db_session,
+        event_id=event_id,
+        snapshot={
+            (trend_id, "signal"): (
+                (other_event_id, newer_seen),
+                (event_id, old_seen),
+            )
+        },
+    )
+
+    assert snapshot == {
+        (trend_id, "signal"): (
+            (other_event_id, newer_seen),
+            (event_id, old_seen),
+        ),
+        (new_trend_id, "signal"): ((event_id, newest_seen),),
+    }
 
 
 @pytest.mark.asyncio

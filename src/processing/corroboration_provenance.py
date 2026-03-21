@@ -25,6 +25,7 @@ from src.processing.corroboration_refresh_support import (
     _load_most_credible_event_item_for_refresh,
     _load_novelty_score_for_refresh,
     _load_novelty_snapshot_for_refresh,
+    _sync_novelty_snapshot_for_refresh,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.trend_impact_reconciliation import reconcile_event_trend_impacts
@@ -371,6 +372,11 @@ async def refresh_events_for_source(
             event=event,
             trends=active_trends,
             novelty_snapshot=novelty_snapshot,
+        )
+        novelty_snapshot = await _sync_novelty_snapshot_for_refresh(
+            session=session,
+            event_id=event.id,
+            snapshot=novelty_snapshot,
         )
     return len(events)
 

@@ -33,12 +33,63 @@ async def _load_novelty_snapshot_for_refresh(
         .order_by(TrendEvidence.created_at.desc())
     )
     rows = (await session.execute(query)).all()
-    snapshot: dict[tuple[UUID, str], list[tuple[UUID, datetime]]] = {}
+    grouped: dict[tuple[UUID, str], dict[UUID, datetime]] = {}
     for trend_id, signal_type, event_id, created_at in rows:
         if created_at is None:
             continue
-        snapshot.setdefault((trend_id, signal_type), []).append((event_id, created_at))
-    return {key: tuple(entries) for key, entries in snapshot.items()}
+        entries = grouped.setdefault((trend_id, signal_type), {})
+        previous = entries.get(event_id)
+        if previous is None or created_at > previous:
+            entries[event_id] = created_at
+    return {
+        key: tuple(sorted(entries.items(), key=lambda item: item[1], reverse=True))
+        for key, entries in grouped.items()
+    }
+
+
+async def _sync_novelty_snapshot_for_refresh(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+    snapshot: Mapping[tuple[UUID, str], tuple[tuple[UUID, datetime], ...]],
+) -> dict[tuple[UUID, str], tuple[tuple[UUID, datetime], ...]]:
+    existing_timestamps = {
+        key: created_at
+        for key, entries in snapshot.items()
+        for seen_event_id, created_at in entries
+        if seen_event_id == event_id
+    }
+    next_snapshot: dict[tuple[UUID, str], list[tuple[UUID, datetime]]] = {
+        key: [
+            (seen_event_id, created_at)
+            for seen_event_id, created_at in entries
+            if seen_event_id != event_id
+        ]
+        for key, entries in snapshot.items()
+    }
+    query = (
+        select(
+            TrendEvidence.trend_id,
+            TrendEvidence.signal_type,
+            func.max(TrendEvidence.created_at),
+        )
+        .where(TrendEvidence.event_id == event_id)
+        .where(TrendEvidence.is_invalidated.is_(False))
+        .group_by(TrendEvidence.trend_id, TrendEvidence.signal_type)
+    )
+    rows = (await session.execute(query)).all()
+    for trend_id, signal_type, created_at in rows:
+        if created_at is None:
+            continue
+        key = (trend_id, signal_type)
+        next_snapshot.setdefault(key, []).append(
+            (event_id, existing_timestamps.get(key, created_at))
+        )
+    return {
+        key: tuple(sorted(entries, key=lambda item: item[1], reverse=True))
+        for key, entries in next_snapshot.items()
+        if entries
+    }
 
 
 async def _load_item_for_refresh(

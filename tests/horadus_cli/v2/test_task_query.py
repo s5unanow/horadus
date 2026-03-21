@@ -645,6 +645,31 @@ def test_pre_push_review_guidance_treats_repo_workflow_helpers_as_high_risk() ->
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_workflow_core_modules_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-986",
+        title="Workflow core fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise workflow core module guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/review_defaults.py`",
+            "`tools/horadus/python/horadus_workflow/result.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
 def test_pre_push_review_guidance_treats_repo_owned_automation_surfaces_as_high_risk() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-989",
@@ -653,6 +678,28 @@ def test_pre_push_review_guidance_treats_repo_owned_automation_surfaces_as_high_
         estimate="1h",
         description=["Exercise repo-owned automation workflow guidance."],
         files=["`agents/automation/`", "`ops/automations/specs/`", "`codex/rules/default.rules`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_makefile_backed_workflow_scripts_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-985",
+        title="Workflow script fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise Makefile-backed workflow script guidance."],
+        files=["`scripts/sync_automations.py`", "`scripts/agent_smoke_run.sh`"],
         acceptance_criteria=[],
         assessment_refs=[],
         raw_block="raw",

@@ -31,6 +31,8 @@ _HIGH_RISK_SHARED_WORKFLOW_FILES = (
     "tools/horadus/python/horadus_cli/",
     "tools/horadus/python/horadus_workflow/docs_freshness.py",
     "tools/horadus/python/horadus_workflow/repo_workflow.py",
+    "tools/horadus/python/horadus_workflow/review_defaults.py",
+    "tools/horadus/python/horadus_workflow/result.py",
     "tools/horadus/python/horadus_workflow/task_repo.py",
     "tools/horadus/python/horadus_workflow/task_workflow_shared.py",
     "tools/horadus/python/horadus_cli/task_repo.py",
@@ -47,7 +49,14 @@ _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (
     "scripts/task_context_pack",
     "scripts/prepush_",
 )
-_HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = ("Makefile", ".pre-commit-config.yaml")
+_HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = (
+    ".pre-commit-config.yaml",
+    "Makefile",
+    "scripts/agent_smoke_run.sh",
+    "scripts/enforce_main_protection.sh",
+    "scripts/install_horadus_cli_skill.sh",
+    "scripts/sync_automations.py",
+)
 _HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md", "tasks/specs/TEMPLATE.md")
 _HIGH_RISK_SHARED_MATH_FILES = (
     "src/core/trend_engine.py",

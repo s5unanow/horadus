@@ -8,7 +8,7 @@ from inspect import isawaitable
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.narrative_grounding import (
@@ -18,6 +18,7 @@ from src.core.narrative_grounding import (
 from src.core.runtime_provenance import build_prompt_provenance, current_trend_scoring_contract
 from src.core.trend_engine import TrendEngine
 from src.storage.models import TrendEvidence
+from src.storage.restatement_models import TrendRestatement
 
 
 @dataclass(slots=True)
@@ -93,6 +94,10 @@ async def build_report_generation_manifest(
         session=session,
         trend_id=getattr(trend, "id", None),
     )
+    scoring_contract = await _load_active_trend_scoring_contract(
+        session=session,
+        trend_id=getattr(trend, "id", None),
+    )
     return {
         "report_type": report_type,
         "period": {
@@ -122,7 +127,7 @@ async def build_report_generation_manifest(
                 "top_events": len(top_events),
             },
         },
-        "scoring": current_trend_scoring_contract(),
+        "scoring": scoring_contract,
         "artifact_status": {
             "provisional": narrative.provisional,
             "grounding_status": narrative.grounding_status,
@@ -179,6 +184,115 @@ async def _load_active_trend_input_ids(
     evidence_ids = [str(evidence_id) for evidence_id, _ in rows if evidence_id is not None]
     event_ids = sorted({str(event_id) for _, event_id in rows if event_id is not None})
     return (evidence_ids, event_ids)
+
+
+async def _load_active_trend_scoring_contract(
+    *,
+    session: AsyncSession,
+    trend_id: UUID | None,
+) -> dict[str, Any]:
+    if trend_id is None:
+        return current_trend_scoring_contract()
+
+    evidence_rows = (
+        await session.execute(
+            select(
+                TrendEvidence.scoring_math_version,
+                TrendEvidence.scoring_parameter_set,
+                func.count(TrendEvidence.id),
+            )
+            .where(TrendEvidence.trend_id == trend_id)
+            .where(TrendEvidence.is_invalidated.is_(False))
+            .group_by(
+                TrendEvidence.scoring_math_version,
+                TrendEvidence.scoring_parameter_set,
+            )
+            .order_by(
+                TrendEvidence.scoring_math_version.asc(),
+                TrendEvidence.scoring_parameter_set.asc(),
+            )
+        )
+    ).all()
+    if isawaitable(evidence_rows):
+        evidence_rows = await evidence_rows
+
+    restatement_rows = (
+        await session.execute(
+            select(
+                TrendRestatement.scoring_math_version,
+                TrendRestatement.scoring_parameter_set,
+                func.count(TrendRestatement.id),
+            )
+            .where(TrendRestatement.trend_id == trend_id)
+            .group_by(
+                TrendRestatement.scoring_math_version,
+                TrendRestatement.scoring_parameter_set,
+            )
+            .order_by(
+                TrendRestatement.scoring_math_version.asc(),
+                TrendRestatement.scoring_parameter_set.asc(),
+            )
+        )
+    ).all()
+    if isawaitable(restatement_rows):
+        restatement_rows = await restatement_rows
+
+    observed_rows = [
+        {
+            "source": "trend_evidence",
+            "math_version": str(math_version),
+            "parameter_set": str(parameter_set),
+            "row_count": int(row_count or 0),
+        }
+        for math_version, parameter_set, row_count in evidence_rows
+        if math_version is not None and parameter_set is not None
+    ]
+    observed_rows.extend(
+        {
+            "source": "trend_restatements",
+            "math_version": str(math_version),
+            "parameter_set": str(parameter_set),
+            "row_count": int(row_count or 0),
+        }
+        for math_version, parameter_set, row_count in restatement_rows
+        if math_version is not None and parameter_set is not None
+    )
+    return _summarize_scoring_contract_rows(observed_rows)
+
+
+def _summarize_scoring_contract_rows(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not rows:
+        return current_trend_scoring_contract()
+
+    current_contract = current_trend_scoring_contract()
+    math_versions = sorted({str(row["math_version"]) for row in rows})
+    parameter_sets = sorted({str(row["parameter_set"]) for row in rows})
+    payload: dict[str, Any] = {
+        "math_version": math_versions[0] if len(math_versions) == 1 else "mixed",
+        "parameter_set": parameter_sets[0] if len(parameter_sets) == 1 else "mixed",
+        "observed_rows": sorted(
+            [
+                {
+                    "source": str(row["source"]),
+                    "math_version": str(row["math_version"]),
+                    "parameter_set": str(row["parameter_set"]),
+                    "row_count": int(row["row_count"]),
+                }
+                for row in rows
+            ],
+            key=lambda row: (
+                row["source"],
+                row["math_version"],
+                row["parameter_set"],
+            ),
+        ),
+    }
+    if (
+        payload["math_version"] == current_contract["math_version"]
+        and payload["parameter_set"] == current_contract["parameter_set"]
+    ):
+        payload["promotion_check"] = current_contract["promotion_check"]
+    return payload
 
 
 def _fallback_narrative(

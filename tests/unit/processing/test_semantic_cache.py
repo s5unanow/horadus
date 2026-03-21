@@ -207,6 +207,29 @@ def test_build_cache_key_changes_for_provider_schema_and_request_overrides() -> 
     assert overrides_changed != base_key
 
 
+def test_build_cache_key_changes_for_reasoning_effort() -> None:
+    base_key = LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider="openai",
+        model="gpt-5-mini",
+        reasoning_effort="minimal",
+        prompt_template="prompt-v1",
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
+    changed_key = LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider="openai",
+        model="gpt-5-mini",
+        reasoning_effort="medium",
+        prompt_template="prompt-v1",
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
+
+    assert changed_key != base_key
+
+
 def test_semantic_cache_initialization_normalizes_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_ENABLED", True)
     monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_TTL_SECONDS", 0)

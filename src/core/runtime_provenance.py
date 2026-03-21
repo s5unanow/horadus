@@ -75,6 +75,7 @@ def build_semantic_cache_basis(
     stage: str,
     provider: str | None,
     model: str,
+    reasoning_effort: str | None,
     api_mode: str | None,
     prompt_path: str,
     prompt_template: str,
@@ -88,6 +89,11 @@ def build_semantic_cache_basis(
         "stage": stage,
         "provider": provider.strip() if isinstance(provider, str) and provider.strip() else None,
         "model": model.strip(),
+        "reasoning_effort": (
+            reasoning_effort.strip()
+            if isinstance(reasoning_effort, str) and reasoning_effort.strip()
+            else None
+        ),
         "api_mode": api_mode.strip() if isinstance(api_mode, str) and api_mode.strip() else None,
         "prompt": build_prompt_provenance(
             prompt_path=prompt_path,
@@ -125,6 +131,7 @@ def build_llm_runtime_provenance(
         stage=stage,
         provider=active_provider,
         model=active_model,
+        reasoning_effort=active_reasoning_effort,
         api_mode=api_mode,
         prompt_path=prompt_path,
         prompt_template=prompt_template,

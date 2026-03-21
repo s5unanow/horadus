@@ -282,22 +282,28 @@ class Tier1Classifier:
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
-        cache_kwargs = build_semantic_cache_kwargs(
-            stage=TIER1,
-            provider=self.primary_provider,
-            model=self.model,
-            prompt_path=self.prompt_path,
-            prompt_template=self.prompt_template,
-            schema_name="tier1_classification",
-            schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
-            request_overrides=self.request_overrides,
-        )
-        cached_content = await asyncio.to_thread(
-            self.semantic_cache.get,
-            **cache_kwargs,
-            payload=payload,
-        )
-        if isinstance(cached_content, str) and cached_content.strip():
+        cached_content: str | None = None
+        for provider, model, reasoning_effort in self._semantic_cache_read_routes():
+            cache_kwargs = build_semantic_cache_kwargs(
+                stage=TIER1,
+                provider=provider,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                prompt_path=self.prompt_path,
+                prompt_template=self.prompt_template,
+                schema_name="tier1_classification",
+                schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+                request_overrides=self.request_overrides,
+            )
+            candidate = await asyncio.to_thread(
+                self.semantic_cache.get,
+                **cache_kwargs,
+                payload=payload,
+            )
+            if isinstance(candidate, str) and candidate.strip():
+                cached_content = candidate
+                break
+        if cached_content is not None:
             try:
                 output = _Tier1Output.model_validate(json.loads(cached_content))
                 self._validate_output_alignment(output, items=items, trends=trends)
@@ -347,6 +353,20 @@ class Tier1Classifier:
             used_secondary_route=invocation.used_secondary_route,
         )
         return (results, usage)
+
+    def _semantic_cache_read_routes(self) -> list[tuple[str | None, str, str | None]]:
+        routes: list[tuple[str | None, str, str | None]] = [
+            (self.primary_provider, self.model, self.reasoning_effort)
+        ]
+        if self.secondary_model is not None:
+            secondary_route = (
+                self.secondary_provider or self.primary_provider,
+                self.secondary_model,
+                self.secondary_reasoning_effort,
+            )
+            if secondary_route not in routes:
+                routes.append(secondary_route)
+        return routes
 
     def _secondary_route(self) -> LLMChatRoute | None:
         if self.secondary_client is None or self.secondary_model is None:
@@ -399,6 +419,7 @@ class Tier1Classifier:
             stage=TIER1,
             provider=invocation.active_provider,
             model=invocation.active_model,
+            reasoning_effort=invocation.active_reasoning_effort,
             prompt_path=self.prompt_path,
             prompt_template=self.prompt_template,
             schema_name="tier1_classification",

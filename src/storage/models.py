@@ -30,16 +30,20 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
+from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EVENT_ACTIVITY_STATE_SQL_VALUES,
     EVENT_EPISTEMIC_STATE_SQL_VALUES,
     EventActivityState,
     EventEpistemicState,
 )
+from src.storage.restatement_models import HumanFeedback, TrendRestatement
 from src.storage.scoring_contract import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,
 )
+
+_ = (EventLineage, HumanFeedback, TrendRestatement)
 
 
 class SourceType(enum.StrEnum):
@@ -422,7 +426,6 @@ class Event(Base):
     )
     taxonomy_gaps: Mapped[list[TaxonomyGap]] = relationship(back_populates="event")
 
-    # Indexes
     __table_args__ = (
         CheckConstraint(
             f"lifecycle_status IN ({EVENT_LIFECYCLE_SQL_VALUES})",
@@ -1159,6 +1162,3 @@ class TrendOutcome(Base):
         Index("idx_outcomes_trend_date", "trend_id", "prediction_date"),
         Index("idx_outcomes_outcome", "outcome"),
     )
-
-
-from src.storage.restatement_models import HumanFeedback, TrendRestatement  # noqa: E402,F401

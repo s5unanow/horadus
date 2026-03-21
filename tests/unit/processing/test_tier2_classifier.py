@@ -309,6 +309,20 @@ def _assert_event_payload(event: Event) -> None:
 
 
 @pytest.mark.asyncio
+async def test_load_unclassified_events_excludes_closed_empty_stubs(mock_db_session) -> None:
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
+    classifier, _, _ = _build_classifier(mock_db_session)
+
+    await classifier._load_unclassified_events(limit=5)
+
+    query_text = str(mock_db_session.scalars.await_args.args[0]).lower()
+    assert "events.extracted_what is null" in query_text
+    assert "events.source_count >" in query_text
+    assert "events.activity_state is null" in query_text
+    assert "events.activity_state !=" in query_text
+
+
+@pytest.mark.asyncio
 async def test_classify_event_updates_event_fields(mock_db_session) -> None:
     classifier, chat, cost_tracker = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")

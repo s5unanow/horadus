@@ -27,6 +27,7 @@ from src.processing.corroboration_refresh_support import (
     _load_novelty_snapshot_for_refresh,
     _sync_novelty_snapshot_for_refresh,
 )
+from src.processing.event_cluster_health import CLUSTER_HEALTH_KEY
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.trend_impact_reconciliation import reconcile_event_trend_impacts
 from src.storage.event_state import resolved_corroboration_score
@@ -323,6 +324,10 @@ async def refresh_event_provenance(
 ) -> EventProvenanceSummary:
     """Recompute and persist one event's provenance-aware corroboration summary."""
 
+    prior_cluster_health = None
+    if isinstance(event.provenance_summary, dict):
+        prior_cluster_health = event.provenance_summary.get(CLUSTER_HEALTH_KEY)
+
     if event.id is None:
         summary = fallback_event_provenance_summary(
             raw_source_count=event.source_count,
@@ -340,6 +345,8 @@ async def refresh_event_provenance(
     event.corroboration_score = summary.weighted_corroboration_score
     event.corroboration_mode = summary.method
     event.provenance_summary = summary.as_dict()
+    if isinstance(prior_cluster_health, dict):
+        event.provenance_summary[CLUSTER_HEALTH_KEY] = dict(prior_cluster_health)
     return summary
 
 

@@ -123,6 +123,7 @@ async def monitor_cluster_drift_async(*, deps: Any) -> dict[str, Any]:
                 deps.select(
                     deps.Event.id,
                     deps.Event.has_contradictions,
+                    deps.Event.activity_state,
                     deps.func.count(deps.EventItem.item_id).label("item_count"),
                     deps.func.array_agg(deps.func.coalesce(deps.RawItem.language, "unknown")).label(
                         "languages"
@@ -132,14 +133,22 @@ async def monitor_cluster_drift_async(*, deps: Any) -> dict[str, Any]:
                 .outerjoin(deps.RawItem, deps.RawItem.id == deps.EventItem.item_id)
                 .where(deps.Event.first_seen_at >= window_start)
                 .where(deps.Event.first_seen_at < window_end)
-                .group_by(deps.Event.id, deps.Event.has_contradictions)
+                .group_by(
+                    deps.Event.id,
+                    deps.Event.has_contradictions,
+                    deps.Event.activity_state,
+                )
             )
         ).all()
 
     event_samples: list[Any] = []
     for row in rows:
-        item_count_raw = row[2]
-        languages_raw = row[3]
+        activity_state_raw = row[2]
+        item_count_raw = row[3]
+        item_count = max(0, int(item_count_raw or 0))
+        if activity_state_raw == "closed" and item_count == 0:
+            continue
+        languages_raw = row[4]
         language_values: tuple[str, ...]
         if isinstance(languages_raw, list):
             language_values = tuple(
@@ -150,7 +159,7 @@ async def monitor_cluster_drift_async(*, deps: Any) -> dict[str, Any]:
 
         event_samples.append(
             deps.ClusterEventSample(
-                item_count=max(0, int(item_count_raw or 0)),
+                item_count=item_count,
                 has_contradictions=bool(row[1]),
                 languages=language_values,
             )

@@ -21,6 +21,11 @@ from src.core.source_credibility import (
     source_multiplier_expression,
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
+from src.processing.event_cluster_health import (
+    apply_default_cluster_health,
+    ensure_cluster_health,
+    resolve_cluster_health,
+)
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.event_state import EventActivityState, EventEpistemicState
@@ -99,6 +104,7 @@ class EventClusterer:
                 merged=False,
                 similarity=similarity,
             )
+        await ensure_cluster_health(session=self.session, event=event)
         link_added = await self._add_event_link(event.id, item_id)
         if not link_added:
             resolved_event_id = await self._find_existing_event_id_for_item(item_id)
@@ -141,6 +147,7 @@ class EventClusterer:
         event = await self._create_event(item)
         await self._add_event_link(event.id, item.id)
         await self._refresh_event_provenance(event)
+        apply_default_cluster_health(event)
         await self.session.flush()
         return ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
 
@@ -195,6 +202,14 @@ class EventClusterer:
 
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
         await self._refresh_event_provenance(event)
+        cluster_health = await resolve_cluster_health(
+            session=self.session,
+            event=event,
+            prefer_stored=False,
+        )
+        provenance_summary = dict(event.provenance_summary or {})
+        provenance_summary["cluster_health"] = cluster_health
+        event.provenance_summary = provenance_summary
         self.lifecycle_manager.on_event_mention(event, mentioned_at=mention_time)
         await self.session.flush()
 
@@ -252,6 +267,9 @@ class EventClusterer:
         return normalized_action
 
     async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool:
+        event = await self.session.get(Event, event_id, with_for_update=True)
+        if event is None:
+            return False
         link = EventItem(event_id=event_id, item_id=item_id)
         try:
             async with self.session.begin_nested():

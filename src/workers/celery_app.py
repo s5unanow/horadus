@@ -55,11 +55,12 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
             "task": "workers.process_pending_items",
             "schedule": timedelta(minutes=max(1, settings.PROCESS_PENDING_INTERVAL_MINUTES)),
         }
-    if settings.LLM_DEGRADED_REPLAY_ENABLED:
-        schedule["replay-degraded-events"] = {
-            "task": "workers.replay_degraded_events",
-            "schedule": timedelta(minutes=max(1, settings.LLM_DEGRADED_REPLAY_INTERVAL_MINUTES)),
-        }
+    # This drain also services lineage-repair replays, so it must remain scheduled
+    # even when degraded-mode replay intake is disabled.
+    schedule["replay-degraded-events"] = {
+        "task": "workers.replay_degraded_events",
+        "schedule": timedelta(minutes=max(1, settings.LLM_DEGRADED_REPLAY_INTERVAL_MINUTES)),
+    }
     schedule["check-source-freshness"] = {
         "task": "workers.check_source_freshness",
         "schedule": timedelta(minutes=max(1, settings.SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES)),

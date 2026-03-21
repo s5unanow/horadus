@@ -12,6 +12,7 @@ from src.storage.models import (
     Event,
     EventClaim,
     EventItem,
+    EventLineage,
     RawItem,
     Report,
     Source,
@@ -202,6 +203,21 @@ def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -
     assert "idx_trend_restatements_trend_recorded" in index_names
 
 
+def test_event_lineage_columns_and_constraints_present_in_model_metadata() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in EventLineage.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+    index_names = {index.name for index in EventLineage.__table__.indexes}
+
+    assert "lineage_kind" in EventLineage.__table__.c
+    assert "details" in EventLineage.__table__.c
+    assert "check_event_lineage_kind_allowed" in constraint_names
+    assert "idx_event_lineage_source_created" in index_names
+    assert "idx_event_lineage_target_created" in index_names
+
+
 def test_restatement_models_module_imports_without_circular_dependency() -> None:
     repo_root = Path(__file__).resolve().parents[3]
     result = subprocess.run(
@@ -209,6 +225,23 @@ def test_restatement_models_module_imports_without_circular_dependency() -> None
             sys.executable,
             "-c",
             "import importlib; importlib.import_module('src.storage.restatement_models')",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_event_lineage_models_module_imports_without_circular_dependency() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import importlib; importlib.import_module('src.storage.event_lineage_models')",
         ],
         cwd=repo_root,
         capture_output=True,

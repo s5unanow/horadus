@@ -63,6 +63,12 @@ async def test_cluster_item_creates_event_when_no_match(mock_db_session) -> None
     assert added_event.embedding_generated_at is None
     assert added_event.source_count == 1
     assert added_event.primary_item_id == item.id
+    assert added_event.provenance_summary["cluster_health"][
+        "cluster_cohesion_score"
+    ] == pytest.approx(1.0)
+    assert added_event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(
+        0.0
+    )
     assert result.created is True
     assert result.merged is False
     assert result.event_id == added_event.id
@@ -99,7 +105,7 @@ async def test_cluster_item_handles_launch_languages(
 
 
 @pytest.mark.asyncio
-async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
+async def test_cluster_item_merges_into_existing_event(mock_db_session, monkeypatch) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=[0.1, 0.2, 0.3], title="Updated summary")
     item.embedding_model = "text-embedding-3-small"
@@ -128,6 +134,14 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
     clusterer._add_event_link = add_link
     clusterer._update_primary_item = update_primary
     clusterer._count_unique_sources = count_unique
+    monkeypatch.setattr(event_clusterer_module, "ensure_cluster_health", AsyncMock())
+    resolve_cluster_health = AsyncMock(
+        return_value={
+            "cluster_cohesion_score": 0.4,
+            "split_risk_score": 0.6,
+        }
+    )
+    monkeypatch.setattr(event_clusterer_module, "resolve_cluster_health", resolve_cluster_health)
 
     async def refresh_provenance(target_event: Event) -> None:
         target_event.independent_evidence_count = target_event.unique_source_count
@@ -148,16 +162,28 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
     assert result.created is False
     assert result.merged is True
     assert result.similarity == pytest.approx(0.95)
+    assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
+        0.4
+    )
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.6)
     assert add_link.await_count == 1
     assert update_primary.await_count == 1
+    resolve_cluster_health.assert_awaited_once_with(
+        session=mock_db_session,
+        event=event,
+        prefer_stored=False,
+    )
 
 
 @pytest.mark.asyncio
-async def test_cluster_item_links_before_unique_source_recount(mock_db_session) -> None:
+async def test_cluster_item_backfills_cluster_health_before_adding_link(
+    mock_db_session,
+    monkeypatch,
+) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=[0.1, 0.2, 0.3], title="Threshold mention")
     item.embedding_model = "text-embedding-3-small"
-    event = Event(
+    cluster_event = Event(
         canonical_summary="Emerging event",
         source_count=2,
         unique_source_count=2,
@@ -170,11 +196,16 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
         return None
 
     async def match_event(_embedding, _embedding_model, _reference_time):
-        return (event, 0.9)
+        return (cluster_event, 0.9)
 
     async def add_link(_event_id, _item_id):
         link_state["added"] = True
         return True
+
+    async def ensure_cluster_health(*, session, event: Event):
+        assert session is mock_db_session
+        assert event is cluster_event
+        assert link_state["added"] is False
 
     async def count_unique(_event_id, _fallback_source_id):
         assert link_state["added"] is True
@@ -185,6 +216,14 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
     clusterer._add_event_link = add_link
     clusterer._count_unique_sources = count_unique
     clusterer._update_primary_item = AsyncMock(return_value=True)
+    monkeypatch.setattr(event_clusterer_module, "ensure_cluster_health", ensure_cluster_health)
+    resolve_cluster_health = AsyncMock(
+        return_value={
+            "cluster_cohesion_score": 0.7,
+            "split_risk_score": 0.3,
+        }
+    )
+    monkeypatch.setattr(event_clusterer_module, "resolve_cluster_health", resolve_cluster_health)
 
     async def refresh_provenance(target_event: Event) -> None:
         target_event.independent_evidence_count = target_event.unique_source_count
@@ -194,9 +233,14 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
     result = await clusterer.cluster_item(item)
 
     assert result.merged is True
-    assert event.unique_source_count == 3
-    assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
-    assert event.confirmed_at is not None
+    assert cluster_event.unique_source_count == 3
+    assert cluster_event.lifecycle_status == EventLifecycle.CONFIRMED.value
+    assert cluster_event.confirmed_at is not None
+    resolve_cluster_health.assert_awaited_once_with(
+        session=mock_db_session,
+        event=cluster_event,
+        prefer_stored=False,
+    )
 
 
 @pytest.mark.asyncio
@@ -518,6 +562,7 @@ async def test_create_event_preserves_preexisting_event_id(
 @pytest.mark.asyncio
 async def test_merge_into_event_populates_embedding_and_preserves_summary_when_primary_unchanged(
     mock_db_session,
+    monkeypatch,
 ) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=[0.5, 0.6], title="new summary")
@@ -534,6 +579,13 @@ async def test_merge_into_event_populates_embedding_and_preserves_summary_when_p
     clusterer._update_primary_item = AsyncMock(return_value=False)
     clusterer._count_unique_sources = AsyncMock(return_value=2)
     clusterer.lifecycle_manager.on_event_mention = MagicMock()
+    resolve_cluster_health = AsyncMock(
+        return_value={
+            "cluster_cohesion_score": 0.8,
+            "split_risk_score": 0.2,
+        }
+    )
+    monkeypatch.setattr(event_clusterer_module, "resolve_cluster_health", resolve_cluster_health)
 
     await clusterer._merge_into_event(event, item)
 
@@ -542,10 +594,15 @@ async def test_merge_into_event_populates_embedding_and_preserves_summary_when_p
     assert event.embedding_generated_at == item.embedding_generated_at
     assert event.canonical_summary == "old summary"
     clusterer.lifecycle_manager.on_event_mention.assert_called_once()
+    resolve_cluster_health.assert_awaited_once_with(
+        session=mock_db_session,
+        event=event,
+        prefer_stored=False,
+    )
 
 
 @pytest.mark.asyncio
-async def test_merge_into_event_preserves_existing_embedding(mock_db_session) -> None:
+async def test_merge_into_event_preserves_existing_embedding(mock_db_session, monkeypatch) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=None, title="irrelevant")
     item.fetched_at = datetime(2026, 3, 2, tzinfo=UTC)
@@ -560,11 +617,74 @@ async def test_merge_into_event_preserves_existing_embedding(mock_db_session) ->
     clusterer._update_primary_item = AsyncMock(return_value=False)
     clusterer._count_unique_sources = AsyncMock(return_value=1)
     clusterer.lifecycle_manager.on_event_mention = MagicMock()
+    monkeypatch.setattr(
+        event_clusterer_module,
+        "resolve_cluster_health",
+        AsyncMock(
+            return_value={
+                "cluster_cohesion_score": 0.9,
+                "split_risk_score": 0.1,
+            }
+        ),
+    )
 
     await clusterer._merge_into_event(event, item)
 
     assert event.embedding == [0.1, 0.2]
     assert event.embedding_model == "old-model"
+
+
+@pytest.mark.asyncio
+async def test_merge_into_event_preserves_prior_cluster_health_after_provenance_refresh(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.4, 0.5], title="follow-up")
+    item.embedding_model = "text-embedding-3-small"
+    item.fetched_at = datetime(2026, 3, 2, tzinfo=UTC)
+    event = Event(
+        canonical_summary="summary",
+        source_count=2,
+        unique_source_count=2,
+        primary_item_id=uuid4(),
+        embedding=[0.1, 0.2],
+        embedding_model="old-model",
+    )
+    event.provenance_summary = {
+        "method": "provenance_aware",
+        "cluster_health": {
+            "cluster_cohesion_score": 0.6,
+            "split_risk_score": 0.4,
+        },
+    }
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+    clusterer._count_unique_sources = AsyncMock(return_value=3)
+    clusterer.lifecycle_manager.on_event_mention = MagicMock()
+    resolve_cluster_health = AsyncMock(
+        return_value={
+            "cluster_cohesion_score": 0.25,
+            "split_risk_score": 0.75,
+        }
+    )
+    monkeypatch.setattr(event_clusterer_module, "resolve_cluster_health", resolve_cluster_health)
+
+    async def refresh_provenance(target_event: Event) -> None:
+        target_event.provenance_summary = {"method": "provenance_aware"}
+
+    clusterer._refresh_event_provenance = AsyncMock(side_effect=refresh_provenance)
+
+    await clusterer._merge_into_event(event, item)
+
+    assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
+        0.25
+    )
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.75)
+    resolve_cluster_health.assert_awaited_once_with(
+        session=mock_db_session,
+        event=event,
+        prefer_stored=False,
+    )
 
 
 @pytest.mark.asyncio
@@ -619,10 +739,33 @@ async def test_add_event_link_returns_true_on_insert_and_false_on_conflict(mock_
         raise IntegrityError("stmt", "params", "orig")
         yield
 
+    mock_db_session.get = AsyncMock(return_value=Event(id=event_id, canonical_summary="event"))
     mock_db_session.begin_nested.side_effect = [ok_nested(), fail_nested()]
 
     assert await clusterer._add_event_link(event_id, item_id) is True
     assert await clusterer._add_event_link(event_id, item_id) is False
+    assert mock_db_session.get.await_count == 2
+    mock_db_session.get.assert_awaited_with(
+        Event,
+        event_id,
+        with_for_update=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_event_link_returns_false_when_event_missing(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event_id = uuid4()
+    item_id = uuid4()
+    mock_db_session.get = AsyncMock(return_value=None)
+
+    assert await clusterer._add_event_link(event_id, item_id) is False
+    mock_db_session.begin_nested.assert_not_called()
+    mock_db_session.get.assert_awaited_once_with(
+        Event,
+        event_id,
+        with_for_update=True,
+    )
 
 
 @pytest.mark.asyncio

@@ -11,10 +11,21 @@ from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, ConfigDict
-from sqlalchemy import exists, func, select
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.middleware.auth import require_privileged_access
+from src.processing.event_cluster_health import (
+    cluster_health_payload,
+    resolve_cluster_health,
+)
+from src.processing.event_lineage import (
+    EventRepairResult,
+    load_event_lineage,
+    merge_events,
+    split_event,
+)
 from src.storage.database import get_session
 from src.storage.event_state import (
     resolved_corroboration_mode,
@@ -56,6 +67,8 @@ class EventResponse(BaseModel):
                 "extracted_who": ["Country A", "Country B"],
                 "extracted_what": "Military units repositioned near border.",
                 "extracted_where": "Eastern sector",
+                "cluster_cohesion_score": 0.94,
+                "split_risk_score": 0.18,
             }
         }
     )
@@ -77,6 +90,8 @@ class EventResponse(BaseModel):
     extracted_who: list[str] | None
     extracted_what: str | None
     extracted_where: str | None
+    cluster_cohesion_score: float
+    split_risk_score: float
 
 
 class EventDetailResponse(EventResponse):
@@ -116,6 +131,7 @@ class EventDetailResponse(EventResponse):
                         "direction": "escalatory",
                     }
                 ],
+                "lineage": [],
             }
         }
     )
@@ -126,6 +142,36 @@ class EventDetailResponse(EventResponse):
     corroboration_score: float
     provenance_summary: dict[str, Any]
     extraction_provenance: dict[str, Any]
+    lineage: list[dict[str, Any]]
+
+
+class EventMergeRequest(BaseModel):
+    """Operator request to merge one event into another."""
+
+    target_event_id: UUID
+    notes: str | None = None
+    created_by: str | None = None
+
+
+class EventSplitRequest(BaseModel):
+    """Operator request to split selected items into a new event."""
+
+    item_ids: list[UUID] = Field(min_length=1)
+    notes: str | None = None
+    created_by: str | None = None
+
+
+class EventRepairResponse(BaseModel):
+    """Summary of one event repair operation."""
+
+    action: str
+    lineage_id: UUID
+    source_event_id: UUID
+    target_event_id: UUID
+    created_event_id: UUID | None
+    moved_item_ids: list[UUID]
+    invalidated_evidence_ids: list[UUID]
+    replay_enqueued_event_ids: list[UUID]
 
 
 # =============================================================================
@@ -136,6 +182,7 @@ class EventDetailResponse(EventResponse):
 async def _load_event_detail_payloads(
     *,
     session: AsyncSession,
+    event: Event,
     event_id: UUID,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     source_rows = (
@@ -162,19 +209,30 @@ async def _load_event_detail_payloads(
             .order_by(TrendEvidence.created_at.desc())
         )
     ).all()
-    claim_rows = (
-        await session.execute(
-            select(
-                EventClaim.id,
-                EventClaim.claim_key,
-                EventClaim.claim_text,
-                EventClaim.claim_type,
-                EventClaim.is_active,
-            )
-            .where(EventClaim.event_id == event_id)
-            .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+    referenced_claim_ids = {
+        event_claim_id for _, event_claim_id, _, _, _ in impact_rows if event_claim_id is not None
+    }
+    claim_query = (
+        select(
+            EventClaim.id,
+            EventClaim.claim_key,
+            EventClaim.claim_text,
+            EventClaim.claim_type,
+            EventClaim.is_active,
         )
-    ).all()
+        .where(EventClaim.event_id == event_id)
+        .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+    )
+    if referenced_claim_ids:
+        claim_query = claim_query.where(
+            or_(
+                EventClaim.is_active.is_(True),
+                EventClaim.id.in_(tuple(referenced_claim_ids)),
+            )
+        )
+    elif not _lineage_replay_pending(event):
+        claim_query = claim_query.where(EventClaim.is_active.is_(True))
+    claim_rows = (await session.execute(claim_query)).all()
     sources = [
         {"source_name": source_name, "url": url}
         for source_name, url in source_rows
@@ -203,6 +261,56 @@ async def _load_event_detail_payloads(
     return (sources, claims, trend_impacts)
 
 
+def _to_event_response(
+    event: Event,
+    *,
+    cluster_health: dict[str, float] | None = None,
+) -> EventResponse:
+    resolved_cluster_health = cluster_health or cluster_health_payload(event)
+    return EventResponse(
+        id=event.id,
+        summary=event.canonical_summary,
+        categories=list(event.categories or []),
+        source_count=event.source_count,
+        unique_source_count=event.unique_source_count,
+        independent_evidence_count=resolved_independent_evidence_count(event),
+        corroboration_mode=resolved_corroboration_mode(event),
+        epistemic_state=resolved_event_epistemic_state(event),
+        activity_state=resolved_event_activity_state(event),
+        lifecycle_status=event.lifecycle_status,
+        has_contradictions=event.has_contradictions,
+        contradiction_notes=event.contradiction_notes,
+        first_seen_at=event.first_seen_at,
+        last_mention_at=event.last_mention_at,
+        extracted_who=list(event.extracted_who) if event.extracted_who else None,
+        extracted_what=event.extracted_what,
+        extracted_where=event.extracted_where,
+        cluster_cohesion_score=resolved_cluster_health["cluster_cohesion_score"],
+        split_risk_score=resolved_cluster_health["split_risk_score"],
+    )
+
+
+def _lineage_replay_pending(event: Event) -> bool:
+    provenance = dict(event.extraction_provenance or {})
+    return (
+        provenance.get("status") == "replay_pending"
+        and provenance.get("reason") == "event_lineage_repair"
+    )
+
+
+def _to_event_repair_response(result: EventRepairResult) -> EventRepairResponse:
+    return EventRepairResponse(
+        action=result.action,
+        lineage_id=result.lineage_id,
+        source_event_id=result.source_event_id,
+        target_event_id=result.target_event_id,
+        created_event_id=result.created_event_id,
+        moved_item_ids=list(result.moved_item_ids),
+        invalidated_evidence_ids=list(result.invalidated_evidence_ids),
+        replay_enqueued_event_ids=list(result.replay_enqueued_event_ids),
+    )
+
+
 @router.get("", response_model=list[EventResponse])
 async def list_events(
     category: str | None = None,
@@ -227,6 +335,7 @@ async def list_events(
     query = (
         select(Event)
         .where(Event.last_mention_at >= since)
+        .where(~((Event.activity_state == "closed") & (Event.source_count == 0)))
         .order_by(Event.last_mention_at.desc())
         .limit(limit)
     )
@@ -252,25 +361,15 @@ async def list_events(
         )
 
     events = list((await session.scalars(query)).all())
+    cluster_health_by_event_id = {
+        event.id: await resolve_cluster_health(session=session, event=event)
+        for event in events
+        if event.id is not None
+    }
     return [
-        EventResponse(
-            id=event.id,
-            summary=event.canonical_summary,
-            categories=list(event.categories or []),
-            source_count=event.source_count,
-            unique_source_count=event.unique_source_count,
-            independent_evidence_count=resolved_independent_evidence_count(event),
-            corroboration_mode=resolved_corroboration_mode(event),
-            epistemic_state=resolved_event_epistemic_state(event),
-            activity_state=resolved_event_activity_state(event),
-            lifecycle_status=event.lifecycle_status,
-            has_contradictions=event.has_contradictions,
-            contradiction_notes=event.contradiction_notes,
-            first_seen_at=event.first_seen_at,
-            last_mention_at=event.last_mention_at,
-            extracted_who=list(event.extracted_who) if event.extracted_who else None,
-            extracted_what=event.extracted_what,
-            extracted_where=event.extracted_where,
+        _to_event_response(
+            event,
+            cluster_health=cluster_health_by_event_id.get(event.id),
         )
         for event in events
     ]
@@ -292,32 +391,94 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Event '{event_id}' not found",
         )
+    cluster_health = await resolve_cluster_health(session=session, event=event)
     sources, claims, trend_impacts = await _load_event_detail_payloads(
         session=session,
+        event=event,
         event_id=event_id,
     )
+    lineage = await load_event_lineage(session=session, event_id=event_id)
     return EventDetailResponse(
-        id=event.id,
-        summary=event.canonical_summary,
-        categories=list(event.categories or []),
-        source_count=event.source_count,
-        unique_source_count=event.unique_source_count,
-        independent_evidence_count=resolved_independent_evidence_count(event),
-        corroboration_mode=resolved_corroboration_mode(event),
-        epistemic_state=resolved_event_epistemic_state(event),
-        activity_state=resolved_event_activity_state(event),
-        lifecycle_status=event.lifecycle_status,
-        has_contradictions=event.has_contradictions,
-        contradiction_notes=event.contradiction_notes,
-        first_seen_at=event.first_seen_at,
-        last_mention_at=event.last_mention_at,
-        extracted_who=list(event.extracted_who) if event.extracted_who else None,
-        extracted_what=event.extracted_what,
-        extracted_where=event.extracted_where,
+        **_to_event_response(event, cluster_health=cluster_health).model_dump(),
         corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
         extraction_provenance=dict(event.extraction_provenance or {}),
         sources=sources,
         claims=claims,
         trend_impacts=trend_impacts,
+        lineage=lineage,
     )
+
+
+@router.post(
+    "/{event_id}/merge",
+    response_model=EventRepairResponse,
+    dependencies=[Depends(require_privileged_access("events.lineage_repair"))],
+)
+async def merge_event(
+    event_id: UUID,
+    payload: EventMergeRequest,
+    session: AsyncSession = Depends(get_session),
+) -> EventRepairResponse:
+    """Merge one event into a target event and record lineage."""
+
+    source_event = await session.get(Event, event_id)
+    if source_event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event '{event_id}' not found",
+        )
+    target_event = await session.get(Event, payload.target_event_id)
+    if target_event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event '{payload.target_event_id}' not found",
+        )
+    try:
+        result = await merge_events(
+            session=session,
+            source_event=source_event,
+            target_event=target_event,
+            notes=payload.notes,
+            created_by=payload.created_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await session.flush()
+    return _to_event_repair_response(result)
+
+
+@router.post(
+    "/{event_id}/split",
+    response_model=EventRepairResponse,
+    dependencies=[Depends(require_privileged_access("events.lineage_repair"))],
+)
+async def split_event_route(
+    event_id: UUID,
+    payload: EventSplitRequest,
+    session: AsyncSession = Depends(get_session),
+) -> EventRepairResponse:
+    """Split selected raw items into a new event and record lineage."""
+
+    source_event = await session.get(Event, event_id)
+    if source_event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event '{event_id}' not found",
+        )
+    try:
+        result = await split_event(
+            session=session,
+            source_event=source_event,
+            item_ids=payload.item_ids,
+            notes=payload.notes,
+            created_by=payload.created_by,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    await session.flush()
+    return _to_event_repair_response(result)

@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any
+from typing import Any, TypedDict
 
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     canonical_task_workflow_commands_for_task,
+    high_risk_pre_push_review_batching_statements,
+    high_risk_pre_push_review_commands,
+    high_risk_pre_push_review_fallback_statements,
 )
 
 _CANONICAL_PLANNING_EXAMPLE_PATH = "tasks/specs/275-finish-review-gate-timeout.md"
@@ -15,6 +18,39 @@ _PLANNING_STATE_PRESENT = "applicable_with_authoritative_artifact_present"
 _PLANNING_STATE_SPEC_ONLY = "applicable_spec_backed_without_exec_plan"
 _PLANNING_STATE_MISSING = "applicable_backlog_only_missing_artifact"
 _PLANNING_STATE_QUIET = "non_applicable"
+_HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
+    "tools/horadus/python/horadus_workflow/",
+    "tools/horadus/python/horadus_cli/",
+)
+_HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md")
+_HIGH_RISK_RUNTIME_SURFACE_PREFIXES = {
+    "src/api/": "api",
+    "src/core/": "core",
+    "src/processing/": "processing",
+    "src/storage/": "storage",
+    "src/workers/": "workers",
+    "alembic/": "migrations",
+}
+_HIGH_RISK_TEXT_MARKERS = (
+    ("migration", "task description references migrations"),
+    ("migrations", "task description references migrations"),
+    ("shared math", "task description references shared math"),
+    ("workflow tooling", "task description references workflow tooling"),
+    ("multi-surface mutation", "task description references multi-surface mutation paths"),
+    ("cross-surface", "task description references cross-surface behavior"),
+)
+_SUGGESTED_VALIDATION_COMMANDS = [
+    "make agent-check",
+    "uv run --no-sync horadus tasks local-gate --full",
+]
+
+
+class PrePushReviewGuidance(TypedDict):
+    recommended: bool
+    risk_reasons: list[str]
+    commands: list[str]
+    fallback_notes: list[str]
+    batching_notes: list[str]
 
 
 def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, object]:
@@ -292,6 +328,83 @@ def _planning_context(task_id: str, record: Any) -> dict[str, object]:
     }
 
 
+def _normalized_task_paths(record: Any) -> list[str]:
+    return [path.strip().strip("`") for path in record.files or [] if path.strip().strip("`")]
+
+
+def _pre_push_review_guidance(record: Any, *, planning: dict[str, object]) -> PrePushReviewGuidance:
+    if not planning["required"]:
+        return {
+            "recommended": False,
+            "risk_reasons": [],
+            "commands": [],
+            "fallback_notes": [],
+            "batching_notes": [],
+        }
+
+    normalized_paths = _normalized_task_paths(record)
+    risk_reasons: list[str] = []
+    runtime_surfaces = sorted(
+        {
+            label
+            for path in normalized_paths
+            for prefix, label in _HIGH_RISK_RUNTIME_SURFACE_PREFIXES.items()
+            if path.startswith(prefix)
+        }
+    )
+
+    if any(path.startswith("alembic/") for path in normalized_paths):
+        risk_reasons.append("task touches migration surfaces")
+
+    if any(
+        path == policy_path for policy_path in _HIGH_RISK_POLICY_FILES for path in normalized_paths
+    ):
+        risk_reasons.append("task changes canonical workflow or policy guidance")
+
+    if any(
+        path.startswith(prefix)
+        for prefix in _HIGH_RISK_SHARED_WORKFLOW_PREFIXES
+        for path in normalized_paths
+    ):
+        risk_reasons.append("task changes shared workflow tooling")
+
+    if len(runtime_surfaces) >= 2:
+        risk_reasons.append("task spans multiple runtime surfaces: " + ", ".join(runtime_surfaces))
+
+    text_blob = " ".join([record.title, *record.description, *record.acceptance_criteria]).lower()
+    for marker, reason in _HIGH_RISK_TEXT_MARKERS:
+        if marker in text_blob and reason not in risk_reasons:
+            risk_reasons.append(reason)
+
+    recommended = bool(risk_reasons)
+    return {
+        "recommended": recommended,
+        "risk_reasons": risk_reasons,
+        "commands": list(high_risk_pre_push_review_commands()) if recommended else [],
+        "fallback_notes": (
+            list(high_risk_pre_push_review_fallback_statements()) if recommended else []
+        ),
+        "batching_notes": (
+            list(high_risk_pre_push_review_batching_statements()) if recommended else []
+        ),
+    }
+
+
+def _append_pre_push_review_guidance_lines(
+    lines: list[str], guidance: PrePushReviewGuidance
+) -> None:
+    if not guidance["recommended"]:
+        return
+    lines.extend(["", "## Pre-Push Review Guidance", "Applicability: recommended"])
+    lines.extend(f"- {reason}" for reason in guidance["risk_reasons"])
+    lines.extend(["", "Suggested commands:"])
+    lines.extend(guidance["commands"])
+    lines.extend(["", "Fallback guidance:"])
+    lines.extend(f"- {note}" for note in guidance["fallback_notes"])
+    lines.extend(["", "Re-review discipline:"])
+    lines.extend(f"- {note}" for note in guidance["batching_notes"])
+
+
 def handle_context_pack(args: Any) -> CommandResult:
     try:
         task_id = task_repo.normalize_task_id(args.task_id)
@@ -312,6 +425,7 @@ def handle_context_pack(args: Any) -> CommandResult:
         )
 
     planning = _planning_context(task_id, record)
+    pre_push_review = _pre_push_review_guidance(record, planning=planning)
     lines = [
         f"# Context Pack: {task_id}",
         "",
@@ -364,14 +478,8 @@ def handle_context_pack(args: Any) -> CommandResult:
         archived=record.archived,
     )
     lines.extend(workflow_commands)
-    lines.extend(
-        [
-            "",
-            "## Suggested Validation Commands",
-            "make agent-check",
-            "uv run --no-sync horadus tasks local-gate --full",
-        ]
-    )
+    lines.extend(["", "## Suggested Validation Commands", *_SUGGESTED_VALIDATION_COMMANDS])
+    _append_pre_push_review_guidance_lines(lines, pre_push_review)
     return CommandResult(
         lines=lines,
         data={
@@ -382,18 +490,18 @@ def handle_context_pack(args: Any) -> CommandResult:
             "canonical_spec_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
             "planning_gates": planning,
             "suggested_workflow_commands": workflow_commands,
-            "suggested_validation_commands": [
-                "make agent-check",
-                "uv run --no-sync horadus tasks local-gate --full",
-            ],
+            "suggested_validation_commands": list(_SUGGESTED_VALIDATION_COMMANDS),
+            "pre_push_review_guidance": pre_push_review,
         },
     )
 
 
 __all__ = [
+    "_append_pre_push_review_guidance_lines",
     "_archived_task_blocked_result",
     "_planning_context",
     "_planning_marker_from_relative_path",
+    "_pre_push_review_guidance",
     "_task_record_payload",
     "_workflow_commands_for_context_pack",
     "handle_context_pack",

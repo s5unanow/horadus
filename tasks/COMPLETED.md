@@ -333,3 +333,4 @@
 - TASK-227: Make Corroboration Provenance-Aware Instead of Source-Count-Aware ✅
 - TASK-339: Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math ✅
 - TASK-235: Add Event Split/Merge Lineage for Evolving Stories ✅
+- TASK-346: Front-load adversarial review guidance for high-risk cross-surface tasks ✅

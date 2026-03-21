@@ -121,29 +121,6 @@ waiting.
 
 ---
 
-### TASK-346: Front-load adversarial review guidance for high-risk cross-surface tasks
-**Priority**: P2 (Medium)
-**Estimate**: 2-3 hours
-
-For cross-cutting tasks with migrations, shared math, workflow tooling, or
-multi-surface mutation paths, discovering semantic bugs for the first time in
-the PR finish loop is too expensive. The repo workflow should explicitly push
-high-risk tasks toward adversarial review before the first push, with a clear
-fallback when a provider-specific local-review path is unavailable.
-
-**Dependency Note**:
-- Coordinate with `TASK-334` so the guidance does not depend on one provider-specific local-review wrapper being healthy.
-
-**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `tests/horadus_cli/`, `tests/workflow/`
-
-**Acceptance Criteria**:
-- [ ] Define which task shapes count as “high-risk cross-surface” for pre-push adversarial review guidance
-- [ ] Workflow guidance or context-pack output recommends a pre-push review step for those task shapes instead of discovering everything in `horadus tasks finish`
-- [ ] The guidance documents an explicit fallback path when local-review tooling is unavailable, so operators still front-load review rather than skipping it silently
-- [ ] Tests cover at least one high-risk task context where the guidance includes the new pre-push review recommendation
-
----
-
 ### TASK-334: Align Gemini local-review approval-mode flags with installed CLI
 **Priority**: P3 (Low)
 **Estimate**: <1h

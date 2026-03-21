@@ -14,6 +14,7 @@ from tests.horadus_cli.v2.helpers import (
     BACKLOG_ONLY_TASK_ID,
     EXEC_PLAN_NO_MARKER_TASK_ID,
     EXEC_PLAN_TASK_ID,
+    HIGH_RISK_TASK_ID,
     LIVE_TASK_ID,
     NON_APPLICABLE_TASK_ID,
 )
@@ -377,6 +378,7 @@ def test_handle_context_pack_surfaces_missing_planning_artifact_notice(
     assert planning["state"] == "applicable_backlog_only_missing_artifact"
     assert planning["authoritative_artifact_path"] is None
     assert planning["canonical_example_path"] == "tasks/specs/275-finish-review-gate-timeout.md"
+    assert result.data["pre_push_review_guidance"]["recommended"] is False
 
 
 def test_handle_context_pack_stays_quiet_for_non_applicable_task(
@@ -448,6 +450,29 @@ def test_handle_context_pack_propagates_archive_flag_to_suggested_commands(
     )
     assert result.data is not None
     assert expected in result.data["suggested_workflow_commands"]
+
+
+def test_handle_context_pack_surfaces_pre_push_review_guidance_for_high_risk_task(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id=HIGH_RISK_TASK_ID))
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Pre-Push Review Guidance" in result.lines
+    assert "Applicability: recommended" in result.lines
+    assert "uv run --no-sync horadus tasks local-review --format json" in result.lines
+    assert (
+        "uv run --no-sync horadus tasks local-review --format json --allow-provider-fallback"
+        in result.lines
+    )
+    assert result.data is not None
+    guidance = result.data["pre_push_review_guidance"]
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+    assert guidance["fallback_notes"]
+    assert guidance["batching_notes"]
 
 
 def test_handle_show_requires_explicit_archive_flag_for_archived_task(

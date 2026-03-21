@@ -167,6 +167,30 @@ FALLBACK_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     ),
 )
 
+HIGH_RISK_PRE_PUSH_REVIEW_COMMANDS: tuple[str, ...] = (
+    "uv run --no-sync horadus tasks local-review --format json",
+    "uv run --no-sync horadus tasks local-review --format json --allow-provider-fallback",
+)
+
+HIGH_RISK_PRE_PUSH_REVIEW_FALLBACK_STATEMENTS: tuple[str, ...] = (
+    (
+        "If the selected local-review provider is unavailable on PATH and you "
+        "still want local automation, rerun with `--allow-provider-fallback` "
+        "so Horadus can try the next supported provider."
+    ),
+    (
+        "If local-review remains unavailable, unreadable, or otherwise "
+        "unusable, front-load adversarial review manually before push "
+        "(for example by opening a draft PR early or requesting explicit "
+        "review) instead of waiting for `horadus tasks finish`."
+    ),
+)
+
+HIGH_RISK_PRE_PUSH_REVIEW_BATCHING_STATEMENTS: tuple[str, ...] = (
+    "Batch related fixes with updated tests before requesting another review pass.",
+    "Do not turn a high-risk task into a single-fix re-review loop when the same bucket is still open.",
+)
+
 WORKFLOW_POLICY_GUARDRAIL_STATEMENTS: tuple[str, ...] = (
     (
         "Apply these guardrails only when changing shared workflow helpers, "
@@ -209,6 +233,18 @@ def dependency_aware_guidance_statements() -> tuple[str, ...]:
 
 def fallback_guidance_statements() -> tuple[str, ...]:
     return FALLBACK_GUIDANCE_STATEMENTS
+
+
+def high_risk_pre_push_review_commands() -> tuple[str, ...]:
+    return HIGH_RISK_PRE_PUSH_REVIEW_COMMANDS
+
+
+def high_risk_pre_push_review_fallback_statements() -> tuple[str, ...]:
+    return HIGH_RISK_PRE_PUSH_REVIEW_FALLBACK_STATEMENTS
+
+
+def high_risk_pre_push_review_batching_statements() -> tuple[str, ...]:
+    return HIGH_RISK_PRE_PUSH_REVIEW_BATCHING_STATEMENTS
 
 
 def workflow_policy_guardrail_statements() -> tuple[str, ...]:

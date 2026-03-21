@@ -6,6 +6,7 @@ import pytest
 
 import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo_module
 
 LIVE_TASK_ID = "TASK-901"
 ARCHIVED_TASK_ID = "TASK-902"
@@ -13,15 +14,11 @@ BACKLOG_ONLY_TASK_ID = "TASK-903"
 NON_APPLICABLE_TASK_ID = "TASK-904"
 EXEC_PLAN_TASK_ID = "TASK-905"
 EXEC_PLAN_NO_MARKER_TASK_ID = "TASK-906"
+HIGH_RISK_TASK_ID = "TASK-907"
 
 
-def seed_task_repo_layout(repo_root: Path) -> Path:
-    tasks_dir = repo_root / "tasks"
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    (tasks_dir / "specs").mkdir(parents=True, exist_ok=True)
-    (repo_root / "archive" / "closed_tasks").mkdir(parents=True, exist_ok=True)
-
-    (tasks_dir / "BACKLOG.md").write_text(
+def _backlog_fixture_text() -> str:
+    return (
         "\n".join(
             [
                 "# Backlog",
@@ -97,12 +94,28 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "",
                 "---",
                 "",
+                "### TASK-907: High-risk review fixture",
+                "**Priority**: P1",
+                "**Estimate**: 2h",
+                "**Planning Gates**: Required — shared workflow tooling fixture",
+                "",
+                "Exercise pre-push adversarial review guidance for workflow tooling.",
+                "",
+                "**Files**: `AGENTS.md`, `tools/horadus/python/horadus_workflow/`, `tests/workflow/`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] high-risk context pack recommends pre-push review",
+                "",
+                "---",
+                "",
             ]
         )
-        + "\n",
-        encoding="utf-8",
+        + "\n"
     )
-    (tasks_dir / "CURRENT_SPRINT.md").write_text(
+
+
+def _current_sprint_fixture_text() -> str:
+    return (
         "\n".join(
             [
                 "# Current Sprint",
@@ -117,9 +130,18 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "",
             ]
         )
-        + "\n",
-        encoding="utf-8",
+        + "\n"
     )
+
+
+def seed_task_repo_layout(repo_root: Path) -> Path:
+    tasks_dir = repo_root / "tasks"
+    tasks_dir.mkdir(parents=True, exist_ok=True)
+    (tasks_dir / "specs").mkdir(parents=True, exist_ok=True)
+    (repo_root / "archive" / "closed_tasks").mkdir(parents=True, exist_ok=True)
+
+    (tasks_dir / "BACKLOG.md").write_text(_backlog_fixture_text(), encoding="utf-8")
+    (tasks_dir / "CURRENT_SPRINT.md").write_text(_current_sprint_fixture_text(), encoding="utf-8")
     (tasks_dir / "COMPLETED.md").write_text(
         "# Completed Tasks\n\n## Sprint 4\n- TASK-902: Stable archived fixture ✅\n",
         encoding="utf-8",
@@ -211,7 +233,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
                 "**Status**: Archived closed-task ledger (non-authoritative)",
                 "**Quarter**: 2026-Q1",
                 "",
-                task_repo_module.CLOSED_TASK_ARCHIVE_GUIDANCE,
+                workflow_task_repo_module.CLOSED_TASK_ARCHIVE_GUIDANCE,
                 "",
                 "---",
                 "",

@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping
-from typing import Any
+from typing import Any, cast
 
 from src.storage.scoring_contract import (
     TREND_SCORING_MATH_VERSION,
@@ -42,11 +42,7 @@ def normalize_request_overrides(request_overrides: dict[str, Any] | None) -> dic
 
     if request_overrides is None:
         return None
-    normalized = canonicalize_payload(request_overrides)
-    if not isinstance(normalized, dict):
-        msg = "Normalized request overrides must be a mapping"
-        raise TypeError(msg)
-    return normalized
+    return cast(dict[str, Any], canonicalize_payload(request_overrides))
 
 
 def build_prompt_provenance(*, prompt_path: str, prompt_template: str) -> dict[str, str]:

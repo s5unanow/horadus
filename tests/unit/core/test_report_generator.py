@@ -1044,6 +1044,72 @@ def test_build_narrative_payload_content_truncates_large_payload(
 
 
 @pytest.mark.asyncio
+async def test_build_narrative_defaults_prompt_path_from_report_type(
+    mock_db_session,
+) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    trend = SimpleNamespace(id=uuid4(), name="Trend", description="Description")
+    captured: dict[str, str] = {}
+
+    def _fallback(**kwargs) -> NarrativeResult:
+        captured["prompt_path"] = kwargs["prompt_path"]
+        return NarrativeResult(
+            narrative="fallback",
+            grounding_status="fallback",
+            grounding_violation_count=0,
+            provisional=True,
+        )
+
+    generator._build_fallback_narrative_result = _fallback  # type: ignore[method-assign]
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={},
+        top_events=[],
+        period_start=datetime(2026, 3, 1, tzinfo=UTC),
+        period_end=datetime(2026, 3, 8, tzinfo=UTC),
+        prompt_template="template",
+        report_type="monthly",
+    )
+
+    assert result.narrative == "fallback"
+    assert captured["prompt_path"] == generator.monthly_prompt_path
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_preserves_explicit_prompt_path(
+    mock_db_session,
+) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    trend = SimpleNamespace(id=uuid4(), name="Trend", description="Description")
+    captured: dict[str, str] = {}
+
+    def _fallback(**kwargs) -> NarrativeResult:
+        captured["prompt_path"] = kwargs["prompt_path"]
+        return NarrativeResult(
+            narrative="fallback",
+            grounding_status="fallback",
+            grounding_violation_count=0,
+            provisional=True,
+        )
+
+    generator._build_fallback_narrative_result = _fallback  # type: ignore[method-assign]
+
+    await generator._build_narrative(
+        trend=trend,
+        statistics={},
+        top_events=[],
+        period_start=datetime(2026, 3, 1, tzinfo=UTC),
+        period_end=datetime(2026, 3, 8, tzinfo=UTC),
+        prompt_path="custom/report_prompt.md",
+        prompt_template="template",
+        report_type="monthly",
+    )
+
+    assert captured["prompt_path"] == "custom/report_prompt.md"
+
+
+@pytest.mark.asyncio
 async def test_generate_weekly_reports_persists_grounding_metadata(mock_db_session) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend_id = uuid4()

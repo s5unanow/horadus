@@ -22,10 +22,11 @@ _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_workflow/",
     "tools/horadus/python/horadus_cli/",
 )
-_HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md")
+_HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md", "tasks/specs/TEMPLATE.md")
 _HIGH_RISK_RUNTIME_SURFACE_PREFIXES = {
     "src/api/": "api",
     "src/core/": "core",
+    "src/ingestion/": "ingestion",
     "src/processing/": "processing",
     "src/storage/": "storage",
     "src/workers/": "workers",

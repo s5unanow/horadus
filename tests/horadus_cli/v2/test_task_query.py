@@ -526,6 +526,50 @@ def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() 
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_spec_template_as_policy_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-997",
+        title="Spec template fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise shared workflow policy guidance for the spec template."],
+        files=["`tasks/specs/TEMPLATE.md`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_ingestion_as_runtime_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-996",
+        title="Ingestion/storage fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise multi-surface runtime guidance for ingestion plus storage."],
+        files=["`src/ingestion/rss_collector.py`", "`src/storage/models.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task spans multiple runtime surfaces: ingestion, storage" in guidance["risk_reasons"]
+
+
 def test_handle_show_requires_explicit_archive_flag_for_archived_task(
     synthetic_task_repo: Path,
 ) -> None:

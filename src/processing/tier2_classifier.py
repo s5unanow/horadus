@@ -330,7 +330,7 @@ class Tier2Classifier:
         provenance_derivation: dict[str, Any] | None,
     ) -> Tier2EventResult | None:
         cached_content: str | None = None
-        cache_provider = self.primary_provider
+        cache_provider: str | None = self.primary_provider
         cache_model = self.model
         cache_reasoning_effort = self.reasoning_effort
         for provider, model, reasoning_effort in self._semantic_cache_read_routes():
@@ -394,14 +394,17 @@ class Tier2Classifier:
         )
 
     def _semantic_cache_read_routes(self) -> list[tuple[str | None, str, str | None]]:
-        routes = [(self.primary_provider, self.model, self.reasoning_effort)]
-        secondary_route = (
-            self.secondary_provider or self.primary_provider,
-            self.secondary_model,
-            self.secondary_reasoning_effort,
-        )
-        if self.secondary_model is not None and secondary_route not in routes:
-            routes.append(secondary_route)
+        routes: list[tuple[str | None, str, str | None]] = [
+            (self.primary_provider, self.model, self.reasoning_effort)
+        ]
+        if self.secondary_model is not None:
+            secondary_route = (
+                self.secondary_provider or self.primary_provider,
+                self.secondary_model,
+                self.secondary_reasoning_effort,
+            )
+            if secondary_route not in routes:
+                routes.append(secondary_route)
         return routes
 
     async def _invoke_event_model(

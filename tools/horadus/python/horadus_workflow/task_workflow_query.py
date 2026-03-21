@@ -332,16 +332,7 @@ def _normalized_task_paths(record: Any) -> list[str]:
     return [path.strip().strip("`") for path in record.files or [] if path.strip().strip("`")]
 
 
-def _pre_push_review_guidance(record: Any, *, planning: dict[str, object]) -> PrePushReviewGuidance:
-    if not planning["required"]:
-        return {
-            "recommended": False,
-            "risk_reasons": [],
-            "commands": [],
-            "fallback_notes": [],
-            "batching_notes": [],
-        }
-
+def _pre_push_review_guidance(record: Any) -> PrePushReviewGuidance:
     normalized_paths = _normalized_task_paths(record)
     risk_reasons: list[str] = []
     runtime_surfaces = sorted(
@@ -425,7 +416,7 @@ def handle_context_pack(args: Any) -> CommandResult:
         )
 
     planning = _planning_context(task_id, record)
-    pre_push_review = _pre_push_review_guidance(record, planning=planning)
+    pre_push_review = _pre_push_review_guidance(record)
     lines = [
         f"# Context Pack: {task_id}",
         "",

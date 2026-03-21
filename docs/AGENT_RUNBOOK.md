@@ -69,9 +69,9 @@ tasks:
 Non-applicable tasks stay on the quiet path with no planning banner.
 For high-risk cross-surface tasks, `context-pack` also surfaces pre-push
 adversarial review guidance before the first push. The current repo-owned
-heuristic stays narrow: planning-required tasks that touch shared workflow or
-policy surfaces, migration surfaces, or multiple runtime areas will get the
-extra review section instead of every ordinary task.
+heuristic stays narrow: tasks that touch shared workflow or policy surfaces,
+migration surfaces, or multiple runtime areas will get the extra review
+section instead of every ordinary task.
 If planning gates are required but the backlog entry is still the only artifact,
 create the missing spec or exec plan before implementation and use
 `tasks/specs/275-finish-review-gate-timeout.md` as the canonical example.

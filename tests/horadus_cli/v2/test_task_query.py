@@ -495,16 +495,35 @@ def test_pre_push_review_guidance_detects_migration_and_multi_surface_runtime_pa
         spec_paths=[],
     )
 
-    guidance = task_commands_module._pre_push_review_guidance(
-        record,
-        planning={"required": True},
-    )
+    guidance = task_commands_module._pre_push_review_guidance(record)
 
     assert guidance["recommended"] is True
     assert "task touches migration surfaces" in guidance["risk_reasons"]
     assert (
         "task spans multiple runtime surfaces: api, migrations, storage" in guidance["risk_reasons"]
     )
+
+
+def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-998",
+        title="Workflow compatibility fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise shared workflow tooling guidance without planning gates."],
+        files=["`tools/horadus/python/horadus_workflow/`", "`docs/AGENT_RUNBOOK.md`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
 def test_handle_show_requires_explicit_archive_flag_for_archived_task(

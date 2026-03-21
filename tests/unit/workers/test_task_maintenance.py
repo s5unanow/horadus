@@ -252,19 +252,6 @@ async def test_replay_degraded_events_async_marks_lineage_error_on_failure(
 async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineage_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    degraded_item = SimpleNamespace(
-        event_id=uuid4(),
-        status="pending",
-        locked_at=None,
-        locked_by=None,
-        attempt_count=0,
-        last_attempt_at=None,
-        details={"reason": "degraded_llm_high_impact"},
-        last_error=None,
-        processed_at=None,
-        priority=10,
-        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
-    )
     lineage_item = SimpleNamespace(
         event_id=uuid4(),
         status="pending",
@@ -280,7 +267,7 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     )
     session = AsyncMock()
     session.scalars.side_effect = [
-        SimpleNamespace(all=lambda: [degraded_item, lineage_item]),
+        SimpleNamespace(all=lambda: [lineage_item]),
         SimpleNamespace(all=list),
     ]
 
@@ -320,11 +307,12 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     result = await _task_maintenance.replay_degraded_events_async(deps=deps, limit=5)
 
     assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 0}
-    assert degraded_item.status == "pending"
-    assert degraded_item.locked_by is None
     assert lineage_item.status == "processing"
     replay_one.assert_awaited_once()
     assert replay_one.await_args.kwargs["item"] is lineage_item
+    query_text = str(session.scalars.await_args_list[0].args[0]).lower()
+    assert "details[:details_1]" in query_text
+    assert "for update" in query_text
 
 
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:

@@ -402,19 +402,20 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
     now = datetime.now(tz=UTC)
     async with deps.async_session_maker() as session:
         run_limit = max(1, int(limit))
-        rows = (
-            await session.scalars(
-                deps.select(deps.LLMReplayQueueItem)
-                .where(deps.LLMReplayQueueItem.status == "pending")
-                .order_by(
-                    deps.LLMReplayQueueItem.priority.desc(),
-                    deps.LLMReplayQueueItem.enqueued_at.asc(),
-                )
-                .limit(run_limit)
-                .with_for_update(skip_locked=True)
+        pending_query = (
+            deps.select(deps.LLMReplayQueueItem)
+            .where(deps.LLMReplayQueueItem.status == "pending")
+            .order_by(
+                deps.LLMReplayQueueItem.priority.desc(),
+                deps.LLMReplayQueueItem.enqueued_at.asc(),
             )
-        ).all()
-        items = list(rows)
+            .with_for_update(skip_locked=True)
+        )
+        rows = list((await session.scalars(pending_query)).all())
+        if getattr(deps.settings, "LLM_DEGRADED_REPLAY_ENABLED", True):
+            items = rows[:run_limit]
+        else:
+            items = [item for item in rows if _is_lineage_replay_queue_item(item)][:run_limit]
         if not items:
             return {
                 "status": "ok",
@@ -476,3 +477,8 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
         "drained": drained,
         "errors": errors,
     }
+
+
+def _is_lineage_replay_queue_item(item: Any) -> bool:
+    details = getattr(item, "details", None)
+    return isinstance(details, dict) and details.get("reason") == "event_lineage_repair"

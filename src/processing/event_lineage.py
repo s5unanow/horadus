@@ -400,7 +400,11 @@ async def _close_empty_merged_event(event: Event, *, replay_pending: bool = True
     event.embedding_retained_tokens = None
     event.embedding_was_truncated = False
     event.embedding_truncation_strategy = None
-    apply_event_state_update(event, activity_state=EventActivityState.CLOSED.value)
+    apply_event_state_update(
+        event,
+        epistemic_state=EventEpistemicState.EMERGING.value,
+        activity_state=EventActivityState.CLOSED.value,
+    )
     if replay_pending:
         await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
     else:

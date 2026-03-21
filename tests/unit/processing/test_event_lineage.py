@@ -41,6 +41,7 @@ from src.processing.event_lineage_replay import (
     replay_source_provenance,
 )
 from src.storage.event_lineage_models import EventLineage
+from src.storage.event_state import EventEpistemicState
 from src.storage.models import (
     Event,
     EventClaim,
@@ -512,6 +513,7 @@ async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> No
     event = Event(
         id=uuid4(),
         canonical_summary="event",
+        epistemic_state=EventEpistemicState.CONFIRMED.value,
         embedding=[0.5, 0.6],
         embedding_model="text-embedding-3-large",
         embedding_input_tokens=200,
@@ -532,6 +534,7 @@ async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> No
     await _close_empty_merged_event(event)
 
     assert event.activity_state == "closed"
+    assert event.epistemic_state == EventEpistemicState.EMERGING.value
     assert event.source_count == 0
     assert event.embedding is None
     assert event.embedding_model is None
@@ -548,6 +551,7 @@ async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
     event = Event(
         id=uuid4(),
         canonical_summary="event",
+        epistemic_state=EventEpistemicState.CONTESTED.value,
         extraction_provenance={"stage": "tier2", "model": "old"},
         extracted_claims={"claim_graph": {}},
         extracted_who=["A"],
@@ -562,6 +566,7 @@ async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
     await _close_empty_merged_event(event, replay_pending=False)
 
     assert event.activity_state == "closed"
+    assert event.epistemic_state == EventEpistemicState.EMERGING.value
     assert event.extraction_provenance["status"] == "closed"
     assert event.extraction_provenance["original_extraction_provenance"] == {
         "stage": "tier2",

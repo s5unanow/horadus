@@ -248,6 +248,85 @@ async def test_replay_degraded_events_async_marks_lineage_error_on_failure(
     session.commit.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineage_items(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    degraded_item = SimpleNamespace(
+        event_id=uuid4(),
+        status="pending",
+        locked_at=None,
+        locked_by=None,
+        attempt_count=0,
+        last_attempt_at=None,
+        details={"reason": "degraded_llm_high_impact"},
+        last_error=None,
+        processed_at=None,
+        priority=10,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    lineage_item = SimpleNamespace(
+        event_id=uuid4(),
+        status="pending",
+        locked_at=None,
+        locked_by=None,
+        attempt_count=0,
+        last_attempt_at=None,
+        details={"reason": "event_lineage_repair"},
+        last_error=None,
+        processed_at=None,
+        priority=5,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [degraded_item, lineage_item]),
+        SimpleNamespace(all=list),
+    ]
+
+    class _SessionContext:
+        async def __aenter__(self) -> AsyncMock:
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    replay_one = AsyncMock(return_value=True)
+    monkeypatch.setattr(_task_maintenance, "_replay_one_degraded_item", replay_one)
+
+    class _Tier2Classifier:
+        def __init__(self, *, session, model, secondary_model) -> None:
+            pass
+
+    class _Pipeline:
+        def __init__(self, *, session, tier2_classifier, degraded_llm_tracker) -> None:
+            pass
+
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(
+            LLM_DEGRADED_MODE_ENABLED=False,
+            LLM_DEGRADED_REPLAY_ENABLED=False,
+            LLM_TIER2_MODEL="tier2-model",
+        ),
+        async_session_maker=lambda: _SessionContext(),
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        Trend=Trend,
+        Tier2Classifier=_Tier2Classifier,
+        ProcessingPipeline=_Pipeline,
+        asyncio=SimpleNamespace(to_thread=AsyncMock()),
+    )
+
+    result = await _task_maintenance.replay_degraded_events_async(deps=deps, limit=5)
+
+    assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 0}
+    assert degraded_item.status == "pending"
+    assert degraded_item.locked_by is None
+    assert lineage_item.status == "processing"
+    replay_one.assert_awaited_once()
+    assert replay_one.await_args.kwargs["item"] is lineage_item
+
+
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:
     parsed = _task_maintenance._parse_lineage_replay_ids(
         SimpleNamespace(details={"replay_enqueued_event_ids": [uuid4(), "not-a-uuid", None]})

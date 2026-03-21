@@ -105,6 +105,15 @@ async def _sync_lineage_replay_status(*, session: Any, event_id: Any) -> None:
             lineage.details = details
 
 
+async def _mark_replay_item_error(*, session: Any, item: Any, exc: Exception) -> None:
+    item.status = "error"
+    item.last_error = str(exc)[:1000]
+    item.locked_at = None
+    item.locked_by = None
+    await session.flush()
+    await _sync_lineage_replay_status(session=session, event_id=item.event_id)
+
+
 def _parse_lineage_replay_ids(lineage: EventLineage) -> tuple[UUID, ...]:
     parsed_ids: list[UUID] = []
     for value in (lineage.details or {}).get("replay_enqueued_event_ids", []):
@@ -343,12 +352,7 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                 )
             except Exception as exc:
                 errors += 1
-                item.status = "error"
-                item.last_error = str(exc)[:1000]
-                item.locked_at = None
-                item.locked_by = None
-                await session.flush()
-                await _sync_lineage_replay_status(session=session, event_id=item.event_id)
+                await _mark_replay_item_error(session=session, item=item, exc=exc)
         await session.commit()
 
     return {

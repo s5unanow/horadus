@@ -79,3 +79,25 @@ def test_docs_freshness_flags_finish_dedupe_policy_duplication_outside_agents(
         and issue.path == "ops/skills/horadus-cli/SKILL.md"
         for issue in result.errors
     )
+
+
+def test_docs_freshness_flags_missing_high_risk_review_statement_in_skill_docs(
+    tmp_path: Path,
+) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
+        "Thin helper only.\n",
+        encoding="utf-8",
+    )
+
+    result = run_docs_freshness_check(
+        repo_root=tmp_path,
+        override_path=tmp_path / "docs" / "DOCS_FRESHNESS_OVERRIDES.json",
+    )
+
+    assert any(
+        issue.rule_id == "high_risk_pre_push_review_statement_missing"
+        and issue.path == "ops/skills/horadus-cli/SKILL.md"
+        for issue in result.errors
+    )

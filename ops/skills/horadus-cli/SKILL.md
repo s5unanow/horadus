@@ -35,7 +35,7 @@ Implementation note:
 - Canonical autonomous start: `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
 - Context pack: `uv run --no-sync horadus tasks context-pack TASK-XXX`
 - Fast iteration gate: `make agent-check`
-- Optional local review:
+- Pre-push local review:
   `uv run --no-sync horadus tasks local-review --format json`
 - Canonical local gate: `uv run --no-sync horadus tasks local-gate --full`
 - Lifecycle verifier: `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
@@ -55,9 +55,18 @@ Implementation note:
 
 ## When to read more
 
-- For local pre-push review, use `horadus tasks local-review` when you want an
-  advisory branch-diff review before push. Keep PR review / `tasks finish` as
-  the remote merge gate.
+- For high-risk cross-surface tasks (for example migrations, shared workflow
+  tooling or config, shared math, or multi-surface mutation work), front-load
+  adversarial review before the first push instead of discovering the whole bug
+  set inside `horadus tasks finish`.
+- If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,
+  follow that guidance. When the selected provider is unavailable and local
+  automation is still desired, rerun with `--allow-provider-fallback`; if the
+  local-review path remains unusable, request manual review early rather than
+  waiting for the finish loop.
+- Batch related fixes with updated tests before re-requesting review on a
+  high-risk task; do not turn the same open bucket into a single-commit
+  re-review loop.
 - Provider selection for local review is: `--provider` override first, then
   `HORADUS_LOCAL_REVIEW_PROVIDER` from optional local-only `.env.harness`,
   then the repo default `claude`.

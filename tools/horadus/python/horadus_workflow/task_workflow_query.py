@@ -24,6 +24,13 @@ _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_cli/task_",
     "tools/horadus/python/horadus_cli/_task_",
 )
+_HIGH_RISK_SHARED_WORKFLOW_FILES = (
+    "tools/horadus/python/horadus_workflow/task_repo.py",
+    "tools/horadus/python/horadus_workflow/task_workflow_shared.py",
+    "tools/horadus/python/horadus_workflow/triage.py",
+    "tools/horadus/python/horadus_cli/task_repo.py",
+    "tools/horadus/python/horadus_cli/triage_commands.py",
+)
 _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (
     ".github/workflows/",
     "scripts/check_",
@@ -377,7 +384,9 @@ def _structural_risk_reasons(paths: list[str]) -> list[str]:
         reasons.append("task touches migration surfaces")
     if _matches_any_exact_path(paths, _HIGH_RISK_POLICY_FILES):
         reasons.append("task changes canonical workflow or policy guidance")
-    if _matches_any_prefix(paths, _HIGH_RISK_SHARED_WORKFLOW_PREFIXES):
+    if _matches_any_prefix(paths, _HIGH_RISK_SHARED_WORKFLOW_PREFIXES) or (
+        _matches_any_exact_path(paths, _HIGH_RISK_SHARED_WORKFLOW_FILES)
+    ):
         reasons.append("task changes shared workflow tooling")
     if _matches_any_prefix(paths, _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES) or (
         _matches_any_exact_path(paths, _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES)

@@ -31,10 +31,15 @@ from tools.horadus.python.horadus_workflow.repo_workflow import (
     completion_guidance_statements,
     dependency_aware_guidance_statements,
     fallback_guidance_statements,
+    high_risk_pre_push_review_statements,
     workflow_policy_guardrail_statements,
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _write_lines(path: Path, *lines: str) -> None:
+    path.write_text("\n".join([*lines, ""]), encoding="utf-8")
 
 
 def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
@@ -55,28 +60,24 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     completion_guidance_block = "\n".join([*completion_guidance_statements(), ""])
     dependency_guidance_block = "\n".join([*dependency_aware_guidance_statements(), ""])
     fallback_guidance_block = "\n".join([*fallback_guidance_statements(), ""])
+    high_risk_pre_push_review_block = "\n".join([*high_risk_pre_push_review_statements(), ""])
     workflow_guardrail_block = "\n".join([*workflow_policy_guardrail_statements(), ""])
 
-    (repo_root / "PROJECT_STATUS.md").write_text(
-        "\n".join(
-            [
-                "# Project Status",
-                "",
-                "**Status**: Archived pointer stub (non-authoritative)",
-                "**Archived Detailed Status On**: 2026-03-10",
-                "",
-                "- `tasks/CURRENT_SPRINT.md`",
-                "- `tasks/BACKLOG.md`",
-                "- `tasks/COMPLETED.md`",
-                "- `archive/2026-03-10-sprint-3-close/PROJECT_STATUS.md`",
-                "",
-                "Do not read `archive/` during normal implementation flow unless a user explicitly asks for historical context or an archive-aware CLI flag is used.",
-                "",
-                "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_lines(
+        repo_root / "PROJECT_STATUS.md",
+        "# Project Status",
+        "",
+        "**Status**: Archived pointer stub (non-authoritative)",
+        "**Archived Detailed Status On**: 2026-03-10",
+        "",
+        "- `tasks/CURRENT_SPRINT.md`",
+        "- `tasks/BACKLOG.md`",
+        "- `tasks/COMPLETED.md`",
+        "- `archive/2026-03-10-sprint-3-close/PROJECT_STATUS.md`",
+        "",
+        "Do not read `archive/` during normal implementation flow unless a user explicitly asks for historical context or an archive-aware CLI flag is used.",
+        "",
+        "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`",
     )
     (repo_root / "tasks" / "CURRENT_SPRINT.md").write_text(
         "**Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`\n",
@@ -86,85 +87,61 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
         "# Completed Tasks\n",
         encoding="utf-8",
     )
-    (repo_root / "tasks" / "BACKLOG.md").write_text(
-        "\n".join(
-            [
-                "# Backlog",
-                "",
-                "## Task Branching Policy (Hard Rule)",
-                CANONICAL_SAFE_START_COMMAND,
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_lines(
+        repo_root / "tasks" / "BACKLOG.md",
+        "# Backlog",
+        "",
+        "## Task Branching Policy (Hard Rule)",
+        CANONICAL_SAFE_START_COMMAND,
     )
-    (repo_root / "AGENTS.md").write_text(
-        "\n".join(
-            [
-                "## Canonical Source-of-Truth Hierarchy",
-                "",
-                "## Development Commands",
-                workflow_reference_block.strip(),
-                "",
-                "## Completion Policy",
-                completion_guidance_block.strip(),
-                "",
-                "## Dependency-Aware Workflow",
-                dependency_guidance_block.strip(),
-                "",
-                "## Fallback Workflow",
-                fallback_guidance_block.strip(),
-                "",
-                "## Shared Workflow/Policy Change Guardrails",
-                workflow_guardrail_block.strip(),
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_lines(
+        repo_root / "AGENTS.md",
+        "## Canonical Source-of-Truth Hierarchy",
+        "",
+        "## Development Commands",
+        workflow_reference_block.strip(),
+        "",
+        "## Completion Policy",
+        completion_guidance_block.strip(),
+        "",
+        "## Dependency-Aware Workflow",
+        dependency_guidance_block.strip(),
+        "",
+        "## Fallback Workflow",
+        fallback_guidance_block.strip(),
+        "",
+        "## Shared Workflow/Policy Change Guardrails",
+        workflow_guardrail_block.strip(),
+        "",
+        "## High-Risk Pre-Push Review",
+        high_risk_pre_push_review_block.strip(),
     )
-    (repo_root / "README.md").write_text(
-        "\n".join(
-            [
-                workflow_reference_block.strip(),
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_lines(repo_root / "README.md", workflow_reference_block.strip())
+    _write_lines(
+        repo_root / "docs" / "AGENT_RUNBOOK.md",
+        f"**Last Verified**: {marker_date}",
+        "",
+        workflow_reference_block.strip(),
+        "",
+        high_risk_pre_push_review_block.strip(),
+        "",
+        "See `AGENTS.md` for the canonical workflow policy.",
     )
-    (repo_root / "docs" / "AGENT_RUNBOOK.md").write_text(
-        "\n".join(
-            [
-                f"**Last Verified**: {marker_date}",
-                "",
-                workflow_reference_block.strip(),
-                "",
-                "See `AGENTS.md` for the canonical workflow policy.",
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_lines(
+        repo_root / "ops" / "skills" / "horadus-cli" / "SKILL.md",
+        workflow_reference_block.strip(),
+        "",
+        high_risk_pre_push_review_block.strip(),
     )
-    (repo_root / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
-        "\n".join(
-            [
-                workflow_reference_block.strip(),
-                "",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    (repo_root / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(
-        "\n".join(
-            [
-                workflow_reference_block.strip(),
-                "",
-                dependency_guidance_block.strip(),
-                "",
-                fallback_guidance_block.strip(),
-                "",
-            ]
-        ),
-        encoding="utf-8",
+    _write_lines(
+        repo_root / "ops" / "skills" / "horadus-cli" / "references" / "commands.md",
+        workflow_reference_block.strip(),
+        "",
+        high_risk_pre_push_review_block.strip(),
+        "",
+        dependency_guidance_block.strip(),
+        "",
+        fallback_guidance_block.strip(),
     )
     (repo_root / "tasks" / "specs" / "TEMPLATE.md").write_text(
         "\n".join(

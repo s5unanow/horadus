@@ -512,7 +512,7 @@ def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() 
         estimate="1h",
         description=["Exercise shared workflow tooling guidance without planning gates."],
         files=[
-            "`tools/horadus/python/horadus_workflow/task_workflow_query.py`",
+            "`tools/horadus/python/horadus_workflow/task_repo.py`",
             "`docs/AGENT_RUNBOOK.md`",
         ],
         acceptance_criteria=[],
@@ -527,6 +527,28 @@ def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() 
 
     assert guidance["recommended"] is True
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_keeps_non_shared_workflow_helpers_quiet() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-993",
+        title="Code shape fixture",
+        priority="P3",
+        estimate="1h",
+        description=["Exercise a non-shared workflow helper path without risk markers."],
+        files=["`tools/horadus/python/horadus_workflow/code_shape.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is False
+    assert guidance["risk_reasons"] == []
 
 
 def test_pre_push_review_guidance_treats_spec_template_as_policy_surface() -> None:

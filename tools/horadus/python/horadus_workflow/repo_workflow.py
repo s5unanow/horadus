@@ -94,6 +94,8 @@ WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS: tuple[str, ...] = (
 HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS: tuple[str, ...] = (
     "AGENTS.md",
     "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
 )
 
 COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (

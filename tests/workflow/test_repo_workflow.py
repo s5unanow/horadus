@@ -24,6 +24,8 @@ def test_repo_workflow_guidance_helpers_return_expected_statement_groups() -> No
     assert repo_workflow_module.high_risk_pre_push_review_reference_paths() == (
         "AGENTS.md",
         "docs/AGENT_RUNBOOK.md",
+        "ops/skills/horadus-cli/SKILL.md",
+        "ops/skills/horadus-cli/references/commands.md",
     )
     assert repo_workflow_module.high_risk_pre_push_review_statements()
     assert repo_workflow_module.workflow_policy_guardrail_statements()

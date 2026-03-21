@@ -389,6 +389,37 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
 
 
 @pytest.mark.asyncio
+async def test_refresh_event_after_item_change_resets_singleton_cluster_health(
+    mock_db_session, monkeypatch
+) -> None:
+    item = _build_item(title="One")
+    item.embedding = [0.3, 0.4]
+    event = Event(
+        id=uuid4(),
+        canonical_summary="old",
+        provenance_summary={
+            "cluster_health": {
+                "cluster_cohesion_score": 0.42,
+                "split_risk_score": 0.35,
+            }
+        },
+    )
+    rows = [_EventItemRow(link=EventItem(event_id=event.id, item_id=item.id), item=item)]
+    monkeypatch.setattr(event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=rows))
+    monkeypatch.setattr(event_lineage_module, "_pick_primary_item", AsyncMock(return_value=item))
+    monkeypatch.setattr(event_lineage_module, "refresh_event_provenance", AsyncMock())
+    monkeypatch.setattr(event_lineage_module, "_mark_event_replay_pending", AsyncMock())
+    monkeypatch.setattr(event_lineage_module, "_mark_event_claims_stale", AsyncMock())
+
+    await _refresh_event_after_item_change(session=mock_db_session, event=event)
+
+    assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
+        1.0
+    )
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
 async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> None:
     event = Event(
         id=uuid4(),

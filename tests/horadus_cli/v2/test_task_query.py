@@ -475,6 +475,38 @@ def test_handle_context_pack_surfaces_pre_push_review_guidance_for_high_risk_tas
     assert guidance["batching_notes"]
 
 
+def test_pre_push_review_guidance_detects_migration_and_multi_surface_runtime_paths() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-999",
+        title="Migration repair fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise migration and multi-surface mutation guidance."],
+        files=[
+            "`alembic/versions/20260321_add_table.py`",
+            "`src/api/routes/events.py`",
+            "`src/storage/models.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(
+        record,
+        planning={"required": True},
+    )
+
+    assert guidance["recommended"] is True
+    assert "task touches migration surfaces" in guidance["risk_reasons"]
+    assert (
+        "task spans multiple runtime surfaces: api, migrations, storage" in guidance["risk_reasons"]
+    )
+
+
 def test_handle_show_requires_explicit_archive_flag_for_archived_task(
     synthetic_task_repo: Path,
 ) -> None:

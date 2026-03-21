@@ -275,6 +275,10 @@ async def _build_event_from_rows(
         embedding=primary_item.embedding,
         embedding_model=primary_item.embedding_model,
         embedding_generated_at=primary_item.embedding_generated_at,
+        embedding_input_tokens=primary_item.embedding_input_tokens,
+        embedding_retained_tokens=primary_item.embedding_retained_tokens,
+        embedding_was_truncated=bool(primary_item.embedding_was_truncated),
+        embedding_truncation_strategy=primary_item.embedding_truncation_strategy,
         source_count=len(rows),
         unique_source_count=len({row.item.source_id for row in rows}),
         first_seen_at=timestamp,
@@ -301,6 +305,13 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     event.unique_source_count = len({row.item.source_id for row in rows})
     event.primary_item_id = primary_item.id
     event.canonical_summary = _build_canonical_summary(primary_item)
+    event.embedding = primary_item.embedding
+    event.embedding_model = primary_item.embedding_model
+    event.embedding_generated_at = primary_item.embedding_generated_at
+    event.embedding_input_tokens = primary_item.embedding_input_tokens
+    event.embedding_retained_tokens = primary_item.embedding_retained_tokens
+    event.embedding_was_truncated = bool(primary_item.embedding_was_truncated)
+    event.embedding_truncation_strategy = primary_item.embedding_truncation_strategy
     event.first_seen_at = min(_item_timestamp(row.item) for row in rows)
     event.last_mention_at = max(_item_timestamp(row.item) for row in rows)
     await refresh_event_provenance(session=session, event=event)
@@ -315,6 +326,13 @@ async def _close_empty_merged_event(event: Event) -> None:
     event.independent_evidence_count = 0
     event.corroboration_score = 0.0
     event.corroboration_mode = "fallback"
+    event.embedding = None
+    event.embedding_model = None
+    event.embedding_generated_at = None
+    event.embedding_input_tokens = None
+    event.embedding_retained_tokens = None
+    event.embedding_was_truncated = False
+    event.embedding_truncation_strategy = None
     apply_event_state_update(event, activity_state=EventActivityState.CLOSED.value)
     await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
     apply_default_cluster_health(event)
@@ -476,6 +494,16 @@ async def _enqueue_event_replay(
         "repair_kind": reason,
         "original_extraction_provenance": dict(event.extraction_provenance or {}),
     }
+    existing = await session.scalar(
+        select(LLMReplayQueueItem)
+        .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
+        .where(LLMReplayQueueItem.event_id == event_id)
+        .limit(1)
+    )
+    if existing is not None:
+        _reset_replay_queue_item(existing=existing, details=details)
+        await session.flush()
+        return True
     try:
         async with session.begin_nested():
             session.add(
@@ -489,7 +517,17 @@ async def _enqueue_event_replay(
             await session.flush()
         return True
     except IntegrityError:
-        return False
+        existing = await session.scalar(
+            select(LLMReplayQueueItem)
+            .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
+            .where(LLMReplayQueueItem.event_id == event_id)
+            .limit(1)
+        )
+        if existing is None:
+            return False
+        _reset_replay_queue_item(existing=existing, details=details)
+        await session.flush()
+        return True
 
 
 async def _pick_primary_item(*, session: AsyncSession, item_ids: tuple[UUID, ...]) -> RawItem:
@@ -537,3 +575,13 @@ def _require_event_id(event: Event) -> UUID:
     if event.id is None:
         raise ValueError("event must have an id before repair")
     return event.id
+
+
+def _reset_replay_queue_item(*, existing: LLMReplayQueueItem, details: dict[str, Any]) -> None:
+    existing.priority = 500
+    existing.status = "pending"
+    existing.locked_at = None
+    existing.locked_by = None
+    existing.processed_at = None
+    existing.last_error = None
+    existing.details = details

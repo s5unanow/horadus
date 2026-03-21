@@ -34,7 +34,15 @@ from src.processing.event_lineage import (
     split_event,
 )
 from src.storage.event_lineage_models import EventLineage
-from src.storage.models import Event, EventClaim, EventItem, RawItem, Trend, TrendEvidence
+from src.storage.models import (
+    Event,
+    EventClaim,
+    EventItem,
+    LLMReplayQueueItem,
+    RawItem,
+    Trend,
+    TrendEvidence,
+)
 
 pytestmark = pytest.mark.unit
 
@@ -246,6 +254,12 @@ async def test_build_event_from_rows_creates_event_and_cluster_health(
     mock_db_session, monkeypatch
 ) -> None:
     primary_item = _build_item(title="Primary")
+    primary_item.embedding = [0.1, 0.2]
+    primary_item.embedding_model = "text-embedding-3-large"
+    primary_item.embedding_input_tokens = 128
+    primary_item.embedding_retained_tokens = 96
+    primary_item.embedding_was_truncated = True
+    primary_item.embedding_truncation_strategy = "head"
     row = _EventItemRow(
         link=EventItem(event_id=uuid4(), item_id=primary_item.id), item=primary_item
     )
@@ -257,6 +271,12 @@ async def test_build_event_from_rows_creates_event_and_cluster_health(
     event = await _build_event_from_rows(session=mock_db_session, rows=[row])
 
     assert event.canonical_summary == "Primary"
+    assert event.embedding == [0.1, 0.2]
+    assert event.embedding_model == "text-embedding-3-large"
+    assert event.embedding_input_tokens == 128
+    assert event.embedding_retained_tokens == 96
+    assert event.embedding_was_truncated is True
+    assert event.embedding_truncation_strategy == "head"
     assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
         1.0
     )
@@ -280,6 +300,12 @@ async def test_refresh_event_after_item_change_handles_empty_rows(
 async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, monkeypatch) -> None:
     item_one = _build_item(title="One")
     item_two = _build_item(title="Two")
+    item_two.embedding = [0.3, 0.4]
+    item_two.embedding_model = "text-embedding-3-large"
+    item_two.embedding_input_tokens = 144
+    item_two.embedding_retained_tokens = 120
+    item_two.embedding_was_truncated = True
+    item_two.embedding_truncation_strategy = "tail"
     event = Event(id=uuid4(), canonical_summary="old")
     rows = [
         _EventItemRow(link=EventItem(event_id=event.id, item_id=item_one.id), item=item_one),
@@ -298,6 +324,12 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     assert event.canonical_summary == "Two"
     assert event.source_count == 2
     assert event.primary_item_id == item_two.id
+    assert event.embedding == [0.3, 0.4]
+    assert event.embedding_model == "text-embedding-3-large"
+    assert event.embedding_input_tokens == 144
+    assert event.embedding_retained_tokens == 120
+    assert event.embedding_was_truncated is True
+    assert event.embedding_truncation_strategy == "tail"
 
 
 @pytest.mark.asyncio
@@ -305,6 +337,12 @@ async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> No
     event = Event(
         id=uuid4(),
         canonical_summary="event",
+        embedding=[0.5, 0.6],
+        embedding_model="text-embedding-3-large",
+        embedding_input_tokens=200,
+        embedding_retained_tokens=150,
+        embedding_was_truncated=True,
+        embedding_truncation_strategy="tail",
         extraction_provenance={"stage": "tier2"},
         extracted_claims={"claim_graph": {}},
         extracted_who=["A"],
@@ -320,6 +358,12 @@ async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> No
 
     assert event.activity_state == "closed"
     assert event.source_count == 0
+    assert event.embedding is None
+    assert event.embedding_model is None
+    assert event.embedding_input_tokens is None
+    assert event.embedding_retained_tokens is None
+    assert event.embedding_was_truncated is False
+    assert event.embedding_truncation_strategy is None
     assert event.extraction_provenance["status"] == "replay_pending"
     assert event.provenance_summary["reason"] == "lineage_repair_empty_cluster"
 
@@ -454,9 +498,19 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
         yield
 
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    existing = LLMReplayQueueItem(
+        stage="tier2",
+        event_id=event.id,
+        status="done",
+        priority=50,
+        locked_by="worker-1",
+        last_error="boom",
+        details={"stale": True},
+    )
     mock_db_session.get = AsyncMock(side_effect=[None, event, event])
     mock_db_session.begin_nested = _begin_nested
-    mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z")])
+    mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z"), None])
+    mock_db_session.scalar = AsyncMock(side_effect=[None, None, existing])
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=uuid4(), reason="split")
@@ -468,6 +522,58 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
     )
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="split")
+        is True
+    )
+    assert existing.priority == 500
+    assert existing.status == "pending"
+    assert existing.locked_by is None
+    assert existing.last_error is None
+    assert existing.details["repair_kind"] == "split"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session) -> None:
+    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    existing = LLMReplayQueueItem(
+        stage="tier2",
+        event_id=event.id,
+        status="error",
+        priority=25,
+        locked_by="worker-2",
+        last_error="retry me",
+        details={"stale": True},
+    )
+    mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+    mock_db_session.flush = AsyncMock()
+
+    assert (
+        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
+        is True
+    )
+    assert existing.priority == 500
+    assert existing.status == "pending"
+    assert existing.locked_by is None
+    assert existing.last_error is None
+    assert existing.details["repair_kind"] == "merge"
+
+
+@pytest.mark.asyncio
+async def test_enqueue_event_replay_returns_false_when_conflict_cannot_resolve(
+    mock_db_session,
+) -> None:
+    @asynccontextmanager
+    async def _begin_nested():
+        yield
+
+    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.begin_nested = _begin_nested
+    mock_db_session.scalar = AsyncMock(side_effect=[None, None])
+    mock_db_session.flush = AsyncMock(side_effect=[IntegrityError("x", "y", "z")])
+
+    assert (
+        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
         is False
     )
 

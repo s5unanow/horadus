@@ -69,6 +69,7 @@ def _build_item(*, title: str = "Item title") -> RawItem:
 @pytest.mark.asyncio
 async def test_split_event_validates_selected_items(mock_db_session) -> None:
     source_event = Event(id=uuid4(), canonical_summary="source")
+    mock_db_session.get = AsyncMock(return_value=source_event)
     row = _EventItemRow(
         link=EventItem(event_id=source_event.id, item_id=uuid4()), item=_build_item()
     )
@@ -106,6 +107,7 @@ async def test_split_event_validates_selected_items(mock_db_session) -> None:
             notes=None,
             created_by=None,
         )
+    assert mock_db_session.get.await_count == 3
     monkeypatch.undo()
 
 
@@ -132,6 +134,7 @@ async def test_split_event_returns_repair_result(mock_db_session, monkeypatch) -
             added[-1].id = lineage_id
 
     mock_db_session.add.side_effect = _add
+    mock_db_session.get = AsyncMock(return_value=source_event)
     mock_db_session.flush.side_effect = _flush
     monkeypatch.setattr(
         event_lineage_module,
@@ -160,6 +163,11 @@ async def test_split_event_returns_repair_result(mock_db_session, monkeypatch) -
     assert result.lineage_id == lineage_id
     assert result.created_event_id == new_event.id
     assert row.link.event_id == new_event.id
+    mock_db_session.get.assert_awaited_once_with(
+        Event,
+        source_event.id,
+        with_for_update=True,
+    )
 
 
 @pytest.mark.asyncio
@@ -187,6 +195,7 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
             added[-1].id = lineage_id
 
     mock_db_session.add.side_effect = _add
+    mock_db_session.get = AsyncMock(return_value=source_event)
     mock_db_session.flush.side_effect = _flush
     monkeypatch.setattr(
         event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=[row])
@@ -239,12 +248,18 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
         session=mock_db_session,
         event_id=source_event.id,
     )
+    mock_db_session.get.assert_awaited_once_with(
+        Event,
+        source_event.id,
+        with_for_update=True,
+    )
 
 
 @pytest.mark.asyncio
 async def test_merge_events_rejects_empty_source(mock_db_session, monkeypatch) -> None:
     source_event = Event(id=uuid4(), canonical_summary="source")
     target_event = Event(id=uuid4(), canonical_summary="target")
+    mock_db_session.get = AsyncMock(return_value=source_event)
     monkeypatch.setattr(event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=[]))
 
     with pytest.raises(ValueError, match="has no linked items"):
@@ -255,6 +270,11 @@ async def test_merge_events_rejects_empty_source(mock_db_session, monkeypatch) -
             notes=None,
             created_by=None,
         )
+    mock_db_session.get.assert_awaited_once_with(
+        Event,
+        source_event.id,
+        with_for_update=True,
+    )
 
 
 @pytest.mark.asyncio

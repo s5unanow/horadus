@@ -739,10 +739,33 @@ async def test_add_event_link_returns_true_on_insert_and_false_on_conflict(mock_
         raise IntegrityError("stmt", "params", "orig")
         yield
 
+    mock_db_session.get = AsyncMock(return_value=Event(id=event_id, canonical_summary="event"))
     mock_db_session.begin_nested.side_effect = [ok_nested(), fail_nested()]
 
     assert await clusterer._add_event_link(event_id, item_id) is True
     assert await clusterer._add_event_link(event_id, item_id) is False
+    assert mock_db_session.get.await_count == 2
+    mock_db_session.get.assert_awaited_with(
+        Event,
+        event_id,
+        with_for_update=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_add_event_link_returns_false_when_event_missing(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event_id = uuid4()
+    item_id = uuid4()
+    mock_db_session.get = AsyncMock(return_value=None)
+
+    assert await clusterer._add_event_link(event_id, item_id) is False
+    mock_db_session.begin_nested.assert_not_called()
+    mock_db_session.get.assert_awaited_once_with(
+        Event,
+        event_id,
+        with_for_update=True,
+    )
 
 
 @pytest.mark.asyncio

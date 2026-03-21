@@ -10,7 +10,7 @@ from typing import Any, ClassVar
 from uuid import UUID
 
 from openai import AsyncOpenAI
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -58,6 +58,7 @@ from src.processing.tier2_runtime import (
 from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY, map_event_trend_impacts
 from src.processing.trend_impact_reconciliation import TREND_IMPACT_RECONCILIATION_KEY
 from src.storage.event_state import (
+    EventActivityState,
     EventEpistemicState,
     apply_event_state_update,
     derived_epistemic_state,
@@ -501,6 +502,13 @@ class Tier2Classifier:
         query = (
             select(Event)
             .where(Event.extracted_what.is_(None))
+            .where(
+                or_(
+                    Event.source_count > 0,
+                    Event.activity_state.is_(None),
+                    Event.activity_state != EventActivityState.CLOSED.value,
+                )
+            )
             .order_by(Event.first_seen_at.asc())
             .limit(limit)
         )

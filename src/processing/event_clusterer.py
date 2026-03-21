@@ -267,6 +267,9 @@ class EventClusterer:
         return normalized_action
 
     async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool:
+        event = await self.session.get(Event, event_id, with_for_update=True)
+        if event is None:
+            return False
         link = EventItem(event_id=event_id, item_id=item_id)
         try:
             async with self.session.begin_nested():

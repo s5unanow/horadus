@@ -74,6 +74,7 @@ async def split_event(
     """Split a subset of raw items from one event into a new event."""
 
     source_event_id = _require_event_id(source_event)
+    await _lock_event_for_lineage_change(session=session, event_id=source_event_id)
     source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
     requested_item_ids = tuple(dict.fromkeys(item_ids))
     current_item_ids = {row.item.id for row in source_rows}
@@ -156,6 +157,7 @@ async def merge_events(
     ):
         raise ValueError("merge target event cannot be an empty closed stub")
 
+    await _lock_event_for_lineage_change(session=session, event_id=source_event_id)
     source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
     if not source_rows:
         raise ValueError("merge source event has no linked items")
@@ -278,6 +280,10 @@ async def load_event_lineage(
 class _EventItemRow:
     link: EventItem
     item: RawItem
+
+
+async def _lock_event_for_lineage_change(*, session: AsyncSession, event_id: UUID) -> None:
+    await session.get(Event, event_id, with_for_update=True)
 
 
 async def _load_event_item_rows(

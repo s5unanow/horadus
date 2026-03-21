@@ -142,7 +142,7 @@ async def merge_events(
     await session.flush()
 
     await _refresh_event_after_item_change(session=session, event=target_event)
-    await _close_empty_merged_event(source_event)
+    await _close_empty_merged_event(source_event, replay_pending=False)
     await _delete_event_replay_queue_items(session=session, event_id=source_event_id)
     await _mark_event_claims_stale(session=session, event_id=source_event_id)
     invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
@@ -332,7 +332,8 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     await _mark_event_claims_stale(session=session, event_id=event_id)
 
 
-async def _close_empty_merged_event(event: Event) -> None:
+async def _close_empty_merged_event(event: Event, *, replay_pending: bool = True) -> None:
+    prior_extraction_provenance = dict(event.extraction_provenance or {})
     event.source_count = 0
     event.unique_source_count = 0
     event.independent_evidence_count = 0
@@ -346,7 +347,15 @@ async def _close_empty_merged_event(event: Event) -> None:
     event.embedding_was_truncated = False
     event.embedding_truncation_strategy = None
     apply_event_state_update(event, activity_state=EventActivityState.CLOSED.value)
-    await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
+    if replay_pending:
+        await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
+    else:
+        _clear_stale_event_extractions(event)
+        event.extraction_provenance = {
+            "status": "closed",
+            "reason": "event_lineage_repair",
+            "original_extraction_provenance": prior_extraction_provenance,
+        }
     apply_default_cluster_health(event)
     event.provenance_summary = {
         "method": "fallback",

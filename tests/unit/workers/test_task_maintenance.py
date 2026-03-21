@@ -84,6 +84,7 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
         "processed_at": now.isoformat(),
         "model": "tier2-model",
     }
+    session.flush.assert_awaited_once()
     assert lineage.details["status"] == "replay_complete"
 
 

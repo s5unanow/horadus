@@ -415,6 +415,35 @@ async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> No
 
 
 @pytest.mark.asyncio
+async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="event",
+        extraction_provenance={"stage": "tier2", "model": "old"},
+        extracted_claims={"claim_graph": {}},
+        extracted_who=["A"],
+        extracted_what="what",
+        extracted_where="where",
+        extracted_when=datetime.now(tz=UTC),
+        categories=["x"],
+        has_contradictions=True,
+        contradiction_notes="note",
+    )
+
+    await _close_empty_merged_event(event, replay_pending=False)
+
+    assert event.activity_state == "closed"
+    assert event.extraction_provenance["status"] == "closed"
+    assert event.extraction_provenance["original_extraction_provenance"] == {
+        "stage": "tier2",
+        "model": "old",
+    }
+    assert event.extracted_claims is None
+    assert event.extracted_who is None
+    assert not event.categories
+
+
+@pytest.mark.asyncio
 async def test_repair_affected_events_handles_empty_and_restates_active_evidence(
     mock_db_session,
     monkeypatch,

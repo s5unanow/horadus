@@ -56,6 +56,7 @@ async def _replay_one_degraded_item(
         "model": deps.settings.LLM_TIER2_MODEL,
     }
     item.details = details
+    await session.flush()
     await _sync_lineage_replay_status(session=session, event_id=item.event_id)
     return True
 

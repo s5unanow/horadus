@@ -21,10 +21,13 @@ _PLANNING_STATE_QUIET = "non_applicable"
 _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_workflow/task_workflow_",
     "tools/horadus/python/horadus_workflow/_task_",
+    "tools/horadus/python/horadus_workflow/pr_review_gate",
     "tools/horadus/python/horadus_cli/task_",
     "tools/horadus/python/horadus_cli/_task_",
 )
 _HIGH_RISK_SHARED_WORKFLOW_FILES = (
+    "tools/horadus/python/horadus_workflow/",
+    "tools/horadus/python/horadus_cli/",
     "tools/horadus/python/horadus_workflow/task_repo.py",
     "tools/horadus/python/horadus_workflow/task_workflow_shared.py",
     "tools/horadus/python/horadus_workflow/triage.py",

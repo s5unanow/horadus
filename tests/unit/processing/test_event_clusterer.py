@@ -63,6 +63,12 @@ async def test_cluster_item_creates_event_when_no_match(mock_db_session) -> None
     assert added_event.embedding_generated_at is None
     assert added_event.source_count == 1
     assert added_event.primary_item_id == item.id
+    assert added_event.provenance_summary["cluster_health"][
+        "cluster_cohesion_score"
+    ] == pytest.approx(1.0)
+    assert added_event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(
+        0.0
+    )
     assert result.created is True
     assert result.merged is False
     assert result.event_id == added_event.id
@@ -148,6 +154,11 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
     assert result.created is False
     assert result.merged is True
     assert result.similarity == pytest.approx(0.95)
+    assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
+        0.983333,
+        rel=1e-5,
+    )
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.05)
     assert add_link.await_count == 1
     assert update_primary.await_count == 1
 
@@ -535,7 +546,7 @@ async def test_merge_into_event_populates_embedding_and_preserves_summary_when_p
     clusterer._count_unique_sources = AsyncMock(return_value=2)
     clusterer.lifecycle_manager.on_event_mention = MagicMock()
 
-    await clusterer._merge_into_event(event, item)
+    await clusterer._merge_into_event(event, item, similarity=0.91)
 
     assert event.embedding == [0.5, 0.6]
     assert event.embedding_model == "text-embedding-3-small"
@@ -561,7 +572,7 @@ async def test_merge_into_event_preserves_existing_embedding(mock_db_session) ->
     clusterer._count_unique_sources = AsyncMock(return_value=1)
     clusterer.lifecycle_manager.on_event_mention = MagicMock()
 
-    await clusterer._merge_into_event(event, item)
+    await clusterer._merge_into_event(event, item, similarity=0.88)
 
     assert event.embedding == [0.1, 0.2]
     assert event.embedding_model == "old-model"

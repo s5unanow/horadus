@@ -1,0 +1,539 @@
+"""Event split/merge repair helpers with lineage and replay safety."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from typing import Any
+from uuid import UUID
+
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.core.source_credibility import DEFAULT_SOURCE_CREDIBILITY, source_multiplier_expression
+from src.core.trend_engine import TrendEngine
+from src.core.trend_restatement import (
+    apply_compensating_restatement,
+    remaining_evidence_delta,
+    restatement_compensation_totals_by_evidence_id,
+)
+from src.processing.corroboration_provenance import refresh_event_provenance
+from src.processing.event_cluster_health import apply_default_cluster_health
+from src.storage.event_lineage_models import EventLineage
+from src.storage.event_state import EventActivityState, apply_event_state_update
+from src.storage.models import (
+    Event,
+    EventClaim,
+    EventItem,
+    LLMReplayQueueItem,
+    RawItem,
+    Source,
+    Trend,
+    TrendEvidence,
+)
+
+_REPLAY_STAGE = "tier2"
+
+
+@dataclass(frozen=True, slots=True)
+class EventRepairResult:
+    """Summary of one lineage repair operation."""
+
+    action: str
+    lineage_id: UUID
+    source_event_id: UUID
+    target_event_id: UUID
+    created_event_id: UUID | None
+    moved_item_ids: tuple[UUID, ...]
+    invalidated_evidence_ids: tuple[UUID, ...]
+    replay_enqueued_event_ids: tuple[UUID, ...]
+
+
+async def split_event(
+    *,
+    session: AsyncSession,
+    source_event: Event,
+    item_ids: list[UUID],
+    notes: str | None,
+    created_by: str | None,
+) -> EventRepairResult:
+    """Split a subset of raw items from one event into a new event."""
+
+    source_event_id = _require_event_id(source_event)
+    source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
+    selected_rows = [row for row in source_rows if row.item.id in set(item_ids)]
+    if not selected_rows:
+        raise ValueError("split requires at least one current event item")
+    if len(selected_rows) >= len(source_rows):
+        raise ValueError("split must leave at least one item on the source event")
+
+    new_event = await _build_event_from_rows(session=session, rows=selected_rows)
+    moved_item_ids = tuple(row.item.id for row in selected_rows)
+    for row in selected_rows:
+        row.link.event_id = _require_event_id(new_event)
+    await session.flush()
+
+    await _refresh_event_after_item_change(session=session, event=source_event)
+    await _refresh_event_after_item_change(session=session, event=new_event)
+    invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
+        session=session,
+        events=[source_event, new_event],
+        reason="split",
+    )
+    lineage = EventLineage(
+        lineage_kind="split",
+        source_event_id=source_event_id,
+        target_event_id=_require_event_id(new_event),
+        created_by=created_by,
+        notes=notes,
+        details={
+            "moved_item_ids": [str(item_id) for item_id in moved_item_ids],
+            "moved_item_count": len(moved_item_ids),
+            "invalidated_evidence_ids": [
+                str(evidence_id) for evidence_id in invalidated_evidence_ids
+            ],
+            "replay_enqueued_event_ids": [str(event_id) for event_id in replay_enqueued_event_ids],
+            "status": "replay_pending",
+        },
+    )
+    session.add(lineage)
+    await session.flush()
+    lineage_id = lineage.id
+    assert lineage_id is not None
+    return EventRepairResult(
+        action="split",
+        lineage_id=lineage_id,
+        source_event_id=source_event_id,
+        target_event_id=_require_event_id(new_event),
+        created_event_id=_require_event_id(new_event),
+        moved_item_ids=moved_item_ids,
+        invalidated_evidence_ids=invalidated_evidence_ids,
+        replay_enqueued_event_ids=replay_enqueued_event_ids,
+    )
+
+
+async def merge_events(
+    *,
+    session: AsyncSession,
+    source_event: Event,
+    target_event: Event,
+    notes: str | None,
+    created_by: str | None,
+) -> EventRepairResult:
+    """Merge one event's raw items into another event."""
+
+    source_event_id = _require_event_id(source_event)
+    target_event_id = _require_event_id(target_event)
+    if source_event_id == target_event_id:
+        raise ValueError("merge source and target events must differ")
+
+    source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
+    if not source_rows:
+        raise ValueError("merge source event has no linked items")
+    moved_item_ids = tuple(row.item.id for row in source_rows)
+    for row in source_rows:
+        row.link.event_id = target_event_id
+    await session.flush()
+
+    await _refresh_event_after_item_change(session=session, event=target_event)
+    await _close_empty_merged_event(source_event)
+    await _mark_event_claims_stale(session=session, event_id=source_event_id)
+    invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
+        session=session,
+        events=[source_event, target_event],
+        replay_event_ids=(target_event_id,),
+        reason="merge",
+    )
+    lineage = EventLineage(
+        lineage_kind="merge",
+        source_event_id=source_event_id,
+        target_event_id=target_event_id,
+        created_by=created_by,
+        notes=notes,
+        details={
+            "moved_item_ids": [str(item_id) for item_id in moved_item_ids],
+            "moved_item_count": len(moved_item_ids),
+            "invalidated_evidence_ids": [
+                str(evidence_id) for evidence_id in invalidated_evidence_ids
+            ],
+            "replay_enqueued_event_ids": [str(event_id) for event_id in replay_enqueued_event_ids],
+            "status": "replay_pending",
+        },
+    )
+    session.add(lineage)
+    await session.flush()
+    lineage_id = lineage.id
+    assert lineage_id is not None
+    return EventRepairResult(
+        action="merge",
+        lineage_id=lineage_id,
+        source_event_id=source_event_id,
+        target_event_id=target_event_id,
+        created_event_id=None,
+        moved_item_ids=moved_item_ids,
+        invalidated_evidence_ids=invalidated_evidence_ids,
+        replay_enqueued_event_ids=replay_enqueued_event_ids,
+    )
+
+
+async def load_event_lineage(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> list[dict[str, Any]]:
+    """Return normalized lineage payloads for one event."""
+
+    rows = list(
+        (
+            await session.scalars(
+                select(EventLineage)
+                .where(
+                    (EventLineage.source_event_id == event_id)
+                    | (EventLineage.target_event_id == event_id)
+                )
+                .order_by(EventLineage.created_at.desc(), EventLineage.id.desc())
+            )
+        ).all()
+    )
+    counterpart_ids = {
+        lineage.target_event_id
+        for lineage in rows
+        if lineage.source_event_id == event_id and lineage.target_event_id is not None
+    }
+    counterpart_ids.update(
+        lineage.source_event_id
+        for lineage in rows
+        if lineage.target_event_id == event_id and lineage.source_event_id is not None
+    )
+    counterparts = {
+        event.id: event
+        for event in (
+            await session.scalars(select(Event).where(Event.id.in_(tuple(counterpart_ids or ()))))
+        ).all()
+        if event.id is not None
+    }
+    payloads: list[dict[str, Any]] = []
+    for lineage in rows:
+        role = "source" if lineage.source_event_id == event_id else "target"
+        counterpart_id = lineage.target_event_id if role == "source" else lineage.source_event_id
+        counterpart = counterparts.get(counterpart_id) if counterpart_id is not None else None
+        details = dict(lineage.details or {})
+        payloads.append(
+            {
+                "id": lineage.id,
+                "lineage_kind": lineage.lineage_kind,
+                "role": role,
+                "counterpart_event_id": counterpart_id,
+                "counterpart_summary": getattr(counterpart, "canonical_summary", None),
+                "moved_item_count": int(details.get("moved_item_count", 0) or 0),
+                "moved_item_ids": list(details.get("moved_item_ids", [])),
+                "invalidated_evidence_ids": list(details.get("invalidated_evidence_ids", [])),
+                "replay_enqueued_event_ids": list(details.get("replay_enqueued_event_ids", [])),
+                "status": details.get("status", "recorded"),
+                "created_by": lineage.created_by,
+                "notes": lineage.notes,
+                "created_at": lineage.created_at,
+            }
+        )
+    return payloads
+
+
+@dataclass(slots=True)
+class _EventItemRow:
+    link: EventItem
+    item: RawItem
+
+
+async def _load_event_item_rows(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> list[_EventItemRow]:
+    rows = (
+        await session.execute(
+            select(EventItem, RawItem)
+            .join(RawItem, RawItem.id == EventItem.item_id)
+            .where(EventItem.event_id == event_id)
+            .order_by(RawItem.published_at.asc().nullslast(), RawItem.fetched_at.asc().nullslast())
+        )
+    ).all()
+    return [_EventItemRow(link=row[0], item=row[1]) for row in rows]
+
+
+async def _build_event_from_rows(
+    *,
+    session: AsyncSession,
+    rows: list[_EventItemRow],
+) -> Event:
+    primary_item = await _pick_primary_item(
+        session=session, item_ids=tuple(row.item.id for row in rows)
+    )
+    timestamp = _item_timestamp(primary_item)
+    event = Event(
+        canonical_summary=_build_canonical_summary(primary_item),
+        embedding=primary_item.embedding,
+        embedding_model=primary_item.embedding_model,
+        embedding_generated_at=primary_item.embedding_generated_at,
+        source_count=len(rows),
+        unique_source_count=len({row.item.source_id for row in rows}),
+        first_seen_at=timestamp,
+        last_mention_at=max(_item_timestamp(row.item) for row in rows),
+        primary_item_id=primary_item.id,
+    )
+    session.add(event)
+    await session.flush()
+    apply_default_cluster_health(event)
+    return event
+
+
+async def _refresh_event_after_item_change(*, session: AsyncSession, event: Event) -> None:
+    event_id = _require_event_id(event)
+    rows = await _load_event_item_rows(session=session, event_id=event_id)
+    if not rows:
+        await _close_empty_merged_event(event)
+        return
+    primary_item = await _pick_primary_item(
+        session=session,
+        item_ids=tuple(row.item.id for row in rows),
+    )
+    event.source_count = len(rows)
+    event.unique_source_count = len({row.item.source_id for row in rows})
+    event.primary_item_id = primary_item.id
+    event.canonical_summary = _build_canonical_summary(primary_item)
+    event.first_seen_at = min(_item_timestamp(row.item) for row in rows)
+    event.last_mention_at = max(_item_timestamp(row.item) for row in rows)
+    await refresh_event_provenance(session=session, event=event)
+    apply_default_cluster_health(event)
+    await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
+    await _mark_event_claims_stale(session=session, event_id=event_id)
+
+
+async def _close_empty_merged_event(event: Event) -> None:
+    event.source_count = 0
+    event.unique_source_count = 0
+    event.independent_evidence_count = 0
+    event.corroboration_score = 0.0
+    event.corroboration_mode = "fallback"
+    apply_event_state_update(event, activity_state=EventActivityState.CLOSED.value)
+    await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
+    apply_default_cluster_health(event)
+    event.provenance_summary = {
+        "method": "fallback",
+        "reason": "lineage_repair_empty_cluster",
+        "raw_source_count": 0,
+        "unique_source_count": 0,
+        "independent_evidence_count": 0,
+        "weighted_corroboration_score": 0.0,
+        "groups": [],
+        "cluster_health": {"cluster_cohesion_score": 1.0, "split_risk_score": 0.0},
+    }
+    event.extracted_claims = None
+    event.extracted_who = None
+    event.extracted_what = None
+    event.extracted_where = None
+    event.extracted_when = None
+    event.categories = None
+    event.has_contradictions = False
+    event.contradiction_notes = None
+
+
+async def _repair_affected_events(
+    *,
+    session: AsyncSession,
+    events: list[Event],
+    reason: str,
+    replay_event_ids: tuple[UUID, ...] | None = None,
+) -> tuple[tuple[UUID, ...], tuple[UUID, ...]]:
+    event_ids = tuple(event.id for event in events if event.id is not None)
+    if not event_ids:
+        return ((), ())
+    evidence_rows = list(
+        (await session.scalars(select_from_active_evidence(event_ids=event_ids))).all()
+    )
+    prior_compensation_by_evidence_id = await _load_prior_compensation_by_evidence_id(
+        session=session,
+        evidences=evidence_rows,
+    )
+    trend_by_id = await _load_trends_for_evidence(
+        session=session,
+        trend_ids={evidence.trend_id for evidence in evidence_rows},
+    )
+    trend_engine = TrendEngine(session=session)
+    recorded_at = datetime.now(tz=UTC)
+    invalidated_evidence_ids: list[UUID] = []
+    for evidence in evidence_rows:
+        evidence.is_invalidated = True
+        evidence.invalidated_at = recorded_at
+        trend = trend_by_id.get(evidence.trend_id)
+        if trend is None:
+            continue
+        await apply_compensating_restatement(
+            trend_engine=trend_engine,
+            trend=trend,
+            compensation_delta_log_odds=_invalidation_compensation_delta(
+                evidence=evidence,
+                prior_compensation_by_evidence_id=prior_compensation_by_evidence_id,
+            ),
+            restatement_kind="reclassification",
+            source="tier2_reconciliation",
+            recorded_at=recorded_at,
+            trend_evidence=evidence,
+            original_evidence_delta_log_odds=float(evidence.delta_log_odds),
+            notes=f"Event lineage repair {reason}",
+            details={"event_action": reason, "policy": "lineage_repair_replay"},
+        )
+        if evidence.id is not None:
+            invalidated_evidence_ids.append(evidence.id)
+    replay_targets = replay_event_ids or tuple(
+        event_id for event_id in event_ids if event_id is not None
+    )
+    enqueued_ids = []
+    for event_id in replay_targets:
+        if await _enqueue_event_replay(session=session, event_id=event_id, reason=reason):
+            enqueued_ids.append(event_id)
+    return (tuple(invalidated_evidence_ids), tuple(enqueued_ids))
+
+
+def select_from_active_evidence(*, event_ids: tuple[UUID, ...]) -> Any:
+    return (
+        select(TrendEvidence)
+        .where(TrendEvidence.event_id.in_(event_ids))
+        .where(TrendEvidence.is_invalidated.is_(False))
+        .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
+    )
+
+
+async def _load_trends_for_evidence(
+    *,
+    session: AsyncSession,
+    trend_ids: set[UUID],
+) -> dict[UUID, Trend]:
+    if not trend_ids:
+        return {}
+    trends = list(
+        (await session.scalars(select(Trend).where(Trend.id.in_(tuple(trend_ids))))).all()
+    )
+    return {trend.id: trend for trend in trends if trend.id is not None}
+
+
+async def _load_prior_compensation_by_evidence_id(
+    *,
+    session: AsyncSession,
+    evidences: list[TrendEvidence],
+) -> dict[UUID, float]:
+    evidence_ids = tuple(evidence.id for evidence in evidences if evidence.id is not None)
+    return await restatement_compensation_totals_by_evidence_id(
+        session=session,
+        evidence_ids=evidence_ids,
+    )
+
+
+def _invalidation_compensation_delta(
+    *,
+    evidence: TrendEvidence,
+    prior_compensation_by_evidence_id: dict[UUID, float],
+) -> float:
+    prior_compensation_delta = (
+        prior_compensation_by_evidence_id.get(evidence.id, 0.0) if evidence.id is not None else 0.0
+    )
+    return -remaining_evidence_delta(
+        evidence=evidence,
+        prior_compensation_delta=prior_compensation_delta,
+    )
+
+
+async def _mark_event_claims_stale(*, session: AsyncSession, event_id: UUID) -> None:
+    claims = list(
+        (await session.scalars(select(EventClaim).where(EventClaim.event_id == event_id))).all()
+    )
+    for claim in claims:
+        claim.is_active = False
+
+
+async def _mark_event_replay_pending(*, event: Event, reason: str) -> None:
+    prior = dict(event.extraction_provenance or {})
+    event.extraction_provenance = {
+        "status": "replay_pending",
+        "stage": "tier2",
+        "reason": reason,
+        "original_extraction_provenance": prior,
+    }
+    event.extracted_claims = None
+
+
+async def _enqueue_event_replay(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+    reason: str,
+) -> bool:
+    event = await session.get(Event, event_id)
+    if event is None:
+        return False
+    details = {
+        "reason": "event_lineage_repair",
+        "repair_kind": reason,
+        "original_extraction_provenance": dict(event.extraction_provenance or {}),
+    }
+    try:
+        async with session.begin_nested():
+            session.add(
+                LLMReplayQueueItem(
+                    stage=_REPLAY_STAGE,
+                    event_id=event_id,
+                    priority=500,
+                    details=details,
+                )
+            )
+            await session.flush()
+        return True
+    except IntegrityError:
+        return False
+
+
+async def _pick_primary_item(*, session: AsyncSession, item_ids: tuple[UUID, ...]) -> RawItem:
+    if not item_ids:
+        raise ValueError("event repair requires at least one item")
+    query = (
+        select(RawItem)
+        .join(Source, Source.id == RawItem.source_id)
+        .where(RawItem.id.in_(item_ids))
+        .order_by(
+            (
+                func.coalesce(Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY)
+                * source_multiplier_expression(
+                    source_tier_col=Source.source_tier,
+                    reporting_type_col=Source.reporting_type,
+                )
+            ).desc(),
+            RawItem.published_at.desc().nullslast(),
+            RawItem.fetched_at.desc().nullslast(),
+        )
+        .limit(1)
+    )
+    item = await session.scalar(query)
+    if item is None:
+        raise ValueError("unable to resolve primary item for event repair")
+    return item
+
+
+def _build_canonical_summary(item: RawItem) -> str:
+    if item.title and item.title.strip():
+        return item.title.strip()
+    content = item.raw_content.strip()
+    return content[:400] if len(content) > 400 else content
+
+
+def _item_timestamp(item: RawItem) -> datetime:
+    if item.published_at is not None:
+        return item.published_at
+    if item.fetched_at is not None:
+        return item.fetched_at
+    return datetime.now(tz=UTC)
+
+
+def _require_event_id(event: Event) -> UUID:
+    if event.id is None:
+        raise ValueError("event must have an id before repair")
+    return event.id

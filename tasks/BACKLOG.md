@@ -502,31 +502,6 @@ first-class tracked trend state and reporting context.
 
 ---
 
-### TASK-235: Add Event Split/Merge Lineage for Evolving Stories
-**Priority**: P1 (High)
-**Estimate**: 6-8 hours
-
-Similarity-plus-time-window clustering is a good baseline, but evolving stories
-need explicit lineage when one event later proves to contain multiple subevents
-or when separate clusters converge into the same story. Add event split/merge
-lineage so clustering corrections remain auditable.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/processing/event_clusterer.py`, `src/storage/models.py`, `src/api/routes/events.py`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Add explicit event-lineage records for split and merge operations
-- [ ] Preserve raw-item linkage auditability when events are corrected after initial clustering
-- [ ] Persist a bounded cluster-cohesion or split-risk signal so likely bad merges are visible before operators need to discover them ad hoc
-- [ ] Keep downstream evidence/reporting paths consistent when lineage changes occur
-- [ ] Define how split/merge repairs restate or redistribute already-applied trend evidence so cluster corrections do not leave belief state ambiguous
-- [ ] Expose lineage metadata in event detail responses for operator debugging
-- [ ] Add regression coverage for split, merge, and no-op lineage cases
-
----
-
 ### TASK-236: Add Canonical Entity Registry for Actors, Organizations, and Locations
 **Priority**: P2 (Medium)
 **Estimate**: 8-12 hours

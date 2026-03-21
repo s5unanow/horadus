@@ -146,3 +146,16 @@ def test_corroboration_helpers_cover_source_count_and_invalid_score_paths() -> N
     assert resolved_independent_evidence_count(provenance_aware_missing_independent) == 4
     assert resolved_corroboration_score(provenance_aware_missing_score) == pytest.approx(2.0)
     assert resolved_corroboration_score(provenance_aware_invalid_score) == pytest.approx(2.0)
+
+
+def test_corroboration_helpers_allow_zero_for_empty_lineage_stub_events() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Merged-away event",
+        source_count=0,
+        unique_source_count=0,
+        independent_evidence_count=0,
+    )
+
+    assert resolved_independent_evidence_count(event) == 0
+    assert resolved_corroboration_score(event) == pytest.approx(0.0)

@@ -218,6 +218,29 @@ LIMIT 5;
 
 Operational note:
 - Use `uv run horadus eval embedding-lineage` to detect mixed model populations and estimate re-embed scope.
+- `provenance_summary.cluster_health` now carries bounded merge-audit diagnostics
+  (`cluster_cohesion_score`, `split_risk_score`) for operator review.
+
+---
+
+### event_lineage
+
+Append-only split/merge repair ledger for mutable event clusters.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| lineage_kind | VARCHAR(20) | No | | Repair type: `split` or `merge` |
+| source_event_id | UUID | Yes | | Historical source event reference |
+| target_event_id | UUID | Yes | | Historical target/new event reference |
+| details | JSONB | No | {} | Audit payload: moved item ids/count, invalidated evidence ids, replay queue linkage |
+| created_by | VARCHAR(100) | Yes | | Optional operator identity |
+| notes | TEXT | Yes | | Optional analyst notes |
+| created_at | TIMESTAMPTZ | No | NOW() | Ledger timestamp |
+
+**Indexes:**
+- Index: `(source_event_id, created_at)`
+- Index: `(target_event_id, created_at)`
 - Follow `docs/EMBEDDING_MODEL_UPGRADE.md` for cutover/backfill/rollback workflow.
 - Event confirmation now keys off `independent_evidence_count` when provenance metadata is present; fallback rows continue to use conservative legacy counts until they are recomputed.
 - Lifecycle split/backfill guidance:

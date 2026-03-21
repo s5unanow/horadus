@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-235` Add Event Split/Merge Lineage for Evolving Stories
 - `TASK-337` Pin Live Trend State to Active Definition/Scoring Versions
 - `TASK-341` Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records
 
@@ -60,3 +59,4 @@
 - `TASK-340` Split Event Epistemic State from Activity State ✅
 - `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware ✅
 - `TASK-339` Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math ✅
+- `TASK-235` Add Event Split/Merge Lineage for Evolving Stories ✅

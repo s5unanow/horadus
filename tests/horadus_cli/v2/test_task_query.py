@@ -570,6 +570,50 @@ def test_pre_push_review_guidance_treats_ingestion_as_runtime_surface() -> None:
     assert "task spans multiple runtime surfaces: ingestion, storage" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_shared_workflow_config_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-995",
+        title="Workflow config fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise shared workflow config guidance."],
+        files=["`.github/workflows/ci.yml`", "`Makefile`", "`.pre-commit-config.yaml`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_single_surface_math_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-994",
+        title="Trend engine fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise shared math guidance without multi-surface paths."],
+        files=["`src/core/trend_engine.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared math modules" in guidance["risk_reasons"]
+
+
 def test_handle_show_requires_explicit_archive_flag_for_archived_task(
     synthetic_task_repo: Path,
 ) -> None:

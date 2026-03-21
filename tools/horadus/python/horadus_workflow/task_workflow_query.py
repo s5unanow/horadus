@@ -22,7 +22,15 @@ _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_workflow/",
     "tools/horadus/python/horadus_cli/",
 )
+_HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (".github/workflows/", "scripts/")
+_HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = ("Makefile", ".pre-commit-config.yaml")
 _HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md", "tasks/specs/TEMPLATE.md")
+_HIGH_RISK_SHARED_MATH_FILES = (
+    "src/core/trend_engine.py",
+    "src/core/trend_restatement.py",
+    "src/core/calibration.py",
+    "src/core/trend_forecast_contract.py",
+)
 _HIGH_RISK_RUNTIME_SURFACE_PREFIXES = {
     "src/api/": "api",
     "src/core/": "core",
@@ -333,35 +341,48 @@ def _normalized_task_paths(record: Any) -> list[str]:
     return [path.strip().strip("`") for path in record.files or [] if path.strip().strip("`")]
 
 
-def _pre_push_review_guidance(record: Any) -> PrePushReviewGuidance:
-    normalized_paths = _normalized_task_paths(record)
-    risk_reasons: list[str] = []
-    runtime_surfaces = sorted(
+def _matches_any_prefix(paths: list[str], prefixes: tuple[str, ...]) -> bool:
+    return any(path.startswith(prefix) for prefix in prefixes for path in paths)
+
+
+def _matches_any_exact_path(paths: list[str], exact_paths: tuple[str, ...]) -> bool:
+    return any(path in exact_paths for path in paths)
+
+
+def _runtime_surfaces_for_paths(paths: list[str]) -> list[str]:
+    return sorted(
         {
             label
-            for path in normalized_paths
+            for path in paths
             for prefix, label in _HIGH_RISK_RUNTIME_SURFACE_PREFIXES.items()
             if path.startswith(prefix)
         }
     )
 
-    if any(path.startswith("alembic/") for path in normalized_paths):
-        risk_reasons.append("task touches migration surfaces")
 
-    if any(
-        path == policy_path for policy_path in _HIGH_RISK_POLICY_FILES for path in normalized_paths
+def _structural_risk_reasons(paths: list[str]) -> list[str]:
+    runtime_surfaces = _runtime_surfaces_for_paths(paths)
+    reasons: list[str] = []
+    if _matches_any_prefix(paths, ("alembic/",)):
+        reasons.append("task touches migration surfaces")
+    if _matches_any_exact_path(paths, _HIGH_RISK_POLICY_FILES):
+        reasons.append("task changes canonical workflow or policy guidance")
+    if _matches_any_prefix(paths, _HIGH_RISK_SHARED_WORKFLOW_PREFIXES):
+        reasons.append("task changes shared workflow tooling")
+    if _matches_any_prefix(paths, _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES) or (
+        _matches_any_exact_path(paths, _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES)
     ):
-        risk_reasons.append("task changes canonical workflow or policy guidance")
-
-    if any(
-        path.startswith(prefix)
-        for prefix in _HIGH_RISK_SHARED_WORKFLOW_PREFIXES
-        for path in normalized_paths
-    ):
-        risk_reasons.append("task changes shared workflow tooling")
-
+        reasons.append("task changes shared workflow config")
+    if _matches_any_exact_path(paths, _HIGH_RISK_SHARED_MATH_FILES):
+        reasons.append("task changes shared math modules")
     if len(runtime_surfaces) >= 2:
-        risk_reasons.append("task spans multiple runtime surfaces: " + ", ".join(runtime_surfaces))
+        reasons.append("task spans multiple runtime surfaces: " + ", ".join(runtime_surfaces))
+    return reasons
+
+
+def _pre_push_review_guidance(record: Any) -> PrePushReviewGuidance:
+    normalized_paths = _normalized_task_paths(record)
+    risk_reasons = _structural_risk_reasons(normalized_paths)
 
     text_blob = " ".join([record.title, *record.description, *record.acceptance_criteria]).lower()
     for marker, reason in _HIGH_RISK_TEXT_MARKERS:

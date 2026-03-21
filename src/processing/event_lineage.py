@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -33,6 +33,7 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
+from src.storage.restatement_models import HumanFeedback
 
 _REPLAY_STAGE = "tier2"
 
@@ -144,6 +145,11 @@ async def merge_events(
     await _refresh_event_after_item_change(session=session, event=target_event)
     await _close_empty_merged_event(source_event)
     await _delete_event_replay_queue_items(session=session, event_id=source_event_id)
+    await _move_suppression_feedback(
+        session=session,
+        source_event_id=source_event_id,
+        target_event_id=target_event_id,
+    )
     await _mark_event_claims_stale(session=session, event_id=source_event_id)
     invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
         session=session,
@@ -604,6 +610,21 @@ async def _delete_event_replay_queue_items(*, session: AsyncSession, event_id: U
         delete(LLMReplayQueueItem)
         .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
         .where(LLMReplayQueueItem.event_id == event_id)
+    )
+
+
+async def _move_suppression_feedback(
+    *,
+    session: AsyncSession,
+    source_event_id: UUID,
+    target_event_id: UUID,
+) -> None:
+    await session.execute(
+        update(HumanFeedback)
+        .where(HumanFeedback.target_type == "event")
+        .where(HumanFeedback.target_id == source_event_id)
+        .where(HumanFeedback.action.in_(("mark_noise", "invalidate")))
+        .values(target_id=target_event_id)
     )
 
 

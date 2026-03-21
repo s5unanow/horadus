@@ -1518,6 +1518,7 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
         side_effect=[
             MagicMock(all=lambda: [success_item, error_item]),
             MagicMock(all=lambda: [SimpleNamespace(id="trend-1")]),
+            MagicMock(all=list),
         ]
     )
 
@@ -1553,13 +1554,7 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
     monkeypatch.setattr(tasks_module, "ProcessingPipeline", FakePipeline)
 
     result = await tasks_module._replay_degraded_events_async(limit=3)
-
-    assert result == {
-        "status": "ok",
-        "task": "replay_degraded_events",
-        "drained": 2,
-        "errors": 1,
-    }
+    assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 2, "errors": 1}
     assert success_item.status == "done"
     assert success_item.last_error is None
     assert success_item.details["replay_result"]["impacts_seen"] == 2

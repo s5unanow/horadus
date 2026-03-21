@@ -3,6 +3,12 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from inspect import signature
 from typing import Any
+from uuid import UUID
+
+from sqlalchemy import select
+
+from src.storage.event_lineage_models import EventLineage
+from src.storage.models import LLMReplayQueueItem
 
 
 def _replay_provenance_derivation(*, item: Any, details: dict[str, Any]) -> dict[str, Any]:
@@ -50,7 +56,58 @@ async def _replay_one_degraded_item(
         "model": deps.settings.LLM_TIER2_MODEL,
     }
     item.details = details
+    await _sync_lineage_replay_status(session=session, event_id=item.event_id)
     return True
+
+
+async def _sync_lineage_replay_status(*, session: Any, event_id: Any) -> None:
+    relevant_lineages = [
+        lineage
+        for lineage in (
+            await session.scalars(
+                select(EventLineage).where(
+                    (EventLineage.source_event_id == event_id)
+                    | (EventLineage.target_event_id == event_id)
+                )
+            )
+        ).all()
+        if str(event_id)
+        in {str(value) for value in (lineage.details or {}).get("replay_enqueued_event_ids", [])}
+    ]
+    if not relevant_lineages:
+        return
+
+    replay_event_ids = {
+        parsed_id
+        for lineage in relevant_lineages
+        for parsed_id in _parse_lineage_replay_ids(lineage)
+    }
+    status_rows = (
+        await session.execute(
+            select(LLMReplayQueueItem.event_id, LLMReplayQueueItem.status)
+            .where(LLMReplayQueueItem.stage == "tier2")
+            .where(LLMReplayQueueItem.event_id.in_(tuple(replay_event_ids)))
+        )
+    ).all()
+    status_by_event_id = {str(row[0]): row[1] for row in status_rows}
+    for lineage in relevant_lineages:
+        replay_ids = tuple(str(parsed_id) for parsed_id in _parse_lineage_replay_ids(lineage))
+        if replay_ids and all(
+            status_by_event_id.get(replay_id) == "done" for replay_id in replay_ids
+        ):
+            details = dict(lineage.details or {})
+            details["status"] = "replay_complete"
+            lineage.details = details
+
+
+def _parse_lineage_replay_ids(lineage: EventLineage) -> tuple[UUID, ...]:
+    parsed_ids: list[UUID] = []
+    for value in (lineage.details or {}).get("replay_enqueued_event_ids", []):
+        try:
+            parsed_ids.append(UUID(str(value)))
+        except (TypeError, ValueError):
+            continue
+    return tuple(parsed_ids)
 
 
 async def snapshot_trends_async(*, deps: Any) -> dict[str, Any]:

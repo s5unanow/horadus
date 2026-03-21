@@ -25,7 +25,7 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
-from src.storage.restatement_models import TrendRestatement
+from src.storage.restatement_models import HumanFeedback, TrendRestatement
 
 pytestmark = pytest.mark.integration
 
@@ -145,6 +145,14 @@ async def _seed_merge_repair_fixture(session):
             details={"reason": "prior-repair"},
         )
     )
+    session.add(
+        HumanFeedback(
+            target_type="event",
+            target_id=source_event.id,
+            action="mark_noise",
+            created_by="analyst@horadus",
+        )
+    )
     await session.commit()
     return source_event, target_event, source_item, target_item, trend
 
@@ -164,12 +172,42 @@ async def _assert_merge_repair_outcome(
     assert refreshed_source is not None
     assert refreshed_target is not None
     assert refreshed_trend is not None
+    _assert_merge_repair_events(
+        refreshed_source=refreshed_source,
+        refreshed_target=refreshed_target,
+        refreshed_trend=refreshed_trend,
+    )
+
+    await _assert_merge_repair_side_effects(
+        session,
+        source_event_id=source_event_id,
+        target_event_id=target_event_id,
+        source_item_id=source_item_id,
+        target_item_id=target_item_id,
+    )
+
+
+def _assert_merge_repair_events(
+    *,
+    refreshed_source: Event,
+    refreshed_target: Event,
+    refreshed_trend: Trend,
+) -> None:
     assert refreshed_source.source_count == 0
     assert refreshed_source.activity_state == "closed"
     assert refreshed_target.source_count == 2
     assert refreshed_target.activity_state == "active"
     assert float(refreshed_trend.current_log_odds) == pytest.approx(-2.0)
 
+
+async def _assert_merge_repair_side_effects(
+    session,
+    *,
+    source_event_id: UUID,
+    target_event_id: UUID,
+    source_item_id: UUID,
+    target_item_id: UUID,
+) -> None:
     moved_links = list(
         (
             await session.scalars(select(EventItem).where(EventItem.event_id == target_event_id))
@@ -191,6 +229,11 @@ async def _assert_merge_repair_outcome(
     assert len(replay_rows) == 1
     assert replay_rows[0].event_id == target_event_id
     assert replay_rows[0].stage == "tier2"
+
+    feedback_rows = list((await session.scalars(select(HumanFeedback))).all())
+    assert len(feedback_rows) == 1
+    assert feedback_rows[0].target_id == target_event_id
+    assert feedback_rows[0].action == "mark_noise"
 
     restatement_rows = list((await session.scalars(select(TrendRestatement))).all())
     assert len(restatement_rows) == 2

@@ -1062,6 +1062,31 @@ async def test_classify_event_reuses_secondary_route_cache_entries(
     assert second_event.extraction_provenance["derivation"]["cache_hit"] is True
 
 
+def test_semantic_cache_read_routes_omits_secondary_when_unconfigured(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    classifier.secondary_model = None
+    classifier.secondary_provider = "openai-secondary"
+
+    assert classifier._semantic_cache_read_routes() == [
+        ("openai", "gpt-4o-mini", None),
+    ]
+
+
+def test_semantic_cache_read_routes_deduplicates_identical_secondary_route(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session)
+    classifier.secondary_model = classifier.model
+    classifier.secondary_provider = classifier.primary_provider
+    classifier.secondary_reasoning_effort = classifier.reasoning_effort
+
+    assert classifier._semantic_cache_read_routes() == [
+        (classifier.primary_provider, classifier.model, classifier.reasoning_effort),
+    ]
+
+
 @pytest.mark.asyncio
 async def test_classify_event_falls_back_when_strict_schema_mode_unavailable(
     mock_db_session,

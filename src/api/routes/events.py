@@ -215,6 +215,7 @@ async def _load_event_detail_payloads(
                 EventClaim.is_active,
             )
             .where(EventClaim.event_id == event_id)
+            .where(EventClaim.is_active.is_(True))
             .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
         )
     ).all()

@@ -504,6 +504,12 @@ async def test_refresh_event_provenance_persists_summary(mock_db_session) -> Non
         source_count=2,
         unique_source_count=2,
     )
+    event.provenance_summary = {
+        "cluster_health": {
+            "cluster_cohesion_score": 0.61,
+            "split_risk_score": 0.39,
+        }
+    }
 
     summary = await refresh_event_provenance(session=mock_db_session, event=event)
 
@@ -511,6 +517,10 @@ async def test_refresh_event_provenance_persists_summary(mock_db_session) -> Non
     assert summary.independent_evidence_count == 1
     assert event.corroboration_mode == "provenance_aware"
     assert event.provenance_summary["independent_evidence_count"] == 1
+    assert event.provenance_summary["cluster_health"] == {
+        "cluster_cohesion_score": 0.61,
+        "split_risk_score": 0.39,
+    }
 
 
 @pytest.mark.asyncio

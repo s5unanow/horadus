@@ -166,21 +166,17 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
         contradiction_notes="Source narratives conflict on withdrawal timeline.",
     )
     mock_db_session.get.return_value = event
-    mock_db_session.execute.side_effect = [
-        SimpleNamespace(
-            all=lambda: [
+    responses = iter(
+        [
+            [
                 ("Reuters", "https://example.com/a1"),
                 ("BBC", "https://example.com/a2"),
-            ]
-        ),
-        SimpleNamespace(
-            all=lambda: [
+            ],
+            [
                 (uuid4(), uuid4(), "Troops advanced into border region", "military_movement", 0.12),
                 (uuid4(), uuid4(), "Negotiators resumed talks", "diplomatic_talks", -0.05),
-            ]
-        ),
-        SimpleNamespace(
-            all=lambda: [
+            ],
+            [
                 (uuid4(), "__event__", "Cluster summary", "fallback", True),
                 (
                     uuid4(),
@@ -189,9 +185,14 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
                     "statement",
                     True,
                 ),
-            ]
-        ),
-    ]
+            ],
+        ]
+    )
+
+    async def _execute(_query):
+        return SimpleNamespace(all=lambda: next(responses))
+
+    mock_db_session.execute.side_effect = _execute
     monkeypatch.setattr(
         events_module,
         "load_event_lineage",
@@ -222,6 +223,7 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
     assert result.sources[0]["source_name"] == "Reuters"
     assert len(result.claims) == 2
     assert result.claims[0]["claim_key"] == "__event__"
+    assert all(claim["is_active"] is True for claim in result.claims)
     assert len(result.trend_impacts) == 2
     assert "event_claim_id" in result.trend_impacts[0]
     assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"

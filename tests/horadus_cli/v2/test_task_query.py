@@ -511,7 +511,10 @@ def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() 
         priority="P2",
         estimate="1h",
         description=["Exercise shared workflow tooling guidance without planning gates."],
-        files=["`tools/horadus/python/horadus_workflow/`", "`docs/AGENT_RUNBOOK.md`"],
+        files=[
+            "`tools/horadus/python/horadus_workflow/task_workflow_query.py`",
+            "`docs/AGENT_RUNBOOK.md`",
+        ],
         acceptance_criteria=[],
         assessment_refs=[],
         raw_block="raw",

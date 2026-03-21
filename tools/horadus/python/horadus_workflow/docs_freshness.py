@@ -97,6 +97,7 @@ from tools.horadus.python.horadus_workflow.repo_workflow import (
     COMPLETION_GUIDANCE_REFERENCE_PATHS,
     DEPENDENCY_AWARE_GUIDANCE_REFERENCE_PATHS,
     FALLBACK_GUIDANCE_REFERENCE_PATHS,
+    HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS,
     STALE_LOWER_LEVEL_TASK_START_COMMAND,
     STALE_TASK_START_FORBIDDEN_REFERENCE_PATHS,
     WORKFLOW_ESCAPE_HATCH_TEXT,
@@ -106,6 +107,7 @@ from tools.horadus.python.horadus_workflow.repo_workflow import (
     completion_guidance_statements,
     dependency_aware_guidance_statements,
     fallback_guidance_statements,
+    high_risk_pre_push_review_statements,
     workflow_policy_guardrail_statements,
 )
 
@@ -309,6 +311,8 @@ def run_docs_freshness_check(
             dependency_aware_guidance_statements=tuple(dependency_aware_guidance_statements()),
             fallback_guidance_reference_paths=FALLBACK_GUIDANCE_REFERENCE_PATHS,
             fallback_guidance_statements=tuple(fallback_guidance_statements()),
+            high_risk_pre_push_review_reference_paths=HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS,
+            high_risk_pre_push_review_statements=tuple(high_risk_pre_push_review_statements()),
             workflow_policy_guardrail_reference_paths=WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS,
             workflow_policy_guardrail_statements=tuple(workflow_policy_guardrail_statements()),
             adr_reference_pattern=_ADR_REFERENCE_PATTERN,

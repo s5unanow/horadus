@@ -19,10 +19,20 @@ _PLANNING_STATE_SPEC_ONLY = "applicable_spec_backed_without_exec_plan"
 _PLANNING_STATE_MISSING = "applicable_backlog_only_missing_artifact"
 _PLANNING_STATE_QUIET = "non_applicable"
 _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
-    "tools/horadus/python/horadus_workflow/",
-    "tools/horadus/python/horadus_cli/",
+    "tools/horadus/python/horadus_workflow/task_workflow_",
+    "tools/horadus/python/horadus_workflow/_task_",
+    "tools/horadus/python/horadus_cli/task_",
+    "tools/horadus/python/horadus_cli/_task_",
 )
-_HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (".github/workflows/", "scripts/")
+_HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (
+    ".github/workflows/",
+    "scripts/check_",
+    "scripts/run_",
+    "scripts/start_task_",
+    "scripts/finish_task_",
+    "scripts/task_context_pack",
+    "scripts/prepush_",
+)
 _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = ("Makefile", ".pre-commit-config.yaml")
 _HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md", "tasks/specs/TEMPLATE.md")
 _HIGH_RISK_SHARED_MATH_FILES = (

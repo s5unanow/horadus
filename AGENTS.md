@@ -162,9 +162,9 @@ After completing work:
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
 - Resolve locally solvable environment blockers before reporting blocked.
 - For high-risk cross-surface tasks (for example migrations, shared workflow
-  tooling, shared math, or multi-surface mutation work), front-load adversarial
-  review before the first push instead of discovering the whole bug set inside
-  `horadus tasks finish`.
+  tooling or config, shared math, or multi-surface mutation work), front-load
+  adversarial review before the first push instead of discovering the whole bug
+  set inside `horadus tasks finish`.
 - If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,
   follow that guidance. When the selected provider is unavailable and local
   automation is still desired, rerun with `--allow-provider-fallback`; if the

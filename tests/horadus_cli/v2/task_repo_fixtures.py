@@ -101,7 +101,7 @@ def _backlog_fixture_text() -> str:
                 "",
                 "Exercise pre-push adversarial review guidance for workflow tooling.",
                 "",
-                "**Files**: `AGENTS.md`, `tools/horadus/python/horadus_workflow/`, `tests/workflow/`",
+                "**Files**: `AGENTS.md`, `tools/horadus/python/horadus_workflow/task_workflow_query.py`, `tests/workflow/`",
                 "",
                 "**Acceptance Criteria**:",
                 "- [ ] high-risk context pack recommends pre-push review",

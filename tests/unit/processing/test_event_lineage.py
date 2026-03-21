@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
@@ -441,6 +441,47 @@ async def test_refresh_event_after_item_change_clears_retracted_state(
 
     assert event.epistemic_state == "emerging"
     assert event.activity_state == "active"
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_after_item_change_preserves_stale_activity_state(
+    mock_db_session, monkeypatch
+) -> None:
+    item = _build_item(title="Old")
+    item.published_at = datetime.now(tz=UTC) - timedelta(days=10)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="old",
+        activity_state="active",
+    )
+    rows = [_EventItemRow(link=EventItem(event_id=event.id, item_id=item.id), item=item)]
+    monkeypatch.setattr(event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=rows))
+    monkeypatch.setattr(event_lineage_module, "_pick_primary_item", AsyncMock(return_value=item))
+    monkeypatch.setattr(event_lineage_module, "refresh_event_provenance", AsyncMock())
+    monkeypatch.setattr(event_lineage_module, "_mark_event_replay_pending", AsyncMock())
+    monkeypatch.setattr(event_lineage_module, "_mark_event_claims_stale", AsyncMock())
+
+    await _refresh_event_after_item_change(session=mock_db_session, event=event)
+
+    assert event.activity_state == "closed"
+
+
+@pytest.mark.asyncio
+async def test_repaired_event_activity_state_defaults_to_active_without_timestamp() -> None:
+    event = Event(id=uuid4(), canonical_summary="event", last_mention_at=None)
+
+    assert event_lineage_module._repaired_event_activity_state(event) == "active"
+
+
+@pytest.mark.asyncio
+async def test_repaired_event_activity_state_marks_recently_stale_events_dormant() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="event",
+        last_mention_at=datetime.now(tz=UTC) - timedelta(days=3),
+    )
+
+    assert event_lineage_module._repaired_event_activity_state(event) == "dormant"
 
 
 @pytest.mark.asyncio

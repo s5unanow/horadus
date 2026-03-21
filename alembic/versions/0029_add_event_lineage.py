@@ -44,8 +44,6 @@ def upgrade() -> None:
             "lineage_kind IN ('merge', 'split')",
             name="check_event_lineage_kind_allowed",
         ),
-        sa.ForeignKeyConstraint(["source_event_id"], ["events.id"], ondelete="SET NULL"),
-        sa.ForeignKeyConstraint(["target_event_id"], ["events.id"], ondelete="SET NULL"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(

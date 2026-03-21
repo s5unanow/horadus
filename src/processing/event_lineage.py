@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 from uuid import UUID
 
@@ -24,7 +24,7 @@ from src.processing.event_cluster_health import (
     apply_default_cluster_health,
     apply_repaired_cluster_health,
 )
-from src.processing.event_lifecycle import EventLifecycleManager
+from src.processing.event_lifecycle import ARCHIVE_DAYS, FADING_HOURS, EventLifecycleManager
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EventActivityState,
@@ -340,10 +340,22 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     EventLifecycleManager(session).sync_event_state(
         event,
         confirmed_at=event.last_mention_at,
-        activity_state=EventActivityState.ACTIVE.value,
+        activity_state=_repaired_event_activity_state(event),
     )
     await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
     await _mark_event_claims_stale(session=session, event_id=event_id)
+
+
+def _repaired_event_activity_state(event: Event) -> str:
+    last_mention_at = event.last_mention_at
+    if last_mention_at is None:
+        return EventActivityState.ACTIVE.value
+    now = datetime.now(tz=UTC)
+    if last_mention_at <= now - timedelta(days=ARCHIVE_DAYS):
+        return EventActivityState.CLOSED.value
+    if last_mention_at <= now - timedelta(hours=FADING_HOURS):
+        return EventActivityState.DORMANT.value
+    return EventActivityState.ACTIVE.value
 
 
 async def _close_empty_merged_event(event: Event, *, replay_pending: bool = True) -> None:

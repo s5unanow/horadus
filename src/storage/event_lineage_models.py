@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, func, text
+from sqlalchemy import CheckConstraint, DateTime, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -23,14 +23,8 @@ class EventLineage(Base):
 
     id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
     lineage_kind: Mapped[str] = mapped_column(String(20), nullable=False)
-    source_event_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("events.id", ondelete="SET NULL"),
-    )
-    target_event_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("events.id", ondelete="SET NULL"),
-    )
+    source_event_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
+    target_event_id: Mapped[UUID | None] = mapped_column(PGUUID(as_uuid=True), nullable=True)
     details: Mapped[dict[str, Any]] = mapped_column(
         JSONB,
         default=dict,

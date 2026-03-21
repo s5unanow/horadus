@@ -27,7 +27,11 @@ from src.processing.event_cluster_health import (
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.event_lineage_models import EventLineage
-from src.storage.event_state import EventActivityState, apply_event_state_update
+from src.storage.event_state import (
+    EventActivityState,
+    EventEpistemicState,
+    apply_event_state_update,
+)
 from src.storage.models import (
     Event,
     EventClaim,
@@ -141,6 +145,7 @@ async def merge_events(
     source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
     if not source_rows:
         raise ValueError("merge source event has no linked items")
+    await _delete_event_replay_queue_items(session=session, event_id=source_event_id)
     moved_item_ids = tuple(row.item.id for row in source_rows)
     for row in source_rows:
         row.link.event_id = target_event_id
@@ -148,7 +153,6 @@ async def merge_events(
 
     await _refresh_event_after_item_change(session=session, event=target_event)
     await _close_empty_merged_event(source_event, replay_pending=False)
-    await _delete_event_replay_queue_items(session=session, event_id=source_event_id)
     await _mark_event_claims_stale(session=session, event_id=source_event_id)
     invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
         session=session,
@@ -334,6 +338,8 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
         provenance_summary[CLUSTER_HEALTH_KEY] = prior_cluster_health
         event.provenance_summary = provenance_summary
     _clear_stale_event_extractions(event)
+    if event.epistemic_state == EventEpistemicState.RETRACTED.value:
+        event.epistemic_state = EventEpistemicState.EMERGING.value
     EventLifecycleManager(session).sync_event_state(
         event,
         confirmed_at=event.last_mention_at,
@@ -630,11 +636,26 @@ async def _reset_replay_queue_item_if_idle(
 
 
 async def _delete_event_replay_queue_items(*, session: AsyncSession, event_id: UUID) -> None:
-    await session.execute(
-        delete(LLMReplayQueueItem)
+    result = cast(
+        "CursorResult[Any]",
+        await session.execute(
+            delete(LLMReplayQueueItem)
+            .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
+            .where(LLMReplayQueueItem.event_id == event_id)
+            .where(LLMReplayQueueItem.status != "processing")
+        ),
+    )
+    if result.rowcount:
+        return
+    processing_item_id = await session.scalar(
+        select(LLMReplayQueueItem.id)
         .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
         .where(LLMReplayQueueItem.event_id == event_id)
+        .where(LLMReplayQueueItem.status == "processing")
+        .limit(1)
     )
+    if processing_item_id is not None:
+        raise RuntimeError("cannot merge event while source replay is processing")
 
 
 def _clear_stale_event_extractions(event: Event) -> None:

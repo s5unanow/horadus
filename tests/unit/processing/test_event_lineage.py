@@ -419,6 +419,30 @@ async def test_refresh_event_after_item_change_resets_singleton_cluster_health(
 
 
 @pytest.mark.asyncio
+async def test_refresh_event_after_item_change_clears_retracted_state(
+    mock_db_session, monkeypatch
+) -> None:
+    item = _build_item(title="One")
+    event = Event(
+        id=uuid4(),
+        canonical_summary="old",
+        epistemic_state="retracted",
+        activity_state="closed",
+    )
+    rows = [_EventItemRow(link=EventItem(event_id=event.id, item_id=item.id), item=item)]
+    monkeypatch.setattr(event_lineage_module, "_load_event_item_rows", AsyncMock(return_value=rows))
+    monkeypatch.setattr(event_lineage_module, "_pick_primary_item", AsyncMock(return_value=item))
+    monkeypatch.setattr(event_lineage_module, "refresh_event_provenance", AsyncMock())
+    monkeypatch.setattr(event_lineage_module, "_mark_event_replay_pending", AsyncMock())
+    monkeypatch.setattr(event_lineage_module, "_mark_event_claims_stale", AsyncMock())
+
+    await _refresh_event_after_item_change(session=mock_db_session, event=event)
+
+    assert event.epistemic_state == "emerging"
+    assert event.activity_state == "active"
+
+
+@pytest.mark.asyncio
 async def test_close_empty_merged_event_sets_closed_replay_pending_state() -> None:
     event = Event(
         id=uuid4(),
@@ -776,6 +800,7 @@ async def test_enqueue_event_replay_conflict_recovery_uses_processing_guard(
 @pytest.mark.asyncio
 async def test_delete_event_replay_queue_items_executes_delete(mock_db_session) -> None:
     event_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(rowcount=1)
 
     await _delete_event_replay_queue_items(session=mock_db_session, event_id=event_id)
 
@@ -783,6 +808,27 @@ async def test_delete_event_replay_queue_items_executes_delete(mock_db_session) 
     assert "delete from llm_replay_queue" in str(statement).lower()
     assert statement.compile().params["stage_1"] == "tier2"
     assert statement.compile().params["event_id_1"] == event_id
+    assert statement.compile().params["status_1"] == "processing"
+    mock_db_session.scalar.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_delete_event_replay_queue_items_rejects_processing_row(mock_db_session) -> None:
+    event_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(rowcount=0)
+    mock_db_session.scalar = AsyncMock(return_value=uuid4())
+
+    with pytest.raises(RuntimeError, match="source replay is processing"):
+        await _delete_event_replay_queue_items(session=mock_db_session, event_id=event_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_event_replay_queue_items_allows_missing_row(mock_db_session) -> None:
+    event_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(rowcount=0)
+    mock_db_session.scalar = AsyncMock(return_value=None)
+
+    await _delete_event_replay_queue_items(session=mock_db_session, event_id=event_id)
 
 
 @pytest.mark.asyncio

@@ -93,10 +93,14 @@ async def _sync_lineage_replay_status(*, session: Any, event_id: Any) -> None:
     status_by_event_id = {str(row[0]): row[1] for row in status_rows}
     for lineage in relevant_lineages:
         replay_ids = tuple(str(parsed_id) for parsed_id in _parse_lineage_replay_ids(lineage))
-        if replay_ids and all(
-            status_by_event_id.get(replay_id) == "done" for replay_id in replay_ids
-        ):
-            details = dict(lineage.details or {})
+        if not replay_ids:
+            continue
+        replay_statuses = {status_by_event_id.get(replay_id) for replay_id in replay_ids}
+        details = dict(lineage.details or {})
+        if "error" in replay_statuses:
+            details["status"] = "replay_error"
+            lineage.details = details
+        elif all(status_by_event_id.get(replay_id) == "done" for replay_id in replay_ids):
             details["status"] = "replay_complete"
             lineage.details = details
 

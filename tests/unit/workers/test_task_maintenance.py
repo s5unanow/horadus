@@ -109,6 +109,27 @@ async def test_sync_lineage_replay_status_leaves_pending_when_other_replays_not_
     assert lineage.details["status"] == "replay_pending"
 
 
+@pytest.mark.asyncio
+async def test_sync_lineage_replay_status_marks_error_when_any_replay_errors() -> None:
+    event_id = uuid4()
+    other_event_id = uuid4()
+    lineage = SimpleNamespace(
+        details={
+            "replay_enqueued_event_ids": [str(event_id), str(other_event_id)],
+            "status": "replay_pending",
+        }
+    )
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [lineage])
+    session.execute.return_value = SimpleNamespace(
+        all=lambda: [(event_id, "done"), (other_event_id, "error")]
+    )
+
+    await _task_maintenance._sync_lineage_replay_status(session=session, event_id=event_id)
+
+    assert lineage.details["status"] == "replay_error"
+
+
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:
     parsed = _task_maintenance._parse_lineage_replay_ids(
         SimpleNamespace(details={"replay_enqueued_event_ids": [uuid4(), "not-a-uuid", None]})

@@ -334,6 +334,12 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
         canonical_summary="old",
         epistemic_state="confirmed",
         activity_state="closed",
+        provenance_summary={
+            "cluster_health": {
+                "cluster_cohesion_score": 0.42,
+                "split_risk_score": 0.35,
+            }
+        },
         categories=["legacy"],
         extracted_who=["stale"],
         extracted_what="stale",
@@ -368,6 +374,10 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     assert event.embedding_truncation_strategy == "tail"
     assert event.epistemic_state == "emerging"
     assert event.activity_state == "active"
+    assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
+        0.42
+    )
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.35)
     assert event.categories == []
     assert event.extracted_who is None
     assert event.extracted_what is None

@@ -19,7 +19,11 @@ from src.core.trend_restatement import (
     restatement_compensation_totals_by_evidence_id,
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
-from src.processing.event_cluster_health import apply_default_cluster_health
+from src.processing.event_cluster_health import (
+    CLUSTER_HEALTH_KEY,
+    apply_default_cluster_health,
+    cluster_health_payload,
+)
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import EventActivityState, apply_event_state_update
@@ -303,6 +307,7 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     if not rows:
         await _close_empty_merged_event(event)
         return
+    prior_cluster_health = cluster_health_payload(event)
     primary_item = await _pick_primary_item(
         session=session,
         item_ids=tuple(row.item.id for row in rows),
@@ -321,7 +326,12 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     event.first_seen_at = min(_item_timestamp(row.item) for row in rows)
     event.last_mention_at = max(_item_timestamp(row.item) for row in rows)
     await refresh_event_provenance(session=session, event=event)
-    apply_default_cluster_health(event)
+    if len(rows) == 1:
+        apply_default_cluster_health(event)
+    else:
+        provenance_summary = dict(event.provenance_summary or {})
+        provenance_summary[CLUSTER_HEALTH_KEY] = prior_cluster_health
+        event.provenance_summary = provenance_summary
     _clear_stale_event_extractions(event)
     EventLifecycleManager(session).sync_event_state(
         event,

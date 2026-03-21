@@ -38,7 +38,10 @@ _HIGH_RISK_SHARED_WORKFLOW_FILES = (
     "tools/horadus/python/horadus_cli/triage_commands.py",
 )
 _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (
+    "agents/automation/",
+    "codex/",
     ".github/workflows/",
+    "ops/automations/",
     "scripts/check_",
     "scripts/run_",
     "scripts/start_task_",

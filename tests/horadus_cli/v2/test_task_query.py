@@ -620,6 +620,28 @@ def test_pre_push_review_guidance_treats_repo_workflow_helpers_as_high_risk() ->
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_repo_owned_automation_surfaces_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-989",
+        title="Automation surface fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise repo-owned automation workflow guidance."],
+        files=["`agents/automation/`", "`ops/automations/specs/`", "`codex/rules/default.rules`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
 def test_pre_push_review_guidance_treats_spec_template_as_policy_surface() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-997",

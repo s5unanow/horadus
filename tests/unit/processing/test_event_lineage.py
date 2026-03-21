@@ -11,6 +11,7 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 import src.processing.event_lineage as event_lineage_module
+import src.processing.event_lineage_replay as event_lineage_replay_module
 from src.processing.event_lineage import (
     _build_canonical_summary,
     _build_event_from_rows,
@@ -33,6 +34,11 @@ from src.processing.event_lineage import (
     merge_events,
     select_from_active_evidence,
     split_event,
+)
+from src.processing.event_lineage_replay import (
+    clear_stale_event_extractions,
+    mark_lineages_superseded_for_queue_items,
+    replay_source_provenance,
 )
 from src.storage.event_lineage_models import EventLineage
 from src.storage.models import (
@@ -138,7 +144,7 @@ async def test_split_event_returns_repair_result(mock_db_session, monkeypatch) -
     monkeypatch.setattr(
         event_lineage_module,
         "_repair_affected_events",
-        AsyncMock(return_value=((uuid4(),), (source_event.id, new_event.id))),
+        AsyncMock(return_value=((uuid4(),), (source_event.id, new_event.id), (uuid4(), uuid4()))),
     )
 
     result = await split_event(
@@ -196,7 +202,7 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
     monkeypatch.setattr(
         event_lineage_module,
         "_repair_affected_events",
-        AsyncMock(return_value=((uuid4(),), (target_event.id,))),
+        AsyncMock(return_value=((uuid4(),), (target_event.id,), (uuid4(),))),
     )
 
     with pytest.raises(ValueError, match="must differ"):
@@ -570,7 +576,7 @@ async def test_repair_affected_events_handles_empty_and_restates_active_evidence
     monkeypatch,
 ) -> None:
     empty = await _repair_affected_events(session=mock_db_session, events=[Event()], reason="split")
-    assert empty == ((), ())
+    assert empty == ((), (), ())
 
     trend = Trend(id=uuid4(), name="Trend", current_log_odds=-2.0)
     evidence_with_trend = TrendEvidence(
@@ -613,7 +619,7 @@ async def test_repair_affected_events_handles_empty_and_restates_active_evidence
     monkeypatch.setattr(
         event_lineage_module,
         "_enqueue_event_replay",
-        AsyncMock(side_effect=[True, True]),
+        AsyncMock(side_effect=[uuid4(), uuid4()]),
     )
 
     result = await _repair_affected_events(
@@ -628,6 +634,7 @@ async def test_repair_affected_events_handles_empty_and_restates_active_evidence
     assert apply_restatement.await_count == 2
     assert result[0] == (evidence_with_trend.id,)
     assert result[1] == (evidence_with_trend.event_id, evidence_without_trend.event_id)
+    assert len(result[2]) == 2
 
 
 @pytest.mark.asyncio
@@ -657,7 +664,7 @@ async def test_repair_affected_events_raises_when_replay_enqueue_fails(
     monkeypatch.setattr(
         event_lineage_module,
         "_enqueue_event_replay",
-        AsyncMock(return_value=False),
+        AsyncMock(return_value=None),
     )
 
     with pytest.raises(RuntimeError, match="requires replay queue items"):
@@ -732,9 +739,11 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
         yield
 
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    reset_queue_item_id = uuid4()
     mock_db_session.get = AsyncMock(side_effect=[None, event, event])
     mock_db_session.begin_nested = _begin_nested
     mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z")])
+    mock_db_session.scalar = AsyncMock(return_value=reset_queue_item_id)
     mock_db_session.execute = AsyncMock(
         side_effect=[
             SimpleNamespace(rowcount=0),
@@ -745,15 +754,15 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=uuid4(), reason="split")
-        is False
+        is None
     )
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="split")
-        is True
+        is not None
     )
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="split")
-        is True
+        == reset_queue_item_id
     )
     assert mock_db_session.execute.await_count == 3
     reset_statement = mock_db_session.execute.await_args_list[-1].args[0]
@@ -781,12 +790,10 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
         },
     )
     mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalar = AsyncMock(return_value=uuid4())
     mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
 
-    assert (
-        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
-        is True
-    )
+    assert await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
     statement = mock_db_session.execute.await_args.args[0]
     compiled = statement.compile()
     assert "update llm_replay_queue" in str(statement).lower()
@@ -820,7 +827,7 @@ async def test_enqueue_event_replay_does_not_reset_processing_row(mock_db_sessio
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
-        is False
+        is None
     )
     assert mock_db_session.execute.await_count == 2
 
@@ -846,7 +853,7 @@ async def test_enqueue_event_replay_conflict_recovery_uses_processing_guard(
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
-        is False
+        is None
     )
     statement = mock_db_session.execute.await_args_list[0].args[0]
     compiled = statement.compile()
@@ -855,9 +862,22 @@ async def test_enqueue_event_replay_conflict_recovery_uses_processing_guard(
 
 
 @pytest.mark.asyncio
-async def test_delete_event_replay_queue_items_executes_delete(mock_db_session) -> None:
+async def test_delete_event_replay_queue_items_executes_delete(
+    mock_db_session,
+    monkeypatch,
+) -> None:
     event_id = uuid4()
+    deleted_queue_item_id = uuid4()
     mock_db_session.execute.return_value = SimpleNamespace(rowcount=1)
+    mock_db_session.scalars = AsyncMock(
+        return_value=SimpleNamespace(all=lambda: [deleted_queue_item_id])
+    )
+    mark_superseded = AsyncMock()
+    monkeypatch.setattr(
+        event_lineage_replay_module,
+        "mark_lineages_superseded_for_queue_items",
+        mark_superseded,
+    )
 
     await _delete_event_replay_queue_items(session=mock_db_session, event_id=event_id)
 
@@ -866,13 +886,17 @@ async def test_delete_event_replay_queue_items_executes_delete(mock_db_session) 
     assert statement.compile().params["stage_1"] == "tier2"
     assert statement.compile().params["event_id_1"] == event_id
     assert statement.compile().params["status_1"] == "processing"
-    mock_db_session.scalar.assert_not_awaited()
+    mark_superseded.assert_awaited_once_with(
+        session=mock_db_session,
+        queue_item_ids=(deleted_queue_item_id,),
+    )
 
 
 @pytest.mark.asyncio
 async def test_delete_event_replay_queue_items_rejects_processing_row(mock_db_session) -> None:
     event_id = uuid4()
     mock_db_session.execute.return_value = SimpleNamespace(rowcount=0)
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
     mock_db_session.scalar = AsyncMock(return_value=uuid4())
 
     with pytest.raises(RuntimeError, match="source replay is processing"):
@@ -883,9 +907,72 @@ async def test_delete_event_replay_queue_items_rejects_processing_row(mock_db_se
 async def test_delete_event_replay_queue_items_allows_missing_row(mock_db_session) -> None:
     event_id = uuid4()
     mock_db_session.execute.return_value = SimpleNamespace(rowcount=0)
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
     mock_db_session.scalar = AsyncMock(return_value=None)
 
     await _delete_event_replay_queue_items(session=mock_db_session, event_id=event_id)
+
+
+@pytest.mark.asyncio
+async def test_mark_lineages_superseded_for_queue_items_updates_matching_lineages() -> None:
+    queue_item_id = uuid4()
+    matching_lineage = EventLineage(
+        details={"replay_queue_item_ids": [str(queue_item_id)], "status": "replay_pending"}
+    )
+    untouched_lineage = EventLineage(details={"replay_queue_item_ids": [str(uuid4())]})
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(
+        all=lambda: [matching_lineage, untouched_lineage]
+    )
+
+    await mark_lineages_superseded_for_queue_items(
+        session=session,
+        queue_item_ids=(queue_item_id,),
+    )
+
+    assert matching_lineage.details["status"] == "replay_superseded"
+    assert untouched_lineage.details.get("status") is None
+
+
+@pytest.mark.asyncio
+async def test_mark_lineages_superseded_for_queue_items_returns_early_without_ids() -> None:
+    session = AsyncMock()
+
+    await mark_lineages_superseded_for_queue_items(session=session, queue_item_ids=())
+
+    session.scalars.assert_not_awaited()
+
+
+def test_replay_helper_utilities_clear_stale_fields_and_preserve_original_provenance() -> None:
+    event = Event(
+        canonical_summary="event",
+        extraction_provenance={
+            "status": "replay_pending",
+            "original_extraction_provenance": {"stage": "tier2"},
+        },
+        extracted_claims={"claim_graph": {}},
+        extracted_who=["A"],
+        extracted_what="what",
+        extracted_where="where",
+        extracted_when=datetime.now(tz=UTC),
+        categories=["x"],
+        has_contradictions=True,
+        contradiction_notes="note",
+    )
+
+    clear_stale_event_extractions(event)
+
+    assert event.extracted_claims is None
+    assert event.extracted_who is None
+    assert event.extracted_what is None
+    assert event.extracted_where is None
+    assert event.extracted_when is None
+    assert event.categories == []
+    assert event.has_contradictions is False
+    assert event.contradiction_notes is None
+    assert replay_source_provenance(event) == {"stage": "tier2"}
+    event.extraction_provenance = {"status": "done", "model": "tier2"}
+    assert replay_source_provenance(event) == {"status": "done", "model": "tier2"}
 
 
 @pytest.mark.asyncio

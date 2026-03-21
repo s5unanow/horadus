@@ -59,10 +59,12 @@ def apply_merge_cluster_health(event: Any, *, similarity: float) -> None:
     current = cluster_health_payload(event)
     current_count = max(1, int(getattr(event, "source_count", 1) or 1))
     prior_count = max(1, current_count - 1)
+    prior_pair_count = max(0, (prior_count * (prior_count - 1)) // 2)
+    new_pair_count = max(1, (current_count * (current_count - 1)) // 2)
     bounded_similarity = _bounded_float(similarity, default=DEFAULT_CLUSTER_COHESION_SCORE)
     cluster_cohesion_score = (
-        (current["cluster_cohesion_score"] * prior_count) + bounded_similarity
-    ) / current_count
+        (current["cluster_cohesion_score"] * prior_pair_count) + (bounded_similarity * prior_count)
+    ) / new_pair_count
     split_risk_score = max(current["split_risk_score"], 1.0 - bounded_similarity)
     _store_cluster_health(
         event=event,

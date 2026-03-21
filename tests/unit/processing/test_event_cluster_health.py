@@ -67,7 +67,7 @@ def test_apply_merge_cluster_health_updates_running_scores_and_getters() -> None
 
     apply_merge_cluster_health(event, similarity=0.5)
 
-    assert cluster_cohesion_score(event) == pytest.approx(0.725)
+    assert cluster_cohesion_score(event) == pytest.approx(0.65)
     assert split_risk_score(event) == pytest.approx(0.5)
 
 

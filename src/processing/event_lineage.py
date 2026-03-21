@@ -4,12 +4,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any
 from uuid import UUID
 
-from sqlalchemy import case, delete, func, select, update
-from sqlalchemy.engine import CursorResult
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.source_credibility import DEFAULT_SOURCE_CREDIBILITY, source_multiplier_expression
@@ -25,6 +23,15 @@ from src.processing.event_cluster_health import (
     apply_repaired_cluster_health,
 )
 from src.processing.event_lifecycle import ARCHIVE_DAYS, FADING_HOURS, EventLifecycleManager
+from src.processing.event_lineage_replay import (
+    clear_stale_event_extractions as _clear_stale_event_extractions,
+)
+from src.processing.event_lineage_replay import (
+    delete_event_replay_queue_items as _delete_event_replay_queue_items,
+)
+from src.processing.event_lineage_replay import (
+    enqueue_event_replay as _enqueue_event_replay,
+)
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EventActivityState,
@@ -35,14 +42,11 @@ from src.storage.models import (
     Event,
     EventClaim,
     EventItem,
-    LLMReplayQueueItem,
     RawItem,
     Source,
     Trend,
     TrendEvidence,
 )
-
-_REPLAY_STAGE = "tier2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,7 +93,11 @@ async def split_event(
 
     await _refresh_event_after_item_change(session=session, event=source_event)
     await _refresh_event_after_item_change(session=session, event=new_event)
-    invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
+    (
+        invalidated_evidence_ids,
+        replay_enqueued_event_ids,
+        replay_queue_item_ids,
+    ) = await _repair_affected_events(
         session=session,
         events=[source_event, new_event],
         reason="split",
@@ -107,6 +115,9 @@ async def split_event(
                 str(evidence_id) for evidence_id in invalidated_evidence_ids
             ],
             "replay_enqueued_event_ids": [str(event_id) for event_id in replay_enqueued_event_ids],
+            "replay_queue_item_ids": [
+                str(queue_item_id) for queue_item_id in replay_queue_item_ids
+            ],
             "status": "replay_pending",
         },
     )
@@ -157,7 +168,11 @@ async def merge_events(
     await _refresh_event_after_item_change(session=session, event=target_event)
     await _close_empty_merged_event(source_event, replay_pending=False)
     await _mark_event_claims_stale(session=session, event_id=source_event_id)
-    invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
+    (
+        invalidated_evidence_ids,
+        replay_enqueued_event_ids,
+        replay_queue_item_ids,
+    ) = await _repair_affected_events(
         session=session,
         events=[source_event, target_event],
         replay_event_ids=(target_event_id,),
@@ -176,6 +191,9 @@ async def merge_events(
                 str(evidence_id) for evidence_id in invalidated_evidence_ids
             ],
             "replay_enqueued_event_ids": [str(event_id) for event_id in replay_enqueued_event_ids],
+            "replay_queue_item_ids": [
+                str(queue_item_id) for queue_item_id in replay_queue_item_ids
+            ],
             "status": "replay_pending",
         },
     )
@@ -412,10 +430,10 @@ async def _repair_affected_events(
     events: list[Event],
     reason: str,
     replay_event_ids: tuple[UUID, ...] | None = None,
-) -> tuple[tuple[UUID, ...], tuple[UUID, ...]]:
+) -> tuple[tuple[UUID, ...], tuple[UUID, ...], tuple[UUID, ...]]:
     event_ids = tuple(event.id for event in events if event.id is not None)
     if not event_ids:
-        return ((), ())
+        return ((), (), ())
     evidence_rows = list(
         (await session.scalars(select_from_active_evidence(event_ids=event_ids))).all()
     )
@@ -456,13 +474,24 @@ async def _repair_affected_events(
     replay_targets = replay_event_ids or tuple(
         event_id for event_id in event_ids if event_id is not None
     )
-    enqueued_ids = []
+    enqueued_ids: list[UUID] = []
+    replay_queue_item_ids: list[UUID] = []
     for event_id in replay_targets:
-        if await _enqueue_event_replay(session=session, event_id=event_id, reason=reason):
+        replay_queue_item_id = await _enqueue_event_replay(
+            session=session,
+            event_id=event_id,
+            reason=reason,
+        )
+        if replay_queue_item_id is not None:
             enqueued_ids.append(event_id)
+            replay_queue_item_ids.append(replay_queue_item_id)
     if len(enqueued_ids) != len(replay_targets):
         raise RuntimeError("event lineage repair requires replay queue items for all targets")
-    return (tuple(invalidated_evidence_ids), tuple(enqueued_ids))
+    return (
+        tuple(invalidated_evidence_ids),
+        tuple(enqueued_ids),
+        tuple(replay_queue_item_ids),
+    )
 
 
 def select_from_active_evidence(*, event_ids: tuple[UUID, ...]) -> Any:
@@ -532,46 +561,6 @@ async def _mark_event_replay_pending(*, event: Event, reason: str) -> None:
     }
 
 
-async def _enqueue_event_replay(
-    *,
-    session: AsyncSession,
-    event_id: UUID,
-    reason: str,
-) -> bool:
-    event = await session.get(Event, event_id)
-    if event is None:
-        return False
-    details = {
-        "reason": "event_lineage_repair",
-        "repair_kind": reason,
-        "original_extraction_provenance": _replay_source_provenance(event),
-    }
-    if await _reset_replay_queue_item_if_idle(
-        session=session,
-        event_id=event_id,
-        details=details,
-    ):
-        return True
-    try:
-        async with session.begin_nested():
-            session.add(
-                LLMReplayQueueItem(
-                    stage=_REPLAY_STAGE,
-                    event_id=event_id,
-                    priority=500,
-                    details=details,
-                )
-            )
-            await session.flush()
-        return True
-    except IntegrityError:
-        return await _reset_replay_queue_item_if_idle(
-            session=session,
-            event_id=event_id,
-            details=details,
-        )
-
-
 async def _pick_primary_item(
     *,
     session: AsyncSession,
@@ -628,73 +617,3 @@ def _require_event_id(event: Event) -> UUID:
     if event.id is None:
         raise ValueError("event must have an id before repair")
     return event.id
-
-
-async def _reset_replay_queue_item_if_idle(
-    *,
-    session: AsyncSession,
-    event_id: UUID,
-    details: dict[str, Any],
-) -> bool:
-    result = cast(
-        "CursorResult[Any]",
-        await session.execute(
-            update(LLMReplayQueueItem)
-            .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
-            .where(LLMReplayQueueItem.event_id == event_id)
-            .where(LLMReplayQueueItem.status != "processing")
-            .values(
-                priority=500,
-                status="pending",
-                locked_at=None,
-                locked_by=None,
-                processed_at=None,
-                last_error=None,
-                details=details,
-            )
-            .execution_options(synchronize_session="fetch")
-        ),
-    )
-    return bool(result.rowcount)
-
-
-async def _delete_event_replay_queue_items(*, session: AsyncSession, event_id: UUID) -> None:
-    result = cast(
-        "CursorResult[Any]",
-        await session.execute(
-            delete(LLMReplayQueueItem)
-            .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
-            .where(LLMReplayQueueItem.event_id == event_id)
-            .where(LLMReplayQueueItem.status != "processing")
-        ),
-    )
-    if result.rowcount:
-        return
-    processing_item_id = await session.scalar(
-        select(LLMReplayQueueItem.id)
-        .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
-        .where(LLMReplayQueueItem.event_id == event_id)
-        .where(LLMReplayQueueItem.status == "processing")
-        .limit(1)
-    )
-    if processing_item_id is not None:
-        raise RuntimeError("cannot merge event while source replay is processing")
-
-
-def _clear_stale_event_extractions(event: Event) -> None:
-    event.extracted_claims = None
-    event.extracted_who = None
-    event.extracted_what = None
-    event.extracted_where = None
-    event.extracted_when = None
-    event.categories = []
-    event.has_contradictions = False
-    event.contradiction_notes = None
-
-
-def _replay_source_provenance(event: Event) -> dict[str, Any]:
-    provenance = dict(event.extraction_provenance or {})
-    original = provenance.get("original_extraction_provenance")
-    if isinstance(original, dict):
-        return dict(original)
-    return provenance

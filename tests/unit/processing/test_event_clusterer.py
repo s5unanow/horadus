@@ -156,7 +156,7 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session, monkeypa
     assert result.merged is True
     assert result.similarity == pytest.approx(0.95)
     assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
-        0.983333,
+        0.966667,
         rel=1e-5,
     )
     assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.05)
@@ -629,7 +629,7 @@ async def test_merge_into_event_preserves_prior_cluster_health_after_provenance_
     await clusterer._merge_into_event(event, item, similarity=0.95)
 
     assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
-        0.716667,
+        0.833333,
         rel=1e-5,
     )
     assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.4)

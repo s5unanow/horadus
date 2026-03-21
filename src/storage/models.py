@@ -346,6 +346,10 @@ class Event(Base):
     # Aggregated metadata
     source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unique_source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    independent_evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    corroboration_score: Mapped[float] = mapped_column(Numeric(5, 2), default=1.0, nullable=False)
+    corroboration_mode: Mapped[str] = mapped_column(String(20), default="fallback", nullable=False)
+    provenance_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
 
     # NEW: Lifecycle tracking (Expert Recommendation)
     lifecycle_status: Mapped[str] = mapped_column(

@@ -52,6 +52,7 @@ async def test_cluster_item_creates_event_when_no_match(mock_db_session) -> None
     clusterer._find_existing_event_id_for_item = no_existing
     clusterer._find_matching_event = no_match
     clusterer._add_event_link = add_link
+    clusterer._refresh_event_provenance = AsyncMock()
 
     result = await clusterer.cluster_item(item)
 
@@ -89,6 +90,7 @@ async def test_cluster_item_handles_launch_languages(
     clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
     clusterer._find_matching_event = AsyncMock(return_value=None)
     clusterer._add_event_link = AsyncMock()
+    clusterer._refresh_event_provenance = AsyncMock()
 
     result = await clusterer.cluster_item(item)
 
@@ -126,6 +128,14 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
     clusterer._add_event_link = add_link
     clusterer._update_primary_item = update_primary
     clusterer._count_unique_sources = count_unique
+
+    async def refresh_provenance(target_event: Event) -> None:
+        target_event.independent_evidence_count = target_event.unique_source_count
+        target_event.corroboration_score = Decimal(target_event.unique_source_count)
+        target_event.corroboration_mode = "provenance_aware"
+        target_event.provenance_summary = {"method": "provenance_aware"}
+
+    clusterer._refresh_event_provenance = AsyncMock(side_effect=refresh_provenance)
 
     result = await clusterer.cluster_item(item)
 
@@ -176,6 +186,11 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
     clusterer._count_unique_sources = count_unique
     clusterer._update_primary_item = AsyncMock(return_value=True)
 
+    async def refresh_provenance(target_event: Event) -> None:
+        target_event.independent_evidence_count = target_event.unique_source_count
+
+    clusterer._refresh_event_provenance = AsyncMock(side_effect=refresh_provenance)
+
     result = await clusterer.cluster_item(item)
 
     assert result.merged is True
@@ -202,6 +217,7 @@ async def test_cluster_item_skips_merge_when_link_already_exists(mock_db_session
     clusterer._find_matching_event = AsyncMock(return_value=(event, 0.93))
     clusterer._add_event_link = AsyncMock(return_value=False)
     clusterer._merge_into_event = merge_into_event
+    clusterer._refresh_event_provenance = AsyncMock()
 
     result = await clusterer.cluster_item(item)
 
@@ -682,3 +698,66 @@ def test_item_timestamp_prefers_published_then_fetched_then_now(
     assert EventClusterer._item_timestamp(published_item) == published_at
     assert EventClusterer._item_timestamp(fetched_item) == fetched_at
     assert EventClusterer._item_timestamp(missing_item) == fallback_now
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_provenance_handles_async_row_collection(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Async provenance rows",
+        source_count=1,
+        unique_source_count=1,
+    )
+
+    async def async_all():
+        return [
+            (
+                uuid4(),
+                "Reuters",
+                "https://www.reuters.com",
+                "wire",
+                "secondary",
+                "https://example.test/story",
+                "Story title",
+                "Reuters staff",
+                "a" * 64,
+            )
+        ]
+
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=async_all))
+
+    await clusterer._refresh_event_provenance(event)
+
+    assert event.independent_evidence_count == 1
+    assert event.corroboration_mode == "provenance_aware"
+
+
+@pytest.mark.asyncio
+async def test_refresh_event_provenance_handles_sync_row_collection(mock_db_session) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Sync provenance rows",
+        source_count=1,
+        unique_source_count=1,
+    )
+    rows = [
+        (
+            uuid4(),
+            "Reuters",
+            "https://www.reuters.com",
+            "wire",
+            "secondary",
+            "https://example.test/story",
+            "Story title",
+            "Reuters staff",
+            "a" * 64,
+        )
+    ]
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: rows))
+
+    await clusterer._refresh_event_provenance(event)
+
+    assert event.independent_evidence_count == 1
+    assert event.corroboration_mode == "provenance_aware"

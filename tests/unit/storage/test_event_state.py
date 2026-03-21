@@ -5,12 +5,16 @@ from uuid import uuid4
 import pytest
 
 from src.storage.event_state import (
+    FALLBACK_CORROBORATION_MODE,
     EventActivityState,
     EventEpistemicState,
     activity_state_from_legacy,
     epistemic_state_from_legacy,
     event_state_snapshot,
     legacy_lifecycle_status_for_states,
+    resolved_corroboration_mode,
+    resolved_corroboration_score,
+    resolved_independent_evidence_count,
 )
 from src.storage.models import Event
 
@@ -55,3 +59,90 @@ def test_event_state_snapshot_uses_explicit_split_state_when_present() -> None:
         "activity_state": "active",
         "lifecycle_status": "confirmed",
     }
+
+
+def test_corroboration_helpers_prefer_persisted_independent_values() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Corroboration snapshot",
+        unique_source_count=5,
+        independent_evidence_count=2,
+        corroboration_score=1.35,
+        corroboration_mode="provenance_aware",
+    )
+
+    assert resolved_independent_evidence_count(event) == 2
+    assert resolved_corroboration_score(event) == pytest.approx(1.35)
+    assert resolved_corroboration_mode(event) == "provenance_aware"
+
+
+def test_corroboration_helpers_fall_back_to_legacy_counts() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Fallback corroboration snapshot",
+        source_count=3,
+        unique_source_count=2,
+        independent_evidence_count=0,
+        corroboration_score=0.0,
+    )
+
+    assert resolved_independent_evidence_count(event) == 2
+    assert resolved_corroboration_score(event) == pytest.approx(2.0)
+    assert resolved_corroboration_mode(event) == FALLBACK_CORROBORATION_MODE
+
+
+def test_corroboration_helpers_ignore_persisted_defaults_in_fallback_mode() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Fallback stored defaults",
+        unique_source_count=4,
+        independent_evidence_count=1,
+        corroboration_score=1.0,
+        corroboration_mode=FALLBACK_CORROBORATION_MODE,
+    )
+
+    assert resolved_independent_evidence_count(event) == 4
+    assert resolved_corroboration_score(event) == pytest.approx(4.0)
+
+
+def test_corroboration_helpers_cover_source_count_and_invalid_score_paths() -> None:
+    source_only_event = Event(
+        id=uuid4(),
+        canonical_summary="Source-count fallback",
+        source_count=3,
+        unique_source_count=0,
+        independent_evidence_count=0,
+    )
+    invalid_score_event = Event(
+        id=uuid4(),
+        canonical_summary="Invalid score fallback",
+        unique_source_count=2,
+        corroboration_score="bad",
+    )
+    provenance_aware_missing_independent = Event(
+        id=uuid4(),
+        canonical_summary="Missing provenance-aware evidence count",
+        unique_source_count=4,
+        independent_evidence_count=None,
+        corroboration_mode="provenance_aware",
+    )
+    provenance_aware_missing_score = Event(
+        id=uuid4(),
+        canonical_summary="Missing provenance-aware score",
+        unique_source_count=2,
+        corroboration_score=None,
+        corroboration_mode="provenance_aware",
+    )
+    provenance_aware_invalid_score = Event(
+        id=uuid4(),
+        canonical_summary="Invalid provenance-aware score",
+        unique_source_count=2,
+        corroboration_score="bad",
+        corroboration_mode="provenance_aware",
+    )
+
+    assert resolved_independent_evidence_count(source_only_event) == 3
+    assert resolved_corroboration_score(invalid_score_event) == pytest.approx(2.0)
+    assert resolved_independent_evidence_count(provenance_aware_missing_independent) == 4
+    assert resolved_corroboration_score(provenance_aware_missing_score) == pytest.approx(2.0)
+    assert resolved_corroboration_score(provenance_aware_invalid_score) == pytest.approx(2.0)

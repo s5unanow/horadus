@@ -6,6 +6,8 @@ import enum
 from typing import Any
 
 CONFIRMATION_THRESHOLD = 3
+FALLBACK_CORROBORATION_MODE = "fallback"
+PROVENANCE_AWARE_CORROBORATION_MODE = "provenance_aware"
 
 
 class EventEpistemicState(enum.StrEnum):
@@ -109,6 +111,46 @@ def derived_epistemic_state(*, unique_source_count: int | None, has_contradictio
     if int(unique_source_count or 0) >= CONFIRMATION_THRESHOLD:
         return EventEpistemicState.CONFIRMED.value
     return EventEpistemicState.EMERGING.value
+
+
+def resolved_independent_evidence_count(event: Any) -> int:
+    """Return the effective independent-evidence count with conservative fallback."""
+
+    if resolved_corroboration_mode(event) != FALLBACK_CORROBORATION_MODE:
+        explicit = getattr(event, "independent_evidence_count", None)
+        if explicit is not None and int(explicit) > 0:
+            return int(explicit)
+    unique_source_count = getattr(event, "unique_source_count", None)
+    if unique_source_count is not None and int(unique_source_count) > 0:
+        return int(unique_source_count)
+    source_count = getattr(event, "source_count", None)
+    if source_count is not None and int(source_count) > 0:
+        return int(source_count)
+    return 1
+
+
+def resolved_corroboration_score(event: Any) -> float:
+    """Return the effective corroboration score with conservative fallback."""
+
+    if resolved_corroboration_mode(event) != FALLBACK_CORROBORATION_MODE:
+        explicit = getattr(event, "corroboration_score", None)
+        if explicit is not None:
+            try:
+                value = float(explicit)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 0:
+                return value
+    return float(resolved_independent_evidence_count(event))
+
+
+def resolved_corroboration_mode(event: Any) -> str:
+    """Return the stored corroboration mode with fallback to legacy counting."""
+
+    explicit = getattr(event, "corroboration_mode", None)
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip().lower()
+    return FALLBACK_CORROBORATION_MODE
 
 
 def apply_event_state_update(

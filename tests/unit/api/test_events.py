@@ -27,6 +27,10 @@ def _build_event(
         categories=["military"],
         source_count=4,
         unique_source_count=3,
+        independent_evidence_count=2,
+        corroboration_score=1.35,
+        corroboration_mode="provenance_aware",
+        provenance_summary={"method": "provenance_aware", "independent_evidence_count": 2},
         lifecycle_status=lifecycle_status,
         has_contradictions=has_contradictions,
         contradiction_notes=contradiction_notes,
@@ -59,6 +63,8 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
     assert result[0].activity_state == "active"
     assert result[0].lifecycle_status == "confirmed"
     assert result[0].unique_source_count == 3
+    assert result[0].independent_evidence_count == 2
+    assert result[0].corroboration_mode == "provenance_aware"
     assert result[0].summary == event.canonical_summary
     query = mock_db_session.scalars.await_args.args[0]
     query_text = str(query)
@@ -166,6 +172,10 @@ async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session
     assert result.id == event.id
     assert result.epistemic_state == "contested"
     assert result.activity_state == "active"
+    assert result.independent_evidence_count == 2
+    assert result.corroboration_mode == "provenance_aware"
+    assert result.corroboration_score == pytest.approx(1.35)
+    assert result.provenance_summary["method"] == "provenance_aware"
     assert result.has_contradictions is True
     assert "conflict" in (result.contradiction_notes or "").lower()
     assert len(result.sources) == 2
@@ -177,3 +187,28 @@ async def test_get_event_returns_detail_with_sources_and_impacts(mock_db_session
     assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"
     assert result.trend_impacts[0]["direction"] == "escalatory"
     assert result.trend_impacts[1]["direction"] == "de_escalatory"
+
+
+@pytest.mark.asyncio
+async def test_event_responses_use_resolved_fallback_corroboration_values(mock_db_session) -> None:
+    fallback_event = _build_event()
+    fallback_event.independent_evidence_count = 0
+    fallback_event.corroboration_mode = ""
+    fallback_event.corroboration_score = 0
+    fallback_event.unique_source_count = 3
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [fallback_event])
+    mock_db_session.get.return_value = fallback_event
+    mock_db_session.execute.side_effect = [
+        SimpleNamespace(all=list),
+        SimpleNamespace(all=list),
+        SimpleNamespace(all=list),
+    ]
+
+    list_result = await list_events(days=7, limit=10, session=mock_db_session)
+    detail_result = await get_event(event_id=fallback_event.id, session=mock_db_session)
+
+    assert list_result[0].independent_evidence_count == 3
+    assert list_result[0].corroboration_mode == "fallback"
+    assert detail_result.independent_evidence_count == 3
+    assert detail_result.corroboration_mode == "fallback"
+    assert detail_result.corroboration_score == pytest.approx(3.0)

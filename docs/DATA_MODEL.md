@@ -179,6 +179,10 @@ Clustered news events (multiple raw_items about the same story).
 | categories | TEXT[] | Yes | | Classification categories |
 | source_count | INTEGER | No | 1 | Number of sources reporting this |
 | unique_source_count | INTEGER | No | 1 | Number of distinct sources represented in the event |
+| independent_evidence_count | INTEGER | No | 1 | Number of likely independent evidence groups after provenance-aware grouping |
+| corroboration_score | DECIMAL(5,2) | No | 1.00 | Weighted corroboration score used for trend math before contradiction penalty |
+| corroboration_mode | VARCHAR(20) | No | 'fallback' | Whether corroboration currently comes from legacy fallback counts or provenance-aware grouping |
+| provenance_summary | JSONB | No | {} | Bounded debug summary of source families, syndication/duplicate groups, and raw-vs-independent counts |
 | epistemic_state | VARCHAR(20) | No | 'emerging' | Evidence/support axis: emerging, confirmed, contested, retracted |
 | activity_state | VARCHAR(20) | No | 'active' | Recency/activity axis: active, dormant, closed |
 | lifecycle_status | VARCHAR(20) | No | 'emerging' | Deprecated compatibility projection derived from the split axes |
@@ -214,6 +218,7 @@ LIMIT 5;
 Operational note:
 - Use `uv run horadus eval embedding-lineage` to detect mixed model populations and estimate re-embed scope.
 - Follow `docs/EMBEDDING_MODEL_UPGRADE.md` for cutover/backfill/rollback workflow.
+- Event confirmation now keys off `independent_evidence_count` when provenance metadata is present; fallback rows continue to use conservative legacy counts until they are recomputed.
 - Lifecycle split/backfill guidance:
   - legacy `emerging` -> `epistemic_state=emerging`, `activity_state=active`
   - legacy `confirmed` -> `epistemic_state=confirmed`, `activity_state=active`

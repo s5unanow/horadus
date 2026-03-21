@@ -906,12 +906,18 @@ async def test_replay_and_impact_helpers_cover_queue_and_prediction_logic(
 
 
 @pytest.mark.asyncio
-async def test_pipeline_domain_helpers_cover_fallbacks_and_parsers(
+async def test_pipeline_corroboration_helpers_cover_fallbacks_and_provenance_modes(
     mock_db_session,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     pipeline = _pipeline(mock_db_session)
-    event = Event(id=uuid4(), canonical_summary="summary", source_count=2, unique_source_count=1)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="summary",
+        source_count=2,
+        unique_source_count=1,
+        corroboration_score=1.2,
+        corroboration_mode="provenance_aware",
+    )
     assert await pipeline._load_event_source_credibility(
         Event(primary_item_id=None)
     ) == pytest.approx(0.5)
@@ -925,51 +931,22 @@ async def test_pipeline_domain_helpers_cover_fallbacks_and_parsers(
 
     pipeline._record_corroboration_path = MagicMock()
     assert (
-        await pipeline._corroboration_score(Event(id=None, source_count=2, unique_source_count=1))
+        await pipeline._corroboration_score(
+            Event(id=None, source_count=2, unique_source_count=1, corroboration_mode="fallback")
+        )
         >= 0.1
     )
-
-    mock_db_session.execute = AsyncMock(side_effect=RuntimeError("db"))
     assert await pipeline._corroboration_score(event) >= 0.1
 
-    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=list))
-    assert await pipeline._corroboration_score(event) >= 0.1
-
-    row_mapping = SimpleNamespace(
-        _mapping={"source_id": "src-1", "source_tier": "official", "reporting_type": "secondary"}
+    assert (
+        ProcessingPipeline._fallback_corroboration_score(Event(independent_evidence_count=2)) == 2.0
     )
-    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(all=lambda: [row_mapping]))
-    assert await pipeline._corroboration_score(event) >= 0.1
-
     assert ProcessingPipeline._fallback_corroboration_score(Event(unique_source_count=2)) == 2.0
     assert ProcessingPipeline._fallback_corroboration_score(Event(source_count=3)) == 3.0
     assert ProcessingPipeline._fallback_corroboration_score(Event()) == 1.0
-    assert (
-        ProcessingPipeline._source_cluster_key(
-            source_id="a", source_tier="official", reporting_type="firsthand"
-        )
-        == "firsthand:a"
-    )
-    assert (
-        ProcessingPipeline._source_cluster_key(
-            source_id="a", source_tier="official", reporting_type="secondary"
-        )
-        == "official:secondary"
-    )
-    assert ProcessingPipeline._parse_corroboration_row((None, "a", "b")) is None
-    assert ProcessingPipeline._parse_corroboration_row((1, 2, 3)) == (1, "2", "3")
-    assert ProcessingPipeline._parse_corroboration_row(SimpleNamespace(_mapping={"id": "x"})) == (
-        "x",
-        None,
-        None,
-    )
-    assert ProcessingPipeline._parse_corroboration_row(object()) is None
-    ProcessingPipeline._record_corroboration_path(event=event, mode="cluster_aware", reason="ok")
-    assert ProcessingPipeline._reporting_type_weight("firsthand") == pytest.approx(1.0)
-    assert ProcessingPipeline._reporting_type_weight("secondary") == pytest.approx(0.6)
-    assert ProcessingPipeline._reporting_type_weight("aggregator") == pytest.approx(0.35)
-    assert ProcessingPipeline._reporting_type_weight("other") == pytest.approx(0.5)
 
+
+def test_pipeline_indicator_decay_and_parsing_helpers_cover_invalid_inputs() -> None:
     contradiction_event = Event(
         extracted_claims={
             "claim_graph": {"links": [{"relation": "contradict"}, {"relation": "contradict"}]}

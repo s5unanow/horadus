@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -741,6 +742,7 @@ async def test_fetch_with_retries_raises_runtimeerror_when_retry_budget_is_negat
 async def test_get_or_create_source_creates_and_updates_records(
     mock_db_session,
     mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
     feed = FeedConfig(
@@ -756,6 +758,8 @@ async def test_get_or_create_source_creates_and_updates_records(
         enabled=False,
         extra={"region": "EMEA"},
     )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.rss_collector.refresh_events_for_source", refresh_mock)
     mock_db_session.scalar.return_value = None
 
     created = await collector._get_or_create_source(feed)
@@ -764,8 +768,10 @@ async def test_get_or_create_source_creates_and_updates_records(
     assert created.url == "https://example.com/rss"
     assert created.config["region"] == "EMEA"
     assert created.is_active is False
+    refresh_mock.assert_not_awaited()
 
     existing = SimpleNamespace(
+        id=uuid4(),
         name="Old",
         credibility_score=0.1,
         source_tier="regional",
@@ -784,6 +790,79 @@ async def test_get_or_create_source_creates_and_updates_records(
     assert existing.reporting_type == "primary"
     assert existing.config["categories"] == ["conflict"]
     assert existing.is_active is False
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_unchanged(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
+    feed = FeedConfig(
+        name="Feed",
+        url="https://example.com/rss",
+        credibility=0.9,
+        categories=["conflict"],
+        check_interval_minutes=15,
+        max_items_per_fetch=10,
+        language="en",
+        source_tier="tier1",
+        reporting_type="primary",
+        enabled=False,
+        extra={"region": "EMEA"},
+    )
+    refresh_mock = AsyncMock(return_value=0)
+    monkeypatch.setattr("src.ingestion.rss_collector.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Feed",
+        credibility_score=Decimal(str(feed.credibility)),
+        source_tier="tier1",
+        reporting_type="primary",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar.return_value = existing
+
+    updated = await collector._get_or_create_source(feed)
+
+    assert updated is existing
+    refresh_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_refreshes_provenance_when_credibility_changes(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
+    feed = FeedConfig(
+        name="Feed",
+        url="https://example.com/rss",
+        credibility=0.9,
+        source_tier="tier1",
+        reporting_type="primary",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.rss_collector.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Feed",
+        credibility_score=Decimal("0.1"),
+        source_tier="tier1",
+        reporting_type="primary",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar.return_value = existing
+
+    await collector._get_or_create_source(feed)
+
+    assert existing.credibility_score == pytest.approx(0.9)
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 
 @pytest.mark.asyncio

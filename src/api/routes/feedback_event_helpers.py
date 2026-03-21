@@ -8,7 +8,10 @@ from uuid import UUID
 
 from src.api.routes.feedback_models import ReviewQueueItem, ReviewQueueTrendImpact
 from src.core.trend_restatement import HISTORICAL_ARTIFACT_POLICY
-from src.storage.event_state import event_state_snapshot
+from src.storage.event_state import (
+    event_state_snapshot,
+    resolved_independent_evidence_count,
+)
 
 if TYPE_CHECKING:
     from src.storage.models import Event, TrendEvidence
@@ -152,6 +155,8 @@ def build_review_queue_item(
         last_mention_at=event.last_mention_at or event.created_at or datetime.now(tz=UTC),
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,
+        independent_evidence_count=resolved_independent_evidence_count(event),
+        corroboration_mode=str(event.corroboration_mode or "fallback"),
         has_contradictions=bool(event.has_contradictions),
         contradiction_notes=event.contradiction_notes,
         evidence_count=len(event_evidence),

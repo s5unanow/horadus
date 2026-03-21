@@ -17,6 +17,7 @@ from src.storage.event_state import (
     derived_epistemic_state,
     resolved_event_activity_state,
     resolved_event_epistemic_state,
+    resolved_independent_evidence_count,
 )
 from src.storage.models import Event, EventLifecycle
 
@@ -37,25 +38,38 @@ class EventLifecycleManager:
         mentioned_at: datetime | None = None,
     ) -> bool:
         mention_time = mentioned_at or datetime.now(tz=UTC)
+        event.last_mention_at = mention_time
+        return self.sync_event_state(
+            event,
+            confirmed_at=mention_time,
+            activity_state=EventActivityState.ACTIVE.value,
+        )
+
+    def sync_event_state(
+        self,
+        event: Event,
+        *,
+        confirmed_at: datetime | None = None,
+        activity_state: str | None = None,
+    ) -> bool:
         previous_epistemic = resolved_event_epistemic_state(event)
         previous_activity = resolved_event_activity_state(event)
-        event.last_mention_at = mention_time
 
         next_epistemic = previous_epistemic
         if previous_epistemic != EventEpistemicState.RETRACTED.value:
             next_epistemic = derived_epistemic_state(
-                unique_source_count=event.unique_source_count,
+                unique_source_count=resolved_independent_evidence_count(event),
                 has_contradictions=bool(event.has_contradictions),
             )
         if next_epistemic in {
             EventEpistemicState.CONFIRMED.value,
             EventEpistemicState.CONTESTED.value,
         }:
-            event.confirmed_at = event.confirmed_at or mention_time
+            event.confirmed_at = event.confirmed_at or confirmed_at or event.last_mention_at
         apply_event_state_update(
             event,
             epistemic_state=next_epistemic,
-            activity_state=EventActivityState.ACTIVE.value,
+            activity_state=activity_state or previous_activity,
         )
 
         return (

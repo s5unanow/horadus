@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telethon import TelegramClient
 
 from src.core.config import settings
+from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
@@ -397,12 +398,30 @@ class TelegramHarvester:
             await self.session.flush()
             return source
 
+        url_changed = source.url != channel_url
+        name_changed = source.name != channel.name
+        existing_credibility = (
+            float(source.credibility_score) if source.credibility_score is not None else None
+        )
+        credibility_changed = existing_credibility != float(channel.credibility)
+        source_tier_changed = source.source_tier != channel.source_tier
+        reporting_type_changed = source.reporting_type != channel.reporting_type
+        source.name = channel.name
         source.url = channel_url
         source.credibility_score = channel.credibility
         source.source_tier = channel.source_tier
         source.reporting_type = channel.reporting_type
         source.config = config_payload
         source.is_active = channel.enabled
+        if (
+            url_changed
+            or name_changed
+            or credibility_changed
+            or source_tier_changed
+            or reporting_type_changed
+        ) and source.id is not None:
+            await self.session.flush()
+            await refresh_events_for_source(session=self.session, source_id=source.id)
         return source
 
     async def _record_source_success(self, source: Source) -> None:

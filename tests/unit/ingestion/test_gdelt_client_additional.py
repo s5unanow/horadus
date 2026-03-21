@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -166,14 +167,19 @@ async def test_get_or_create_source_and_store_article_cover_update_and_early_ret
         source_tier="official",
         reporting_type="firsthand",
     )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
 
     mock_db_session.scalar = AsyncMock(return_value=None)
     created = await client._get_or_create_source(query)
     assert isinstance(created, Source)
     assert created.type == SourceType.GDELT
     assert created.is_active is False
+    refresh_mock.assert_not_awaited()
 
     existing = SimpleNamespace(
+        id=uuid4(),
+        name="Old Query",
         url="old",
         credibility_score=0.1,
         source_tier="aggregator",
@@ -186,6 +192,7 @@ async def test_get_or_create_source_and_store_article_cover_update_and_early_ret
     assert updated is existing
     assert existing.url == client.api_url
     assert existing.source_tier == "official"
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
     source = SimpleNamespace(id=uuid4())
     monkeypatch.setattr(client, "_is_duplicate", AsyncMock(return_value=False))
@@ -221,6 +228,74 @@ async def test_get_or_create_source_and_store_article_cover_update_and_early_ret
         published_at=datetime.now(tz=UTC),
     )
     assert stored is None
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_unchanged(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    query = GDELTQueryConfig(
+        name="Query",
+        query="ukraine",
+        enabled=False,
+        source_tier="official",
+        reporting_type="firsthand",
+    )
+    refresh_mock = AsyncMock(return_value=0)
+    monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Query",
+        url=client.api_url,
+        credibility_score=Decimal(str(query.credibility)),
+        source_tier="official",
+        reporting_type="firsthand",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+
+    updated = await client._get_or_create_source(query)
+
+    assert updated is existing
+    refresh_mock.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_refreshes_provenance_when_credibility_changes(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    query = GDELTQueryConfig(
+        name="Query",
+        query="ukraine",
+        credibility=0.9,
+        source_tier="official",
+        reporting_type="firsthand",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        name="Query",
+        url=client.api_url,
+        credibility_score=Decimal("0.1"),
+        source_tier="official",
+        reporting_type="firsthand",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+
+    await client._get_or_create_source(query)
+
+    assert existing.credibility_score == pytest.approx(0.9)
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 
 def test_gdelt_helper_functions_cover_parsing_and_filters() -> None:

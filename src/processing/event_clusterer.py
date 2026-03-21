@@ -20,6 +20,7 @@ from src.core.source_credibility import (
     DEFAULT_SOURCE_CREDIBILITY,
     source_multiplier_expression,
 )
+from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.event_state import EventActivityState, EventEpistemicState
@@ -64,15 +65,11 @@ class EventClusterer:
             )
 
         if item.embedding is None:
-            event = await self._create_event(item)
-            await self._add_event_link(event.id, item_id)
-            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+            return await self._create_linked_event(item)
 
         item_embedding_model = item.embedding_model.strip() if item.embedding_model else None
         if not item_embedding_model:
-            event = await self._create_event(item)
-            await self._add_event_link(event.id, item_id)
-            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+            return await self._create_linked_event(item)
 
         matched = await self._find_matching_event(
             item.embedding,
@@ -80,9 +77,7 @@ class EventClusterer:
             self._item_timestamp(item),
         )
         if matched is None:
-            event = await self._create_event(item)
-            await self._add_event_link(event.id, item_id)
-            return ClusterResult(item_id=item_id, event_id=event.id, created=True, merged=False)
+            return await self._create_linked_event(item)
 
         event, similarity = matched
         suppression_action = await self._event_suppression_action(event_id=event.id)
@@ -142,6 +137,13 @@ class EventClusterer:
             similarity=similarity,
         )
 
+    async def _create_linked_event(self, item: RawItem) -> ClusterResult:
+        event = await self._create_event(item)
+        await self._add_event_link(event.id, item.id)
+        await self._refresh_event_provenance(event)
+        await self.session.flush()
+        return ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+
     async def cluster_unlinked_items(self, limit: int = 100) -> list[ClusterResult]:
         """Cluster raw items not yet attached to an event."""
         query = (
@@ -192,8 +194,12 @@ class EventClusterer:
             event.canonical_summary = self._build_canonical_summary(item)
 
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
+        await self._refresh_event_provenance(event)
         self.lifecycle_manager.on_event_mention(event, mentioned_at=mention_time)
         await self.session.flush()
+
+    async def _refresh_event_provenance(self, event: Event) -> None:
+        await refresh_event_provenance(session=self.session, event=event)
 
     async def _find_matching_event(
         self,

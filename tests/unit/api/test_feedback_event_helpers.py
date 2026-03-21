@@ -6,10 +6,11 @@ from uuid import uuid4
 import pytest
 
 from src.api.routes.feedback_event_helpers import (
+    build_review_queue_item,
     event_feedback_corrected_value,
     event_feedback_original_value,
 )
-from src.storage.models import TrendEvidence
+from src.storage.models import Event, TrendEvidence
 
 pytestmark = pytest.mark.unit
 
@@ -37,3 +38,35 @@ def test_event_feedback_payload_helpers_allow_missing_event_state() -> None:
     assert original["active_evidence_ids"] == [str(evidence.id)]
     assert "epistemic_state" not in corrected
     assert corrected["affected_evidence_count"] == 1
+
+
+def test_build_review_queue_item_uses_resolved_fallback_corroboration_counts() -> None:
+    now = datetime.now(tz=UTC)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Fallback event",
+        lifecycle_status="emerging",
+        created_at=now,
+        last_mention_at=now,
+        source_count=3,
+        unique_source_count=3,
+        independent_evidence_count=0,
+        corroboration_mode="fallback",
+    )
+    evidence_row = (
+        uuid4(),
+        uuid4(),
+        "Trend",
+        "signal",
+        0.4,
+        0.8,
+        0.0,
+    )
+
+    item = build_review_queue_item(
+        event=event,
+        event_evidence=[evidence_row],
+        feedback_actions=[],
+    )
+
+    assert item.independent_evidence_count == 3

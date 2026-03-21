@@ -595,6 +595,31 @@ def test_pre_push_review_guidance_treats_pr_review_gate_family_as_high_risk() ->
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_repo_workflow_helpers_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-990",
+        title="Workflow helper fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise repo-owned workflow helper guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/repo_workflow.py`",
+            "`tools/horadus/python/horadus_workflow/docs_freshness.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
 def test_pre_push_review_guidance_treats_spec_template_as_policy_surface() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-997",

@@ -138,3 +138,7 @@ def test_event_provenance_migration_normalizes_telegram_preview_channel_urls() -
         migration._source_family_key_from_url("https://t.me/s/channel_name/123")
         == "t.me/channel_name"
     )
+    assert (
+        migration._source_family_key_from_url("https://telegram.me/channel_name/123")
+        == "t.me/channel_name"
+    )

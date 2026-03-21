@@ -593,6 +593,7 @@ def _source_family_key_from_url(value: str | None) -> str | None:
     if hostname.startswith("www."):
         hostname = hostname[4:]
     if hostname in {"t.me", "telegram.me"}:
+        hostname = "t.me"
         segments = [
             segment.strip().lower() for segment in parsed.path.split("/") if segment.strip()
         ]

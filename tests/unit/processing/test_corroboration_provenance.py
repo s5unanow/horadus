@@ -342,6 +342,10 @@ def test_provenance_helper_normalization_paths() -> None:
         provenance_module._source_family_key_from_url("https://t.me/s/channel_name/123")
         == "t.me/channel_name"
     )
+    assert (
+        provenance_module._source_family_key_from_url("https://telegram.me/channel_name/123")
+        == "t.me/channel_name"
+    )
     assert provenance_module._source_family_key_from_url("https://t.me") == "t.me"
     assert provenance_module._slug_text(None) is None
     assert provenance_module._slug_text("   !!!   ") is None

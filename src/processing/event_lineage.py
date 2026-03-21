@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from src.core.trend_restatement import (
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_cluster_health import apply_default_cluster_health
+from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import EventActivityState, apply_event_state_update
 from src.storage.models import (
@@ -138,6 +139,7 @@ async def merge_events(
 
     await _refresh_event_after_item_change(session=session, event=target_event)
     await _close_empty_merged_event(source_event)
+    await _delete_event_replay_queue_items(session=session, event_id=source_event_id)
     await _mark_event_claims_stale(session=session, event_id=source_event_id)
     invalidated_evidence_ids, replay_enqueued_event_ids = await _repair_affected_events(
         session=session,
@@ -316,6 +318,11 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     event.last_mention_at = max(_item_timestamp(row.item) for row in rows)
     await refresh_event_provenance(session=session, event=event)
     apply_default_cluster_health(event)
+    EventLifecycleManager(session).sync_event_state(
+        event,
+        confirmed_at=event.last_mention_at,
+        activity_state=EventActivityState.ACTIVE.value,
+    )
     await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
     await _mark_event_claims_stale(session=session, event_id=event_id)
 
@@ -585,3 +592,11 @@ def _reset_replay_queue_item(*, existing: LLMReplayQueueItem, details: dict[str,
     existing.processed_at = None
     existing.last_error = None
     existing.details = details
+
+
+async def _delete_event_replay_queue_items(*, session: AsyncSession, event_id: UUID) -> None:
+    await session.execute(
+        delete(LLMReplayQueueItem)
+        .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
+        .where(LLMReplayQueueItem.event_id == event_id)
+    )

@@ -579,6 +579,47 @@ async def test_merge_into_event_preserves_existing_embedding(mock_db_session) ->
 
 
 @pytest.mark.asyncio
+async def test_merge_into_event_preserves_prior_cluster_health_after_provenance_refresh(
+    mock_db_session,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    item = _build_item(embedding=[0.4, 0.5], title="follow-up")
+    item.embedding_model = "text-embedding-3-small"
+    item.fetched_at = datetime(2026, 3, 2, tzinfo=UTC)
+    event = Event(
+        canonical_summary="summary",
+        source_count=2,
+        unique_source_count=2,
+        primary_item_id=uuid4(),
+        embedding=[0.1, 0.2],
+        embedding_model="old-model",
+    )
+    event.provenance_summary = {
+        "method": "provenance_aware",
+        "cluster_health": {
+            "cluster_cohesion_score": 0.6,
+            "split_risk_score": 0.4,
+        },
+    }
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+    clusterer._count_unique_sources = AsyncMock(return_value=3)
+    clusterer.lifecycle_manager.on_event_mention = MagicMock()
+
+    async def refresh_provenance(target_event: Event) -> None:
+        target_event.provenance_summary = {"method": "provenance_aware"}
+
+    clusterer._refresh_event_provenance = AsyncMock(side_effect=refresh_provenance)
+
+    await clusterer._merge_into_event(event, item, similarity=0.95)
+
+    assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
+        0.716667,
+        rel=1e-5,
+    )
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.4)
+
+
+@pytest.mark.asyncio
 async def test_find_matching_event_returns_similarity(mock_db_session) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     event = Event(canonical_summary="match")

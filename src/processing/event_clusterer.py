@@ -24,6 +24,7 @@ from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_cluster_health import (
     apply_default_cluster_health,
     apply_merge_cluster_health,
+    cluster_health_payload,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
@@ -188,6 +189,7 @@ class EventClusterer:
         event.source_count += 1
         mention_time = self._item_timestamp(item)
         event.last_mention_at = mention_time
+        prior_cluster_health = cluster_health_payload(event)
         if event.embedding is None and item.embedding is not None:
             event.embedding = item.embedding
             event.embedding_model = item.embedding_model
@@ -200,6 +202,9 @@ class EventClusterer:
 
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
         await self._refresh_event_provenance(event)
+        provenance_summary = dict(event.provenance_summary or {})
+        provenance_summary["cluster_health"] = prior_cluster_health
+        event.provenance_summary = provenance_summary
         apply_merge_cluster_health(event, similarity=similarity)
         self.lifecycle_manager.on_event_mention(event, mentioned_at=mention_time)
         await self.session.flush()

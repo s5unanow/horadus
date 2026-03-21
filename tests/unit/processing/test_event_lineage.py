@@ -15,6 +15,7 @@ from src.processing.event_lineage import (
     _build_canonical_summary,
     _build_event_from_rows,
     _close_empty_merged_event,
+    _delete_event_replay_queue_items,
     _enqueue_event_replay,
     _EventItemRow,
     _invalidation_compensation_delta,
@@ -168,6 +169,12 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
     )
     monkeypatch.setattr(event_lineage_module, "_refresh_event_after_item_change", AsyncMock())
     monkeypatch.setattr(event_lineage_module, "_close_empty_merged_event", AsyncMock())
+    delete_replay_queue_items = AsyncMock()
+    monkeypatch.setattr(
+        event_lineage_module,
+        "_delete_event_replay_queue_items",
+        delete_replay_queue_items,
+    )
     monkeypatch.setattr(event_lineage_module, "_mark_event_claims_stale", AsyncMock())
     monkeypatch.setattr(
         event_lineage_module,
@@ -195,6 +202,10 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
     assert result.action == "merge"
     assert result.lineage_id == lineage_id
     assert row.link.event_id == target_event.id
+    delete_replay_queue_items.assert_awaited_once_with(
+        session=mock_db_session,
+        event_id=source_event.id,
+    )
 
 
 @pytest.mark.asyncio
@@ -306,7 +317,12 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     item_two.embedding_retained_tokens = 120
     item_two.embedding_was_truncated = True
     item_two.embedding_truncation_strategy = "tail"
-    event = Event(id=uuid4(), canonical_summary="old")
+    event = Event(
+        id=uuid4(),
+        canonical_summary="old",
+        epistemic_state="confirmed",
+        activity_state="closed",
+    )
     rows = [
         _EventItemRow(link=EventItem(event_id=event.id, item_id=item_one.id), item=item_one),
         _EventItemRow(link=EventItem(event_id=event.id, item_id=item_two.id), item=item_two),
@@ -330,6 +346,8 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     assert event.embedding_retained_tokens == 120
     assert event.embedding_was_truncated is True
     assert event.embedding_truncation_strategy == "tail"
+    assert event.epistemic_state == "emerging"
+    assert event.activity_state == "active"
 
 
 @pytest.mark.asyncio
@@ -576,6 +594,18 @@ async def test_enqueue_event_replay_returns_false_when_conflict_cannot_resolve(
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
         is False
     )
+
+
+@pytest.mark.asyncio
+async def test_delete_event_replay_queue_items_executes_delete(mock_db_session) -> None:
+    event_id = uuid4()
+
+    await _delete_event_replay_queue_items(session=mock_db_session, event_id=event_id)
+
+    statement = mock_db_session.execute.await_args.args[0]
+    assert "delete from llm_replay_queue" in str(statement).lower()
+    assert statement.compile().params["stage_1"] == "tier2"
+    assert statement.compile().params["event_id_1"] == event_id
 
 
 @pytest.mark.asyncio

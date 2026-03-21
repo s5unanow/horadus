@@ -182,6 +182,7 @@ class EventRepairResponse(BaseModel):
 async def _load_event_detail_payloads(
     *,
     session: AsyncSession,
+    event: Event,
     event_id: UUID,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     source_rows = (
@@ -229,7 +230,7 @@ async def _load_event_detail_payloads(
                 EventClaim.id.in_(tuple(referenced_claim_ids)),
             )
         )
-    else:
+    elif not _lineage_replay_pending(event):
         claim_query = claim_query.where(EventClaim.is_active.is_(True))
     claim_rows = (await session.execute(claim_query)).all()
     sources = [
@@ -286,6 +287,14 @@ def _to_event_response(
         extracted_where=event.extracted_where,
         cluster_cohesion_score=resolved_cluster_health["cluster_cohesion_score"],
         split_risk_score=resolved_cluster_health["split_risk_score"],
+    )
+
+
+def _lineage_replay_pending(event: Event) -> bool:
+    provenance = dict(event.extraction_provenance or {})
+    return (
+        provenance.get("status") == "replay_pending"
+        and provenance.get("reason") == "event_lineage_repair"
     )
 
 
@@ -385,6 +394,7 @@ async def get_event(
     cluster_health = await resolve_cluster_health(session=session, event=event)
     sources, claims, trend_impacts = await _load_event_detail_payloads(
         session=session,
+        event=event,
         event_id=event_id,
     )
     lineage = await load_event_lineage(session=session, event_id=event_id)

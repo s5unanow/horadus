@@ -286,6 +286,48 @@ async def test_get_event_computes_missing_cluster_health_without_mutating_event(
 
 
 @pytest.mark.asyncio
+async def test_get_event_keeps_claims_visible_during_lineage_replay_pending(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = _build_event()
+    event.extraction_provenance = {
+        "status": "replay_pending",
+        "reason": "event_lineage_repair",
+    }
+    mock_db_session.get.return_value = event
+    claim_id = uuid4()
+    responses = iter(
+        [
+            [],
+            [],
+            [
+                (
+                    claim_id,
+                    "__event__",
+                    "Claim before replay",
+                    "fallback",
+                    False,
+                )
+            ],
+        ]
+    )
+
+    async def _execute(_query):
+        return SimpleNamespace(all=lambda: next(responses))
+
+    mock_db_session.execute.side_effect = _execute
+    monkeypatch.setattr(events_module, "load_event_lineage", AsyncMock(return_value=[]))
+
+    result = await get_event(event_id=event.id, session=mock_db_session)
+
+    assert len(result.claims) == 1
+    assert result.claims[0]["claim_text"] == "Claim before replay"
+    claim_query_text = str(mock_db_session.execute.await_args_list[1].args[0]).lower()
+    assert "event_claims.is_active is true" not in claim_query_text
+
+
+@pytest.mark.asyncio
 async def test_event_responses_use_resolved_fallback_corroboration_values(
     mock_db_session,
     monkeypatch,

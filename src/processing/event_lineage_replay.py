@@ -150,6 +150,8 @@ async def mark_lineages_superseded_for_replay_requests(
         if not lineage_replay_request_ids.intersection(replay_request_id_strings):
             continue
         details = dict(lineage.details or {})
+        if details.get("status") != "replay_pending":
+            continue
         details["status"] = "replay_superseded"
         lineage.details = details
 

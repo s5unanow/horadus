@@ -977,6 +977,27 @@ async def test_mark_lineages_superseded_for_replay_requests_updates_matching_lin
 
 
 @pytest.mark.asyncio
+async def test_mark_lineages_superseded_for_replay_requests_keeps_terminal_statuses() -> None:
+    replay_request_id = uuid4()
+    complete_lineage = EventLineage(
+        details={"replay_request_ids": [str(replay_request_id)], "status": "replay_complete"}
+    )
+    error_lineage = EventLineage(
+        details={"replay_request_ids": [str(replay_request_id)], "status": "replay_error"}
+    )
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [complete_lineage, error_lineage])
+
+    await mark_lineages_superseded_for_replay_requests(
+        session=session,
+        replay_request_ids=(replay_request_id,),
+    )
+
+    assert complete_lineage.details["status"] == "replay_complete"
+    assert error_lineage.details["status"] == "replay_error"
+
+
+@pytest.mark.asyncio
 async def test_mark_lineages_superseded_for_replay_requests_returns_early_without_ids() -> None:
     session = AsyncMock()
 

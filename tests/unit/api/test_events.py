@@ -52,6 +52,37 @@ def _build_event(
     )
 
 
+def _assert_event_detail_summary(result, *, event: Event) -> None:
+    assert result.id == event.id
+    assert result.epistemic_state == "contested"
+    assert result.activity_state == "active"
+    assert result.independent_evidence_count == 2
+    assert result.corroboration_mode == "provenance_aware"
+    assert result.corroboration_score == pytest.approx(1.35)
+    assert result.provenance_summary["method"] == "provenance_aware"
+    assert result.has_contradictions is True
+    assert "conflict" in (result.contradiction_notes or "").lower()
+    assert result.lineage[0]["lineage_kind"] == "merge"
+    assert result.cluster_cohesion_score == pytest.approx(1.0)
+    assert result.split_risk_score == pytest.approx(0.0)
+
+
+def _assert_event_detail_relations(result, *, mock_db_session) -> None:
+    assert len(result.sources) == 2
+    assert result.sources[0]["source_name"] == "Reuters"
+    assert len(result.claims) == 2
+    assert result.claims[0]["claim_key"] == "__event__"
+    assert result.claims[1]["is_active"] is False
+    assert len(result.trend_impacts) == 2
+    assert "event_claim_id" in result.trend_impacts[0]
+    assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"
+    assert result.trend_impacts[0]["direction"] == "escalatory"
+    assert result.trend_impacts[1]["direction"] == "de_escalatory"
+    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    assert "event_claims.is_active is true" in claim_query_text
+    assert "event_claims.id in" in claim_query_text
+
+
 @pytest.mark.asyncio
 async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
     event = _build_event(lifecycle_status="confirmed")
@@ -217,31 +248,8 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
 
     result = await get_event(event_id=event.id, session=mock_db_session)
 
-    assert result.id == event.id
-    assert result.epistemic_state == "contested"
-    assert result.activity_state == "active"
-    assert result.independent_evidence_count == 2
-    assert result.corroboration_mode == "provenance_aware"
-    assert result.corroboration_score == pytest.approx(1.35)
-    assert result.provenance_summary["method"] == "provenance_aware"
-    assert result.has_contradictions is True
-    assert "conflict" in (result.contradiction_notes or "").lower()
-    assert len(result.sources) == 2
-    assert result.sources[0]["source_name"] == "Reuters"
-    assert len(result.claims) == 2
-    assert result.claims[0]["claim_key"] == "__event__"
-    assert result.claims[1]["is_active"] is False
-    assert len(result.trend_impacts) == 2
-    assert "event_claim_id" in result.trend_impacts[0]
-    assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"
-    assert result.trend_impacts[0]["direction"] == "escalatory"
-    assert result.trend_impacts[1]["direction"] == "de_escalatory"
-    assert result.lineage[0]["lineage_kind"] == "merge"
-    assert result.cluster_cohesion_score == pytest.approx(1.0)
-    assert result.split_risk_score == pytest.approx(0.0)
-    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
-    assert "event_claims.is_active is true" in claim_query_text
-    assert "event_claims.id in" in claim_query_text
+    _assert_event_detail_summary(result, event=event)
+    _assert_event_detail_relations(result, mock_db_session=mock_db_session)
 
 
 @pytest.mark.asyncio

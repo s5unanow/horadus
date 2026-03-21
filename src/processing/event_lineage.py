@@ -291,6 +291,7 @@ async def _load_event_item_rows(
             .join(RawItem, RawItem.id == EventItem.item_id)
             .where(EventItem.event_id == event_id)
             .order_by(RawItem.published_at.asc().nullslast(), RawItem.fetched_at.asc().nullslast())
+            .with_for_update(of=EventItem)
         )
     ).all()
     return [_EventItemRow(link=row[0], item=row[1]) for row in rows]

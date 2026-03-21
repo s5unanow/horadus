@@ -290,6 +290,8 @@ async def test_load_event_item_rows_wraps_query_results(mock_db_session) -> None
     rows = await _load_event_item_rows(session=mock_db_session, event_id=uuid4())
 
     assert rows == [_EventItemRow(link=link, item=item)]
+    query_text = str(mock_db_session.execute.await_args.args[0]).upper()
+    assert "FOR UPDATE" in query_text
 
 
 @pytest.mark.asyncio

@@ -123,10 +123,11 @@ async def resolve_cluster_health(
     *,
     session: AsyncSession,
     event: Any,
+    prefer_stored: bool = True,
 ) -> dict[str, float]:
     """Return stored or computed cluster health without mutating the event row."""
 
-    if _has_stored_cluster_health(event):
+    if prefer_stored and _has_stored_cluster_health(event):
         return cluster_health_payload(event)
 
     event_id = getattr(event, "id", None)

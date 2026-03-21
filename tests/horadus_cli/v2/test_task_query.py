@@ -551,6 +551,31 @@ def test_pre_push_review_guidance_keeps_non_shared_workflow_helpers_quiet() -> N
     assert guidance["risk_reasons"] == []
 
 
+def test_pre_push_review_guidance_keeps_triage_helpers_quiet() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-988",
+        title="Triage helper fixture",
+        priority="P3",
+        estimate="1h",
+        description=["Exercise ordinary triage helper work without extra workflow risk."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/triage.py`",
+            "`tools/horadus/python/horadus_cli/triage_commands.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is False
+    assert guidance["risk_reasons"] == []
+
+
 def test_pre_push_review_guidance_treats_workflow_package_directory_as_high_risk() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-992",
@@ -684,6 +709,28 @@ def test_pre_push_review_guidance_treats_ingestion_as_runtime_surface() -> None:
 
     assert guidance["recommended"] is True
     assert "task spans multiple runtime surfaces: ingestion, storage" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_eval_as_runtime_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-987",
+        title="Processing/eval fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise multi-surface runtime guidance for processing plus eval."],
+        files=["`src/processing/pipeline.py`", "`src/eval/benchmark.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task spans multiple runtime surfaces: eval, processing" in guidance["risk_reasons"]
 
 
 def test_pre_push_review_guidance_treats_shared_workflow_config_as_high_risk() -> None:

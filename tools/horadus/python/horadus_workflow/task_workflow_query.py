@@ -33,9 +33,7 @@ _HIGH_RISK_SHARED_WORKFLOW_FILES = (
     "tools/horadus/python/horadus_workflow/repo_workflow.py",
     "tools/horadus/python/horadus_workflow/task_repo.py",
     "tools/horadus/python/horadus_workflow/task_workflow_shared.py",
-    "tools/horadus/python/horadus_workflow/triage.py",
     "tools/horadus/python/horadus_cli/task_repo.py",
-    "tools/horadus/python/horadus_cli/triage_commands.py",
 )
 _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (
     "agents/automation/",
@@ -60,6 +58,7 @@ _HIGH_RISK_SHARED_MATH_FILES = (
 _HIGH_RISK_RUNTIME_SURFACE_PREFIXES = {
     "src/api/": "api",
     "src/core/": "core",
+    "src/eval/": "eval",
     "src/ingestion/": "ingestion",
     "src/processing/": "processing",
     "src/storage/": "storage",

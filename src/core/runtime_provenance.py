@@ -42,7 +42,7 @@ def normalize_request_overrides(request_overrides: dict[str, Any] | None) -> dic
 
     if request_overrides is None:
         return None
-    return cast(dict[str, Any], canonicalize_payload(request_overrides))
+    return cast("dict[str, Any]", canonicalize_payload(request_overrides))
 
 
 def build_prompt_provenance(*, prompt_path: str, prompt_template: str) -> dict[str, str]:

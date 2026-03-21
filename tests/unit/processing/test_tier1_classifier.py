@@ -76,23 +76,61 @@ class InMemorySemanticCache:
     entries: dict[str, str]
 
     @staticmethod
-    def _key(*, stage: str, model: str, prompt_template: str, payload: object) -> str:
-        serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
-        return f"{stage}:{model}:{prompt_template}:{serialized}"
+    def _key(
+        *,
+        stage: str,
+        provider: str | None = None,
+        model: str,
+        api_mode: str | None = None,
+        prompt_path: str = "",
+        prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
+        payload: object,
+    ) -> str:
+        serialized = json.dumps(
+            {
+                "provider": provider,
+                "model": model,
+                "api_mode": api_mode,
+                "prompt_path": prompt_path,
+                "prompt_template": prompt_template,
+                "schema_name": schema_name,
+                "schema_payload": schema_payload,
+                "request_overrides": request_overrides,
+                "payload": payload,
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        return f"{stage}:{serialized}"
 
     def get(
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
     ) -> str | None:
         return self.entries.get(
             self._key(
                 stage=stage,
+                provider=provider,
                 model=model,
+                api_mode=api_mode,
+                prompt_path=prompt_path,
                 prompt_template=prompt_template,
+                schema_name=schema_name,
+                schema_payload=schema_payload,
+                request_overrides=request_overrides,
                 payload=payload,
             )
         )
@@ -101,16 +139,28 @@ class InMemorySemanticCache:
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
         value: str,
     ) -> None:
         self.entries[
             self._key(
                 stage=stage,
+                provider=provider,
                 model=model,
+                api_mode=api_mode,
+                prompt_path=prompt_path,
                 prompt_template=prompt_template,
+                schema_name=schema_name,
+                schema_payload=schema_payload,
+                request_overrides=request_overrides,
                 payload=payload,
             )
         ] = value
@@ -125,16 +175,28 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
     ) -> str | None:
         self.get_thread_ids.append(threading.get_ident())
         return InMemorySemanticCache.get(
             self,
             stage=stage,
+            provider=provider,
             model=model,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
             prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
             payload=payload,
         )
 
@@ -142,8 +204,14 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
         value: str,
     ) -> None:
@@ -151,8 +219,14 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         InMemorySemanticCache.set(
             self,
             stage=stage,
+            provider=provider,
             model=model,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
             prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
             payload=payload,
             value=value,
         )

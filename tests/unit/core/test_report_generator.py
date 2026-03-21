@@ -1047,7 +1047,13 @@ def test_build_narrative_payload_content_truncates_large_payload(
 async def test_generate_weekly_reports_persists_grounding_metadata(mock_db_session) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend_id = uuid4()
-    trend = SimpleNamespace(id=trend_id, name="Signal Watch", description="desc")
+    trend = SimpleNamespace(
+        id=trend_id,
+        name="Signal Watch",
+        description="desc",
+        runtime_trend_id="signal-watch",
+        definition={"id": "signal-watch"},
+    )
 
     generator._load_active_trends = AsyncMock(return_value=[trend])
     generator._build_weekly_statistics = AsyncMock(
@@ -1077,3 +1083,6 @@ async def test_generate_weekly_reports_persists_grounding_metadata(mock_db_sessi
     assert persisted.grounding_status == "grounded"
     assert persisted.grounding_violation_count == 0
     assert persisted.grounding_references is None
+    assert persisted.generation_manifest["report_type"] == "weekly"
+    assert persisted.generation_manifest["trend"]["runtime_trend_id"] == "signal-watch"
+    assert persisted.generation_manifest["artifact_status"]["provisional"] is False

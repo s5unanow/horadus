@@ -1,7 +1,56 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from inspect import signature
 from typing import Any
+
+
+def _replay_provenance_derivation(*, item: Any, details: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "source": "replay_queue",
+        "queue_item_id": str(item.id),
+        "original_extraction_provenance": details.get("original_extraction_provenance"),
+    }
+
+
+async def _replay_one_degraded_item(
+    *,
+    deps: Any,
+    session: Any,
+    tier2: Any,
+    pipeline: Any,
+    trends: list[Any],
+    item: Any,
+    now: datetime,
+) -> bool:
+    event = await session.get(deps.Event, item.event_id)
+    if event is None:
+        raise ValueError(f"Event not found: {item.event_id}")
+    details = dict(item.details or {})
+    classify_kwargs = {"event": event, "trends": trends}
+    if "provenance_derivation" in signature(tier2.classify_event).parameters:
+        classify_kwargs["provenance_derivation"] = _replay_provenance_derivation(
+            item=item,
+            details=details,
+        )
+    await tier2.classify_event(**classify_kwargs)
+    impacts_seen, updates_applied = await pipeline._apply_trend_impacts(
+        event=event,
+        trends=trends,
+    )
+    item.status = "done"
+    item.processed_at = now
+    item.locked_at = None
+    item.locked_by = None
+    item.last_error = None
+    details["replay_result"] = {
+        "impacts_seen": impacts_seen,
+        "updates_applied": updates_applied,
+        "processed_at": now.isoformat(),
+        "model": deps.settings.LLM_TIER2_MODEL,
+    }
+    item.details = details
+    return True
 
 
 async def snapshot_trends_async(*, deps: Any) -> dict[str, Any]:
@@ -221,27 +270,15 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
         for item in items:
             drained += 1
             try:
-                event = await session.get(deps.Event, item.event_id)
-                if event is None:
-                    raise ValueError(f"Event not found: {item.event_id}")
-                await tier2.classify_event(event=event, trends=trends)
-                impacts_seen, updates_applied = await pipeline._apply_trend_impacts(
-                    event=event,
+                await _replay_one_degraded_item(
+                    deps=deps,
+                    session=session,
+                    tier2=tier2,
+                    pipeline=pipeline,
                     trends=trends,
+                    item=item,
+                    now=now,
                 )
-                item.status = "done"
-                item.processed_at = now
-                item.locked_at = None
-                item.locked_by = None
-                item.last_error = None
-                details = dict(item.details or {})
-                details["replay_result"] = {
-                    "impacts_seen": impacts_seen,
-                    "updates_applied": updates_applied,
-                    "processed_at": now.isoformat(),
-                    "model": deps.settings.LLM_TIER2_MODEL,
-                }
-                item.details = details
             except Exception as exc:
                 errors += 1
                 item.status = "error"

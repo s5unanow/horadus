@@ -148,6 +148,65 @@ def test_build_cache_key_changes_for_model_and_prompt_versions() -> None:
     assert prompt_changed != base_key
 
 
+def test_build_cache_key_changes_for_provider_schema_and_request_overrides() -> None:
+    base_key = LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider="openai",
+        model="gpt-4.1-mini",
+        api_mode="chat_completions",
+        prompt_path="ai/prompts/tier2.md",
+        prompt_template="prompt-v1",
+        schema_name="tier2_event_classification",
+        schema_payload={"type": "object"},
+        request_overrides={"service_tier": "default"},
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
+    provider_changed = LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider="openai-secondary",
+        model="gpt-4.1-mini",
+        api_mode="chat_completions",
+        prompt_path="ai/prompts/tier2.md",
+        prompt_template="prompt-v1",
+        schema_name="tier2_event_classification",
+        schema_payload={"type": "object"},
+        request_overrides={"service_tier": "default"},
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
+    schema_changed = LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider="openai",
+        model="gpt-4.1-mini",
+        api_mode="chat_completions",
+        prompt_path="ai/prompts/tier2.md",
+        prompt_template="prompt-v1",
+        schema_name="tier2_event_classification",
+        schema_payload={"type": "array"},
+        request_overrides={"service_tier": "default"},
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
+    overrides_changed = LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider="openai",
+        model="gpt-4.1-mini",
+        api_mode="chat_completions",
+        prompt_path="ai/prompts/tier2.md",
+        prompt_template="prompt-v1",
+        schema_name="tier2_event_classification",
+        schema_payload={"type": "object"},
+        request_overrides={"service_tier": "flex"},
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
+
+    assert provider_changed != base_key
+    assert schema_changed != base_key
+    assert overrides_changed != base_key
+
+
 def test_semantic_cache_initialization_normalizes_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_ENABLED", True)
     monkeypatch.setattr(semantic_cache_module.settings, "LLM_SEMANTIC_CACHE_TTL_SECONDS", 0)

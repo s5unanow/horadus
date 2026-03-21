@@ -1,32 +1,30 @@
 """Tier 2 LLM classifier for detailed event extraction."""
 
-# ruff: noqa: RUF001
-
 from __future__ import annotations
 
 import asyncio
 import json
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 from uuid import UUID
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.processing.claim_text_analysis import (
+from src.processing.claim_heuristics import (
+    build_claim_graph,
     claim_language,
     claim_polarity,
-    supported_claim_heuristic_languages,
+    claim_relation,
+    claim_tokens,
+    dedupe_strings,
 )
 from src.processing.cost_tracker import TIER2, CostTracker
 from src.processing.event_claims import (
     assign_claim_keys_to_impacts,
-    normalize_claim_text,
     sync_event_claims,
 )
 from src.processing.llm_failover import LLMChatRoute
@@ -42,7 +40,21 @@ from src.processing.llm_policy import (
     build_safe_payload_content,
     invoke_with_policy,
 )
+from src.processing.llm_runtime_cache import (
+    build_semantic_cache_kwargs,
+    build_tier2_event_provenance,
+    with_cache_hit_derivation,
+)
 from src.processing.semantic_cache import LLMSemanticCache
+from src.processing.tier2_runtime import (
+    Tier2Output,
+    mapped_impacts_count,
+    parse_tier2_datetime,
+    parse_tier2_output,
+    parse_tier2_response,
+    persist_tier2_output,
+    validate_tier2_output_alignment,
+)
 from src.processing.trend_impact_mapping import TREND_IMPACT_MAPPING_KEY, map_event_trend_impacts
 from src.processing.trend_impact_reconciliation import TREND_IMPACT_RECONCILIATION_KEY
 from src.storage.event_state import (
@@ -89,18 +101,8 @@ class Tier2RunResult:
     usage: Tier2Usage = field(default_factory=Tier2Usage)
 
 
-class _Tier2Output(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    summary: str = Field(min_length=1)
-    extracted_who: list[str] = Field(default_factory=list)
-    extracted_what: str = Field(min_length=1)
-    extracted_where: str | None = None
-    extracted_when: str | None = None
-    claims: list[str] = Field(default_factory=list)
-    categories: list[str] = Field(default_factory=list)
-    has_contradictions: bool = False
-    contradiction_notes: str | None = None
+_Tier2Output = Tier2Output
+_mapped_impacts_count = mapped_impacts_count
 
 
 class Tier2Classifier:
@@ -123,71 +125,17 @@ class Tier2Classifier:
         },
     }
     _JSON_OBJECT_RESPONSE_FORMAT: ClassVar[dict[str, str]] = {"type": "json_object"}
-    _CLAIM_STOP_WORDS: ClassVar[dict[str, set[str]]] = {
-        "en": {
-            "a",
-            "an",
-            "and",
-            "are",
-            "as",
-            "at",
-            "by",
-            "for",
-            "from",
-            "in",
-            "is",
-            "of",
-            "on",
-            "or",
-            "that",
-            "the",
-            "to",
-            "was",
-            "were",
-            "with",
-        },
-        "uk": {
-            "а",
-            "або",
-            "але",
-            "в",
-            "від",
-            "до",
-            "для",
-            "з",
-            "за",
-            "і",
-            "й",
-            "на",
-            "по",
-            "про",
-            "та",
-            "у",
-            "це",
-            "що",
-            "як",
-        },
-        "ru": {
-            "а",
-            "без",
-            "в",
-            "для",
-            "до",
-            "за",
-            "и",
-            "или",
-            "на",
-            "не",
-            "о",
-            "по",
-            "с",
-            "также",
-            "то",
-            "что",
-            "это",
-        },
-    }
-    _SUPPORTED_CLAIM_HEURISTIC_LANGUAGES: ClassVar[set[str]] = supported_claim_heuristic_languages()
+    _parse_output = staticmethod(
+        lambda response: parse_tier2_response(response, output_model=_Tier2Output)
+    )
+    _validate_output_alignment = staticmethod(validate_tier2_output_alignment)
+    _dedupe_strings = staticmethod(dedupe_strings)
+    _build_claim_graph = staticmethod(build_claim_graph)
+    _claim_relation = staticmethod(claim_relation)
+    _claim_tokens = staticmethod(claim_tokens)
+    _claim_polarity = staticmethod(claim_polarity)
+    _claim_language = staticmethod(claim_language)
+    _parse_datetime = staticmethod(parse_tier2_datetime)
 
     def __init__(
         self,
@@ -221,6 +169,7 @@ class Tier2Classifier:
         self.request_overrides = (
             dict(request_overrides) if isinstance(request_overrides, dict) else None
         )
+        self.prompt_path = prompt_path
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         self.client = client or self._create_client(
             api_key=settings.OPENAI_API_KEY,
@@ -307,6 +256,7 @@ class Tier2Classifier:
         event: Event,
         trends: list[Trend],
         context_chunks: list[str] | None = None,
+        provenance_derivation: dict[str, Any] | None = None,
     ) -> tuple[Tier2EventResult, Tier2Usage]:
         """Classify one event and persist extracted fields."""
         if event.id is None:
@@ -320,30 +270,14 @@ class Tier2Classifier:
             else await self._load_event_context(event.id)
         )
         payload = self._build_payload(event=event, trends=trends, context_chunks=chunks)
-        cached_content = await asyncio.to_thread(
-            self.semantic_cache.get,
-            stage=TIER2,
-            model=self.model,
-            prompt_template=self.prompt_template,
+        cached = await self._load_cached_classification(
+            event=event,
+            trends=trends,
             payload=payload,
+            provenance_derivation=provenance_derivation,
         )
-        if isinstance(cached_content, str) and cached_content.strip():
-            try:
-                cached_output = _Tier2Output.model_validate(json.loads(cached_content))
-                self._validate_output_alignment(cached_output, trends=trends)
-                self._apply_output(event=event, output=cached_output, trends=trends)
-                await sync_event_claims(session=self.session, event=event)
-                await self.session.flush()
-                return (
-                    Tier2EventResult(
-                        event_id=event.id,
-                        categories_count=len(event.categories or []),
-                        trend_impacts_count=_mapped_impacts_count(event),
-                    ),
-                    Tier2Usage(),
-                )
-            except (ValueError, json.JSONDecodeError):
-                pass
+        if cached is not None:
+            return (cached, Tier2Usage())
 
         payload_content = build_safe_payload_content(
             payload,
@@ -358,32 +292,7 @@ class Tier2Classifier:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": payload_content},
         ]
-        secondary_route = None
-        if self.secondary_client is not None and self.secondary_model is not None:
-            secondary_route = LLMChatRoute(
-                provider=self.secondary_provider or self.primary_provider,
-                model=self.secondary_model,
-                client=self.secondary_client,
-                reasoning_effort=self.secondary_reasoning_effort,
-                request_overrides=self.request_overrides,
-            )
-        invocation = await invoke_with_policy(
-            stage=TIER2,
-            messages=messages,
-            primary_route=LLMChatRoute(
-                provider=self.primary_provider,
-                model=self.model,
-                client=self.client,
-                reasoning_effort=self.reasoning_effort,
-                request_overrides=self.request_overrides,
-            ),
-            secondary_route=secondary_route,
-            temperature=0,
-            strict_response_format=self._STRICT_RESPONSE_FORMAT,
-            fallback_response_format=self._JSON_OBJECT_RESPONSE_FORMAT,
-            cost_tracker=self.cost_tracker,
-            budget_tier=TIER2,
-        )
+        invocation = await self._invoke_event_model(messages=messages)
         usage = Tier2Usage(
             prompt_tokens=invocation.prompt_tokens,
             completion_tokens=invocation.completion_tokens,
@@ -397,29 +306,169 @@ class Tier2Classifier:
 
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, trends=trends)
-        self._apply_output(event=event, output=output, trends=trends)
-        await sync_event_claims(session=self.session, event=event)
+        categories_count, trend_impacts_count = await self._persist_live_output(
+            event=event,
+            trends=trends,
+            output=output,
+            invocation=invocation,
+            payload=payload,
+            provenance_derivation=provenance_derivation,
+        )
+        result = Tier2EventResult(
+            event_id=event.id,
+            categories_count=categories_count,
+            trend_impacts_count=trend_impacts_count,
+        )
+        return (result, usage)
+
+    async def _load_cached_classification(
+        self,
+        *,
+        event: Event,
+        trends: list[Trend],
+        payload: dict[str, Any],
+        provenance_derivation: dict[str, Any] | None,
+    ) -> Tier2EventResult | None:
+        cache_kwargs = build_semantic_cache_kwargs(
+            stage=TIER2,
+            provider=self.primary_provider,
+            model=self.model,
+            prompt_path=self.prompt_path,
+            prompt_template=self.prompt_template,
+            schema_name="tier2_event_classification",
+            schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+            request_overrides=self.request_overrides,
+        )
+        cached_content = await asyncio.to_thread(
+            self.semantic_cache.get,
+            **cache_kwargs,
+            payload=payload,
+        )
+        if not isinstance(cached_content, str) or not cached_content.strip():
+            return None
+        cached_output = parse_tier2_output(
+            raw_content=cached_content,
+            output_model=_Tier2Output,
+            validate_output_alignment=self._validate_output_alignment,
+            trends=trends,
+        )
+        if cached_output is None:
+            return None
+        categories_count, trend_impacts_count = await persist_tier2_output(
+            session=self.session,
+            sync_event_claims=sync_event_claims,
+            event=event,
+            output=cached_output,
+            trends=trends,
+            apply_output=self._apply_output,
+            extraction_provenance=build_tier2_event_provenance(
+                requested_provider=self.primary_provider,
+                requested_model=self.model,
+                requested_reasoning_effort=self.reasoning_effort,
+                active_provider=self.primary_provider,
+                active_model=self.model,
+                active_reasoning_effort=self.reasoning_effort,
+                prompt_path=self.prompt_path,
+                prompt_template=self.prompt_template,
+                schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+                request_overrides=self.request_overrides,
+                derivation=with_cache_hit_derivation(provenance_derivation),
+            ),
+            mapped_impacts_count=mapped_impacts_count,
+        )
+        return Tier2EventResult(
+            event_id=event.id,
+            categories_count=categories_count,
+            trend_impacts_count=trend_impacts_count,
+        )
+
+    async def _invoke_event_model(
+        self,
+        *,
+        messages: list[dict[str, str]],
+    ) -> Any:
+        return await invoke_with_policy(
+            stage=TIER2,
+            messages=messages,
+            primary_route=LLMChatRoute(
+                provider=self.primary_provider,
+                model=self.model,
+                client=self.client,
+                reasoning_effort=self.reasoning_effort,
+                request_overrides=self.request_overrides,
+            ),
+            secondary_route=(
+                None
+                if self.secondary_client is None or self.secondary_model is None
+                else LLMChatRoute(
+                    provider=self.secondary_provider or self.primary_provider,
+                    model=self.secondary_model,
+                    client=self.secondary_client,
+                    reasoning_effort=self.secondary_reasoning_effort,
+                    request_overrides=self.request_overrides,
+                )
+            ),
+            temperature=0,
+            strict_response_format=self._STRICT_RESPONSE_FORMAT,
+            fallback_response_format=self._JSON_OBJECT_RESPONSE_FORMAT,
+            cost_tracker=self.cost_tracker,
+            budget_tier=TIER2,
+        )
+
+    async def _persist_live_output(
+        self,
+        *,
+        event: Event,
+        trends: list[Trend],
+        output: _Tier2Output,
+        invocation: Any,
+        payload: dict[str, Any],
+        provenance_derivation: dict[str, Any] | None,
+    ) -> tuple[int, int]:
+        categories_count, trend_impacts_count = await persist_tier2_output(
+            session=self.session,
+            sync_event_claims=sync_event_claims,
+            event=event,
+            output=output,
+            trends=trends,
+            apply_output=self._apply_output,
+            extraction_provenance=build_tier2_event_provenance(
+                requested_provider=self.primary_provider,
+                requested_model=self.model,
+                requested_reasoning_effort=self.reasoning_effort,
+                active_provider=invocation.active_provider,
+                active_model=invocation.active_model,
+                active_reasoning_effort=invocation.active_reasoning_effort,
+                prompt_path=self.prompt_path,
+                prompt_template=self.prompt_template,
+                schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+                request_overrides=self.request_overrides,
+                derivation=provenance_derivation,
+            ),
+            mapped_impacts_count=mapped_impacts_count,
+        )
         response_choices = getattr(invocation.response, "choices", None)
         if isinstance(response_choices, list) and response_choices:
             message = getattr(response_choices[0], "message", None)
             raw_content = getattr(message, "content", None)
             if isinstance(raw_content, str) and raw_content.strip():
+                cache_write_kwargs = build_semantic_cache_kwargs(
+                    stage=TIER2,
+                    provider=invocation.active_provider,
+                    model=invocation.active_model,
+                    prompt_path=self.prompt_path,
+                    prompt_template=self.prompt_template,
+                    schema_name="tier2_event_classification",
+                    schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+                    request_overrides=self.request_overrides,
+                )
                 await asyncio.to_thread(
                     self.semantic_cache.set,
-                    stage=TIER2,
-                    model=self.model,
-                    prompt_template=self.prompt_template,
+                    **cache_write_kwargs,
                     payload=payload,
                     value=raw_content,
                 )
-        await self.session.flush()
-
-        result = Tier2EventResult(
-            event_id=event.id,
-            categories_count=len(event.categories or []),
-            trend_impacts_count=_mapped_impacts_count(event),
-        )
-        return (result, usage)
+        return (categories_count, trend_impacts_count)
 
     async def _load_unclassified_events(self, limit: int) -> list[Event]:
         query = (
@@ -525,34 +574,6 @@ class Tier2Classifier:
     def _payload_budget_limit(self) -> int:
         return max(1, self._MAX_REQUEST_INPUT_TOKENS - self._PAYLOAD_HEADROOM_TOKENS)
 
-    @staticmethod
-    def _parse_output(response: Any) -> _Tier2Output:
-        choices = getattr(response, "choices", None)
-        if not isinstance(choices, list) or not choices:
-            msg = "Tier 2 response missing choices"
-            raise ValueError(msg)
-        message = getattr(choices[0], "message", None)
-        raw_content = getattr(message, "content", None)
-        if not isinstance(raw_content, str) or not raw_content.strip():
-            msg = "Tier 2 response missing message content"
-            raise ValueError(msg)
-
-        try:
-            parsed = json.loads(raw_content)
-        except json.JSONDecodeError as exc:
-            msg = "Tier 2 response is not valid JSON"
-            raise ValueError(msg) from exc
-        return _Tier2Output.model_validate(parsed)
-
-    @staticmethod
-    def _validate_output_alignment(output: _Tier2Output, *, trends: list[Trend]) -> None:
-        if not trends:
-            msg = "At least one trend is required for deterministic trend mapping"
-            raise ValueError(msg)
-        if not output.claims and not output.extracted_what.strip():
-            msg = "Tier 2 output must include extracted_what or at least one claim"
-            raise ValueError(msg)
-
     def _apply_output(self, *, event: Event, output: _Tier2Output, trends: list[Trend]) -> None:
         existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         system_claims = {}
@@ -593,96 +614,3 @@ class Tier2Classifier:
             impacts=mapping.impacts,
         )
         event.extracted_claims[TREND_IMPACT_MAPPING_KEY] = mapping.diagnostics
-
-    @staticmethod
-    def _dedupe_strings(values: list[str]) -> list[str]:
-        deduped: list[str] = []
-        for value in values:
-            normalized = value.strip()
-            if normalized and normalized not in deduped:
-                deduped.append(normalized)
-        return deduped
-
-    def _build_claim_graph(self, claims: list[str]) -> dict[str, Any]:
-        nodes = [
-            {
-                "claim_id": f"claim_{index + 1}",
-                "text": claim,
-                "normalized_text": normalize_claim_text(claim),
-            }
-            for index, claim in enumerate(claims)
-        ]
-
-        links: list[dict[str, str]] = []
-        for index, source_node in enumerate(nodes):
-            source_text = str(source_node["text"])
-            for target_node in nodes[index + 1 :]:
-                target_text = str(target_node["text"])
-                relation = self._claim_relation(source_text, target_text)
-                if relation is None:
-                    continue
-                links.append(
-                    {
-                        "source_claim_id": str(source_node["claim_id"]),
-                        "target_claim_id": str(target_node["claim_id"]),
-                        "relation": relation,
-                    }
-                )
-
-        return {"nodes": nodes, "links": links}
-
-    def _claim_relation(self, first: str, second: str) -> str | None:
-        first_language = self._claim_language(first)
-        second_language = self._claim_language(second)
-        if (
-            first_language not in self._SUPPORTED_CLAIM_HEURISTIC_LANGUAGES
-            or second_language not in self._SUPPORTED_CLAIM_HEURISTIC_LANGUAGES
-            or first_language != second_language
-        ):
-            return None
-
-        first_tokens = self._claim_tokens(first, language=first_language)
-        second_tokens = self._claim_tokens(second, language=second_language)
-        overlap = first_tokens.intersection(second_tokens)
-        if len(overlap) < 2:
-            return None
-
-        first_polarity = self._claim_polarity(first, language=first_language)
-        second_polarity = self._claim_polarity(second, language=second_language)
-        if first_polarity != second_polarity:
-            return "contradict"
-        return "support"
-
-    def _claim_tokens(self, value: str, *, language: str) -> set[str]:
-        stop_words = self._CLAIM_STOP_WORDS.get(language, set())
-        normalized = normalize_claim_text(value)
-        return {
-            token
-            for token in normalized.split()
-            if token and len(token) > 2 and token not in stop_words
-        }
-
-    def _claim_polarity(self, value: str, *, language: str) -> str:
-        return claim_polarity(value, language=language)
-
-    @staticmethod
-    def _claim_language(value: str) -> str:
-        return claim_language(value)
-
-    @staticmethod
-    def _parse_datetime(raw_value: str | None) -> datetime | None:
-        if raw_value is None or not raw_value.strip():
-            return None
-        normalized = raw_value.strip().replace("Z", "+00:00")
-        parsed = datetime.fromisoformat(normalized)
-        if parsed.tzinfo is None:
-            return parsed.replace(tzinfo=UTC)
-        return parsed.astimezone(UTC)
-
-
-def _mapped_impacts_count(event: Event) -> int:
-    claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-    impacts = claims.get("trend_impacts")
-    if not isinstance(impacts, list):
-        return 0
-    return len(impacts)

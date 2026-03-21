@@ -183,6 +183,7 @@ Clustered news events (multiple raw_items about the same story).
 | corroboration_score | DECIMAL(5,2) | No | 1.00 | Weighted corroboration score used for trend math before contradiction penalty |
 | corroboration_mode | VARCHAR(20) | No | 'fallback' | Whether corroboration currently comes from legacy fallback counts or provenance-aware grouping |
 | provenance_summary | JSONB | No | {} | Bounded debug summary of source families, syndication/duplicate groups, and raw-vs-independent counts |
+| extraction_provenance | JSONB | No | {} | Current Tier-2 extraction/runtime provenance basis (model, prompt hash, schema hash, overrides, replay/cache derivation) |
 | epistemic_state | VARCHAR(20) | No | 'emerging' | Evidence/support axis: emerging, confirmed, contested, retracted |
 | activity_state | VARCHAR(20) | No | 'active' | Recency/activity axis: active, dormant, closed |
 | lifecycle_status | VARCHAR(20) | No | 'emerging' | Deprecated compatibility projection derived from the split axes |
@@ -381,6 +382,8 @@ Audit trail of all probability updates.
 | base_weight | DECIMAL(10,6) | Yes | | Indicator weight used at scoring time (nullable for pre-`TASK-157` rows) |
 | direction_multiplier | DECIMAL(3,1) | Yes | | Direction factor used at scoring time (`+1.0` escalatory, `-1.0` de-escalatory; nullable for legacy rows) |
 | trend_definition_hash | VARCHAR(64) | Yes | | Deterministic hash of trend definition used at scoring time (nullable for legacy rows) |
+| scoring_math_version | VARCHAR(64) | No | `trend-scoring-v1` | Named deterministic scoring-formula version (`legacy-unversioned` for older rows) |
+| scoring_parameter_set | VARCHAR(64) | No | `stable-default-v1` | Named scoring-parameter-set contract used when the delta was applied |
 | credibility_score | DECIMAL(3,2) | Yes | | Source credibility (0.00-1.00) |
 | corroboration_factor | DECIMAL(5,2) | Yes | | sqrt(effective_independent_corroboration)/3 |
 | novelty_score | DECIMAL(3,2) | Yes | | Continuous recency-aware novelty (0.30-1.00) |
@@ -424,7 +427,7 @@ where:
 ```
 
 Scoring-time provenance:
-- `base_weight`, `direction_multiplier`, and `trend_definition_hash` are persisted to preserve factorization inputs even if trend YAML/definitions change later.
+- `base_weight`, `direction_multiplier`, `trend_definition_hash`, `scoring_math_version`, and `scoring_parameter_set` are persisted to preserve factorization inputs even if trend YAML/definitions change later.
 - Legacy rows (created before `TASK-157`) may have these fields as `NULL`.
 
 ---
@@ -445,6 +448,8 @@ Append-only compensating ledger for corrections applied after original evidence 
 | source | VARCHAR(50) | No | | Correction source (`event_feedback`, `trend_override`, `tier2_reconciliation`) |
 | original_evidence_delta_log_odds | DECIMAL(10,6) | Yes | | Original evidence delta before compensation |
 | compensation_delta_log_odds | DECIMAL(10,6) | No | | Signed compensating delta applied to the trend |
+| scoring_math_version | VARCHAR(64) | No | `trend-scoring-v1` | Named scoring-formula version active when the restatement was recorded |
+| scoring_parameter_set | VARCHAR(64) | No | `stable-default-v1` | Named scoring-parameter-set contract active when the restatement was recorded |
 | notes | TEXT | Yes | | Analyst/runtime explanation |
 | details | JSONB | Yes | | Structured lineage context |
 | recorded_at | TIMESTAMPTZ | No | NOW() | Ledger timestamp |
@@ -558,6 +563,7 @@ Generated intelligence reports (weekly/monthly/retrospective).
 | grounding_violation_count | INTEGER | No | `0` | Number of grounding violations |
 | grounding_references | JSONB | Yes | | Grounding evidence metadata |
 | top_events | JSONB | Yes | | Top contributing events |
+| generation_manifest | JSONB | No | {} | Pinned report-generation manifest covering prompt/model lineage, scoring contract, and evidence/event input ids |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 
 **Indexes:**
@@ -567,6 +573,7 @@ Generated intelligence reports (weekly/monthly/retrospective).
 
 **Historical-artifact policy:**
 - Generated reports preserve the deterministic statistics and narrative that were true at report time.
+- `generation_manifest` pins the stored artifact to its input evidence/event ids, active scoring contract, and narrative/runtime provenance basis.
 - Later invalidations/restatements do not rewrite stored report bodies; corrected-history analysis should reference `trend_restatements` plus current projection verification.
 
 ---

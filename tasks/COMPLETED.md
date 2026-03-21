@@ -331,3 +331,4 @@
 - TASK-358: Replace autopilot `flock` dependency with a repo-owned automation lock helper ✅
 - TASK-340: Split Event Epistemic State from Activity State ✅
 - TASK-227: Make Corroboration Provenance-Aware Instead of Source-Count-Aware ✅
+- TASK-339: Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math ✅

@@ -204,13 +204,14 @@ Taxonomy drift safety:
 - Skipped or unresolved impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`) with structured mapping details.
 - This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
 - Active runtime trend routing is pinned to the normalized, unique `trends.runtime_trend_id` value (mirrored in `definition.id`) so duplicate config/API writes fail closed instead of shadowing one trend behind another.
-- Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed through append-only `trend_restatements`, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata for audit/replay.
+- Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed through append-only `trend_restatements`, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata plus current extraction runtime provenance for audit/replay.
 - Operator invalidation, partial restatement, and manual trend compensation use the same append-only restatement ledger, and projection verification can deterministically rebuild `current_log_odds` from chronological evidence/restatement history with decay applied between state changes.
+- Semantic cache keys now share the same prompt/schema/request-override basis surfaced on persisted artifacts, so prompt or route changes cannot silently reuse stale cached Tier-1/Tier-2 outputs.
 
 Degraded-mode safety (sustained Tier-2 failover / quality drift):
 - The system tracks Tier-2 failover ratios over rolling windows and runs a small Tier-2 gold-set canary before bulk pipeline runs.
 - When degraded mode (`degraded_llm`) is active, Tier-2 extraction still runs to populate event fields, but **trend deltas are held** (no `trend_evidence` writes).
-- High-impact events are queued in `llm_replay_queue` for post-recovery replay on a primary-only Tier-2 route; replay applies deltas once primary-quality behavior is restored.
+- High-impact events are queued in `llm_replay_queue` for post-recovery replay on a primary-only Tier-2 route; replay applies deltas once primary-quality behavior is restored and records explicit derivation linkage back to the original degraded extraction basis.
 - If the primary Tier-2 model fails canary but an optional emergency Tier-2 model passes, the pipeline runs using the emergency model and applies deltas normally for that run.
 
 Language-segmented operational metrics are emitted for:
@@ -323,6 +324,7 @@ Benefit: Significant cost reduction vs. running Tier 2 on all items.
 Why: LLM outputs are non-deterministic and unexplainable.
 How: LLM extracts signals → Code computes deltas.
 Benefit: Every probability change has an auditable paper trail.
+Runtime provenance: persisted Tier-2 outputs, semantic-cache basis, evidence/restatement scoring versions, and report manifests now share one named provenance contract.
 Reference: `docs/adr/006-deterministic-scoring.md`
 
 ## Component Details

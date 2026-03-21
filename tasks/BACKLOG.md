@@ -598,32 +598,6 @@ spent on the most decision-relevant work first.
 
 ---
 
-### TASK-339: Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math
-**Priority**: P1 (High)
-**Estimate**: 4-6 hours
-
-Auditability is already strong for some surfaces, but runtime provenance is still
-split across prompt files, cache keys, event payloads, and partial evidence
-metadata. Add one bounded provenance contract for persisted LLM-derived records
-and scoring math so operators can explain why two runs or two artifacts differ.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/processing/tier1_classifier.py`, `src/processing/tier2_classifier.py`, `src/processing/semantic_cache.py`, `src/core/trend_engine.py`, `src/core/report_generator.py`, `src/api/routes/reports.py`, `tests/`, `docs/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Define a compact provenance payload for persisted LLM-derived artifacts covering at least model identifier, prompt hash/version, schema version, and route/request-override basis
-- [ ] Persist immutable provenance for held/replayed Tier-2 work, or record an explicit replay-derivation link back to the original invocation basis, so replay does not silently look like an original run
-- [ ] Persist a scoring-math version identifier alongside applied trend evidence and compensating/restatement records so factor changes are auditable over time
-- [ ] Define a named scoring-parameter-set contract plus a replay/backtest promotion check before scoring-weight or factor changes ship
-- [ ] Ensure semantic cache/debug surfaces expose the same provenance basis used by persisted runtime artifacts rather than a separate implicit contract
-- [ ] Persist an immutable report-generation manifest that pins report period scope, evidence/event inputs, prompt/model lineage, and degraded/provisional status for every generated report artifact
-- [ ] Expose enough read/debug visibility for operators to compare provenance across events/evidence/cache hits without reading source code
-- [ ] Add regression coverage proving provenance changes when model, prompt, schema, taxonomy/config basis, scoring-math version, or replay-derivation basis changes
-
----
-
 ### TASK-341: Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records
 **Priority**: P1 (High)
 **Estimate**: 6-8 hours

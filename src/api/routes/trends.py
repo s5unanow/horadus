@@ -64,6 +64,7 @@ from src.core.risk import (
     get_confidence_rating,
     get_risk_level,
 )
+from src.core.runtime_provenance import current_trend_scoring_contract
 from src.core.trend_config import (
     DEFAULT_TREND_CONFIG_SYNC_DIR,
     TrendConfigSyncPathError,
@@ -243,6 +244,8 @@ async def _to_response(
         confidence=confidence,
         top_movers_7d=top_movers,
         indicators=trend.indicators,
+        active_scoring_math_version=current_trend_scoring_contract()["math_version"],
+        active_scoring_parameter_set=current_trend_scoring_contract()["parameter_set"],
         decay_half_life_days=trend.decay_half_life_days,
         is_active=trend.is_active,
         updated_at=trend.updated_at,
@@ -250,12 +253,16 @@ async def _to_response(
 
 
 def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
+    scoring_contract = current_trend_scoring_contract()
     return TrendEvidenceResponse(
         id=evidence.id,
         trend_id=evidence.trend_id,
         event_id=evidence.event_id,
         event_claim_id=evidence.event_claim_id,
         signal_type=evidence.signal_type,
+        trend_definition_hash=evidence.trend_definition_hash,
+        scoring_math_version=evidence.scoring_math_version or scoring_contract["math_version"],
+        scoring_parameter_set=(evidence.scoring_parameter_set or scoring_contract["parameter_set"]),
         credibility_score=(
             float(evidence.credibility_score) if evidence.credibility_score is not None else None
         ),

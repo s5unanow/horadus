@@ -250,10 +250,12 @@ Artifacts and scope:
 - Use this command for advisory local branch-diff review before push; keep
   remote PR review and `horadus tasks finish` as the merge gate.
 - If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,
-  follow that guidance. When the selected provider is unavailable and local
-  automation is still desired, rerun with `--allow-provider-fallback`; if the
-  local-review path remains unusable, request manual review early rather than
-  waiting for the finish loop.
+  follow that guidance. The default/env provider chain already falls through
+  missing provider CLIs on PATH in repo order. If the first local-review run
+  hits a provider-specific timeout, auth/config failure, or unreadable output
+  and you still want local automation, rerun with `--allow-provider-fallback`;
+  if the local-review path still remains unusable, request manual review early
+  rather than waiting for the finish loop.
 - Batch related fixes with updated tests before re-requesting review on a
   high-risk task; do not turn the same open bucket into a single-commit
   re-review loop.

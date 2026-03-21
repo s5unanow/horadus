@@ -11,6 +11,7 @@ from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     high_risk_pre_push_review_batching_statements,
     high_risk_pre_push_review_commands,
     high_risk_pre_push_review_fallback_statements,
+    high_risk_pre_push_review_reference_paths,
 )
 
 _CANONICAL_PLANNING_EXAMPLE_PATH = "tasks/specs/275-finish-review-gate-timeout.md"
@@ -57,7 +58,10 @@ _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = (
     "scripts/install_horadus_cli_skill.sh",
     "scripts/sync_automations.py",
 )
-_HIGH_RISK_POLICY_FILES = ("AGENTS.md", "docs/AGENT_RUNBOOK.md", "tasks/specs/TEMPLATE.md")
+_HIGH_RISK_POLICY_FILES = (
+    *high_risk_pre_push_review_reference_paths(),
+    "tasks/specs/TEMPLATE.md",
+)
 _HIGH_RISK_SHARED_MATH_FILES = (
     "src/core/trend_engine.py",
     "src/core/trend_restatement.py",

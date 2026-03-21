@@ -70,6 +70,13 @@ WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS: tuple[str, ...] = (
     "tasks/specs/TEMPLATE.md",
 )
 
+HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS: tuple[str, ...] = (
+    "AGENTS.md",
+    "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
+)
+
 COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     (
         "Treat repo-facing work as incomplete until requested deliverables, "
@@ -169,14 +176,19 @@ FALLBACK_GUIDANCE_STATEMENTS: tuple[str, ...] = (
 
 HIGH_RISK_PRE_PUSH_REVIEW_COMMANDS: tuple[str, ...] = (
     "uv run --no-sync horadus tasks local-review --format json",
-    "uv run --no-sync horadus tasks local-review --format json --allow-provider-fallback",
 )
 
 HIGH_RISK_PRE_PUSH_REVIEW_FALLBACK_STATEMENTS: tuple[str, ...] = (
     (
-        "If the selected local-review provider is unavailable on PATH and you "
-        "still want local automation, rerun with `--allow-provider-fallback` "
-        "so Horadus can try the next supported provider."
+        "The default/env local-review path already falls through missing "
+        "provider CLIs on PATH in repo order."
+    ),
+    (
+        "If the first local-review run hits a provider-specific timeout, "
+        "auth/config failure, or unreadable output and you still want local "
+        "automation, rerun with `--allow-provider-fallback` so Horadus can "
+        "try the next supported provider instead of stopping at the first "
+        "provider failure."
     ),
     (
         "If local-review remains unavailable, unreadable, or otherwise "
@@ -249,3 +261,7 @@ def high_risk_pre_push_review_batching_statements() -> tuple[str, ...]:
 
 def workflow_policy_guardrail_statements() -> tuple[str, ...]:
     return WORKFLOW_POLICY_GUARDRAIL_STATEMENTS
+
+
+def high_risk_pre_push_review_reference_paths() -> tuple[str, ...]:
+    return HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS

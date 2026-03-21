@@ -462,16 +462,14 @@ def test_handle_context_pack_surfaces_pre_push_review_guidance_for_high_risk_tas
     assert "## Pre-Push Review Guidance" in result.lines
     assert "Applicability: recommended" in result.lines
     assert "uv run --no-sync horadus tasks local-review --format json" in result.lines
-    assert (
-        "uv run --no-sync horadus tasks local-review --format json --allow-provider-fallback"
-        in result.lines
-    )
     assert result.data is not None
     guidance = result.data["pre_push_review_guidance"]
     assert guidance["recommended"] is True
+    assert guidance["commands"] == ["uv run --no-sync horadus tasks local-review --format json"]
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
     assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
     assert guidance["fallback_notes"]
+    assert any("timeout" in note for note in guidance["fallback_notes"])
     assert guidance["batching_notes"]
 
 
@@ -722,6 +720,31 @@ def test_pre_push_review_guidance_treats_spec_template_as_policy_surface() -> No
         estimate="1h",
         description=["Exercise shared workflow policy guidance for the spec template."],
         files=["`tasks/specs/TEMPLATE.md`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_skill_docs_as_policy_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-984",
+        title="Skill docs fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise authoritative skill-doc workflow guidance."],
+        files=[
+            "`ops/skills/horadus-cli/SKILL.md`",
+            "`ops/skills/horadus-cli/references/commands.md`",
+        ],
         acceptance_criteria=[],
         assessment_refs=[],
         raw_block="raw",

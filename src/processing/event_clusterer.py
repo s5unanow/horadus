@@ -25,6 +25,7 @@ from src.processing.event_cluster_health import (
     apply_default_cluster_health,
     apply_merge_cluster_health,
     cluster_health_payload,
+    ensure_cluster_health,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
@@ -186,6 +187,7 @@ class EventClusterer:
         return event
 
     async def _merge_into_event(self, event: Event, item: RawItem, *, similarity: float) -> None:
+        await ensure_cluster_health(session=self.session, event=event)
         event.source_count += 1
         mention_time = self._item_timestamp(item)
         event.last_mention_at = mention_time

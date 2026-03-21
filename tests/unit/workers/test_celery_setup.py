@@ -159,9 +159,7 @@ def test_build_beat_schedule_supports_six_hour_profile(
     assert schedule["process-pending-items"]["schedule"] == timedelta(minutes=15)
 
 
-def test_build_beat_schedule_can_disable_degraded_replay(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_replay_drain_schedule_stays_enabled(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_RSS_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_GDELT_INGESTION", False)
     monkeypatch.setattr(celery_app_module.settings, "ENABLE_PROCESSING_PIPELINE", False)
@@ -180,7 +178,8 @@ def test_build_beat_schedule_can_disable_degraded_replay(
 
     schedule = celery_app_module._build_beat_schedule()
 
-    assert "replay-degraded-events" not in schedule
+    assert schedule["replay-degraded-events"]["task"] == "workers.replay_degraded_events"
+    assert schedule["replay-degraded-events"]["schedule"] == timedelta(minutes=60)
 
 
 def test_celery_routes_include_processing_queue() -> None:

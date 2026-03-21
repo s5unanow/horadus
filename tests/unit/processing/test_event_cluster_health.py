@@ -13,6 +13,7 @@ from src.processing.event_cluster_health import (
     cluster_cohesion_score,
     cluster_health_payload,
     ensure_cluster_health,
+    resolve_cluster_health,
     split_risk_score,
 )
 
@@ -149,5 +150,70 @@ async def test_ensure_cluster_health_defaults_when_event_has_no_id() -> None:
     assert payload == {
         "cluster_cohesion_score": 1.0,
         "split_risk_score": 0.0,
+    }
+    session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_resolve_cluster_health_computes_without_mutating_event() -> None:
+    event = SimpleNamespace(id=uuid4(), provenance_summary={"method": "provenance_aware"})
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [[1.0, 0.0], [0.0, 1.0]])
+
+    payload = await resolve_cluster_health(session=session, event=event)
+
+    assert payload == {
+        "cluster_cohesion_score": pytest.approx(0.0),
+        "split_risk_score": pytest.approx(1.0),
+    }
+    assert "cluster_health" not in event.provenance_summary
+
+
+@pytest.mark.asyncio
+async def test_resolve_cluster_health_uses_stored_payload_and_defaults_without_id() -> None:
+    stored_event = SimpleNamespace(
+        id=uuid4(),
+        provenance_summary={
+            "cluster_health": {
+                "cluster_cohesion_score": 0.4,
+                "split_risk_score": 0.6,
+            }
+        },
+    )
+    session = AsyncMock()
+
+    assert await resolve_cluster_health(session=session, event=stored_event) == {
+        "cluster_cohesion_score": pytest.approx(0.4),
+        "split_risk_score": pytest.approx(0.6),
+    }
+    session.scalars.assert_not_called()
+
+    payload = await resolve_cluster_health(
+        session=session,
+        event=SimpleNamespace(id=None, provenance_summary={"method": "provenance_aware"}),
+    )
+    assert payload == {
+        "cluster_cohesion_score": 1.0,
+        "split_risk_score": 0.0,
+    }
+
+
+@pytest.mark.asyncio
+async def test_ensure_cluster_health_returns_stored_payload_without_query() -> None:
+    event = SimpleNamespace(
+        provenance_summary={
+            "cluster_health": {
+                "cluster_cohesion_score": 0.4,
+                "split_risk_score": 0.6,
+            }
+        }
+    )
+    session = AsyncMock()
+
+    payload = await ensure_cluster_health(session=session, event=event)
+
+    assert payload == {
+        "cluster_cohesion_score": pytest.approx(0.4),
+        "split_risk_score": pytest.approx(0.6),
     }
     session.scalars.assert_not_called()

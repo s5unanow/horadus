@@ -37,7 +37,7 @@ from src.processing.event_lineage import (
 )
 from src.processing.event_lineage_replay import (
     clear_stale_event_extractions,
-    mark_lineages_superseded_for_queue_items,
+    mark_lineages_superseded_for_replay_requests,
     replay_source_provenance,
 )
 from src.storage.event_lineage_models import EventLineage
@@ -739,11 +739,9 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
         yield
 
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
-    reset_queue_item_id = uuid4()
     mock_db_session.get = AsyncMock(side_effect=[None, event, event])
     mock_db_session.begin_nested = _begin_nested
     mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z")])
-    mock_db_session.scalar = AsyncMock(return_value=reset_queue_item_id)
     mock_db_session.execute = AsyncMock(
         side_effect=[
             SimpleNamespace(rowcount=0),
@@ -760,10 +758,12 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="split")
         is not None
     )
-    assert (
-        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="split")
-        == reset_queue_item_id
+    reset_request_id = await _enqueue_event_replay(
+        session=mock_db_session,
+        event_id=event.id,
+        reason="split",
     )
+    assert reset_request_id is not None
     assert mock_db_session.execute.await_count == 3
     reset_statement = mock_db_session.execute.await_args_list[-1].args[0]
     compiled = reset_statement.compile()
@@ -775,6 +775,7 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
     assert compiled.params["details"] == {
         "reason": "event_lineage_repair",
         "repair_kind": "split",
+        "replay_request_id": str(reset_request_id),
         "original_extraction_provenance": {"old": True},
     }
 
@@ -790,10 +791,14 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
         },
     )
     mock_db_session.get = AsyncMock(return_value=event)
-    mock_db_session.scalar = AsyncMock(return_value=uuid4())
     mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
 
-    assert await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
+    replay_request_id = await _enqueue_event_replay(
+        session=mock_db_session,
+        event_id=event.id,
+        reason="merge",
+    )
+    assert replay_request_id is not None
     statement = mock_db_session.execute.await_args.args[0]
     compiled = statement.compile()
     assert "update llm_replay_queue" in str(statement).lower()
@@ -803,6 +808,7 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
     assert compiled.params["details"] == {
         "reason": "event_lineage_repair",
         "repair_kind": "merge",
+        "replay_request_id": str(replay_request_id),
         "original_extraction_provenance": {"stage": "tier2"},
     }
 
@@ -867,15 +873,15 @@ async def test_delete_event_replay_queue_items_executes_delete(
     monkeypatch,
 ) -> None:
     event_id = uuid4()
-    deleted_queue_item_id = uuid4()
+    deleted_request_id = uuid4()
     mock_db_session.execute.return_value = SimpleNamespace(rowcount=1)
     mock_db_session.scalars = AsyncMock(
-        return_value=SimpleNamespace(all=lambda: [deleted_queue_item_id])
+        return_value=SimpleNamespace(all=lambda: [{"replay_request_id": str(deleted_request_id)}])
     )
     mark_superseded = AsyncMock()
     monkeypatch.setattr(
         event_lineage_replay_module,
-        "mark_lineages_superseded_for_queue_items",
+        "mark_lineages_superseded_for_replay_requests",
         mark_superseded,
     )
 
@@ -888,7 +894,7 @@ async def test_delete_event_replay_queue_items_executes_delete(
     assert statement.compile().params["status_1"] == "processing"
     mark_superseded.assert_awaited_once_with(
         session=mock_db_session,
-        queue_item_ids=(deleted_queue_item_id,),
+        replay_request_ids=(deleted_request_id,),
     )
 
 
@@ -914,20 +920,20 @@ async def test_delete_event_replay_queue_items_allows_missing_row(mock_db_sessio
 
 
 @pytest.mark.asyncio
-async def test_mark_lineages_superseded_for_queue_items_updates_matching_lineages() -> None:
-    queue_item_id = uuid4()
+async def test_mark_lineages_superseded_for_replay_requests_updates_matching_lineages() -> None:
+    replay_request_id = uuid4()
     matching_lineage = EventLineage(
-        details={"replay_queue_item_ids": [str(queue_item_id)], "status": "replay_pending"}
+        details={"replay_request_ids": [str(replay_request_id)], "status": "replay_pending"}
     )
-    untouched_lineage = EventLineage(details={"replay_queue_item_ids": [str(uuid4())]})
+    untouched_lineage = EventLineage(details={"replay_request_ids": [str(uuid4())]})
     session = AsyncMock()
     session.scalars.return_value = SimpleNamespace(
         all=lambda: [matching_lineage, untouched_lineage]
     )
 
-    await mark_lineages_superseded_for_queue_items(
+    await mark_lineages_superseded_for_replay_requests(
         session=session,
-        queue_item_ids=(queue_item_id,),
+        replay_request_ids=(replay_request_id,),
     )
 
     assert matching_lineage.details["status"] == "replay_superseded"
@@ -935,10 +941,10 @@ async def test_mark_lineages_superseded_for_queue_items_updates_matching_lineage
 
 
 @pytest.mark.asyncio
-async def test_mark_lineages_superseded_for_queue_items_returns_early_without_ids() -> None:
+async def test_mark_lineages_superseded_for_replay_requests_returns_early_without_ids() -> None:
     session = AsyncMock()
 
-    await mark_lineages_superseded_for_queue_items(session=session, queue_item_ids=())
+    await mark_lineages_superseded_for_replay_requests(session=session, replay_request_ids=())
 
     session.scalars.assert_not_awaited()
 
@@ -973,6 +979,9 @@ def test_replay_helper_utilities_clear_stale_fields_and_preserve_original_proven
     assert replay_source_provenance(event) == {"stage": "tier2"}
     event.extraction_provenance = {"status": "done", "model": "tier2"}
     assert replay_source_provenance(event) == {"status": "done", "model": "tier2"}
+    assert event_lineage_replay_module._extract_replay_request_ids(
+        [{"replay_request_id": uuid4()}, {"replay_request_id": "bad"}, None]
+    )
 
 
 @pytest.mark.asyncio

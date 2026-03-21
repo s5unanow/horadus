@@ -18,11 +18,12 @@ pytestmark = pytest.mark.unit
 async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
     event_id = uuid4()
     queue_item_id = uuid4()
+    replay_request_id = uuid4()
     event = SimpleNamespace(id=event_id)
     lineage = SimpleNamespace(
         details={
             "replay_enqueued_event_ids": [str(event_id)],
-            "replay_queue_item_ids": [str(queue_item_id)],
+            "replay_request_ids": [str(replay_request_id)],
             "status": "replay_pending",
         }
     )
@@ -39,7 +40,11 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
     session = AsyncMock()
     session.get.return_value = event
     session.scalars.return_value = SimpleNamespace(all=lambda: [lineage])
-    session.execute.return_value = SimpleNamespace(all=lambda: [(queue_item_id, event_id, "done")])
+    session.execute.return_value = SimpleNamespace(
+        all=lambda: [
+            (queue_item_id, event_id, "done", {"replay_request_id": str(replay_request_id)})
+        ]
+    )
     pipeline = SimpleNamespace(_apply_trend_impacts=AsyncMock(return_value=(2, 1)))
     deps = SimpleNamespace(Event=object(), settings=SimpleNamespace(LLM_TIER2_MODEL="tier2-model"))
     captured: dict[str, object] = {}
@@ -138,18 +143,20 @@ async def test_sync_lineage_replay_status_marks_error_when_any_replay_errors() -
 async def test_sync_lineage_replay_status_marks_superseded_when_queue_row_was_deleted() -> None:
     event_id = uuid4()
     other_event_id = uuid4()
-    queue_item_id = uuid4()
-    other_queue_item_id = uuid4()
+    replay_request_id = uuid4()
+    other_replay_request_id = uuid4()
     lineage = SimpleNamespace(
         details={
             "replay_enqueued_event_ids": [str(event_id), str(other_event_id)],
-            "replay_queue_item_ids": [str(queue_item_id), str(other_queue_item_id)],
+            "replay_request_ids": [str(replay_request_id), str(other_replay_request_id)],
             "status": "replay_pending",
         }
     )
     session = AsyncMock()
     session.scalars.return_value = SimpleNamespace(all=lambda: [lineage])
-    session.execute.return_value = SimpleNamespace(all=lambda: [(queue_item_id, event_id, "done")])
+    session.execute.return_value = SimpleNamespace(
+        all=lambda: [(uuid4(), event_id, "done", {"replay_request_id": str(replay_request_id)})]
+    )
 
     await _task_maintenance._sync_lineage_replay_status(session=session, event_id=event_id)
 
@@ -257,17 +264,83 @@ def test_parse_lineage_queue_item_ids_skips_invalid_values() -> None:
     assert len(parsed) == 1
 
 
+def test_parse_lineage_replay_request_ids_skips_invalid_values() -> None:
+    parsed = _task_maintenance._parse_lineage_replay_request_ids(
+        SimpleNamespace(details={"replay_request_ids": [uuid4(), "not-a-uuid", None]})
+    )
+
+    assert len(parsed) == 1
+
+
 def test_build_replay_status_maps_handles_missing_identifiers() -> None:
     event_id = uuid4()
     queue_item_id = uuid4()
+    replay_request_id = uuid4()
 
-    status_by_event_id, status_by_queue_item_id = _task_maintenance._build_replay_status_maps(
-        [
-            (None, event_id, "pending"),
-            (queue_item_id, None, "error"),
-            (None, "done"),
-        ]
+    status_by_event_id, status_by_queue_item_id, status_by_request_id = (
+        _task_maintenance._build_replay_status_maps(
+            [
+                (None, event_id, "pending", {"replay_request_id": "not-a-uuid"}),
+                (queue_item_id, None, "error", {"replay_request_id": str(replay_request_id)}),
+                (None, "done"),
+            ]
+        )
     )
 
     assert status_by_event_id == {str(event_id): "pending"}
     assert status_by_queue_item_id == {str(queue_item_id): "error"}
+    assert status_by_request_id == {str(replay_request_id): "error"}
+
+
+def test_build_replay_status_maps_handles_legacy_queue_item_rows() -> None:
+    event_id = uuid4()
+    queue_item_id = uuid4()
+
+    status_by_event_id, status_by_queue_item_id, status_by_request_id = (
+        _task_maintenance._build_replay_status_maps(
+            [
+                (queue_item_id, event_id, "done"),
+            ]
+        )
+    )
+
+    assert status_by_event_id == {str(event_id): "done"}
+    assert status_by_queue_item_id == {str(queue_item_id): "done"}
+    assert status_by_request_id == {}
+
+
+def test_build_replay_status_maps_handles_legacy_rows_with_missing_identifiers() -> None:
+    event_id = uuid4()
+    queue_item_id = uuid4()
+
+    status_by_event_id, status_by_queue_item_id, status_by_request_id = (
+        _task_maintenance._build_replay_status_maps(
+            [
+                (None, event_id, "pending"),
+                (queue_item_id, None, "error"),
+            ]
+        )
+    )
+
+    assert status_by_event_id == {str(event_id): "pending"}
+    assert status_by_queue_item_id == {str(queue_item_id): "error"}
+    assert status_by_request_id == {}
+
+
+def test_apply_lineage_replay_status_supports_legacy_queue_item_tracking() -> None:
+    queue_item_id = uuid4()
+    lineage = SimpleNamespace(
+        details={
+            "replay_queue_item_ids": [str(queue_item_id)],
+            "status": "replay_pending",
+        }
+    )
+
+    _task_maintenance._apply_lineage_replay_status(
+        lineage=lineage,
+        status_by_event_id={},
+        status_by_queue_item_id={str(queue_item_id): "done"},
+        status_by_request_id={},
+    )
+
+    assert lineage.details["status"] == "replay_complete"

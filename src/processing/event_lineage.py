@@ -96,7 +96,7 @@ async def split_event(
     (
         invalidated_evidence_ids,
         replay_enqueued_event_ids,
-        replay_queue_item_ids,
+        replay_request_ids,
     ) = await _repair_affected_events(
         session=session,
         events=[source_event, new_event],
@@ -115,8 +115,8 @@ async def split_event(
                 str(evidence_id) for evidence_id in invalidated_evidence_ids
             ],
             "replay_enqueued_event_ids": [str(event_id) for event_id in replay_enqueued_event_ids],
-            "replay_queue_item_ids": [
-                str(queue_item_id) for queue_item_id in replay_queue_item_ids
+            "replay_request_ids": [
+                str(replay_request_id) for replay_request_id in replay_request_ids
             ],
             "status": "replay_pending",
         },
@@ -171,7 +171,7 @@ async def merge_events(
     (
         invalidated_evidence_ids,
         replay_enqueued_event_ids,
-        replay_queue_item_ids,
+        replay_request_ids,
     ) = await _repair_affected_events(
         session=session,
         events=[source_event, target_event],
@@ -191,8 +191,8 @@ async def merge_events(
                 str(evidence_id) for evidence_id in invalidated_evidence_ids
             ],
             "replay_enqueued_event_ids": [str(event_id) for event_id in replay_enqueued_event_ids],
-            "replay_queue_item_ids": [
-                str(queue_item_id) for queue_item_id in replay_queue_item_ids
+            "replay_request_ids": [
+                str(replay_request_id) for replay_request_id in replay_request_ids
             ],
             "status": "replay_pending",
         },
@@ -475,22 +475,22 @@ async def _repair_affected_events(
         event_id for event_id in event_ids if event_id is not None
     )
     enqueued_ids: list[UUID] = []
-    replay_queue_item_ids: list[UUID] = []
+    replay_request_ids: list[UUID] = []
     for event_id in replay_targets:
-        replay_queue_item_id = await _enqueue_event_replay(
+        replay_request_id = await _enqueue_event_replay(
             session=session,
             event_id=event_id,
             reason=reason,
         )
-        if replay_queue_item_id is not None:
+        if replay_request_id is not None:
             enqueued_ids.append(event_id)
-            replay_queue_item_ids.append(replay_queue_item_id)
+            replay_request_ids.append(replay_request_id)
     if len(enqueued_ids) != len(replay_targets):
         raise RuntimeError("event lineage repair requires replay queue items for all targets")
     return (
         tuple(invalidated_evidence_ids),
         tuple(enqueued_ids),
-        tuple(replay_queue_item_ids),
+        tuple(replay_request_ids),
     )
 
 

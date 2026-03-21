@@ -17,9 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
 from src.processing.event_cluster_health import (
-    cluster_cohesion_score,
-    ensure_cluster_health,
-    split_risk_score,
+    cluster_health_payload,
+    resolve_cluster_health,
 )
 from src.processing.event_lineage import (
     EventRepairResult,
@@ -261,7 +260,12 @@ async def _load_event_detail_payloads(
     return (sources, claims, trend_impacts)
 
 
-def _to_event_response(event: Event) -> EventResponse:
+def _to_event_response(
+    event: Event,
+    *,
+    cluster_health: dict[str, float] | None = None,
+) -> EventResponse:
+    resolved_cluster_health = cluster_health or cluster_health_payload(event)
     return EventResponse(
         id=event.id,
         summary=event.canonical_summary,
@@ -280,8 +284,8 @@ def _to_event_response(event: Event) -> EventResponse:
         extracted_who=list(event.extracted_who) if event.extracted_who else None,
         extracted_what=event.extracted_what,
         extracted_where=event.extracted_where,
-        cluster_cohesion_score=cluster_cohesion_score(event),
-        split_risk_score=split_risk_score(event),
+        cluster_cohesion_score=resolved_cluster_health["cluster_cohesion_score"],
+        split_risk_score=resolved_cluster_health["split_risk_score"],
     )
 
 
@@ -348,9 +352,18 @@ async def list_events(
         )
 
     events = list((await session.scalars(query)).all())
-    for event in events:
-        await ensure_cluster_health(session=session, event=event)
-    return [_to_event_response(event) for event in events]
+    cluster_health_by_event_id = {
+        event.id: await resolve_cluster_health(session=session, event=event)
+        for event in events
+        if event.id is not None
+    }
+    return [
+        _to_event_response(
+            event,
+            cluster_health=cluster_health_by_event_id.get(event.id),
+        )
+        for event in events
+    ]
 
 
 @router.get("/{event_id}", response_model=EventDetailResponse)
@@ -369,14 +382,14 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Event '{event_id}' not found",
         )
-    await ensure_cluster_health(session=session, event=event)
+    cluster_health = await resolve_cluster_health(session=session, event=event)
     sources, claims, trend_impacts = await _load_event_detail_payloads(
         session=session,
         event_id=event_id,
     )
     lineage = await load_event_lineage(session=session, event_id=event_id)
     return EventDetailResponse(
-        **_to_event_response(event).model_dump(),
+        **_to_event_response(event, cluster_health=cluster_health).model_dump(),
         corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
         extraction_provenance=dict(event.extraction_provenance or {}),

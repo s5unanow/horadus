@@ -80,24 +80,11 @@ def apply_repaired_cluster_health(
 ) -> None:
     """Recompute cluster health from the repaired event's current item embeddings."""
 
-    if len(item_embeddings) <= 1:
-        apply_default_cluster_health(event)
-        return
-    similarities: list[float] = []
-    for left_embedding, right_embedding in combinations(item_embeddings, 2):
-        if left_embedding is None or right_embedding is None:
-            continue
-        try:
-            similarities.append(cosine_similarity(left_embedding, right_embedding))
-        except ValueError:
-            continue
-    if not similarities:
-        apply_default_cluster_health(event)
-        return
+    payload = _cluster_health_from_item_embeddings(item_embeddings)
     _store_cluster_health(
         event=event,
-        cluster_cohesion_score=sum(similarities) / len(similarities),
-        split_risk_score=max(1.0 - similarity for similarity in similarities),
+        cluster_cohesion_score=payload["cluster_cohesion_score"],
+        split_risk_score=payload["split_risk_score"],
     )
 
 
@@ -123,10 +110,31 @@ async def ensure_cluster_health(
     if _has_stored_cluster_health(event):
         return cluster_health_payload(event)
 
+    payload = await resolve_cluster_health(session=session, event=event)
+    _store_cluster_health(
+        event=event,
+        cluster_cohesion_score=payload["cluster_cohesion_score"],
+        split_risk_score=payload["split_risk_score"],
+    )
+    return cluster_health_payload(event)
+
+
+async def resolve_cluster_health(
+    *,
+    session: AsyncSession,
+    event: Any,
+) -> dict[str, float]:
+    """Return stored or computed cluster health without mutating the event row."""
+
+    if _has_stored_cluster_health(event):
+        return cluster_health_payload(event)
+
     event_id = getattr(event, "id", None)
     if event_id is None:
-        apply_default_cluster_health(event)
-        return cluster_health_payload(event)
+        return {
+            "cluster_cohesion_score": DEFAULT_CLUSTER_COHESION_SCORE,
+            "split_risk_score": DEFAULT_SPLIT_RISK_SCORE,
+        }
 
     item_embeddings = list(
         (
@@ -138,8 +146,7 @@ async def ensure_cluster_health(
             )
         ).all()
     )
-    apply_repaired_cluster_health(event, item_embeddings=item_embeddings)
-    return cluster_health_payload(event)
+    return _cluster_health_from_item_embeddings(item_embeddings)
 
 
 def _store_cluster_health(
@@ -166,6 +173,33 @@ def _bounded_float(value: Any, *, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return max(0.0, min(1.0, parsed))
+
+
+def _cluster_health_from_item_embeddings(
+    item_embeddings: list[list[float] | None],
+) -> dict[str, float]:
+    if len(item_embeddings) <= 1:
+        return {
+            "cluster_cohesion_score": DEFAULT_CLUSTER_COHESION_SCORE,
+            "split_risk_score": DEFAULT_SPLIT_RISK_SCORE,
+        }
+    similarities: list[float] = []
+    for left_embedding, right_embedding in combinations(item_embeddings, 2):
+        if left_embedding is None or right_embedding is None:
+            continue
+        try:
+            similarities.append(cosine_similarity(left_embedding, right_embedding))
+        except ValueError:
+            continue
+    if not similarities:
+        return {
+            "cluster_cohesion_score": DEFAULT_CLUSTER_COHESION_SCORE,
+            "split_risk_score": DEFAULT_SPLIT_RISK_SCORE,
+        }
+    return {
+        "cluster_cohesion_score": sum(similarities) / len(similarities),
+        "split_risk_score": max(1.0 - similarity for similarity in similarities),
+    }
 
 
 def _has_stored_cluster_health(event: Any) -> bool:

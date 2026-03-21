@@ -66,7 +66,11 @@ async def _sync_lineage_replay_status(*, session: Any, event_id: Any) -> None:
     if not relevant_lineages:
         return
 
-    status_by_event_id, status_by_queue_item_id = await _load_replay_status_maps(
+    (
+        status_by_event_id,
+        status_by_queue_item_id,
+        status_by_request_id,
+    ) = await _load_replay_status_maps(
         session=session,
         lineages=relevant_lineages,
     )
@@ -75,6 +79,7 @@ async def _sync_lineage_replay_status(*, session: Any, event_id: Any) -> None:
             lineage=lineage,
             status_by_event_id=status_by_event_id,
             status_by_queue_item_id=status_by_queue_item_id,
+            status_by_request_id=status_by_request_id,
         )
 
 
@@ -107,6 +112,16 @@ def _parse_lineage_queue_item_ids(lineage: EventLineage) -> tuple[UUID, ...]:
     return tuple(parsed_ids)
 
 
+def _parse_lineage_replay_request_ids(lineage: EventLineage) -> tuple[UUID, ...]:
+    parsed_ids: list[UUID] = []
+    for value in (lineage.details or {}).get("replay_request_ids", []):
+        try:
+            parsed_ids.append(UUID(str(value)))
+        except (TypeError, ValueError):
+            continue
+    return tuple(parsed_ids)
+
+
 async def _load_relevant_lineages(*, session: Any, event_id: Any) -> list[EventLineage]:
     event_id_str = str(event_id)
     return [
@@ -128,12 +143,9 @@ async def _load_replay_status_maps(
     *,
     session: Any,
     lineages: list[EventLineage],
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     replay_event_ids = {
         parsed_id for lineage in lineages for parsed_id in _parse_lineage_replay_ids(lineage)
-    }
-    replay_queue_item_ids = {
-        parsed_id for lineage in lineages for parsed_id in _parse_lineage_queue_item_ids(lineage)
     }
     status_rows = (
         await session.execute(
@@ -141,12 +153,10 @@ async def _load_replay_status_maps(
                 LLMReplayQueueItem.id,
                 LLMReplayQueueItem.event_id,
                 LLMReplayQueueItem.status,
+                LLMReplayQueueItem.details,
             ).where(
-                (LLMReplayQueueItem.id.in_(tuple(replay_queue_item_ids)))
-                | (
-                    (LLMReplayQueueItem.stage == "tier2")
-                    & (LLMReplayQueueItem.event_id.in_(tuple(replay_event_ids)))
-                )
+                (LLMReplayQueueItem.stage == "tier2")
+                & (LLMReplayQueueItem.event_id.in_(tuple(replay_event_ids)))
             )
         )
     ).all()
@@ -155,10 +165,21 @@ async def _load_replay_status_maps(
 
 def _build_replay_status_maps(
     status_rows: list[tuple[Any, ...]],
-) -> tuple[dict[str, str], dict[str, str]]:
+) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     status_by_event_id: dict[str, str] = {}
     status_by_queue_item_id: dict[str, str] = {}
+    status_by_request_id: dict[str, str] = {}
     for row in status_rows:
+        if len(row) == 4:
+            queue_item_id, replay_event_id, status, details = row
+            if queue_item_id is not None:
+                status_by_queue_item_id[str(queue_item_id)] = status
+            if replay_event_id is not None:
+                status_by_event_id[str(replay_event_id)] = status
+            replay_request_id = _parse_queue_row_replay_request_id(details)
+            if replay_request_id is not None:
+                status_by_request_id[str(replay_request_id)] = status
+            continue
         if len(row) == 3:
             queue_item_id, replay_event_id, status = row
             if queue_item_id is not None:
@@ -169,7 +190,7 @@ def _build_replay_status_maps(
         replay_event_id, status = row
         if replay_event_id is not None:
             status_by_event_id[str(replay_event_id)] = status
-    return status_by_event_id, status_by_queue_item_id
+    return status_by_event_id, status_by_queue_item_id, status_by_request_id
 
 
 def _apply_lineage_replay_status(
@@ -177,11 +198,22 @@ def _apply_lineage_replay_status(
     lineage: EventLineage,
     status_by_event_id: dict[str, str],
     status_by_queue_item_id: dict[str, str],
+    status_by_request_id: dict[str, str],
 ) -> None:
+    replay_request_ids = tuple(
+        str(parsed_id) for parsed_id in _parse_lineage_replay_request_ids(lineage)
+    )
     replay_queue_ids = tuple(str(parsed_id) for parsed_id in _parse_lineage_queue_item_ids(lineage))
     replay_ids = tuple(str(parsed_id) for parsed_id in _parse_lineage_replay_ids(lineage))
-    status_lookup = status_by_queue_item_id if replay_queue_ids else status_by_event_id
-    tracked_ids = replay_queue_ids or replay_ids
+    if replay_request_ids:
+        status_lookup = status_by_request_id
+        tracked_ids = replay_request_ids
+    elif replay_queue_ids:
+        status_lookup = status_by_queue_item_id
+        tracked_ids = replay_queue_ids
+    else:
+        status_lookup = status_by_event_id
+        tracked_ids = replay_ids
     if not tracked_ids:
         return
     replay_statuses = {status_lookup.get(replay_id) for replay_id in tracked_ids}
@@ -197,6 +229,14 @@ def _apply_lineage_replay_status(
     if all(status_lookup.get(replay_id) == "done" for replay_id in tracked_ids):
         details["status"] = "replay_complete"
         lineage.details = details
+
+
+def _parse_queue_row_replay_request_id(details: Any) -> UUID | None:
+    value = details.get("replay_request_id") if isinstance(details, dict) else None
+    try:
+        return UUID(str(value))
+    except (TypeError, ValueError):
+        return None
 
 
 async def snapshot_trends_async(*, deps: Any) -> dict[str, Any]:

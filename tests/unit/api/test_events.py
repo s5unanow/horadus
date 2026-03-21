@@ -260,7 +260,7 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
 
 
 @pytest.mark.asyncio
-async def test_get_event_backfills_missing_cluster_health_for_response(
+async def test_get_event_computes_missing_cluster_health_without_mutating_event(
     mock_db_session,
     monkeypatch,
 ) -> None:
@@ -282,6 +282,7 @@ async def test_get_event_backfills_missing_cluster_health_for_response(
 
     assert result.cluster_cohesion_score == pytest.approx(0.0)
     assert result.split_risk_score == pytest.approx(1.0)
+    assert event.provenance_summary == {"method": "provenance_aware"}
 
 
 @pytest.mark.asyncio

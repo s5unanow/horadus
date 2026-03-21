@@ -223,6 +223,8 @@ def _apply_lineage_replay_status(
         lineage.details = details
         return
     if None in replay_statuses:
+        if details.get("status") in {"replay_complete", "replay_error"}:
+            return
         details["status"] = "replay_superseded"
         lineage.details = details
         return

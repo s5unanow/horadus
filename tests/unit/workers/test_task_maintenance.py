@@ -164,6 +164,34 @@ async def test_sync_lineage_replay_status_marks_superseded_when_queue_row_was_de
 
 
 @pytest.mark.asyncio
+async def test_sync_lineage_replay_status_keeps_terminal_status_when_queue_row_is_deleted() -> None:
+    event_id = uuid4()
+    replay_request_id = uuid4()
+    complete_lineage = SimpleNamespace(
+        details={
+            "replay_enqueued_event_ids": [str(event_id)],
+            "replay_request_ids": [str(replay_request_id)],
+            "status": "replay_complete",
+        }
+    )
+    error_lineage = SimpleNamespace(
+        details={
+            "replay_enqueued_event_ids": [str(event_id)],
+            "replay_request_ids": [str(replay_request_id)],
+            "status": "replay_error",
+        }
+    )
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [complete_lineage, error_lineage])
+    session.execute.return_value = SimpleNamespace(all=list)
+
+    await _task_maintenance._sync_lineage_replay_status(session=session, event_id=event_id)
+
+    assert complete_lineage.details["status"] == "replay_complete"
+    assert error_lineage.details["status"] == "replay_error"
+
+
+@pytest.mark.asyncio
 async def test_sync_lineage_replay_status_skips_lineages_without_replay_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

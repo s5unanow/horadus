@@ -104,6 +104,10 @@ class EventDetailResponse(EventResponse):
                     "independent_evidence_count": 2,
                     "weighted_corroboration_score": 1.35,
                 },
+                "extraction_provenance": {
+                    "stage": "tier2",
+                    "active_route": {"model": "gpt-4.1-mini"},
+                },
                 "sources": [{"source_name": "Reuters", "url": "https://example.com/article-1"}],
                 "trend_impacts": [
                     {
@@ -121,6 +125,7 @@ class EventDetailResponse(EventResponse):
     trend_impacts: list[dict[str, Any]]
     corroboration_score: float
     provenance_summary: dict[str, Any]
+    extraction_provenance: dict[str, Any]
 
 
 # =============================================================================
@@ -311,6 +316,7 @@ async def get_event(
         extracted_where=event.extracted_where,
         corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
+        extraction_provenance=dict(event.extraction_provenance or {}),
         sources=sources,
         claims=claims,
         trend_impacts=trend_impacts,

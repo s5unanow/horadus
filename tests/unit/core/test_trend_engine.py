@@ -15,6 +15,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from src.core.runtime_provenance import (
+    TREND_SCORING_MATH_VERSION,
+    TREND_SCORING_PARAMETER_SET,
+)
 from src.core.trend_engine import (
     MAX_DELTA_PER_EVENT,
     MAX_PROBABILITY,
@@ -543,6 +547,8 @@ class TestTrendEngine:
             sample_factors.direction_multiplier
         )
         assert evidence_record.trend_definition_hash == expected_definition_hash
+        assert evidence_record.scoring_math_version == TREND_SCORING_MATH_VERSION
+        assert evidence_record.scoring_parameter_set == TREND_SCORING_PARAMETER_SET
         assert evidence_record.evidence_age_days == pytest.approx(sample_factors.evidence_age_days)
         assert evidence_record.temporal_decay_factor == pytest.approx(
             sample_factors.temporal_decay_multiplier

@@ -6,12 +6,26 @@ from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    Numeric,
+    String,
+    Text,
+    func,
+    text,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.storage.base import Base
+from src.storage.scoring_contract import (
+    TREND_SCORING_MATH_VERSION,
+    TREND_SCORING_PARAMETER_SET,
+)
 
 RESTATEMENT_KIND_SQL_VALUES = (
     "'full_invalidation', 'partial_restatement', 'manual_compensation', 'reclassification'"
@@ -75,6 +89,18 @@ class TrendRestatement(Base):
     source: Mapped[str] = mapped_column(String(50), nullable=False)
     original_evidence_delta_log_odds: Mapped[float | None] = mapped_column(Numeric(10, 6))
     compensation_delta_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    scoring_math_version: Mapped[str] = mapped_column(
+        String(64),
+        default=TREND_SCORING_MATH_VERSION,
+        server_default=text(f"'{TREND_SCORING_MATH_VERSION}'"),
+        nullable=False,
+    )
+    scoring_parameter_set: Mapped[str] = mapped_column(
+        String(64),
+        default=TREND_SCORING_PARAMETER_SET,
+        server_default=text(f"'{TREND_SCORING_PARAMETER_SET}'"),
+        nullable=False,
+    )
     notes: Mapped[str | None] = mapped_column(Text)
     details: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     recorded_at: Mapped[datetime] = mapped_column(

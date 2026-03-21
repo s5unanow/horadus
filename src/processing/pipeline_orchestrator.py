@@ -872,6 +872,7 @@ class ProcessingPipeline:
             "reason": "degraded_llm_high_impact",
             "max_abs_delta": round(max_abs_delta, 6),
             "risk_level_crossing": bool(risk_level_crossing),
+            "original_extraction_provenance": dict(event.extraction_provenance or {}),
             "degraded_since_epoch": degraded_status.degraded_since_epoch,
             "window": {
                 "total_calls": degraded_status.window.total_calls,

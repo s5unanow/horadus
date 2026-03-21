@@ -203,7 +203,29 @@ async def test_build_narrative_fails_over_to_secondary_route(
 
 
 @pytest.mark.asyncio
-async def test_build_narrative_uses_fallback_when_grounding_fails(mock_db_session) -> None:
+async def test_build_narrative_uses_fallback_when_grounding_fails(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    evaluations = iter(
+        [
+            SimpleNamespace(
+                is_grounded=False,
+                violation_count=1,
+                unsupported_claims=["Resolved coverage reached 95%."],
+            ),
+            SimpleNamespace(
+                is_grounded=True,
+                violation_count=0,
+                unsupported_claims=[],
+            ),
+        ]
+    )
+    monkeypatch.setattr(
+        "src.core.retrospective_analyzer.evaluate_narrative_grounding",
+        lambda **_kwargs: next(evaluations),
+    )
+
     class CompletionsApi:
         async def create(self, **kwargs):
             _ = kwargs

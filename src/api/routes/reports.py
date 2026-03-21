@@ -72,6 +72,10 @@ class ReportResponse(BaseModel):
                 "grounding_status": "grounded",
                 "grounding_violation_count": 0,
                 "grounding_references": None,
+                "generation_manifest": {
+                    "report_type": "monthly",
+                    "artifact_status": {"provisional": False},
+                },
                 "top_events": [
                     {
                         "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
@@ -94,6 +98,7 @@ class ReportResponse(BaseModel):
     grounding_status: str
     grounding_violation_count: int
     grounding_references: dict[str, Any] | None
+    generation_manifest: dict[str, Any] | None
     top_events: list[dict[str, Any]] | None
     created_at: datetime
 
@@ -356,6 +361,9 @@ def _to_report_response(report: Report, trend_name: str | None) -> ReportRespons
         grounding_violation_count=int(report.grounding_violation_count or 0),
         grounding_references=(
             report.grounding_references if isinstance(report.grounding_references, dict) else None
+        ),
+        generation_manifest=(
+            report.generation_manifest if isinstance(report.generation_manifest, dict) else None
         ),
         top_events=_normalize_top_events(report.top_events),
         created_at=report.created_at,

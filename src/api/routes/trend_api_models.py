@@ -177,6 +177,8 @@ class TrendResponse(BaseModel):
                     "Diplomatic talks were suspended after border incident.",
                 ],
                 "indicators": {"military_movement": {"direction": "escalatory", "weight": 0.04}},
+                "active_scoring_math_version": "trend-scoring-v1",
+                "active_scoring_parameter_set": "stable-default-v1",
                 "decay_half_life_days": 30,
                 "is_active": True,
                 "updated_at": "2026-02-07T19:56:00Z",
@@ -196,6 +198,8 @@ class TrendResponse(BaseModel):
     confidence: risk_module.ConfidenceRating
     top_movers_7d: list[str]
     indicators: dict[str, Any]
+    active_scoring_math_version: str
+    active_scoring_parameter_set: str
     decay_half_life_days: int
     is_active: bool
     updated_at: datetime

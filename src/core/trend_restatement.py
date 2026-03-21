@@ -12,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.runtime_provenance import current_trend_scoring_contract
 from src.core.trend_engine import DEFAULT_DECAY_HALF_LIFE_DAYS, TrendEngine
 from src.storage.models import Trend, TrendEvidence
 from src.storage.restatement_models import TrendRestatement
@@ -102,6 +103,7 @@ async def apply_compensating_restatement(
     session = getattr(trend_engine, "session", None)
     applied_at = _as_utc(recorded_at) if recorded_at is not None else datetime.now(tz=UTC)
     evidence_id = trend_evidence.id if trend_evidence is not None else None
+    scoring_contract = current_trend_scoring_contract()
     restatement = TrendRestatement(
         trend_id=trend.id,
         event_id=event_id if event_id is not None else getattr(trend_evidence, "event_id", None),
@@ -116,6 +118,8 @@ async def apply_compensating_restatement(
         source=source,
         original_evidence_delta_log_odds=original_evidence_delta_log_odds,
         compensation_delta_log_odds=compensation_delta_log_odds,
+        scoring_math_version=scoring_contract["math_version"],
+        scoring_parameter_set=scoring_contract["parameter_set"],
         notes=notes,
         details=details if isinstance(details, dict) else None,
         recorded_at=applied_at,

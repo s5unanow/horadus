@@ -76,23 +76,65 @@ class InMemorySemanticCache:
     entries: dict[str, str]
 
     @staticmethod
-    def _key(*, stage: str, model: str, prompt_template: str, payload: object) -> str:
-        serialized = json.dumps(payload, ensure_ascii=True, sort_keys=True)
-        return f"{stage}:{model}:{prompt_template}:{serialized}"
+    def _key(
+        *,
+        stage: str,
+        provider: str | None = None,
+        model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
+        prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
+        payload: object,
+    ) -> str:
+        serialized = json.dumps(
+            {
+                "provider": provider,
+                "model": model,
+                "reasoning_effort": reasoning_effort,
+                "api_mode": api_mode,
+                "prompt_path": prompt_path,
+                "prompt_template": prompt_template,
+                "schema_name": schema_name,
+                "schema_payload": schema_payload,
+                "request_overrides": request_overrides,
+                "payload": payload,
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+        )
+        return f"{stage}:{serialized}"
 
     def get(
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
     ) -> str | None:
         return self.entries.get(
             self._key(
                 stage=stage,
+                provider=provider,
                 model=model,
+                reasoning_effort=reasoning_effort,
+                api_mode=api_mode,
+                prompt_path=prompt_path,
                 prompt_template=prompt_template,
+                schema_name=schema_name,
+                schema_payload=schema_payload,
+                request_overrides=request_overrides,
                 payload=payload,
             )
         )
@@ -101,16 +143,30 @@ class InMemorySemanticCache:
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
         value: str,
     ) -> None:
         self.entries[
             self._key(
                 stage=stage,
+                provider=provider,
                 model=model,
+                reasoning_effort=reasoning_effort,
+                api_mode=api_mode,
+                prompt_path=prompt_path,
                 prompt_template=prompt_template,
+                schema_name=schema_name,
+                schema_payload=schema_payload,
+                request_overrides=request_overrides,
                 payload=payload,
             )
         ] = value
@@ -125,16 +181,30 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
     ) -> str | None:
         self.get_thread_ids.append(threading.get_ident())
         return InMemorySemanticCache.get(
             self,
             stage=stage,
+            provider=provider,
             model=model,
+            reasoning_effort=reasoning_effort,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
             prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
             payload=payload,
         )
 
@@ -142,8 +212,15 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: object | None = None,
+        request_overrides: object | None = None,
         payload: object,
         value: str,
     ) -> None:
@@ -151,8 +228,15 @@ class ThreadTrackingSemanticCache(InMemorySemanticCache):
         InMemorySemanticCache.set(
             self,
             stage=stage,
+            provider=provider,
             model=model,
+            reasoning_effort=reasoning_effort,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
             prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
             payload=payload,
             value=value,
         )
@@ -500,6 +584,97 @@ async def test_classify_items_fails_over_to_secondary_on_retryable_error(
         "model": "gpt-4o-mini",
     }
     cost_tracker.record_usage.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_items_reuses_secondary_route_cache_entries(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_ATTEMPTS", 2)
+    monkeypatch.setattr(settings, "LLM_ROUTE_RETRY_BACKOFF_SECONDS", 0.0)
+    semantic_cache = InMemorySemanticCache(entries={})
+    primary_calls: list[dict[str, object]] = []
+
+    class PrimaryCompletions:
+        async def create(self, **kwargs):
+            primary_calls.append(kwargs)
+            raise _HttpStatusError(429)
+
+    secondary_chat = FakeChatCompletions(calls=[])
+    classifier, _chat, cost_tracker = _build_classifier(
+        mock_db_session,
+        batch_size=1,
+        semantic_cache=semantic_cache,
+    )
+    classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=PrimaryCompletions()))
+    classifier.secondary_client = SimpleNamespace(chat=SimpleNamespace(completions=secondary_chat))
+    classifier.secondary_model = "gpt-4o-mini"
+    classifier.secondary_provider = "openai-secondary"
+    item = _build_item("eu-russia escalation")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    first_results, first_usage = await classifier.classify_items([item], trends)
+    second_results, second_usage = await classifier.classify_items([item], trends)
+
+    assert len(first_results) == 1
+    assert len(second_results) == 1
+    assert first_usage.api_calls == 1
+    assert second_usage.api_calls == 0
+    assert len(primary_calls) == 2
+    assert len(secondary_chat.calls) == 1
+    assert cost_tracker.ensure_within_budget.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_classify_items_semantic_cache_key_includes_reasoning_effort(
+    mock_db_session,
+) -> None:
+    semantic_cache = InMemorySemanticCache(entries={})
+    classifier, chat, _cost_tracker = _build_classifier(
+        mock_db_session,
+        batch_size=1,
+        model="gpt-5-nano",
+        reasoning_effort="minimal",
+        semantic_cache=semantic_cache,
+    )
+    item = _build_item("eu-russia update")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    first_results, first_usage = await classifier.classify_items([item], trends)
+    classifier.reasoning_effort = "low"
+    second_results, second_usage = await classifier.classify_items([item], trends)
+
+    assert len(first_results) == 1
+    assert len(second_results) == 1
+    assert first_usage.api_calls == 1
+    assert second_usage.api_calls == 1
+    assert len(chat.calls) == 2
+
+
+def test_semantic_cache_read_routes_omits_secondary_when_unconfigured(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=1)
+    classifier.secondary_model = None
+    classifier.secondary_provider = "openai-secondary"
+
+    assert classifier._semantic_cache_read_routes() == [
+        ("openai", "gpt-4.1-nano", None),
+    ]
+
+
+def test_semantic_cache_read_routes_deduplicates_identical_secondary_route(
+    mock_db_session,
+) -> None:
+    classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=1)
+    classifier.secondary_model = classifier.model
+    classifier.secondary_provider = classifier.primary_provider
+    classifier.secondary_reasoning_effort = classifier.reasoning_effort
+
+    assert classifier._semantic_cache_read_routes() == [
+        (classifier.primary_provider, classifier.model, classifier.reasoning_effort),
+    ]
 
 
 @pytest.mark.asyncio

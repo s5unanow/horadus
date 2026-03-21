@@ -3,10 +3,15 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from math import pow
 from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
+from src.core.runtime_provenance import (
+    TREND_SCORING_MATH_VERSION,
+    TREND_SCORING_PARAMETER_SET,
+)
 from src.core.trend_restatement import (
     _as_utc,
     apply_compensating_restatement,
@@ -260,6 +265,42 @@ async def test_apply_compensating_restatement_decays_before_applying_delta() -> 
     assert call["delta"] == pytest.approx(-0.1)
     assert float(trend.current_log_odds) == pytest.approx(0.3)
     assert trend.updated_at == applied_at
+
+
+@pytest.mark.asyncio
+async def test_apply_compensating_restatement_records_scoring_contract() -> None:
+    session = SimpleNamespace(add=MagicMock(), flush=AsyncMock())
+    trend = Trend(
+        id=uuid4(),
+        name="Versioned Trend",
+        runtime_trend_id="versioned-trend",
+        definition={"id": "versioned-trend"},
+        baseline_log_odds=0.0,
+        current_log_odds=0.4,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+
+    class _Engine:
+        def __init__(self) -> None:
+            self.session = session
+
+        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
+            previous_lo = float(kwargs["fallback_current_log_odds"])
+            return previous_lo, previous_lo + float(kwargs["delta"])
+
+    await apply_compensating_restatement(
+        trend_engine=_Engine(),
+        trend=trend,
+        compensation_delta_log_odds=0.1,
+        restatement_kind="manual_compensation",
+        source="trend_override",
+    )
+
+    restatement = session.add.call_args.args[0]
+    assert restatement.scoring_math_version == TREND_SCORING_MATH_VERSION
+    assert restatement.scoring_parameter_set == TREND_SCORING_PARAMETER_SET
 
 
 @pytest.mark.asyncio

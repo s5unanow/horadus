@@ -9,9 +9,17 @@ import json
 import subprocess  # nosec
 from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
+
+from src.core.runtime_provenance import (
+    normalize_request_overrides as _normalize_request_overrides,
+)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def normalize_request_overrides(request_overrides: dict[str, Any] | None) -> dict[str, Any] | None:
+    return _normalize_request_overrides(request_overrides)
 
 
 def build_source_control_provenance(*, repo_root: Path | None = None) -> dict[str, Any]:
@@ -92,13 +100,6 @@ def build_directory_provenance(
         "files": file_payloads,
         "fingerprint_sha256": fingerprint,
     }
-
-
-def normalize_request_overrides(request_overrides: dict[str, Any] | None) -> dict[str, Any] | None:
-    if request_overrides is None:
-        return None
-    canonical = json.dumps(request_overrides, sort_keys=True, separators=(",", ":"))
-    return cast("dict[str, Any]", json.loads(canonical))
 
 
 def gold_set_fingerprint(items: list[Any]) -> str:

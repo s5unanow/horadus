@@ -39,6 +39,8 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
+from src.core.runtime_provenance import current_trend_scoring_contract
+
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -546,6 +548,8 @@ class TrendEngine:
             base_weight=factors.base_weight,
             direction_multiplier=factors.direction_multiplier,
             trend_definition_hash=self._definition_hash(trend.definition),
+            scoring_math_version=current_trend_scoring_contract()["math_version"],
+            scoring_parameter_set=current_trend_scoring_contract()["parameter_set"],
             credibility_score=factors.credibility,
             corroboration_factor=factors.corroboration,
             novelty_score=factors.novelty,

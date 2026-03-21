@@ -100,17 +100,10 @@ path = "src/processing/tier2_canary.py"
 
 [[legacy_files]]
 path = "src/processing/tier2_classifier.py"
-[legacy_files.member_max_lines]
-"Tier2Classifier.classify_event" = 119
 
 [[legacy_files]]
 path = "src/storage/models.py"
 max_lines = 1164
-
-[[legacy_files]]
-path = "src/workers/_task_maintenance.py"
-[legacy_files.member_max_lines]
-"replay_degraded_events_async" = 111
 
 [[legacy_files]]
 path = "src/workers/tasks.py"

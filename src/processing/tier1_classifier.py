@@ -35,6 +35,7 @@ from src.processing.llm_policy import (
     build_safe_payload_content,
     invoke_with_policy,
 )
+from src.processing.llm_runtime_cache import build_semantic_cache_kwargs
 from src.processing.semantic_cache import LLMSemanticCache
 from src.storage.models import ProcessingStatus, RawItem, Trend
 
@@ -160,6 +161,7 @@ class Tier1Classifier:
         )
         configured_batch_size = settings.LLM_TIER1_BATCH_SIZE if batch_size is None else batch_size
         self.batch_size = max(1, configured_batch_size)
+        self.prompt_path = prompt_path
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         self.client = client or self._create_client(
             api_key=settings.OPENAI_API_KEY,
@@ -280,14 +282,28 @@ class Tier1Classifier:
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
         payload = self._build_payload(items=items, trends=trends)
-        cached_content = await asyncio.to_thread(
-            self.semantic_cache.get,
-            stage=TIER1,
-            model=self.model,
-            prompt_template=self.prompt_template,
-            payload=payload,
-        )
-        if isinstance(cached_content, str) and cached_content.strip():
+        cached_content: str | None = None
+        for provider, model, reasoning_effort in self._semantic_cache_read_routes():
+            cache_kwargs = build_semantic_cache_kwargs(
+                stage=TIER1,
+                provider=provider,
+                model=model,
+                reasoning_effort=reasoning_effort,
+                prompt_path=self.prompt_path,
+                prompt_template=self.prompt_template,
+                schema_name="tier1_classification",
+                schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+                request_overrides=self.request_overrides,
+            )
+            candidate = await asyncio.to_thread(
+                self.semantic_cache.get,
+                **cache_kwargs,
+                payload=payload,
+            )
+            if isinstance(candidate, str) and candidate.strip():
+                cached_content = candidate
+                break
+        if cached_content is not None:
             try:
                 output = _Tier1Output.model_validate(json.loads(cached_content))
                 self._validate_output_alignment(output, items=items, trends=trends)
@@ -320,48 +336,11 @@ class Tier1Classifier:
             {"role": "system", "content": self.prompt_template},
             {"role": "user", "content": payload_content},
         ]
-        secondary_route = None
-        if self.secondary_client is not None and self.secondary_model is not None:
-            secondary_route = LLMChatRoute(
-                provider=self.secondary_provider or self.primary_provider,
-                model=self.secondary_model,
-                client=self.secondary_client,
-                reasoning_effort=self.secondary_reasoning_effort,
-                request_overrides=self.request_overrides,
-            )
-        invocation = await invoke_with_policy(
-            stage=TIER1,
-            messages=messages,
-            primary_route=LLMChatRoute(
-                provider=self.primary_provider,
-                model=self.model,
-                client=self.client,
-                reasoning_effort=self.reasoning_effort,
-                request_overrides=self.request_overrides,
-            ),
-            secondary_route=secondary_route,
-            temperature=0,
-            strict_response_format=self._STRICT_RESPONSE_FORMAT,
-            fallback_response_format=self._JSON_OBJECT_RESPONSE_FORMAT,
-            cost_tracker=self.cost_tracker,
-            budget_tier=TIER1,
-        )
+        invocation = await self._invoke_batch_model(messages=messages)
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, items=items, trends=trends)
         results = self._to_item_results(output)
-        response_choices = getattr(invocation.response, "choices", None)
-        if isinstance(response_choices, list) and response_choices:
-            message = getattr(response_choices[0], "message", None)
-            raw_content = getattr(message, "content", None)
-            if isinstance(raw_content, str) and raw_content.strip():
-                await asyncio.to_thread(
-                    self.semantic_cache.set,
-                    stage=TIER1,
-                    model=self.model,
-                    prompt_template=self.prompt_template,
-                    payload=payload,
-                    value=raw_content,
-                )
+        await self._cache_batch_response(invocation=invocation, payload=payload)
 
         usage = Tier1Usage(
             prompt_tokens=invocation.prompt_tokens,
@@ -374,6 +353,85 @@ class Tier1Classifier:
             used_secondary_route=invocation.used_secondary_route,
         )
         return (results, usage)
+
+    def _semantic_cache_read_routes(self) -> list[tuple[str | None, str, str | None]]:
+        routes: list[tuple[str | None, str, str | None]] = [
+            (self.primary_provider, self.model, self.reasoning_effort)
+        ]
+        if self.secondary_model is not None:
+            secondary_route = (
+                self.secondary_provider or self.primary_provider,
+                self.secondary_model,
+                self.secondary_reasoning_effort,
+            )
+            if secondary_route not in routes:
+                routes.append(secondary_route)
+        return routes
+
+    def _secondary_route(self) -> LLMChatRoute | None:
+        if self.secondary_client is None or self.secondary_model is None:
+            return None
+        return LLMChatRoute(
+            provider=self.secondary_provider or self.primary_provider,
+            model=self.secondary_model,
+            client=self.secondary_client,
+            reasoning_effort=self.secondary_reasoning_effort,
+            request_overrides=self.request_overrides,
+        )
+
+    async def _invoke_batch_model(
+        self,
+        *,
+        messages: list[dict[str, str]],
+    ) -> Any:
+        return await invoke_with_policy(
+            stage=TIER1,
+            messages=messages,
+            primary_route=LLMChatRoute(
+                provider=self.primary_provider,
+                model=self.model,
+                client=self.client,
+                reasoning_effort=self.reasoning_effort,
+                request_overrides=self.request_overrides,
+            ),
+            secondary_route=self._secondary_route(),
+            temperature=0,
+            strict_response_format=self._STRICT_RESPONSE_FORMAT,
+            fallback_response_format=self._JSON_OBJECT_RESPONSE_FORMAT,
+            cost_tracker=self.cost_tracker,
+            budget_tier=TIER1,
+        )
+
+    async def _cache_batch_response(
+        self,
+        *,
+        invocation: Any,
+        payload: dict[str, Any],
+    ) -> None:
+        response_choices = getattr(invocation.response, "choices", None)
+        if not isinstance(response_choices, list) or not response_choices:
+            return
+        message = getattr(response_choices[0], "message", None)
+        raw_content = getattr(message, "content", None)
+        if not isinstance(raw_content, str) or not raw_content.strip():
+            return
+        cache_write_kwargs = build_semantic_cache_kwargs(
+            stage=TIER1,
+            provider=invocation.active_provider,
+            model=invocation.active_model,
+            reasoning_effort=invocation.active_reasoning_effort,
+            prompt_path=self.prompt_path,
+            prompt_template=self.prompt_template,
+            schema_name="tier1_classification",
+            schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+            request_overrides=self.request_overrides,
+        )
+        await asyncio.to_thread(
+            self.semantic_cache.set,
+            **cache_write_kwargs,
+            payload=payload,
+            value=raw_content,
+        )
 
     @staticmethod
     def _merge_usage(*, left_usage: Tier1Usage, right_usage: Tier1Usage) -> Tier1Usage:

@@ -82,6 +82,7 @@ def test_report_grounding_columns_present_in_model_metadata() -> None:
     assert "grounding_status" in Report.__table__.c
     assert "grounding_violation_count" in Report.__table__.c
     assert "grounding_references" in Report.__table__.c
+    assert "generation_manifest" in Report.__table__.c
 
 
 def test_source_ingestion_watermark_column_present_in_model_metadata() -> None:
@@ -129,6 +130,7 @@ def test_dimension_check_constraints_present_in_model_metadata() -> None:
     assert "corroboration_score" in Event.__table__.c
     assert "corroboration_mode" in Event.__table__.c
     assert "provenance_summary" in Event.__table__.c
+    assert "extraction_provenance" in Event.__table__.c
     assert "idx_events_activity" in {index.name for index in Event.__table__.indexes}
 
 
@@ -136,6 +138,8 @@ def test_trend_evidence_factorization_columns_present_in_model_metadata() -> Non
     assert "base_weight" in TrendEvidence.__table__.c
     assert "direction_multiplier" in TrendEvidence.__table__.c
     assert "trend_definition_hash" in TrendEvidence.__table__.c
+    assert "scoring_math_version" in TrendEvidence.__table__.c
+    assert "scoring_parameter_set" in TrendEvidence.__table__.c
     assert "event_claim_id" in TrendEvidence.__table__.c
 
 
@@ -191,6 +195,8 @@ def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -
 
     assert "trend_evidence_id" in TrendRestatement.__table__.c
     assert "compensation_delta_log_odds" in TrendRestatement.__table__.c
+    assert "scoring_math_version" in TrendRestatement.__table__.c
+    assert "scoring_parameter_set" in TrendRestatement.__table__.c
     assert "check_trend_restatements_kind_allowed" in constraint_names
     assert "check_trend_restatements_source_allowed" in constraint_names
     assert "idx_trend_restatements_trend_recorded" in index_names

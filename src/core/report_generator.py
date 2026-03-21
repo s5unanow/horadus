@@ -20,14 +20,21 @@ from src.core.narrative_grounding import (
     build_grounding_references,
     evaluate_narrative_grounding,
 )
+from src.core.report_runtime import (
+    NarrativeResult,
+    build_fallback_narrative_result,
+    build_report_generation_manifest,
+)
+from src.core.report_runtime import (
+    _fallback_narrative as fallback_narrative_text,
+)
 from src.core.trend_engine import TrendEngine
-from src.processing.cost_tracker import TIER2, BudgetExceededError, CostTracker
-from src.processing.llm_failover import LLMChatRoute
+from src.processing.cost_tracker import BudgetExceededError, CostTracker
 from src.processing.llm_input_safety import (
     DEFAULT_CHARS_PER_TOKEN,
     DEFAULT_TRUNCATION_MARKER,
 )
-from src.processing.llm_policy import build_safe_payload_content, invoke_with_policy
+from src.processing.report_llm import build_report_payload_content, invoke_report_narrative
 from src.storage.models import (
     Event,
     EventItem,
@@ -66,14 +73,6 @@ class MonthlyReportRun:
     period_end: datetime
 
 
-@dataclass(slots=True)
-class NarrativeResult:
-    narrative: str
-    grounding_status: str
-    grounding_violation_count: int
-    grounding_references: dict[str, Any] | None = None
-
-
 class ReportGenerator:
     """Generate and persist weekly/monthly trend reports."""
 
@@ -81,6 +80,7 @@ class ReportGenerator:
     _MAX_NARRATIVE_INPUT_TOKENS = 9000
     _CHARS_PER_TOKEN = DEFAULT_CHARS_PER_TOKEN
     _TRUNCATION_MARKER = DEFAULT_TRUNCATION_MARKER
+    _fallback_narrative = staticmethod(fallback_narrative_text)
 
     def __init__(
         self,
@@ -106,6 +106,8 @@ class ReportGenerator:
         self.secondary_provider = secondary_provider or settings.LLM_SECONDARY_PROVIDER
         self.primary_base_url = primary_base_url or settings.LLM_PRIMARY_BASE_URL
         self.secondary_base_url = secondary_base_url or settings.LLM_SECONDARY_BASE_URL
+        self.weekly_prompt_path = weekly_prompt_path
+        self.monthly_prompt_path = monthly_prompt_path
         self.weekly_prompt_template = Path(weekly_prompt_path).read_text(encoding="utf-8")
         self.monthly_prompt_template = Path(monthly_prompt_path).read_text(encoding="utf-8")
         self.client = (
@@ -189,10 +191,20 @@ class ReportGenerator:
                 top_events=top_events,
                 period_start=run_period_start,
                 period_end=run_period_end,
+                prompt_path=self.weekly_prompt_path,
                 prompt_template=self.weekly_prompt_template,
                 report_type="weekly",
             )
             top_events_payload = {"events": top_events}
+            generation_manifest = await build_report_generation_manifest(
+                session=self.session,
+                trend=trend,
+                period_start=run_period_start,
+                period_end=run_period_end,
+                report_type="weekly",
+                top_events=top_events,
+                narrative=narrative,
+            )
 
             existing = await self._find_existing_report(
                 report_type="weekly",
@@ -213,6 +225,7 @@ class ReportGenerator:
                         grounding_violation_count=narrative.grounding_violation_count,
                         grounding_references=narrative.grounding_references,
                         top_events=top_events_payload,
+                        generation_manifest=generation_manifest,
                     )
                 )
                 created += 1
@@ -223,6 +236,7 @@ class ReportGenerator:
                 existing.grounding_violation_count = narrative.grounding_violation_count
                 existing.grounding_references = narrative.grounding_references
                 existing.top_events = top_events_payload
+                existing.generation_manifest = generation_manifest
                 updated += 1
 
         await self.session.flush()
@@ -272,10 +286,20 @@ class ReportGenerator:
                 top_events=top_events,
                 period_start=run_period_start,
                 period_end=run_period_end,
+                prompt_path=self.monthly_prompt_path,
                 prompt_template=self.monthly_prompt_template,
                 report_type="monthly",
             )
             top_events_payload = {"events": top_events}
+            generation_manifest = await build_report_generation_manifest(
+                session=self.session,
+                trend=trend,
+                period_start=run_period_start,
+                period_end=run_period_end,
+                report_type="monthly",
+                top_events=top_events,
+                narrative=narrative,
+            )
 
             existing = await self._find_existing_report(
                 report_type="monthly",
@@ -296,6 +320,7 @@ class ReportGenerator:
                         grounding_violation_count=narrative.grounding_violation_count,
                         grounding_references=narrative.grounding_references,
                         top_events=top_events_payload,
+                        generation_manifest=generation_manifest,
                     )
                 )
                 created += 1
@@ -306,6 +331,7 @@ class ReportGenerator:
                 existing.grounding_violation_count = narrative.grounding_violation_count
                 existing.grounding_references = narrative.grounding_references
                 existing.top_events = top_events_payload
+                existing.generation_manifest = generation_manifest
                 updated += 1
 
         await self.session.flush()
@@ -736,9 +762,15 @@ class ReportGenerator:
         top_events: list[dict[str, Any]],
         period_start: datetime,
         period_end: datetime,
+        prompt_path: str | None = None,
         prompt_template: str,
         report_type: str,
     ) -> NarrativeResult:
+        resolved_prompt_path = prompt_path
+        if resolved_prompt_path is None:
+            resolved_prompt_path = (
+                self.weekly_prompt_path if report_type == "weekly" else self.monthly_prompt_path
+            )
         payload = {
             "trend": {
                 "id": str(trend.id),
@@ -758,45 +790,37 @@ class ReportGenerator:
                 report_type=report_type,
                 statistics=statistics,
                 payload=payload,
+                prompt_path=resolved_prompt_path,
+                prompt_template=prompt_template,
+                fallback_reason="missing_client",
             )
 
-        payload_content = self._build_narrative_payload_content(payload, report_type=report_type)
-        messages = [
-            {"role": "system", "content": prompt_template},
-            {"role": "user", "content": payload_content},
-        ]
-        secondary_route = None
-        if self.secondary_client is not None and self.secondary_model is not None:
-            secondary_route = LLMChatRoute(
-                provider=self.secondary_provider or self.primary_provider,
-                model=self.secondary_model,
-                client=self.secondary_client,
-                api_mode=self.report_api_mode,
-            )
         try:
-            invocation = await invoke_with_policy(
-                stage="reporting",
-                messages=messages,
-                primary_route=LLMChatRoute(
-                    provider=self.primary_provider,
-                    model=self.model,
-                    client=self.client,
-                    api_mode=self.report_api_mode,
-                ),
-                secondary_route=secondary_route,
-                temperature=0.2,
+            content, provenance = await invoke_report_narrative(
+                payload=payload,
+                prompt_path=resolved_prompt_path,
+                prompt_template=prompt_template,
+                report_type=report_type,
+                primary_provider=self.primary_provider,
+                primary_model=self.model,
+                primary_client=self.client,
+                secondary_provider=self.secondary_provider,
+                secondary_model=self.secondary_model,
+                secondary_client=self.secondary_client,
+                api_mode=self.report_api_mode,
                 cost_tracker=self.cost_tracker,
-                budget_tier=TIER2,
+                max_tokens=self._MAX_NARRATIVE_INPUT_TOKENS,
+                chars_per_token=self._CHARS_PER_TOKEN,
+                truncation_marker=self._TRUNCATION_MARKER,
             )
-            response = invocation.response
-            content = getattr(response.choices[0].message, "content", None)
-            if isinstance(content, str) and content.strip():
+            if content is not None:
                 return self._verify_narrative_grounding(
-                    narrative=content.strip(),
+                    narrative=content,
                     payload=payload,
                     trend=trend,
                     report_type=report_type,
                     statistics=statistics,
+                    provenance=provenance,
                 )
         except BudgetExceededError:
             logger.warning(
@@ -818,6 +842,9 @@ class ReportGenerator:
             report_type=report_type,
             statistics=statistics,
             payload=payload,
+            prompt_path=resolved_prompt_path,
+            prompt_template=prompt_template,
+            fallback_reason="llm_unavailable",
         )
 
     def _verify_narrative_grounding(
@@ -828,6 +855,7 @@ class ReportGenerator:
         trend: Trend,
         report_type: str,
         statistics: dict[str, Any],
+        provenance: dict[str, Any] | None,
     ) -> NarrativeResult:
         evaluation = evaluate_narrative_grounding(
             narrative=narrative,
@@ -841,6 +869,8 @@ class ReportGenerator:
                 grounding_status="grounded",
                 grounding_violation_count=evaluation.violation_count,
                 grounding_references=build_grounding_references(evaluation),
+                provenance=provenance,
+                provisional=False,
             )
 
         logger.warning(
@@ -855,6 +885,16 @@ class ReportGenerator:
             report_type=report_type,
             statistics=statistics,
             payload=payload,
+            prompt_path=(
+                self.weekly_prompt_path if report_type == "weekly" else self.monthly_prompt_path
+            ),
+            prompt_template=(
+                self.weekly_prompt_template
+                if report_type == "weekly"
+                else self.monthly_prompt_template
+            ),
+            fallback_reason="grounding_failed",
+            attempted_provenance=provenance,
         )
 
     def _build_fallback_narrative_result(
@@ -864,23 +904,22 @@ class ReportGenerator:
         report_type: str,
         statistics: dict[str, Any],
         payload: dict[str, Any],
+        prompt_path: str,
+        prompt_template: str,
+        fallback_reason: str,
+        attempted_provenance: dict[str, Any] | None = None,
     ) -> NarrativeResult:
-        narrative = self._fallback_narrative(
+        return build_fallback_narrative_result(
             trend=trend,
             report_type=report_type,
             statistics=statistics,
-        )
-        evaluation = evaluate_narrative_grounding(
-            narrative=narrative,
-            evidence_payload=payload,
+            payload=payload,
+            prompt_path=prompt_path,
+            prompt_template=prompt_template,
+            fallback_reason=fallback_reason,
+            attempted_provenance=attempted_provenance,
             violation_threshold=settings.NARRATIVE_GROUNDING_MAX_UNSUPPORTED_CLAIMS,
             numeric_tolerance=settings.NARRATIVE_GROUNDING_NUMERIC_TOLERANCE,
-        )
-        return NarrativeResult(
-            narrative=narrative,
-            grounding_status="fallback" if evaluation.is_grounded else "flagged",
-            grounding_violation_count=evaluation.violation_count,
-            grounding_references=build_grounding_references(evaluation),
         )
 
     def _build_narrative_payload_content(
@@ -889,68 +928,10 @@ class ReportGenerator:
         *,
         report_type: str,
     ) -> str:
-        return build_safe_payload_content(
-            payload,
-            tag="UNTRUSTED_REPORT_PAYLOAD",
+        return build_report_payload_content(
+            payload=payload,
+            report_type=report_type,
             max_tokens=self._MAX_NARRATIVE_INPUT_TOKENS,
             chars_per_token=self._CHARS_PER_TOKEN,
             truncation_marker=self._TRUNCATION_MARKER,
-            warning_message="Report narrative payload exceeded token budget; truncating",
-            warning_context={"report_type": report_type},
-        )
-
-    @staticmethod
-    def _fallback_narrative(
-        *,
-        trend: Trend,
-        report_type: str,
-        statistics: dict[str, Any],
-    ) -> str:
-        contradiction_summary = ""
-        confidence_modifier = ""
-        contradiction_stats = statistics.get("contradiction_analytics")
-        unresolved_events_count = 0
-        if isinstance(contradiction_stats, dict):
-            contradicted_events_count = int(contradiction_stats.get("contradicted_events_count", 0))
-            resolved_events_count = int(contradiction_stats.get("resolved_events_count", 0))
-            unresolved_events_count = int(contradiction_stats.get("unresolved_events_count", 0))
-            if contradicted_events_count > 0:
-                contradiction_summary = (
-                    f" Contradiction review tracked {contradicted_events_count} events "
-                    f"({resolved_events_count} resolved, {unresolved_events_count} unresolved)."
-                )
-                if unresolved_events_count > 0:
-                    confidence_modifier = " unresolved contradictions"
-
-        def confidence_label(evidence_count: int) -> str:
-            if evidence_count >= 20:
-                return "high"
-            if evidence_count >= 8:
-                return "moderate"
-            return "limited"
-
-        if report_type == "monthly":
-            monthly_change = float(statistics.get("monthly_change", 0.0))
-            evidence_count = int(statistics.get("evidence_count_monthly", 0))
-            direction = str(statistics.get("direction", "stable"))
-            current_probability = float(statistics.get("current_probability", 0.0))
-            confidence = confidence_label(evidence_count)
-            return (
-                f"{trend.name} is currently at {current_probability:.1%} with a monthly change of "
-                f"{monthly_change:+.1%}. Direction over 30 days is {direction}, with "
-                f"{evidence_count} evidence updates. Confidence is {confidence} based on available "
-                f"coverage{confidence_modifier}."
-                f"{contradiction_summary}"
-            )
-
-        direction = str(statistics.get("direction", "stable"))
-        current_probability = float(statistics.get("current_probability", 0.0))
-        weekly_change = float(statistics.get("weekly_change", 0.0))
-        evidence_count = int(statistics.get("evidence_count_weekly", 0))
-        confidence = confidence_label(evidence_count)
-        return (
-            f"{trend.name} is currently at {current_probability:.1%} with a weekly change of "
-            f"{weekly_change:+.1%}. Direction is {direction}, based on {evidence_count} "
-            f"evidence updates in the reporting window. Confidence is {confidence} based on "
-            f"current evidence volume{confidence_modifier}.{contradiction_summary}"
         )

@@ -1044,10 +1044,82 @@ def test_build_narrative_payload_content_truncates_large_payload(
 
 
 @pytest.mark.asyncio
+async def test_build_narrative_defaults_prompt_path_from_report_type(
+    mock_db_session,
+) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    trend = SimpleNamespace(id=uuid4(), name="Trend", description="Description")
+    captured: dict[str, str] = {}
+
+    def _fallback(**kwargs) -> NarrativeResult:
+        captured["prompt_path"] = kwargs["prompt_path"]
+        return NarrativeResult(
+            narrative="fallback",
+            grounding_status="fallback",
+            grounding_violation_count=0,
+            provisional=True,
+        )
+
+    generator._build_fallback_narrative_result = _fallback  # type: ignore[method-assign]
+
+    result = await generator._build_narrative(
+        trend=trend,
+        statistics={},
+        top_events=[],
+        period_start=datetime(2026, 3, 1, tzinfo=UTC),
+        period_end=datetime(2026, 3, 8, tzinfo=UTC),
+        prompt_template="template",
+        report_type="monthly",
+    )
+
+    assert result.narrative == "fallback"
+    assert captured["prompt_path"] == generator.monthly_prompt_path
+
+
+@pytest.mark.asyncio
+async def test_build_narrative_preserves_explicit_prompt_path(
+    mock_db_session,
+) -> None:
+    generator = ReportGenerator(session=mock_db_session, client=None)
+    trend = SimpleNamespace(id=uuid4(), name="Trend", description="Description")
+    captured: dict[str, str] = {}
+
+    def _fallback(**kwargs) -> NarrativeResult:
+        captured["prompt_path"] = kwargs["prompt_path"]
+        return NarrativeResult(
+            narrative="fallback",
+            grounding_status="fallback",
+            grounding_violation_count=0,
+            provisional=True,
+        )
+
+    generator._build_fallback_narrative_result = _fallback  # type: ignore[method-assign]
+
+    await generator._build_narrative(
+        trend=trend,
+        statistics={},
+        top_events=[],
+        period_start=datetime(2026, 3, 1, tzinfo=UTC),
+        period_end=datetime(2026, 3, 8, tzinfo=UTC),
+        prompt_path="custom/report_prompt.md",
+        prompt_template="template",
+        report_type="monthly",
+    )
+
+    assert captured["prompt_path"] == "custom/report_prompt.md"
+
+
+@pytest.mark.asyncio
 async def test_generate_weekly_reports_persists_grounding_metadata(mock_db_session) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend_id = uuid4()
-    trend = SimpleNamespace(id=trend_id, name="Signal Watch", description="desc")
+    trend = SimpleNamespace(
+        id=trend_id,
+        name="Signal Watch",
+        description="desc",
+        runtime_trend_id="signal-watch",
+        definition={"id": "signal-watch"},
+    )
 
     generator._load_active_trends = AsyncMock(return_value=[trend])
     generator._build_weekly_statistics = AsyncMock(
@@ -1077,3 +1149,6 @@ async def test_generate_weekly_reports_persists_grounding_metadata(mock_db_sessi
     assert persisted.grounding_status == "grounded"
     assert persisted.grounding_violation_count == 0
     assert persisted.grounding_references is None
+    assert persisted.generation_manifest["report_type"] == "weekly"
+    assert persisted.generation_manifest["trend"]["runtime_trend_id"] == "signal-watch"
+    assert persisted.generation_manifest["artifact_status"]["provisional"] is False

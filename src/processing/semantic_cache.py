@@ -14,6 +14,7 @@ import structlog
 
 from src.core.config import settings
 from src.core.observability import record_llm_semantic_cache_lookup
+from src.core.runtime_provenance import build_semantic_cache_basis, payload_sha256
 
 logger = structlog.get_logger(__name__)
 
@@ -59,23 +60,49 @@ class LLMSemanticCache:
     def build_cache_key(
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: dict[str, Any] | None = None,
+        request_overrides: dict[str, Any] | None = None,
         payload: Any,
         redis_prefix: str,
     ) -> str:
-        prompt_hash = hashlib.sha256(prompt_template.strip().encode("utf-8")).hexdigest()
+        basis = build_semantic_cache_basis(
+            stage=stage,
+            provider=provider,
+            model=model,
+            reasoning_effort=reasoning_effort,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
+            prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
+        )
+        basis_hash = payload_sha256(basis)
         payload_hash = hashlib.sha256(
             LLMSemanticCache._serialize_payload(payload).encode("utf-8")
         ).hexdigest()
-        return f"{redis_prefix}:{stage}:v1:{model.strip()}:{prompt_hash}:{payload_hash}"
+        return f"{redis_prefix}:{stage}:v2:{basis_hash}:{payload_hash}"
 
     def get(
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: dict[str, Any] | None = None,
+        request_overrides: dict[str, Any] | None = None,
         payload: Any,
     ) -> str | None:
         if not self.enabled:
@@ -83,8 +110,15 @@ class LLMSemanticCache:
 
         key = self.build_cache_key(
             stage=stage,
+            provider=provider,
             model=model,
+            reasoning_effort=reasoning_effort,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
             prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
             payload=payload,
             redis_prefix=self.redis_prefix,
         )
@@ -114,8 +148,15 @@ class LLMSemanticCache:
         self,
         *,
         stage: str,
+        provider: str | None = None,
         model: str,
+        reasoning_effort: str | None = None,
+        api_mode: str | None = None,
+        prompt_path: str = "",
         prompt_template: str,
+        schema_name: str = "",
+        schema_payload: dict[str, Any] | None = None,
+        request_overrides: dict[str, Any] | None = None,
         payload: Any,
         value: str,
     ) -> None:
@@ -128,8 +169,15 @@ class LLMSemanticCache:
 
         key = self.build_cache_key(
             stage=stage,
+            provider=provider,
             model=model,
+            reasoning_effort=reasoning_effort,
+            api_mode=api_mode,
+            prompt_path=prompt_path,
             prompt_template=prompt_template,
+            schema_name=schema_name,
+            schema_payload=schema_payload,
+            request_overrides=request_overrides,
             payload=payload,
             redis_prefix=self.redis_prefix,
         )

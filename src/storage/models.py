@@ -36,6 +36,10 @@ from src.storage.event_state import (
     EventActivityState,
     EventEpistemicState,
 )
+from src.storage.scoring_contract import (
+    TREND_SCORING_MATH_VERSION,
+    TREND_SCORING_PARAMETER_SET,
+)
 
 
 class SourceType(enum.StrEnum):
@@ -350,6 +354,12 @@ class Event(Base):
     corroboration_score: Mapped[float] = mapped_column(Numeric(5, 2), default=1.0, nullable=False)
     corroboration_mode: Mapped[str] = mapped_column(String(20), default="fallback", nullable=False)
     provenance_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
+    extraction_provenance: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
 
     # NEW: Lifecycle tracking (Expert Recommendation)
     lifecycle_status: Mapped[str] = mapped_column(
@@ -691,6 +701,18 @@ class TrendEvidence(Base):
     base_weight: Mapped[float | None] = mapped_column(Numeric(10, 6))
     direction_multiplier: Mapped[float | None] = mapped_column(Numeric(3, 1))
     trend_definition_hash: Mapped[str | None] = mapped_column(String(64))
+    scoring_math_version: Mapped[str] = mapped_column(
+        String(64),
+        default=TREND_SCORING_MATH_VERSION,
+        server_default=text(f"'{TREND_SCORING_MATH_VERSION}'"),
+        nullable=False,
+    )
+    scoring_parameter_set: Mapped[str] = mapped_column(
+        String(64),
+        default=TREND_SCORING_PARAMETER_SET,
+        server_default=text(f"'{TREND_SCORING_PARAMETER_SET}'"),
+        nullable=False,
+    )
 
     # Scoring factors
     credibility_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
@@ -925,8 +947,6 @@ class TrendSnapshot(Base):
 # =============================================================================
 # Report Models
 # =============================================================================
-
-
 class Report(Base):
     """
     Generated intelligence report.
@@ -970,6 +990,12 @@ class Report(Base):
     grounding_violation_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     grounding_references: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     top_events: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
+    generation_manifest: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

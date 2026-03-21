@@ -321,8 +321,9 @@ async def test_refresh_event_after_item_change_handles_empty_rows(
 @pytest.mark.asyncio
 async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, monkeypatch) -> None:
     item_one = _build_item(title="One")
+    item_one.embedding = [1.0, 0.0]
     item_two = _build_item(title="Two")
-    item_two.embedding = [0.3, 0.4]
+    item_two.embedding = [0.0, 1.0]
     item_two.embedding_model = "text-embedding-3-large"
     item_two.embedding_input_tokens = 144
     item_two.embedding_retained_tokens = 120
@@ -365,7 +366,7 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     assert event.canonical_summary == "Two"
     assert event.source_count == 2
     assert event.primary_item_id == item_two.id
-    assert event.embedding == [0.3, 0.4]
+    assert event.embedding == [0.0, 1.0]
     assert event.embedding_model == "text-embedding-3-large"
     assert event.embedding_input_tokens == 144
     assert event.embedding_retained_tokens == 120
@@ -374,9 +375,9 @@ async def test_refresh_event_after_item_change_updates_rollup(mock_db_session, m
     assert event.epistemic_state == "emerging"
     assert event.activity_state == "active"
     assert event.provenance_summary["cluster_health"]["cluster_cohesion_score"] == pytest.approx(
-        0.42
+        0.0
     )
-    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.35)
+    assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(1.0)
     assert event.categories == []
     assert event.extracted_who is None
     assert event.extracted_what is None
@@ -854,5 +855,24 @@ async def test_pick_primary_item_and_basic_helpers(mock_db_session) -> None:
     assert _item_timestamp(item) == item.fetched_at
     item.fetched_at = None
     assert _item_timestamp(item).tzinfo == UTC
+
+
+@pytest.mark.asyncio
+async def test_pick_primary_item_prefers_current_primary_on_credibility_ties(
+    mock_db_session,
+) -> None:
+    item = _build_item(title="Primary item")
+    current_primary_item_id = uuid4()
+    mock_db_session.scalar = AsyncMock(return_value=item)
+
+    await _pick_primary_item(
+        session=mock_db_session,
+        item_ids=(item.id, uuid4()),
+        current_primary_item_id=current_primary_item_id,
+    )
+
+    statement = mock_db_session.scalar.await_args.args[0]
+    assert "CASE WHEN" in str(statement)
+    assert current_primary_item_id in statement.compile().params.values()
     with pytest.raises(ValueError, match="must have an id"):
         _require_event_id(Event(canonical_summary="missing"))

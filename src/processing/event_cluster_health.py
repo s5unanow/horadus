@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from itertools import combinations
 from typing import Any
+
+from src.processing.vector_similarity import cosine_similarity
 
 CLUSTER_HEALTH_KEY = "cluster_health"
 DEFAULT_CLUSTER_COHESION_SCORE = 1.0
@@ -61,6 +64,34 @@ def apply_merge_cluster_health(event: Any, *, similarity: float) -> None:
         event=event,
         cluster_cohesion_score=cluster_cohesion_score,
         split_risk_score=split_risk_score,
+    )
+
+
+def apply_repaired_cluster_health(
+    event: Any,
+    *,
+    item_embeddings: list[list[float] | None],
+) -> None:
+    """Recompute cluster health from the repaired event's current item embeddings."""
+
+    if len(item_embeddings) <= 1:
+        apply_default_cluster_health(event)
+        return
+    similarities: list[float] = []
+    for left_embedding, right_embedding in combinations(item_embeddings, 2):
+        if left_embedding is None or right_embedding is None:
+            continue
+        try:
+            similarities.append(cosine_similarity(left_embedding, right_embedding))
+        except ValueError:
+            continue
+    if not similarities:
+        apply_default_cluster_health(event)
+        return
+    _store_cluster_health(
+        event=event,
+        cluster_cohesion_score=sum(similarities) / len(similarities),
+        split_risk_score=max(1.0 - similarity for similarity in similarities),
     )
 
 

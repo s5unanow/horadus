@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import case, delete, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,9 +21,8 @@ from src.core.trend_restatement import (
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_cluster_health import (
-    CLUSTER_HEALTH_KEY,
     apply_default_cluster_health,
-    cluster_health_payload,
+    apply_repaired_cluster_health,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.storage.event_lineage_models import EventLineage
@@ -312,10 +311,10 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     if not rows:
         await _close_empty_merged_event(event)
         return
-    prior_cluster_health = cluster_health_payload(event)
     primary_item = await _pick_primary_item(
         session=session,
         item_ids=tuple(row.item.id for row in rows),
+        current_primary_item_id=event.primary_item_id,
     )
     event.source_count = len(rows)
     event.unique_source_count = len({row.item.source_id for row in rows})
@@ -331,12 +330,10 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     event.first_seen_at = min(_item_timestamp(row.item) for row in rows)
     event.last_mention_at = max(_item_timestamp(row.item) for row in rows)
     await refresh_event_provenance(session=session, event=event)
-    if len(rows) == 1:
-        apply_default_cluster_health(event)
-    else:
-        provenance_summary = dict(event.provenance_summary or {})
-        provenance_summary[CLUSTER_HEALTH_KEY] = prior_cluster_health
-        event.provenance_summary = provenance_summary
+    apply_repaired_cluster_health(
+        event,
+        item_embeddings=[row.item.embedding for row in rows],
+    )
     _clear_stale_event_extractions(event)
     if event.epistemic_state == EventEpistemicState.RETRACTED.value:
         event.epistemic_state = EventEpistemicState.EMERGING.value
@@ -560,24 +557,35 @@ async def _enqueue_event_replay(
         )
 
 
-async def _pick_primary_item(*, session: AsyncSession, item_ids: tuple[UUID, ...]) -> RawItem:
+async def _pick_primary_item(
+    *,
+    session: AsyncSession,
+    item_ids: tuple[UUID, ...],
+    current_primary_item_id: UUID | None = None,
+) -> RawItem:
     if not item_ids:
         raise ValueError("event repair requires at least one item")
+    credibility_order = (
+        func.coalesce(Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY)
+        * source_multiplier_expression(
+            source_tier_col=Source.source_tier,
+            reporting_type_col=Source.reporting_type,
+        )
+    ).desc()
+    order_by: list[Any] = [credibility_order]
+    if current_primary_item_id is not None:
+        order_by.append(case((RawItem.id == current_primary_item_id, 1), else_=0).desc())
+    order_by.extend(
+        [
+            RawItem.published_at.desc().nullslast(),
+            RawItem.fetched_at.desc().nullslast(),
+        ]
+    )
     query = (
         select(RawItem)
         .join(Source, Source.id == RawItem.source_id)
         .where(RawItem.id.in_(item_ids))
-        .order_by(
-            (
-                func.coalesce(Source.credibility_score, DEFAULT_SOURCE_CREDIBILITY)
-                * source_multiplier_expression(
-                    source_tier_col=Source.source_tier,
-                    reporting_type_col=Source.reporting_type,
-                )
-            ).desc(),
-            RawItem.published_at.desc().nullslast(),
-            RawItem.fetched_at.desc().nullslast(),
-        )
+        .order_by(*order_by)
         .limit(1)
     )
     item = await session.scalar(query)

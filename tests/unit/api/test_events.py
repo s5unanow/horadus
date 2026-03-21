@@ -306,6 +306,12 @@ async def test_merge_event_route_validates_source_target_and_service_errors(
     with pytest.raises(HTTPException, match="bad merge"):
         await merge_event(event_id=source_event.id, payload=payload, session=mock_db_session)
 
+    monkeypatch.setattr(events_module, "merge_events", AsyncMock(side_effect=RuntimeError("busy")))
+    mock_db_session.get.side_effect = [source_event, target_event]
+    with pytest.raises(HTTPException, match="busy") as exc_info:
+        await merge_event(event_id=source_event.id, payload=payload, session=mock_db_session)
+    assert exc_info.value.status_code == 409
+
 
 @pytest.mark.asyncio
 async def test_merge_event_route_returns_service_payload(mock_db_session, monkeypatch) -> None:
@@ -367,6 +373,12 @@ async def test_split_event_route_validates_source_and_service_errors(
     mock_db_session.get.side_effect = [source_event]
     with pytest.raises(HTTPException, match="bad split"):
         await split_event_route(event_id=source_event.id, payload=payload, session=mock_db_session)
+
+    monkeypatch.setattr(events_module, "split_event", AsyncMock(side_effect=RuntimeError("busy")))
+    mock_db_session.get.side_effect = [source_event]
+    with pytest.raises(HTTPException, match="busy") as exc_info:
+        await split_event_route(event_id=source_event.id, payload=payload, session=mock_db_session)
+    assert exc_info.value.status_code == 409
 
 
 @pytest.mark.asyncio

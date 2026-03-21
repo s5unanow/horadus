@@ -217,3 +217,20 @@ async def test_ensure_cluster_health_returns_stored_payload_without_query() -> N
         "split_risk_score": pytest.approx(0.6),
     }
     session.scalars.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_resolve_cluster_health_filters_to_event_embedding_model() -> None:
+    event = SimpleNamespace(
+        id=uuid4(),
+        embedding_model="text-embedding-3-large",
+        provenance_summary={"method": "provenance_aware"},
+    )
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [[1.0, 0.0], [0.0, 1.0]])
+
+    await resolve_cluster_health(session=session, event=event)
+
+    query_text = str(session.scalars.await_args.args[0]).lower()
+    assert "raw_items.embedding_model = :embedding_model_1" in query_text
+    assert "raw_items.embedding_model is null" in query_text

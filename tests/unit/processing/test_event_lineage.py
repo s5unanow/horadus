@@ -740,6 +740,7 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
 
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
     mock_db_session.get = AsyncMock(side_effect=[None, event, event])
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
     mock_db_session.begin_nested = _begin_nested
     mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z")])
     mock_db_session.execute = AsyncMock(
@@ -791,6 +792,7 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
         },
     )
     mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
     mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
 
     replay_request_id = await _enqueue_event_replay(
@@ -814,6 +816,38 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
 
 
 @pytest.mark.asyncio
+async def test_enqueue_event_replay_supersedes_prior_request_ids_on_reset(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    old_request_id = uuid4()
+    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalars = AsyncMock(
+        return_value=SimpleNamespace(all=lambda: [{"replay_request_id": str(old_request_id)}])
+    )
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
+    mark_superseded = AsyncMock()
+    monkeypatch.setattr(
+        event_lineage_replay_module,
+        "mark_lineages_superseded_for_replay_requests",
+        mark_superseded,
+    )
+
+    replay_request_id = await _enqueue_event_replay(
+        session=mock_db_session,
+        event_id=event.id,
+        reason="merge",
+    )
+
+    assert replay_request_id is not None
+    mark_superseded.assert_awaited_once_with(
+        session=mock_db_session,
+        replay_request_ids=(old_request_id,),
+    )
+
+
+@pytest.mark.asyncio
 async def test_enqueue_event_replay_does_not_reset_processing_row(mock_db_session) -> None:
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
 
@@ -822,6 +856,7 @@ async def test_enqueue_event_replay_does_not_reset_processing_row(mock_db_sessio
         yield
 
     mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
     mock_db_session.begin_nested = _begin_nested
     mock_db_session.execute = AsyncMock(
         side_effect=[
@@ -848,6 +883,7 @@ async def test_enqueue_event_replay_conflict_recovery_uses_processing_guard(
 
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
     mock_db_session.get = AsyncMock(return_value=event)
+    mock_db_session.scalars = AsyncMock(return_value=SimpleNamespace(all=list))
     mock_db_session.begin_nested = _begin_nested
     mock_db_session.execute = AsyncMock(
         side_effect=[

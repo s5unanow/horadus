@@ -5,7 +5,7 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.processing.vector_similarity import cosine_similarity
@@ -136,16 +136,21 @@ async def resolve_cluster_health(
             "split_risk_score": DEFAULT_SPLIT_RISK_SCORE,
         }
 
-    item_embeddings = list(
-        (
-            await session.scalars(
-                select(RawItem.embedding)
-                .join(EventItem, EventItem.item_id == RawItem.id)
-                .where(EventItem.event_id == event_id)
-                .order_by(EventItem.added_at.asc(), RawItem.fetched_at.asc().nullslast())
-            )
-        ).all()
+    embedding_model = getattr(event, "embedding_model", None)
+    query = (
+        select(RawItem.embedding)
+        .join(EventItem, EventItem.item_id == RawItem.id)
+        .where(EventItem.event_id == event_id)
+        .order_by(EventItem.added_at.asc(), RawItem.fetched_at.asc().nullslast())
     )
+    if embedding_model is not None:
+        query = query.where(
+            or_(
+                RawItem.embedding_model == embedding_model,
+                RawItem.embedding_model.is_(None),
+            )
+        )
+    item_embeddings = list((await session.scalars(query)).all())
     return _cluster_health_from_item_embeddings(item_embeddings)
 
 

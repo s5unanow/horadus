@@ -353,7 +353,13 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     await refresh_event_provenance(session=session, event=event)
     apply_repaired_cluster_health(
         event,
-        item_embeddings=[row.item.embedding for row in rows],
+        item_embeddings=[
+            row.item.embedding
+            for row in rows
+            if event.embedding_model is None
+            or row.item.embedding_model is None
+            or row.item.embedding_model == event.embedding_model
+        ],
     )
     _clear_stale_event_extractions(event)
     if event.epistemic_state == EventEpistemicState.RETRACTED.value:

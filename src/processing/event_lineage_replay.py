@@ -27,6 +27,7 @@ async def enqueue_event_replay(
     if event is None:
         return None
     replay_request_id = uuid4()
+    superseded_request_ids = await _load_idle_replay_request_ids(session=session, event_id=event_id)
     details = {
         "reason": "event_lineage_repair",
         "repair_kind": reason,
@@ -38,6 +39,10 @@ async def enqueue_event_replay(
         event_id=event_id,
         details=details,
     ):
+        await mark_lineages_superseded_for_replay_requests(
+            session=session,
+            replay_request_ids=superseded_request_ids,
+        )
         return replay_request_id
     try:
         async with session.begin_nested():
@@ -56,6 +61,10 @@ async def enqueue_event_replay(
             event_id=event_id,
             details=details,
         ):
+            await mark_lineages_superseded_for_replay_requests(
+                session=session,
+                replay_request_ids=superseded_request_ids,
+            )
             return replay_request_id
         return None
 
@@ -173,3 +182,20 @@ def _extract_replay_request_ids(queue_item_details: Sequence[Any]) -> tuple[UUID
         except (TypeError, ValueError):
             continue
     return tuple(replay_request_ids)
+
+
+async def _load_idle_replay_request_ids(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> tuple[UUID, ...]:
+    return _extract_replay_request_ids(
+        (
+            await session.scalars(
+                select(LLMReplayQueueItem.details)
+                .where(LLMReplayQueueItem.stage == REPLAY_STAGE)
+                .where(LLMReplayQueueItem.event_id == event_id)
+                .where(LLMReplayQueueItem.status != "processing")
+            )
+        ).all()
+    )

@@ -533,7 +533,7 @@ async def test_repair_affected_events_handles_empty_and_restates_active_evidence
     monkeypatch.setattr(
         event_lineage_module,
         "_enqueue_event_replay",
-        AsyncMock(side_effect=[True, False]),
+        AsyncMock(side_effect=[True, True]),
     )
 
     result = await _repair_affected_events(
@@ -547,7 +547,45 @@ async def test_repair_affected_events_handles_empty_and_restates_active_evidence
     assert evidence_without_id.is_invalidated is True
     assert apply_restatement.await_count == 2
     assert result[0] == (evidence_with_trend.id,)
-    assert result[1] == (evidence_with_trend.event_id,)
+    assert result[1] == (evidence_with_trend.event_id, evidence_without_trend.event_id)
+
+
+@pytest.mark.asyncio
+async def test_repair_affected_events_raises_when_replay_enqueue_fails(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    trend = Trend(id=uuid4(), name="Trend", current_log_odds=-2.0)
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=uuid4(),
+        event_claim_id=uuid4(),
+        signal_type="signal",
+        delta_log_odds=Decimal("0.2"),
+    )
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [evidence]),
+        SimpleNamespace(all=lambda: [trend]),
+    ]
+    monkeypatch.setattr(
+        event_lineage_module,
+        "_load_prior_compensation_by_evidence_id",
+        AsyncMock(return_value={}),
+    )
+    monkeypatch.setattr(event_lineage_module, "apply_compensating_restatement", AsyncMock())
+    monkeypatch.setattr(
+        event_lineage_module,
+        "_enqueue_event_replay",
+        AsyncMock(return_value=False),
+    )
+
+    with pytest.raises(RuntimeError, match="requires replay queue items"):
+        await _repair_affected_events(
+            session=mock_db_session,
+            events=[Event(id=evidence.event_id)],
+            reason="merge",
+        )
 
 
 def test_select_from_active_evidence_builds_expected_query() -> None:

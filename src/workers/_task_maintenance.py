@@ -347,6 +347,8 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                 item.last_error = str(exc)[:1000]
                 item.locked_at = None
                 item.locked_by = None
+                await session.flush()
+                await _sync_lineage_replay_status(session=session, event_id=item.event_id)
         await session.commit()
 
     return {

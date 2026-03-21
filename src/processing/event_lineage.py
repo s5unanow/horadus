@@ -441,6 +441,8 @@ async def _repair_affected_events(
     for event_id in replay_targets:
         if await _enqueue_event_replay(session=session, event_id=event_id, reason=reason):
             enqueued_ids.append(event_id)
+    if len(enqueued_ids) != len(replay_targets):
+        raise RuntimeError("event lineage repair requires replay queue items for all targets")
     return (tuple(invalidated_evidence_ids), tuple(enqueued_ids))
 
 

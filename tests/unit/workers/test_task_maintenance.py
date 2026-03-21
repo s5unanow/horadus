@@ -6,7 +6,9 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import select
 
+from src.storage.models import LLMReplayQueueItem, Trend
 from src.workers import _task_maintenance
 
 pytestmark = pytest.mark.unit
@@ -146,6 +148,73 @@ async def test_sync_lineage_replay_status_skips_lineages_without_replay_ids(
     await _task_maintenance._sync_lineage_replay_status(session=session, event_id=event_id)
 
     assert lineage.details["status"] == "replay_pending"
+
+
+@pytest.mark.asyncio
+async def test_replay_degraded_events_async_marks_lineage_error_on_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        event_id=uuid4(),
+        status="pending",
+        locked_at=None,
+        locked_by=None,
+        attempt_count=0,
+        last_attempt_at=None,
+        details={},
+        last_error=None,
+        processed_at=None,
+        priority=1,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
+        SimpleNamespace(all=list),
+    ]
+
+    class _SessionContext:
+        async def __aenter__(self) -> AsyncMock:
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    sync_status = AsyncMock()
+    monkeypatch.setattr(
+        _task_maintenance,
+        "_replay_one_degraded_item",
+        AsyncMock(side_effect=RuntimeError("boom")),
+    )
+    monkeypatch.setattr(_task_maintenance, "_sync_lineage_replay_status", sync_status)
+
+    class _Tier2Classifier:
+        def __init__(self, *, session, model, secondary_model) -> None:
+            pass
+
+    class _Pipeline:
+        def __init__(self, *, session, tier2_classifier, degraded_llm_tracker) -> None:
+            pass
+
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(LLM_DEGRADED_MODE_ENABLED=False, LLM_TIER2_MODEL="tier2-model"),
+        async_session_maker=lambda: _SessionContext(),
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        Trend=Trend,
+        Tier2Classifier=_Tier2Classifier,
+        ProcessingPipeline=_Pipeline,
+        asyncio=SimpleNamespace(to_thread=AsyncMock()),
+    )
+
+    result = await _task_maintenance.replay_degraded_events_async(deps=deps, limit=1)
+
+    assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 1}
+    assert item.status == "error"
+    assert item.last_error == "boom"
+    session.flush.assert_awaited()
+    sync_status.assert_awaited_once_with(session=session, event_id=item.event_id)
+    session.commit.assert_awaited_once()
 
 
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:

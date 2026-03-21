@@ -124,6 +124,21 @@ def test_apply_repaired_cluster_health_ignores_invalid_embedding_pairs() -> None
     assert split_risk_score(event) == pytest.approx(0.0)
 
 
+def test_apply_repaired_cluster_health_clamps_pairwise_scores() -> None:
+    event = SimpleNamespace(provenance_summary={"method": "provenance_aware"})
+
+    apply_repaired_cluster_health(
+        event,
+        item_embeddings=[
+            [1.0, 0.0],
+            [-1.0, 0.0],
+        ],
+    )
+
+    assert cluster_cohesion_score(event) == pytest.approx(0.0)
+    assert split_risk_score(event) == pytest.approx(1.0)
+
+
 @pytest.mark.asyncio
 async def test_ensure_cluster_health_backfills_missing_scores_from_item_embeddings() -> None:
     event = SimpleNamespace(id=uuid4(), provenance_summary={"method": "provenance_aware"})
@@ -159,6 +174,21 @@ async def test_resolve_cluster_health_computes_without_mutating_event() -> None:
     event = SimpleNamespace(id=uuid4(), provenance_summary={"method": "provenance_aware"})
     session = AsyncMock()
     session.scalars.return_value = SimpleNamespace(all=lambda: [[1.0, 0.0], [0.0, 1.0]])
+
+    payload = await resolve_cluster_health(session=session, event=event)
+
+    assert payload == {
+        "cluster_cohesion_score": pytest.approx(0.0),
+        "split_risk_score": pytest.approx(1.0),
+    }
+    assert "cluster_health" not in event.provenance_summary
+
+
+@pytest.mark.asyncio
+async def test_resolve_cluster_health_clamps_legacy_scores_without_mutating_event() -> None:
+    event = SimpleNamespace(id=uuid4(), provenance_summary={"method": "provenance_aware"})
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [[1.0, 0.0], [-1.0, 0.0]])
 
     payload = await resolve_cluster_health(session=session, event=event)
 

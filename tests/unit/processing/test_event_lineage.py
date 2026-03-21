@@ -1041,6 +1041,21 @@ def test_replay_helper_utilities_clear_stale_fields_and_preserve_original_proven
     )
 
 
+def test_replay_source_provenance_unwraps_nested_pending_wrappers() -> None:
+    event = Event(
+        canonical_summary="event",
+        extraction_provenance={
+            "status": "replay_pending",
+            "original_extraction_provenance": {
+                "status": "replay_pending",
+                "original_extraction_provenance": {"status": "done", "model": "tier2"},
+            },
+        },
+    )
+
+    assert replay_source_provenance(event) == {"status": "done", "model": "tier2"}
+
+
 @pytest.mark.asyncio
 async def test_pick_primary_item_and_basic_helpers(mock_db_session) -> None:
     item = _build_item(title="Primary item")

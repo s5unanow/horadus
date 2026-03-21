@@ -201,9 +201,17 @@ def _cluster_health_from_item_embeddings(
             "cluster_cohesion_score": DEFAULT_CLUSTER_COHESION_SCORE,
             "split_risk_score": DEFAULT_SPLIT_RISK_SCORE,
         }
+    cluster_cohesion = sum(similarities) / len(similarities)
+    split_risk = max(1.0 - similarity for similarity in similarities)
     return {
-        "cluster_cohesion_score": sum(similarities) / len(similarities),
-        "split_risk_score": max(1.0 - similarity for similarity in similarities),
+        "cluster_cohesion_score": _bounded_float(
+            cluster_cohesion,
+            default=DEFAULT_CLUSTER_COHESION_SCORE,
+        ),
+        "split_risk_score": _bounded_float(
+            split_risk,
+            default=DEFAULT_SPLIT_RISK_SCORE,
+        ),
     }
 
 

@@ -169,10 +169,11 @@ def clear_stale_event_extractions(event: Event) -> None:
 
 def replay_source_provenance(event: Event) -> dict[str, Any]:
     provenance = dict(event.extraction_provenance or {})
-    original = provenance.get("original_extraction_provenance")
-    if isinstance(original, dict):
-        return dict(original)
-    return provenance
+    while True:
+        original = provenance.get("original_extraction_provenance")
+        if not isinstance(original, dict):
+            return provenance
+        provenance = dict(original)
 
 
 def _extract_replay_request_ids(queue_item_details: Sequence[Any]) -> tuple[UUID, ...]:

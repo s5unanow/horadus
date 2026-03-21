@@ -5,7 +5,11 @@ from __future__ import annotations
 from itertools import combinations
 from typing import Any
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from src.processing.vector_similarity import cosine_similarity
+from src.storage.models import EventItem, RawItem
 
 CLUSTER_HEALTH_KEY = "cluster_health"
 DEFAULT_CLUSTER_COHESION_SCORE = 1.0
@@ -107,6 +111,35 @@ def split_risk_score(event: Any) -> float:
     return cluster_health_payload(event)["split_risk_score"]
 
 
+async def ensure_cluster_health(
+    *,
+    session: AsyncSession,
+    event: Any,
+) -> dict[str, float]:
+    """Hydrate missing cluster-health metadata from the event's current items."""
+
+    if _has_stored_cluster_health(event):
+        return cluster_health_payload(event)
+
+    event_id = getattr(event, "id", None)
+    if event_id is None:
+        apply_default_cluster_health(event)
+        return cluster_health_payload(event)
+
+    item_embeddings = list(
+        (
+            await session.scalars(
+                select(RawItem.embedding)
+                .join(EventItem, EventItem.item_id == RawItem.id)
+                .where(EventItem.event_id == event_id)
+                .order_by(EventItem.added_at.asc(), RawItem.fetched_at.asc().nullslast())
+            )
+        ).all()
+    )
+    apply_repaired_cluster_health(event, item_embeddings=item_embeddings)
+    return cluster_health_payload(event)
+
+
 def _store_cluster_health(
     *,
     event: Any,
@@ -131,3 +164,11 @@ def _bounded_float(value: Any, *, default: float) -> float:
     except (TypeError, ValueError):
         return default
     return max(0.0, min(1.0, parsed))
+
+
+def _has_stored_cluster_health(event: Any) -> bool:
+    provenance_summary = getattr(event, "provenance_summary", None)
+    return isinstance(provenance_summary, dict) and isinstance(
+        provenance_summary.get(CLUSTER_HEALTH_KEY),
+        dict,
+    )

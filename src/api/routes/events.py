@@ -16,7 +16,11 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
-from src.processing.event_cluster_health import cluster_cohesion_score, split_risk_score
+from src.processing.event_cluster_health import (
+    cluster_cohesion_score,
+    ensure_cluster_health,
+    split_risk_score,
+)
 from src.processing.event_lineage import (
     EventRepairResult,
     load_event_lineage,
@@ -344,6 +348,8 @@ async def list_events(
         )
 
     events = list((await session.scalars(query)).all())
+    for event in events:
+        await ensure_cluster_health(session=session, event=event)
     return [_to_event_response(event) for event in events]
 
 
@@ -363,6 +369,7 @@ async def get_event(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Event '{event_id}' not found",
         )
+    await ensure_cluster_health(session=session, event=event)
     sources, claims, trend_impacts = await _load_event_detail_payloads(
         session=session,
         event_id=event_id,

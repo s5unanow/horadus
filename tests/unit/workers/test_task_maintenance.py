@@ -133,6 +133,25 @@ async def test_sync_lineage_replay_status_marks_error_when_any_replay_errors() -
 
 
 @pytest.mark.asyncio
+async def test_sync_lineage_replay_status_marks_superseded_when_queue_row_was_deleted() -> None:
+    event_id = uuid4()
+    other_event_id = uuid4()
+    lineage = SimpleNamespace(
+        details={
+            "replay_enqueued_event_ids": [str(event_id), str(other_event_id)],
+            "status": "replay_pending",
+        }
+    )
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [lineage])
+    session.execute.return_value = SimpleNamespace(all=lambda: [(event_id, "done")])
+
+    await _task_maintenance._sync_lineage_replay_status(session=session, event_id=event_id)
+
+    assert lineage.details["status"] == "replay_superseded"
+
+
+@pytest.mark.asyncio
 async def test_sync_lineage_replay_status_skips_lineages_without_replay_ids(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

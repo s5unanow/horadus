@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
+from uuid import uuid4
 
 import pytest
 
@@ -10,6 +12,7 @@ from src.processing.event_cluster_health import (
     apply_repaired_cluster_health,
     cluster_cohesion_score,
     cluster_health_payload,
+    ensure_cluster_health,
     split_risk_score,
 )
 
@@ -18,6 +21,10 @@ pytestmark = pytest.mark.unit
 
 def test_cluster_health_payload_defaults_when_provenance_missing_or_invalid() -> None:
     assert cluster_health_payload(SimpleNamespace(provenance_summary=None)) == {
+        "cluster_cohesion_score": 1.0,
+        "split_risk_score": 0.0,
+    }
+    assert cluster_health_payload(SimpleNamespace(provenance_summary={"method": "fallback"})) == {
         "cluster_cohesion_score": 1.0,
         "split_risk_score": 0.0,
     }
@@ -114,3 +121,33 @@ def test_apply_repaired_cluster_health_ignores_invalid_embedding_pairs() -> None
 
     assert cluster_cohesion_score(event) == pytest.approx(1.0)
     assert split_risk_score(event) == pytest.approx(0.0)
+
+
+@pytest.mark.asyncio
+async def test_ensure_cluster_health_backfills_missing_scores_from_item_embeddings() -> None:
+    event = SimpleNamespace(id=uuid4(), provenance_summary={"method": "provenance_aware"})
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=lambda: [[1.0, 0.0], [0.0, 1.0]])
+
+    payload = await ensure_cluster_health(session=session, event=event)
+
+    assert payload["cluster_cohesion_score"] == pytest.approx(0.0)
+    assert payload["split_risk_score"] == pytest.approx(1.0)
+    assert event.provenance_summary["cluster_health"] == {
+        "cluster_cohesion_score": pytest.approx(0.0),
+        "split_risk_score": pytest.approx(1.0),
+    }
+
+
+@pytest.mark.asyncio
+async def test_ensure_cluster_health_defaults_when_event_has_no_id() -> None:
+    event = SimpleNamespace(id=None, provenance_summary={"method": "provenance_aware"})
+    session = AsyncMock()
+
+    payload = await ensure_cluster_health(session=session, event=event)
+
+    assert payload == {
+        "cluster_cohesion_score": 1.0,
+        "split_risk_score": 0.0,
+    }
+    session.scalars.assert_not_called()

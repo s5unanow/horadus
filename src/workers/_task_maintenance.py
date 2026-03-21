@@ -100,6 +100,9 @@ async def _sync_lineage_replay_status(*, session: Any, event_id: Any) -> None:
         if "error" in replay_statuses:
             details["status"] = "replay_error"
             lineage.details = details
+        elif None in replay_statuses:
+            details["status"] = "replay_superseded"
+            lineage.details = details
         elif all(status_by_event_id.get(replay_id) == "done" for replay_id in replay_ids):
             details["status"] = "replay_complete"
             lineage.details = details

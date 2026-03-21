@@ -40,7 +40,14 @@ def _build_event(
         independent_evidence_count=2,
         corroboration_score=1.35,
         corroboration_mode="provenance_aware",
-        provenance_summary={"method": "provenance_aware", "independent_evidence_count": 2},
+        provenance_summary={
+            "method": "provenance_aware",
+            "independent_evidence_count": 2,
+            "cluster_health": {
+                "cluster_cohesion_score": 1.0,
+                "split_risk_score": 0.0,
+            },
+        },
         lifecycle_status=lifecycle_status,
         has_contradictions=has_contradictions,
         contradiction_notes=contradiction_notes,
@@ -250,6 +257,31 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
 
     _assert_event_detail_summary(result, event=event)
     _assert_event_detail_relations(result, mock_db_session=mock_db_session)
+
+
+@pytest.mark.asyncio
+async def test_get_event_backfills_missing_cluster_health_for_response(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = _build_event()
+    event.provenance_summary = {"method": "provenance_aware"}
+    mock_db_session.get.return_value = event
+    responses = iter([[], [], []])
+
+    async def _execute(_query):
+        return SimpleNamespace(all=lambda: next(responses))
+
+    mock_db_session.execute.side_effect = _execute
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [[1.0, 0.0], [0.0, 1.0]]),
+    ]
+    monkeypatch.setattr(events_module, "load_event_lineage", AsyncMock(return_value=[]))
+
+    result = await get_event(event_id=event.id, session=mock_db_session)
+
+    assert result.cluster_cohesion_score == pytest.approx(0.0)
+    assert result.split_risk_score == pytest.approx(1.0)
 
 
 @pytest.mark.asyncio

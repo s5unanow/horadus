@@ -39,7 +39,6 @@ from src.storage.models import (
     Event,
     EventClaim,
     EventItem,
-    LLMReplayQueueItem,
     RawItem,
     Trend,
     TrendEvidence,
@@ -652,19 +651,16 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
         yield
 
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
-    existing = LLMReplayQueueItem(
-        stage="tier2",
-        event_id=event.id,
-        status="done",
-        priority=50,
-        locked_by="worker-1",
-        last_error="boom",
-        details={"stale": True},
-    )
     mock_db_session.get = AsyncMock(side_effect=[None, event, event])
     mock_db_session.begin_nested = _begin_nested
-    mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z"), None])
-    mock_db_session.scalar = AsyncMock(side_effect=[None, None, existing])
+    mock_db_session.flush = AsyncMock(side_effect=[None, IntegrityError("x", "y", "z")])
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            SimpleNamespace(rowcount=0),
+            SimpleNamespace(rowcount=0),
+            SimpleNamespace(rowcount=1),
+        ]
+    )
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=uuid4(), reason="split")
@@ -678,12 +674,19 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="split")
         is True
     )
-    assert existing.priority == 500
-    assert existing.status == "pending"
-    assert existing.locked_by is None
-    assert existing.last_error is None
-    assert existing.details["repair_kind"] == "split"
-    assert existing.details["original_extraction_provenance"] == {"old": True}
+    assert mock_db_session.execute.await_count == 3
+    reset_statement = mock_db_session.execute.await_args_list[-1].args[0]
+    compiled = reset_statement.compile()
+    assert "update llm_replay_queue" in str(reset_statement).lower()
+    assert compiled.params["event_id_1"] == event.id
+    assert compiled.params["status_1"] == "processing"
+    assert compiled.params["status"] == "pending"
+    assert compiled.params["priority"] == 500
+    assert compiled.params["details"] == {
+        "reason": "event_lineage_repair",
+        "repair_kind": "split",
+        "original_extraction_provenance": {"old": True},
+    }
 
 
 @pytest.mark.asyncio
@@ -696,58 +699,53 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
             "original_extraction_provenance": {"stage": "tier2"},
         },
     )
-    existing = LLMReplayQueueItem(
-        stage="tier2",
-        event_id=event.id,
-        status="error",
-        priority=25,
-        locked_by="worker-2",
-        last_error="retry me",
-        details={"stale": True},
-    )
     mock_db_session.get = AsyncMock(return_value=event)
-    mock_db_session.scalar = AsyncMock(return_value=existing)
-    mock_db_session.flush = AsyncMock()
+    mock_db_session.execute = AsyncMock(return_value=SimpleNamespace(rowcount=1))
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
         is True
     )
-    assert existing.priority == 500
-    assert existing.status == "pending"
-    assert existing.locked_by is None
-    assert existing.last_error is None
-    assert existing.details["repair_kind"] == "merge"
-    assert existing.details["original_extraction_provenance"] == {"stage": "tier2"}
+    statement = mock_db_session.execute.await_args.args[0]
+    compiled = statement.compile()
+    assert "update llm_replay_queue" in str(statement).lower()
+    assert compiled.params["event_id_1"] == event.id
+    assert compiled.params["status_1"] == "processing"
+    assert compiled.params["status"] == "pending"
+    assert compiled.params["details"] == {
+        "reason": "event_lineage_repair",
+        "repair_kind": "merge",
+        "original_extraction_provenance": {"stage": "tier2"},
+    }
 
 
 @pytest.mark.asyncio
 async def test_enqueue_event_replay_does_not_reset_processing_row(mock_db_session) -> None:
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
-    existing = LLMReplayQueueItem(
-        stage="tier2",
-        event_id=event.id,
-        status="processing",
-        priority=25,
-        locked_by="worker-2",
-        locked_at=datetime.now(tz=UTC),
-        details={"stale": True},
-    )
+
+    @asynccontextmanager
+    async def _begin_nested():
+        yield
+
     mock_db_session.get = AsyncMock(return_value=event)
-    mock_db_session.scalar = AsyncMock(return_value=existing)
-    mock_db_session.flush = AsyncMock()
+    mock_db_session.begin_nested = _begin_nested
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            SimpleNamespace(rowcount=0),
+            SimpleNamespace(rowcount=0),
+        ]
+    )
+    mock_db_session.flush = AsyncMock(side_effect=[IntegrityError("x", "y", "z")])
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
         is False
     )
-    assert existing.status == "processing"
-    assert existing.locked_by == "worker-2"
-    mock_db_session.flush.assert_not_awaited()
+    assert mock_db_session.execute.await_count == 2
 
 
 @pytest.mark.asyncio
-async def test_enqueue_event_replay_returns_false_when_conflict_cannot_resolve(
+async def test_enqueue_event_replay_conflict_recovery_uses_processing_guard(
     mock_db_session,
 ) -> None:
     @asynccontextmanager
@@ -757,43 +755,22 @@ async def test_enqueue_event_replay_returns_false_when_conflict_cannot_resolve(
     event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
     mock_db_session.get = AsyncMock(return_value=event)
     mock_db_session.begin_nested = _begin_nested
-    mock_db_session.scalar = AsyncMock(side_effect=[None, None])
+    mock_db_session.execute = AsyncMock(
+        side_effect=[
+            SimpleNamespace(rowcount=0),
+            SimpleNamespace(rowcount=0),
+        ]
+    )
     mock_db_session.flush = AsyncMock(side_effect=[IntegrityError("x", "y", "z")])
 
     assert (
         await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
         is False
     )
-
-
-@pytest.mark.asyncio
-async def test_enqueue_event_replay_returns_false_for_conflicted_processing_row(
-    mock_db_session,
-) -> None:
-    @asynccontextmanager
-    async def _begin_nested():
-        yield
-
-    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
-    existing = LLMReplayQueueItem(
-        stage="tier2",
-        event_id=event.id,
-        status="processing",
-        priority=25,
-        locked_by="worker-2",
-        locked_at=datetime.now(tz=UTC),
-        details={"stale": True},
-    )
-    mock_db_session.get = AsyncMock(return_value=event)
-    mock_db_session.begin_nested = _begin_nested
-    mock_db_session.scalar = AsyncMock(side_effect=[None, existing])
-    mock_db_session.flush = AsyncMock(side_effect=[IntegrityError("x", "y", "z")])
-
-    assert (
-        await _enqueue_event_replay(session=mock_db_session, event_id=event.id, reason="merge")
-        is False
-    )
-    assert existing.status == "processing"
+    statement = mock_db_session.execute.await_args_list[0].args[0]
+    compiled = statement.compile()
+    assert compiled.params["event_id_1"] == event.id
+    assert compiled.params["status_1"] == "processing"
 
 
 @pytest.mark.asyncio

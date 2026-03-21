@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -527,17 +528,11 @@ async def _enqueue_event_replay(
         "repair_kind": reason,
         "original_extraction_provenance": _replay_source_provenance(event),
     }
-    existing = await session.scalar(
-        select(LLMReplayQueueItem)
-        .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
-        .where(LLMReplayQueueItem.event_id == event_id)
-        .limit(1)
-    )
-    if existing is not None:
-        if existing.status == "processing":
-            return False
-        _reset_replay_queue_item(existing=existing, details=details)
-        await session.flush()
+    if await _reset_replay_queue_item_if_idle(
+        session=session,
+        event_id=event_id,
+        details=details,
+    ):
         return True
     try:
         async with session.begin_nested():
@@ -552,17 +547,11 @@ async def _enqueue_event_replay(
             await session.flush()
         return True
     except IntegrityError:
-        existing = await session.scalar(
-            select(LLMReplayQueueItem)
-            .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
-            .where(LLMReplayQueueItem.event_id == event_id)
-            .limit(1)
+        return await _reset_replay_queue_item_if_idle(
+            session=session,
+            event_id=event_id,
+            details=details,
         )
-        if existing is None or existing.status == "processing":
-            return False
-        _reset_replay_queue_item(existing=existing, details=details)
-        await session.flush()
-        return True
 
 
 async def _pick_primary_item(*, session: AsyncSession, item_ids: tuple[UUID, ...]) -> RawItem:
@@ -612,14 +601,32 @@ def _require_event_id(event: Event) -> UUID:
     return event.id
 
 
-def _reset_replay_queue_item(*, existing: LLMReplayQueueItem, details: dict[str, Any]) -> None:
-    existing.priority = 500
-    existing.status = "pending"
-    existing.locked_at = None
-    existing.locked_by = None
-    existing.processed_at = None
-    existing.last_error = None
-    existing.details = details
+async def _reset_replay_queue_item_if_idle(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+    details: dict[str, Any],
+) -> bool:
+    result = cast(
+        "CursorResult[Any]",
+        await session.execute(
+            update(LLMReplayQueueItem)
+            .where(LLMReplayQueueItem.stage == _REPLAY_STAGE)
+            .where(LLMReplayQueueItem.event_id == event_id)
+            .where(LLMReplayQueueItem.status != "processing")
+            .values(
+                priority=500,
+                status="pending",
+                locked_at=None,
+                locked_by=None,
+                processed_at=None,
+                last_error=None,
+                details=details,
+            )
+            .execution_options(synchronize_session="fetch")
+        ),
+    )
+    return bool(result.rowcount)
 
 
 async def _delete_event_replay_queue_items(*, session: AsyncSession, event_id: UUID) -> None:

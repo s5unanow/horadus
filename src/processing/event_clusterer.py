@@ -105,6 +105,7 @@ class EventClusterer:
                 merged=False,
                 similarity=similarity,
             )
+        await ensure_cluster_health(session=self.session, event=event)
         link_added = await self._add_event_link(event.id, item_id)
         if not link_added:
             resolved_event_id = await self._find_existing_event_id_for_item(item_id)
@@ -187,7 +188,6 @@ class EventClusterer:
         return event
 
     async def _merge_into_event(self, event: Event, item: RawItem, *, similarity: float) -> None:
-        await ensure_cluster_health(session=self.session, event=event)
         event.source_count += 1
         mention_time = self._item_timestamp(item)
         event.last_mention_at = mention_time

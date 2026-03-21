@@ -112,11 +112,10 @@ async def split_event(
     )
     session.add(lineage)
     await session.flush()
-    lineage_id = lineage.id
-    assert lineage_id is not None
+    assert lineage.id is not None
     return EventRepairResult(
         action="split",
-        lineage_id=lineage_id,
+        lineage_id=lineage.id,
         source_event_id=source_event_id,
         target_event_id=_require_event_id(new_event),
         created_event_id=_require_event_id(new_event),
@@ -140,6 +139,11 @@ async def merge_events(
     target_event_id = _require_event_id(target_event)
     if source_event_id == target_event_id:
         raise ValueError("merge source and target events must differ")
+    if (
+        target_event.source_count == 0
+        and target_event.activity_state == EventActivityState.CLOSED.value
+    ):
+        raise ValueError("merge target event cannot be an empty closed stub")
 
     source_rows = await _load_event_item_rows(session=session, event_id=source_event_id)
     if not source_rows:
@@ -177,11 +181,10 @@ async def merge_events(
     )
     session.add(lineage)
     await session.flush()
-    lineage_id = lineage.id
-    assert lineage_id is not None
+    assert lineage.id is not None
     return EventRepairResult(
         action="merge",
-        lineage_id=lineage_id,
+        lineage_id=lineage.id,
         source_event_id=source_event_id,
         target_event_id=target_event_id,
         created_event_id=None,

@@ -105,7 +105,7 @@ async def test_cluster_item_handles_launch_languages(
 
 
 @pytest.mark.asyncio
-async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
+async def test_cluster_item_merges_into_existing_event(mock_db_session, monkeypatch) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=[0.1, 0.2, 0.3], title="Updated summary")
     item.embedding_model = "text-embedding-3-small"
@@ -134,6 +134,7 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
     clusterer._add_event_link = add_link
     clusterer._update_primary_item = update_primary
     clusterer._count_unique_sources = count_unique
+    monkeypatch.setattr(event_clusterer_module, "ensure_cluster_health", AsyncMock())
 
     async def refresh_provenance(target_event: Event) -> None:
         target_event.independent_evidence_count = target_event.unique_source_count
@@ -164,11 +165,14 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cluster_item_links_before_unique_source_recount(mock_db_session) -> None:
+async def test_cluster_item_backfills_cluster_health_before_adding_link(
+    mock_db_session,
+    monkeypatch,
+) -> None:
     clusterer = EventClusterer(session=mock_db_session)
     item = _build_item(embedding=[0.1, 0.2, 0.3], title="Threshold mention")
     item.embedding_model = "text-embedding-3-small"
-    event = Event(
+    cluster_event = Event(
         canonical_summary="Emerging event",
         source_count=2,
         unique_source_count=2,
@@ -181,11 +185,16 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
         return None
 
     async def match_event(_embedding, _embedding_model, _reference_time):
-        return (event, 0.9)
+        return (cluster_event, 0.9)
 
     async def add_link(_event_id, _item_id):
         link_state["added"] = True
         return True
+
+    async def ensure_cluster_health(*, session, event: Event):
+        assert session is mock_db_session
+        assert event is cluster_event
+        assert link_state["added"] is False
 
     async def count_unique(_event_id, _fallback_source_id):
         assert link_state["added"] is True
@@ -196,6 +205,7 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
     clusterer._add_event_link = add_link
     clusterer._count_unique_sources = count_unique
     clusterer._update_primary_item = AsyncMock(return_value=True)
+    monkeypatch.setattr(event_clusterer_module, "ensure_cluster_health", ensure_cluster_health)
 
     async def refresh_provenance(target_event: Event) -> None:
         target_event.independent_evidence_count = target_event.unique_source_count
@@ -205,9 +215,9 @@ async def test_cluster_item_links_before_unique_source_recount(mock_db_session) 
     result = await clusterer.cluster_item(item)
 
     assert result.merged is True
-    assert event.unique_source_count == 3
-    assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
-    assert event.confirmed_at is not None
+    assert cluster_event.unique_source_count == 3
+    assert cluster_event.lifecycle_status == EventLifecycle.CONFIRMED.value
+    assert cluster_event.confirmed_at is not None
 
 
 @pytest.mark.asyncio
@@ -623,7 +633,6 @@ async def test_merge_into_event_preserves_prior_cluster_health_after_provenance_
         rel=1e-5,
     )
     assert event.provenance_summary["cluster_health"]["split_risk_score"] == pytest.approx(0.4)
-    ensure_cluster_health.assert_awaited_once_with(session=mock_db_session, event=event)
 
 
 @pytest.mark.asyncio

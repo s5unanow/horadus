@@ -159,6 +159,12 @@ async def test_split_event_returns_repair_result(mock_db_session, monkeypatch) -
 async def test_merge_events_validates_and_returns_result(mock_db_session, monkeypatch) -> None:
     source_event = Event(id=uuid4(), canonical_summary="source")
     target_event = Event(id=uuid4(), canonical_summary="target")
+    merged_away_target = Event(
+        id=uuid4(),
+        canonical_summary="merged-away",
+        source_count=0,
+        activity_state="closed",
+    )
     row = _EventItemRow(
         link=EventItem(event_id=source_event.id, item_id=uuid4()),
         item=_build_item(),
@@ -198,6 +204,15 @@ async def test_merge_events_validates_and_returns_result(mock_db_session, monkey
             session=mock_db_session,
             source_event=source_event,
             target_event=source_event,
+            notes=None,
+            created_by=None,
+        )
+
+    with pytest.raises(ValueError, match="empty closed stub"):
+        await merge_events(
+            session=mock_db_session,
+            source_event=source_event,
+            target_event=merged_away_target,
             notes=None,
             created_by=None,
         )

@@ -167,6 +167,36 @@ def test_activity_state_for_last_mention_returns_dormant_for_stale_recent_event(
     )
 
 
+def test_effective_mention_time_clamps_future_incoming_to_now(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    current_last_mention = datetime.now(tz=UTC) - timedelta(hours=1)
+    future_incoming = datetime.now(tz=UTC) + timedelta(days=2)
+    started = datetime.now(tz=UTC)
+
+    effective = manager._effective_mention_time(
+        current_last_mention_at=current_last_mention,
+        incoming_mention_time=future_incoming,
+    )
+
+    finished = datetime.now(tz=UTC)
+    assert started <= effective <= finished
+
+
+def test_effective_mention_time_recovers_existing_future_timestamp(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    existing_future = datetime.now(tz=UTC) + timedelta(days=2)
+    incoming_real_time = datetime.now(tz=UTC) - timedelta(hours=1)
+    started = datetime.now(tz=UTC)
+
+    effective = manager._effective_mention_time(
+        current_last_mention_at=existing_future,
+        incoming_mention_time=incoming_real_time,
+    )
+
+    finished = datetime.now(tz=UTC)
+    assert started <= effective <= finished
+
+
 @pytest.mark.asyncio
 async def test_run_decay_check_returns_transition_counts(mock_db_session) -> None:
     manager = EventLifecycleManager(mock_db_session)

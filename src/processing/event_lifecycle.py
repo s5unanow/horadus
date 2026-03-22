@@ -86,9 +86,12 @@ class EventLifecycleManager:
         current_last_mention_at: datetime | None,
         incoming_mention_time: datetime,
     ) -> datetime:
+        now = datetime.now(tz=UTC)
+        clamped_incoming = min(incoming_mention_time, now)
         if current_last_mention_at is None:
-            return incoming_mention_time
-        return max(current_last_mention_at, incoming_mention_time)
+            return clamped_incoming
+        clamped_current = min(current_last_mention_at, now)
+        return max(clamped_current, clamped_incoming)
 
     @staticmethod
     def _activity_state_for_last_mention(last_mention_at: datetime | None) -> str:

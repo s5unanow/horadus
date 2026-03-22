@@ -21,6 +21,7 @@ def _run_doctor(*, timeout_seconds: float) -> int:
 def test_run_agent_smoke_passes_when_server_enforces_auth_and_no_key(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 401,
@@ -57,6 +58,7 @@ def test_run_agent_smoke_passes_when_server_enforces_auth_and_no_key(
 def test_run_agent_smoke_fails_when_api_key_is_rejected(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 403,
@@ -93,6 +95,7 @@ def test_run_agent_smoke_fails_when_api_key_is_rejected(
 def test_run_agent_smoke_passes_when_auth_is_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 200,
@@ -129,6 +132,7 @@ def test_run_agent_smoke_passes_when_auth_is_disabled(
 def test_run_agent_smoke_passes_when_openapi_is_disabled_by_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "staging")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 401,
@@ -165,6 +169,7 @@ def test_run_agent_smoke_passes_when_openapi_is_disabled_by_policy(
 def test_run_agent_smoke_fails_when_openapi_returns_auth_challenge(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "staging")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 401,
@@ -198,9 +203,48 @@ def test_run_agent_smoke_fails_when_openapi_returns_auth_challenge(
     assert result == 2
 
 
+def test_run_agent_smoke_fails_when_openapi_is_missing_in_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
+    statuses = {
+        "http://127.0.0.1:8000/health": 200,
+        "http://127.0.0.1:8000/api/v1/trends": 401,
+    }
+
+    def fake_http_get(url: str, *, timeout_seconds: float, headers=None) -> int:
+        _ = timeout_seconds
+        _ = headers
+        return statuses[url]
+
+    def fake_http_get_json(
+        url: str,
+        *,
+        timeout_seconds: float,
+        headers=None,
+    ) -> tuple[int, dict[str, object] | None]:
+        _ = timeout_seconds
+        _ = headers
+        assert url == "http://127.0.0.1:8000/openapi.json"
+        return (404, None)
+
+    monkeypatch.setattr(ops_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(ops_module, "_http_get_json", fake_http_get_json)
+
+    result = ops_module._run_agent_smoke(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=5.0,
+        api_key=None,
+    )
+
+    assert result == 2
+
+
 def test_run_agent_smoke_fails_when_server_is_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
+
     def fake_http_get(url: str, *, timeout_seconds: float, headers=None) -> int:
         _ = url
         _ = timeout_seconds

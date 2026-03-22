@@ -7,6 +7,7 @@ from typing import Any
 def agent_smoke_checks(
     *,
     base_url: str,
+    environment: str,
     timeout_seconds: float,
     api_key: str | None,
     http_get: Callable[..., int],
@@ -15,6 +16,7 @@ def agent_smoke_checks(
     validation_error_exit_code: int,
 ) -> tuple[int, list[str], dict[str, Any]]:
     normalized_base_url = base_url.rstrip("/")
+    docs_disabled_by_policy = environment.strip().lower() != "development"
     lines: list[str] = []
 
     health_status = http_get(f"{normalized_base_url}/health", timeout_seconds=timeout_seconds)
@@ -30,7 +32,7 @@ def agent_smoke_checks(
     )
     if 200 <= openapi_status < 300:
         lines.append(f"PASS /openapi.json {openapi_status}")
-    elif openapi_status == 404:
+    elif openapi_status == 404 and docs_disabled_by_policy:
         openapi_payload = None
         lines.append(f"PASS /openapi.json unavailable_by_policy {openapi_status}")
     else:
@@ -63,7 +65,7 @@ def agent_smoke_checks(
         auth_hint = "unknown"
         if openapi_payload is not None:
             auth_hint = "openapi_security_present"
-        elif openapi_status == 404:
+        elif openapi_status == 404 and docs_disabled_by_policy:
             auth_hint = "openapi_restricted_or_disabled"
         lines.append(f"PASS /api/v1/trends {trend_status} auth_enforced_without_key ({auth_hint})")
         return (

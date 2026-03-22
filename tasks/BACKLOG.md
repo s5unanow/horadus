@@ -278,32 +278,6 @@ history, and failure tracking.
 
 ---
 
-### TASK-208: Restrict API docs and schema exposure outside development
-**Priority**: P2 (Medium)
-**Estimate**: 1-2 hours
-
-`/docs`, `/redoc`, and `/openapi.json` are still exempt from auth even when API
-auth is enabled. That leaves the full route inventory and request schema visible
-to unauthenticated clients in non-development environments.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 3 finding 4
-
-**Dependency Note**:
-- Reuse the environment/authorization policy from `TASK-200` and `TASK-189`
-  rather than creating docs-only auth behavior that drifts from the rest of
-  the operational surface.
-
-**Files**: `src/api/middleware/auth.py`, `src/api/main.py`, `src/cli.py`, `docs/DEPLOYMENT.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Restrict or disable `/docs`, `/redoc`, and `/openapi.json` outside development by explicit environment policy
-- [ ] Preserve a documented development/test workflow for local schema/docs access
-- [ ] Update smoke/doctor tooling if they currently assume unauthenticated `/openapi.json`
-- [ ] Add tests covering docs/schema visibility across development vs non-development profiles
-
----
-
 ### TASK-209: Restore `canonical_summary` alignment with `primary_item_id` after Tier-2
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours

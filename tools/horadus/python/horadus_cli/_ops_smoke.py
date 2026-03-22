@@ -4,6 +4,24 @@ from collections.abc import Callable
 from typing import Any
 
 
+def _docs_disabled_by_policy(
+    *,
+    base_url: str,
+    health_status: int,
+    timeout_seconds: float,
+    http_get_json: Callable[..., tuple[int, dict[str, object] | None]],
+) -> bool:
+    health_json_status, health_payload = http_get_json(
+        f"{base_url}/health",
+        timeout_seconds=timeout_seconds,
+    )
+    return (
+        health_json_status == health_status
+        and health_payload is not None
+        and health_payload.get("docs_enabled") is False
+    )
+
+
 def agent_smoke_checks(
     *,
     base_url: str,
@@ -28,8 +46,17 @@ def agent_smoke_checks(
         f"{normalized_base_url}/openapi.json",
         timeout_seconds=timeout_seconds,
     )
+    docs_disabled_by_policy = openapi_status == 404 and _docs_disabled_by_policy(
+        base_url=normalized_base_url,
+        health_status=health_status,
+        timeout_seconds=timeout_seconds,
+        http_get_json=http_get_json,
+    )
     if 200 <= openapi_status < 300:
         lines.append(f"PASS /openapi.json {openapi_status}")
+    elif openapi_status == 404 and docs_disabled_by_policy:
+        openapi_payload = None
+        lines.append(f"PASS /openapi.json unavailable_by_policy {openapi_status}")
     else:
         lines.append(f"FAIL /openapi.json {openapi_status or 'connection_error'}")
         return (
@@ -37,7 +64,6 @@ def agent_smoke_checks(
             lines,
             {"health_status": health_status, "openapi_status": openapi_status},
         )
-
     trend_headers = {"X-API-Key": api_key} if api_key else None
     trend_status = http_get(
         f"{normalized_base_url}/api/v1/trends",
@@ -60,6 +86,8 @@ def agent_smoke_checks(
         auth_hint = "unknown"
         if openapi_payload is not None:
             auth_hint = "openapi_security_present"
+        elif openapi_status == 404 and docs_disabled_by_policy:
+            auth_hint = "openapi_restricted_or_disabled"
         lines.append(f"PASS /api/v1/trends {trend_status} auth_enforced_without_key ({auth_hint})")
         return (
             ok_exit_code,

@@ -10,6 +10,7 @@ import src.api.routes._trend_write_mutations as trend_write_mutations_module
 import src.api.routes.trends as trends_module
 from src.core.trend_engine import prob_to_logodds
 from src.storage.models import Trend, TrendDefinitionVersion
+from tests.unit.trend_forecast_contract_fixtures import sample_binary_forecast_contract
 
 pytestmark = pytest.mark.unit
 
@@ -157,7 +158,33 @@ async def test_update_trend_mutation_ignores_null_probability_fields(
 
 
 @pytest.mark.asyncio
-async def test_update_trend_mutation_rejects_noop_probability_field_on_replay_activation(
+async def test_update_trend_mutation_ignores_echoed_probability_field_on_replay_activation(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(trend_id=uuid4())
+    mock_db_session.scalar.return_value = None
+
+    result = await trend_write_mutations_module.update_trend_mutation(
+        session=mock_db_session,
+        trend_id=trend.id,
+        trend=trend,
+        payload=trends_module.TrendUpdate(
+            name="Updated Trend",
+            baseline_probability=0.25,
+            current_probability=0.2,
+            definition={},
+            forecast_contract=sample_binary_forecast_contract(),
+            activation_mode="replay",
+        ),
+    )
+
+    assert trend.name == "Updated Trend"
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.25), rel=0.001)
+    assert result.trend is trend
+
+
+@pytest.mark.asyncio
+async def test_update_trend_mutation_rejects_changed_probability_field_on_replay_activation(
     mock_db_session,
 ) -> None:
     trend = _build_trend(trend_id=uuid4())
@@ -169,7 +196,8 @@ async def test_update_trend_mutation_rejects_noop_probability_field_on_replay_ac
             trend=trend,
             payload=trends_module.TrendUpdate(
                 baseline_probability=0.25,
-                current_probability=0.2,
+                current_probability=0.35,
+                forecast_contract=sample_binary_forecast_contract(),
                 activation_mode="replay",
             ),
         )

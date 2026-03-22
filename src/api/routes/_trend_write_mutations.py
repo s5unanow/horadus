@@ -114,9 +114,17 @@ def _normalize_noop_current_probability(
     if requested_probability is None:
         updates.pop("current_probability", None)
         return
+    current_probability = logodds_to_prob(float(trend.current_log_odds))
+    if activation_mode in ("replay", "new_line") and math.isclose(
+        float(requested_probability),
+        current_probability,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        updates.pop("current_probability", None)
+        return
     if activation_mode not in (None, "rebase"):
         return
-    current_probability = logodds_to_prob(float(trend.current_log_odds))
     if math.isclose(
         float(requested_probability),
         current_probability,

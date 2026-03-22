@@ -759,6 +759,28 @@ def test_pre_push_review_guidance_treats_skill_docs_as_policy_surface() -> None:
     assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_releasing_doc_as_policy_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-983",
+        title="Release doc fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise authoritative release/workflow guidance."],
+        files=["`docs/RELEASING.md`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+
+
 def test_pre_push_review_guidance_treats_ingestion_as_runtime_surface() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-996",
@@ -811,6 +833,28 @@ def test_pre_push_review_guidance_treats_shared_workflow_config_as_high_risk() -
         estimate="1h",
         description=["Exercise shared workflow config guidance."],
         files=["`.github/workflows/ci.yml`", "`Makefile`", "`.pre-commit-config.yaml`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_code_shape_policy_as_shared_workflow_config() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-982",
+        title="Code shape policy fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise canonical code-shape workflow policy guidance."],
+        files=["`config/quality/code_shape.toml`"],
         acceptance_criteria=[],
         assessment_refs=[],
         raw_block="raw",

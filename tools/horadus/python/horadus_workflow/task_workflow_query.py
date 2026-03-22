@@ -51,6 +51,7 @@ _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (
     "scripts/prepush_",
 )
 _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = (
+    "config/quality/code_shape.toml",
     ".pre-commit-config.yaml",
     "Makefile",
     "scripts/agent_smoke_run.sh",
@@ -60,6 +61,7 @@ _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = (
 )
 _HIGH_RISK_POLICY_FILES = (
     *high_risk_pre_push_review_reference_paths(),
+    "docs/RELEASING.md",
     "tasks/specs/TEMPLATE.md",
 )
 _HIGH_RISK_SHARED_MATH_FILES = (

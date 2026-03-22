@@ -247,6 +247,10 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
 
     loaded = await _load_active_event_evidence(session=session, event_id=event_id)
     assert loaded == [evidence]
+    query_text = str(session.scalars.await_args.args[0])
+    assert "trend_evidence.state_version_id = trends.active_state_version_id" in query_text
+    assert "trend_evidence.state_version_id IS NULL" in query_text
+    assert "trends.active_state_version_id IS NULL" in query_text
 
     loaded_trend = await _trend_for_evidence(
         session=session,

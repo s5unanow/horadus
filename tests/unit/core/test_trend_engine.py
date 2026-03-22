@@ -726,6 +726,28 @@ class TestTrendEngine:
         assert new_lo == pytest.approx(1.2)
 
     @pytest.mark.asyncio
+    async def test_apply_log_odds_delta_updates_active_state_version(
+        self, mock_session, mock_trend
+    ):
+        engine = TrendEngine(mock_session)
+        execute_result = MagicMock()
+        execute_result.scalar_one_or_none.return_value = 1.2
+        mock_session.execute = AsyncMock(side_effect=[execute_result, MagicMock()])
+
+        previous_lo, new_lo = await engine.apply_log_odds_delta(
+            trend_id=mock_trend.id,
+            active_state_version_id=uuid4(),
+            delta=0.2,
+            reason="test",
+            fallback_current_log_odds=0.8,
+        )
+
+        assert previous_lo == pytest.approx(1.0)
+        assert new_lo == pytest.approx(1.2)
+        assert mock_session.execute.await_count == 2
+        assert "trend_state_versions" in str(mock_session.execute.await_args_list[1].args[0])
+
+    @pytest.mark.asyncio
     async def test_apply_decay_uses_locked_row_state_when_available(self, mock_session, mock_trend):
         engine = TrendEngine(mock_session)
         row = SimpleNamespace(
@@ -744,6 +766,29 @@ class TestTrendEngine:
 
         assert new_prob < 0.5
         assert mock_session.execute.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_apply_decay_updates_active_state_version_when_present(
+        self, mock_session, mock_trend
+    ):
+        engine = TrendEngine(mock_session)
+        mock_trend.active_state_version_id = uuid4()
+        row = SimpleNamespace(
+            _mapping={
+                "current_log_odds": 0.0,
+                "baseline_log_odds": prob_to_logodds(0.2),
+                "updated_at": datetime.now(UTC) - timedelta(days=30),
+                "decay_half_life_days": 30,
+            }
+        )
+        execute_result = MagicMock()
+        execute_result.one_or_none.return_value = row
+        mock_session.execute = AsyncMock(side_effect=[execute_result, MagicMock(), MagicMock()])
+
+        await engine.apply_decay(mock_trend)
+
+        assert mock_session.execute.await_count == 3
+        assert "trend_state_versions" in str(mock_session.execute.await_args_list[2].args[0])
 
     @pytest.mark.asyncio
     async def test_apply_decay_awaits_locked_row_and_returns_early_when_not_elapsed(

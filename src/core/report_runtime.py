@@ -8,7 +8,7 @@ from inspect import isawaitable
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.narrative_grounding import (
@@ -16,9 +16,8 @@ from src.core.narrative_grounding import (
     evaluate_narrative_grounding,
 )
 from src.core.runtime_provenance import build_prompt_provenance, current_trend_scoring_contract
-from src.core.trend_engine import TrendEngine
+from src.core.trend_state import resolve_active_definition_hash, resolve_active_scoring_contract
 from src.storage.models import TrendEvidence
-from src.storage.restatement_models import TrendRestatement
 
 
 @dataclass(slots=True)
@@ -93,10 +92,12 @@ async def build_report_generation_manifest(
     live_state_evidence_ids, live_state_event_ids = await _load_active_trend_input_ids(
         session=session,
         trend_id=getattr(trend, "id", None),
+        state_version_id=getattr(trend, "active_state_version_id", None),
     )
     scoring_contract = await _load_active_trend_scoring_contract(
         session=session,
         trend_id=getattr(trend, "id", None),
+        trend=trend,
     )
     return {
         "report_type": report_type,
@@ -107,7 +108,17 @@ async def build_report_generation_manifest(
         "trend": {
             "id": str(getattr(trend, "id", None)),
             "runtime_trend_id": getattr(trend, "runtime_trend_id", None),
-            "definition_hash": TrendEngine._definition_hash(getattr(trend, "definition", {})),
+            "definition_hash": resolve_active_definition_hash(trend),
+            "active_definition_version_id": (
+                str(getattr(trend, "active_definition_version_id", None))
+                if getattr(trend, "active_definition_version_id", None) is not None
+                else None
+            ),
+            "active_state_version_id": (
+                str(getattr(trend, "active_state_version_id", None))
+                if getattr(trend, "active_state_version_id", None) is not None
+                else None
+            ),
         },
         "inputs": {
             "evidence_ids": evidence_ids,
@@ -167,18 +178,20 @@ async def _load_active_trend_input_ids(
     *,
     session: AsyncSession,
     trend_id: UUID | None,
+    state_version_id: UUID | None = None,
 ) -> tuple[list[str], list[str]]:
     if trend_id is None:
         return ([], [])
 
-    rows = (
-        await session.execute(
-            select(TrendEvidence.id, TrendEvidence.event_id)
-            .where(TrendEvidence.trend_id == trend_id)
-            .where(TrendEvidence.is_invalidated.is_(False))
-            .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
-        )
-    ).all()
+    query = (
+        select(TrendEvidence.id, TrendEvidence.event_id)
+        .where(TrendEvidence.trend_id == trend_id)
+        .where(TrendEvidence.is_invalidated.is_(False))
+        .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
+    )
+    if state_version_id is not None:
+        query = query.where(TrendEvidence.state_version_id == state_version_id)
+    rows = (await session.execute(query)).all()
     if isawaitable(rows):
         rows = await rows
     evidence_ids = [str(evidence_id) for evidence_id, _ in rows if evidence_id is not None]
@@ -190,73 +203,61 @@ async def _load_active_trend_scoring_contract(
     *,
     session: AsyncSession,
     trend_id: UUID | None,
+    trend: Any | None = None,
 ) -> dict[str, Any]:
+    if trend is not None:
+        return resolve_active_scoring_contract(trend)
     if trend_id is None:
         return current_trend_scoring_contract()
+
+    from src.storage.restatement_models import TrendRestatement
 
     evidence_rows = (
         await session.execute(
             select(
                 TrendEvidence.scoring_math_version,
                 TrendEvidence.scoring_parameter_set,
-                func.count(TrendEvidence.id),
+                TrendEvidence.id,
             )
             .where(TrendEvidence.trend_id == trend_id)
             .where(TrendEvidence.is_invalidated.is_(False))
-            .group_by(
-                TrendEvidence.scoring_math_version,
-                TrendEvidence.scoring_parameter_set,
-            )
-            .order_by(
-                TrendEvidence.scoring_math_version.asc(),
-                TrendEvidence.scoring_parameter_set.asc(),
-            )
         )
     ).all()
     if isawaitable(evidence_rows):
         evidence_rows = await evidence_rows
-
     restatement_rows = (
         await session.execute(
             select(
                 TrendRestatement.scoring_math_version,
                 TrendRestatement.scoring_parameter_set,
-                func.count(TrendRestatement.id),
-            )
-            .where(TrendRestatement.trend_id == trend_id)
-            .group_by(
-                TrendRestatement.scoring_math_version,
-                TrendRestatement.scoring_parameter_set,
-            )
-            .order_by(
-                TrendRestatement.scoring_math_version.asc(),
-                TrendRestatement.scoring_parameter_set.asc(),
-            )
+                TrendRestatement.id,
+            ).where(TrendRestatement.trend_id == trend_id)
         )
     ).all()
     if isawaitable(restatement_rows):
         restatement_rows = await restatement_rows
 
+    aggregated: dict[tuple[str, str, str], int] = {}
+    for math_version, parameter_set, marker in evidence_rows:
+        if math_version is None or parameter_set is None:
+            continue
+        key = ("trend_evidence", str(math_version), str(parameter_set))
+        aggregated[key] = aggregated.get(key, 0) + (int(marker) if isinstance(marker, int) else 1)
+    for math_version, parameter_set, marker in restatement_rows:
+        if math_version is None or parameter_set is None:
+            continue
+        key = ("trend_restatements", str(math_version), str(parameter_set))
+        aggregated[key] = aggregated.get(key, 0) + (int(marker) if isinstance(marker, int) else 1)
+
     observed_rows = [
         {
-            "source": "trend_evidence",
-            "math_version": str(math_version),
-            "parameter_set": str(parameter_set),
-            "row_count": int(row_count or 0),
+            "source": source,
+            "math_version": math_version,
+            "parameter_set": parameter_set,
+            "row_count": row_count,
         }
-        for math_version, parameter_set, row_count in evidence_rows
-        if math_version is not None and parameter_set is not None
+        for (source, math_version, parameter_set), row_count in aggregated.items()
     ]
-    observed_rows.extend(
-        {
-            "source": "trend_restatements",
-            "math_version": str(math_version),
-            "parameter_set": str(parameter_set),
-            "row_count": int(row_count or 0),
-        }
-        for math_version, parameter_set, row_count in restatement_rows
-        if math_version is not None and parameter_set is not None
-    )
     return _summarize_scoring_contract_rows(observed_rows)
 
 

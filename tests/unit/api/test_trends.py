@@ -274,6 +274,7 @@ async def test_update_trend_updates_fields_and_probabilities(mock_db_session) ->
             is_active=False,
             definition={},
             forecast_contract=sample_binary_forecast_contract(),
+            activation_mode="rebase",
         ),
         session=mock_db_session,
     )
@@ -304,7 +305,7 @@ async def test_update_trend_syncs_definition_baseline_without_definition_payload
 
     await update_trend(
         trend_id=trend.id,
-        trend=TrendUpdate(baseline_probability=0.2),
+        trend=TrendUpdate(baseline_probability=0.2, activation_mode="rebase"),
         session=mock_db_session,
     )
 
@@ -351,6 +352,7 @@ async def test_update_trend_material_definition_change_creates_version_row(
                 "new_field": {"source": "api"},
             },
             forecast_contract=sample_binary_forecast_contract(),
+            activation_mode="rebase",
         ),
         session=mock_db_session,
     )
@@ -377,6 +379,7 @@ async def test_update_trend_returns_409_when_runtime_trend_id_exists(mock_db_ses
             trend=TrendUpdate(
                 definition={"id": "existing-runtime-id"},
                 forecast_contract=sample_binary_forecast_contract(),
+                activation_mode="rebase",
             ),
             session=mock_db_session,
         )
@@ -393,7 +396,10 @@ async def test_update_trend_validates_invalid_merged_payload(mock_db_session) ->
     with pytest.raises(HTTPException, match="less than or equal to 1") as exc_info:
         await update_trend(
             trend_id=trend.id,
-            trend=TrendUpdate(indicators={"signal": {"direction": "escalatory", "weight": 2.0}}),
+            trend=TrendUpdate(
+                indicators={"signal": {"direction": "escalatory", "weight": 2.0}},
+                activation_mode="rebase",
+            ),
             session=mock_db_session,
         )
 
@@ -413,6 +419,7 @@ async def test_update_trend_updates_indicators_and_decay_without_definition_vers
         trend=TrendUpdate(
             indicators={"signal": {"direction": "de_escalatory", "weight": 0.07}},
             decay_half_life_days=45,
+            activation_mode="rebase",
         ),
         session=mock_db_session,
     )
@@ -442,6 +449,7 @@ async def test_update_trend_returns_409_when_flush_hits_runtime_id_constraint(
             trend=TrendUpdate(
                 definition={"id": "conflict-on-flush"},
                 forecast_contract=sample_binary_forecast_contract(),
+                activation_mode="rebase",
             ),
             session=mock_db_session,
         )
@@ -466,6 +474,7 @@ async def test_update_trend_reraises_non_runtime_integrity_errors(mock_db_sessio
             trend=TrendUpdate(
                 definition={"id": "other-integrity-error"},
                 forecast_contract=sample_binary_forecast_contract(),
+                activation_mode="rebase",
             ),
             session=mock_db_session,
         )

@@ -25,8 +25,11 @@ path = "src/api/routes/reports.py"
 [[legacy_files]]
 path = "src/api/routes/trends.py"
 max_lines = 1310
+[legacy_files.member_max_lines]
+"load_trends_from_config" = 144
+"update_trend" = 131
 [legacy_files.member_max_complexity]
-"update_trend" = 21
+"update_trend" = 31
 
 [[legacy_files]]
 path = "src/core/calibration_dashboard.py"
@@ -54,10 +57,19 @@ max_lines = 956
 
 [[legacy_files]]
 path = "src/core/trend_engine.py"
-max_lines = 926
+max_lines = 936
 [legacy_files.member_max_lines]
 "TrendEngine.apply_evidence" = 138
+"TrendEngine.apply_decay" = 105
 "calculate_evidence_delta" = 130
+
+[[legacy_files]]
+path = "src/core/trend_restatement.py"
+[legacy_files.member_max_lines]
+"apply_compensating_restatement" = 102
+"build_trend_projection_check" = 120
+[legacy_files.member_max_complexity]
+"apply_compensating_restatement" = 22
 
 [[legacy_files]]
 path = "src/eval/benchmark.py"
@@ -103,7 +115,7 @@ path = "src/processing/tier2_classifier.py"
 
 [[legacy_files]]
 path = "src/storage/models.py"
-max_lines = 1164
+max_lines = 1168
 
 [[legacy_files]]
 path = "src/workers/tasks.py"

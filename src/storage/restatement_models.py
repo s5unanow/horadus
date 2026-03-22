@@ -81,6 +81,10 @@ class TrendRestatement(Base):
         PGUUID(as_uuid=True),
         ForeignKey("trend_evidence.id", ondelete="SET NULL"),
     )
+    state_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("trend_state_versions.id", ondelete="SET NULL"),
+    )
     feedback_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("human_feedback.id", ondelete="SET NULL"),
@@ -119,6 +123,7 @@ class TrendRestatement(Base):
             name="check_trend_restatements_source_allowed",
         ),
         Index("idx_trend_restatements_trend_recorded", "trend_id", "recorded_at"),
+        Index("idx_trend_restatements_state_recorded", "state_version_id", "recorded_at"),
         Index("idx_trend_restatements_evidence", "trend_evidence_id"),
         Index("idx_trend_restatements_feedback", "feedback_id"),
     )

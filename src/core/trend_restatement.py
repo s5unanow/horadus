@@ -14,8 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.runtime_provenance import current_trend_scoring_contract
 from src.core.trend_engine import DEFAULT_DECAY_HALF_LIFE_DAYS, TrendEngine
+from src.core.trend_state import resolve_active_scoring_contract
 from src.storage.models import Trend, TrendEvidence
 from src.storage.restatement_models import TrendRestatement
+from src.storage.trend_state_models import TrendStateVersion
 
 HISTORICAL_ARTIFACT_POLICY = "belief_at_time"
 PROJECTION_DRIFT_TOLERANCE = 1e-6
@@ -103,7 +105,23 @@ async def apply_compensating_restatement(
     session = getattr(trend_engine, "session", None)
     applied_at = _as_utc(recorded_at) if recorded_at is not None else datetime.now(tz=UTC)
     evidence_id = trend_evidence.id if trend_evidence is not None else None
-    scoring_contract = current_trend_scoring_contract()
+    state_version_id = (
+        getattr(trend_evidence, "state_version_id", None)
+        if trend_evidence is not None
+        else getattr(trend, "active_state_version_id", None)
+    )
+    scoring_contract = resolve_active_scoring_contract(trend)
+    if trend_evidence is not None and state_version_id != getattr(
+        trend, "active_state_version_id", None
+    ):
+        scoring_contract = {
+            "math_version": trend_evidence.scoring_math_version
+            or current_trend_scoring_contract()["math_version"],
+            "parameter_set": (
+                trend_evidence.scoring_parameter_set
+                or current_trend_scoring_contract()["parameter_set"]
+            ),
+        }
     restatement = TrendRestatement(
         trend_id=trend.id,
         event_id=event_id if event_id is not None else getattr(trend_evidence, "event_id", None),
@@ -113,6 +131,7 @@ async def apply_compensating_restatement(
             else getattr(trend_evidence, "event_claim_id", None)
         ),
         trend_evidence_id=evidence_id,
+        state_version_id=state_version_id,
         feedback_id=feedback_id,
         restatement_kind=restatement_kind,
         source=source,
@@ -128,7 +147,9 @@ async def apply_compensating_restatement(
         session.add(restatement)
         await session.flush()
 
-    if abs(compensation_delta_log_odds) > 0.0:
+    if abs(compensation_delta_log_odds) > 0.0 and state_version_id == getattr(
+        trend, "active_state_version_id", None
+    ):
         prior_log_odds = float(trend.current_log_odds)
         baseline_log_odds = getattr(trend, "baseline_log_odds", None)
         prior_updated_at = getattr(trend, "updated_at", None)
@@ -150,6 +171,7 @@ async def apply_compensating_restatement(
         total_delta = (decayed_log_odds - prior_log_odds) + compensation_delta_log_odds
         previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
             trend_id=trend.id,
+            active_state_version_id=state_version_id,
             trend_name=trend.name,
             delta=total_delta,
             reason=f"restatement:{restatement_kind}",
@@ -204,26 +226,33 @@ async def build_trend_projection_check(
         raise ValueError("Trend must have an id before projection verification")
 
     projected_at = _as_utc(as_of if as_of is not None else trend.updated_at)
-    evidence_rows = list(
-        (
-            await session.scalars(
-                select(TrendEvidence)
-                .where(TrendEvidence.trend_id == trend.id)
-                .where(TrendEvidence.created_at <= projected_at)
-                .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
-            )
-        ).all()
+    active_state = (
+        await session.get(TrendStateVersion, trend.active_state_version_id)
+        if trend.active_state_version_id is not None
+        else None
     )
-    restatement_rows = list(
-        (
-            await session.scalars(
-                select(TrendRestatement)
-                .where(TrendRestatement.trend_id == trend.id)
-                .where(TrendRestatement.recorded_at <= projected_at)
-                .order_by(TrendRestatement.recorded_at.asc(), TrendRestatement.id.asc())
-            )
-        ).all()
+    evidence_query = (
+        select(TrendEvidence)
+        .where(TrendEvidence.trend_id == trend.id)
+        .where(TrendEvidence.created_at <= projected_at)
+        .order_by(TrendEvidence.created_at.asc(), TrendEvidence.id.asc())
     )
+    if trend.active_state_version_id is not None:
+        evidence_query = evidence_query.where(
+            TrendEvidence.state_version_id == trend.active_state_version_id
+        )
+    evidence_rows = list((await session.scalars(evidence_query)).all())
+    restatement_query = (
+        select(TrendRestatement)
+        .where(TrendRestatement.trend_id == trend.id)
+        .where(TrendRestatement.recorded_at <= projected_at)
+        .order_by(TrendRestatement.recorded_at.asc(), TrendRestatement.id.asc())
+    )
+    if trend.active_state_version_id is not None:
+        restatement_query = restatement_query.where(
+            TrendRestatement.state_version_id == trend.active_state_version_id
+        )
+    restatement_rows = list((await session.scalars(restatement_query)).all())
 
     entries = [
         TrendProjectionEntry(
@@ -245,10 +274,23 @@ async def build_trend_projection_check(
     )
     entries.sort(key=lambda entry: (entry.recorded_at, entry.entry_type, str(entry.source_id)))
 
-    baseline_log_odds = float(trend.baseline_log_odds)
-    current_log_odds = baseline_log_odds
-    half_life_days = float(trend.decay_half_life_days or DEFAULT_DECAY_HALF_LIFE_DAYS)
-    last_at = _as_utc(trend.created_at)
+    baseline_log_odds = (
+        float(active_state.baseline_log_odds)
+        if active_state is not None
+        else float(trend.baseline_log_odds)
+    )
+    current_log_odds = (
+        float(active_state.starting_log_odds) if active_state is not None else baseline_log_odds
+    )
+    half_life_days = float(
+        (
+            active_state.decay_half_life_days
+            if active_state is not None
+            else trend.decay_half_life_days
+        )
+        or DEFAULT_DECAY_HALF_LIFE_DAYS
+    )
+    last_at = _as_utc(active_state.activated_at if active_state is not None else trend.created_at)
 
     for entry in entries:
         current_log_odds = _decay_log_odds(

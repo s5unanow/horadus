@@ -202,6 +202,75 @@ async def test_load_active_trend_scoring_contract_reads_stored_contract_rows() -
 
 
 @pytest.mark.asyncio
+async def test_load_active_trend_input_ids_filters_by_state_version_id(mock_db_session) -> None:
+    evidence_id = uuid4()
+    event_id = uuid4()
+    state_version_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(all=lambda: [(evidence_id, event_id)])
+
+    evidence_ids, event_ids = await report_runtime._load_active_trend_input_ids(
+        session=mock_db_session,
+        trend_id=uuid4(),
+        state_version_id=state_version_id,
+    )
+
+    assert evidence_ids == [str(evidence_id)]
+    assert event_ids == [str(event_id)]
+    assert "trend_evidence.state_version_id" in str(mock_db_session.execute.await_args.args[0])
+
+
+@pytest.mark.asyncio
+async def test_load_active_trend_scoring_contract_supports_async_rows_and_skips_null_contracts() -> (
+    None
+):
+    class _AsyncRows:
+        def __init__(self, rows: list[tuple[object, object, object]]) -> None:
+            self._rows = rows
+
+        async def all(self) -> list[tuple[object, object, object]]:
+            return self._rows
+
+    session = AsyncMock()
+    session.execute.side_effect = [
+        _AsyncRows(
+            [
+                (None, "ignored", 1),
+                ("trend-scoring-v1", None, 1),
+                ("trend-scoring-v1", "stable-default-v1", 2),
+            ]
+        ),
+        _AsyncRows(
+            [
+                ("legacy-unversioned", None, 1),
+                ("trend-scoring-v1", "stable-default-v1", 3),
+            ]
+        ),
+    ]
+
+    contract = await report_runtime._load_active_trend_scoring_contract(
+        session=session,
+        trend_id=uuid4(),
+    )
+
+    assert contract["math_version"] == "trend-scoring-v1"
+    assert contract["parameter_set"] == "stable-default-v1"
+    assert contract["observed_rows"] == [
+        {
+            "source": "trend_evidence",
+            "math_version": "trend-scoring-v1",
+            "parameter_set": "stable-default-v1",
+            "row_count": 2,
+        },
+        {
+            "source": "trend_restatements",
+            "math_version": "trend-scoring-v1",
+            "parameter_set": "stable-default-v1",
+            "row_count": 3,
+        },
+    ]
+
+
+@pytest.mark.asyncio
 async def test_build_report_generation_manifest_records_live_state_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

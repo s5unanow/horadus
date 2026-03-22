@@ -161,6 +161,20 @@ After completing work:
 - Local commits, local tests, and a clean working tree are checkpoints, not completion.
 - Do not stop at a local commit boundary unless the user explicitly asked for a checkpoint.
 - Resolve locally solvable environment blockers before reporting blocked.
+- For high-risk cross-surface tasks (for example migrations, shared workflow
+  tooling or config, shared math, or multi-surface mutation work), front-load
+  adversarial review before the first push instead of discovering the whole bug
+  set inside `horadus tasks finish`.
+- If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,
+  follow that guidance. The default/env provider chain already falls through
+  missing provider CLIs on PATH in repo order. If the first local-review run
+  hits a provider-specific timeout, auth/config failure, or unreadable output
+  and you still want local automation, rerun with `--allow-provider-fallback`;
+  if the local-review path still remains unusable, request manual review early
+  rather than waiting for the finish loop.
+- Batch related fixes with updated tests before re-requesting review on a
+  high-risk task; do not turn the same open bucket into a single-commit
+  re-review loop.
 - If any lifecycle step is blocked (permissions/CI/platform), stop at the furthest completed step and report the exact blocker and required manual action.
 - If unrelated work is discovered mid-task, create a new task immediately but do not switch branches by default; continue current task unless the new work is a blocker/urgent.
 - Never mix two tasks in one commit/PR; blockers must be handled via a separate task branch after a safe checkpoint.

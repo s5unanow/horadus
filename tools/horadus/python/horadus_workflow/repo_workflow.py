@@ -91,6 +91,13 @@ WORKFLOW_POLICY_GUARDRAIL_REFERENCE_PATHS: tuple[str, ...] = (
     "tasks/specs/TEMPLATE.md",
 )
 
+HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS: tuple[str, ...] = (
+    "AGENTS.md",
+    "docs/AGENT_RUNBOOK.md",
+    "ops/skills/horadus-cli/SKILL.md",
+    "ops/skills/horadus-cli/references/commands.md",
+)
+
 COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     (
         "Treat repo-facing work as incomplete until requested deliverables, "
@@ -188,6 +195,30 @@ FALLBACK_GUIDANCE_STATEMENTS: tuple[str, ...] = (
     ),
 )
 
+HIGH_RISK_PRE_PUSH_REVIEW_STATEMENTS: tuple[str, ...] = (
+    (
+        "For high-risk cross-surface tasks (for example migrations, shared "
+        "workflow tooling or config, shared math, or multi-surface mutation "
+        "work), front-load adversarial review before the first push instead "
+        "of discovering the whole bug set inside `horadus tasks finish`."
+    ),
+    (
+        "If `horadus tasks context-pack TASK-XXX` recommends pre-push local "
+        "review, follow that guidance. The default/env provider chain already "
+        "falls through missing provider CLIs on PATH in repo order. If the "
+        "first local-review run hits a provider-specific timeout, auth/config "
+        "failure, or unreadable output and you still want local automation, "
+        "rerun with `--allow-provider-fallback`; if the local-review path "
+        "still remains unusable, request manual review early rather than "
+        "waiting for the finish loop."
+    ),
+    (
+        "Batch related fixes with updated tests before re-requesting review "
+        "on a high-risk task; do not turn the same open bucket into a "
+        "single-commit re-review loop."
+    ),
+)
+
 WORKFLOW_POLICY_GUARDRAIL_STATEMENTS: tuple[str, ...] = (
     (
         "Apply these guardrails only when changing shared workflow helpers, "
@@ -230,6 +261,14 @@ def dependency_aware_guidance_statements() -> tuple[str, ...]:
 
 def fallback_guidance_statements() -> tuple[str, ...]:
     return FALLBACK_GUIDANCE_STATEMENTS
+
+
+def high_risk_pre_push_review_reference_paths() -> tuple[str, ...]:
+    return HIGH_RISK_PRE_PUSH_REVIEW_REFERENCE_PATHS
+
+
+def high_risk_pre_push_review_statements() -> tuple[str, ...]:
+    return HIGH_RISK_PRE_PUSH_REVIEW_STATEMENTS
 
 
 def workflow_policy_guardrail_statements() -> tuple[str, ...]:

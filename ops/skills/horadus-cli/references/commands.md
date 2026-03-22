@@ -27,6 +27,20 @@ Implementation note:
 - `uv run --no-sync horadus tasks local-review --format json`
   - Runs an opt-in advisory local review against the current branch diff
     without requiring PR state.
+  - For high-risk cross-surface tasks (for example migrations, shared workflow
+    tooling or config, shared math, or multi-surface mutation work), front-load
+    adversarial review before the first push instead of discovering the whole
+    bug set inside `horadus tasks finish`.
+  - If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,
+    follow that guidance. The default/env provider chain already falls through
+    missing provider CLIs on PATH in repo order. If the first local-review run
+    hits a provider-specific timeout, auth/config failure, or unreadable output
+    and you still want local automation, rerun with `--allow-provider-fallback`;
+    if the local-review path still remains unusable, request manual review early
+    rather than waiting for the finish loop.
+  - Batch related fixes with updated tests before re-requesting review on a
+    high-risk task; do not turn the same open bucket into a single-commit
+    re-review loop.
   - Provider precedence is: `--provider`, then
     `HORADUS_LOCAL_REVIEW_PROVIDER` from optional local-only `.env.harness`,
     then the repo default `claude`.
@@ -35,8 +49,8 @@ Implementation note:
   - Keeps telemetry under the gitignored
     `artifacts/agent/local-review/entries.jsonl` log, with optional raw output
     under `artifacts/agent/local-review/runs/`.
-  - Use this before push when you want a local branch-diff review; keep remote
-    PR review and `horadus tasks finish` as the merge gate.
+  - Use this before push when `context-pack` recommends it; keep remote PR
+    review and `horadus tasks finish` as the merge gate.
 - `uv run --no-sync horadus tasks local-gate --full`
   - Canonical CI-parity local validation gate before push/PR.
 - `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`

@@ -67,6 +67,13 @@ tasks:
 - spec-backed without exec plan
 - backlog-only / missing artifact
 Non-applicable tasks stay on the quiet path with no planning banner.
+For high-risk cross-surface tasks (for example migrations, shared workflow
+tooling or config, shared math, or multi-surface mutation work), front-load
+adversarial review before the first push instead of discovering the whole bug
+set inside `horadus tasks finish`.
+`context-pack` surfaces the pre-push review block only when the repo-owned
+heuristic sees the relevant workflow/policy/config, math, or multi-surface
+runtime signals, instead of on every ordinary task.
 If planning gates are required but the backlog entry is still the only artifact,
 create the missing spec or exec plan before implementation and use
 `tasks/specs/275-finish-review-gate-timeout.md` as the canonical example.
@@ -242,6 +249,16 @@ Artifacts and scope:
   result into the same local-review surface.
 - Use this command for advisory local branch-diff review before push; keep
   remote PR review and `horadus tasks finish` as the merge gate.
+- If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,
+  follow that guidance. The default/env provider chain already falls through
+  missing provider CLIs on PATH in repo order. If the first local-review run
+  hits a provider-specific timeout, auth/config failure, or unreadable output
+  and you still want local automation, rerun with `--allow-provider-fallback`;
+  if the local-review path still remains unusable, request manual review early
+  rather than waiting for the finish loop.
+- Batch related fixes with updated tests before re-requesting review on a
+  high-risk task; do not turn the same open bucket into a single-commit
+  re-review loop.
 
 ## Finish Debug Surface
 

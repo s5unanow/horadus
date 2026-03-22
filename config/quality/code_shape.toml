@@ -228,10 +228,6 @@ max_lines = 4692
 [legacy_files.member_max_complexity]
 "test_finish_task_data_blocks_on_post_merge_sync_edge_cases.fake_run_command" = 26
 
-[[legacy_files]]
-path = "tests/horadus_cli/v2/task_repo_fixtures.py"
-[legacy_files.member_max_lines]
-"seed_task_repo_layout" = 219
 
 [[legacy_files]]
 path = "tests/horadus_cli/v2/test_task_preflight.py"

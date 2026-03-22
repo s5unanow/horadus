@@ -33,6 +33,13 @@ _GUIDANCE_RULES: tuple[tuple[str, str, str, str, str], ...] = (
         "fallback_guidance_statement_missing",
     ),
     (
+        "high_risk_pre_push_review_reference_paths",
+        "high_risk_pre_push_review_statements",
+        "high_risk_pre_push_review_reference_file_missing",
+        "high-risk pre-push review guidance",
+        "high_risk_pre_push_review_statement_missing",
+    ),
+    (
         "workflow_policy_guardrail_reference_paths",
         "workflow_policy_guardrail_statements",
         "workflow_policy_guardrail_reference_file_missing",

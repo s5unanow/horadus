@@ -14,6 +14,7 @@ from tests.horadus_cli.v2.helpers import (
     BACKLOG_ONLY_TASK_ID,
     EXEC_PLAN_NO_MARKER_TASK_ID,
     EXEC_PLAN_TASK_ID,
+    HIGH_RISK_TASK_ID,
     LIVE_TASK_ID,
     NON_APPLICABLE_TASK_ID,
 )
@@ -377,6 +378,7 @@ def test_handle_context_pack_surfaces_missing_planning_artifact_notice(
     assert planning["state"] == "applicable_backlog_only_missing_artifact"
     assert planning["authoritative_artifact_path"] is None
     assert planning["canonical_example_path"] == "tasks/specs/275-finish-review-gate-timeout.md"
+    assert result.data["pre_push_review_guidance"]["recommended"] is False
 
 
 def test_handle_context_pack_stays_quiet_for_non_applicable_task(
@@ -448,6 +450,556 @@ def test_handle_context_pack_propagates_archive_flag_to_suggested_commands(
     )
     assert result.data is not None
     assert expected in result.data["suggested_workflow_commands"]
+
+
+def test_handle_context_pack_keeps_archived_tasks_quiet_for_pre_push_guidance(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id=ARCHIVED_TASK_ID, include_archive=True)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Pre-Push Review Guidance" not in result.lines
+    assert result.data is not None
+    guidance = result.data["pre_push_review_guidance"]
+    assert guidance["recommended"] is False
+    assert guidance["commands"] == []
+    assert guidance["fallback_notes"] == []
+    assert guidance["batching_notes"] == []
+
+
+def test_handle_context_pack_surfaces_pre_push_review_guidance_for_high_risk_task(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(argparse.Namespace(task_id=HIGH_RISK_TASK_ID))
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Pre-Push Review Guidance" in result.lines
+    assert "Applicability: recommended" in result.lines
+    assert "uv run --no-sync horadus tasks local-review --format json" in result.lines
+    assert result.data is not None
+    guidance = result.data["pre_push_review_guidance"]
+    assert guidance["recommended"] is True
+    assert guidance["commands"] == ["uv run --no-sync horadus tasks local-review --format json"]
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+    assert guidance["fallback_notes"]
+    assert any("timeout" in note for note in guidance["fallback_notes"])
+    assert guidance["batching_notes"]
+
+
+def test_pre_push_review_guidance_detects_migration_and_multi_surface_runtime_paths() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-999",
+        title="Migration repair fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise migration and multi-surface mutation guidance."],
+        files=[
+            "`alembic/versions/20260321_add_table.py`",
+            "`src/api/routes/events.py`",
+            "`src/storage/models.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task touches migration surfaces" in guidance["risk_reasons"]
+    assert (
+        "task spans multiple runtime surfaces: api, migrations, storage" in guidance["risk_reasons"]
+    )
+
+
+def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-998",
+        title="Workflow compatibility fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise shared workflow tooling guidance without planning gates."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/task_repo.py`",
+            "`docs/AGENT_RUNBOOK.md`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_keeps_single_runtime_storage_work_quiet() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-993",
+        title="Storage fixture",
+        priority="P3",
+        estimate="1h",
+        description=["Exercise an ordinary single-surface runtime path without risk markers."],
+        files=["`src/storage/models.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is False
+    assert guidance["risk_reasons"] == []
+
+
+def test_pre_push_review_guidance_treats_triage_helpers_as_shared_workflow_tooling() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-988",
+        title="Triage helper fixture",
+        priority="P3",
+        estimate="1h",
+        description=["Exercise repo-owned triage workflow guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/triage.py`",
+            "`tools/horadus/python/horadus_cli/triage_commands.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_workflow_package_directory_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-992",
+        title="Workflow package fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise directory-level workflow package guidance."],
+        files=["`tools/horadus/python/horadus_workflow/`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_pr_review_gate_family_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-991",
+        title="Review gate fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise review-gate workflow guidance."],
+        files=["`tools/horadus/python/horadus_workflow/pr_review_gate.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_repo_workflow_helpers_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-990",
+        title="Workflow helper fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise repo-owned workflow helper guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/repo_workflow.py`",
+            "`tools/horadus/python/horadus_workflow/docs_freshness.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_workflow_core_modules_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-986",
+        title="Workflow core fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise workflow core module guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/review_defaults.py`",
+            "`tools/horadus/python/horadus_workflow/result.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_cli_app_as_shared_workflow_tooling() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-981",
+        title="CLI app fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise top-level CLI workflow dispatch guidance."],
+        files=["`tools/horadus/python/horadus_cli/app.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_gate_helpers_as_shared_workflow_tooling() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-979",
+        title="Gate helper fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise repo-owned gate helper guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/import_boundaries.py`",
+            "`tools/horadus/python/horadus_workflow/code_shape.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_repo_owned_automation_surfaces_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-989",
+        title="Automation surface fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise repo-owned automation workflow guidance."],
+        files=["`agents/automation/`", "`ops/automations/specs/`", "`codex/rules/default.rules`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_makefile_backed_workflow_scripts_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-985",
+        title="Workflow script fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise Makefile-backed workflow script guidance."],
+        files=["`scripts/sync_automations.py`", "`scripts/agent_smoke_run.sh`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_integration_gate_script_as_shared_workflow_config() -> (
+    None
+):
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-978",
+        title="Integration gate fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise canonical integration gate guidance."],
+        files=["`scripts/test_integration_docker.sh`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_spec_template_as_policy_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-997",
+        title="Spec template fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise shared workflow policy guidance for the spec template."],
+        files=["`tasks/specs/TEMPLATE.md`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_skill_docs_as_policy_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-984",
+        title="Skill docs fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise authoritative skill-doc workflow guidance."],
+        files=[
+            "`ops/skills/horadus-cli/SKILL.md`",
+            "`ops/skills/horadus-cli/references/commands.md`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_releasing_doc_as_policy_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-983",
+        title="Release doc fixture",
+        priority="P2",
+        estimate="1h",
+        description=["Exercise authoritative release/workflow guidance."],
+        files=["`docs/RELEASING.md`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes canonical workflow or policy guidance" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_ingestion_as_runtime_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-996",
+        title="Ingestion/storage fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise multi-surface runtime guidance for ingestion plus storage."],
+        files=["`src/ingestion/rss_collector.py`", "`src/storage/models.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task spans multiple runtime surfaces: ingestion, storage" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_api_and_cli_as_multi_surface_runtime() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-980",
+        title="API/CLI fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise multi-surface runtime guidance for API plus CLI."],
+        files=["`src/api/main.py`", "`src/cli.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task spans multiple runtime surfaces: api, cli" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_eval_as_runtime_surface() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-987",
+        title="Processing/eval fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise multi-surface runtime guidance for processing plus eval."],
+        files=["`src/processing/pipeline.py`", "`src/eval/benchmark.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task spans multiple runtime surfaces: eval, processing" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_shared_workflow_config_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-995",
+        title="Workflow config fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise shared workflow config guidance."],
+        files=["`.github/workflows/ci.yml`", "`Makefile`", "`.pre-commit-config.yaml`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_code_shape_policy_as_shared_workflow_config() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-982",
+        title="Code shape policy fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise canonical code-shape workflow policy guidance."],
+        files=["`config/quality/code_shape.toml`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_single_surface_math_as_high_risk() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-994",
+        title="Trend engine fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise shared math guidance without multi-surface paths."],
+        files=["`src/core/trend_engine.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared math modules" in guidance["risk_reasons"]
 
 
 def test_handle_show_requires_explicit_archive_flag_for_archived_task(

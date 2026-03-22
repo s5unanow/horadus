@@ -29,6 +29,8 @@ class DocsFreshnessCheckConfig:
     dependency_aware_guidance_statements: tuple[str, ...]
     fallback_guidance_reference_paths: tuple[str, ...]
     fallback_guidance_statements: tuple[str, ...]
+    high_risk_pre_push_review_reference_paths: tuple[str, ...]
+    high_risk_pre_push_review_statements: tuple[str, ...]
     workflow_policy_guardrail_reference_paths: tuple[str, ...]
     workflow_policy_guardrail_statements: tuple[str, ...]
     adr_reference_pattern: Pattern[str]

@@ -134,4 +134,23 @@ def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> 
     assert task_workflow_policy_module.completion_guidance_statements()
     assert task_workflow_policy_module.dependency_aware_guidance_statements()
     assert task_workflow_policy_module.fallback_guidance_statements()
+    assert task_workflow_policy_module.high_risk_pre_push_review_reference_paths()
+    assert task_workflow_policy_module.high_risk_pre_push_review_commands() == (
+        "uv run --no-sync horadus tasks local-review --format json",
+    )
+    assert task_workflow_policy_module.high_risk_pre_push_review_fallback_statements()
+    assert task_workflow_policy_module.high_risk_pre_push_review_batching_statements()
     assert task_workflow_policy_module.workflow_policy_guardrail_statements()
+
+
+def test_handle_show_remains_unchanged_by_context_pack_review_guidance(
+    synthetic_task_repo_v2: Path,
+) -> None:
+    _ = synthetic_task_repo_v2
+    result = task_query_module.handle_show(
+        SimpleNamespace(task_id="TASK-901", include_archive=False)
+    )
+
+    assert result.exit_code == 0
+    assert result.data is not None
+    assert "pre_push_review_guidance" not in result.data

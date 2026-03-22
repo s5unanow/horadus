@@ -102,6 +102,45 @@ def _definition_update_requested(updates: dict[str, Any]) -> bool:
     )
 
 
+def _normalize_noop_current_probability(
+    *,
+    trend: Trend,
+    updates: dict[str, Any],
+    activation_mode: str | None,
+) -> None:
+    if "current_probability" not in updates:
+        return
+    requested_probability = updates["current_probability"]
+    if requested_probability is None:
+        updates.pop("current_probability", None)
+        return
+    if activation_mode not in (None, "rebase"):
+        return
+    current_probability = logodds_to_prob(float(trend.current_log_odds))
+    if math.isclose(
+        float(requested_probability),
+        current_probability,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        updates.pop("current_probability", None)
+
+
+def normalized_trend_update_intent_payload(
+    *,
+    trend: Trend,
+    payload: TrendUpdate,
+) -> dict[str, Any]:
+    updates = payload.model_dump(mode="json", exclude_none=True, exclude_unset=True)
+    activation_mode = updates.get("activation_mode")
+    _normalize_noop_current_probability(
+        trend=trend,
+        updates=updates,
+        activation_mode=activation_mode if isinstance(activation_mode, str) else None,
+    )
+    return updates
+
+
 def _resolved_candidate_definition(
     *,
     trend: Trend,
@@ -253,6 +292,11 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
     updates = payload.model_dump(exclude_unset=True)
     activation_mode = updates.pop("activation_mode", None)
     activation_notes = updates.pop("activation_notes", None)
+    _normalize_noop_current_probability(
+        trend=trend,
+        updates=updates,
+        activation_mode=activation_mode,
+    )
     definition_updated = _definition_update_requested(updates)
     return TrendUpdatePlan(
         previous_definition=previous_definition,
@@ -328,19 +372,6 @@ def _enforce_activation_mode(*, trend: Trend, plan: TrendUpdatePlan) -> None:
 
 def _enforce_override_route(*, trend: Trend, plan: TrendUpdatePlan) -> None:
     if "current_probability" not in plan.updates:
-        return
-    requested_probability = plan.updates["current_probability"]
-    if requested_probability is None:
-        plan.updates.pop("current_probability", None)
-        return
-    current_probability = logodds_to_prob(float(trend.current_log_odds))
-    if math.isclose(
-        float(requested_probability),
-        current_probability,
-        rel_tol=0.0,
-        abs_tol=1e-9,
-    ):
-        plan.updates.pop("current_probability", None)
         return
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,

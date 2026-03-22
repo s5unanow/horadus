@@ -154,3 +154,24 @@ async def test_update_trend_mutation_ignores_null_probability_fields(
     assert trend.description == "updated"
     assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
     assert result.trend is trend
+
+
+@pytest.mark.asyncio
+async def test_update_trend_mutation_rejects_noop_probability_field_on_replay_activation(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(trend_id=uuid4())
+
+    with pytest.raises(HTTPException, match="use POST /api/v1/trends/\\{id\\}/override") as exc:
+        await trend_write_mutations_module.update_trend_mutation(
+            session=mock_db_session,
+            trend_id=trend.id,
+            trend=trend,
+            payload=trends_module.TrendUpdate(
+                baseline_probability=0.25,
+                current_probability=0.2,
+                activation_mode="replay",
+            ),
+        )
+
+    assert exc.value.status_code == 409

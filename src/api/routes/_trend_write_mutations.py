@@ -33,6 +33,7 @@ _DIRECT_PROBABILITY_OVERRIDE_DETAIL = (
     "PATCH /api/v1/trends/{id} cannot modify current_probability directly; "
     "use POST /api/v1/trends/{id}/override."
 )
+_CURRENT_PROBABILITY_NOOP_ABS_TOL = 1e-6
 
 
 @dataclass(slots=True)
@@ -119,7 +120,7 @@ def _normalize_noop_current_probability(
         float(requested_probability),
         current_probability,
         rel_tol=0.0,
-        abs_tol=1e-9,
+        abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
     ):
         updates.pop("current_probability", None)
         return
@@ -129,7 +130,7 @@ def _normalize_noop_current_probability(
         float(requested_probability),
         current_probability,
         rel_tol=0.0,
-        abs_tol=1e-9,
+        abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
     ):
         updates.pop("current_probability", None)
 

@@ -148,6 +148,42 @@ async def test_update_trend_rejects_duplicate_idempotency_key(
 
 
 @pytest.mark.asyncio
+async def test_update_trend_rejects_direct_probability_override_and_records_audit(
+    mock_db_session,
+) -> None:
+    trend = _build_trend()
+    mock_db_session.get.return_value = trend
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_trend(
+            trend_id=trend.id,
+            trend=TrendUpdate(current_probability=0.35),
+            request=_request_with_headers(
+                method="PATCH",
+                path=f"/api/v1/trends/{trend.id}",
+                headers={
+                    "X-Idempotency-Key": "trend-probability-rewrite",
+                    "If-Match": write_contract_module.trend_revision_token(trend),
+                },
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "cannot modify current_probability directly" in str(exc_info.value.detail)
+    audit_rows = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], PrivilegedWriteAudit)
+    ]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "trends.update"
+    assert float(audit_rows[0].request_intent["payload"]["current_probability"]) == pytest.approx(
+        0.35
+    )
+
+
+@pytest.mark.asyncio
 async def test_update_trend_validates_contract_before_missing_trend_404(mock_db_session) -> None:
     mock_db_session.get.return_value = None
 

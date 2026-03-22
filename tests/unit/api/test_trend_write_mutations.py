@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
 
 import src.api.routes._trend_write_mutations as trend_write_mutations_module
 import src.api.routes.trends as trends_module
@@ -90,3 +91,22 @@ def test_requires_state_activation_helpers_cover_true_and_false_paths() -> None:
     assert trend_write_mutations_module.requires_state_activation({"definition": {"id": "trend-a"}})
     assert trends_module._requires_state_activation({"description": "only metadata"}) is False
     assert trends_module._requires_state_activation({"indicators": {"signal": {}}})
+
+
+@pytest.mark.asyncio
+async def test_update_trend_mutation_rejects_direct_probability_override(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(trend_id=uuid4())
+
+    with pytest.raises(HTTPException, match="use POST /api/v1/trends/\\{id\\}/override") as exc:
+        await trend_write_mutations_module.update_trend_mutation(
+            session=mock_db_session,
+            trend_id=trend.id,
+            trend=trend,
+            payload=trends_module.TrendUpdate(current_probability=0.35),
+        )
+
+    assert exc.value.status_code == 409
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    mock_db_session.flush.assert_not_awaited()

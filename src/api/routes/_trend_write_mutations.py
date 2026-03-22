@@ -28,6 +28,12 @@ if TYPE_CHECKING:
     from src.api.routes.trend_api_models import TrendCreate, TrendUpdate
 
 
+_DIRECT_PROBABILITY_OVERRIDE_DETAIL = (
+    "PATCH /api/v1/trends/{id} cannot modify current_probability directly; "
+    "use POST /api/v1/trends/{id}/override."
+)
+
+
 @dataclass(slots=True)
 class TrendMutationResult:
     """Useful linkage ids returned after a trend mutation succeeds."""
@@ -319,6 +325,15 @@ def _enforce_activation_mode(*, trend: Trend, plan: TrendUpdatePlan) -> None:
     )
 
 
+def _enforce_override_route(plan: TrendUpdatePlan) -> None:
+    if "current_probability" not in plan.updates:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=_DIRECT_PROBABILITY_OVERRIDE_DETAIL,
+    )
+
+
 def _apply_trend_updates(
     *,
     trend: Trend,
@@ -342,8 +357,6 @@ def _apply_trend_updates(
         trend.decay_half_life_days = validated_config.decay_half_life_days
     if "is_active" in updates:
         trend.is_active = updates["is_active"]
-    if "current_probability" in updates and updates["current_probability"] is not None:
-        trend.current_log_odds = prob_to_logodds(updates["current_probability"])
 
 
 async def _record_definition_history_if_needed(
@@ -401,6 +414,7 @@ async def update_trend_mutation(
     """Apply a trend update plus any required versioned-state activation."""
 
     plan = _build_trend_update_plan(trend, payload)
+    _enforce_override_route(plan)
     _enforce_activation_mode(trend=trend, plan=plan)
 
     try:

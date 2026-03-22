@@ -81,7 +81,6 @@ class TrendUpdate(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "current_probability": 0.18,
                 "decay_half_life_days": 45,
                 "forecast_contract": {
                     "question": (
@@ -122,7 +121,15 @@ class TrendUpdate(BaseModel):
     definition: dict[str, Any] | None = None
     forecast_contract: trend_forecast_contract_module.TrendForecastContract | None = None
     baseline_probability: float | None = Field(default=None, ge=0, le=1)
-    current_probability: float | None = Field(default=None, ge=0, le=1)
+    current_probability: float | None = Field(
+        default=None,
+        ge=0,
+        le=1,
+        description=(
+            "Direct live probability rewrites are rejected on PATCH; use "
+            "POST /api/v1/trends/{id}/override instead."
+        ),
+    )
     indicators: dict[str, Any] | None = None
     decay_half_life_days: int | None = Field(default=None, ge=1)
     is_active: bool | None = None

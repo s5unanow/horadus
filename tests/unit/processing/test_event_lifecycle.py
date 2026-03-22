@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
 
-from src.processing.event_lifecycle import EventLifecycleManager
+from src.processing.event_lifecycle import ARCHIVE_DAYS, EventLifecycleManager
 from src.storage.event_state import EventActivityState, EventEpistemicState
 from src.storage.models import Event, EventLifecycle
 
@@ -100,6 +100,39 @@ def test_on_event_mention_preserves_retracted_epistemic_state(mock_db_session) -
     assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
 
 
+def test_on_event_mention_keeps_last_mention_monotonic_for_older_backfill(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    event = _build_event(unique_source_count=2, lifecycle_status=EventLifecycle.EMERGING.value)
+    original_last_mention = datetime.now(tz=UTC)
+    older_backfill = original_last_mention - timedelta(days=2)
+    event.last_mention_at = original_last_mention
+
+    changed = manager.on_event_mention(event, mentioned_at=older_backfill)
+
+    assert changed is False
+    assert event.last_mention_at == original_last_mention
+    assert event.activity_state == EventActivityState.ACTIVE.value
+    assert event.lifecycle_status == EventLifecycle.EMERGING.value
+
+
+def test_on_event_mention_does_not_revive_closed_event_for_older_backfill(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    event = _build_event(unique_source_count=4, lifecycle_status=EventLifecycle.ARCHIVED.value)
+    original_last_mention = datetime.now(tz=UTC) - timedelta(days=ARCHIVE_DAYS + 1)
+    event.last_mention_at = original_last_mention
+    event.activity_state = EventActivityState.CLOSED.value
+
+    changed = manager.on_event_mention(
+        event,
+        mentioned_at=original_last_mention - timedelta(hours=12),
+    )
+
+    assert changed is False
+    assert event.last_mention_at == original_last_mention
+    assert event.activity_state == EventActivityState.CLOSED.value
+    assert event.lifecycle_status == EventLifecycle.ARCHIVED.value
+
+
 def test_sync_event_state_promotes_without_touching_last_mention(mock_db_session) -> None:
     manager = EventLifecycleManager(mock_db_session)
     event = _build_event(unique_source_count=1, lifecycle_status=EventLifecycle.EMERGING.value)
@@ -114,6 +147,54 @@ def test_sync_event_state_promotes_without_touching_last_mention(mock_db_session
     assert event.epistemic_state == EventEpistemicState.CONFIRMED.value
     assert event.lifecycle_status == EventLifecycle.CONFIRMED.value
     assert event.confirmed_at == original_last_mention
+
+
+def test_activity_state_for_last_mention_defaults_none_to_active(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+
+    assert manager._activity_state_for_last_mention(None) == EventActivityState.ACTIVE.value
+
+
+def test_activity_state_for_last_mention_returns_dormant_for_stale_recent_event(
+    mock_db_session,
+) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    stale_last_mention = datetime.now(tz=UTC) - timedelta(hours=49)
+
+    assert (
+        manager._activity_state_for_last_mention(stale_last_mention)
+        == EventActivityState.DORMANT.value
+    )
+
+
+def test_effective_mention_time_clamps_future_incoming_to_now(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    current_last_mention = datetime.now(tz=UTC) - timedelta(hours=1)
+    future_incoming = datetime.now(tz=UTC) + timedelta(days=2)
+    started = datetime.now(tz=UTC)
+
+    effective = manager._effective_mention_time(
+        current_last_mention_at=current_last_mention,
+        incoming_mention_time=future_incoming,
+    )
+
+    finished = datetime.now(tz=UTC)
+    assert started <= effective <= finished
+
+
+def test_effective_mention_time_recovers_existing_future_timestamp(mock_db_session) -> None:
+    manager = EventLifecycleManager(mock_db_session)
+    existing_future = datetime.now(tz=UTC) + timedelta(days=2)
+    incoming_real_time = datetime.now(tz=UTC) - timedelta(hours=1)
+    started = datetime.now(tz=UTC)
+
+    effective = manager._effective_mention_time(
+        current_last_mention_at=existing_future,
+        incoming_mention_time=incoming_real_time,
+    )
+
+    finished = datetime.now(tz=UTC)
+    assert started <= effective <= finished
 
 
 @pytest.mark.asyncio

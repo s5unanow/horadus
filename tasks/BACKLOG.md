@@ -211,26 +211,6 @@ Transient model/provider/DB failures can strand held deltas permanently.
 
 ---
 
-### TASK-206: Keep event recency monotonic under late and backfilled mentions
-**Priority**: P1 (High)
-**Estimate**: 1-2 hours
-
-`last_mention_at` is still overwritten with the incoming item timestamp during
-merge and lifecycle handling. Late or backfilled items can therefore move event
-recency backwards and distort clustering/lifecycle behavior.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 3 finding 2
-
-**Files**: `src/processing/event_clusterer.py`, `src/processing/event_lifecycle.py`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Update recency with `max(existing_last_mention_at, incoming_mention_time)` semantics
-- [ ] Keep lifecycle transitions and clustering windows based on monotonic recency
-- [ ] Add tests covering older backfill arriving after newer mentions
-
----
-
 ### TASK-207: Use stable source identity keys for GDELT and Telegram watermarks
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours

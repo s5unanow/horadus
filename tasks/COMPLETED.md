@@ -340,3 +340,4 @@
 ## Sprint 6
 - TASK-208: Restrict API docs and schema exposure outside development ✅
 - TASK-201: Preserve audited, atomic manual trend overrides ✅
+- TASK-206: Keep event recency monotonic under late and backfilled mentions ✅

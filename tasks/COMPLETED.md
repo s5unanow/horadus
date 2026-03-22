@@ -335,3 +335,4 @@
 - TASK-235: Add Event Split/Merge Lineage for Evolving Stories ✅
 - TASK-346: Front-load adversarial review guidance for high-risk cross-surface tasks ✅
 - TASK-337: Pin Live Trend State to Active Definition/Scoring Versions ✅
+- TASK-341: Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records ✅

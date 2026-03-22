@@ -12,6 +12,7 @@ from src.processing.event_claims import (
     build_event_claim_specs,
     normalize_claim_text,
 )
+from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, TaxonomyGapReason, Trend
 
 TREND_IMPACT_MAPPING_KEY = "_trend_impact_mapping"
@@ -230,7 +231,7 @@ def _event_context_text(event: Event) -> str:
     for raw_value in (
         event.extracted_where,
         event.extracted_what,
-        event.canonical_summary,
+        resolved_event_summary(event),
         extracted_when.isoformat() if extracted_when is not None else None,
     ):
         if isinstance(raw_value, str) and raw_value.strip():

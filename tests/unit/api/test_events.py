@@ -29,11 +29,13 @@ def _build_event(
     lifecycle_status: str = "confirmed",
     has_contradictions: bool = False,
     contradiction_notes: str | None = None,
+    event_summary: str | None = None,
 ) -> Event:
     now = datetime.now(tz=UTC)
     return Event(
         id=event_id or uuid4(),
         canonical_summary="Cross-border force movements reported",
+        event_summary=event_summary,
         categories=["military"],
         source_count=4,
         unique_source_count=3,
@@ -125,6 +127,16 @@ async def test_list_events_returns_filtered_payload(mock_db_session) -> None:
     assert "trend_evidence.trend_id" in query_text
     assert "trend_evidence.is_invalidated is false" in query_text_lower
     assert "join trend_evidence" not in query_text_lower
+
+
+@pytest.mark.asyncio
+async def test_list_events_prefers_event_summary_when_present(mock_db_session) -> None:
+    event = _build_event(event_summary="Synthesized cross-border event summary")
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [event])
+
+    result = await list_events(days=7, limit=5, session=mock_db_session)
+
+    assert result[0].summary == "Synthesized cross-border event summary"
 
 
 @pytest.mark.asyncio

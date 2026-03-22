@@ -135,6 +135,7 @@ def event_revision_token(event: Event) -> str:
         {
             "id": event.id,
             "canonical_summary": event.canonical_summary,
+            "event_summary": event.event_summary,
             "epistemic_state": event.epistemic_state,
             "activity_state": event.activity_state,
             "lifecycle_status": event.lifecycle_status,

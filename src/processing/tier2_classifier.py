@@ -66,6 +66,7 @@ from src.storage.event_state import (
     resolved_event_epistemic_state,
     resolved_independent_evidence_count,
 )
+from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -564,7 +565,7 @@ class Tier2Classifier:
 
         payload = {
             "event_id": str(event.id),
-            "summary": event.canonical_summary,
+            "summary": resolved_event_summary(event),
             "context_chunks": sanitized_chunks,
         }
         self._enforce_payload_budget(payload)
@@ -615,9 +616,7 @@ class Tier2Classifier:
         for system_key in (TREND_IMPACT_RECONCILIATION_KEY,):
             if system_key in existing_claims:
                 system_claims[system_key] = existing_claims[system_key]
-        # `canonical_summary` is reserved for the current primary item summary.
-        # Tier-2 may synthesize an event-level summary, but it must not overwrite
-        # the canonical identity field tied to `primary_item_id`.
+        event.event_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
         event.extracted_where = output.extracted_where.strip() if output.extracted_where else None

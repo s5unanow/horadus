@@ -78,3 +78,16 @@ async def test_create_event_feedback_restate_updates_event_revision_token(
     assert event.last_updated_at is not None
     assert event.last_updated_at > original_updated_at
     assert result.target_revision_token != original_revision_token
+
+
+def test_event_revision_token_changes_when_event_summary_changes() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Primary item title",
+        event_summary="Synthesized summary",
+    )
+
+    original = write_contract_module.event_revision_token(event)
+    event.event_summary = "Updated synthesized summary"
+
+    assert write_contract_module.event_revision_token(event) != original

@@ -35,6 +35,7 @@ from src.storage.event_state import (
     resolved_event_epistemic_state,
     resolved_independent_evidence_count,
 )
+from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, EventClaim, EventItem, RawItem, Source, TrendEvidence
 
 router = APIRouter()
@@ -271,7 +272,7 @@ def _to_event_response(
     resolved_cluster_health = cluster_health or cluster_health_payload(event)
     return EventResponse(
         id=event.id,
-        summary=event.canonical_summary,
+        summary=resolved_event_summary(event),
         categories=list(event.categories or []),
         source_count=event.source_count,
         unique_source_count=event.unique_source_count,

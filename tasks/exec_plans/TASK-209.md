@@ -17,7 +17,7 @@ most credible linked item.
 
 - Spec/backlog references: `tasks/CURRENT_SPRINT.md`, `TASK-209` backlog/context-pack entry
 - Runtime/code touchpoints: `src/processing/tier2_classifier.py`, `src/processing/event_clusterer.py`, `docs/DATA_MODEL.md`, `tests/unit/processing/test_tier2_classifier*.py`
-- Preconditions/dependencies: task branch created via `horadus tasks safe-start`; no schema change needed for the smallest safe fix
+- Preconditions/dependencies: task branch created via `horadus tasks safe-start`; storage/model/docs summary semantics must stay aligned once the split lands
 
 ## Outputs
 
@@ -26,18 +26,18 @@ most credible linked item.
 
 ## Non-Goals
 
-- Explicitly excluded work: adding a new persisted event-summary column, changing DB schema, or redesigning the Tier-2 response schema beyond wording/docs cleanup
+- Explicitly excluded work: broader extraction schema redesign beyond the summary split required to preserve API/reporting behavior
 
 ## Scope
 
-- In scope: preserve canonical-summary semantics, align prompt/docs wording, update tests that assumed Tier-2 rewrites the field
+- In scope: preserve canonical-summary semantics, add a persisted event-level summary, align prompt/docs wording, update readers and tests that assumed Tier-2 rewrites the canonical field
 - Out of scope: broader extraction schema redesign or reworking deterministic trend mapping strategy
 
 ## Gate Outcomes / Waivers
 
-- Accepted design / smallest safe shape: Tier-2 may still emit a synthesized `summary`, but runtime treats it as transient extraction output and does not persist it into `events.canonical_summary`
-- Rejected simpler alternative: keep overwriting `canonical_summary` and only soften docs; rejected because it preserves the semantic drift the task exists to remove
-- First integration proof: a merged event retains the primary-item summary before and after Tier-2 classification
+- Accepted design / smallest safe shape: split summary semantics into `events.canonical_summary` (primary-item identity) and `events.event_summary` (persisted synthesized event-level summary used for API/reporting/Tier-2 carry-forward)
+- Rejected simpler alternative: drop the Tier-2 write entirely and rely only on `canonical_summary`; rejected because it regresses user-facing summaries and loses the carry-forward seed for later reclassification
+- First integration proof: a merged event retains the primary-item summary while Tier-2 persists and reuses a separate synthesized event summary
 - Waivers: none
 
 ## Plan (Keep Updated)
@@ -49,12 +49,13 @@ most credible linked item.
 
 ## Decisions (Timestamped)
 
-- 2026-03-23: Chose preservation over field-split for this task because the documented invariant is already clear, cluster/provenance code already enforces it, and the smallest safe fix is to stop Tier-2 from violating that invariant.
+- 2026-03-23: Initial preserve-only draft proved too narrow under review because API/report/reporting surfaces and Tier-2 reclassification still needed a persisted event-level summary.
+- 2026-03-23: Switched to a split-field design: keep `canonical_summary` tied to `primary_item_id`, persist Tier-2 synthesized text in `event_summary`, and route event-level readers through the new field with canonical fallback.
 
 ## Risks / Foot-guns
 
-- Trend-impact mapping still reads `canonical_summary` as fallback context -> cover with targeted Tier-2 tests to ensure extracted fields continue to drive mappings correctly
-- Test expectations currently encode the old overwrite behavior -> update them alongside the runtime change to avoid false regressions
+- Split summary semantics must stay aligned across storage, API, reports, embeddings, and Tier-2 reuse -> cover the main reader paths with targeted tests and the full local gate
+- Existing rows and pre-Tier-2 events still need a usable summary -> migration/backfill plus canonical fallback keeps older data readable
 
 ## Validation Commands
 

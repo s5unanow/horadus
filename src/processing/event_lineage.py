@@ -38,6 +38,10 @@ from src.storage.event_state import (
     EventEpistemicState,
     apply_event_state_update,
 )
+from src.storage.event_summary import (
+    refresh_event_summary_from_canonical,
+    resolved_event_summary,
+)
 from src.storage.models import (
     Event,
     EventClaim,
@@ -262,7 +266,9 @@ async def load_event_lineage(
                 "lineage_kind": lineage.lineage_kind,
                 "role": role,
                 "counterpart_event_id": counterpart_id,
-                "counterpart_summary": getattr(counterpart, "canonical_summary", None),
+                "counterpart_summary": (
+                    resolved_event_summary(counterpart) if counterpart is not None else None
+                ),
                 "moved_item_count": int(details.get("moved_item_count", 0) or 0),
                 "moved_item_ids": list(details.get("moved_item_ids", [])),
                 "invalidated_evidence_ids": list(details.get("invalidated_evidence_ids", [])),
@@ -314,6 +320,7 @@ async def _build_event_from_rows(
     timestamp = _item_timestamp(primary_item)
     event = Event(
         canonical_summary=_build_canonical_summary(primary_item),
+        event_summary=_build_canonical_summary(primary_item),
         embedding=primary_item.embedding,
         embedding_model=primary_item.embedding_model,
         embedding_generated_at=primary_item.embedding_generated_at,
@@ -346,8 +353,13 @@ async def _refresh_event_after_item_change(*, session: AsyncSession, event: Even
     )
     event.source_count = len(rows)
     event.unique_source_count = len({row.item.source_id for row in rows})
+    previous_canonical_summary = event.canonical_summary
     event.primary_item_id = primary_item.id
     event.canonical_summary = _build_canonical_summary(primary_item)
+    refresh_event_summary_from_canonical(
+        event,
+        previous_canonical_summary=previous_canonical_summary,
+    )
     event.embedding = primary_item.embedding
     event.embedding_model = primary_item.embedding_model
     event.embedding_generated_at = primary_item.embedding_generated_at

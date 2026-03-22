@@ -331,7 +331,8 @@ class Event(Base):
         default=uuid4,
     )
     canonical_summary: Mapped[str] = mapped_column(Text, nullable=False)
-    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))  # OpenAI dim
+    event_summary: Mapped[str | None] = mapped_column(Text)
+    embedding: Mapped[list[float] | None] = mapped_column(Vector(1536))
     embedding_model: Mapped[str | None] = mapped_column(String(255))
     embedding_generated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     embedding_input_tokens: Mapped[int | None] = mapped_column(Integer)
@@ -344,7 +345,6 @@ class Event(Base):
     )
     embedding_truncation_strategy: Mapped[str | None] = mapped_column(String(20))
 
-    # LLM-extracted structured data
     extracted_who: Mapped[list[str] | None] = mapped_column(ARRAY(String))
     extracted_what: Mapped[str | None] = mapped_column(Text)
     extracted_where: Mapped[str | None] = mapped_column(String(255))

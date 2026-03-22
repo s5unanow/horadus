@@ -413,6 +413,7 @@ async def _persist_event_feedback(
 def _event_refresh_attributes() -> list[str]:
     return [
         "canonical_summary",
+        "event_summary",
         "epistemic_state",
         "activity_state",
         "lifecycle_status",

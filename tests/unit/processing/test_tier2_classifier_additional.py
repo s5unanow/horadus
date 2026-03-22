@@ -370,6 +370,7 @@ def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None
     classifier._apply_output(event=event, output=output, trends=[_build_trend()])
 
     assert event.canonical_summary == "summary"
+    assert event.event_summary == "updated summary"
     assert event.extracted_who == ["NATO"]
     assert event.extracted_where == ""
     assert event.extracted_when == datetime(2026, 2, 7, 12, 0, tzinfo=UTC)
@@ -467,7 +468,25 @@ async def test_classify_event_preserves_primary_item_summary_after_cluster_merge
 
     assert result.event_id == event.id
     assert event.canonical_summary == "Primary source title"
+    assert event.event_summary == "Synthesized event summary. Secondary sentence."
     assert event.extracted_what == "Troop movement near the border"
+
+
+def test_build_payload_prefers_persisted_event_summary(mock_db_session) -> None:
+    classifier = _build_classifier(mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Primary item title",
+        event_summary="Synthesized event summary",
+    )
+
+    payload = classifier._build_payload(
+        event=event,
+        trends=[_build_trend()],
+        context_chunks=["Context paragraph"],
+    )
+
+    assert payload["summary"] == "Synthesized event summary"
     long_claim = ("forces crossed border repeatedly near northern checkpoint " * 8).strip()
     assert "checkpoint" in classifier._claim_tokens(long_claim, language="en")
     assert classifier._claim_polarity("forces did not cross", language="en") == "negative"

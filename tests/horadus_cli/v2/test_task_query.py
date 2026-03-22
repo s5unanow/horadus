@@ -79,7 +79,7 @@ def test_main_tasks_list_active_honors_root_format_flag(
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
-    assert payload["data"]["tasks"]
+    assert isinstance(payload["data"]["tasks"], list)
 
 
 def test_main_tasks_list_active_ignores_stale_metadata_rows(

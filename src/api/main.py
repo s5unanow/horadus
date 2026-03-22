@@ -81,8 +81,13 @@ OPENAPI_TAGS = [
     },
 ]
 
-_DEFAULT_AUTH_EXEMPT_PREFIXES = ("/health", "/metrics")
-_DEVELOPMENT_DOCS_PREFIXES = ("/docs", "/redoc", "/openapi.json")
+_DEFAULT_AUTH_EXEMPT_PREFIXES = (
+    "/health",
+    "/metrics",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
 
 
 # =============================================================================
@@ -158,8 +163,6 @@ def _api_docs_urls() -> tuple[str | None, str | None, str | None]:
 
 
 def _auth_exempt_prefixes() -> tuple[str, ...]:
-    if settings.is_development:
-        return _DEFAULT_AUTH_EXEMPT_PREFIXES + _DEVELOPMENT_DOCS_PREFIXES
     return _DEFAULT_AUTH_EXEMPT_PREFIXES
 
 

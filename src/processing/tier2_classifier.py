@@ -615,7 +615,9 @@ class Tier2Classifier:
         for system_key in (TREND_IMPACT_RECONCILIATION_KEY,):
             if system_key in existing_claims:
                 system_claims[system_key] = existing_claims[system_key]
-        event.canonical_summary = output.summary.strip()
+        # `canonical_summary` is reserved for the current primary item summary.
+        # Tier-2 may synthesize an event-level summary, but it must not overwrite
+        # the canonical identity field tied to `primary_item_id`.
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
         event.extracted_where = output.extracted_where.strip() if output.extracted_where else None

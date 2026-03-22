@@ -8,10 +8,12 @@ from uuid import uuid4
 
 import pytest
 
+import src.processing.event_clusterer as event_clusterer_module
 import src.processing.tier2_classifier as tier2_module
 from src.core.trend_config_loader import load_trends_from_config_dir
+from src.processing.event_clusterer import EventClusterer
 from src.processing.tier2_classifier import Tier2Classifier
-from src.storage.models import Event
+from src.storage.models import Event, RawItem
 
 pytestmark = pytest.mark.unit
 
@@ -367,7 +369,7 @@ def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None
 
     classifier._apply_output(event=event, output=output, trends=[_build_trend()])
 
-    assert event.canonical_summary == "updated summary"
+    assert event.canonical_summary == "summary"
     assert event.extracted_who == ["NATO"]
     assert event.extracted_where == ""
     assert event.extracted_when == datetime(2026, 2, 7, 12, 0, tzinfo=UTC)
@@ -389,6 +391,83 @@ def test_apply_output_and_claim_helpers_cover_fallbacks(mock_db_session) -> None
         "crossed",
         "border",
     }
+
+
+@pytest.mark.asyncio
+async def test_classify_event_preserves_primary_item_summary_after_cluster_merge(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Primary source title",
+        source_count=1,
+        unique_source_count=1,
+        primary_item_id=uuid4(),
+    )
+    merged_item = RawItem(
+        id=uuid4(),
+        source_id=uuid4(),
+        external_id=f"item-{uuid4()}",
+        title="Later lower-credibility mention",
+        raw_content="Follow-up report body",
+        content_hash="b" * 64,
+    )
+
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+    clusterer._count_unique_sources = AsyncMock(return_value=2)
+    clusterer._refresh_event_provenance = AsyncMock()
+    clusterer.lifecycle_manager = SimpleNamespace(on_event_mention=lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        event_clusterer_module,
+        "resolve_cluster_health",
+        AsyncMock(
+            return_value={
+                "cluster_cohesion_score": 0.8,
+                "split_risk_score": 0.2,
+            }
+        ),
+    )
+
+    await clusterer._merge_into_event(event, merged_item)
+
+    class _ChatCompletions:
+        async def create(self, **_kwargs):
+            return SimpleNamespace(
+                choices=[
+                    SimpleNamespace(
+                        message=SimpleNamespace(
+                            content=(
+                                '{"summary":"Synthesized event summary. Secondary sentence.",'
+                                '"extracted_who":["NATO"],'
+                                '"extracted_what":"Troop movement near the border",'
+                                '"extracted_where":"Baltic region",'
+                                '"extracted_when":"2026-02-07T12:00:00Z",'
+                                '"claims":["Troop deployment increased near the border."],'
+                                '"categories":["military"],'
+                                '"has_contradictions":false,'
+                                '"contradiction_notes":null}'
+                            )
+                        )
+                    )
+                ],
+                usage=SimpleNamespace(prompt_tokens=10, completion_tokens=10),
+            )
+
+    classifier = _build_classifier(
+        mock_db_session,
+        client=SimpleNamespace(chat=SimpleNamespace(completions=_ChatCompletions())),
+    )
+    result, _usage = await classifier.classify_event(
+        event=event,
+        trends=[_build_trend()],
+        context_chunks=["Context paragraph"],
+    )
+
+    assert result.event_id == event.id
+    assert event.canonical_summary == "Primary source title"
+    assert event.extracted_what == "Troop movement near the border"
     long_claim = ("forces crossed border repeatedly near northern checkpoint " * 8).strip()
     assert "checkpoint" in classifier._claim_tokens(long_claim, language="en")
     assert classifier._claim_polarity("forces did not cross", language="en") == "negative"

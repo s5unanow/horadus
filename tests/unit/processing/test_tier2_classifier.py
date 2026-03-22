@@ -337,6 +337,7 @@ async def test_classify_event_updates_event_fields(mock_db_session) -> None:
     assert result.event_id == event.id
     assert result.categories_count == 2
     assert result.trend_impacts_count == 1
+    assert event.canonical_summary == "Initial summary"
     _assert_event_payload(event)
     assert len(chat.calls) == 1
     assert chat.calls[0]["response_format"]["type"] == "json_schema"

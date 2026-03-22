@@ -196,6 +196,9 @@ Clustered news events (multiple raw_items about the same story).
 | contradiction_notes | TEXT | Yes | | Optional contradiction analysis notes |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 
+Notes:
+- Tier-2 may emit a synthesized structured-output `summary` during extraction, but that value is transient extraction output. Persisted `events.canonical_summary` remains the summary of the current `primary_item_id`.
+
 **Indexes:**
 - Primary key: `id`
 - IVFFlat: `embedding` (vector_cosine_ops, lists=64)

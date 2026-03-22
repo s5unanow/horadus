@@ -237,27 +237,6 @@ history, and failure tracking.
 
 ---
 
-### TASK-209: Restore `canonical_summary` alignment with `primary_item_id` after Tier-2
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-`TASK-148` aligned `canonical_summary` with `primary_item_id`, but Tier-2 still
-overwrites `canonical_summary` with a synthesized event summary on every
-classification. That reintroduces the semantic drift the earlier task removed.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 1 finding 5
-
-**Files**: `src/processing/event_clusterer.py`, `src/processing/tier2_classifier.py`, `docs/DATA_MODEL.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Preserve `canonical_summary` as the summary of the current `primary_item_id`, or explicitly rename/split fields if event-level synthesized summary is still required
-- [ ] Ensure Tier-2 writes do not silently violate the documented `primary_item_id` semantics
-- [ ] Add regression tests covering cluster merge plus Tier-2 classification on the same event
-- [ ] Update docs to reflect the final semantics unambiguously
-
----
-
 ### TASK-225: Make `horadus triage collect` Return Task-Aware Search Hits
 **Priority**: P2 (Medium)
 **Estimate**: 1-2 hours

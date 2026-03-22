@@ -34,8 +34,16 @@ def refresh_event_summary_from_canonical(
     current_event_summary = (
         event.event_summary.strip() if isinstance(event.event_summary, str) else ""
     )
+    extraction_provenance = (
+        event.extraction_provenance if isinstance(event.extraction_provenance, dict) else {}
+    )
     previous_canonical = (
         previous_canonical_summary.strip() if isinstance(previous_canonical_summary, str) else ""
     )
-    if not current_event_summary or current_event_summary == previous_canonical:
+    if not current_event_summary:
+        event.event_summary = event.canonical_summary
+        return
+    if extraction_provenance.get("stage") == "tier2":
+        return
+    if current_event_summary == previous_canonical:
         event.event_summary = event.canonical_summary

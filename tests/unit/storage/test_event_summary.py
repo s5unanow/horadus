@@ -45,6 +45,18 @@ def test_refresh_event_summary_from_canonical_updates_only_fallback_values() -> 
     )
     assert synthesized_event.event_summary == "Persistent synthesized summary"
 
+    preserved_tier2_event = Event(
+        id=uuid4(),
+        canonical_summary="Updated primary title",
+        event_summary="Old primary title",
+        extraction_provenance={"stage": "tier2"},
+    )
+    refresh_event_summary_from_canonical(
+        preserved_tier2_event,
+        previous_canonical_summary="Old primary title",
+    )
+    assert preserved_tier2_event.event_summary == "Old primary title"
+
 
 def test_event_summary_expression_prefers_event_summary_with_canonical_fallback() -> None:
     expression = event_summary_expression()

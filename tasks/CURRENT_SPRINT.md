@@ -1,29 +1,32 @@
 # Current Sprint
 
-**Sprint Goal**: Narrow the active queue to the highest-impact non-human work on semantic correctness, replayability, and bounded production hardening.
-**Sprint Number**: 5
-**Sprint Dates**: 2026-03-17 to 2026-03-31
+**Sprint Goal**: Concentrate the active queue on high-leverage runtime correctness, replay resilience, and audited mutation semantics.
+**Sprint Number**: 6
+**Sprint Dates**: 2026-03-22 to 2026-04-05
 **Source-of-truth policy**: See `AGENTS.md` → `Canonical Source-of-Truth Hierarchy`
 
 ---
 
 ## Active Tasks
 
-
+- `TASK-201` Preserve audited, atomic manual trend overrides
+- `TASK-206` Keep event recency monotonic under late and backfilled mentions
+- `TASK-209` Restore `canonical_summary` alignment with `primary_item_id` after Tier-2
+- `TASK-202` Make degraded replay queue retryable instead of fail-once terminal
 
 ## Selection Notes
 
-- Sprint 5 intentionally excludes human-gated work from the active queue unless a human explicitly reactivates it.
-- The selected tasks were chosen for direct impact on stable identity, deterministic semantics, replay/rebuild safety, and production-facing mutation correctness.
-- Sprint 5 now also carries a stricter repo-health lane focused on enforcing architecture, static-analysis, and CI guardrails earlier rather than allowing quality debt to accumulate.
+- Sprint 6 intentionally keeps the active queue small and excludes human-gated work unless a human explicitly reactivates it.
+- The selected tasks were chosen for direct impact on audited write correctness, monotonic event semantics, summary identity integrity, and replay/rebuild resilience.
+- Workflow and repo-health follow-ups remain in `tasks/BACKLOG.md`, but Sprint 6 shifts the active lane back to runtime correctness and production-facing behavior.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
 
 ## Suggested Sequence
 
-1. `TASK-352` Enforce server-side secret and dependency-vulnerability scanning first to close the easiest server-side security gaps with limited repo churn.
-2. `TASK-350` Add the cyclomatic-complexity ratchet early so new and modified code starts paying the stricter control-flow budget immediately.
-3. `TASK-349` Add repo-wide dependency-direction gates after the lighter gate expansions, with planning first because this is the most likely task to expose existing architectural drift.
-4. `TASK-353` Align canonical release/local gates last so the stricter analyzer set above becomes one authoritative enforced contract instead of several partially overlapping paths.
+1. `TASK-201` Close the live-probability mutation hole first so manual overrides always use the audited atomic path.
+2. `TASK-206` Restore monotonic event recency next because late/backfilled mentions can currently corrupt clustering and lifecycle semantics.
+3. `TASK-209` Re-align `canonical_summary` with `primary_item_id` after Tier-2 so event identity semantics stop drifting again.
+4. `TASK-202` Harden degraded replay retries last because it is the broadest queue-state change in the selected set.
 
 ## Human Blocker Metadata
 
@@ -40,25 +43,4 @@
 
 ## Completed This Sprint
 
-- `TASK-336` Separate Story Clusters from Stable Event-Claim Identity
-- `TASK-231` Extend Event Invalidation into a Compensating Restatement Ledger ✅
-- `TASK-347` Investigate and stabilize hanging `horadus tasks local-review` runs ✅
-- `TASK-228` Harden Trend Forecast Contracts with Explicit Horizon and Resolution Semantics ✅
-- `TASK-348` Make `horadus tasks finish` fail loudly and recover cleanly in the review window ✅
-- `TASK-352` Enforce server-side secret and dependency vulnerability scanning in CI ✅
-- `TASK-351` Bring `scripts/` Under the Main Lint, Type, Security, and Coverage Posture ✅
-- `TASK-350` Add a cyclomatic-complexity ratchet for tracked Python surfaces ✅
-- `TASK-349` Add repo-wide dependency direction gates for `src/` and tooling adapter seams ✅
-- `TASK-353` Align canonical release and local gates with the full repo-owned analyzer set ✅
-- `TASK-355` Add repo-owned sprint autopilot automation with external locking ✅
-- `TASK-356` Move autopilot lock into the automation-owned Codex path ✅
-- `TASK-357` Version a repo-owned Codex rules baseline for autopilot workflow commands ✅
-- `TASK-335` Move Trend-Impact Mapping Fully Into Deterministic Code ✅
-- `TASK-358` Replace autopilot `flock` dependency with a repo-owned automation lock helper ✅
-- `TASK-340` Split Event Epistemic State from Activity State ✅
-- `TASK-227` Make Corroboration Provenance-Aware Instead of Source-Count-Aware ✅
-- `TASK-339` Version Runtime Provenance for LLM-Derived Artifacts and Scoring Math ✅
-- `TASK-235` Add Event Split/Merge Lineage for Evolving Stories ✅
-- `TASK-346` Front-load adversarial review guidance for high-risk cross-surface tasks ✅
-- `TASK-337` Pin Live Trend State to Active Definition/Scoring Versions ✅
-- `TASK-341` Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records ✅
+- Sprint opened on 2026-03-22 with carry-over work only; no Sprint 6 tasks are complete yet.

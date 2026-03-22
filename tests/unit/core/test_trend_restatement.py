@@ -304,6 +304,57 @@ async def test_apply_compensating_restatement_records_scoring_contract() -> None
 
 
 @pytest.mark.asyncio
+async def test_apply_compensating_restatement_uses_historical_evidence_contract() -> None:
+    session = SimpleNamespace(add=MagicMock(), flush=AsyncMock())
+    active_state_version_id = uuid4()
+    historical_state_version_id = uuid4()
+    trend = Trend(
+        id=uuid4(),
+        name="Historical Contract Trend",
+        runtime_trend_id="historical-contract-trend",
+        definition={"id": "historical-contract-trend"},
+        baseline_log_odds=0.0,
+        current_log_odds=0.4,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+    )
+    trend.active_state_version_id = active_state_version_id
+    trend_evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=uuid4(),
+        event_claim_id=uuid4(),
+        state_version_id=historical_state_version_id,
+        signal_type="military_movement",
+        scoring_math_version="legacy-math",
+        scoring_parameter_set="legacy-params",
+        delta_log_odds=0.2,
+    )
+
+    class _Engine:
+        def __init__(self) -> None:
+            self.session = session
+            self.apply_log_odds_delta = AsyncMock()
+
+    engine = _Engine()
+
+    await apply_compensating_restatement(
+        trend_engine=engine,
+        trend=trend,
+        trend_evidence=trend_evidence,
+        compensation_delta_log_odds=-0.1,
+        restatement_kind="partial_restatement",
+        source="event_feedback",
+    )
+
+    restatement = session.add.call_args.args[0]
+    assert restatement.scoring_math_version == "legacy-math"
+    assert restatement.scoring_parameter_set == "legacy-params"
+    engine.apply_log_odds_delta.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_build_trend_projection_check_requires_trend_id(mock_db_session) -> None:
     trend = Trend(
         id=None,
@@ -319,6 +370,69 @@ async def test_build_trend_projection_check_requires_trend_id(mock_db_session) -
 
     with pytest.raises(ValueError, match="Trend must have an id"):
         await build_trend_projection_check(session=mock_db_session, trend=trend)
+
+
+@pytest.mark.asyncio
+async def test_build_trend_projection_check_filters_to_active_state_version(
+    mock_db_session,
+) -> None:
+    activated_at = datetime(2026, 3, 1, tzinfo=UTC)
+    active_state_version_id = uuid4()
+    trend = Trend(
+        id=uuid4(),
+        name="Active State Projection Trend",
+        runtime_trend_id="active-state-projection-trend",
+        definition={"id": "active-state-projection-trend"},
+        baseline_log_odds=0.0,
+        current_log_odds=0.24,
+        indicators={},
+        decay_half_life_days=30,
+        is_active=True,
+        created_at=activated_at,
+        updated_at=activated_at,
+    )
+    trend.active_state_version_id = active_state_version_id
+    mock_db_session.get.return_value = SimpleNamespace(
+        baseline_log_odds=0.1,
+        starting_log_odds=0.2,
+        decay_half_life_days=30,
+        activated_at=activated_at,
+    )
+    evidence = TrendEvidence(
+        id=uuid4(),
+        trend_id=trend.id,
+        event_id=uuid4(),
+        event_claim_id=uuid4(),
+        state_version_id=active_state_version_id,
+        signal_type="military_movement",
+        delta_log_odds=0.05,
+        created_at=activated_at,
+    )
+    restatement = TrendRestatement(
+        id=uuid4(),
+        trend_id=trend.id,
+        state_version_id=active_state_version_id,
+        trend_evidence_id=evidence.id,
+        restatement_kind="partial_restatement",
+        source="event_feedback",
+        original_evidence_delta_log_odds=0.05,
+        compensation_delta_log_odds=-0.01,
+        recorded_at=activated_at,
+    )
+    mock_db_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [evidence]),
+        SimpleNamespace(all=lambda: [restatement]),
+    ]
+
+    result = await build_trend_projection_check(session=mock_db_session, trend=trend)
+
+    assert result.projected_log_odds == pytest.approx(0.24, rel=1e-6)
+    assert "trend_evidence.state_version_id" in str(
+        mock_db_session.scalars.call_args_list[0].args[0]
+    )
+    assert "trend_restatements.state_version_id" in str(
+        mock_db_session.scalars.call_args_list[1].args[0]
+    )
 
 
 def test_remaining_evidence_delta_accounts_for_prior_restatements() -> None:

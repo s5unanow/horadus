@@ -72,14 +72,20 @@ from src.core.trend_config import (
     resolve_trend_config_sync_dir,
 )
 from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
+from src.core.trend_state import (
+    activate_trend_state,
+    ensure_definition_version,
+    resolve_active_definition_hash,
+    resolve_active_scoring_contract,
+)
 from src.storage.database import get_session
 from src.storage.models import (
     Trend,
-    TrendDefinitionVersion,
     TrendEvidence,
     TrendOutcome,
     TrendSnapshot,
 )
+from src.storage.trend_state_models import TrendDefinitionVersion
 
 router = APIRouter()
 SYNC_FROM_CONFIG_QUERY_REJECTED_DETAIL = (
@@ -103,6 +109,24 @@ def _hash_definition_payload(definition: dict[str, Any]) -> str:
         separators=(",", ":"),
     )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
+def _requires_state_activation(updates: dict[str, Any]) -> bool:
+    return any(
+        key in updates
+        for key in (
+            "definition",
+            "baseline_probability",
+            "indicators",
+            "decay_half_life_days",
+        )
+    )
+
+
+def _live_state_definition_basis(definition: Any) -> dict[str, Any]:
+    normalized = normalize_definition_payload(definition if isinstance(definition, dict) else None)
+    normalized.pop("forecast_contract", None)
+    return normalized
 
 
 async def _record_definition_version_if_material_change(
@@ -152,6 +176,7 @@ async def _get_evidence_stats(
     session: AsyncSession,
     *,
     trend_id: UUID,
+    state_version_id: UUID | None = None,
 ) -> tuple[int, float, int]:
     now = datetime.now(tz=UTC)
     since_30d = now - timedelta(days=30)
@@ -165,6 +190,8 @@ async def _get_evidence_stats(
         TrendEvidence.created_at >= since_30d,
         TrendEvidence.is_invalidated.is_(False),
     )
+    if state_version_id is not None:
+        count_stmt = count_stmt.where(TrendEvidence.state_version_id == state_version_id)
     count_row = (await session.execute(count_stmt)).one()
     evidence_count = int(count_row[0] or 0)
     avg_corroboration = float(count_row[1]) if count_row[1] is not None else 0.5
@@ -184,6 +211,7 @@ async def _get_top_movers_7d(
     session: AsyncSession,
     *,
     trend_id: UUID,
+    state_version_id: UUID | None = None,
     limit: int = 3,
 ) -> list[str]:
     since_7d = datetime.now(tz=UTC) - timedelta(days=7)
@@ -195,6 +223,8 @@ async def _get_top_movers_7d(
         .order_by(func.abs(TrendEvidence.delta_log_odds).desc())
         .limit(limit)
     )
+    if state_version_id is not None:
+        query = query.where(TrendEvidence.state_version_id == state_version_id)
     records = list((await session.scalars(query)).all())
     movers = [record.reasoning.strip() for record in records if record.reasoning]
     if movers:
@@ -211,6 +241,7 @@ async def _to_response(
     evidence_count, avg_corroboration, days_since_last = await _get_evidence_stats(
         session,
         trend_id=trend.id,
+        state_version_id=trend.active_state_version_id,
     )
     band_low, band_high = calculate_probability_band(
         probability=probability,
@@ -223,7 +254,11 @@ async def _to_response(
         evidence_count=evidence_count,
         avg_corroboration=avg_corroboration,
     )
-    top_movers = await _get_top_movers_7d(session, trend_id=trend.id)
+    top_movers = await _get_top_movers_7d(
+        session,
+        trend_id=trend.id,
+        state_version_id=trend.active_state_version_id,
+    )
     try:
         forecast_contract = forecast_contract_from_definition(
             trend.definition if isinstance(trend.definition, dict) else None
@@ -244,8 +279,11 @@ async def _to_response(
         confidence=confidence,
         top_movers_7d=top_movers,
         indicators=trend.indicators,
-        active_scoring_math_version=current_trend_scoring_contract()["math_version"],
-        active_scoring_parameter_set=current_trend_scoring_contract()["parameter_set"],
+        active_definition_version_id=trend.active_definition_version_id,
+        active_definition_hash=resolve_active_definition_hash(trend),
+        active_scoring_math_version=resolve_active_scoring_contract(trend)["math_version"],
+        active_scoring_parameter_set=resolve_active_scoring_contract(trend)["parameter_set"],
+        active_state_version_id=trend.active_state_version_id,
         decay_half_life_days=trend.decay_half_life_days,
         is_active=trend.is_active,
         updated_at=trend.updated_at,
@@ -259,6 +297,7 @@ def _to_evidence_response(evidence: TrendEvidence) -> TrendEvidenceResponse:
         trend_id=evidence.trend_id,
         event_id=evidence.event_id,
         event_claim_id=evidence.event_claim_id,
+        state_version_id=evidence.state_version_id,
         signal_type=evidence.signal_type,
         trend_definition_hash=evidence.trend_definition_hash,
         scoring_math_version=evidence.scoring_math_version or scoring_contract["math_version"],
@@ -299,6 +338,7 @@ def _to_history_point(snapshot: TrendSnapshot) -> TrendHistoryPoint:
     log_odds = float(snapshot.log_odds)
     return TrendHistoryPoint(
         timestamp=snapshot.timestamp,
+        state_version_id=snapshot.state_version_id,
         log_odds=log_odds,
         probability=logodds_to_prob(log_odds),
     )
@@ -369,6 +409,7 @@ async def load_trends_from_config(
     session: AsyncSession,
     *,
     config_dir: str = DEFAULT_TREND_CONFIG_SYNC_DIR,
+    activation_mode: Literal["rebase", "replay", "new_line"] | None = None,
 ) -> TrendConfigLoadResponse:
     """Load trends from YAML files and upsert by runtime trend identifier."""
     config_path = resolve_trend_config_sync_dir(config_dir)
@@ -438,12 +479,39 @@ async def load_trends_from_config(
                     context=f"config_sync:{file_path.name}",
                     force=True,
                 )
+                definition_version = await ensure_definition_version(
+                    session=session,
+                    trend=trend,
+                    actor="system",
+                    context=f"config_sync:{file_path.name}",
+                )
+                await activate_trend_state(
+                    session=session,
+                    trend=trend,
+                    activation_kind="create",
+                    actor="system",
+                    context=f"config_sync:{file_path.name}",
+                    definition_version=definition_version,
+                )
                 result.created += 1
                 continue
 
             previous_definition = normalize_definition_payload(
                 existing.definition if isinstance(existing.definition, dict) else None
             )
+            state_payload_changed = (
+                _live_state_definition_basis(previous_definition)
+                != _live_state_definition_basis(write_payload.definition)
+                or float(existing.baseline_log_odds) != float(write_payload.baseline_log_odds)
+                or existing.indicators != write_payload.indicators
+                or existing.decay_half_life_days != validated_config.decay_half_life_days
+            )
+            if state_payload_changed and activation_mode is None:
+                result.errors.append(
+                    f"{file_path.name}: material live-state changes require activation_mode "
+                    "(rebase, replay, or new_line)"
+                )
+                continue
             existing.name = validated_config.name
             existing.description = validated_config.description
             existing.runtime_trend_id = runtime_trend_id
@@ -458,6 +526,23 @@ async def load_trends_from_config(
                 actor="system",
                 context=f"config_sync:{file_path.name}",
             )
+            if state_payload_changed:
+                assert activation_mode is not None
+                definition_version = await ensure_definition_version(
+                    session=session,
+                    trend=existing,
+                    actor="system",
+                    context=f"config_sync:{file_path.name}",
+                )
+                await activate_trend_state(
+                    session=session,
+                    trend=existing,
+                    activation_kind=activation_mode,
+                    actor="system",
+                    context=f"config_sync:{file_path.name}",
+                    definition_version=definition_version,
+                    details={"source_file": file_path.name},
+                )
             result.updated += 1
         except Exception as exc:
             result.errors.append(f"{file_path.name}: {exc}")
@@ -558,6 +643,20 @@ async def create_trend(
         context="create_trend",
         force=True,
     )
+    definition_version = await ensure_definition_version(
+        session=session,
+        trend=trend_record,
+        actor="api",
+        context="create_trend",
+    )
+    await activate_trend_state(
+        session=session,
+        trend=trend_record,
+        activation_kind="create",
+        actor="api",
+        context="create_trend",
+        definition_version=definition_version,
+    )
 
     return await _to_response(trend_record, session=session)
 
@@ -567,11 +666,19 @@ async def create_trend(
 )
 async def sync_trends_from_config(
     config_dir: str = Query(default=DEFAULT_TREND_CONFIG_SYNC_DIR),
+    activation_mode: Annotated[
+        Literal["rebase", "replay", "new_line"] | None,
+        Query(),
+    ] = None,
     session: AsyncSession = Depends(get_session),
 ) -> TrendConfigLoadResponse:
     """Load or update trends from YAML files under `config/trends/`."""
     try:
-        return await load_trends_from_config(session=session, config_dir=config_dir)
+        return await load_trends_from_config(
+            session=session,
+            config_dir=config_dir,
+            activation_mode=activation_mode,
+        )
     except TrendConfigSyncPathError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -701,6 +808,8 @@ async def simulate_trend(
             TrendEvidence.event_id == payload.event_id,
             TrendEvidence.is_invalidated.is_(False),
         )
+        if trend.active_state_version_id is not None:
+            query = query.where(TrendEvidence.state_version_id == trend.active_state_version_id)
         if payload.signal_type is not None:
             query = query.where(TrendEvidence.signal_type == payload.signal_type)
 
@@ -874,9 +983,12 @@ async def update_trend(
         trend_record.definition if isinstance(trend_record.definition, dict) else None
     )
     updates = trend.model_dump(exclude_unset=True)
+    activation_mode = updates.pop("activation_mode", None)
+    activation_notes = updates.pop("activation_notes", None)
     definition_updated = any(
         key in updates for key in ("definition", "forecast_contract", "baseline_probability")
     )
+    requested_state_activation = _requires_state_activation(updates)
 
     candidate_name = updates.get("name", trend_record.name)
     candidate_description = updates.get("description", trend_record.description)
@@ -897,6 +1009,21 @@ async def update_trend(
         "decay_half_life_days",
         trend_record.decay_half_life_days,
     )
+    state_contract_changed = requested_state_activation and (
+        _live_state_definition_basis(candidate_definition)
+        != _live_state_definition_basis(previous_definition)
+        or candidate_baseline_probability != logodds_to_prob(float(trend_record.baseline_log_odds))
+        or candidate_indicators != trend_record.indicators
+        or candidate_decay_half_life_days != trend_record.decay_half_life_days
+    )
+    if state_contract_changed and activation_mode is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Material live-state changes require activation_mode "
+                "('rebase', 'replay', or 'new_line')."
+            ),
+        )
 
     try:
         write_payload = build_validated_trend_write_payload(
@@ -945,6 +1072,23 @@ async def update_trend(
             previous_definition=previous_definition,
             actor="api",
             context="update_trend",
+        )
+    if state_contract_changed:
+        assert activation_mode is not None
+        definition_version = await ensure_definition_version(
+            session=session,
+            trend=trend_record,
+            actor="api",
+            context="update_trend",
+        )
+        await activate_trend_state(
+            session=session,
+            trend=trend_record,
+            activation_kind=activation_mode,
+            actor="api",
+            context="update_trend",
+            definition_version=definition_version,
+            details={"notes": activation_notes} if activation_notes else None,
         )
     try:
         await session.flush()

@@ -580,31 +580,6 @@ only visible in transient logs or partial per-feature lineage.
 
 ---
 
-### TASK-337: Pin Live Trend State to Active Definition/Scoring Versions
-**Priority**: P1 (High)
-**Estimate**: 6-8 hours
-
-Evidence rows now carry strong provenance, but live trend state can still drift
-into a semantic hybrid when definition or scoring contracts change. Make live
-probability state explicitly versioned so definition activation, replay, and
-rebase behavior are auditable instead of implicit.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/api/routes/trends.py`, `src/core/trend_engine.py`, `src/workers/`, `src/core/report_generator.py`, `docs/DATA_MODEL.md`, `docs/ARCHITECTURE.md`, `tests/`, `alembic/`
-
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-
-**Acceptance Criteria**:
-- [ ] Introduce an explicit active definition/scoring-version reference for live trend state and any persisted derived state that depends on current scoring semantics
-- [ ] Require definition/scoring changes to activate through an explicit workflow that chooses between rebase/replay and a new active-state line, rather than silently continuing the old live state
-- [ ] Define one replay/rebase isolation strategy for live-state recomputation (for example shadow state + promote, or equivalent cutoff/freeze semantics) and document it as an invariant
-- [ ] Expose active definition/scoring-version metadata in trend API responses and operator-facing debug paths
-- [ ] Add regression coverage proving the system does not mix old-version and new-version semantics into one unexplained live probability state
-
----
-
 ### TASK-338: Separate Provisional and Canonical Extraction State in Degraded Mode
 **Priority**: P1 (High)
 **Estimate**: 4-6 hours

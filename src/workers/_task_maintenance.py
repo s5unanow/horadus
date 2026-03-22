@@ -276,6 +276,7 @@ async def snapshot_trends_async(*, deps: Any) -> dict[str, Any]:
                 deps.TrendSnapshot(
                     trend_id=trend_id,
                     timestamp=snapshot_time,
+                    state_version_id=getattr(trend, "active_state_version_id", None),
                     log_odds=float(trend.current_log_odds),
                 )
             )

@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.trend_config import index_trends_by_runtime_id, trend_runtime_id_for_record
@@ -574,8 +574,18 @@ async def _load_active_event_evidence(
 ) -> list[TrendEvidence]:
     result = await session.scalars(
         select(TrendEvidence)
+        .join(Trend, Trend.id == TrendEvidence.trend_id)
         .where(TrendEvidence.event_id == event_id)
         .where(TrendEvidence.is_invalidated.is_(False))
+        .where(
+            or_(
+                TrendEvidence.state_version_id == Trend.active_state_version_id,
+                and_(
+                    TrendEvidence.state_version_id.is_(None),
+                    Trend.active_state_version_id.is_(None),
+                ),
+            )
+        )
         .order_by(TrendEvidence.created_at.asc())
     )
     rows = result.all()

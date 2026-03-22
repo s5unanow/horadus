@@ -42,8 +42,9 @@ from src.storage.scoring_contract import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,
 )
+from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
-_ = (EventLineage, HumanFeedback, TrendRestatement)
+_ = (EventLineage, HumanFeedback, TrendRestatement, TrendStateVersion)
 
 
 class SourceType(enum.StrEnum):
@@ -593,6 +594,27 @@ class Trend(Base):
     description: Mapped[str | None] = mapped_column(Text)
     runtime_trend_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    active_definition_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "trend_definition_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_trends_active_definition_version",
+        ),
+    )
+    active_definition_hash: Mapped[str | None] = mapped_column(String(64))
+    active_scoring_math_version: Mapped[str | None] = mapped_column(String(64))
+    active_scoring_parameter_set: Mapped[str | None] = mapped_column(String(64))
+    active_state_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "trend_state_versions.id",
+            ondelete="SET NULL",
+            use_alter=True,
+            name="fk_trends_active_state_version",
+        ),
+    )
 
     # Probability as log-odds
     baseline_log_odds: Mapped[float] = mapped_column(
@@ -629,48 +651,21 @@ class Trend(Base):
     evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="trend")
     snapshots: Mapped[list[TrendSnapshot]] = relationship(back_populates="trend")
     outcomes: Mapped[list[TrendOutcome]] = relationship(back_populates="trend")
-    definition_versions: Mapped[list[TrendDefinitionVersion]] = relationship(back_populates="trend")
+    definition_versions: Mapped[list[TrendDefinitionVersion]] = relationship(
+        back_populates="trend",
+        foreign_keys="TrendDefinitionVersion.trend_id",
+    )
+    state_versions: Mapped[list[TrendStateVersion]] = relationship(
+        back_populates="trend",
+        foreign_keys="TrendStateVersion.trend_id",
+    )
+    active_state_version: Mapped[TrendStateVersion | None] = relationship(
+        foreign_keys=[active_state_version_id],
+        post_update=True,
+    )
 
     # Indexes
     __table_args__ = (Index("idx_trends_active", "is_active"),)
-
-
-class TrendDefinitionVersion(Base):
-    """
-    Append-only record of trend definition payload changes.
-
-    Captures trend-definition state at write time so operators can audit
-    historical definition changes independently from Git history.
-    """
-
-    __tablename__ = "trend_definition_versions"
-
-    id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-        default=uuid4,
-    )
-    trend_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("trends.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    definition_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    definition: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    actor: Mapped[str | None] = mapped_column(String(255))
-    context: Mapped[str | None] = mapped_column(String(255))
-    recorded_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-
-    trend: Mapped[Trend] = relationship(back_populates="definition_versions")
-
-    __table_args__ = (
-        Index("idx_trend_definition_versions_trend_recorded", "trend_id", "recorded_at"),
-        Index("idx_trend_definition_versions_hash", "definition_hash"),
-    )
 
 
 class TrendEvidence(Base):
@@ -697,6 +692,10 @@ class TrendEvidence(Base):
         PGUUID(as_uuid=True),
         ForeignKey("event_claims.id", ondelete="CASCADE"),
         nullable=False,
+    )
+    state_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("trend_state_versions.id", ondelete="SET NULL"),
     )
 
     # Signal classification
@@ -766,13 +765,14 @@ class TrendEvidence(Base):
             ondelete="CASCADE",
             name="fk_trend_evidence_event_id_event_claim_id_event_claims",
         ),
+        Index("idx_evidence_state_created", "state_version_id", "created_at"),
         Index("idx_evidence_trend_created", "trend_id", "created_at"),
         Index("idx_evidence_event", "event_id"),
         Index("idx_evidence_event_claim", "event_claim_id"),
         Index("idx_evidence_event_invalidated", "event_id", "is_invalidated"),
         Index(
             "uq_trend_event_claim_signal_active",
-            "trend_id",
+            "state_version_id",
             "event_claim_id",
             "signal_type",
             unique=True,
@@ -936,6 +936,10 @@ class TrendSnapshot(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         primary_key=True,
+    )
+    state_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("trend_state_versions.id", ondelete="SET NULL"),
     )
     log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
     event_count_24h: Mapped[int | None] = mapped_column(Integer)

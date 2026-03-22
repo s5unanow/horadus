@@ -39,7 +39,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
-from src.core.runtime_provenance import current_trend_scoring_contract
+from src.core.trend_state import resolve_active_definition_hash, resolve_active_scoring_contract
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -442,12 +442,14 @@ class TrendEngine:
         trend_id: UUID,
         delta: float,
         reason: str,
+        active_state_version_id: UUID | None = None,
         trend_name: str | None = None,
         updated_at: datetime | None = None,
         fallback_current_log_odds: float | None = None,
     ) -> tuple[float, float]:
         """Apply a log-odds delta atomically and return (previous_lo, new_lo)."""
         from src.storage.models import Trend
+        from src.storage.trend_state_models import TrendStateVersion
 
         delta_value = Decimal(str(delta))
         applied_at = _as_utc(updated_at) if updated_at is not None else datetime.now(UTC)
@@ -488,6 +490,13 @@ class TrendEngine:
 
         new_lo = parsed_new_log_odds
         previous_lo = new_lo - float(delta_value)
+        if isinstance(active_state_version_id, UUID):
+            await self.session.execute(
+                update(TrendStateVersion)
+                .where(TrendStateVersion.id == active_state_version_id)
+                .values(current_log_odds=TrendStateVersion.current_log_odds + delta_value)
+                .execution_options(synchronize_session=False)
+            )
         logger.debug(
             "Applied atomic trend log-odds delta",
             trend_id=str(trend_id),
@@ -518,7 +527,7 @@ class TrendEngine:
 
         existing = await self.session.execute(
             select(TrendEvidence.id).where(
-                TrendEvidence.trend_id == trend.id,
+                TrendEvidence.state_version_id == trend.active_state_version_id,
                 TrendEvidence.event_claim_id == event_claim_id,
                 TrendEvidence.signal_type == signal_type,
                 TrendEvidence.is_invalidated.is_(False),
@@ -540,16 +549,23 @@ class TrendEngine:
                 direction="unchanged",
             )
 
+        scoring_contract = resolve_active_scoring_contract(trend)
+        active_state_version_id = (
+            trend.active_state_version_id
+            if isinstance(trend.active_state_version_id, UUID)
+            else None
+        )
         evidence = TrendEvidence(
             trend_id=trend.id,
             event_id=event_id,
             event_claim_id=event_claim_id,
+            state_version_id=active_state_version_id,
             signal_type=signal_type,
             base_weight=factors.base_weight,
             direction_multiplier=factors.direction_multiplier,
-            trend_definition_hash=self._definition_hash(trend.definition),
-            scoring_math_version=current_trend_scoring_contract()["math_version"],
-            scoring_parameter_set=current_trend_scoring_contract()["parameter_set"],
+            trend_definition_hash=resolve_active_definition_hash(trend),
+            scoring_math_version=scoring_contract["math_version"],
+            scoring_parameter_set=scoring_contract["parameter_set"],
             credibility_score=factors.credibility,
             corroboration_factor=factors.corroboration,
             novelty_score=factors.novelty,
@@ -584,6 +600,7 @@ class TrendEngine:
         applied_at = datetime.now(UTC)
         previous_lo, new_lo = await self.apply_log_odds_delta(
             trend_id=trend.id,
+            active_state_version_id=active_state_version_id,
             trend_name=trend.name,
             delta=delta,
             reason="evidence",
@@ -648,6 +665,7 @@ class TrendEngine:
         as_of = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
 
         from src.storage.models import Trend as TrendModel
+        from src.storage.trend_state_models import TrendStateVersion
 
         locked_row_result = await self.session.execute(
             select(
@@ -701,6 +719,13 @@ class TrendEngine:
                 .values(current_log_odds=new_lo, updated_at=as_of)
                 .execution_options(synchronize_session=False)
             )
+            if isinstance(trend.active_state_version_id, UUID):
+                await self.session.execute(
+                    update(TrendStateVersion)
+                    .where(TrendStateVersion.id == trend.active_state_version_id)
+                    .values(current_log_odds=new_lo)
+                    .execution_options(synchronize_session=False)
+                )
         trend.current_log_odds = new_lo
         trend.updated_at = as_of
 

@@ -155,6 +155,49 @@ async def test_evidence_stats_and_top_movers_cover_fallback_paths(mock_db_sessio
     assert await _get_top_movers_7d(mock_db_session, trend_id=uuid4(), limit=2) == ["Trim me"]
 
 
+@pytest.mark.asyncio
+async def test_evidence_stats_and_top_movers_filter_by_state_version(mock_db_session) -> None:
+    state_version_id = uuid4()
+    mock_db_session.execute.return_value = SimpleNamespace(
+        one=lambda: (1, 0.6, datetime.now(tz=UTC))
+    )
+
+    count, avg_corroboration, days_since_last = await _get_evidence_stats(
+        mock_db_session,
+        trend_id=uuid4(),
+        state_version_id=state_version_id,
+    )
+
+    assert count == 1
+    assert avg_corroboration == pytest.approx(0.6)
+    assert days_since_last >= 0
+    assert "trend_evidence.state_version_id" in str(mock_db_session.execute.await_args.args[0])
+
+    mock_db_session.scalars.return_value = SimpleNamespace(
+        all=lambda: [
+            TrendEvidence(
+                id=uuid4(),
+                trend_id=uuid4(),
+                event_id=uuid4(),
+                event_claim_id=uuid4(),
+                state_version_id=state_version_id,
+                signal_type="military_movement",
+                delta_log_odds=0.1,
+                reasoning="state move",
+            )
+        ]
+    )
+    movers = await _get_top_movers_7d(
+        mock_db_session,
+        trend_id=uuid4(),
+        state_version_id=state_version_id,
+        limit=2,
+    )
+
+    assert movers == ["state move"]
+    assert "trend_evidence.state_version_id" in str(mock_db_session.scalars.await_args.args[0])
+
+
 def test_history_helpers_cover_weekly_bucket_and_downsampling() -> None:
     first = TrendSnapshot(
         trend_id=uuid4(),
@@ -199,9 +242,10 @@ async def test_load_trends_sync_and_list_trends_cover_wrapper_paths(
     monkeypatch.setattr(trends_module, "_get_top_movers_7d", AsyncMock(return_value=[]))
     called: list[str] = []
 
-    async def fake_sync(*, session, config_dir: str = "config/trends"):
+    async def fake_sync(*, session, config_dir: str = "config/trends", activation_mode=None):
         assert session is mock_db_session
         called.append(config_dir)
+        assert activation_mode is None
         return SimpleNamespace(loaded_files=0, created=0, updated=0, errors=[])
 
     monkeypatch.setattr(trends_module, "load_trends_from_config", fake_sync)
@@ -303,7 +347,9 @@ indicators:
     existing.runtime_trend_id = "shared-runtime-id"
     mock_db_session.scalar.side_effect = [existing, None]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=".")
+    result = await load_trends_from_config(
+        mock_db_session, config_dir=".", activation_mode="rebase"
+    )
 
     assert result.created == 0
     assert result.updated == 1
@@ -340,7 +386,9 @@ indicators:
     existing_by_name.runtime_trend_id = "other-runtime-id"
     mock_db_session.scalar.side_effect = [existing_by_runtime, existing_by_name]
 
-    result = await load_trends_from_config(mock_db_session, config_dir=".")
+    result = await load_trends_from_config(
+        mock_db_session, config_dir=".", activation_mode="rebase"
+    )
 
     assert result.created == 0
     assert result.updated == 0
@@ -423,11 +471,104 @@ indicators:
     existing = _build_trend(name="EU Russia")
     mock_db_session.scalar.return_value = existing
 
-    result = await load_trends_from_config(mock_db_session, config_dir=".")
+    result = await load_trends_from_config(
+        mock_db_session, config_dir=".", activation_mode="rebase"
+    )
 
     assert result.updated == 1
     assert existing.description == "Updated description"
     assert existing.decay_half_life_days == 20
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_requires_activation_for_material_live_state_change(
+    mock_db_session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
+    config_file = tmp_path / "trend.yaml"
+    config_file.write_text(
+        f"""
+id: eu-russia
+name: EU Russia
+description: Updated description
+baseline_probability: 0.35
+decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
+indicators:
+  signal:
+    weight: 0.04
+    direction: escalatory
+""".strip(),
+        encoding="utf-8",
+    )
+    existing = _build_trend(name="EU Russia")
+    mock_db_session.scalar.return_value = existing
+
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
+
+    assert result.updated == 0
+    assert result.errors == [
+        "trend.yaml: material live-state changes require activation_mode (rebase, replay, or new_line)"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_load_trends_from_config_allows_forecast_contract_only_update_without_activation(
+    mock_db_session,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _use_tmp_trend_root(monkeypatch, tmp_path)
+    config_file = tmp_path / "trend.yaml"
+    config_file.write_text(
+        f"""
+id: trend-a
+name: Trend A
+description: description
+baseline_probability: 0.10
+decay_half_life_days: 30
+{sample_forecast_contract_yaml(sample_binary_forecast_contract(question="Updated question?"))}
+indicators:
+  signal:
+    weight: 0.04
+    direction: escalatory
+    keywords:
+      - x
+""".strip(),
+        encoding="utf-8",
+    )
+    existing = _build_trend(name="Trend A")
+    existing_payload = trends_module.build_validated_trend_write_payload(
+        name="Trend A",
+        description="description",
+        baseline_probability=0.10,
+        decay_half_life_days=30,
+        indicators={
+            "signal": {
+                "weight": 0.04,
+                "direction": "escalatory",
+                "keywords": ["x"],
+            }
+        },
+        definition={"id": "trend-a"},
+        forecast_contract=sample_binary_forecast_contract(),
+        require_forecast_contract=True,
+    )
+    existing.definition = existing_payload.definition
+    existing.indicators = existing_payload.indicators
+    mock_db_session.scalar.return_value = existing
+
+    result = await load_trends_from_config(mock_db_session, config_dir=".")
+
+    assert result.updated == 1
+    assert result.errors == []
+    assert existing.definition["forecast_contract"]["question"] == "Updated question?"
+    assert not any(
+        call.args and call.args[0].__class__.__name__ == "TrendStateVersion"
+        for call in mock_db_session.add.call_args_list
+    )
 
 
 @pytest.mark.asyncio
@@ -542,6 +683,57 @@ async def test_simulate_remove_event_and_update_trend_duplicate_name_paths(
         await update_trend(
             trend_id=trend.id,
             trend=trends_module.TrendUpdate(name="Duplicate"),
+            session=mock_db_session,
+        )
+
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_simulate_remove_event_filters_active_state_version(mock_db_session) -> None:
+    trend = _build_trend(name="Current Trend")
+    trend.active_state_version_id = uuid4()
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalars.return_value = SimpleNamespace(
+        all=lambda: [
+            TrendEvidence(
+                id=uuid4(),
+                trend_id=trend.id,
+                event_id=uuid4(),
+                event_claim_id=uuid4(),
+                state_version_id=trend.active_state_version_id,
+                signal_type="military_movement",
+                delta_log_odds=0.2,
+            )
+        ]
+    )
+
+    result = await simulate_trend(
+        trend_id=trend.id,
+        payload=trends_module.RemoveEventImpactSimulationRequest(
+            mode="remove_event_impact",
+            event_id=uuid4(),
+        ),
+        session=mock_db_session,
+    )
+
+    assert result.factor_breakdown["evidence_count"] == 1
+    assert "trend_evidence.state_version_id" in str(mock_db_session.scalars.await_args.args[0])
+
+
+@pytest.mark.asyncio
+async def test_update_trend_requires_activation_mode_for_material_live_state_change(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(name="Current Trend")
+    mock_db_session.get.return_value = trend
+
+    with pytest.raises(
+        HTTPException, match="Material live-state changes require activation_mode"
+    ) as exc:
+        await update_trend(
+            trend_id=trend.id,
+            trend=trends_module.TrendUpdate(baseline_probability=0.3),
             session=mock_db_session,
         )
 

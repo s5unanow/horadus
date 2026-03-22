@@ -59,6 +59,7 @@ class TrendCreate(BaseModel):
                 },
                 "decay_half_life_days": 30,
                 "is_active": True,
+                "activation_mode": "rebase",
             }
         }
     )
@@ -125,6 +126,8 @@ class TrendUpdate(BaseModel):
     indicators: dict[str, Any] | None = None
     decay_half_life_days: int | None = Field(default=None, ge=1)
     is_active: bool | None = None
+    activation_mode: Literal["rebase", "replay", "new_line"] | None = None
+    activation_notes: str | None = None
 
 
 class TrendResponse(BaseModel):
@@ -177,8 +180,11 @@ class TrendResponse(BaseModel):
                     "Diplomatic talks were suspended after border incident.",
                 ],
                 "indicators": {"military_movement": {"direction": "escalatory", "weight": 0.04}},
+                "active_definition_version_id": "1b4e28ba-2fa1-11d2-883f-0016d3cca427",
+                "active_definition_hash": "definition-hash-example-v2",
                 "active_scoring_math_version": "trend-scoring-v1",
                 "active_scoring_parameter_set": "stable-default-v1",
+                "active_state_version_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "decay_half_life_days": 30,
                 "is_active": True,
                 "updated_at": "2026-02-07T19:56:00Z",
@@ -198,8 +204,11 @@ class TrendResponse(BaseModel):
     confidence: risk_module.ConfidenceRating
     top_movers_7d: list[str]
     indicators: dict[str, Any]
+    active_definition_version_id: UUID | None
+    active_definition_hash: str
     active_scoring_math_version: str
     active_scoring_parameter_set: str
+    active_state_version_id: UUID | None
     decay_half_life_days: int
     is_active: bool
     updated_at: datetime

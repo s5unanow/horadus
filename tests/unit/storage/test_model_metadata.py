@@ -19,6 +19,7 @@ from src.storage.models import (
     TrendDefinitionVersion,
     TrendEvidence,
     TrendRestatement,
+    TrendStateVersion,
 )
 
 pytestmark = pytest.mark.unit
@@ -142,6 +143,23 @@ def test_trend_evidence_factorization_columns_present_in_model_metadata() -> Non
     assert "scoring_math_version" in TrendEvidence.__table__.c
     assert "scoring_parameter_set" in TrendEvidence.__table__.c
     assert "event_claim_id" in TrendEvidence.__table__.c
+    assert "state_version_id" in TrendEvidence.__table__.c
+
+
+def test_trend_state_version_columns_and_constraints_present_in_model_metadata() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in TrendStateVersion.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+    index_names = {index.name for index in TrendStateVersion.__table__.indexes}
+
+    assert "definition_version_id" in TrendStateVersion.__table__.c
+    assert "activation_kind" in TrendStateVersion.__table__.c
+    assert "starting_log_odds" in TrendStateVersion.__table__.c
+    assert "current_log_odds" in TrendStateVersion.__table__.c
+    assert "check_trend_state_versions_activation_kind_allowed" in constraint_names
+    assert "idx_trend_state_versions_trend_activated" in index_names
 
 
 def test_event_claim_constraints_present_in_model_metadata() -> None:
@@ -175,6 +193,11 @@ def test_trend_evidence_active_unique_index_present_in_model_metadata() -> None:
     where_clause = evidence_index.dialect_options["postgresql"]["where"]
 
     assert evidence_index.unique is True
+    assert [column.name for column in evidence_index.columns] == [
+        "state_version_id",
+        "event_claim_id",
+        "signal_type",
+    ]
     assert (
         str(
             where_clause.compile(
@@ -195,12 +218,14 @@ def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -
     index_names = {index.name for index in TrendRestatement.__table__.indexes}
 
     assert "trend_evidence_id" in TrendRestatement.__table__.c
+    assert "state_version_id" in TrendRestatement.__table__.c
     assert "compensation_delta_log_odds" in TrendRestatement.__table__.c
     assert "scoring_math_version" in TrendRestatement.__table__.c
     assert "scoring_parameter_set" in TrendRestatement.__table__.c
     assert "check_trend_restatements_kind_allowed" in constraint_names
     assert "check_trend_restatements_source_allowed" in constraint_names
     assert "idx_trend_restatements_trend_recorded" in index_names
+    assert "idx_trend_restatements_state_recorded" in index_names
 
 
 def test_event_lineage_columns_and_constraints_present_in_model_metadata() -> None:

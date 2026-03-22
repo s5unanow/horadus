@@ -43,6 +43,7 @@ class TrendEvidenceResponse(BaseModel):
                 "trend_id": "0f8fad5b-d9cb-469f-a165-70867728950e",
                 "event_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "event_claim_id": "5b1fdf8a-327d-4b3f-82e0-1f53dfcccf63",
+                "state_version_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "signal_type": "military_movement",
                 "trend_definition_hash": "definition-hash-example-v1",
                 "scoring_math_version": "trend-scoring-v1",
@@ -68,6 +69,7 @@ class TrendEvidenceResponse(BaseModel):
     trend_id: UUID
     event_id: UUID
     event_claim_id: UUID
+    state_version_id: UUID | None
     signal_type: str
     trend_definition_hash: str | None
     scoring_math_version: str
@@ -94,6 +96,7 @@ class TrendHistoryPoint(BaseModel):
         json_schema_extra={
             "example": {
                 "timestamp": "2026-02-07T18:00:00Z",
+                "state_version_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "log_odds": -1.65,
                 "probability": 0.161,
             }
@@ -101,5 +104,6 @@ class TrendHistoryPoint(BaseModel):
     )
 
     timestamp: datetime
+    state_version_id: UUID | None = None
     log_odds: float
     probability: float

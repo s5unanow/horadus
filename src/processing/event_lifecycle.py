@@ -38,11 +38,15 @@ class EventLifecycleManager:
         mentioned_at: datetime | None = None,
     ) -> bool:
         mention_time = mentioned_at or datetime.now(tz=UTC)
-        event.last_mention_at = mention_time
+        effective_mention_time = self._effective_mention_time(
+            current_last_mention_at=event.last_mention_at,
+            incoming_mention_time=mention_time,
+        )
+        event.last_mention_at = effective_mention_time
         return self.sync_event_state(
             event,
-            confirmed_at=mention_time,
-            activity_state=EventActivityState.ACTIVE.value,
+            confirmed_at=effective_mention_time,
+            activity_state=self._activity_state_for_last_mention(effective_mention_time),
         )
 
     def sync_event_state(
@@ -75,6 +79,28 @@ class EventLifecycleManager:
         return (
             previous_epistemic != event.epistemic_state or previous_activity != event.activity_state
         )
+
+    @staticmethod
+    def _effective_mention_time(
+        *,
+        current_last_mention_at: datetime | None,
+        incoming_mention_time: datetime,
+    ) -> datetime:
+        if current_last_mention_at is None:
+            return incoming_mention_time
+        return max(current_last_mention_at, incoming_mention_time)
+
+    @staticmethod
+    def _activity_state_for_last_mention(last_mention_at: datetime | None) -> str:
+        if last_mention_at is None:
+            return EventActivityState.ACTIVE.value
+
+        now = datetime.now(tz=UTC)
+        if last_mention_at < now - timedelta(days=ARCHIVE_DAYS):
+            return EventActivityState.CLOSED.value
+        if last_mention_at < now - timedelta(hours=FADING_HOURS):
+            return EventActivityState.DORMANT.value
+        return EventActivityState.ACTIVE.value
 
     async def run_decay_check(self, *, now: datetime | None = None) -> dict[str, Any]:
         as_of = now or datetime.now(tz=UTC)

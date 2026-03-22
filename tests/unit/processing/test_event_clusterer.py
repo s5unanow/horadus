@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -632,6 +632,43 @@ async def test_merge_into_event_preserves_existing_embedding(mock_db_session, mo
 
     assert event.embedding == [0.1, 0.2]
     assert event.embedding_model == "old-model"
+
+
+@pytest.mark.asyncio
+async def test_merge_into_event_keeps_last_mention_monotonic_for_older_backfill(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    clusterer = EventClusterer(session=mock_db_session)
+    current_last_mention = datetime.now(tz=UTC)
+    item = _build_item(embedding=None, title="older backfill")
+    item.published_at = current_last_mention - timedelta(days=1)
+    event = Event(
+        canonical_summary="summary",
+        source_count=1,
+        unique_source_count=1,
+        primary_item_id=uuid4(),
+        last_mention_at=current_last_mention,
+        activity_state="active",
+        lifecycle_status=EventLifecycle.EMERGING.value,
+    )
+    clusterer._update_primary_item = AsyncMock(return_value=False)
+    clusterer._count_unique_sources = AsyncMock(return_value=2)
+    clusterer._refresh_event_provenance = AsyncMock()
+    monkeypatch.setattr(
+        event_clusterer_module,
+        "resolve_cluster_health",
+        AsyncMock(
+            return_value={
+                "cluster_cohesion_score": 0.9,
+                "split_risk_score": 0.1,
+            }
+        ),
+    )
+
+    await clusterer._merge_into_event(event, item)
+
+    assert event.last_mention_at == current_last_mention
 
 
 @pytest.mark.asyncio

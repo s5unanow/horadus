@@ -189,7 +189,6 @@ class EventClusterer:
     async def _merge_into_event(self, event: Event, item: RawItem) -> None:
         event.source_count += 1
         mention_time = self._item_timestamp(item)
-        event.last_mention_at = mention_time
         if event.embedding is None and item.embedding is not None:
             event.embedding = item.embedding
             event.embedding_model = item.embedding_model

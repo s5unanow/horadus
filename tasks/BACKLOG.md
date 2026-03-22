@@ -190,27 +190,6 @@ umask.
 
 ---
 
-### TASK-201: Preserve audited, atomic manual trend overrides
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-`PATCH /api/v1/trends/{id}` still accepts `current_probability` and writes
-`current_log_odds` directly, bypassing the atomic delta path and the
-`HumanFeedback` audit trail used by the dedicated override endpoint.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 1 finding 2
-- User review intake 2026-03-05, Reviewer 2 finding 3
-
-**Files**: `src/api/routes/trends.py`, `src/api/routes/feedback.py`, `src/core/trend_engine.py`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] `PATCH /api/v1/trends/{id}` can no longer mutate live probability state outside the audited override flow
-- [ ] All manual probability changes use the atomic delta path and emit `HumanFeedback` lineage, or the generic patch route rejects such writes explicitly
-- [ ] Add tests covering unauthorized direct probability rewrites and preserved audit/atomicity behavior
-
----
-
 ### TASK-202: Make degraded replay queue retryable instead of fail-once terminal
 **Priority**: P1 (High)
 **Estimate**: 3-5 hours

@@ -260,7 +260,7 @@ async def test_get_trend_returns_404_when_missing(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_trend_updates_fields_and_probabilities(mock_db_session) -> None:
+async def test_update_trend_updates_metadata_fields(mock_db_session) -> None:
     trend = _build_trend()
     mock_db_session.get.return_value = trend
     mock_db_session.scalar.return_value = None
@@ -269,28 +269,22 @@ async def test_update_trend_updates_fields_and_probabilities(mock_db_session) ->
         trend_id=trend.id,
         trend=TrendUpdate(
             name="Updated Trend",
-            baseline_probability=0.25,
-            current_probability=0.35,
+            description="Updated description",
             is_active=False,
-            definition={},
-            forecast_contract=sample_binary_forecast_contract(),
-            activation_mode="rebase",
         ),
         session=mock_db_session,
     )
 
     assert trend.name == "Updated Trend"
-    assert trend.runtime_trend_id == "updated-trend"
-    assert trend.definition["id"] == "updated-trend"
-    assert trend.definition["baseline_probability"] == pytest.approx(0.25, rel=0.001)
-    assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.25), rel=0.001)
-    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.35), rel=0.001)
+    assert trend.description == "Updated description"
+    assert trend.runtime_trend_id == "test-trend"
+    assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.1), rel=0.001)
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
     assert trend.is_active is False
-    assert result.current_probability == pytest.approx(0.35, rel=0.01)
+    assert result.current_probability == pytest.approx(0.2, rel=0.01)
     assert mock_db_session.flush.await_count == 1
 
 
-@pytest.mark.asyncio
 async def test_update_trend_syncs_definition_baseline_without_definition_payload(
     mock_db_session,
 ) -> None:

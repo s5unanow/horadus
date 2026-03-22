@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID, uuid4
@@ -26,6 +27,13 @@ from src.storage.trend_state_models import TrendDefinitionVersion
 
 if TYPE_CHECKING:
     from src.api.routes.trend_api_models import TrendCreate, TrendUpdate
+
+
+_DIRECT_PROBABILITY_OVERRIDE_DETAIL = (
+    "PATCH /api/v1/trends/{id} cannot modify current_probability directly; "
+    "use POST /api/v1/trends/{id}/override."
+)
+_CURRENT_PROBABILITY_NOOP_ABS_TOL = 1e-6
 
 
 @dataclass(slots=True)
@@ -93,6 +101,53 @@ def _definition_update_requested(updates: dict[str, Any]) -> bool:
     return any(
         key in updates for key in ("definition", "forecast_contract", "baseline_probability")
     )
+
+
+def _normalize_noop_current_probability(
+    *,
+    trend: Trend,
+    updates: dict[str, Any],
+    activation_mode: str | None,
+    candidate_baseline_probability: float,
+    state_activation_required: bool,
+) -> None:
+    if "current_probability" not in updates:
+        return
+    requested_probability = updates["current_probability"]
+    if requested_probability is None:
+        updates.pop("current_probability", None)
+        return
+    requested_probability = float(requested_probability)
+    current_probability = logodds_to_prob(float(trend.current_log_odds))
+    if (
+        activation_mode in ("replay", "new_line")
+        and state_activation_required
+        and (
+            math.isclose(
+                requested_probability,
+                current_probability,
+                rel_tol=0.0,
+                abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
+            )
+            or math.isclose(
+                requested_probability,
+                candidate_baseline_probability,
+                rel_tol=0.0,
+                abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
+            )
+        )
+    ):
+        updates.pop("current_probability", None)
+        return
+    if activation_mode not in (None, "rebase"):
+        return
+    if math.isclose(
+        requested_probability,
+        current_probability,
+        rel_tol=0.0,
+        abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
+    ):
+        updates.pop("current_probability", None)
 
 
 def _resolved_candidate_definition(
@@ -247,6 +302,37 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
     activation_mode = updates.pop("activation_mode", None)
     activation_notes = updates.pop("activation_notes", None)
     definition_updated = _definition_update_requested(updates)
+    candidate_definition = _resolved_candidate_definition(
+        trend=trend,
+        updates=updates,
+        definition_updated=definition_updated,
+    )
+    candidate_baseline_probability = (
+        updates["baseline_probability"]
+        if "baseline_probability" in updates
+        else logodds_to_prob(float(trend.baseline_log_odds))
+    )
+    candidate_indicators = updates.get("indicators", trend.indicators)
+    candidate_decay_half_life_days = updates.get(
+        "decay_half_life_days",
+        trend.decay_half_life_days,
+    )
+    state_activation_required = _state_contract_changed(
+        updates=updates,
+        trend=trend,
+        candidate_definition=candidate_definition,
+        previous_definition=previous_definition,
+        candidate_baseline_probability=candidate_baseline_probability,
+        candidate_indicators=candidate_indicators,
+        candidate_decay_half_life_days=candidate_decay_half_life_days,
+    )
+    _normalize_noop_current_probability(
+        trend=trend,
+        updates=updates,
+        activation_mode=activation_mode,
+        candidate_baseline_probability=candidate_baseline_probability,
+        state_activation_required=state_activation_required,
+    )
     return TrendUpdatePlan(
         previous_definition=previous_definition,
         updates=updates,
@@ -255,22 +341,11 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
         definition_updated=definition_updated,
         candidate_name=updates.get("name", trend.name),
         candidate_description=updates.get("description", trend.description),
-        candidate_definition=_resolved_candidate_definition(
-            trend=trend,
-            updates=updates,
-            definition_updated=definition_updated,
-        ),
+        candidate_definition=candidate_definition,
         candidate_forecast_contract=updates.get("forecast_contract"),
-        candidate_baseline_probability=(
-            updates["baseline_probability"]
-            if "baseline_probability" in updates
-            else logodds_to_prob(float(trend.baseline_log_odds))
-        ),
-        candidate_indicators=updates.get("indicators", trend.indicators),
-        candidate_decay_half_life_days=updates.get(
-            "decay_half_life_days",
-            trend.decay_half_life_days,
-        ),
+        candidate_baseline_probability=candidate_baseline_probability,
+        candidate_indicators=candidate_indicators,
+        candidate_decay_half_life_days=candidate_decay_half_life_days,
     )
 
 
@@ -319,6 +394,15 @@ def _enforce_activation_mode(*, trend: Trend, plan: TrendUpdatePlan) -> None:
     )
 
 
+def _enforce_override_route(*, trend: Trend, plan: TrendUpdatePlan) -> None:
+    if "current_probability" not in plan.updates:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=_DIRECT_PROBABILITY_OVERRIDE_DETAIL,
+    )
+
+
 def _apply_trend_updates(
     *,
     trend: Trend,
@@ -342,8 +426,6 @@ def _apply_trend_updates(
         trend.decay_half_life_days = validated_config.decay_half_life_days
     if "is_active" in updates:
         trend.is_active = updates["is_active"]
-    if "current_probability" in updates and updates["current_probability"] is not None:
-        trend.current_log_odds = prob_to_logodds(updates["current_probability"])
 
 
 async def _record_definition_history_if_needed(
@@ -401,6 +483,7 @@ async def update_trend_mutation(
     """Apply a trend update plus any required versioned-state activation."""
 
     plan = _build_trend_update_plan(trend, payload)
+    _enforce_override_route(trend=trend, plan=plan)
     _enforce_activation_mode(trend=trend, plan=plan)
 
     try:

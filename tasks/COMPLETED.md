@@ -339,3 +339,4 @@
 - TASK-359: Close Sprint 5 early and seed Sprint 6 from the live backlog ✅
 ## Sprint 6
 - TASK-208: Restrict API docs and schema exposure outside development ✅
+- TASK-201: Preserve audited, atomic manual trend overrides ✅

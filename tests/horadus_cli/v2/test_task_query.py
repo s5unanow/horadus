@@ -567,13 +567,13 @@ def test_pre_push_review_guidance_keeps_non_shared_workflow_helpers_quiet() -> N
     assert guidance["risk_reasons"] == []
 
 
-def test_pre_push_review_guidance_keeps_triage_helpers_quiet() -> None:
+def test_pre_push_review_guidance_treats_triage_helpers_as_shared_workflow_tooling() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-988",
         title="Triage helper fixture",
         priority="P3",
         estimate="1h",
-        description=["Exercise ordinary triage helper work without extra workflow risk."],
+        description=["Exercise repo-owned triage workflow guidance."],
         files=[
             "`tools/horadus/python/horadus_workflow/triage.py`",
             "`tools/horadus/python/horadus_cli/triage_commands.py`",
@@ -588,8 +588,8 @@ def test_pre_push_review_guidance_keeps_triage_helpers_quiet() -> None:
 
     guidance = task_commands_module._pre_push_review_guidance(record)
 
-    assert guidance["recommended"] is False
-    assert guidance["risk_reasons"] == []
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
 def test_pre_push_review_guidance_treats_workflow_package_directory_as_high_risk() -> None:

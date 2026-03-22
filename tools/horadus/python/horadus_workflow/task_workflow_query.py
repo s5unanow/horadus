@@ -31,12 +31,14 @@ _HIGH_RISK_SHARED_WORKFLOW_FILES = (
     "tools/horadus/python/horadus_workflow/",
     "tools/horadus/python/horadus_cli/",
     "tools/horadus/python/horadus_cli/app.py",
+    "tools/horadus/python/horadus_cli/triage_commands.py",
     "tools/horadus/python/horadus_workflow/docs_freshness.py",
     "tools/horadus/python/horadus_workflow/repo_workflow.py",
     "tools/horadus/python/horadus_workflow/review_defaults.py",
     "tools/horadus/python/horadus_workflow/result.py",
     "tools/horadus/python/horadus_workflow/task_repo.py",
     "tools/horadus/python/horadus_workflow/task_workflow_shared.py",
+    "tools/horadus/python/horadus_workflow/triage.py",
     "tools/horadus/python/horadus_cli/task_repo.py",
 )
 _HIGH_RISK_SHARED_WORKFLOW_CONFIG_PREFIXES = (

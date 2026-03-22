@@ -738,3 +738,40 @@ async def test_update_trend_requires_activation_mode_for_material_live_state_cha
         )
 
     assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_update_trend_updates_versioned_fields_without_live_probability_override(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    trend = _build_trend(name="Current Trend")
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+    monkeypatch.setattr(trends_module, "_get_evidence_stats", AsyncMock(return_value=(8, 0.75, 1)))
+    monkeypatch.setattr(
+        trends_module,
+        "_get_top_movers_7d",
+        AsyncMock(return_value=["Signal corroborated across multiple outlets"]),
+    )
+
+    result = await update_trend(
+        trend_id=trend.id,
+        trend=trends_module.TrendUpdate(
+            name="Updated Trend",
+            baseline_probability=0.25,
+            definition={},
+            forecast_contract=sample_binary_forecast_contract(),
+            activation_mode="rebase",
+        ),
+        session=mock_db_session,
+    )
+
+    assert trend.name == "Updated Trend"
+    assert trend.runtime_trend_id == "updated-trend"
+    assert trend.definition["id"] == "updated-trend"
+    assert trend.definition["baseline_probability"] == pytest.approx(0.25, rel=0.001)
+    assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.25), rel=0.001)
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    assert result.current_probability == pytest.approx(0.2, rel=0.01)
+    assert mock_db_session.flush.await_count == 1

@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+import src.api.routes._trend_write_mutations as trend_write_mutations_module
 import src.api.routes.trends as trends_module
 from src.storage.models import TrendDefinitionVersion, TrendStateVersion
 
@@ -78,3 +79,13 @@ def patch_state_activation(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(trends_module, "ensure_definition_version", _fake_ensure_definition_version)
     monkeypatch.setattr(trends_module, "activate_trend_state", _fake_activate_trend_state)
+    monkeypatch.setattr(
+        trend_write_mutations_module,
+        "ensure_definition_version",
+        _fake_ensure_definition_version,
+    )
+    monkeypatch.setattr(
+        trend_write_mutations_module,
+        "activate_trend_state",
+        _fake_activate_trend_state,
+    )

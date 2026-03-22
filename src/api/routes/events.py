@@ -16,6 +16,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
+from src.api.routes._privileged_write_contract import event_revision_token
 from src.processing.event_cluster_health import (
     cluster_health_payload,
     resolve_cluster_health,
@@ -87,6 +88,7 @@ class EventResponse(BaseModel):
     contradiction_notes: str | None
     first_seen_at: datetime
     last_mention_at: datetime
+    revision_token: str
     extracted_who: list[str] | None
     extracted_what: str | None
     extracted_where: str | None
@@ -282,6 +284,7 @@ def _to_event_response(
         contradiction_notes=event.contradiction_notes,
         first_seen_at=event.first_seen_at,
         last_mention_at=event.last_mention_at,
+        revision_token=event_revision_token(event),
         extracted_who=list(event.extracted_who) if event.extracted_who else None,
         extracted_what=event.extracted_what,
         extracted_where=event.extracted_where,

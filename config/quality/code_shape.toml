@@ -27,9 +27,6 @@ path = "src/api/routes/trends.py"
 max_lines = 1310
 [legacy_files.member_max_lines]
 "load_trends_from_config" = 144
-"update_trend" = 131
-[legacy_files.member_max_complexity]
-"update_trend" = 31
 
 [[legacy_files]]
 path = "src/core/calibration_dashboard.py"

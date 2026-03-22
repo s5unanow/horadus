@@ -10,6 +10,7 @@ from fastapi.responses import Response
 from fastapi.testclient import TestClient
 
 import src.api.middleware.auth as auth_middleware_module
+import src.api.routes._privileged_write_contract as write_contract_module
 import src.api.routes.auth as auth_module
 import src.api.routes.feedback as feedback_routes
 import src.api.routes.sources as sources_routes
@@ -56,6 +57,11 @@ def _build_app(manager: APIKeyManager) -> FastAPI:
         return {"status": "admin-ok"}
 
     app.include_router(auth_module.router, prefix="/api/v1/auth", tags=["Auth"])
+
+    async def _override_get_session():
+        yield AsyncMock()
+
+    app.dependency_overrides[get_session] = _override_get_session
     return app
 
 
@@ -71,6 +77,20 @@ def _build_api_app(manager: APIKeyManager, session: AsyncMock) -> FastAPI:
 
     app.dependency_overrides[get_session] = _override_get_session
     return app
+
+
+def _mock_audit_session_factory(session: AsyncMock):
+    class _Factory:
+        def __call__(self):
+            return self
+
+        async def __aenter__(self):
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    return _Factory()
 
 
 def test_missing_api_key_returns_401() -> None:
@@ -215,8 +235,19 @@ def test_rate_limit_without_retry_after_omits_header(monkeypatch: pytest.MonkeyP
 
 def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     manager, credential = _build_manager()
+    audit_session = AsyncMock()
+    audit_session.add = MagicMock()
+    audit_session.flush = AsyncMock()
+    audit_session.commit = AsyncMock()
+    audit_session.rollback = AsyncMock()
+    audit_session.get = AsyncMock(return_value=SimpleNamespace())
     monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
     monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    monkeypatch.setattr(
+        write_contract_module,
+        "async_session_maker",
+        _mock_audit_session_factory(audit_session),
+    )
     audit_logger = MagicMock()
     monkeypatch.setattr(auth_module, "logger", audit_logger)
     client = TestClient(_build_app(manager))
@@ -228,7 +259,7 @@ def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     listed = client.get("/api/v1/auth/keys", headers=headers)
     created = client.post(
         "/api/v1/auth/keys",
-        headers=headers,
+        headers={**headers, "X-Idempotency-Key": "auth-create-dashboard"},
         json={"name": "dashboard", "rate_limit_per_minute": 50},
     )
 
@@ -240,7 +271,10 @@ def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     assert created_payload["api_key"]
     assert created_payload["key"]["name"] == "dashboard"
 
-    rotated = client.post(f"/api/v1/auth/keys/{created_id}/rotate", headers=headers)
+    rotated = client.post(
+        f"/api/v1/auth/keys/{created_id}/rotate",
+        headers={**headers, "X-Idempotency-Key": "auth-rotate-dashboard"},
+    )
     assert rotated.status_code == 200
     rotated_payload = rotated.json()
     assert rotated_payload["api_key"]
@@ -248,11 +282,15 @@ def test_auth_key_management_endpoints(monkeypatch: pytest.MonkeyPatch) -> None:
     assert manager.authenticate(original_raw_key) is None
     assert manager.authenticate(rotated_payload["api_key"]) is not None
 
-    revoked = client.delete(f"/api/v1/auth/keys/{created_id}", headers=headers)
+    revoked = client.delete(
+        f"/api/v1/auth/keys/{created_id}",
+        headers={**headers, "X-Idempotency-Key": "auth-revoke-original"},
+    )
     assert revoked.status_code == 404
 
     revoked_rotated = client.delete(
-        f"/api/v1/auth/keys/{rotated_payload['key']['id']}", headers=headers
+        f"/api/v1/auth/keys/{rotated_payload['key']['id']}",
+        headers={**headers, "X-Idempotency-Key": "auth-revoke-rotated"},
     )
     assert revoked_rotated.status_code == 204
     logged_actions = [call.kwargs.get("action") for call in audit_logger.info.call_args_list]
@@ -433,8 +471,19 @@ def test_create_key_denied_attempt_is_audited(monkeypatch: pytest.MonkeyPatch) -
 
 def test_revoke_and_rotate_missing_keys_are_audited(monkeypatch: pytest.MonkeyPatch) -> None:
     manager, credential = _build_manager()
+    audit_session = AsyncMock()
+    audit_session.add = MagicMock()
+    audit_session.flush = AsyncMock()
+    audit_session.commit = AsyncMock()
+    audit_session.rollback = AsyncMock()
+    audit_session.get = AsyncMock(return_value=SimpleNamespace())
     monkeypatch.setattr(auth_module, "get_api_key_manager", lambda: manager)
     monkeypatch.setattr(auth_module.settings, "API_ADMIN_KEY", "admin-secret")
+    monkeypatch.setattr(
+        write_contract_module,
+        "async_session_maker",
+        _mock_audit_session_factory(audit_session),
+    )
     audit_logger = MagicMock()
     monkeypatch.setattr(auth_module, "logger", audit_logger)
     client = TestClient(_build_app(manager))
@@ -443,8 +492,14 @@ def test_revoke_and_rotate_missing_keys_are_audited(monkeypatch: pytest.MonkeyPa
         "X-Admin-API-Key": "admin-secret",
     }
 
-    revoked = client.delete("/api/v1/auth/keys/missing-key", headers=headers)
-    rotated = client.post("/api/v1/auth/keys/missing-key/rotate", headers=headers)
+    revoked = client.delete(
+        "/api/v1/auth/keys/missing-key",
+        headers={**headers, "X-Idempotency-Key": "auth-revoke-missing"},
+    )
+    rotated = client.post(
+        "/api/v1/auth/keys/missing-key/rotate",
+        headers={**headers, "X-Idempotency-Key": "auth-rotate-missing"},
+    )
 
     assert revoked.status_code == 404
     assert rotated.status_code == 404

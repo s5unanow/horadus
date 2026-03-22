@@ -187,6 +187,7 @@ class TrendResponse(BaseModel):
                 "active_state_version_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
                 "decay_half_life_days": 30,
                 "is_active": True,
+                "revision_token": "revision-token-example",  # nosec B105
                 "updated_at": "2026-02-07T19:56:00Z",
             }
         },
@@ -211,6 +212,7 @@ class TrendResponse(BaseModel):
     active_state_version_id: UUID | None
     decay_half_life_days: int
     is_active: bool
+    revision_token: str
     updated_at: datetime
 
 

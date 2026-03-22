@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     String,
     Text,
@@ -55,6 +56,70 @@ class HumanFeedback(Base):
     __table_args__ = (
         Index("idx_feedback_target", "target_type", "target_id"),
         Index("idx_feedback_action", "action"),
+    )
+
+
+class PrivilegedWriteAudit(Base):
+    """Durable audit and idempotency record for privileged API writes."""
+
+    __tablename__ = "privileged_write_audits"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    actor_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    actor_api_key_id: Mapped[str | None] = mapped_column(String(255))
+    actor_api_key_name: Mapped[str | None] = mapped_column(String(255))
+    operator_identity: Mapped[str | None] = mapped_column(String(255))
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    request_method: Mapped[str] = mapped_column(String(10), nullable=False)
+    request_path: Mapped[str] = mapped_column(String(255), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_identifier: Mapped[str | None] = mapped_column(String(255))
+    idempotency_key: Mapped[str | None] = mapped_column(String(255))
+    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    request_intent: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
+    expected_revision_token: Mapped[str | None] = mapped_column(String(128))
+    observed_revision_token: Mapped[str | None] = mapped_column(String(128))
+    outcome: Mapped[str] = mapped_column(String(50), nullable=False)
+    detail: Mapped[str | None] = mapped_column(Text)
+    result_links: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
+    replay_count: Mapped[int] = mapped_column(
+        Integer,
+        default=0,
+        server_default=text("0"),
+        nullable=False,
+    )
+    first_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("idx_privileged_write_audits_action_seen", "action", "first_seen_at"),
+        Index("idx_privileged_write_audits_target", "target_type", "target_identifier"),
+        Index(
+            "uq_privileged_write_audits_actor_action_idempotency",
+            "actor_key",
+            "action",
+            "idempotency_key",
+            unique=True,
+            postgresql_where=text("idempotency_key IS NOT NULL"),
+        ),
     )
 
 

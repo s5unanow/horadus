@@ -18,6 +18,11 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.routes._privileged_write_audit_deferred import (
+    PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY,
+    pop_pending_write_success,
+    store_pending_write_success,
+)
 from src.storage.database import async_session_maker
 from src.storage.restatement_models import PrivilegedWriteAudit
 
@@ -31,6 +36,7 @@ _MISSING_REVISION_DETAIL = f"{REVISION_HEADER} header with the latest revision_t
 _STALE_REVISION_DETAIL = (
     "Revision token is stale. Re-read the resource and retry with the latest revision_token."
 )
+_PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY = PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY
 
 
 def request_dependency(request: Request) -> Request:
@@ -205,9 +211,13 @@ def _classify_http_outcome(exc: HTTPException) -> str:
     return "failed"
 
 
+def _uses_independent_audit_session(route_session: Any) -> bool:
+    return isinstance(route_session, AsyncSession)
+
+
 @asynccontextmanager
 async def _audit_session(route_session: Any) -> AsyncIterator[Any]:
-    if isinstance(route_session, AsyncSession):
+    if _uses_independent_audit_session(route_session):
         async with async_session_maker() as audit_session:
             try:
                 yield audit_session
@@ -312,7 +322,27 @@ async def record_privileged_write_rejection(
         outcome=outcome,
         detail=detail,
     )
-    await _insert_audit_row(route_session, record)
+    try:
+        await _insert_audit_row(route_session, record)
+    except IntegrityError:
+        if record.idempotency_key is None:
+            raise
+        existing = await _load_audit_row(
+            route_session,
+            actor_key=record.actor_key,
+            action=record.action,
+            idempotency_key=record.idempotency_key,
+        )
+        if existing is None:
+            raise
+        await _update_audit_row(
+            route_session,
+            audit_id=existing.id,
+            outcome=outcome,
+            detail=detail,
+            observed_revision_token=observed_revision_token,
+            increment_replay=True,
+        )
 
 
 @dataclass(slots=True)
@@ -330,6 +360,19 @@ class PrivilegedWriteGuard:
         detail: str | None = None,
     ) -> None:
         if self.audit_id is None:
+            return
+        if _uses_independent_audit_session(self.route_session):
+            store_pending_write_success(
+                self.route_session,
+                audit_id=self.audit_id,
+                observed_revision_token=observed_revision_token,
+                result_links=(
+                    dict(_normalize_jsonable(dict(result_links)))
+                    if result_links is not None
+                    else None
+                ),
+                detail=detail,
+            )
             return
         await _update_audit_row(
             self.route_session,
@@ -349,6 +392,8 @@ class PrivilegedWriteGuard:
     ) -> None:
         if self.audit_id is None:
             return
+        if _uses_independent_audit_session(self.route_session):
+            pop_pending_write_success(self.route_session, audit_id=self.audit_id)
         await _update_audit_row(
             self.route_session,
             audit_id=self.audit_id,

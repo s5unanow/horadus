@@ -210,6 +210,101 @@ async def test_record_privileged_write_rejection_inserts_expected_audit_row(
 
 
 @pytest.mark.asyncio
+async def test_record_privileged_write_rejection_reuses_existing_audit_row_on_duplicate(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = PrivilegedWriteAudit(
+        id=uuid4(),
+        actor_key="test-api-key-id",
+        action="feedback.event_feedback",
+        request_method="POST",
+        request_path="/api/v1/events/test-event/feedback",
+        target_type="event",
+        target_identifier="test-event",
+        idempotency_key="reject-key",
+        request_fingerprint="fingerprint",
+        request_intent={},
+        outcome="not_found",
+        replay_count=1,
+    )
+    update_audit_row = AsyncMock()
+
+    async def _raise_duplicate(*_args, **_kwargs) -> PrivilegedWriteAudit:
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(write_contract_module, "_insert_audit_row", _raise_duplicate)
+    monkeypatch.setattr(write_contract_module, "_load_audit_row", AsyncMock(return_value=existing))
+    monkeypatch.setattr(write_contract_module, "_update_audit_row", update_audit_row)
+
+    await write_contract_module.record_privileged_write_rejection(
+        route_session=object(),
+        request=_request_with_headers(
+            path="/api/v1/events/test-event/feedback",
+            headers={write_contract_module.IDEMPOTENCY_HEADER: "reject-key"},
+        ),
+        action="feedback.event_feedback",
+        target_type="event",
+        target_identifier="test-event",
+        intent={"payload": {"event_id": "test-event"}},
+        outcome="not_found",
+        detail="missing event",
+    )
+
+    update_audit_row.assert_awaited_once()
+    assert update_audit_row.await_args.kwargs["audit_id"] == existing.id
+    assert update_audit_row.await_args.kwargs["outcome"] == "not_found"
+    assert update_audit_row.await_args.kwargs["increment_replay"] is True
+
+
+@pytest.mark.asyncio
+async def test_record_privileged_write_rejection_reraises_duplicate_without_idempotency_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _raise_duplicate(*_args, **_kwargs) -> PrivilegedWriteAudit:
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(write_contract_module, "_insert_audit_row", _raise_duplicate)
+
+    with pytest.raises(IntegrityError):
+        await write_contract_module.record_privileged_write_rejection(
+            route_session=object(),
+            request=_request_with_headers(path="/api/v1/events/test-event/feedback", headers={}),
+            action="feedback.event_feedback",
+            target_type="event",
+            target_identifier="test-event",
+            intent={"payload": {"event_id": "test-event"}},
+            outcome="not_found",
+            detail="missing event",
+        )
+
+
+@pytest.mark.asyncio
+async def test_record_privileged_write_rejection_reraises_duplicate_when_existing_row_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _raise_duplicate(*_args, **_kwargs) -> PrivilegedWriteAudit:
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(write_contract_module, "_insert_audit_row", _raise_duplicate)
+    monkeypatch.setattr(write_contract_module, "_load_audit_row", AsyncMock(return_value=None))
+
+    with pytest.raises(IntegrityError):
+        await write_contract_module.record_privileged_write_rejection(
+            route_session=object(),
+            request=_request_with_headers(
+                path="/api/v1/events/test-event/feedback",
+                headers={write_contract_module.IDEMPOTENCY_HEADER: "reject-key"},
+            ),
+            action="feedback.event_feedback",
+            target_type="event",
+            target_identifier="test-event",
+            intent={"payload": {"event_id": "test-event"}},
+            outcome="not_found",
+            detail="missing event",
+        )
+
+
+@pytest.mark.asyncio
 async def test_guard_succeed_and_fail_delegate_to_audit_updates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -223,6 +318,59 @@ async def test_guard_succeed_and_fail_delegate_to_audit_updates(
     assert update_audit_row.await_count == 2
     assert update_audit_row.await_args_list[0].kwargs["outcome"] == "applied"
     assert update_audit_row.await_args_list[1].kwargs["outcome"] == "failed"
+
+
+@pytest.mark.asyncio
+async def test_guard_succeed_defers_applied_outcome_for_async_route_sessions(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    update_audit_row = AsyncMock()
+    route_session = SimpleNamespace(info={})
+    monkeypatch.setattr(write_contract_module, "_update_audit_row", update_audit_row)
+    monkeypatch.setattr(
+        write_contract_module,
+        "_uses_independent_audit_session",
+        lambda candidate: candidate is route_session,
+    )
+
+    guard = write_contract_module.PrivilegedWriteGuard(
+        route_session=route_session, audit_id="audit-id"
+    )
+    await guard.succeed(observed_revision_token="rev-1", result_links={"trend_id": "trend-1"})
+
+    assert update_audit_row.await_count == 0
+    pending = route_session.info[write_contract_module._PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY]
+    assert len(pending) == 1
+    assert pending[0].audit_id == "audit-id"
+
+
+@pytest.mark.asyncio
+async def test_guard_fail_clears_deferred_async_session_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    update_audit_row = AsyncMock()
+    route_session = SimpleNamespace(
+        info={
+            write_contract_module._PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY: [
+                SimpleNamespace(audit_id="audit-id")
+            ]
+        }
+    )
+    monkeypatch.setattr(write_contract_module, "_update_audit_row", update_audit_row)
+    monkeypatch.setattr(
+        write_contract_module,
+        "_uses_independent_audit_session",
+        lambda candidate: candidate is route_session,
+    )
+
+    guard = write_contract_module.PrivilegedWriteGuard(
+        route_session=route_session, audit_id="audit-id"
+    )
+    await guard.fail(outcome="failed", detail="boom", observed_revision_token="rev-2")
+
+    assert route_session.info[write_contract_module._PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY] == []
+    update_audit_row.assert_awaited_once()
+    assert update_audit_row.await_args.kwargs["outcome"] == "failed"
 
 
 @pytest.mark.asyncio

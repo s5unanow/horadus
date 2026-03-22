@@ -10,7 +10,8 @@ This module provides:
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -20,6 +21,7 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.pool import NullPool
 
 from src.core.config import settings
+from src.storage.restatement_models import PrivilegedWriteAudit
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -67,6 +69,68 @@ async_session_maker = async_sessionmaker(
     autoflush=False,
 )
 
+_PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY = "pending_privileged_write_successes"
+
+
+def _drain_pending_privileged_write_successes(session: AsyncSession) -> list[Any]:
+    pending = session.info.pop(_PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY, [])
+    return pending if isinstance(pending, list) else []
+
+
+async def _update_privileged_write_audit(
+    audit_session: AsyncSession,
+    *,
+    audit_id: Any,
+    outcome: str,
+    detail: str | None,
+    observed_revision_token: str | None,
+    result_links: dict[str, Any] | None = None,
+) -> None:
+    record = await audit_session.get(PrivilegedWriteAudit, audit_id)
+    if record is None:
+        return
+    record.outcome = outcome
+    record.detail = detail
+    record.last_seen_at = datetime.now(tz=UTC)
+    if observed_revision_token is not None:
+        record.observed_revision_token = observed_revision_token
+    if result_links is not None:
+        record.result_links = result_links
+    await audit_session.flush()
+
+
+async def _finalize_pending_privileged_write_audits(
+    session: AsyncSession,
+    *,
+    outcome: str,
+    detail: str | None = None,
+) -> None:
+    pending = _drain_pending_privileged_write_successes(session)
+    if not pending:
+        return
+    async with async_session_maker() as audit_session:
+        try:
+            for entry in pending:
+                audit_id = getattr(entry, "audit_id", None)
+                if audit_id is None:
+                    continue
+                await _update_privileged_write_audit(
+                    audit_session,
+                    audit_id=audit_id,
+                    outcome=outcome,
+                    detail=detail if outcome != "applied" else getattr(entry, "detail", None),
+                    observed_revision_token=getattr(entry, "observed_revision_token", None),
+                    result_links=(
+                        cast("dict[str, Any] | None", getattr(entry, "result_links", None))
+                        if outcome == "applied"
+                        else None
+                    ),
+                )
+            await audit_session.commit()
+        except Exception:
+            await audit_session.rollback()
+            raise
+
 
 # =============================================================================
 # Session Dependency
@@ -89,9 +153,15 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield session
             await session.commit()
-        except Exception:
+        except Exception as exc:
             await session.rollback()
+            await _finalize_pending_privileged_write_audits(
+                session,
+                outcome="rolled_back",
+                detail=f"Route transaction rolled back before commit completed: {exc}",
+            )
             raise
+        await _finalize_pending_privileged_write_audits(session, outcome="applied")
 
 
 # =============================================================================

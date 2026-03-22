@@ -18,9 +18,14 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.routes._privileged_write_contract import (
+    IDEMPOTENCY_HEADER,
+    REVISION_HEADER,
+    idempotency_key_from_request,
     normalize_request_intent,
     privileged_write,
+    record_privileged_write_rejection,
     request_dependency,
+    revision_token_from_request,
     trend_revision_token,
 )
 from src.api.routes._trend_forecast_contract import forecast_contract_from_definition
@@ -129,6 +134,59 @@ def _live_state_definition_basis(definition: Any) -> dict[str, Any]:
     normalized = normalize_definition_payload(definition if isinstance(definition, dict) else None)
     normalized.pop("forecast_contract", None)
     return normalized
+
+
+async def _load_trend_for_privileged_write(
+    *,
+    session: AsyncSession,
+    trend_id: UUID,
+    request: Request,
+    action: str,
+    intent: dict[str, Any],
+) -> Trend:
+    trend = await session.get(Trend, trend_id)
+    if trend is not None:
+        return trend
+    if idempotency_key_from_request(request) is None:
+        detail = f"{IDEMPOTENCY_HEADER} header is required for this privileged write."
+        await record_privileged_write_rejection(
+            route_session=session,
+            request=request,
+            action=action,
+            target_type="trend",
+            target_identifier=str(trend_id),
+            intent=intent,
+            outcome="missing_idempotency_key",
+            detail=detail,
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+    expected_revision_token = revision_token_from_request(request)
+    if expected_revision_token is None:
+        detail = f"{REVISION_HEADER} header with the latest revision_token is required for this privileged write."
+        await record_privileged_write_rejection(
+            route_session=session,
+            request=request,
+            action=action,
+            target_type="trend",
+            target_identifier=str(trend_id),
+            intent=intent,
+            outcome="missing_revision_token",
+            detail=detail,
+        )
+        raise HTTPException(status_code=status.HTTP_428_PRECONDITION_REQUIRED, detail=detail)
+    detail = f"Trend '{trend_id}' not found"
+    await record_privileged_write_rejection(
+        route_session=session,
+        request=request,
+        action=action,
+        target_type="trend",
+        target_identifier=str(trend_id),
+        intent=intent,
+        outcome="not_found",
+        detail=detail,
+        expected_revision_token=expected_revision_token,
+    )
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)
 
 
 async def _record_definition_version_if_material_change(
@@ -977,9 +1035,15 @@ async def update_trend(
     session: AsyncSession = Depends(get_session),
 ) -> TrendResponse:
     """Update a trend."""
-    trend_record = await _get_trend_or_404(session, trend_id)
-    current_revision_token = trend_revision_token(trend_record)
     intent = normalize_request_intent(trend.model_dump(mode="json", exclude_none=True))
+    trend_record = await _load_trend_for_privileged_write(
+        session=session,
+        trend_id=trend_id,
+        request=request,
+        action="trends.update",
+        intent=intent,
+    )
+    current_revision_token = trend_revision_token(trend_record)
     async with privileged_write(
         route_session=session,
         request=request,
@@ -1024,9 +1088,15 @@ async def delete_trend(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Deactivate a trend (soft delete)."""
-    trend = await _get_trend_or_404(session, trend_id)
-    current_revision_token = trend_revision_token(trend)
     intent = normalize_request_intent()
+    trend = await _load_trend_for_privileged_write(
+        session=session,
+        trend_id=trend_id,
+        request=request,
+        action="trends.delete",
+        intent=intent,
+    )
+    current_revision_token = trend_revision_token(trend)
     async with privileged_write(
         route_session=session,
         request=request,

@@ -215,9 +215,13 @@ def _uses_independent_audit_session(route_session: Any) -> bool:
     return isinstance(route_session, AsyncSession)
 
 
+def _uses_audit_session_factory(route_session: Any) -> bool:
+    return route_session is None or _uses_independent_audit_session(route_session)
+
+
 @asynccontextmanager
 async def _audit_session(route_session: Any) -> AsyncIterator[Any]:
-    if _uses_independent_audit_session(route_session):
+    if _uses_audit_session_factory(route_session):
         async with async_session_maker() as audit_session:
             try:
                 yield audit_session

@@ -8,7 +8,7 @@ from fastapi import HTTPException, Request
 from sqlalchemy.exc import IntegrityError
 
 import src.api.routes._privileged_write_contract as write_contract_module
-from src.api.routes.trends import TrendUpdate, update_trend
+from src.api.routes.trends import TrendUpdate, delete_trend, update_trend
 from src.core.trend_engine import prob_to_logodds
 from src.storage.models import PrivilegedWriteAudit, Trend
 
@@ -145,3 +145,90 @@ async def test_update_trend_rejects_duplicate_idempotency_key(
 
     assert exc_info.value.status_code == 409
     assert "Duplicate privileged write rejected" in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_update_trend_validates_contract_before_missing_trend_404(mock_db_session) -> None:
+    mock_db_session.get.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_trend(
+            trend_id=uuid4(),
+            trend=TrendUpdate(name="Missing Trend"),
+            request=_request_with_headers(
+                method="PATCH",
+                path="/api/v1/trends/missing",
+                headers={},
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 400
+    audit_rows = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], PrivilegedWriteAudit)
+    ]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "trends.update"
+    assert audit_rows[0].outcome == "missing_idempotency_key"
+
+
+@pytest.mark.asyncio
+async def test_delete_trend_records_missing_trend_rejection_after_header_validation(
+    mock_db_session,
+) -> None:
+    trend_id = uuid4()
+    mock_db_session.get.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        await delete_trend(
+            trend_id=trend_id,
+            request=_request_with_headers(
+                method="DELETE",
+                path=f"/api/v1/trends/{trend_id}",
+                headers={
+                    "X-Idempotency-Key": "delete-missing-key",
+                    "If-Match": "expected-revision",
+                },
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 404
+    audit_rows = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], PrivilegedWriteAudit)
+    ]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "trends.delete"
+    assert audit_rows[0].outcome == "not_found"
+    assert audit_rows[0].expected_revision_token == "expected-revision"
+
+
+@pytest.mark.asyncio
+async def test_update_trend_missing_revision_beats_missing_trend_404(mock_db_session) -> None:
+    mock_db_session.get.return_value = None
+
+    with pytest.raises(HTTPException) as exc_info:
+        await update_trend(
+            trend_id=uuid4(),
+            trend=TrendUpdate(name="Missing Revision"),
+            request=_request_with_headers(
+                method="PATCH",
+                path="/api/v1/trends/missing",
+                headers={"X-Idempotency-Key": "missing-revision-key"},
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 428
+    audit_rows = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], PrivilegedWriteAudit)
+    ]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "trends.update"
+    assert audit_rows[0].outcome == "missing_revision_token"

@@ -170,6 +170,39 @@ async def test_load_and_update_audit_rows_use_route_session(mock_db_session) -> 
 
 
 @pytest.mark.asyncio
+async def test_insert_audit_row_awaits_async_add_result() -> None:
+    record = PrivilegedWriteAudit(
+        id=uuid4(),
+        actor_key="test-api-key-id",
+        action="trends.update",
+        request_method="PATCH",
+        request_path="/api/v1/trends/test",
+        target_type="trend",
+        target_identifier="trend-1",
+        idempotency_key="idem-key",
+        request_fingerprint="fingerprint",
+        request_intent={},
+        outcome="in_progress",
+    )
+
+    class _AwaitableAddSession:
+        def __init__(self) -> None:
+            self.flush = AsyncMock()
+            self.added: PrivilegedWriteAudit | None = None
+
+        async def add(self, value: PrivilegedWriteAudit) -> None:
+            self.added = value
+
+    audit_session = _AwaitableAddSession()
+
+    inserted = await write_contract_module._insert_audit_row(audit_session, record)
+
+    assert inserted is record
+    assert audit_session.added is record
+    audit_session.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_record_privileged_write_rejection_inserts_expected_audit_row(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

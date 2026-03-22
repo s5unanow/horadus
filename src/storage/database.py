@@ -73,7 +73,7 @@ _PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY = "pending_privileged_write_successes"
 
 
 def _drain_pending_privileged_write_successes(session: AsyncSession) -> list[Any]:
-    pending = session.info.pop(_PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY, [])
+    pending = session.info.get(_PENDING_PRIVILEGED_WRITE_SUCCESSES_KEY, [])
     return pending if isinstance(pending, list) else []
 
 
@@ -127,6 +127,7 @@ async def _finalize_pending_privileged_write_audits(
                     ),
                 )
             await audit_session.commit()
+            pending.clear()
         except Exception:
             await audit_session.rollback()
             raise

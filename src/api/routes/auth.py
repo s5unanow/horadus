@@ -7,15 +7,13 @@ from __future__ import annotations
 from datetime import datetime
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import verify_privileged_access
 from src.api.routes._privileged_write_contract import normalize_request_intent, privileged_write
 from src.core.api_key_manager import APIKeyRecord, get_api_key_manager
 from src.core.config import settings as app_settings
-from src.storage.database import get_session
 
 router = APIRouter()
 logger = structlog.get_logger(__name__)
@@ -139,7 +137,6 @@ async def list_api_keys(request: Request) -> list[APIKeySummary]:
 async def create_api_key(
     payload: APIKeyCreateRequest,
     request: Request,
-    session: AsyncSession = Depends(get_session),
 ) -> APIKeyCreateResponse:
     """Create a new API key."""
     try:
@@ -157,7 +154,7 @@ async def create_api_key(
     manager = get_api_key_manager()
     intent = normalize_request_intent(payload.model_dump(mode="json", exclude_none=True))
     async with privileged_write(
-        route_session=session,
+        route_session=None,
         request=request,
         action="auth.create_key",
         target_type="api_key",
@@ -190,7 +187,6 @@ async def create_api_key(
 async def revoke_api_key(
     key_id: str,
     request: Request,
-    session: AsyncSession = Depends(get_session),
 ) -> None:
     """Revoke an API key by id."""
     try:
@@ -207,7 +203,7 @@ async def revoke_api_key(
     manager = get_api_key_manager()
     intent = normalize_request_intent(extras={"key_id": key_id})
     async with privileged_write(
-        route_session=session,
+        route_session=None,
         request=request,
         action="auth.revoke_key",
         target_type="api_key",
@@ -239,7 +235,6 @@ async def revoke_api_key(
 async def rotate_api_key(
     key_id: str,
     request: Request,
-    session: AsyncSession = Depends(get_session),
 ) -> APIKeyCreateResponse:
     """Rotate an API key by id and return a replacement credential."""
     try:
@@ -256,7 +251,7 @@ async def rotate_api_key(
     manager = get_api_key_manager()
     intent = normalize_request_intent(extras={"key_id": key_id})
     async with privileged_write(
-        route_session=session,
+        route_session=None,
         request=request,
         action="auth.rotate_key",
         target_type="api_key",

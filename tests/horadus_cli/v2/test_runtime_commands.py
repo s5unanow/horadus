@@ -162,6 +162,42 @@ def test_run_agent_smoke_passes_when_openapi_is_disabled_by_policy(
     assert result == 0
 
 
+def test_run_agent_smoke_fails_when_openapi_returns_auth_challenge(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    statuses = {
+        "http://127.0.0.1:8000/health": 200,
+        "http://127.0.0.1:8000/api/v1/trends": 401,
+    }
+
+    def fake_http_get(url: str, *, timeout_seconds: float, headers=None) -> int:
+        _ = timeout_seconds
+        _ = headers
+        return statuses[url]
+
+    def fake_http_get_json(
+        url: str,
+        *,
+        timeout_seconds: float,
+        headers=None,
+    ) -> tuple[int, dict[str, object] | None]:
+        _ = timeout_seconds
+        _ = headers
+        assert url == "http://127.0.0.1:8000/openapi.json"
+        return (403, None)
+
+    monkeypatch.setattr(ops_module, "_http_get", fake_http_get)
+    monkeypatch.setattr(ops_module, "_http_get_json", fake_http_get_json)
+
+    result = ops_module._run_agent_smoke(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=5.0,
+        api_key=None,
+    )
+
+    assert result == 2
+
+
 def test_run_agent_smoke_fails_when_server_is_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

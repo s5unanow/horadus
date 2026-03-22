@@ -84,7 +84,21 @@ def test_agent_smoke_helpers_cover_failure_and_auth_hint_paths(
     assert lines[-1] == "FAIL /api/v1/trends 403 api_key_rejected"
     assert data["trend_status"] == 403
 
+    monkeypatch.setattr(ops_module, "_http_get", lambda url, **_kwargs: statuses[url])
+    monkeypatch.setattr(ops_module, "_http_get_json", lambda _url, **_kwargs: (403, None))
+    exit_code, lines, data = ops_module._agent_smoke_checks(
+        base_url="http://127.0.0.1:8000",
+        timeout_seconds=1.0,
+        api_key=None,
+    )
+    assert exit_code == ExitCode.VALIDATION_ERROR
+    assert lines[-1] == "FAIL /openapi.json 403"
+    assert data == {"health_status": 200, "openapi_status": 403}
+
     statuses["http://127.0.0.1:8000/api/v1/trends"] = 0
+    monkeypatch.setattr(
+        ops_module, "_http_get_json", lambda _url, **_kwargs: (200, {"openapi": True})
+    )
     exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,

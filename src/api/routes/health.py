@@ -41,6 +41,7 @@ class HealthStatus(BaseModel):
                 "status": "healthy",
                 "timestamp": "2026-02-07T20:00:00Z",
                 "version": "1.0.0",
+                "docs_enabled": True,
                 "checks": {
                     "database": {"status": "healthy", "latency_ms": 3.2},
                     "redis": {"status": "healthy", "latency_ms": 1.8},
@@ -58,6 +59,7 @@ class HealthStatus(BaseModel):
     status: str
     timestamp: str
     version: str
+    docs_enabled: bool
     checks: dict[str, Any]
 
 
@@ -134,6 +136,7 @@ async def health_check(
         status=overall_status,
         timestamp=datetime.now(UTC).isoformat(),
         version="1.0.0",
+        docs_enabled=settings.is_development,
         checks=checks,
     )
 

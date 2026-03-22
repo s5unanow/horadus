@@ -11,7 +11,6 @@ pytestmark = pytest.mark.unit
 def test_agent_smoke_fails_when_health_check_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     monkeypatch.setattr(
         ops_module, "_http_get", lambda url, **_kwargs: 500 if url.endswith("/health") else 0
     )
@@ -28,7 +27,6 @@ def test_agent_smoke_fails_when_health_check_fails(
 def test_agent_smoke_uses_openapi_auth_hint_when_schema_is_available(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 401,
@@ -50,7 +48,6 @@ def test_agent_smoke_uses_openapi_auth_hint_when_schema_is_available(
 def test_agent_smoke_fails_when_openapi_is_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     monkeypatch.setattr(ops_module, "_http_get", lambda _url, **_kwargs: 200)
     monkeypatch.setattr(ops_module, "_http_get_json", lambda _url, **_kwargs: (0, None))
     exit_code, lines, data = ops_module._agent_smoke_checks(
@@ -71,8 +68,13 @@ def test_agent_smoke_handles_openapi_404_by_environment(
         "http://127.0.0.1:8000/api/v1/trends": 401,
     }
     monkeypatch.setattr(ops_module, "_http_get", lambda url, **_kwargs: statuses[url])
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "staging")
-    monkeypatch.setattr(ops_module, "_http_get_json", lambda _url, **_kwargs: (404, None))
+    monkeypatch.setattr(
+        ops_module,
+        "_http_get_json",
+        lambda url, **_kwargs: (
+            (404, None) if url.endswith("/openapi.json") else (200, {"docs_enabled": False})
+        ),
+    )
     exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
@@ -83,7 +85,13 @@ def test_agent_smoke_handles_openapi_404_by_environment(
     assert lines[-1].endswith("auth_enforced_without_key (openapi_restricted_or_disabled)")
     assert data["openapi_status"] == 404
 
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
+    monkeypatch.setattr(
+        ops_module,
+        "_http_get_json",
+        lambda url, **_kwargs: (
+            (404, None) if url.endswith("/openapi.json") else (200, {"docs_enabled": True})
+        ),
+    )
     exit_code, lines, data = ops_module._agent_smoke_checks(
         base_url="http://127.0.0.1:8000",
         timeout_seconds=1.0,
@@ -114,7 +122,6 @@ def test_agent_smoke_rejects_api_key_failure_and_openapi_auth_challenge(
     assert lines[-1] == "FAIL /api/v1/trends 403 api_key_rejected"
     assert data["trend_status"] == 403
 
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "staging")
     monkeypatch.setattr(ops_module, "_http_get", lambda url, **_kwargs: statuses[url])
     monkeypatch.setattr(ops_module, "_http_get_json", lambda _url, **_kwargs: (403, None))
     exit_code, lines, data = ops_module._agent_smoke_checks(
@@ -130,7 +137,6 @@ def test_agent_smoke_rejects_api_key_failure_and_openapi_auth_challenge(
 def test_agent_smoke_fails_when_trends_endpoint_is_unreachable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(ops_module, "_default_environment", lambda: "development")
     statuses = {
         "http://127.0.0.1:8000/health": 200,
         "http://127.0.0.1:8000/api/v1/trends": 0,

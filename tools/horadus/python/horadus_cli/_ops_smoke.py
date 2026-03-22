@@ -4,10 +4,27 @@ from collections.abc import Callable
 from typing import Any
 
 
+def _docs_disabled_by_policy(
+    *,
+    base_url: str,
+    health_status: int,
+    timeout_seconds: float,
+    http_get_json: Callable[..., tuple[int, dict[str, object] | None]],
+) -> bool:
+    health_json_status, health_payload = http_get_json(
+        f"{base_url}/health",
+        timeout_seconds=timeout_seconds,
+    )
+    return (
+        health_json_status == health_status
+        and health_payload is not None
+        and health_payload.get("docs_enabled") is False
+    )
+
+
 def agent_smoke_checks(
     *,
     base_url: str,
-    environment: str,
     timeout_seconds: float,
     api_key: str | None,
     http_get: Callable[..., int],
@@ -16,7 +33,6 @@ def agent_smoke_checks(
     validation_error_exit_code: int,
 ) -> tuple[int, list[str], dict[str, Any]]:
     normalized_base_url = base_url.rstrip("/")
-    docs_disabled_by_policy = environment.strip().lower() != "development"
     lines: list[str] = []
 
     health_status = http_get(f"{normalized_base_url}/health", timeout_seconds=timeout_seconds)
@@ -30,6 +46,12 @@ def agent_smoke_checks(
         f"{normalized_base_url}/openapi.json",
         timeout_seconds=timeout_seconds,
     )
+    docs_disabled_by_policy = openapi_status == 404 and _docs_disabled_by_policy(
+        base_url=normalized_base_url,
+        health_status=health_status,
+        timeout_seconds=timeout_seconds,
+        http_get_json=http_get_json,
+    )
     if 200 <= openapi_status < 300:
         lines.append(f"PASS /openapi.json {openapi_status}")
     elif openapi_status == 404 and docs_disabled_by_policy:
@@ -42,7 +64,6 @@ def agent_smoke_checks(
             lines,
             {"health_status": health_status, "openapi_status": openapi_status},
         )
-
     trend_headers = {"X-API-Key": api_key} if api_key else None
     trend_status = http_get(
         f"{normalized_base_url}/api/v1/trends",

@@ -109,7 +109,6 @@ def _agent_smoke_checks(
 ) -> tuple[int, list[str], dict[str, Any]]:
     return smoke_helpers.agent_smoke_checks(
         base_url=base_url,
-        environment=_default_environment(),
         timeout_seconds=timeout_seconds,
         api_key=api_key,
         http_get=_http_get,
@@ -156,10 +155,6 @@ def _default_embedding_model() -> str:
 
 def _default_agent_base_url() -> str:
     return defaults.default_agent_base_url(config_lookup=_config_default)
-
-
-def _default_environment() -> str:
-    return _config_default("ENVIRONMENT", "development").strip().lower() or "development"
 
 
 _ops_leaf_options = registration.add_ops_leaf_options

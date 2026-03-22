@@ -56,9 +56,39 @@ async def test_health_check_includes_worker_component(mock_db_session, monkeypat
     result = await health_module.health_check(session=mock_db_session)
 
     assert result.status == "healthy"
+    assert result.docs_enabled is True
     assert result.checks["worker"]["status"] == "healthy"
     assert result.checks["worker"]["last_task"] == "workers.collect_rss"
     assert result.checks["migrations"]["status"] == "healthy"
+
+
+@pytest.mark.asyncio
+async def test_health_check_reports_docs_disabled_outside_development(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    async def fake_db(_session):
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_redis():
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_worker():
+        return {"status": "healthy", "age_seconds": 5.0}
+
+    async def fake_migration(_session):
+        return {"status": "healthy"}
+
+    monkeypatch.setattr(health_module, "check_database", fake_db)
+    monkeypatch.setattr(health_module, "check_redis", fake_redis)
+    monkeypatch.setattr(health_module, "check_worker_activity", fake_worker)
+    monkeypatch.setattr(health_module, "check_migration_parity", fake_migration)
+    monkeypatch.setattr(health_module.settings, "MIGRATION_PARITY_CHECK_ENABLED", True)
+    monkeypatch.setattr(health_module.settings, "ENVIRONMENT", "staging")
+
+    result = await health_module.health_check(session=mock_db_session)
+
+    assert result.docs_enabled is False
 
 
 @pytest.mark.asyncio

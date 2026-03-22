@@ -235,6 +235,7 @@ async def test_record_privileged_write_rejection_reuses_existing_audit_row_on_du
     monkeypatch.setattr(write_contract_module, "_insert_audit_row", _raise_duplicate)
     monkeypatch.setattr(write_contract_module, "_load_audit_row", AsyncMock(return_value=existing))
     monkeypatch.setattr(write_contract_module, "_update_audit_row", update_audit_row)
+    monkeypatch.setattr(write_contract_module, "request_fingerprint", lambda _intent: "fingerprint")
 
     await write_contract_module.record_privileged_write_rejection(
         route_session=object(),
@@ -253,6 +254,60 @@ async def test_record_privileged_write_rejection_reuses_existing_audit_row_on_du
     update_audit_row.assert_awaited_once()
     assert update_audit_row.await_args.kwargs["audit_id"] == existing.id
     assert update_audit_row.await_args.kwargs["outcome"] == "not_found"
+    assert update_audit_row.await_args.kwargs["increment_replay"] is True
+
+
+@pytest.mark.asyncio
+async def test_record_privileged_write_rejection_conflicts_on_fingerprint_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    existing = PrivilegedWriteAudit(
+        id=uuid4(),
+        actor_key="test-api-key-id",
+        action="feedback.event_feedback",
+        request_method="POST",
+        request_path="/api/v1/events/test-event/feedback",
+        target_type="event",
+        target_identifier="test-event",
+        idempotency_key="reject-key",
+        request_fingerprint="existing-fingerprint",
+        request_intent={},
+        outcome="not_found",
+        replay_count=1,
+    )
+    update_audit_row = AsyncMock()
+
+    async def _raise_duplicate(*_args, **_kwargs) -> PrivilegedWriteAudit:
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    monkeypatch.setattr(write_contract_module, "_insert_audit_row", _raise_duplicate)
+    monkeypatch.setattr(write_contract_module, "_load_audit_row", AsyncMock(return_value=existing))
+    monkeypatch.setattr(write_contract_module, "_update_audit_row", update_audit_row)
+    monkeypatch.setattr(
+        write_contract_module,
+        "request_fingerprint",
+        lambda _intent: "new-fingerprint",
+    )
+
+    with pytest.raises(
+        HTTPException, match="already used for a different privileged write request"
+    ):
+        await write_contract_module.record_privileged_write_rejection(
+            route_session=object(),
+            request=_request_with_headers(
+                path="/api/v1/events/test-event/feedback",
+                headers={write_contract_module.IDEMPOTENCY_HEADER: "reject-key"},
+            ),
+            action="feedback.event_feedback",
+            target_type="event",
+            target_identifier="test-event",
+            intent={"payload": {"event_id": "different-event"}},
+            outcome="not_found",
+            detail="missing event",
+        )
+
+    update_audit_row.assert_awaited_once()
+    assert update_audit_row.await_args.kwargs["outcome"] == "conflict"
     assert update_audit_row.await_args.kwargs["increment_replay"] is True
 
 

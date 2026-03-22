@@ -478,6 +478,7 @@ async def apply_event_feedback_mutation(
         )
     else:
         feedback.corrected_value = preparation.corrected_value
+    event.last_updated_at = datetime.now(tz=UTC)
     await session.flush()
     await session.refresh(event, attribute_names=_event_refresh_attributes())
     target_revision = event_revision_token(event)

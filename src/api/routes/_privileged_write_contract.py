@@ -335,6 +335,20 @@ async def record_privileged_write_rejection(
         )
         if existing is None:
             raise
+        if existing.request_fingerprint != record.request_fingerprint:
+            conflict_detail = (
+                f"Idempotency key '{record.idempotency_key}' was already used for a different privileged "
+                "write request."
+            )
+            await _update_audit_row(
+                route_session,
+                audit_id=existing.id,
+                outcome="conflict",
+                detail=conflict_detail,
+                observed_revision_token=observed_revision_token,
+                increment_replay=True,
+            )
+            raise HTTPException(status_code=409, detail=conflict_detail) from None
         await _update_audit_row(
             route_session,
             audit_id=existing.id,

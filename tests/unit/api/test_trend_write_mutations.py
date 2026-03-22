@@ -110,3 +110,47 @@ async def test_update_trend_mutation_rejects_direct_probability_override(
     assert exc.value.status_code == 409
     assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
     mock_db_session.flush.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_update_trend_mutation_ignores_noop_probability_fields(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(trend_id=uuid4())
+    mock_db_session.scalar.return_value = None
+
+    result = await trend_write_mutations_module.update_trend_mutation(
+        session=mock_db_session,
+        trend_id=trend.id,
+        trend=trend,
+        payload=trends_module.TrendUpdate(
+            description="updated",
+            current_probability=0.2,
+        ),
+    )
+
+    assert trend.description == "updated"
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    assert result.trend is trend
+
+
+@pytest.mark.asyncio
+async def test_update_trend_mutation_ignores_null_probability_fields(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(trend_id=uuid4())
+    mock_db_session.scalar.return_value = None
+
+    result = await trend_write_mutations_module.update_trend_mutation(
+        session=mock_db_session,
+        trend_id=trend.id,
+        trend=trend,
+        payload=trends_module.TrendUpdate(
+            description="updated",
+            current_probability=None,
+        ),
+    )
+
+    assert trend.description == "updated"
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    assert result.trend is trend

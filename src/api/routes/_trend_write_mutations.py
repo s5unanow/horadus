@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID, uuid4
@@ -325,8 +326,21 @@ def _enforce_activation_mode(*, trend: Trend, plan: TrendUpdatePlan) -> None:
     )
 
 
-def _enforce_override_route(plan: TrendUpdatePlan) -> None:
+def _enforce_override_route(*, trend: Trend, plan: TrendUpdatePlan) -> None:
     if "current_probability" not in plan.updates:
+        return
+    requested_probability = plan.updates["current_probability"]
+    if requested_probability is None:
+        plan.updates.pop("current_probability", None)
+        return
+    current_probability = logodds_to_prob(float(trend.current_log_odds))
+    if math.isclose(
+        float(requested_probability),
+        current_probability,
+        rel_tol=0.0,
+        abs_tol=1e-9,
+    ):
+        plan.updates.pop("current_probability", None)
         return
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
@@ -414,7 +428,7 @@ async def update_trend_mutation(
     """Apply a trend update plus any required versioned-state activation."""
 
     plan = _build_trend_update_plan(trend, payload)
-    _enforce_override_route(plan)
+    _enforce_override_route(trend=trend, plan=plan)
     _enforce_activation_mode(trend=trend, plan=plan)
 
     try:

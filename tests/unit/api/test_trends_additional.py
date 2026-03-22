@@ -775,3 +775,34 @@ async def test_update_trend_updates_versioned_fields_without_live_probability_ov
     assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
     assert result.current_probability == pytest.approx(0.2, rel=0.01)
     assert mock_db_session.flush.await_count == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("noop_probability", [None, 0.2])
+async def test_update_trend_ignores_noop_current_probability_fields(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+    noop_probability: float | None,
+) -> None:
+    trend = _build_trend(name="Current Trend")
+    mock_db_session.get.return_value = trend
+    mock_db_session.scalar.return_value = None
+    monkeypatch.setattr(trends_module, "_get_evidence_stats", AsyncMock(return_value=(8, 0.75, 1)))
+    monkeypatch.setattr(
+        trends_module,
+        "_get_top_movers_7d",
+        AsyncMock(return_value=["Signal corroborated across multiple outlets"]),
+    )
+
+    result = await update_trend(
+        trend_id=trend.id,
+        trend=trends_module.TrendUpdate(
+            description="Updated description",
+            current_probability=noop_probability,
+        ),
+        session=mock_db_session,
+    )
+
+    assert trend.description == "Updated description"
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    assert result.current_probability == pytest.approx(0.2, rel=0.01)

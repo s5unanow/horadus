@@ -21,6 +21,33 @@ API key auth and rate limiting are controlled by environment config.
 - Rate-limit algorithm is configured via `API_RATE_LIMIT_STRATEGY` (`fixed_window` default, `sliding_window` optional)
 - On throttling, API returns `429` with `Retry-After` seconds
 
+## Privileged Write Contract
+
+The current operator/admin write contract is enforced for API key management
+and the privileged trend/feedback mutation routes documented below.
+
+Headers:
+- `X-Idempotency-Key: <opaque-key>` is required on every covered privileged write
+- `If-Match: <revision_token>` is additionally required on revision-sensitive writes
+
+Semantics:
+- reusing the same idempotency key for a prior successful or in-flight write returns `409`
+- reusing an idempotency key with a different request intent also returns `409`
+- missing `If-Match` on a revision-sensitive write returns `428`
+- stale revision tokens return `412`
+- durable privileged-write audit rows capture actor metadata, target, request intent, outcome, revision basis, and resulting linkage ids where applicable
+
+Current route matrix:
+- Idempotency only: `POST /api/v1/auth/keys`, `POST /api/v1/auth/keys/{key_id}/rotate`, `DELETE /api/v1/auth/keys/{key_id}`, `POST /api/v1/trends`, `POST /api/v1/trends/sync-config`, `POST /api/v1/trends/{trend_id}/outcomes`
+- Idempotency + revision token: `PATCH /api/v1/trends/{trend_id}`, `DELETE /api/v1/trends/{trend_id}`, `PATCH /api/v1/taxonomy-gaps/{gap_id}`, `POST /api/v1/events/{event_id}/feedback`, `POST /api/v1/trends/{trend_id}/override`
+
+Revision tokens are surfaced on the resource payloads used for read-before-write
+flows:
+- `TrendResponse.revision_token`
+- `EventResponse.revision_token` and `EventDetailResponse.revision_token`
+- `TaxonomyGapResponse.revision_token`
+- `FeedbackResponse.target_revision_token` for writes that mutate an event or trend
+
 Example:
 
 ```bash
@@ -112,6 +139,7 @@ Trend responses now include:
 - `confidence` (`low`/`medium`/`high`)
 - `top_movers_7d` (highest-impact recent evidence summaries)
 - `forecast_contract` (explicit question, structured horizon, resolver source/basis, and closure semantics)
+- `revision_token` (optimistic-concurrency token for privileged writes)
 
 Trend config sync and `POST /api/v1/trends` now require an explicit
 `forecast_contract`. `PATCH /api/v1/trends/{trend_id}` may omit the field only
@@ -183,6 +211,13 @@ Feedback mutations are exposed under:
 - `POST /api/v1/trends/{trend_id}/override`
 
 These routes require both `X-API-Key` and `X-Admin-API-Key`.
+`PATCH /api/v1/taxonomy-gaps/{gap_id}`, `POST /api/v1/events/{event_id}/feedback`,
+and `POST /api/v1/trends/{trend_id}/override` also require:
+- `X-Idempotency-Key`
+- `If-Match` with the latest `revision_token` for the target taxonomy gap/event/trend
+
+Feedback write responses now include `target_revision_token` so the caller can
+chain subsequent writes against the new resource revision.
 
 Supported event filters:
 - `category` (string)
@@ -258,6 +293,13 @@ curl "http://localhost:8000/api/v1/budget"
 
 - `GET /api/v1/auth/keys`
 - `POST /api/v1/auth/keys`
+- `DELETE /api/v1/auth/keys/{key_id}`
+- `POST /api/v1/auth/keys/{key_id}/rotate`
+
+Privileged auth writes require:
+- `X-API-Key`
+- `X-Admin-API-Key`
+- `X-Idempotency-Key`
 - `DELETE /api/v1/auth/keys/{key_id}`
 - `POST /api/v1/auth/keys/{key_id}/rotate`
 

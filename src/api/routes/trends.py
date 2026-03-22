@@ -13,23 +13,25 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.routes._privileged_write_contract import (
+    normalize_request_intent,
+    privileged_write,
+    request_dependency,
+    trend_revision_token,
+)
 from src.api.routes._trend_forecast_contract import forecast_contract_from_definition
 from src.api.routes._trend_write_contract import (
     build_validated_trend_write_payload,
 )
-from src.api.routes._trend_write_persistence import (
-    enforce_trend_uniqueness,
-    get_existing_trend_by_runtime_id,
-    is_unique_integrity_error,
+from src.api.routes._trend_write_mutations import (
+    create_trend_mutation,
+    update_trend_mutation,
 )
-from src.api.routes._trend_write_persistence import (
-    raise_payload_validation_error as raise_trend_payload_validation_error,
-)
+from src.api.routes._trend_write_persistence import get_existing_trend_by_runtime_id
 from src.api.routes.trend_api_models import (
     CalibrationBucketResponse,
     InjectHypotheticalSignalSimulationRequest,
@@ -71,7 +73,7 @@ from src.core.trend_config import (
     normalize_definition_payload,
     resolve_trend_config_sync_dir,
 )
-from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob, prob_to_logodds
+from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob
 from src.core.trend_state import (
     activate_trend_state,
     ensure_definition_version,
@@ -286,6 +288,7 @@ async def _to_response(
         active_state_version_id=trend.active_state_version_id,
         decay_half_life_days=trend.decay_half_life_days,
         is_active=trend.is_active,
+        revision_token=trend_revision_token(trend),
         updated_at=trend.updated_at,
     )
 
@@ -583,88 +586,44 @@ async def list_trends(
 )
 async def create_trend(
     trend: TrendCreate,
+    request: Request = Depends(request_dependency),
     session: AsyncSession = Depends(get_session),
 ) -> TrendResponse:
     """Create a new trend."""
-    try:
-        write_payload = build_validated_trend_write_payload(
-            name=trend.name,
-            description=trend.description,
-            baseline_probability=trend.baseline_probability,
-            decay_half_life_days=trend.decay_half_life_days,
-            indicators=trend.indicators,
-            definition=trend.definition,
-            forecast_contract=trend.forecast_contract,
-            require_forecast_contract=True,
+    intent = normalize_request_intent(trend.model_dump(mode="json", exclude_none=True))
+    async with privileged_write(
+        route_session=session,
+        request=request,
+        action="trends.create",
+        target_type="trend",
+        target_identifier=trend.name,
+        intent=intent,
+    ) as audit_guard:
+        result = await create_trend_mutation(session=session, payload=trend)
+        response = await _to_response(result.trend, session=session)
+        await audit_guard.succeed(
+            observed_revision_token=response.revision_token,
+            result_links={
+                "trend_id": str(response.id),
+                "runtime_trend_id": result.runtime_trend_id,
+                "definition_version_id": (
+                    str(result.definition_version_id)
+                    if result.definition_version_id is not None
+                    else None
+                ),
+                "state_version_id": (
+                    str(result.state_version_id) if result.state_version_id is not None else None
+                ),
+            },
         )
-    except ValueError as exc:
-        raise_trend_payload_validation_error(exc)
-    validated_config = write_payload.trend_config
-
-    await enforce_trend_uniqueness(
-        session,
-        trend_name=validated_config.name,
-        runtime_trend_id=write_payload.runtime_trend_id,
-    )
-
-    current_probability = (
-        trend.current_probability
-        if trend.current_probability is not None
-        else validated_config.baseline_probability
-    )
-    current_log_odds = prob_to_logodds(current_probability)
-
-    trend_record = Trend(
-        name=validated_config.name,
-        description=validated_config.description,
-        runtime_trend_id=write_payload.runtime_trend_id,
-        definition=write_payload.definition,
-        baseline_log_odds=write_payload.baseline_log_odds,
-        current_log_odds=current_log_odds,
-        indicators=write_payload.indicators,
-        decay_half_life_days=validated_config.decay_half_life_days,
-        is_active=trend.is_active,
-    )
-    session.add(trend_record)
-    try:
-        await session.flush()
-    except IntegrityError as exc:
-        if is_unique_integrity_error(exc, marker="runtime_trend_id"):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Trend runtime id '{write_payload.runtime_trend_id}' already exists",
-            ) from exc
-        raise
-    await _record_definition_version_if_material_change(
-        session,
-        trend=trend_record,
-        previous_definition=None,
-        actor="api",
-        context="create_trend",
-        force=True,
-    )
-    definition_version = await ensure_definition_version(
-        session=session,
-        trend=trend_record,
-        actor="api",
-        context="create_trend",
-    )
-    await activate_trend_state(
-        session=session,
-        trend=trend_record,
-        activation_kind="create",
-        actor="api",
-        context="create_trend",
-        definition_version=definition_version,
-    )
-
-    return await _to_response(trend_record, session=session)
+        return response
 
 
 @router.post(
     "/sync-config", response_model=TrendConfigLoadResponse, dependencies=[AUTHORIZE_TREND_SYNC]
 )
 async def sync_trends_from_config(
+    request: Request = Depends(request_dependency),
     config_dir: str = Query(default=DEFAULT_TREND_CONFIG_SYNC_DIR),
     activation_mode: Annotated[
         Literal["rebase", "replay", "new_line"] | None,
@@ -673,17 +632,36 @@ async def sync_trends_from_config(
     session: AsyncSession = Depends(get_session),
 ) -> TrendConfigLoadResponse:
     """Load or update trends from YAML files under `config/trends/`."""
-    try:
-        return await load_trends_from_config(
-            session=session,
-            config_dir=config_dir,
-            activation_mode=activation_mode,
+    intent = normalize_request_intent(
+        extras={"config_dir": config_dir, "activation_mode": activation_mode},
+    )
+    async with privileged_write(
+        route_session=session,
+        request=request,
+        action="trends.sync_config",
+        target_type="trend_catalog",
+        target_identifier=config_dir,
+        intent=intent,
+    ) as audit_guard:
+        try:
+            response = await load_trends_from_config(
+                session=session,
+                config_dir=config_dir,
+                activation_mode=activation_mode,
+            )
+        except TrendConfigSyncPathError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(exc),
+            ) from exc
+        await audit_guard.succeed(
+            result_links={
+                "loaded_files": response.loaded_files,
+                "created": response.created,
+                "updated": response.updated,
+            }
         )
-    except TrendConfigSyncPathError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
+        return response
 
 
 @router.get("/{trend_id}", response_model=TrendResponse)
@@ -902,28 +880,48 @@ async def get_trend_retrospective(
 async def record_trend_outcome(
     trend_id: UUID,
     payload: TrendOutcomeCreate,
+    request: Request = Depends(request_dependency),
     session: AsyncSession = Depends(get_session),
 ) -> TrendOutcomeResponse:
     """
     Record a resolved trend outcome and compute Brier score for calibration.
     """
-    service = CalibrationService(session)
-    try:
-        outcome = await service.record_outcome(
-            trend_id=trend_id,
-            outcome=payload.outcome,
-            outcome_date=payload.outcome_date,
-            notes=payload.outcome_notes,
-            evidence=payload.outcome_evidence,
-            recorded_by=payload.recorded_by,
-        )
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=str(exc),
-        ) from exc
+    intent = normalize_request_intent(
+        payload.model_dump(mode="json", exclude_none=True),
+    )
+    async with privileged_write(
+        route_session=session,
+        request=request,
+        action="trends.record_outcome",
+        target_type="trend",
+        target_identifier=str(trend_id),
+        intent=intent,
+        operator_identity=payload.recorded_by,
+    ) as audit_guard:
+        service = CalibrationService(session)
+        try:
+            outcome = await service.record_outcome(
+                trend_id=trend_id,
+                outcome=payload.outcome,
+                outcome_date=payload.outcome_date,
+                notes=payload.outcome_notes,
+                evidence=payload.outcome_evidence,
+                recorded_by=payload.recorded_by,
+            )
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=str(exc),
+            ) from exc
 
-    return _to_outcome_response(outcome)
+        response = _to_outcome_response(outcome)
+        await audit_guard.succeed(
+            result_links={
+                "trend_id": str(response.trend_id),
+                "trend_outcome_id": str(response.id),
+            }
+        )
+        return response
 
 
 @router.get("/{trend_id}/calibration", response_model=TrendCalibrationResponse)
@@ -975,131 +973,46 @@ async def get_trend_calibration(
 async def update_trend(
     trend_id: UUID,
     trend: TrendUpdate,
+    request: Request = Depends(request_dependency),
     session: AsyncSession = Depends(get_session),
 ) -> TrendResponse:
     """Update a trend."""
     trend_record = await _get_trend_or_404(session, trend_id)
-    previous_definition = normalize_definition_payload(
-        trend_record.definition if isinstance(trend_record.definition, dict) else None
-    )
-    updates = trend.model_dump(exclude_unset=True)
-    activation_mode = updates.pop("activation_mode", None)
-    activation_notes = updates.pop("activation_notes", None)
-    definition_updated = any(
-        key in updates for key in ("definition", "forecast_contract", "baseline_probability")
-    )
-    requested_state_activation = _requires_state_activation(updates)
-
-    candidate_name = updates.get("name", trend_record.name)
-    candidate_description = updates.get("description", trend_record.description)
-    candidate_definition = updates.get("definition", trend_record.definition)
-    candidate_forecast_contract = updates.get("forecast_contract")
-    if ("forecast_contract" in updates and "definition" not in updates) or not definition_updated:
-        candidate_definition = normalize_definition_payload(
-            trend_record.definition if isinstance(trend_record.definition, dict) else None
-        )
-        candidate_definition.pop("forecast_contract", None)
-    candidate_baseline_probability = (
-        updates["baseline_probability"]
-        if "baseline_probability" in updates
-        else logodds_to_prob(float(trend_record.baseline_log_odds))
-    )
-    candidate_indicators = updates.get("indicators", trend_record.indicators)
-    candidate_decay_half_life_days = updates.get(
-        "decay_half_life_days",
-        trend_record.decay_half_life_days,
-    )
-    state_contract_changed = requested_state_activation and (
-        _live_state_definition_basis(candidate_definition)
-        != _live_state_definition_basis(previous_definition)
-        or candidate_baseline_probability != logodds_to_prob(float(trend_record.baseline_log_odds))
-        or candidate_indicators != trend_record.indicators
-        or candidate_decay_half_life_days != trend_record.decay_half_life_days
-    )
-    if state_contract_changed and activation_mode is None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Material live-state changes require activation_mode "
-                "('rebase', 'replay', or 'new_line')."
-            ),
-        )
-
-    try:
-        write_payload = build_validated_trend_write_payload(
-            name=candidate_name,
-            description=candidate_description,
-            baseline_probability=candidate_baseline_probability,
-            decay_half_life_days=candidate_decay_half_life_days,
-            indicators=candidate_indicators,
-            definition=candidate_definition,
-            forecast_contract=candidate_forecast_contract,
-            require_forecast_contract=definition_updated,
-        )
-    except ValueError as exc:
-        raise_trend_payload_validation_error(exc)
-    validated_config = write_payload.trend_config
-
-    await enforce_trend_uniqueness(
-        session,
-        trend_name=validated_config.name,
-        runtime_trend_id=write_payload.runtime_trend_id,
-        current_trend_id=trend_id,
-    )
-
-    if "name" in updates:
-        trend_record.name = validated_config.name
-    if "description" in updates:
-        trend_record.description = validated_config.description
-    if definition_updated:
-        trend_record.runtime_trend_id = write_payload.runtime_trend_id
-        trend_record.definition = write_payload.definition
-    if "baseline_probability" in updates:
-        trend_record.baseline_log_odds = write_payload.baseline_log_odds
-    if "indicators" in updates:
-        trend_record.indicators = write_payload.indicators
-    if "decay_half_life_days" in updates:
-        trend_record.decay_half_life_days = validated_config.decay_half_life_days
-    if "is_active" in updates:
-        trend_record.is_active = updates["is_active"]
-    if "current_probability" in updates and updates["current_probability"] is not None:
-        trend_record.current_log_odds = prob_to_logodds(updates["current_probability"])
-
-    if definition_updated:
-        await _record_definition_version_if_material_change(
-            session,
-            trend=trend_record,
-            previous_definition=previous_definition,
-            actor="api",
-            context="update_trend",
-        )
-    if state_contract_changed:
-        assert activation_mode is not None
-        definition_version = await ensure_definition_version(
+    current_revision_token = trend_revision_token(trend_record)
+    intent = normalize_request_intent(trend.model_dump(mode="json", exclude_none=True))
+    async with privileged_write(
+        route_session=session,
+        request=request,
+        action="trends.update",
+        target_type="trend",
+        target_identifier=str(trend_id),
+        intent=intent,
+        require_revision=True,
+        observed_revision_token=current_revision_token,
+    ) as audit_guard:
+        result = await update_trend_mutation(
             session=session,
+            trend_id=trend_id,
             trend=trend_record,
-            actor="api",
-            context="update_trend",
+            payload=trend,
         )
-        await activate_trend_state(
-            session=session,
-            trend=trend_record,
-            activation_kind=activation_mode,
-            actor="api",
-            context="update_trend",
-            definition_version=definition_version,
-            details={"notes": activation_notes} if activation_notes else None,
+        response = await _to_response(result.trend, session=session)
+        await audit_guard.succeed(
+            observed_revision_token=response.revision_token,
+            result_links={
+                "trend_id": str(response.id),
+                "runtime_trend_id": result.runtime_trend_id,
+                "definition_version_id": (
+                    str(result.definition_version_id)
+                    if result.definition_version_id is not None
+                    else None
+                ),
+                "state_version_id": (
+                    str(result.state_version_id) if result.state_version_id is not None else None
+                ),
+            },
         )
-    try:
-        await session.flush()
-    except IntegrityError as exc:
-        if is_unique_integrity_error(exc, marker="runtime_trend_id"):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Trend runtime id '{write_payload.runtime_trend_id}' already exists",
-            ) from exc
-        raise
-    return await _to_response(trend_record, session=session)
+        return response
 
 
 @router.delete(
@@ -1107,9 +1020,26 @@ async def update_trend(
 )
 async def delete_trend(
     trend_id: UUID,
+    request: Request = Depends(request_dependency),
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """Deactivate a trend (soft delete)."""
     trend = await _get_trend_or_404(session, trend_id)
-    trend.is_active = False
-    await session.flush()
+    current_revision_token = trend_revision_token(trend)
+    intent = normalize_request_intent()
+    async with privileged_write(
+        route_session=session,
+        request=request,
+        action="trends.delete",
+        target_type="trend",
+        target_identifier=str(trend_id),
+        intent=intent,
+        require_revision=True,
+        observed_revision_token=current_revision_token,
+    ) as audit_guard:
+        trend.is_active = False
+        await session.flush()
+        await audit_guard.succeed(
+            observed_revision_token=trend_revision_token(trend),
+            result_links={"trend_id": str(trend_id), "is_active": trend.is_active},
+        )

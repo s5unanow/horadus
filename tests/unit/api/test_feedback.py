@@ -6,12 +6,14 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from sqlalchemy.exc import IntegrityError
 
+import src.api.routes._feedback_write_mutations as feedback_mutations_module
+import src.api.routes._privileged_write_contract as write_contract_module
 import src.api.routes.feedback as feedback_module
 from src.api.routes.feedback import (
     EventFeedbackRequest,
-    EventRestatementTarget,
     TaxonomyGapUpdateRequest,
     TrendOverrideRequest,
     create_event_feedback,
@@ -26,9 +28,11 @@ from src.api.routes.feedback_event_helpers import (
     _contradiction_risk,
     _uncertainty_score,
 )
+from src.api.routes.feedback_models import EventRestatementTarget
 from src.storage.models import (
     Event,
     HumanFeedback,
+    PrivilegedWriteAudit,
     TaxonomyGap,
     TaxonomyGapReason,
     TaxonomyGapStatus,
@@ -37,6 +41,42 @@ from src.storage.models import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+def _request_with_headers(
+    *,
+    method: str,
+    path: str,
+    headers: dict[str, str],
+) -> Request:
+    request = Request(
+        {
+            "type": "http",
+            "method": method,
+            "path": path,
+            "headers": [
+                (name.lower().encode("latin-1"), value.encode("latin-1"))
+                for name, value in headers.items()
+            ],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+    request.state.api_key_id = "test-api-key-id"  # pragma: allowlist secret
+    request.state.api_key_name = "fixture-actor"  # pragma: allowlist secret
+    return request
+
+
+def _restatement_target(
+    evidence_id, delta: float, notes: str | None = None
+) -> EventRestatementTarget:
+    return EventRestatementTarget(
+        evidence_id=evidence_id,
+        compensation_delta_log_odds=delta,
+        notes=notes,
+    )
 
 
 @pytest.mark.asyncio
@@ -54,8 +94,7 @@ async def test_list_feedback_returns_records(mock_db_session) -> None:
     result = await list_feedback(limit=20, session=mock_db_session)
 
     assert len(result) == 1
-    assert result[0].target_type == "event"
-    assert result[0].action == "pin"
+    assert (result[0].target_type, result[0].action) == ("event", "pin")
 
 
 @pytest.mark.asyncio
@@ -249,7 +288,7 @@ async def test_create_event_feedback_invalidate_handles_missing_trend_rows(
             assert fallback_current_log_odds is None
             return (0.2, -0.2)
 
-    monkeypatch.setattr(feedback_module, "TrendEngine", FakeTrendEngine)
+    monkeypatch.setattr(feedback_mutations_module, "TrendEngine", FakeTrendEngine)
     mock_db_session.get.return_value = event
     mock_db_session.scalars.side_effect = [
         SimpleNamespace(all=lambda: [evidence]),
@@ -302,9 +341,9 @@ async def test_create_event_feedback_invalidate_reverses_only_net_remaining_delt
         trend.updated_at = datetime.now(tz=UTC)
         return SimpleNamespace(id=uuid4())
 
-    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    monkeypatch.setattr(feedback_mutations_module, "apply_compensating_restatement", _fake_apply)
     monkeypatch.setattr(
-        feedback_module,
+        feedback_mutations_module,
         "load_prior_compensation_by_evidence_id",
         AsyncMock(return_value={evidence.id: -0.2}),
     )
@@ -368,7 +407,7 @@ async def test_create_event_feedback_invalidate_skips_missing_trend_adjustment_o
         async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
             raise ValueError("missing trend")
 
-    monkeypatch.setattr(feedback_module, "TrendEngine", FakeTrendEngine)
+    monkeypatch.setattr(feedback_mutations_module, "TrendEngine", FakeTrendEngine)
     mock_db_session.get.return_value = event
     mock_db_session.scalars.side_effect = [
         SimpleNamespace(all=lambda: [evidence]),
@@ -420,7 +459,7 @@ async def test_create_event_feedback_restate_preserves_evidence_and_records_comp
         trend.updated_at = datetime.now(tz=UTC)
         return SimpleNamespace(id=uuid4())
 
-    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    monkeypatch.setattr(feedback_mutations_module, "apply_compensating_restatement", _fake_apply)
     mock_db_session.get.return_value = event
     mock_db_session.scalars.side_effect = [
         SimpleNamespace(all=lambda: [evidence]),
@@ -433,9 +472,9 @@ async def test_create_event_feedback_restate_preserves_evidence_and_records_comp
             action="restate",
             notes="Analyst reduced confidence impact.",
             restatement_targets=[
-                EventRestatementTarget(
+                _restatement_target(
                     evidence_id=evidence.id,
-                    compensation_delta_log_odds=-0.2,
+                    delta=-0.2,
                     notes="Only half the original impact remains.",
                 )
             ],
@@ -487,12 +526,7 @@ async def test_create_event_feedback_restate_rejects_unknown_targets(mock_db_ses
             event_id=event.id,
             payload=EventFeedbackRequest(
                 action="restate",
-                restatement_targets=[
-                    EventRestatementTarget(
-                        evidence_id=uuid4(),
-                        compensation_delta_log_odds=-0.1,
-                    )
-                ],
+                restatement_targets=[_restatement_target(uuid4(), -0.1)],
             ),
             session=mock_db_session,
         )
@@ -520,14 +554,8 @@ async def test_create_event_feedback_restate_rejects_duplicate_targets(mock_db_s
             payload=EventFeedbackRequest(
                 action="restate",
                 restatement_targets=[
-                    EventRestatementTarget(
-                        evidence_id=evidence.id,
-                        compensation_delta_log_odds=-0.1,
-                    ),
-                    EventRestatementTarget(
-                        evidence_id=evidence.id,
-                        compensation_delta_log_odds=-0.05,
-                    ),
+                    _restatement_target(evidence.id, -0.1),
+                    _restatement_target(evidence.id, -0.05),
                 ],
             ),
             session=mock_db_session,
@@ -548,6 +576,96 @@ async def test_create_event_feedback_returns_404_for_unknown_event(mock_db_sessi
         )
 
     assert exc.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_rejects_stale_revision_and_records_audit(
+    mock_db_session,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Stale event write")
+    mock_db_session.get.side_effect = [event, None]
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_event_feedback(
+            event_id=event.id,
+            payload=EventFeedbackRequest(action="pin", created_by="analyst@horadus"),
+            request=_request_with_headers(
+                method="POST",
+                path=f"/api/v1/events/{event.id}/feedback",
+                headers={
+                    "X-Idempotency-Key": "feedback-stale-key",
+                    "If-Match": "stale-token",
+                },
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 412
+    audit_rows = [
+        call.args[0]
+        for call in mock_db_session.add.call_args_list
+        if isinstance(call.args[0], PrivilegedWriteAudit)
+    ]
+    assert len(audit_rows) == 1
+    assert audit_rows[0].action == "feedback.event_feedback"
+    assert audit_rows[0].target_identifier == str(event.id)
+    assert audit_rows[0].idempotency_key == "feedback-stale-key"
+
+
+@pytest.mark.asyncio
+async def test_create_event_feedback_rejects_duplicate_idempotency_key(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="Duplicate event write")
+    mock_db_session.get.return_value = event
+    existing = PrivilegedWriteAudit(
+        id=uuid4(),
+        actor_key="test-api-key-id",
+        action="feedback.event_feedback",
+        request_method="POST",
+        request_path=f"/api/v1/events/{event.id}/feedback",
+        target_type="event",
+        target_identifier=str(event.id),
+        idempotency_key="feedback-dup-key",
+        request_fingerprint="same-fingerprint",
+        request_intent={},
+        outcome="applied",
+    )
+
+    async def _raise_duplicate(*_args, **_kwargs):
+        raise IntegrityError("insert", {}, Exception("duplicate"))
+
+    async def _load_existing(*_args, **_kwargs):
+        return existing
+
+    async def _noop_update(*_args, **_kwargs) -> None:
+        return None
+
+    monkeypatch.setattr(write_contract_module, "_insert_audit_row", _raise_duplicate)
+    monkeypatch.setattr(write_contract_module, "_load_audit_row", _load_existing)
+    monkeypatch.setattr(write_contract_module, "_update_audit_row", _noop_update)
+    monkeypatch.setattr(
+        write_contract_module, "request_fingerprint", lambda _intent: "same-fingerprint"
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        await create_event_feedback(
+            event_id=event.id,
+            payload=EventFeedbackRequest(action="pin", created_by="analyst@horadus"),
+            request=_request_with_headers(
+                method="POST",
+                path=f"/api/v1/events/{event.id}/feedback",
+                headers={
+                    "X-Idempotency-Key": "feedback-dup-key",
+                    "If-Match": write_contract_module.event_revision_token(event),
+                },
+            ),
+            session=mock_db_session,
+        )
+
+    assert exc_info.value.status_code == 409
+    assert "Duplicate privileged write rejected" in str(exc_info.value.detail)
 
 
 @pytest.mark.asyncio
@@ -606,7 +724,7 @@ async def test_create_trend_override_records_manual_compensation_restatement(
         trend.updated_at = datetime.now(tz=UTC)
         return SimpleNamespace(id=uuid4())
 
-    monkeypatch.setattr(feedback_module, "apply_compensating_restatement", _fake_apply)
+    monkeypatch.setattr(feedback_mutations_module, "apply_compensating_restatement", _fake_apply)
     mock_db_session.get.return_value = trend
 
     result = await create_trend_override(
@@ -639,7 +757,10 @@ async def test_create_trend_override_returns_404_for_unknown_trend(mock_db_sessi
 
 @pytest.mark.asyncio
 async def test_trend_map_returns_empty_for_no_ids(mock_db_session) -> None:
-    result = await feedback_module._trend_map(session=mock_db_session, trend_ids=set())
+    result = await feedback_mutations_module._trend_map(
+        session=mock_db_session,
+        trend_ids=set(),
+    )
 
     assert result == {}
 

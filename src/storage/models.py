@@ -37,14 +37,14 @@ from src.storage.event_state import (
     EventActivityState,
     EventEpistemicState,
 )
-from src.storage.restatement_models import HumanFeedback, TrendRestatement
+from src.storage.restatement_models import HumanFeedback, PrivilegedWriteAudit, TrendRestatement
 from src.storage.scoring_contract import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,
 )
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
-_ = (EventLineage, HumanFeedback, TrendRestatement, TrendStateVersion)
+_ = (EventLineage, HumanFeedback, PrivilegedWriteAudit, TrendRestatement, TrendStateVersion)
 
 
 class SourceType(enum.StrEnum):

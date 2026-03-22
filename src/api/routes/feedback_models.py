@@ -26,6 +26,7 @@ class FeedbackResponse(BaseModel):
     corrected_value: dict[str, Any] | None
     notes: str | None
     created_by: str | None
+    target_revision_token: str | None = None
     created_at: datetime
 
 
@@ -129,6 +130,7 @@ class TaxonomyGapResponse(BaseModel):
     resolution_notes: str | None
     resolved_by: str | None
     resolved_at: datetime | None
+    revision_token: str | None = None
     observed_at: datetime
 
 
@@ -161,7 +163,11 @@ class TaxonomyGapUpdateRequest(BaseModel):
     resolved_by: str | None = None
 
 
-def to_feedback_response(feedback: HumanFeedback) -> FeedbackResponse:
+def to_feedback_response(
+    feedback: HumanFeedback,
+    *,
+    target_revision_token: str | None = None,
+) -> FeedbackResponse:
     """Normalize a feedback row into the API contract."""
 
     feedback_id = feedback.id if feedback.id is not None else uuid4()
@@ -175,11 +181,16 @@ def to_feedback_response(feedback: HumanFeedback) -> FeedbackResponse:
         corrected_value=feedback.corrected_value,
         notes=feedback.notes,
         created_by=feedback.created_by,
+        target_revision_token=target_revision_token,
         created_at=created_at,
     )
 
 
-def to_taxonomy_gap_response(gap: TaxonomyGap) -> TaxonomyGapResponse:
+def to_taxonomy_gap_response(
+    gap: TaxonomyGap,
+    *,
+    revision_token: str | None = None,
+) -> TaxonomyGapResponse:
     """Normalize a taxonomy-gap row into the API contract."""
 
     gap_id = gap.id if gap.id is not None else uuid4()
@@ -196,5 +207,6 @@ def to_taxonomy_gap_response(gap: TaxonomyGap) -> TaxonomyGapResponse:
         resolution_notes=gap.resolution_notes,
         resolved_by=gap.resolved_by,
         resolved_at=gap.resolved_at,
+        revision_token=revision_token,
         observed_at=observed_at,
     )

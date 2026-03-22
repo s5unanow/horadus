@@ -10,7 +10,6 @@
 ## Active Tasks
 
 - `TASK-201` Preserve audited, atomic manual trend overrides
-- `TASK-208` Restrict API docs and schema exposure outside development
 - `TASK-206` Keep event recency monotonic under late and backfilled mentions
 - `TASK-209` Restore `canonical_summary` alignment with `primary_item_id` after Tier-2
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
@@ -28,13 +27,12 @@
 ## Suggested Sequence
 
 1. `TASK-201` Close the live-probability mutation hole first so manual overrides always use the audited atomic path.
-2. `TASK-208` Harden the remaining unauthenticated docs/schema exposure while the API auth surface is already in focus.
-3. `TASK-206` Restore monotonic event recency because late/backfilled mentions can currently corrupt clustering and lifecycle semantics.
-4. `TASK-209` Re-align `canonical_summary` with `primary_item_id` after Tier-2 so event identity semantics stop drifting again.
-5. `TASK-272` Fix mixed-route reasoning metadata drift while the Tier-1/Tier-2 runtime semantics are under active review.
-6. `TASK-202` Harden degraded replay retries before broader degraded-mode state work lands.
-7. `TASK-338` Separate provisional and canonical degraded-mode extraction state so provisional output cannot silently become durable truth.
-8. `TASK-230` Add coverage observability last to expose remaining blind spots after the higher-risk runtime-correctness fixes are in flight.
+2. `TASK-206` Restore monotonic event recency because late/backfilled mentions can currently corrupt clustering and lifecycle semantics.
+3. `TASK-209` Re-align `canonical_summary` with `primary_item_id` after Tier-2 so event identity semantics stop drifting again.
+4. `TASK-272` Fix mixed-route reasoning metadata drift while the Tier-1/Tier-2 runtime semantics are under active review.
+5. `TASK-202` Harden degraded replay retries before broader degraded-mode state work lands.
+6. `TASK-338` Separate provisional and canonical degraded-mode extraction state so provisional output cannot silently become durable truth.
+7. `TASK-230` Add coverage observability last to expose remaining blind spots after the higher-risk runtime-correctness fixes are in flight.
 
 ## Human Blocker Metadata
 
@@ -51,4 +49,4 @@
 
 ## Completed This Sprint
 
-- Sprint opened on 2026-03-22 with carry-over work only; no Sprint 6 tasks are complete yet.
+- `TASK-208` Restrict API docs and schema exposure outside development ✅

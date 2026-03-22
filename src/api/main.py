@@ -81,6 +81,9 @@ OPENAPI_TAGS = [
     },
 ]
 
+_DEFAULT_AUTH_EXEMPT_PREFIXES = ("/health", "/metrics")
+_DEVELOPMENT_DOCS_PREFIXES = ("/docs", "/redoc", "/openapi.json")
+
 
 # =============================================================================
 # Lifespan Management
@@ -148,6 +151,18 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
 # =============================================================================
 
 
+def _api_docs_urls() -> tuple[str | None, str | None, str | None]:
+    if settings.is_development:
+        return ("/docs", "/redoc", "/openapi.json")
+    return (None, None, None)
+
+
+def _auth_exempt_prefixes() -> tuple[str, ...]:
+    if settings.is_development:
+        return _DEFAULT_AUTH_EXEMPT_PREFIXES + _DEVELOPMENT_DOCS_PREFIXES
+    return _DEFAULT_AUTH_EXEMPT_PREFIXES
+
+
 def create_app() -> FastAPI:
     """
     Create and configure the FastAPI application.
@@ -166,6 +181,7 @@ def create_app() -> FastAPI:
             "Required when API auth is enabled or keys are configured."
         ),
     )
+    docs_url, redoc_url, openapi_url = _api_docs_urls()
 
     app = FastAPI(
         title="Geopolitical Intelligence Platform",
@@ -177,9 +193,9 @@ def create_app() -> FastAPI:
             "- `X-API-Key`: required when `API_AUTH_ENABLED=true` or when keys are configured."
         ),
         version="1.0.0",
-        docs_url="/docs",
-        redoc_url="/redoc",
-        openapi_url="/openapi.json",
+        docs_url=docs_url,
+        redoc_url=redoc_url,
+        openapi_url=openapi_url,
         openapi_tags=OPENAPI_TAGS,
         dependencies=[Security(api_key_auth)],
         lifespan=lifespan,
@@ -194,7 +210,10 @@ def create_app() -> FastAPI:
             shutdown_on_error=settings.AGENT_SHUTDOWN_ON_ERROR,
         )
 
-    app.add_middleware(APIKeyAuthMiddleware)
+    app.add_middleware(
+        APIKeyAuthMiddleware,
+        exempt_prefixes=_auth_exempt_prefixes(),
+    )
 
     # Add CORS middleware
     app.add_middleware(

@@ -81,6 +81,8 @@ deployment steps.
    - `ENVIRONMENT=staging`
    - `API_AUTH_ENABLED=true`
    - explicit `SECRET_KEY`/`API_ADMIN_KEY`
+   - interactive docs/schema routes disabled outside development (`/docs`,
+     `/redoc`, `/openapi.json` should not be publicly available)
    - migration parity checks enabled (`MIGRATION_PARITY_STRICT_STARTUP=true`)
 4. Run pre-release gates against staging before prod promotion:
    ```bash
@@ -90,7 +92,7 @@ deployment steps.
      `docs/PROMPT_EVAL_POLICY.md`; the release gate already includes the
      eval audit and taxonomy validation
 5. Perform post-deploy smoke checks in staging (`/health`, `/health/ready`,
-   `/metrics`, auth-protected endpoints) and only then promote the same commit
+   `/metrics`, auth-protected endpoints, and disabled docs/schema routes) and only then promote the same commit
    to production.
 
 ## 2) Build production images

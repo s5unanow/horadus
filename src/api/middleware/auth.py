@@ -30,9 +30,6 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         exempt_prefixes: tuple[str, ...] = (
             "/health",
             "/metrics",
-            "/docs",
-            "/redoc",
-            "/openapi.json",
         ),
     ) -> None:
         super().__init__(app)

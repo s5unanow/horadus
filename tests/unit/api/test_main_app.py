@@ -44,11 +44,41 @@ def test_create_app_registers_core_middleware_routes_and_tracing(
     middleware_classes = {middleware.cls for middleware in app.user_middleware}
     assert APIKeyAuthMiddleware in middleware_classes
     assert AgentRuntimeMiddleware not in middleware_classes
+    auth_middleware = next(
+        middleware for middleware in app.user_middleware if middleware.cls is APIKeyAuthMiddleware
+    )
+    assert auth_middleware.kwargs["exempt_prefixes"] == (
+        "/health",
+        "/metrics",
+        "/docs",
+        "/redoc",
+        "/openapi.json",
+    )
     route_paths = {route.path for route in app.routes}
     assert "/health" in route_paths
     assert "/metrics" in route_paths
     assert "/api/v1/trends" in route_paths
     assert "/api/v1/events" in route_paths
+
+
+def test_create_app_hides_docs_routes_outside_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main_module, "configure_logging", MagicMock())
+    monkeypatch.setattr(main_module, "configure_tracing", MagicMock())
+    monkeypatch.setattr(main_module.settings, "RUNTIME_PROFILE", "server")
+    monkeypatch.setattr(main_module.settings, "AGENT_MODE", False)
+    monkeypatch.setattr(main_module.settings, "ENVIRONMENT", "staging")
+
+    app = main_module.create_app()
+
+    auth_middleware = next(
+        middleware for middleware in app.user_middleware if middleware.cls is APIKeyAuthMiddleware
+    )
+    assert auth_middleware.kwargs["exempt_prefixes"] == ("/health", "/metrics")
+    assert app.docs_url is None
+    assert app.redoc_url is None
+    assert app.openapi_url is None
 
 
 def test_create_app_enables_agent_runtime_middleware_for_agent_profile(

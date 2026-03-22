@@ -337,3 +337,5 @@
 - TASK-337: Pin Live Trend State to Active Definition/Scoring Versions ✅
 - TASK-341: Harden Mutable API Write Contracts with Revision Tokens, Idempotency, and Durable Audit Records ✅
 - TASK-359: Close Sprint 5 early and seed Sprint 6 from the live backlog ✅
+## Sprint 6
+- TASK-208: Restrict API docs and schema exposure outside development ✅

@@ -3,9 +3,11 @@
 This service exposes REST endpoints under `/api/v1` plus health probes.
 
 Interactive documentation:
-- Swagger UI: `/docs`
-- ReDoc: `/redoc`
-- OpenAPI JSON: `/openapi.json`
+- Swagger UI: `/docs` in `development`
+- ReDoc: `/redoc` in `development`
+- OpenAPI JSON: `/openapi.json` in `development`
+- In `staging` and `production`, the interactive docs/schema routes are disabled;
+  use this checked-in reference plus authenticated API calls for verification.
 
 ## Authentication
 

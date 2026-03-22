@@ -32,7 +32,9 @@ _HIGH_RISK_SHARED_WORKFLOW_FILES = (
     "tools/horadus/python/horadus_cli/",
     "tools/horadus/python/horadus_cli/app.py",
     "tools/horadus/python/horadus_cli/triage_commands.py",
+    "tools/horadus/python/horadus_workflow/code_shape.py",
     "tools/horadus/python/horadus_workflow/docs_freshness.py",
+    "tools/horadus/python/horadus_workflow/import_boundaries.py",
     "tools/horadus/python/horadus_workflow/repo_workflow.py",
     "tools/horadus/python/horadus_workflow/review_defaults.py",
     "tools/horadus/python/horadus_workflow/result.py",
@@ -61,6 +63,7 @@ _HIGH_RISK_SHARED_WORKFLOW_CONFIG_FILES = (
     "scripts/enforce_main_protection.sh",
     "scripts/install_horadus_cli_skill.sh",
     "scripts/sync_automations.py",
+    "scripts/test_integration_docker.sh",
 )
 _HIGH_RISK_POLICY_FILES = (
     *high_risk_pre_push_review_reference_paths(),

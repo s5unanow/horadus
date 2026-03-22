@@ -545,14 +545,14 @@ def test_pre_push_review_guidance_can_recommend_review_without_planning_gates() 
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
-def test_pre_push_review_guidance_keeps_non_shared_workflow_helpers_quiet() -> None:
+def test_pre_push_review_guidance_keeps_single_runtime_storage_work_quiet() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-993",
-        title="Code shape fixture",
+        title="Storage fixture",
         priority="P3",
         estimate="1h",
-        description=["Exercise a non-shared workflow helper path without risk markers."],
-        files=["`tools/horadus/python/horadus_workflow/code_shape.py`"],
+        description=["Exercise an ordinary single-surface runtime path without risk markers."],
+        files=["`src/storage/models.py`"],
         acceptance_criteria=[],
         assessment_refs=[],
         raw_block="raw",
@@ -708,6 +708,31 @@ def test_pre_push_review_guidance_treats_cli_app_as_shared_workflow_tooling() ->
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_gate_helpers_as_shared_workflow_tooling() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-979",
+        title="Gate helper fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise repo-owned gate helper guidance."],
+        files=[
+            "`tools/horadus/python/horadus_workflow/import_boundaries.py`",
+            "`tools/horadus/python/horadus_workflow/code_shape.py`",
+        ],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
 def test_pre_push_review_guidance_treats_repo_owned_automation_surfaces_as_high_risk() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-989",
@@ -738,6 +763,30 @@ def test_pre_push_review_guidance_treats_makefile_backed_workflow_scripts_as_hig
         estimate="1h",
         description=["Exercise Makefile-backed workflow script guidance."],
         files=["`scripts/sync_automations.py`", "`scripts/agent_smoke_run.sh`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow config" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_integration_gate_script_as_shared_workflow_config() -> (
+    None
+):
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-978",
+        title="Integration gate fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise canonical integration gate guidance."],
+        files=["`scripts/test_integration_docker.sh`"],
         acceptance_criteria=[],
         assessment_refs=[],
         raw_block="raw",

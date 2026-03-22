@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, NoReturn, cast
 from uuid import UUID
 
 from fastapi import HTTPException, Request
@@ -358,6 +358,102 @@ class PrivilegedWriteGuard:
         )
 
 
+async def _reject_write_start(
+    *,
+    route_session: Any,
+    request: Any,
+    action: str,
+    target_type: str,
+    target_identifier: str | None,
+    intent: Mapping[str, Any],
+    outcome: str,
+    detail: str,
+    status_code: int,
+    operator_identity: str | None,
+    expected_revision_token: str | None,
+    observed_revision_token: str | None,
+) -> NoReturn:
+    await record_privileged_write_rejection(
+        route_session=route_session,
+        request=request,
+        action=action,
+        target_type=target_type,
+        target_identifier=target_identifier,
+        intent=intent,
+        outcome=outcome,
+        detail=detail,
+        operator_identity=operator_identity,
+        expected_revision_token=expected_revision_token,
+        observed_revision_token=observed_revision_token,
+    )
+    raise HTTPException(status_code=status_code, detail=detail)
+
+
+def _build_in_progress_audit_record(
+    *,
+    request_value: Request,
+    action: str,
+    target_type: str,
+    target_identifier: str | None,
+    operator_identity: str | None,
+    idempotency_key: str,
+    fingerprint: str,
+    normalized_intent: dict[str, Any],
+    expected_revision_token: str | None,
+    observed_revision_token: str | None,
+) -> PrivilegedWriteAudit:
+    return PrivilegedWriteAudit(
+        actor_key=_actor_key(request_value),
+        actor_api_key_id=getattr(request_value.state, "api_key_id", None),
+        actor_api_key_name=getattr(request_value.state, "api_key_name", None),
+        operator_identity=operator_identity,
+        action=action,
+        request_method=request_value.method,
+        request_path=request_value.url.path,
+        target_type=target_type,
+        target_identifier=target_identifier,
+        idempotency_key=idempotency_key,
+        request_fingerprint=fingerprint,
+        request_intent=normalized_intent,
+        expected_revision_token=expected_revision_token,
+        observed_revision_token=observed_revision_token,
+        outcome="in_progress",
+    )
+
+
+async def _raise_duplicate_write_conflict(
+    *,
+    route_session: Any,
+    request_value: Request,
+    action: str,
+    idempotency_key: str,
+    fingerprint: str,
+    observed_revision_token: str | None,
+) -> None:
+    existing = await _load_audit_row(
+        route_session,
+        actor_key=_actor_key(request_value),
+        action=action,
+        idempotency_key=idempotency_key,
+    )
+    if existing is None:
+        raise
+    conflict_detail = (
+        f"Idempotency key '{idempotency_key}' was already used for a different privileged write request."
+        if existing.request_fingerprint != fingerprint
+        else f"Duplicate privileged write rejected for idempotency key '{idempotency_key}'."
+    )
+    await _update_audit_row(
+        route_session,
+        audit_id=existing.id,
+        outcome="conflict",
+        detail=conflict_detail,
+        observed_revision_token=observed_revision_token,
+        increment_replay=True,
+    )
+    raise HTTPException(status_code=409, detail=conflict_detail) from None
+
+
 async def start_privileged_write(
     *,
     route_session: Any,
@@ -380,7 +476,7 @@ async def start_privileged_write(
     idempotency_key = idempotency_key_from_request(request_value)
     expected_revision_token = revision_token_from_request(request_value)
     if idempotency_key is None:
-        await record_privileged_write_rejection(
+        await _reject_write_start(
             route_session=route_session,
             request=request,
             action=action,
@@ -389,13 +485,13 @@ async def start_privileged_write(
             intent=normalized_intent,
             outcome="missing_idempotency_key",
             detail=_MISSING_IDEMPOTENCY_DETAIL,
+            status_code=400,
             operator_identity=operator_identity,
             expected_revision_token=expected_revision_token,
             observed_revision_token=observed_revision_token,
         )
-        raise HTTPException(status_code=400, detail=_MISSING_IDEMPOTENCY_DETAIL)
     if require_revision and expected_revision_token is None:
-        await record_privileged_write_rejection(
+        await _reject_write_start(
             route_session=route_session,
             request=request,
             action=action,
@@ -404,54 +500,34 @@ async def start_privileged_write(
             intent=normalized_intent,
             outcome="missing_revision_token",
             detail=_MISSING_REVISION_DETAIL,
+            status_code=428,
             operator_identity=operator_identity,
             expected_revision_token=expected_revision_token,
             observed_revision_token=observed_revision_token,
         )
-        raise HTTPException(status_code=428, detail=_MISSING_REVISION_DETAIL)
-
-    record = PrivilegedWriteAudit(
-        actor_key=_actor_key(request_value),
-        actor_api_key_id=getattr(request_value.state, "api_key_id", None),
-        actor_api_key_name=getattr(request_value.state, "api_key_name", None),
-        operator_identity=operator_identity,
+    record = _build_in_progress_audit_record(
+        request_value=request_value,
         action=action,
-        request_method=request_value.method,
-        request_path=request_value.url.path,
         target_type=target_type,
         target_identifier=target_identifier,
+        operator_identity=operator_identity,
         idempotency_key=idempotency_key,
-        request_fingerprint=fingerprint,
-        request_intent=normalized_intent,
+        fingerprint=fingerprint,
+        normalized_intent=normalized_intent,
         expected_revision_token=expected_revision_token,
         observed_revision_token=observed_revision_token,
-        outcome="in_progress",
     )
     try:
         inserted = await _insert_audit_row(route_session, record)
     except IntegrityError:
-        existing = await _load_audit_row(
-            route_session,
-            actor_key=_actor_key(request_value),
+        await _raise_duplicate_write_conflict(
+            route_session=route_session,
+            request_value=request_value,
             action=action,
             idempotency_key=idempotency_key,
+            fingerprint=fingerprint,
+            observed_revision_token=observed_revision_token,
         )
-        if existing is not None:
-            conflict_detail = (
-                f"Idempotency key '{idempotency_key}' was already used for a different privileged write request."
-                if existing.request_fingerprint != fingerprint
-                else f"Duplicate privileged write rejected for idempotency key '{idempotency_key}'."
-            )
-            await _update_audit_row(
-                route_session,
-                audit_id=existing.id,
-                outcome="conflict",
-                detail=conflict_detail,
-                observed_revision_token=observed_revision_token,
-                increment_replay=True,
-            )
-            raise HTTPException(status_code=409, detail=conflict_detail) from None
-        raise
 
     if require_revision and expected_revision_token != observed_revision_token:
         await _update_audit_row(

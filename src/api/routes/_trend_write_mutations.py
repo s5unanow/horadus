@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, cast
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
@@ -38,6 +38,27 @@ class TrendMutationResult:
     state_version_id: UUID | None
 
 
+@dataclass(slots=True)
+class TrendUpdatePlan:
+    """Resolved candidate state for a trend update mutation."""
+
+    previous_definition: dict[str, Any]
+    updates: dict[str, Any]
+    activation_mode: str | None
+    activation_notes: str | None
+    definition_updated: bool
+    candidate_name: str
+    candidate_description: str | None
+    candidate_definition: dict[str, Any] | Any
+    candidate_forecast_contract: Any
+    candidate_baseline_probability: float
+    candidate_indicators: dict[str, Any] | Any
+    candidate_decay_half_life_days: int
+
+
+TrendActivationKind = Literal["create", "rebase", "replay", "new_line"]
+
+
 def _hash_definition_payload(definition: dict[str, Any]) -> str:
     canonical = json.dumps(
         definition,
@@ -66,6 +87,27 @@ def _live_state_definition_basis(definition: Any) -> dict[str, Any]:
     normalized = normalize_definition_payload(definition if isinstance(definition, dict) else None)
     normalized.pop("forecast_contract", None)
     return normalized
+
+
+def _definition_update_requested(updates: dict[str, Any]) -> bool:
+    return any(
+        key in updates for key in ("definition", "forecast_contract", "baseline_probability")
+    )
+
+
+def _resolved_candidate_definition(
+    *,
+    trend: Trend,
+    updates: dict[str, Any],
+    definition_updated: bool,
+) -> dict[str, Any] | Any:
+    candidate_definition = updates.get("definition", trend.definition)
+    if ("forecast_contract" in updates and "definition" not in updates) or not definition_updated:
+        candidate_definition = normalize_definition_payload(
+            trend.definition if isinstance(trend.definition, dict) else None
+        )
+        candidate_definition.pop("forecast_contract", None)
+    return candidate_definition
 
 
 async def record_definition_version_if_material_change(
@@ -197,6 +239,41 @@ async def create_trend_mutation(
     )
 
 
+def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdatePlan:
+    previous_definition = normalize_definition_payload(
+        trend.definition if isinstance(trend.definition, dict) else None
+    )
+    updates = payload.model_dump(exclude_unset=True)
+    activation_mode = updates.pop("activation_mode", None)
+    activation_notes = updates.pop("activation_notes", None)
+    definition_updated = _definition_update_requested(updates)
+    return TrendUpdatePlan(
+        previous_definition=previous_definition,
+        updates=updates,
+        activation_mode=activation_mode,
+        activation_notes=activation_notes,
+        definition_updated=definition_updated,
+        candidate_name=updates.get("name", trend.name),
+        candidate_description=updates.get("description", trend.description),
+        candidate_definition=_resolved_candidate_definition(
+            trend=trend,
+            updates=updates,
+            definition_updated=definition_updated,
+        ),
+        candidate_forecast_contract=updates.get("forecast_contract"),
+        candidate_baseline_probability=(
+            updates["baseline_probability"]
+            if "baseline_probability" in updates
+            else logodds_to_prob(float(trend.baseline_log_odds))
+        ),
+        candidate_indicators=updates.get("indicators", trend.indicators),
+        candidate_decay_half_life_days=updates.get(
+            "decay_half_life_days",
+            trend.decay_half_life_days,
+        ),
+    )
+
+
 def _state_contract_changed(
     *,
     updates: dict[str, Any],
@@ -218,89 +295,43 @@ def _state_contract_changed(
     )
 
 
-async def update_trend_mutation(
+def _state_activation_required(*, trend: Trend, plan: TrendUpdatePlan) -> bool:
+    return _state_contract_changed(
+        updates=plan.updates,
+        trend=trend,
+        candidate_definition=plan.candidate_definition,
+        previous_definition=plan.previous_definition,
+        candidate_baseline_probability=plan.candidate_baseline_probability,
+        candidate_indicators=plan.candidate_indicators,
+        candidate_decay_half_life_days=plan.candidate_decay_half_life_days,
+    )
+
+
+def _enforce_activation_mode(*, trend: Trend, plan: TrendUpdatePlan) -> None:
+    if not _state_activation_required(trend=trend, plan=plan) or plan.activation_mode is not None:
+        return
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Material live-state changes require activation_mode "
+            "('rebase', 'replay', or 'new_line')."
+        ),
+    )
+
+
+def _apply_trend_updates(
     *,
-    session: AsyncSession,
-    trend_id: UUID,
     trend: Trend,
-    payload: TrendUpdate,
-) -> TrendMutationResult:
-    """Apply a trend update plus any required versioned-state activation."""
-
-    previous_definition = normalize_definition_payload(
-        trend.definition if isinstance(trend.definition, dict) else None
-    )
-    updates = payload.model_dump(exclude_unset=True)
-    activation_mode = updates.pop("activation_mode", None)
-    activation_notes = updates.pop("activation_notes", None)
-    definition_updated = any(
-        key in updates for key in ("definition", "forecast_contract", "baseline_probability")
-    )
-    candidate_name = updates.get("name", trend.name)
-    candidate_description = updates.get("description", trend.description)
-    candidate_definition = updates.get("definition", trend.definition)
-    candidate_forecast_contract = updates.get("forecast_contract")
-    if ("forecast_contract" in updates and "definition" not in updates) or not definition_updated:
-        candidate_definition = normalize_definition_payload(
-            trend.definition if isinstance(trend.definition, dict) else None
-        )
-        candidate_definition.pop("forecast_contract", None)
-    candidate_baseline_probability = (
-        updates["baseline_probability"]
-        if "baseline_probability" in updates
-        else logodds_to_prob(float(trend.baseline_log_odds))
-    )
-    candidate_indicators = updates.get("indicators", trend.indicators)
-    candidate_decay_half_life_days = updates.get(
-        "decay_half_life_days",
-        trend.decay_half_life_days,
-    )
-    if (
-        _state_contract_changed(
-            updates=updates,
-            trend=trend,
-            candidate_definition=candidate_definition,
-            previous_definition=previous_definition,
-            candidate_baseline_probability=candidate_baseline_probability,
-            candidate_indicators=candidate_indicators,
-            candidate_decay_half_life_days=candidate_decay_half_life_days,
-        )
-        and activation_mode is None
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Material live-state changes require activation_mode "
-                "('rebase', 'replay', or 'new_line')."
-            ),
-        )
-
-    try:
-        write_payload = build_validated_trend_write_payload(
-            name=candidate_name,
-            description=candidate_description,
-            baseline_probability=candidate_baseline_probability,
-            decay_half_life_days=candidate_decay_half_life_days,
-            indicators=candidate_indicators,
-            definition=candidate_definition,
-            forecast_contract=candidate_forecast_contract,
-            require_forecast_contract=definition_updated,
-        )
-    except ValueError as exc:
-        raise_payload_validation_error(exc)
-    validated_config = write_payload.trend_config
-    await enforce_trend_uniqueness(
-        session,
-        trend_name=validated_config.name,
-        runtime_trend_id=write_payload.runtime_trend_id,
-        current_trend_id=trend_id,
-    )
-
+    plan: TrendUpdatePlan,
+    write_payload: Any,
+    validated_config: Any,
+) -> None:
+    updates = plan.updates
     if "name" in updates:
         trend.name = validated_config.name
     if "description" in updates:
         trend.description = validated_config.description
-    if definition_updated:
+    if plan.definition_updated:
         trend.runtime_trend_id = write_payload.runtime_trend_id
         trend.definition = write_payload.definition
     if "baseline_probability" in updates:
@@ -314,41 +345,97 @@ async def update_trend_mutation(
     if "current_probability" in updates and updates["current_probability"] is not None:
         trend.current_log_odds = prob_to_logodds(updates["current_probability"])
 
-    if definition_updated:
-        await record_definition_version_if_material_change(
-            session,
-            trend=trend,
-            previous_definition=previous_definition,
-            actor="api",
-            context="update_trend",
-        )
-    definition_version_id = trend.active_definition_version_id
-    if _state_contract_changed(
-        updates=updates,
+
+async def _record_definition_history_if_needed(
+    *,
+    session: AsyncSession,
+    trend: Trend,
+    plan: TrendUpdatePlan,
+) -> None:
+    if not plan.definition_updated:
+        return
+    await record_definition_version_if_material_change(
+        session,
         trend=trend,
-        candidate_definition=candidate_definition,
-        previous_definition=previous_definition,
-        candidate_baseline_probability=candidate_baseline_probability,
-        candidate_indicators=candidate_indicators,
-        candidate_decay_half_life_days=candidate_decay_half_life_days,
-    ):
-        assert activation_mode is not None
-        definition_version = await ensure_definition_version(
-            session=session,
-            trend=trend,
-            actor="api",
-            context="update_trend",
+        previous_definition=plan.previous_definition,
+        actor="api",
+        context="update_trend",
+    )
+
+
+async def _activate_trend_state_if_needed(
+    *,
+    session: AsyncSession,
+    trend: Trend,
+    plan: TrendUpdatePlan,
+) -> UUID | None:
+    definition_version_id = trend.active_definition_version_id
+    if not _state_activation_required(trend=trend, plan=plan):
+        return definition_version_id
+    assert plan.activation_mode is not None
+    definition_version = await ensure_definition_version(
+        session=session,
+        trend=trend,
+        actor="api",
+        context="update_trend",
+    )
+    await activate_trend_state(
+        session=session,
+        trend=trend,
+        activation_kind=cast("TrendActivationKind", plan.activation_mode),
+        actor="api",
+        context="update_trend",
+        definition_version=definition_version,
+        details={"notes": plan.activation_notes} if plan.activation_notes else None,
+    )
+    return definition_version.id
+
+
+async def update_trend_mutation(
+    *,
+    session: AsyncSession,
+    trend_id: UUID,
+    trend: Trend,
+    payload: TrendUpdate,
+) -> TrendMutationResult:
+    """Apply a trend update plus any required versioned-state activation."""
+
+    plan = _build_trend_update_plan(trend, payload)
+    _enforce_activation_mode(trend=trend, plan=plan)
+
+    try:
+        write_payload = build_validated_trend_write_payload(
+            name=plan.candidate_name,
+            description=plan.candidate_description,
+            baseline_probability=plan.candidate_baseline_probability,
+            decay_half_life_days=plan.candidate_decay_half_life_days,
+            indicators=plan.candidate_indicators,
+            definition=plan.candidate_definition,
+            forecast_contract=plan.candidate_forecast_contract,
+            require_forecast_contract=plan.definition_updated,
         )
-        definition_version_id = definition_version.id
-        await activate_trend_state(
-            session=session,
-            trend=trend,
-            activation_kind=activation_mode,
-            actor="api",
-            context="update_trend",
-            definition_version=definition_version,
-            details={"notes": activation_notes} if activation_notes else None,
-        )
+    except ValueError as exc:
+        raise_payload_validation_error(exc)
+    validated_config = write_payload.trend_config
+    await enforce_trend_uniqueness(
+        session,
+        trend_name=validated_config.name,
+        runtime_trend_id=write_payload.runtime_trend_id,
+        current_trend_id=trend_id,
+    )
+
+    _apply_trend_updates(
+        trend=trend,
+        plan=plan,
+        write_payload=write_payload,
+        validated_config=validated_config,
+    )
+    await _record_definition_history_if_needed(session=session, trend=trend, plan=plan)
+    definition_version_id = await _activate_trend_state_if_needed(
+        session=session,
+        trend=trend,
+        plan=plan,
+    )
     try:
         await session.flush()
     except IntegrityError as exc:

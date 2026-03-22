@@ -452,6 +452,24 @@ def test_handle_context_pack_propagates_archive_flag_to_suggested_commands(
     assert expected in result.data["suggested_workflow_commands"]
 
 
+def test_handle_context_pack_keeps_archived_tasks_quiet_for_pre_push_guidance(
+    synthetic_task_repo: Path,
+) -> None:
+    result = task_commands_module.handle_context_pack(
+        argparse.Namespace(task_id=ARCHIVED_TASK_ID, include_archive=True)
+    )
+
+    assert result.exit_code == task_commands_module.ExitCode.OK
+    assert result.lines is not None
+    assert "## Pre-Push Review Guidance" not in result.lines
+    assert result.data is not None
+    guidance = result.data["pre_push_review_guidance"]
+    assert guidance["recommended"] is False
+    assert guidance["commands"] == []
+    assert guidance["fallback_notes"] == []
+    assert guidance["batching_notes"] == []
+
+
 def test_handle_context_pack_surfaces_pre_push_review_guidance_for_high_risk_task(
     synthetic_task_repo: Path,
 ) -> None:

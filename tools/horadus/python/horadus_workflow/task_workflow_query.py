@@ -426,6 +426,15 @@ def _structural_risk_reasons(paths: list[str]) -> list[str]:
 
 
 def _pre_push_review_guidance(record: Any) -> PrePushReviewGuidance:
+    if getattr(record, "archived", False):
+        return {
+            "recommended": False,
+            "risk_reasons": [],
+            "commands": [],
+            "fallback_notes": [],
+            "batching_notes": [],
+        }
+
     normalized_paths = _normalized_task_paths(record)
     risk_reasons = _structural_risk_reasons(normalized_paths)
 

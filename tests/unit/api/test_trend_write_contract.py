@@ -185,7 +185,7 @@ async def test_update_trend_rejects_direct_probability_override_and_records_audi
 
 
 @pytest.mark.asyncio
-async def test_update_trend_normalizes_noop_probability_field_in_request_intent(
+async def test_update_trend_preserves_noop_probability_field_in_request_intent(
     mock_db_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -226,7 +226,10 @@ async def test_update_trend_normalizes_noop_probability_field_in_request_intent(
         if isinstance(call.args[0], PrivilegedWriteAudit)
     ]
     assert len(audit_rows) == 1
-    assert audit_rows[0].request_intent["payload"] == {"description": "Updated description"}
+    assert audit_rows[0].request_intent["payload"] == {
+        "description": "Updated description",
+        "current_probability": "0.2",
+    }
 
 
 @pytest.mark.asyncio

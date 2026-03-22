@@ -34,7 +34,6 @@ from src.api.routes._trend_write_contract import (
 )
 from src.api.routes._trend_write_mutations import (
     create_trend_mutation,
-    normalized_trend_update_intent_payload,
     update_trend_mutation,
 )
 from src.api.routes._trend_write_persistence import get_existing_trend_by_runtime_id
@@ -1036,19 +1035,13 @@ async def update_trend(
     session: AsyncSession = Depends(get_session),
 ) -> TrendResponse:
     """Update a trend."""
-    raw_intent = normalize_request_intent(trend.model_dump(mode="json", exclude_none=True))
+    intent = normalize_request_intent(trend.model_dump(mode="json", exclude_none=True))
     trend_record = await _load_trend_for_privileged_write(
         session=session,
         trend_id=trend_id,
         request=request,
         action="trends.update",
-        intent=raw_intent,
-    )
-    intent = normalize_request_intent(
-        normalized_trend_update_intent_payload(
-            trend=trend_record,
-            payload=trend,
-        )
+        intent=intent,
     )
     current_revision_token = trend_revision_token(trend_record)
     async with privileged_write(

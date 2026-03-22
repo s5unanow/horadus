@@ -126,21 +126,6 @@ def _normalize_noop_current_probability(
         updates.pop("current_probability", None)
 
 
-def normalized_trend_update_intent_payload(
-    *,
-    trend: Trend,
-    payload: TrendUpdate,
-) -> dict[str, Any]:
-    updates = payload.model_dump(mode="json", exclude_none=True, exclude_unset=True)
-    activation_mode = updates.get("activation_mode")
-    _normalize_noop_current_probability(
-        trend=trend,
-        updates=updates,
-        activation_mode=activation_mode if isinstance(activation_mode, str) else None,
-    )
-    return updates
-
-
 def _resolved_candidate_definition(
     *,
     trend: Trend,

@@ -30,6 +30,7 @@ _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
 _HIGH_RISK_SHARED_WORKFLOW_FILES = (
     "tools/horadus/python/horadus_workflow/",
     "tools/horadus/python/horadus_cli/",
+    "tools/horadus/python/horadus_cli/app.py",
     "tools/horadus/python/horadus_workflow/docs_freshness.py",
     "tools/horadus/python/horadus_workflow/repo_workflow.py",
     "tools/horadus/python/horadus_workflow/review_defaults.py",
@@ -72,6 +73,7 @@ _HIGH_RISK_SHARED_MATH_FILES = (
 )
 _HIGH_RISK_RUNTIME_SURFACE_PREFIXES = {
     "src/api/": "api",
+    "src/cli": "cli",
     "src/core/": "core",
     "src/eval/": "eval",
     "src/ingestion/": "ingestion",
@@ -79,6 +81,7 @@ _HIGH_RISK_RUNTIME_SURFACE_PREFIXES = {
     "src/storage/": "storage",
     "src/workers/": "workers",
     "alembic/": "migrations",
+    "tools/horadus/python/horadus_cli/": "cli",
 }
 _HIGH_RISK_TEXT_MARKERS = (
     ("migration", "task description references migrations"),

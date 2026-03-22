@@ -668,6 +668,28 @@ def test_pre_push_review_guidance_treats_workflow_core_modules_as_high_risk() ->
     assert "task changes shared workflow tooling" in guidance["risk_reasons"]
 
 
+def test_pre_push_review_guidance_treats_cli_app_as_shared_workflow_tooling() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-981",
+        title="CLI app fixture",
+        priority="P1",
+        estimate="1h",
+        description=["Exercise top-level CLI workflow dispatch guidance."],
+        files=["`tools/horadus/python/horadus_cli/app.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task changes shared workflow tooling" in guidance["risk_reasons"]
+
+
 def test_pre_push_review_guidance_treats_repo_owned_automation_surfaces_as_high_risk() -> None:
     record = task_repo_module.TaskRecord(
         task_id="TASK-989",
@@ -801,6 +823,28 @@ def test_pre_push_review_guidance_treats_ingestion_as_runtime_surface() -> None:
 
     assert guidance["recommended"] is True
     assert "task spans multiple runtime surfaces: ingestion, storage" in guidance["risk_reasons"]
+
+
+def test_pre_push_review_guidance_treats_api_and_cli_as_multi_surface_runtime() -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-980",
+        title="API/CLI fixture",
+        priority="P1",
+        estimate="2h",
+        description=["Exercise multi-surface runtime guidance for API plus CLI."],
+        files=["`src/api/main.py`", "`src/cli.py`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+    )
+
+    guidance = task_commands_module._pre_push_review_guidance(record)
+
+    assert guidance["recommended"] is True
+    assert "task spans multiple runtime surfaces: api, cli" in guidance["risk_reasons"]
 
 
 def test_pre_push_review_guidance_treats_eval_as_runtime_surface() -> None:

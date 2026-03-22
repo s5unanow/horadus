@@ -108,6 +108,8 @@ def _normalize_noop_current_probability(
     trend: Trend,
     updates: dict[str, Any],
     activation_mode: str | None,
+    candidate_baseline_probability: float,
+    state_activation_required: bool,
 ) -> None:
     if "current_probability" not in updates:
         return
@@ -115,19 +117,32 @@ def _normalize_noop_current_probability(
     if requested_probability is None:
         updates.pop("current_probability", None)
         return
+    requested_probability = float(requested_probability)
     current_probability = logodds_to_prob(float(trend.current_log_odds))
-    if activation_mode in ("replay", "new_line") and math.isclose(
-        float(requested_probability),
-        current_probability,
-        rel_tol=0.0,
-        abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
+    if (
+        activation_mode in ("replay", "new_line")
+        and state_activation_required
+        and (
+            math.isclose(
+                requested_probability,
+                current_probability,
+                rel_tol=0.0,
+                abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
+            )
+            or math.isclose(
+                requested_probability,
+                candidate_baseline_probability,
+                rel_tol=0.0,
+                abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
+            )
+        )
     ):
         updates.pop("current_probability", None)
         return
     if activation_mode not in (None, "rebase"):
         return
     if math.isclose(
-        float(requested_probability),
+        requested_probability,
         current_probability,
         rel_tol=0.0,
         abs_tol=_CURRENT_PROBABILITY_NOOP_ABS_TOL,
@@ -286,12 +301,38 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
     updates = payload.model_dump(exclude_unset=True)
     activation_mode = updates.pop("activation_mode", None)
     activation_notes = updates.pop("activation_notes", None)
+    definition_updated = _definition_update_requested(updates)
+    candidate_definition = _resolved_candidate_definition(
+        trend=trend,
+        updates=updates,
+        definition_updated=definition_updated,
+    )
+    candidate_baseline_probability = (
+        updates["baseline_probability"]
+        if "baseline_probability" in updates
+        else logodds_to_prob(float(trend.baseline_log_odds))
+    )
+    candidate_indicators = updates.get("indicators", trend.indicators)
+    candidate_decay_half_life_days = updates.get(
+        "decay_half_life_days",
+        trend.decay_half_life_days,
+    )
+    state_activation_required = _state_contract_changed(
+        updates=updates,
+        trend=trend,
+        candidate_definition=candidate_definition,
+        previous_definition=previous_definition,
+        candidate_baseline_probability=candidate_baseline_probability,
+        candidate_indicators=candidate_indicators,
+        candidate_decay_half_life_days=candidate_decay_half_life_days,
+    )
     _normalize_noop_current_probability(
         trend=trend,
         updates=updates,
         activation_mode=activation_mode,
+        candidate_baseline_probability=candidate_baseline_probability,
+        state_activation_required=state_activation_required,
     )
-    definition_updated = _definition_update_requested(updates)
     return TrendUpdatePlan(
         previous_definition=previous_definition,
         updates=updates,
@@ -300,22 +341,11 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
         definition_updated=definition_updated,
         candidate_name=updates.get("name", trend.name),
         candidate_description=updates.get("description", trend.description),
-        candidate_definition=_resolved_candidate_definition(
-            trend=trend,
-            updates=updates,
-            definition_updated=definition_updated,
-        ),
+        candidate_definition=candidate_definition,
         candidate_forecast_contract=updates.get("forecast_contract"),
-        candidate_baseline_probability=(
-            updates["baseline_probability"]
-            if "baseline_probability" in updates
-            else logodds_to_prob(float(trend.baseline_log_odds))
-        ),
-        candidate_indicators=updates.get("indicators", trend.indicators),
-        candidate_decay_half_life_days=updates.get(
-            "decay_half_life_days",
-            trend.decay_half_life_days,
-        ),
+        candidate_baseline_probability=candidate_baseline_probability,
+        candidate_indicators=candidate_indicators,
+        candidate_decay_half_life_days=candidate_decay_half_life_days,
     )
 
 

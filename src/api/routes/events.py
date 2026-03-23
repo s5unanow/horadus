@@ -30,7 +30,6 @@ from src.processing.event_lineage import (
 from src.storage.database import get_session
 from src.storage.event_extraction import (
     has_canonical_extraction,
-    provisional_extraction_payload,
     resolved_extraction_status,
 )
 from src.storage.event_state import (
@@ -325,9 +324,8 @@ def _lineage_replay_pending(event: Event) -> bool:
 
 
 def _visible_provisional_extraction(event: Event) -> dict[str, Any] | None:
-    if _lineage_replay_pending(event):
-        return None
-    return provisional_extraction_payload(event)
+    _ = event
+    return None
 
 
 def _to_event_repair_response(result: EventRepairResult) -> EventRepairResponse:

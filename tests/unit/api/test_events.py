@@ -345,7 +345,7 @@ async def test_get_event_keeps_claims_visible_during_lineage_replay_pending(
 
 
 @pytest.mark.asyncio
-async def test_get_event_surfaces_provisional_extraction_debug_payload(
+async def test_get_event_hides_provisional_extraction_payload_on_public_route(
     mock_db_session,
     monkeypatch,
 ) -> None:
@@ -368,11 +368,7 @@ async def test_get_event_surfaces_provisional_extraction_debug_payload(
     result = await get_event(event_id=event.id, session=mock_db_session)
 
     assert result.extraction_status == "provisional"
-    assert result.provisional_extraction == {
-        "status": "provisional",
-        "summary": "Held degraded summary",
-        "categories": ["security"],
-    }
+    assert result.provisional_extraction is None
 
 
 @pytest.mark.asyncio

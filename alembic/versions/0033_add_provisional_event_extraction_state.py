@@ -61,7 +61,7 @@ def upgrade() -> None:
             'has_contradictions', to_jsonb(has_contradictions),
             'contradiction_notes', to_jsonb(contradiction_notes),
             'provenance', extraction_provenance,
-            'replay_enqueued', 'false'::jsonb,
+            'replay_enqueued', 'true'::jsonb,
             'policy', extracted_claims -> '_llm_policy'
           ),
           event_summary = NULL,
@@ -89,6 +89,59 @@ def upgrade() -> None:
               'false'
             ) = 'true'
         )
+        """
+    )
+    op.execute(
+        """
+        INSERT INTO llm_replay_queue (
+          id,
+          stage,
+          event_id,
+          priority,
+          status,
+          attempt_count,
+          last_attempt_at,
+          locked_at,
+          locked_by,
+          processed_at,
+          last_error,
+          details
+        )
+        SELECT
+          gen_random_uuid(),
+          'tier2',
+          id,
+          500,
+          'pending',
+          0,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          jsonb_build_object(
+            'reason', 'migration_backfill_degraded_llm',
+            'migration', '0033_event_provisional_state',
+            'original_extraction_provenance', provisional_extraction -> 'provenance'
+          )
+        FROM events
+        WHERE extraction_status = 'provisional'
+          AND COALESCE(
+            provisional_extraction -> 'policy' ->> 'degraded_llm',
+            'false'
+          ) = 'true'
+        ON CONFLICT (stage, event_id) DO UPDATE
+        SET
+          priority = EXCLUDED.priority,
+          status = 'pending',
+          attempt_count = 0,
+          last_attempt_at = NULL,
+          locked_at = NULL,
+          locked_by = NULL,
+          processed_at = NULL,
+          last_error = NULL,
+          details = EXCLUDED.details
+        WHERE llm_replay_queue.status != 'processing'
         """
     )
     op.execute(

@@ -50,8 +50,14 @@ def test_event_extraction_state_migration_backfills_degraded_rows_as_provisional
         for statement in executed
     )
     assert any("provisional_extraction = jsonb_build_object" in statement for statement in executed)
+    assert any("'replay_enqueued', 'true'::jsonb" in statement for statement in executed)
     assert any("UPDATE event_claims" in statement for statement in executed)
     assert any("SET is_active = false" in statement for statement in executed)
+    replay_backfill = next(
+        statement for statement in executed if "INSERT INTO llm_replay_queue" in statement
+    )
+    assert "'reason', 'migration_backfill_degraded_llm'" in replay_backfill
+    assert "ON CONFLICT (stage, event_id) DO UPDATE" in replay_backfill
     assert any("epistemic_state = CASE" in statement for statement in executed)
     assert any("lifecycle_status = CASE" in statement for statement in executed)
     canonical_backfill = next(

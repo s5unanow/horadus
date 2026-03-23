@@ -31,6 +31,7 @@ from src.processing.event_cluster_health import CLUSTER_HEALTH_KEY
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.trend_impact_reconciliation import reconcile_event_trend_impacts
 from src.storage.event_state import resolved_corroboration_score
+from src.storage.event_summary import refresh_event_summary_from_canonical
 from src.storage.models import Event, EventItem, RawItem, Source, Trend
 
 PROVENANCE_AWARE_MODE = "provenance_aware"
@@ -417,8 +418,13 @@ async def _refresh_event_primary_item(
         )
         if (candidate_credibility or 0.0) <= (current_credibility or 0.0):
             selected_item = current_primary_item
+    previous_canonical_summary = event.canonical_summary
     event.primary_item_id = selected_item.id
     event.canonical_summary = _build_canonical_summary(selected_item)
+    refresh_event_summary_from_canonical(
+        event,
+        previous_canonical_summary=previous_canonical_summary,
+    )
 
 
 async def _refresh_event_trend_impacts(

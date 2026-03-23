@@ -35,6 +35,7 @@ from src.processing.llm_input_safety import (
     DEFAULT_TRUNCATION_MARKER,
 )
 from src.processing.report_llm import build_report_payload_content, invoke_report_narrative
+from src.storage.event_summary import event_summary_expression
 from src.storage.models import (
     Event,
     EventItem,
@@ -718,12 +719,13 @@ class ReportGenerator:
         period_end: datetime,
         limit: int = 5,
     ) -> list[dict[str, Any]]:
+        summary_expr = event_summary_expression()
         query = (
             select(
                 TrendEvidence.event_id,
                 func.sum(func.abs(TrendEvidence.delta_log_odds)).label("impact_score"),
                 func.count(TrendEvidence.id).label("evidence_count"),
-                Event.canonical_summary,
+                summary_expr.label("summary"),
                 Event.categories,
             )
             .join(Event, Event.id == TrendEvidence.event_id)
@@ -733,7 +735,7 @@ class ReportGenerator:
             .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(
                 TrendEvidence.event_id,
-                Event.canonical_summary,
+                summary_expr,
                 Event.categories,
             )
             .order_by(func.sum(func.abs(TrendEvidence.delta_log_odds)).desc())

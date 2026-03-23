@@ -84,6 +84,7 @@ def _event_for_item(item: GoldSetItem) -> Event:
     return Event(
         id=uuid5(NAMESPACE_URL, f"horadus-canary/{item.item_id}"),
         canonical_summary=f"{item.title}. {summary}",
+        event_summary=f"{item.title}. {summary}",
         source_count=1,
         unique_source_count=1,
     )

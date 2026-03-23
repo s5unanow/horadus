@@ -164,6 +164,7 @@ Clustered news events (multiple raw_items about the same story).
 |--------|------|----------|---------|-------------|
 | id | UUID | No | gen_random_uuid() | Primary key |
 | canonical_summary | TEXT | No | | Canonical summary of the current `primary_item_id` (most credible item), not simply the latest mention |
+| event_summary | TEXT | Yes | | Synthesized event-level summary used for API/reporting/Tier-2 carry-forward; falls back to `canonical_summary` until Tier-2 writes one |
 | embedding | vector(1536) | Yes | | Text embedding for similarity |
 | embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
 | embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |
@@ -196,6 +197,10 @@ Clustered news events (multiple raw_items about the same story).
 | contradiction_notes | TEXT | Yes | | Optional contradiction analysis notes |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 
+Notes:
+- Tier-2 persists its synthesized structured-output `summary` into `events.event_summary`.
+- Persisted `events.canonical_summary` remains the summary of the current `primary_item_id`.
+
 **Indexes:**
 - Primary key: `id`
 - IVFFlat: `embedding` (vector_cosine_ops, lists=64)
@@ -207,7 +212,8 @@ Clustered news events (multiple raw_items about the same story).
 **Vector search example:**
 ```sql
 -- Find similar events (cosine similarity > 0.88)
-SELECT id, canonical_summary,
+SELECT id,
+       COALESCE(event_summary, canonical_summary) AS summary,
        1 - (embedding <=> $1) as similarity
 FROM events
 WHERE first_seen_at > NOW() - INTERVAL '48 hours'
@@ -709,7 +715,7 @@ ORDER BY probability DESC;
 ```sql
 SELECT
     e.id,
-    e.canonical_summary,
+    COALESCE(e.event_summary, e.canonical_summary) AS summary,
     e.source_count,
     e.first_seen_at
 FROM events e
@@ -726,7 +732,7 @@ SELECT
     te.signal_type,
     te.delta_log_odds,
     te.reasoning,
-    e.canonical_summary,
+    COALESCE(e.event_summary, e.canonical_summary) AS summary,
     te.created_at
 FROM trend_evidence te
 JOIN events e ON te.event_id = e.id
@@ -764,7 +770,7 @@ FROM current c, week_ago w;
 ```sql
 SELECT
     id,
-    canonical_summary,
+    COALESCE(event_summary, canonical_summary) AS summary,
     1 - (embedding <=> $1) as similarity
 FROM events
 WHERE first_seen_at > NOW() - INTERVAL '48 hours'

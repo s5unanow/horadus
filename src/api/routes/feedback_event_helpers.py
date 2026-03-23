@@ -12,6 +12,7 @@ from src.storage.event_state import (
     event_state_snapshot,
     resolved_independent_evidence_count,
 )
+from src.storage.event_summary import resolved_event_summary
 
 if TYPE_CHECKING:
     from src.storage.models import Event, TrendEvidence
@@ -148,7 +149,7 @@ def build_review_queue_item(
     )
     return ReviewQueueItem(
         event_id=event.id,
-        summary=event.canonical_summary,
+        summary=resolved_event_summary(event),
         epistemic_state=state["epistemic_state"],
         activity_state=state["activity_state"],
         lifecycle_status=event.lifecycle_status,

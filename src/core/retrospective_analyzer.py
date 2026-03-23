@@ -27,6 +27,7 @@ from src.processing.llm_input_safety import (
     DEFAULT_TRUNCATION_MARKER,
 )
 from src.processing.llm_policy import build_safe_payload_content, invoke_with_policy
+from src.storage.event_summary import event_summary_expression
 from src.storage.models import Event, Trend, TrendEvidence, TrendOutcome
 
 logger = structlog.get_logger(__name__)
@@ -180,10 +181,11 @@ class RetrospectiveAnalyzer:
         period_end: datetime,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
+        summary_expr = event_summary_expression()
         query = (
             select(
                 TrendEvidence.event_id,
-                Event.canonical_summary,
+                summary_expr.label("summary"),
                 Event.categories,
                 func.count(TrendEvidence.id).label("evidence_count"),
                 func.sum(TrendEvidence.delta_log_odds).label("net_delta_log_odds"),
@@ -196,7 +198,7 @@ class RetrospectiveAnalyzer:
             .where(TrendEvidence.is_invalidated.is_(False))
             .group_by(
                 TrendEvidence.event_id,
-                Event.canonical_summary,
+                summary_expr,
                 Event.categories,
             )
             .order_by(func.sum(func.abs(TrendEvidence.delta_log_odds)).desc())

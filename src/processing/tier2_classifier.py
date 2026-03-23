@@ -66,6 +66,7 @@ from src.storage.event_state import (
     resolved_event_epistemic_state,
     resolved_independent_evidence_count,
 )
+from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -562,9 +563,17 @@ class Tier2Classifier:
         if not sanitized_chunks:
             sanitized_chunks = [self._TRUNCATION_MARKER]
 
+        extraction_provenance = (
+            event.extraction_provenance if isinstance(event.extraction_provenance, dict) else {}
+        )
+        summary_seed = (
+            event.canonical_summary
+            if extraction_provenance.get("status") == "replay_pending"
+            else resolved_event_summary(event)
+        )
         payload = {
             "event_id": str(event.id),
-            "summary": event.canonical_summary,
+            "summary": summary_seed,
             "context_chunks": sanitized_chunks,
         }
         self._enforce_payload_budget(payload)
@@ -615,7 +624,7 @@ class Tier2Classifier:
         for system_key in (TREND_IMPACT_RECONCILIATION_KEY,):
             if system_key in existing_claims:
                 system_claims[system_key] = existing_claims[system_key]
-        event.canonical_summary = output.summary.strip()
+        event.event_summary = output.summary.strip()
         event.extracted_who = self._dedupe_strings(output.extracted_who)
         event.extracted_what = output.extracted_what.strip()
         event.extracted_where = output.extracted_where.strip() if output.extracted_where else None

@@ -15,6 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, EventClaim, EventClaimType
 
 FALLBACK_EVENT_CLAIM_KEY = "__event__"
@@ -54,7 +55,7 @@ def normalize_claim_text(value: str) -> str:
 
 def fallback_claim_text(event: Event) -> str:
     """Return the deterministic fallback claim text for an event."""
-    for candidate in (event.extracted_what, event.canonical_summary):
+    for candidate in (event.extracted_what, resolved_event_summary(event)):
         if isinstance(candidate, str) and candidate.strip():
             return candidate.strip()
     return _DEFAULT_FALLBACK_CLAIM_TEXT

@@ -29,6 +29,7 @@ from src.processing.event_cluster_health import (
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.event_state import EventActivityState, EventEpistemicState
+from src.storage.event_summary import refresh_event_summary_from_canonical
 from src.storage.models import Event, EventItem, RawItem, Source
 from src.storage.restatement_models import HumanFeedback
 
@@ -169,6 +170,7 @@ class EventClusterer:
         timestamp = self._item_timestamp(item)
         event = Event(
             canonical_summary=self._build_canonical_summary(item),
+            event_summary=self._build_canonical_summary(item),
             embedding=item.embedding,
             embedding_model=item.embedding_model,
             embedding_generated_at=item.embedding_generated_at,
@@ -189,6 +191,7 @@ class EventClusterer:
     async def _merge_into_event(self, event: Event, item: RawItem) -> None:
         event.source_count += 1
         mention_time = self._item_timestamp(item)
+        previous_canonical_summary = event.canonical_summary
         if event.embedding is None and item.embedding is not None:
             event.embedding = item.embedding
             event.embedding_model = item.embedding_model
@@ -198,6 +201,10 @@ class EventClusterer:
         if primary_changed:
             # Canonical summary intentionally tracks the primary (most credible) item.
             event.canonical_summary = self._build_canonical_summary(item)
+            refresh_event_summary_from_canonical(
+                event,
+                previous_canonical_summary=previous_canonical_summary,
+            )
 
         event.unique_source_count = await self._count_unique_sources(event.id, item.source_id)
         await self._refresh_event_provenance(event)

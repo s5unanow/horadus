@@ -22,10 +22,7 @@ from src.eval import artifact_provenance as provenance
 from src.processing.llm_policy import apply_latest_active_route_metadata
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
-from src.processing.tier2_classifier import (
-    Tier2Classifier,
-    Tier2Usage,
-)
+from src.processing.tier2_classifier import Tier2Classifier, Tier2Usage
 from src.storage.models import Event, ProcessingStatus, RawItem
 
 HUMAN_VERIFIED_LABEL = "human_verified"
@@ -591,6 +588,7 @@ def _build_event(item: GoldSetItem) -> Event:
     return Event(
         id=_item_uuid(item.item_id),
         canonical_summary=f"{item.title}. {summary}",
+        event_summary=f"{item.title}. {summary}",
         source_count=1,
         unique_source_count=1,
     )

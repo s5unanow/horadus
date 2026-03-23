@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
 
@@ -53,6 +53,42 @@ async def fresh_replay_status(*, deps: Any, item_id: Any) -> str | None:
     state = await fresh_replay_state(deps=deps, item_id=item_id)
     status = state.get("status") if state is not None else None
     return str(status) if isinstance(status, str) else None
+
+
+async def persist_failure_state(
+    *,
+    deps: Any,
+    session: Any,
+    item: Any,
+    exc: Exception,
+    now: datetime,
+    attempt_count_override: int,
+    dbapi_error_cls: type[BaseException],
+    persist_failure: Any,
+) -> Any | None:
+    item_id = item.id
+    current_item = item
+    current_now = now
+    for _ in range(2):
+        try:
+            await persist_failure(
+                deps=deps,
+                session=session,
+                item=current_item,
+                exc=exc,
+                now=current_now,
+                attempt_count_override=attempt_count_override,
+            )
+            return current_item
+        except dbapi_error_cls:
+            await session.rollback()
+            current_item = await session.get(
+                deps.LLMReplayQueueItem, item_id, with_for_update={"skip_locked": True}
+            )
+            if current_item is None or current_item.status != "pending":
+                return None
+            current_now = datetime.now(tz=UTC)
+    return None
 
 
 def _serialize_replay_timestamp(value: Any) -> str | None:

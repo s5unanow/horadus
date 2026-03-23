@@ -404,6 +404,52 @@ async def test_get_event_hides_unanchored_claims_for_provisional_events(
 
 
 @pytest.mark.asyncio
+async def test_get_event_keeps_evidence_anchored_claims_for_provisional_events(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = _build_event()
+    event.extraction_status = "provisional"
+    event.provisional_extraction = {
+        "status": "provisional",
+        "summary": "Held degraded summary",
+        "extracted_claims": {"claims": ["Held degraded claim"]},
+    }
+    mock_db_session.get.return_value = event
+    referenced_claim_id = uuid4()
+    responses = iter(
+        [
+            [],
+            [(uuid4(), referenced_claim_id, "Anchored canonical claim", "military_movement", 0.12)],
+            [
+                (
+                    referenced_claim_id,
+                    "anchored canonical claim",
+                    "Anchored canonical claim",
+                    "statement",
+                    False,
+                )
+            ],
+        ]
+    )
+
+    async def _execute(_query):
+        return SimpleNamespace(all=lambda: next(responses))
+
+    mock_db_session.execute.side_effect = _execute
+    monkeypatch.setattr(events_module, "load_event_lineage", AsyncMock(return_value=[]))
+
+    result = await get_event(event_id=event.id, session=mock_db_session)
+
+    assert result.extraction_status == "provisional"
+    assert len(result.claims) == 1
+    assert result.claims[0]["id"] == referenced_claim_id
+    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    assert "event_claims.id in" in claim_query_text
+    assert "event_claims.is_active is true" not in claim_query_text
+
+
+@pytest.mark.asyncio
 async def test_event_responses_use_resolved_fallback_corroboration_values(
     mock_db_session,
     monkeypatch,

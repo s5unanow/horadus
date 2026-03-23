@@ -607,7 +607,7 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
             item.locked_by = "workers.replay_degraded_events"
             item.attempt_count = int(item.attempt_count or 0) + 1
             item.last_attempt_at = now
-        await session.flush()
+        await session.commit()
 
         trends, tier2, pipeline = await _build_replay_runtime(deps=deps, session=session)
 
@@ -624,6 +624,7 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                     item=item,
                     now=now,
                 )
+                await session.commit()
             except Exception as exc:
                 errors += 1
                 consumed_attempt_count = int(item.attempt_count or 0)
@@ -631,7 +632,7 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                     await session.rollback()
                     refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
                     if refreshed_item is None:
-                        break
+                        continue
                     await _handle_replay_item_failure(
                         deps=deps,
                         session=session,
@@ -640,16 +641,16 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                         now=now,
                         attempt_count_override=consumed_attempt_count,
                     )
-                    break
-                await _handle_replay_item_failure(
-                    deps=deps,
-                    session=session,
-                    item=item,
-                    exc=exc,
-                    now=now,
-                    attempt_count_override=consumed_attempt_count,
-                )
-        await session.commit()
+                else:
+                    await _handle_replay_item_failure(
+                        deps=deps,
+                        session=session,
+                        item=item,
+                        exc=exc,
+                        now=now,
+                        attempt_count_override=consumed_attempt_count,
+                    )
+                await session.commit()
 
     return {
         "status": "ok",

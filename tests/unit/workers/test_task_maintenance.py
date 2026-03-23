@@ -284,7 +284,7 @@ async def test_replay_degraded_events_async_schedules_retryable_failure(
     assert item.details["replay_failure"]["next_attempt_after"]
     session.flush.assert_awaited()
     sync_status.assert_not_awaited()
-    session.commit.assert_awaited_once()
+    assert session.commit.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -556,7 +556,7 @@ async def test_replay_degraded_events_async_marks_terminal_manual_review_failure
     assert item.last_error == "boom"
     assert item.details["replay_failure"]["disposition"] == "manual_review"
     sync_status.assert_awaited_once_with(session=session, event_id=item.event_id)
-    session.commit.assert_awaited_once()
+    assert session.commit.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -698,7 +698,7 @@ async def test_replay_degraded_events_async_rolls_back_before_retrying_dbapi_fai
     session.rollback.assert_awaited_once()
     session.get.assert_awaited_with(LLMReplayQueueItem, item.id)
     sync_status.assert_not_awaited()
-    session.commit.assert_awaited_once()
+    assert session.commit.await_count == 2
 
 
 @pytest.mark.asyncio

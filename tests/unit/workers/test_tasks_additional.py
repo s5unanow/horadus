@@ -1508,8 +1508,8 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
     assert success_item.details["replay_result"]["attempts_used"] == 1
     assert error_item.status == "error"
     assert error_item.last_error == "Event not found: missing-event"
-    assert mock_session.flush.await_count == 3
-    assert mock_session.commit.await_count == 1
+    assert mock_session.flush.await_count == 2
+    assert mock_session.commit.await_count == 3
 
 
 def test_replay_degraded_events_wrapper_uses_configured_limit(

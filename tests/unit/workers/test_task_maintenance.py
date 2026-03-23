@@ -789,6 +789,69 @@ async def test_replay_degraded_events_async_stops_when_dbapi_row_disappears_afte
 
 
 @pytest.mark.asyncio
+async def test_replay_degraded_events_async_skips_same_pending_row_after_failed_attempt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        status="pending",
+        locked_at=None,
+        locked_by=None,
+        attempt_count=0,
+        last_attempt_at=None,
+        details={},
+        last_error=None,
+        processed_at=None,
+        priority=1,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    first_session = AsyncMock()
+    first_session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
+        SimpleNamespace(all=lambda: [item]),
+    ]
+    second_session = AsyncMock()
+    second_session.scalars.return_value = SimpleNamespace(all=lambda: [item])
+    process_item = AsyncMock(return_value=True)
+
+    class _SessionContext:
+        def __init__(self, session: AsyncMock) -> None:
+            self._session = session
+
+        async def __aenter__(self) -> AsyncMock:
+            return self._session
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    session_contexts = iter([_SessionContext(first_session), _SessionContext(second_session)])
+
+    monkeypatch.setattr(_task_maintenance, "_process_replay_item", process_item)
+    monkeypatch.setattr(
+        _task_maintenance.replay_helpers,
+        "build_replay_runtime",
+        AsyncMock(return_value=([], object(), object())),
+    )
+
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(LLM_DEGRADED_MODE_ENABLED=False, LLM_TIER2_MODEL="tier2-model"),
+        async_session_maker=lambda: next(session_contexts),
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        Trend=Trend,
+        Tier2Classifier=object,
+        ProcessingPipeline=object,
+        asyncio=SimpleNamespace(to_thread=AsyncMock()),
+    )
+
+    result = await _task_maintenance.replay_degraded_events_async(deps=deps, limit=2)
+
+    assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 1}
+    process_item.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_load_due_replay_items_locks_only_limited_ready_ids() -> None:
     ready_item = SimpleNamespace(
         id=uuid4(),

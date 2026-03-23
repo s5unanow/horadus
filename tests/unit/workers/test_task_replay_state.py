@@ -616,6 +616,53 @@ async def test_process_replay_item_stops_commit_recovery_when_failure_state_cann
 
 
 @pytest.mark.asyncio
+async def test_process_replay_item_recovers_when_commit_confirmation_read_raises_dbapi_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        attempt_count=2,
+        status="done",
+        details={},
+        last_attempt_at=None,
+        processed_at=None,
+        last_error=None,
+    )
+    refreshed_item = SimpleNamespace(id=item.id, attempt_count=2, status="pending")
+    session = AsyncMock()
+    session.commit = AsyncMock(
+        side_effect=[OperationalError("commit", {}, Exception("drop")), None]
+    )
+    session.get = AsyncMock(return_value=refreshed_item)
+    monkeypatch.setattr(
+        _task_maintenance, "_replay_one_degraded_item", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        replay_helpers,
+        "fresh_replay_state",
+        AsyncMock(side_effect=OperationalError("select 1", {}, Exception("db down"))),
+    )
+    monkeypatch.setattr(
+        replay_helpers, "persist_failure_state", AsyncMock(return_value=refreshed_item)
+    )
+
+    had_error = await _task_maintenance._process_replay_item(
+        deps=SimpleNamespace(LLMReplayQueueItem=LLMReplayQueueItem),
+        session=session,
+        item=item,
+        tier2=object(),
+        pipeline=object(),
+        trends=[],
+        now=datetime(2026, 3, 23, tzinfo=UTC),
+    )
+
+    assert had_error is True
+    session.rollback.assert_awaited_once()
+    session.get.assert_awaited_once_with(LLMReplayQueueItem, item.id, with_for_update=True)
+    assert session.commit.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_replay_degraded_events_async_rolls_back_when_runtime_build_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

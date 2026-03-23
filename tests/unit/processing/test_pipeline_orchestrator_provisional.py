@@ -160,6 +160,79 @@ async def test_process_after_tier1_deactivates_claim_rows_when_degraded_hold_has
 
 
 @pytest.mark.asyncio
+async def test_process_after_tier1_preserves_canonical_claims_on_repeat_degraded_hold(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = _item()
+    prepared = _PreparedItem(item=item, item_id=item.id, raw_content=item.raw_content)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="primary title",
+        event_summary="Stable canonical summary",
+        extracted_what="Canonical extraction",
+        extracted_claims={"claims": ["Canonical statement"]},
+        extraction_provenance={"stage": "tier2", "active_route": {"model": "gpt-4.1-mini"}},
+        extraction_status="provisional",
+        provisional_extraction={"summary": "Earlier held degraded summary"},
+    )
+    tracker = SimpleNamespace(
+        record_invocation=MagicMock(),
+        evaluate=MagicMock(
+            return_value=SimpleNamespace(
+                stage="tier2",
+                is_degraded=True,
+                availability_degraded=True,
+                quality_degraded=False,
+                degraded_since_epoch=1,
+                window=SimpleNamespace(total_calls=3, secondary_calls=2, failover_ratio=0.67),
+            )
+        ),
+    )
+
+    async def _classify_event(*, event: Event, trends: list[object]) -> tuple[object, Tier2Usage]:
+        _ = trends
+        event.event_summary = "New held degraded summary"
+        event.extracted_what = "New held degraded extraction"
+        event.extracted_claims = {"claims": ["New degraded statement"]}
+        return (SimpleNamespace(event_id=event.id), Tier2Usage(api_calls=1, active_model="gpt"))
+
+    pipeline = _pipeline(
+        mock_db_session,
+        degraded_llm_tracker=tracker,
+        tier2_classifier=SimpleNamespace(classify_event=AsyncMock(side_effect=_classify_event)),
+    )
+    pipeline._load_event = AsyncMock(return_value=event)
+    pipeline._maybe_enqueue_replay = AsyncMock(return_value=True)
+    pipeline._apply_trend_impacts = AsyncMock(return_value=(5, 0))
+    pipeline.event_clusterer.cluster_item = AsyncMock(
+        return_value=ClusterResult(item_id=item.id, event_id=event.id, created=False, merged=True)
+    )
+    sync_claims = AsyncMock()
+    deactivate_claims = AsyncMock()
+    monkeypatch.setattr(orchestrator_module, "set_llm_degraded_mode", lambda **_: None)
+    monkeypatch.setattr(
+        orchestrator_module, "record_processing_tier2_language_usage", lambda **_: None
+    )
+    monkeypatch.setattr(orchestrator_module, "sync_event_claims", sync_claims)
+    monkeypatch.setattr(orchestrator_module, "deactivate_event_claims", deactivate_claims)
+
+    execution = await pipeline._process_after_tier1(
+        prepared=prepared,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True),
+        trends=[_trend()],
+    )
+
+    assert execution.result.degraded_llm_hold is True
+    assert event.event_summary == "Stable canonical summary"
+    assert event.extracted_claims == {"claims": ["Canonical statement"]}
+    assert event.extraction_status == "provisional"
+    assert event.provisional_extraction["summary"] == "New held degraded summary"
+    sync_claims.assert_awaited_once_with(session=mock_db_session, event=event)
+    deactivate_claims.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_process_after_tier1_reports_zero_impacts_when_degraded_payload_is_not_a_list(
     mock_db_session,
     monkeypatch: pytest.MonkeyPatch,

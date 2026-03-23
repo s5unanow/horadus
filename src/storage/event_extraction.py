@@ -73,6 +73,26 @@ def capture_canonical_extraction(event: Event) -> CanonicalExtractionSnapshot:
     )
 
 
+def snapshot_has_canonical_extraction(snapshot: CanonicalExtractionSnapshot) -> bool:
+    """Return whether a captured snapshot contains durable canonical extraction state."""
+    return bool(
+        _nonblank(snapshot.event_summary)
+        or snapshot.extracted_who
+        or _nonblank(snapshot.extracted_what)
+        or _nonblank(snapshot.extracted_where)
+        or snapshot.extracted_when is not None
+        or bool(snapshot.extracted_claims)
+        or bool(snapshot.categories)
+        or bool(snapshot.has_contradictions)
+        or _nonblank(snapshot.contradiction_notes)
+        or (
+            isinstance(snapshot.extraction_provenance, dict)
+            and snapshot.extraction_provenance.get("stage") == "tier2"
+            and snapshot.extraction_provenance.get("status") != "replay_pending"
+        )
+    )
+
+
 def demote_current_extraction_to_provisional(
     event: Event,
     *,

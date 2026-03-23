@@ -294,6 +294,7 @@ def _assert_event_payload(event: Event) -> None:
     assert event.contradiction_notes is not None
     assert event.extraction_provenance["stage"] == "tier2"
     assert event.extraction_provenance["active_route"]["model"] == "gpt-4o-mini"
+    assert event.extraction_provenance["active_route"]["reasoning_effort"] is None
     assert event.extraction_provenance["prompt"]["path"] == "ai/prompts/tier2_classify.md"
     assert isinstance(event.extracted_claims, dict)
     assert "claim_graph" in event.extracted_claims

@@ -525,28 +525,6 @@ and explicit N/A handling when a task legitimately skips a normal gate.
 - [ ] `horadus tasks context-pack` suggested validation commands stay aligned with the effective completion contract when that contract changes
 - [ ] Tests cover the intended pass path plus at least one documented N/A or blocker path so the contract does not regress back into implicit policy
 
----
-
-### TASK-272: Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs
-**Priority**: P2 (Medium)
-**Estimate**: 1-3 hours
-
-Run-level usage metadata should not report an `active_reasoning_effort` from an
-earlier GPT-5 call after provider/model have moved to a later route that has no
-reasoning setting. Make mixed-route aggregation internally consistent across
-Tier-1 and Tier-2 telemetry and benchmark artifacts.
-
-**Files**: `src/processing/tier1_classifier.py`, `src/processing/tier2_classifier.py`, `src/processing/pipeline_orchestrator.py`, `src/eval/benchmark.py`, `tests/unit/processing/test_tier1_classifier.py`, `tests/unit/processing/test_tier2_classifier.py`, `tests/unit/processing/test_pipeline_orchestrator_additional.py`
-
-**Acceptance Criteria**:
-- [ ] Mixed-route Tier-1 aggregation cannot report a later provider/model with a stale reasoning effort from an earlier route
-- [ ] Mixed-route Tier-2 aggregation cannot report a later provider/model with a stale reasoning effort from an earlier route
-- [ ] The chosen contract for aggregated reasoning metadata is explicit and internally consistent across runtime telemetry and eval artifacts
-- [ ] Existing metadata consumers continue to receive a stable shape even if the reasoning field is reset to `null`
-- [ ] Tests cover transitions from reasoning-enabled routes to routes with no reasoning metadata
-
----
-
 ### TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

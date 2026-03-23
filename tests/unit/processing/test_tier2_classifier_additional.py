@@ -487,6 +487,24 @@ def test_build_payload_prefers_persisted_event_summary(mock_db_session) -> None:
     )
 
     assert payload["summary"] == "Synthesized event summary"
+
+
+def test_build_payload_uses_canonical_summary_when_replay_pending(mock_db_session) -> None:
+    classifier = _build_classifier(mock_db_session)
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Primary item title",
+        event_summary="Synthesized event summary",
+        extraction_provenance={"status": "replay_pending"},
+    )
+
+    payload = classifier._build_payload(
+        event=event,
+        trends=[_build_trend()],
+        context_chunks=["Context paragraph"],
+    )
+
+    assert payload["summary"] == "Primary item title"
     long_claim = ("forces crossed border repeatedly near northern checkpoint " * 8).strip()
     assert "checkpoint" in classifier._claim_tokens(long_claim, language="en")
     assert classifier._claim_polarity("forces did not cross", language="en") == "negative"

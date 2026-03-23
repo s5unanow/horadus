@@ -563,9 +563,17 @@ class Tier2Classifier:
         if not sanitized_chunks:
             sanitized_chunks = [self._TRUNCATION_MARKER]
 
+        extraction_provenance = (
+            event.extraction_provenance if isinstance(event.extraction_provenance, dict) else {}
+        )
+        summary_seed = (
+            event.canonical_summary
+            if extraction_provenance.get("status") == "replay_pending"
+            else resolved_event_summary(event)
+        )
         payload = {
             "event_id": str(event.id),
-            "summary": resolved_event_summary(event),
+            "summary": summary_seed,
             "context_chunks": sanitized_chunks,
         }
         self._enforce_payload_budget(payload)

@@ -93,13 +93,7 @@ def _is_replay_item_ready(*, item: Any, now: datetime) -> bool:
     return due_at is None or due_at <= now
 
 
-async def _load_due_replay_items(
-    *,
-    deps: Any,
-    session: Any,
-    now: datetime,
-    limit: int,
-) -> list[Any]:
+def _pending_replay_query(*, deps: Any) -> Any:
     pending_query = (
         deps.select(deps.LLMReplayQueueItem)
         .where(deps.LLMReplayQueueItem.status == "pending")
@@ -112,8 +106,29 @@ async def _load_due_replay_items(
         pending_query = pending_query.where(
             deps.LLMReplayQueueItem.details["reason"].as_string() == "event_lineage_repair"
         )
-    rows = (await session.scalars(pending_query.with_for_update(skip_locked=True))).all()
-    return [item for item in rows if _is_replay_item_ready(item=item, now=now)][:limit]
+    return pending_query
+
+
+async def _load_due_replay_items(
+    *,
+    deps: Any,
+    session: Any,
+    now: datetime,
+    limit: int,
+) -> list[Any]:
+    rows = (await session.scalars(_pending_replay_query(deps=deps))).all()
+    candidate_ids = [item.id for item in rows if _is_replay_item_ready(item=item, now=now)][:limit]
+    if not candidate_ids:
+        return []
+    return list(
+        (
+            await session.scalars(
+                _pending_replay_query(deps=deps)
+                .where(deps.LLMReplayQueueItem.id.in_(tuple(candidate_ids)))
+                .with_for_update(skip_locked=True)
+            )
+        ).all()
+    )
 
 
 async def _build_replay_runtime(*, deps: Any, session: Any) -> tuple[list[Any], Any, Any]:
@@ -164,7 +179,9 @@ async def _replay_one_degraded_item(
         event=event,
         trends=trends,
     )
+    attempts_used = int(item.attempt_count or 0)
     item.status = "done"
+    item.attempt_count = 0
     item.processed_at = now
     item.locked_at = None
     item.locked_by = None
@@ -173,6 +190,7 @@ async def _replay_one_degraded_item(
     details["replay_result"] = {
         "impacts_seen": impacts_seen,
         "updates_applied": updates_applied,
+        "attempts_used": attempts_used,
         "processed_at": now.isoformat(),
         "model": deps.settings.LLM_TIER2_MODEL,
     }

@@ -85,6 +85,8 @@ async def reset_replay_queue_item_if_idle(
             .values(
                 priority=500,
                 status="pending",
+                attempt_count=0,
+                last_attempt_at=None,
                 locked_at=None,
                 locked_by=None,
                 processed_at=None,

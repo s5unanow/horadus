@@ -31,6 +31,7 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
     item = SimpleNamespace(
         id=queue_item_id,
         event_id=event_id,
+        attempt_count=2,
         details={"original_extraction_provenance": {"stage": "tier2"}},
         status="pending",
         processed_at=None,
@@ -84,6 +85,7 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
         "original_extraction_provenance": {"stage": "tier2"},
     }
     assert item.status == "done"
+    assert item.attempt_count == 0
     assert item.processed_at == now
     assert item.locked_at is None
     assert item.locked_by is None
@@ -91,6 +93,7 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
     assert item.details["replay_result"] == {
         "impacts_seen": 2,
         "updates_applied": 1,
+        "attempts_used": 2,
         "processed_at": now.isoformat(),
         "model": "tier2-model",
     }
@@ -215,6 +218,7 @@ async def test_replay_degraded_events_async_schedules_retryable_failure(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     item = SimpleNamespace(
+        id=uuid4(),
         event_id=uuid4(),
         status="pending",
         locked_at=None,
@@ -229,6 +233,7 @@ async def test_replay_degraded_events_async_schedules_retryable_failure(
     )
     session = AsyncMock()
     session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
         SimpleNamespace(all=lambda: [item]),
         SimpleNamespace(all=list),
     ]
@@ -287,6 +292,7 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     lineage_item = SimpleNamespace(
+        id=uuid4(),
         event_id=uuid4(),
         status="pending",
         locked_at=None,
@@ -301,6 +307,7 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     )
     session = AsyncMock()
     session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [lineage_item]),
         SimpleNamespace(all=lambda: [lineage_item]),
         SimpleNamespace(all=list),
     ]
@@ -346,7 +353,10 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     assert replay_one.await_args.kwargs["item"] is lineage_item
     query_text = str(session.scalars.await_args_list[0].args[0]).lower()
     assert "details[:details_1]" in query_text
-    assert "for update" in query_text
+    assert "for update" not in query_text
+    lock_query_text = str(session.scalars.await_args_list[1].args[0]).lower()
+    assert "for update" in lock_query_text
+    assert "llm_replay_queue.id in" in lock_query_text
 
 
 @pytest.mark.asyncio
@@ -354,6 +364,7 @@ async def test_replay_degraded_events_async_retries_due_pending_item_then_succee
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     retry_item = SimpleNamespace(
+        id=uuid4(),
         event_id=uuid4(),
         status="pending",
         locked_at=None,
@@ -373,6 +384,7 @@ async def test_replay_degraded_events_async_retries_due_pending_item_then_succee
     )
     session = AsyncMock()
     session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [retry_item]),
         SimpleNamespace(all=lambda: [retry_item]),
         SimpleNamespace(all=list),
     ]
@@ -427,6 +439,7 @@ async def test_replay_degraded_events_async_skips_pending_item_before_backoff_ex
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     deferred_item = SimpleNamespace(
+        id=uuid4(),
         event_id=uuid4(),
         status="pending",
         locked_at=None,
@@ -445,7 +458,9 @@ async def test_replay_degraded_events_async_skips_pending_item_before_backoff_ex
         enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
     )
     session = AsyncMock()
-    session.scalars.return_value = SimpleNamespace(all=lambda: [deferred_item])
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [deferred_item]),
+    ]
 
     class _SessionContext:
         async def __aenter__(self) -> AsyncMock:
@@ -480,6 +495,7 @@ async def test_replay_degraded_events_async_marks_terminal_manual_review_failure
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     item = SimpleNamespace(
+        id=uuid4(),
         event_id=uuid4(),
         status="pending",
         locked_at=None,
@@ -494,6 +510,7 @@ async def test_replay_degraded_events_async_marks_terminal_manual_review_failure
     )
     session = AsyncMock()
     session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
         SimpleNamespace(all=lambda: [item]),
         SimpleNamespace(all=list),
     ]
@@ -547,6 +564,7 @@ async def test_replay_degraded_events_async_marks_retry_exhausted_after_max_atte
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     item = SimpleNamespace(
+        id=uuid4(),
         event_id=uuid4(),
         status="pending",
         locked_at=None,
@@ -561,6 +579,7 @@ async def test_replay_degraded_events_async_marks_retry_exhausted_after_max_atte
     )
     session = AsyncMock()
     session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
         SimpleNamespace(all=lambda: [item]),
         SimpleNamespace(all=list),
     ]
@@ -607,6 +626,50 @@ async def test_replay_degraded_events_async_marks_retry_exhausted_after_max_atte
     assert item.details["replay_failure"]["reason"] == "ConnectionError"
     assert item.details["replay_failure"]["attempt_count"] == 3
     sync_status.assert_awaited_once_with(session=session, event_id=item.event_id)
+
+
+@pytest.mark.asyncio
+async def test_load_due_replay_items_locks_only_limited_ready_ids() -> None:
+    ready_item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        details={},
+        priority=10,
+        enqueued_at=datetime(2026, 3, 20, tzinfo=UTC),
+    )
+    second_ready_item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        details={},
+        priority=9,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [ready_item, second_ready_item]),
+        SimpleNamespace(all=lambda: [ready_item]),
+    ]
+    deps = SimpleNamespace(
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
+    )
+
+    items = await _task_maintenance._load_due_replay_items(
+        deps=deps,
+        session=session,
+        now=datetime(2026, 3, 23, tzinfo=UTC),
+        limit=1,
+    )
+
+    assert items == [ready_item]
+    lock_statement = session.scalars.await_args_list[1].args[0]
+    lock_params = tuple(lock_statement.compile().params.values())
+    assert any(
+        isinstance(value, list) and ready_item.id in value and second_ready_item.id not in value
+        for value in lock_params
+    )
+    assert "for update" in str(lock_statement).lower()
 
 
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:

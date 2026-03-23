@@ -29,6 +29,9 @@ def test_demote_current_extraction_to_provisional_restores_canonical_state() -> 
         extracted_claims={"trend_impacts": []},
         extraction_provenance={"stage": "tier2", "active_route": {"model": "gpt-4.1-mini"}},
         extraction_status="canonical",
+        lifecycle_status="confirmed",
+        epistemic_state="confirmed",
+        activity_state="active",
     )
     snapshot = capture_canonical_extraction(event)
 
@@ -37,6 +40,9 @@ def test_demote_current_extraction_to_provisional_restores_canonical_state() -> 
     event.categories = ["security"]
     event.extracted_claims = {"trend_impacts": [{"signal_type": "military_movement"}]}
     event.extraction_provenance = {"stage": "tier2", "active_route": {"model": "gpt-4.1-nano"}}
+    event.lifecycle_status = "confirmed"
+    event.epistemic_state = "contested"
+    event.activity_state = "active"
 
     demote_current_extraction_to_provisional(
         event,
@@ -48,6 +54,8 @@ def test_demote_current_extraction_to_provisional_restores_canonical_state() -> 
     assert event.event_summary == "Stable canonical summary"
     assert event.extracted_what == "Canonical extraction"
     assert event.categories == ["military"]
+    assert event.lifecycle_status == "confirmed"
+    assert event.epistemic_state == "confirmed"
     assert resolved_extraction_status(event) == "provisional"
     provisional = provisional_extraction_payload(event)
     assert provisional is not None

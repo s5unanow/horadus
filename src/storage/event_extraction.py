@@ -29,6 +29,9 @@ class CanonicalExtractionSnapshot:
     has_contradictions: bool
     contradiction_notes: str | None
     extraction_provenance: dict[str, Any]
+    lifecycle_status: str
+    epistemic_state: str
+    activity_state: str
 
 
 def resolved_extraction_status(event: Event) -> str:
@@ -70,6 +73,9 @@ def capture_canonical_extraction(event: Event) -> CanonicalExtractionSnapshot:
         has_contradictions=bool(event.has_contradictions),
         contradiction_notes=event.contradiction_notes,
         extraction_provenance=provenance,
+        lifecycle_status=str(getattr(event, "lifecycle_status", "emerging") or "emerging"),
+        epistemic_state=str(getattr(event, "epistemic_state", "emerging") or "emerging"),
+        activity_state=str(getattr(event, "activity_state", "active") or "active"),
     )
 
 
@@ -210,6 +216,9 @@ def restore_canonical_extraction(
     event.has_contradictions = snapshot.has_contradictions
     event.contradiction_notes = snapshot.contradiction_notes
     event.extraction_provenance = deepcopy(snapshot.extraction_provenance)
+    event.lifecycle_status = snapshot.lifecycle_status
+    event.epistemic_state = snapshot.epistemic_state
+    event.activity_state = snapshot.activity_state
 
 
 def _has_canonical_extraction(event: Event) -> bool:

@@ -27,9 +27,8 @@ def _replay_provenance_derivation(*, item: Any, details: dict[str, Any]) -> dict
 
 
 def _replay_retry_max_attempts(*, deps: Any) -> int:
-    value = getattr(
-        deps.settings, "LLM_DEGRADED_REPLAY_RETRY_MAX_ATTEMPTS", DEFAULT_REPLAY_MAX_ATTEMPTS
-    )
+    settings = deps.settings
+    value = getattr(settings, "LLM_DEGRADED_REPLAY_RETRY_MAX_ATTEMPTS", DEFAULT_REPLAY_MAX_ATTEMPTS)
     return max(1, int(value))
 
 

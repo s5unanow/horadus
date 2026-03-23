@@ -1502,7 +1502,7 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
     result = await tasks_module._replay_degraded_events_async(limit=3)
     assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 2, "errors": 1}
     assert success_item.status == "done"
-    assert success_item.attempt_count == 0
+    assert success_item.attempt_count == 1
     assert success_item.last_error is None
     assert success_item.details["replay_result"]["impacts_seen"] == 2
     assert success_item.details["replay_result"]["attempts_used"] == 1

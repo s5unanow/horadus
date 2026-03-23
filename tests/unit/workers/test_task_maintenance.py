@@ -85,7 +85,7 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
         "original_extraction_provenance": {"stage": "tier2"},
     }
     assert item.status == "done"
-    assert item.attempt_count == 0
+    assert item.attempt_count == 2
     assert item.processed_at == now
     assert item.locked_at is None
     assert item.locked_by is None
@@ -626,6 +626,145 @@ async def test_replay_degraded_events_async_marks_retry_exhausted_after_max_atte
     assert item.details["replay_failure"]["reason"] == "ConnectionError"
     assert item.details["replay_failure"]["attempt_count"] == 3
     sync_status.assert_awaited_once_with(session=session, event_id=item.event_id)
+
+
+@pytest.mark.asyncio
+async def test_replay_degraded_events_async_rolls_back_before_retrying_dbapi_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        status="pending",
+        locked_at=None,
+        locked_by=None,
+        attempt_count=0,
+        last_attempt_at=None,
+        details={},
+        last_error=None,
+        processed_at=None,
+        priority=1,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
+        SimpleNamespace(all=lambda: [item]),
+        SimpleNamespace(all=list),
+    ]
+    session.get = AsyncMock(return_value=item)
+
+    class _SessionContext:
+        async def __aenter__(self) -> AsyncMock:
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    db_failure = OperationalError("select 1", {}, Exception("db down"))
+    monkeypatch.setattr(
+        _task_maintenance,
+        "_replay_one_degraded_item",
+        AsyncMock(side_effect=db_failure),
+    )
+    sync_status = AsyncMock()
+    monkeypatch.setattr(_task_maintenance, "_sync_lineage_replay_status", sync_status)
+
+    class _Tier2Classifier:
+        def __init__(self, *, session, model, secondary_model) -> None:
+            pass
+
+    class _Pipeline:
+        def __init__(self, *, session, tier2_classifier, degraded_llm_tracker) -> None:
+            pass
+
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(LLM_DEGRADED_MODE_ENABLED=False, LLM_TIER2_MODEL="tier2-model"),
+        async_session_maker=lambda: _SessionContext(),
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        Trend=Trend,
+        Tier2Classifier=_Tier2Classifier,
+        ProcessingPipeline=_Pipeline,
+        asyncio=SimpleNamespace(to_thread=AsyncMock()),
+    )
+
+    result = await _task_maintenance.replay_degraded_events_async(deps=deps, limit=1)
+
+    assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 1}
+    assert item.status == "pending"
+    assert item.attempt_count == 1
+    assert item.details["replay_failure"]["disposition"] == "retryable"
+    session.rollback.assert_awaited_once()
+    session.get.assert_awaited_with(LLMReplayQueueItem, item.id)
+    sync_status.assert_not_awaited()
+    session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_replay_degraded_events_async_stops_when_dbapi_row_disappears_after_rollback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        status="pending",
+        locked_at=None,
+        locked_by=None,
+        attempt_count=0,
+        last_attempt_at=None,
+        details={},
+        last_error=None,
+        processed_at=None,
+        priority=1,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [item]),
+        SimpleNamespace(all=lambda: [item]),
+        SimpleNamespace(all=list),
+    ]
+    session.get = AsyncMock(return_value=None)
+
+    class _SessionContext:
+        async def __aenter__(self) -> AsyncMock:
+            return session
+
+        async def __aexit__(self, exc_type, exc, tb) -> None:
+            return None
+
+    monkeypatch.setattr(
+        _task_maintenance,
+        "_replay_one_degraded_item",
+        AsyncMock(side_effect=OperationalError("select 1", {}, Exception("db down"))),
+    )
+
+    class _Tier2Classifier:
+        def __init__(self, *, session, model, secondary_model) -> None:
+            pass
+
+    class _Pipeline:
+        def __init__(self, *, session, tier2_classifier, degraded_llm_tracker) -> None:
+            pass
+
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(LLM_DEGRADED_MODE_ENABLED=False, LLM_TIER2_MODEL="tier2-model"),
+        async_session_maker=lambda: _SessionContext(),
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        Trend=Trend,
+        Tier2Classifier=_Tier2Classifier,
+        ProcessingPipeline=_Pipeline,
+        asyncio=SimpleNamespace(to_thread=AsyncMock()),
+    )
+
+    result = await _task_maintenance.replay_degraded_events_async(deps=deps, limit=1)
+
+    assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 1}
+    session.rollback.assert_awaited_once()
+    session.get.assert_awaited_with(LLMReplayQueueItem, item.id)
+    session.commit.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -181,7 +181,6 @@ async def _replay_one_degraded_item(
     )
     attempts_used = int(item.attempt_count or 0)
     item.status = "done"
-    item.attempt_count = 0
     item.processed_at = now
     item.locked_at = None
     item.locked_by = None
@@ -229,8 +228,13 @@ async def _handle_replay_item_failure(
     item: Any,
     exc: Exception,
     now: datetime,
+    attempt_count_override: int | None = None,
 ) -> None:
-    attempt_count = int(item.attempt_count or 0)
+    attempt_count = (
+        int(attempt_count_override)
+        if attempt_count_override is not None
+        else int(item.attempt_count or 0)
+    )
     max_attempts = _replay_retry_max_attempts(deps=deps)
     retry_reason = _retryable_replay_failure_reason(exc)
     details = dict(item.details or {})
@@ -242,6 +246,8 @@ async def _handle_replay_item_failure(
     }
     if retry_reason is not None:
         failure_details["reason"] = retry_reason
+    item.attempt_count = attempt_count
+    item.last_attempt_at = now
     item.locked_at = None
     item.locked_by = None
     item.processed_at = None
@@ -620,12 +626,28 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                 )
             except Exception as exc:
                 errors += 1
+                consumed_attempt_count = int(item.attempt_count or 0)
+                if isinstance(exc, DBAPIError):
+                    await session.rollback()
+                    refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
+                    if refreshed_item is None:
+                        break
+                    await _handle_replay_item_failure(
+                        deps=deps,
+                        session=session,
+                        item=refreshed_item,
+                        exc=exc,
+                        now=now,
+                        attempt_count_override=consumed_attempt_count,
+                    )
+                    break
                 await _handle_replay_item_failure(
                     deps=deps,
                     session=session,
                     item=item,
                     exc=exc,
                     now=now,
+                    attempt_count_override=consumed_attempt_count,
                 )
         await session.commit()
 

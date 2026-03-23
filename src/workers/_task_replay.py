@@ -101,8 +101,8 @@ async def commit_or_unresolved_error(
     deps: Any,
     item_id: Any,
     expected_state: dict[str, Any],
-    dbapi_error_cls: type[BaseException],
-) -> BaseException | None:
+    dbapi_error_cls: type[Exception],
+) -> Exception | None:
     try:
         await session.commit()
     except dbapi_error_cls as exc:

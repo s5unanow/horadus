@@ -376,6 +376,34 @@ async def test_get_event_surfaces_provisional_extraction_debug_payload(
 
 
 @pytest.mark.asyncio
+async def test_get_event_hides_unanchored_claims_for_provisional_events(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = _build_event()
+    event.extraction_status = "provisional"
+    event.provisional_extraction = {
+        "status": "provisional",
+        "summary": "Held degraded summary",
+        "extracted_claims": {"claims": ["Held degraded claim"]},
+    }
+    mock_db_session.get.return_value = event
+    responses = iter([[], []])
+
+    async def _execute(_query):
+        return SimpleNamespace(all=lambda: next(responses))
+
+    mock_db_session.execute.side_effect = _execute
+    monkeypatch.setattr(events_module, "load_event_lineage", AsyncMock(return_value=[]))
+
+    result = await get_event(event_id=event.id, session=mock_db_session)
+
+    assert result.extraction_status == "provisional"
+    assert result.claims == []
+    assert mock_db_session.execute.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_event_responses_use_resolved_fallback_corroboration_values(
     mock_db_session,
     monkeypatch,

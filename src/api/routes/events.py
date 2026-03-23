@@ -231,16 +231,27 @@ async def _load_event_detail_payloads(
         .where(EventClaim.event_id == event_id)
         .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
     )
-    if referenced_claim_ids:
-        claim_query = claim_query.where(
-            or_(
-                EventClaim.is_active.is_(True),
-                EventClaim.id.in_(tuple(referenced_claim_ids)),
+    claim_rows: list[tuple[Any, ...]]
+    provisional_claims_hidden = resolved_extraction_status(
+        event
+    ) == "provisional" and not _lineage_replay_pending(event)
+    if provisional_claims_hidden:
+        if referenced_claim_ids:
+            claim_query = claim_query.where(EventClaim.id.in_(tuple(referenced_claim_ids)))
+            claim_rows = [tuple(row) for row in (await session.execute(claim_query)).all()]
+        else:
+            claim_rows = []
+    else:
+        if referenced_claim_ids:
+            claim_query = claim_query.where(
+                or_(
+                    EventClaim.is_active.is_(True),
+                    EventClaim.id.in_(tuple(referenced_claim_ids)),
+                )
             )
-        )
-    elif not _lineage_replay_pending(event):
-        claim_query = claim_query.where(EventClaim.is_active.is_(True))
-    claim_rows = (await session.execute(claim_query)).all()
+        elif not _lineage_replay_pending(event):
+            claim_query = claim_query.where(EventClaim.is_active.is_(True))
+        claim_rows = [tuple(row) for row in (await session.execute(claim_query)).all()]
     sources = [
         {"source_name": source_name, "url": url}
         for source_name, url in source_rows

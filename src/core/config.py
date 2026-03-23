@@ -948,29 +948,28 @@ class Settings(BaseSettings):
         description="TTL in seconds for quality-degraded latch after a canary failure",
     )
     LLM_DEGRADED_REPLAY_ENABLED: bool = Field(
-        default=True,
-        description="Enable bounded replay of high-impact events after degraded-mode recovery",
+        default=True, description="Enable bounded replay after degraded-mode recovery"
     )
     LLM_DEGRADED_REPLAY_INTERVAL_MINUTES: int = Field(
-        default=60,
-        ge=1,
-        description="Replay worker schedule interval in minutes (when enabled)",
+        default=60, ge=1, description="Replay worker schedule interval in minutes"
     )
     LLM_DEGRADED_REPLAY_DRAIN_LIMIT: int = Field(
-        default=50,
-        ge=1,
-        description="Max replay queue items drained per replay worker run",
+        default=50, ge=1, description="Max replay queue items drained per run"
+    )
+    LLM_DEGRADED_REPLAY_RETRY_MAX_ATTEMPTS: int = Field(
+        default=3, ge=1, description="Max replay retry attempts before terminal error"
+    )
+    LLM_DEGRADED_REPLAY_RETRY_BACKOFF_SECONDS: int = Field(
+        default=300, ge=0, description="Base seconds between replay retry attempts"
     )
     LLM_DEGRADED_REPLAY_MAX_QUEUE: int = Field(
-        default=500,
-        ge=1,
-        description="Best-effort max replay queue size before enqueue begins dropping/skipping",
+        default=500, ge=1, description="Best-effort max replay queue size before enqueue skips"
     )
     LLM_DEGRADED_REPLAY_MIN_ABS_DELTA: float = Field(
         default=0.15,
         ge=0.0,
         le=10.0,
-        description="Minimum absolute log-odds delta required to enqueue an event for replay",
+        description="Minimum absolute log-odds delta required to enqueue replay",
     )
     EMBEDDING_MODEL: str = Field(
         default="text-embedding-3-small",

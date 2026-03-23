@@ -799,6 +799,8 @@ async def test_enqueue_event_replay_handles_missing_event_success_and_conflict(
     assert compiled.params["event_id_1"] == event.id
     assert compiled.params["status_1"] == "processing"
     assert compiled.params["status"] == "pending"
+    assert compiled.params["attempt_count"] == 0
+    assert compiled.params["last_attempt_at"] is None
     assert compiled.params["priority"] == 500
     assert compiled.params["details"] == {
         "reason": "event_lineage_repair",
@@ -834,6 +836,8 @@ async def test_enqueue_event_replay_resets_existing_pending_row(mock_db_session)
     assert compiled.params["event_id_1"] == event.id
     assert compiled.params["status_1"] == "processing"
     assert compiled.params["status"] == "pending"
+    assert compiled.params["attempt_count"] == 0
+    assert compiled.params["last_attempt_at"] is None
     assert compiled.params["details"] == {
         "reason": "event_lineage_repair",
         "repair_kind": "merge",

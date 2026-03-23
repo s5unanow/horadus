@@ -20,6 +20,23 @@ def test_build_semantic_cache_basis_preserves_null_reasoning_effort() -> None:
     assert basis["reasoning_effort"] is None
 
 
+def test_build_semantic_cache_basis_normalizes_blank_reasoning_effort_to_null() -> None:
+    basis = build_semantic_cache_basis(
+        stage="tier2",
+        provider="openai",
+        model="gpt-4.1-mini",
+        reasoning_effort="   ",
+        api_mode=None,
+        prompt_path="ai/prompts/tier2_classify.md",
+        prompt_template="prompt",
+        schema_name="tier2_event_classification",
+        schema_payload={"type": "object"},
+        request_overrides=None,
+    )
+
+    assert basis["reasoning_effort"] is None
+
+
 def test_build_llm_runtime_provenance_preserves_null_reasoning_fields() -> None:
     provenance = build_llm_runtime_provenance(
         stage="tier2",

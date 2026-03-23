@@ -11,6 +11,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 
 from src.storage.models import LLMReplayQueueItem, Trend
 from src.workers import _task_maintenance
+from src.workers import _task_replay as replay_helpers
 
 pytestmark = pytest.mark.unit
 
@@ -813,7 +814,12 @@ async def test_replay_degraded_events_async_skips_same_pending_row_after_failed_
     ]
     second_session = AsyncMock()
     second_session.scalars.return_value = SimpleNamespace(all=lambda: [item])
-    process_item = AsyncMock(return_value=True)
+
+    async def _process_item_once(**kwargs: object) -> bool:
+        kwargs["item"]._skip_same_run = True
+        return True
+
+    process_item = AsyncMock(side_effect=_process_item_once)
 
     class _SessionContext:
         def __init__(self, session: AsyncMock) -> None:
@@ -878,11 +884,14 @@ async def test_load_due_replay_items_locks_only_limited_ready_ids() -> None:
         settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
     )
 
-    items = await _task_maintenance._load_due_replay_items(
+    items = await replay_helpers.load_due_replay_items(
         deps=deps,
         session=session,
         now=datetime(2026, 3, 23, tzinfo=UTC),
         limit=1,
+        exclude_item_ids=None,
+        pending_replay_query=_task_maintenance._pending_replay_query,
+        is_replay_item_ready=_task_maintenance._is_replay_item_ready,
     )
 
     assert items == [ready_item]
@@ -919,11 +928,14 @@ async def test_load_due_replay_items_skips_locked_candidate_and_keeps_scanning()
         settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
     )
 
-    items = await _task_maintenance._load_due_replay_items(
+    items = await replay_helpers.load_due_replay_items(
         deps=deps,
         session=session,
         now=datetime(2026, 3, 23, tzinfo=UTC),
         limit=1,
+        exclude_item_ids=None,
+        pending_replay_query=_task_maintenance._pending_replay_query,
+        is_replay_item_ready=_task_maintenance._is_replay_item_ready,
     )
 
     assert items == [second_ready_item]
@@ -957,11 +969,14 @@ async def test_load_due_replay_items_returns_empty_when_all_due_candidates_are_s
         settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
     )
 
-    items = await _task_maintenance._load_due_replay_items(
+    items = await replay_helpers.load_due_replay_items(
         deps=deps,
         session=session,
         now=datetime(2026, 3, 23, tzinfo=UTC),
         limit=1,
+        exclude_item_ids=None,
+        pending_replay_query=_task_maintenance._pending_replay_query,
+        is_replay_item_ready=_task_maintenance._is_replay_item_ready,
     )
 
     assert items == []

@@ -99,38 +99,6 @@ def _pending_replay_query(*, deps: Any) -> Any:
     return pending_query
 
 
-async def _load_due_replay_items(
-    *,
-    deps: Any,
-    session: Any,
-    now: datetime,
-    limit: int,
-    exclude_item_ids: set[Any] | None = None,
-) -> list[Any]:
-    rows = (await session.scalars(_pending_replay_query(deps=deps))).all()
-    candidate_ids = [
-        item.id
-        for item in rows
-        if item.id not in (exclude_item_ids or set()) and _is_replay_item_ready(item=item, now=now)
-    ]
-    if not candidate_ids:
-        return []
-    locked_items: list[Any] = []
-    for candidate_id in candidate_ids:
-        locked_items.extend(
-            (
-                await session.scalars(
-                    _pending_replay_query(deps=deps)
-                    .where(deps.LLMReplayQueueItem.id == candidate_id)
-                    .with_for_update(skip_locked=True)
-                )
-            ).all()
-        )
-        if len(locked_items) >= limit:
-            break
-    return locked_items
-
-
 async def _process_replay_item(
     *,
     deps: Any,
@@ -175,7 +143,7 @@ async def _process_replay_item(
                 persist_failure=_handle_replay_item_failure,
             )
             if state_item is None:
-                return had_error
+                return replay_helpers.return_with_same_run_skip(item=item, result=had_error)
         else:
             state_item = await replay_helpers.persist_failure_state(
                 deps=deps,
@@ -188,20 +156,27 @@ async def _process_replay_item(
                 persist_failure=_handle_replay_item_failure,
             )
             if state_item is None:
-                return had_error
+                return replay_helpers.return_with_same_run_skip(item=item, result=had_error)
     try:
         expected_state = replay_helpers.serialize_replay_state(item=state_item)
         await session.commit()
     except DBAPIError as exc:
         await session.rollback()
-        try:
-            persisted_state = await replay_helpers.fresh_replay_state(deps=deps, item_id=item.id)
-        except DBAPIError:
-            persisted_state = None
+        persisted_state = await replay_helpers.fresh_replay_state_or_none(
+            deps=deps,
+            item_id=item.id,
+            dbapi_error_cls=DBAPIError,
+        )
         if persisted_state == expected_state:
             return had_error
         refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id, with_for_update=True)
         if refreshed_item is None or refreshed_item.status != "pending":
+            return True
+        if not replay_helpers.replay_request_matches(
+            state_item=state_item,
+            refreshed_item=refreshed_item,
+            parse_replay_request_id=_parse_queue_row_replay_request_id,
+        ):
             return True
         if (
             await replay_helpers.persist_failure_state(
@@ -216,7 +191,7 @@ async def _process_replay_item(
             )
             is None
         ):
-            return True
+            return replay_helpers.return_with_same_run_skip(item=item, result=True)
         await session.commit()
         return True
     return had_error
@@ -665,17 +640,18 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
     for _ in range(run_limit):
         async with deps.async_session_maker() as session:
             scan_now = datetime.now(tz=UTC)
-            items = await _load_due_replay_items(
+            items = await replay_helpers.load_due_replay_items(
                 deps=deps,
                 session=session,
                 now=scan_now,
                 limit=1,
                 exclude_item_ids=attempted_item_ids,
+                pending_replay_query=_pending_replay_query,
+                is_replay_item_ready=_is_replay_item_ready,
             )
             if not items:
                 break
             item = items[0]
-            attempted_item_ids.add(item.id)
             try:
                 trends, tier2, pipeline = await replay_helpers.build_replay_runtime(
                     deps=deps, session=session
@@ -696,5 +672,7 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                 now=attempt_now,
             ):
                 errors += 1
+            if getattr(item, "_skip_same_run", False):
+                attempted_item_ids.add(item.id)
 
     return {"status": "ok", "task": "replay_degraded_events", "drained": drained, "errors": errors}

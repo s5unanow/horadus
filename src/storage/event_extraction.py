@@ -139,6 +139,13 @@ def promote_canonical_extraction(
 
 def clear_all_extraction_state(event: Event) -> None:
     """Clear both canonical and provisional extraction state."""
+    clear_canonical_extraction_state(event)
+    event.provisional_extraction = {}
+    event.extraction_status = EXTRACTION_STATUS_NONE
+
+
+def clear_canonical_extraction_state(event: Event) -> None:
+    """Clear canonical extraction fields while preserving provisional payload."""
     event.event_summary = None
     event.extracted_claims = None
     event.extracted_who = None
@@ -148,8 +155,11 @@ def clear_all_extraction_state(event: Event) -> None:
     event.categories = []
     event.has_contradictions = False
     event.contradiction_notes = None
-    event.extraction_status = EXTRACTION_STATUS_NONE
-    event.provisional_extraction = {}
+    event.extraction_status = (
+        EXTRACTION_STATUS_PROVISIONAL
+        if provisional_extraction_payload(event) is not None
+        else EXTRACTION_STATUS_NONE
+    )
 
 
 def provisional_extraction_payload(event: Event) -> dict[str, Any] | None:

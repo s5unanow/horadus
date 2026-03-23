@@ -46,8 +46,42 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE events
+        SET
+          extraction_status = 'provisional',
+          provisional_extraction = jsonb_build_object(
+            'status', 'provisional',
+            'captured_at', NOW(),
+            'summary', COALESCE(NULLIF(BTRIM(event_summary), ''), canonical_summary),
+            'extracted_who', to_jsonb(extracted_who),
+            'extracted_what', to_jsonb(extracted_what),
+            'extracted_where', to_jsonb(extracted_where),
+            'extracted_when', to_jsonb(extracted_when),
+            'extracted_claims', to_jsonb(extracted_claims),
+            'categories', COALESCE(to_jsonb(categories), '[]'::jsonb),
+            'has_contradictions', to_jsonb(has_contradictions),
+            'contradiction_notes', to_jsonb(contradiction_notes),
+            'provenance', extraction_provenance,
+            'replay_enqueued', 'false'::jsonb,
+            'policy', extracted_claims -> '_llm_policy'
+          ),
+          event_summary = NULL,
+          extracted_who = NULL,
+          extracted_what = NULL,
+          extracted_where = NULL,
+          extracted_when = NULL,
+          extracted_claims = NULL,
+          categories = ARRAY[]::text[],
+          has_contradictions = false,
+          contradiction_notes = NULL
+        WHERE COALESCE(extracted_claims -> '_llm_policy' ->> 'degraded_llm', 'false') = 'true'
+        """
+    )
+    op.execute(
+        """
+        UPDATE events
         SET extraction_status = 'canonical'
-        WHERE COALESCE(extraction_provenance ->> 'status', '') != 'replay_pending'
+        WHERE extraction_status = 'none'
+          AND COALESCE(extraction_provenance ->> 'status', '') != 'replay_pending'
           AND (
             COALESCE(NULLIF(BTRIM(event_summary), ''), '') != ''
             OR extracted_who IS NOT NULL

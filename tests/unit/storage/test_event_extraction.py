@@ -8,6 +8,7 @@ import pytest
 from src.storage.event_extraction import (
     capture_canonical_extraction,
     clear_all_extraction_state,
+    clear_canonical_extraction_state,
     demote_current_extraction_to_provisional,
     promote_canonical_extraction,
     provisional_extraction_payload,
@@ -129,3 +130,20 @@ def test_resolved_extraction_status_infers_provisional_or_none_without_valid_sta
 
     assert resolved_extraction_status(provisional_event) == "provisional"
     assert resolved_extraction_status(empty_event) == "none"
+
+
+def test_clear_canonical_extraction_state_preserves_provisional_payload() -> None:
+    event = Event(
+        canonical_summary="Primary item title",
+        event_summary="Stable canonical summary",
+        extracted_what="Canonical extraction",
+        extraction_status="provisional",
+        provisional_extraction={"summary": "Held degraded summary"},
+    )
+
+    clear_canonical_extraction_state(event)
+
+    assert event.event_summary is None
+    assert event.extracted_what is None
+    assert event.provisional_extraction == {"summary": "Held degraded summary"}
+    assert resolved_extraction_status(event) == "provisional"

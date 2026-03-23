@@ -747,7 +747,13 @@ async def test_mark_event_claims_stale_and_replay_pending(mock_db_session) -> No
     )
     claim.is_active = True
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [claim])
-    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    event = Event(
+        id=uuid4(),
+        canonical_summary="event",
+        extraction_provenance={"old": True},
+        extraction_status="provisional",
+        provisional_extraction={"summary": "Held degraded summary"},
+    )
 
     await _mark_event_claims_stale(session=mock_db_session, event_id=claim.event_id)
     await _mark_event_replay_pending(event=event, reason="repair")
@@ -755,6 +761,8 @@ async def test_mark_event_claims_stale_and_replay_pending(mock_db_session) -> No
     assert claim.is_active is False
     assert event.extraction_provenance["reason"] == "repair"
     assert event.extracted_claims is None
+    assert event.provisional_extraction == {"summary": "Held degraded summary"}
+    assert event.extraction_status == "provisional"
 
 
 @pytest.mark.asyncio

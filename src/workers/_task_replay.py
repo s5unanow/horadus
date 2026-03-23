@@ -95,6 +95,31 @@ async def fresh_replay_state_or_none(
         return None
 
 
+async def commit_or_unresolved_error(
+    *,
+    session: Any,
+    deps: Any,
+    item_id: Any,
+    expected_state: dict[str, Any],
+    dbapi_error_cls: type[BaseException],
+) -> BaseException | None:
+    try:
+        await session.commit()
+    except dbapi_error_cls as exc:
+        await session.rollback()
+        if (
+            await fresh_replay_state_or_none(
+                deps=deps,
+                item_id=item_id,
+                dbapi_error_cls=dbapi_error_cls,
+            )
+            == expected_state
+        ):
+            return None
+        return exc
+    return None
+
+
 async def fresh_replay_status(*, deps: Any, item_id: Any) -> str | None:
     state = await fresh_replay_state(deps=deps, item_id=item_id)
     status = state.get("status") if state is not None else None

@@ -367,6 +367,26 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     assert "llm_replay_queue.id =" in lock_query_text
 
 
+def test_pending_replay_query_prioritizes_first_attempts_before_retries() -> None:
+    deps = SimpleNamespace(
+        settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+    )
+
+    query_text = str(
+        _task_maintenance._pending_replay_query(deps=deps).compile(
+            compile_kwargs={"literal_binds": True}
+        )
+    ).lower()
+
+    assert "llm_replay_queue.priority desc" in query_text
+    assert "llm_replay_queue.attempt_count > 0" in query_text
+    assert query_text.index("llm_replay_queue.attempt_count > 0") < query_text.index(
+        "llm_replay_queue.enqueued_at asc"
+    )
+
+
 @pytest.mark.asyncio
 async def test_replay_degraded_events_async_retries_due_pending_item_then_succeeds(
     monkeypatch: pytest.MonkeyPatch,

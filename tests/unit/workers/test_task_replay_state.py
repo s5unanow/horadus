@@ -707,6 +707,61 @@ async def test_process_replay_item_does_not_clobber_new_replay_request_during_co
 
 
 @pytest.mark.asyncio
+async def test_process_replay_item_skips_same_run_when_recovery_commit_also_raises_dbapi_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        attempt_count=2,
+        status="pending",
+        details={"replay_request_id": str(uuid4())},
+        last_attempt_at=None,
+        processed_at=None,
+        last_error="db down",
+    )
+    refreshed_item = SimpleNamespace(
+        id=item.id,
+        attempt_count=2,
+        status="pending",
+        details=item.details.copy(),
+        last_attempt_at=None,
+        processed_at=None,
+        last_error="db down",
+    )
+    session = AsyncMock()
+    session.commit = AsyncMock(
+        side_effect=[
+            OperationalError("commit", {}, Exception("drop")),
+            OperationalError("commit", {}, Exception("drop again")),
+        ]
+    )
+    session.get = AsyncMock(return_value=refreshed_item)
+    monkeypatch.setattr(
+        _task_maintenance, "_replay_one_degraded_item", AsyncMock(side_effect=ValueError("boom"))
+    )
+    monkeypatch.setattr(
+        replay_helpers, "persist_failure_state", AsyncMock(side_effect=[item, refreshed_item])
+    )
+    monkeypatch.setattr(replay_helpers, "fresh_replay_state", AsyncMock(return_value=None))
+
+    had_error = await _task_maintenance._process_replay_item(
+        deps=SimpleNamespace(LLMReplayQueueItem=LLMReplayQueueItem),
+        session=session,
+        item=item,
+        tier2=object(),
+        pipeline=object(),
+        trends=[],
+        now=datetime(2026, 3, 23, tzinfo=UTC),
+    )
+
+    assert had_error is True
+    assert item._skip_same_run is True
+    assert session.rollback.await_count == 2
+    session.get.assert_awaited_once_with(LLMReplayQueueItem, item.id, with_for_update=True)
+    assert session.commit.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_replay_degraded_events_async_rolls_back_when_runtime_build_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

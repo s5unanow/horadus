@@ -5,7 +5,7 @@ from inspect import signature
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import case, select
 from sqlalchemy.exc import DBAPIError, OperationalError
 
 from src.processing.pipeline_retry import build_retryable_pipeline_error
@@ -89,6 +89,7 @@ def _pending_replay_query(*, deps: Any) -> Any:
         .where(deps.LLMReplayQueueItem.status == "pending")
         .order_by(
             deps.LLMReplayQueueItem.priority.desc(),
+            case((deps.LLMReplayQueueItem.attempt_count > 0, 1), else_=0).asc(),
             deps.LLMReplayQueueItem.enqueued_at.asc(),
         )
     )
@@ -125,50 +126,33 @@ async def _process_replay_item(
     except Exception as exc:
         had_error = True
         replay_failure_exc = exc
+        failure_item = item
         if isinstance(exc, DBAPIError):
             await session.rollback()
-            refreshed_item = await session.get(
-                deps.LLMReplayQueueItem, item.id, with_for_update=True
-            )
-            if refreshed_item is None or refreshed_item.status != "pending":
+            failure_item = await session.get(deps.LLMReplayQueueItem, item.id, with_for_update=True)
+            if failure_item is None or failure_item.status != "pending":
                 return had_error
-            state_item = await replay_helpers.persist_failure_state(
-                deps=deps,
-                session=session,
-                item=refreshed_item,
-                exc=exc,
-                now=datetime.now(tz=UTC),
-                attempt_count_override=consumed_attempt_count,  # retry budget is attempt-scoped
-                dbapi_error_cls=DBAPIError,
-                persist_failure=_handle_replay_item_failure,
-            )
-            if state_item is None:
-                return replay_helpers.return_with_same_run_skip(item=item, result=had_error)
-        else:
-            state_item = await replay_helpers.persist_failure_state(
-                deps=deps,
-                session=session,
-                item=item,
-                exc=exc,
-                now=datetime.now(tz=UTC),
-                attempt_count_override=consumed_attempt_count,
-                dbapi_error_cls=DBAPIError,
-                persist_failure=_handle_replay_item_failure,
-            )
-            if state_item is None:
-                return replay_helpers.return_with_same_run_skip(item=item, result=had_error)
-    try:
-        expected_state = replay_helpers.serialize_replay_state(item=state_item)
-        await session.commit()
-    except DBAPIError as exc:
-        await session.rollback()
-        persisted_state = await replay_helpers.fresh_replay_state_or_none(
+        state_item = await replay_helpers.persist_failure_state(
             deps=deps,
-            item_id=item.id,
+            session=session,
+            item=failure_item,
+            exc=exc,
+            now=datetime.now(tz=UTC),
+            attempt_count_override=consumed_attempt_count,
             dbapi_error_cls=DBAPIError,
+            persist_failure=_handle_replay_item_failure,
         )
-        if persisted_state == expected_state:
-            return had_error
+        if state_item is None:
+            return replay_helpers.return_with_same_run_skip(item=item, result=had_error)
+    expected_state = replay_helpers.serialize_replay_state(item=state_item)
+    unresolved_commit_error = await replay_helpers.commit_or_unresolved_error(
+        deps=deps,
+        expected_state=expected_state,
+        dbapi_error_cls=DBAPIError,
+        item_id=item.id,
+        session=session,
+    )
+    if unresolved_commit_error is not None:
         refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id, with_for_update=True)
         if refreshed_item is None or refreshed_item.status != "pending":
             return True
@@ -178,21 +162,30 @@ async def _process_replay_item(
             parse_replay_request_id=_parse_queue_row_replay_request_id,
         ):
             return True
+        recovered_state_item = await replay_helpers.persist_failure_state(
+            deps=deps,
+            session=session,
+            item=refreshed_item,
+            exc=replay_failure_exc or unresolved_commit_error,
+            now=datetime.now(tz=UTC),
+            attempt_count_override=consumed_attempt_count,
+            dbapi_error_cls=DBAPIError,
+            persist_failure=_handle_replay_item_failure,
+        )
+        if recovered_state_item is None:
+            return replay_helpers.return_with_same_run_skip(item=item, result=True)
+        recovered_expected_state = replay_helpers.serialize_replay_state(item=recovered_state_item)
         if (
-            await replay_helpers.persist_failure_state(
+            await replay_helpers.commit_or_unresolved_error(
                 deps=deps,
-                session=session,
-                item=refreshed_item,
-                exc=replay_failure_exc or exc,
-                now=datetime.now(tz=UTC),
-                attempt_count_override=consumed_attempt_count,
+                expected_state=recovered_expected_state,
                 dbapi_error_cls=DBAPIError,
-                persist_failure=_handle_replay_item_failure,
+                item_id=item.id,
+                session=session,
             )
-            is None
+            is not None
         ):
             return replay_helpers.return_with_same_run_skip(item=item, result=True)
-        await session.commit()
         return True
     return had_error
 

@@ -89,11 +89,7 @@ def build_semantic_cache_basis(
         "stage": stage,
         "provider": provider.strip() if isinstance(provider, str) and provider.strip() else None,
         "model": model.strip(),
-        "reasoning_effort": (
-            reasoning_effort.strip()
-            if isinstance(reasoning_effort, str) and reasoning_effort.strip()
-            else None
-        ),
+        "reasoning_effort": _normalize_optional_text(reasoning_effort),
         "api_mode": api_mode.strip() if isinstance(api_mode, str) and api_mode.strip() else None,
         "prompt": build_prompt_provenance(
             prompt_path=prompt_path,
@@ -105,7 +101,7 @@ def build_semantic_cache_basis(
         ),
         "request_overrides": normalize_request_overrides(request_overrides),
     }
-    return _strip_none(payload)
+    return _strip_none(payload, preserve_none_keys={"reasoning_effort"})
 
 
 def build_llm_runtime_provenance(
@@ -144,18 +140,24 @@ def build_llm_runtime_provenance(
         "prompt": cache_basis["prompt"],
         "schema": cache_basis.get("schema"),
         "request_overrides": cache_basis.get("request_overrides"),
-        "requested_route": {
-            "provider": requested_provider,
-            "model": requested_model.strip(),
-            "reasoning_effort": requested_reasoning_effort,
-            "api_mode": api_mode,
-        },
-        "active_route": {
-            "provider": active_provider,
-            "model": active_model.strip(),
-            "reasoning_effort": active_reasoning_effort,
-            "api_mode": api_mode,
-        },
+        "requested_route": _strip_none(
+            {
+                "provider": requested_provider,
+                "model": requested_model.strip(),
+                "reasoning_effort": _normalize_optional_text(requested_reasoning_effort),
+                "api_mode": api_mode,
+            },
+            preserve_none_keys={"reasoning_effort"},
+        ),
+        "active_route": _strip_none(
+            {
+                "provider": active_provider,
+                "model": active_model.strip(),
+                "reasoning_effort": _normalize_optional_text(active_reasoning_effort),
+                "api_mode": api_mode,
+            },
+            preserve_none_keys={"reasoning_effort"},
+        ),
         "cache_basis": cache_basis,
         "derivation": canonicalize_payload(derivation) if isinstance(derivation, dict) else None,
     }
@@ -172,5 +174,18 @@ def current_trend_scoring_contract() -> dict[str, Any]:
     }
 
 
-def _strip_none(payload: dict[str, Any]) -> dict[str, Any]:
-    return {key: value for key, value in payload.items() if value is not None}
+def _normalize_optional_text(value: str | None) -> str | None:
+    if isinstance(value, str):
+        normalized = value.strip()
+        if normalized:
+            return normalized
+    return None
+
+
+def _strip_none(
+    payload: dict[str, Any],
+    *,
+    preserve_none_keys: set[str] | None = None,
+) -> dict[str, Any]:
+    preserved = preserve_none_keys or set()
+    return {key: value for key, value in payload.items() if value is not None or key in preserved}

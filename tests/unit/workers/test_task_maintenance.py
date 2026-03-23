@@ -858,6 +858,39 @@ async def test_load_due_replay_items_skips_locked_candidate_and_keeps_scanning()
     )
 
 
+@pytest.mark.asyncio
+async def test_load_due_replay_items_returns_empty_when_all_due_candidates_are_skip_locked() -> (
+    None
+):
+    ready_item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        details={},
+        priority=10,
+        enqueued_at=datetime(2026, 3, 20, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [ready_item]),
+        SimpleNamespace(all=list),
+    ]
+    deps = SimpleNamespace(
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
+    )
+
+    items = await _task_maintenance._load_due_replay_items(
+        deps=deps,
+        session=session,
+        now=datetime(2026, 3, 23, tzinfo=UTC),
+        limit=1,
+    )
+
+    assert items == []
+    assert session.scalars.await_args_list[1].args[0].compile().params["id_1"] == ready_item.id
+
+
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:
     parsed = _task_maintenance._parse_lineage_replay_ids(
         SimpleNamespace(details={"replay_enqueued_event_ids": [uuid4(), "not-a-uuid", None]})

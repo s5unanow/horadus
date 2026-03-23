@@ -343,3 +343,4 @@
 - TASK-206: Keep event recency monotonic under late and backfilled mentions ✅
 - TASK-209: Restore `canonical_summary` alignment with `primary_item_id` after Tier-2 ✅
 - TASK-272: Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs ✅
+- TASK-202: Make degraded replay queue retryable instead of fail-once terminal ✅

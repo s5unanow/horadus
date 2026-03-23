@@ -165,15 +165,19 @@ async def _process_replay_item(
         replay_failure_exc = exc
         if isinstance(exc, DBAPIError):
             await session.rollback()
-            refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
-            if refreshed_item is None:
+            refreshed_item = await session.get(
+                deps.LLMReplayQueueItem,
+                item.id,
+                with_for_update={"skip_locked": True},
+            )
+            if refreshed_item is None or refreshed_item.status != "pending":
                 return had_error
             await _handle_replay_item_failure(
                 deps=deps,
                 session=session,
                 item=refreshed_item,
                 exc=exc,
-                now=now,
+                now=datetime.now(tz=UTC),
                 attempt_count_override=consumed_attempt_count,
             )
         else:
@@ -182,7 +186,7 @@ async def _process_replay_item(
                 session=session,
                 item=item,
                 exc=exc,
-                now=now,
+                now=datetime.now(tz=UTC),
                 attempt_count_override=consumed_attempt_count,
             )
     try:
@@ -192,15 +196,19 @@ async def _process_replay_item(
         await session.rollback()
         if await replay_helpers.fresh_replay_state(deps=deps, item_id=item.id) == expected_state:
             return had_error
-        refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
-        if refreshed_item is None:
+        refreshed_item = await session.get(
+            deps.LLMReplayQueueItem,
+            item.id,
+            with_for_update={"skip_locked": True},
+        )
+        if refreshed_item is None or refreshed_item.status != "pending":
             return True
         await _handle_replay_item_failure(
             deps=deps,
             session=session,
             item=refreshed_item,
             exc=replay_failure_exc or exc,
-            now=now,
+            now=datetime.now(tz=UTC),
             attempt_count_override=consumed_attempt_count,
         )
         await session.commit()
@@ -646,15 +654,15 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                 },
             }
 
-    now = datetime.now(tz=UTC)
     run_limit = max(1, int(limit))
     drained = errors = 0
     for _ in range(run_limit):
         async with deps.async_session_maker() as session:
+            scan_now = datetime.now(tz=UTC)
             items = await _load_due_replay_items(
                 deps=deps,
                 session=session,
-                now=now,
+                now=scan_now,
                 limit=1,
             )
             if not items:
@@ -668,7 +676,8 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
             except Exception:
                 await session.rollback()
                 raise
-            _mark_replay_item_processing(item=item, now=now)
+            attempt_now = datetime.now(tz=UTC)
+            _mark_replay_item_processing(item=item, now=attempt_now)
             drained += 1
             if await _process_replay_item(
                 deps=deps,
@@ -677,7 +686,7 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
                 tier2=tier2,
                 pipeline=pipeline,
                 trends=trends,
-                now=now,
+                now=attempt_now,
             ):
                 errors += 1
 

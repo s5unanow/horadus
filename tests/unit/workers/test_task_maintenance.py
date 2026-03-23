@@ -59,10 +59,12 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
             event: object,
             trends: list[object],
             provenance_derivation: dict[str, object],
+            allow_semantic_cache_read: bool,
         ) -> None:
             captured["event"] = event
             captured["trends"] = trends
             captured["provenance_derivation"] = provenance_derivation
+            captured["allow_semantic_cache_read"] = allow_semantic_cache_read
 
     now = datetime(2026, 3, 21, tzinfo=UTC)
     trends = [SimpleNamespace(id="trend-1")]
@@ -85,6 +87,7 @@ async def test_replay_one_degraded_item_passes_provenance_derivation() -> None:
         "queue_item_id": str(queue_item_id),
         "original_extraction_provenance": {"stage": "tier2"},
     }
+    assert captured["allow_semantic_cache_read"] is False
     assert item.status == "done"
     assert item.attempt_count == 2
     assert item.processed_at == now

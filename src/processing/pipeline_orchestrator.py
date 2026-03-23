@@ -627,7 +627,6 @@ class ProcessingPipeline:
             usage.tier2_completion_tokens += tier2_usage.completion_tokens
             usage.tier2_api_calls += tier2_usage.api_calls
             usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
-            await self._capture_unresolved_trend_mapping(event=event)
             degraded_hold = False
             replay_enqueued = False
             trend_impacts_seen = 0
@@ -655,6 +654,7 @@ class ProcessingPipeline:
                     )
 
             if not degraded_hold:
+                await self._capture_unresolved_trend_mapping(event=event)
                 trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
                     event=event,
                     trends=trends,

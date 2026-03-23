@@ -63,6 +63,7 @@ async def test_process_after_tier1_restores_canonical_fields_when_degraded_hold_
     )
     pipeline._load_event = AsyncMock(return_value=event)
     pipeline._maybe_enqueue_replay = AsyncMock(return_value=True)
+    pipeline._capture_unresolved_trend_mapping = AsyncMock()
     pipeline._apply_trend_impacts = AsyncMock(return_value=(5, 0))
     pipeline.event_clusterer.cluster_item = AsyncMock(
         return_value=ClusterResult(item_id=item.id, event_id=event.id, created=False, merged=True)
@@ -89,6 +90,7 @@ async def test_process_after_tier1_restores_canonical_fields_when_degraded_hold_
     assert event.extraction_status == "provisional"
     assert event.provisional_extraction["summary"] == "Held degraded summary"
     assert event.provisional_extraction["replay_enqueued"] is True
+    pipeline._capture_unresolved_trend_mapping.assert_not_awaited()
     sync_claims.assert_awaited_once_with(session=mock_db_session, event=event)
     deactivate_claims.assert_not_awaited()
 

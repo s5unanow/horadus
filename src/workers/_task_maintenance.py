@@ -217,6 +217,8 @@ async def _replay_one_degraded_item(
             item=item,
             details=details,
         )
+    if "allow_semantic_cache_read" in signature(tier2.classify_event).parameters:
+        classify_kwargs["allow_semantic_cache_read"] = False
     await tier2.classify_event(**classify_kwargs)
     impacts_seen, updates_applied = await pipeline._apply_trend_impacts(
         event=event,

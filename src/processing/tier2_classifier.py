@@ -259,6 +259,7 @@ class Tier2Classifier:
         trends: list[Trend],
         context_chunks: list[str] | None = None,
         provenance_derivation: dict[str, Any] | None = None,
+        allow_semantic_cache_read: bool = True,
     ) -> tuple[Tier2EventResult, Tier2Usage]:
         """Classify one event and persist extracted fields."""
         if event.id is None:
@@ -272,14 +273,15 @@ class Tier2Classifier:
             else await self._load_event_context(event.id)
         )
         payload = self._build_payload(event=event, trends=trends, context_chunks=chunks)
-        cached = await self._load_cached_classification(
-            event=event,
-            trends=trends,
-            payload=payload,
-            provenance_derivation=provenance_derivation,
-        )
-        if cached is not None:
-            return (cached, Tier2Usage())
+        if allow_semantic_cache_read:
+            cached = await self._load_cached_classification(
+                event=event,
+                trends=trends,
+                payload=payload,
+                provenance_derivation=provenance_derivation,
+            )
+            if cached is not None:
+                return (cached, Tier2Usage())
 
         payload_content = build_safe_payload_content(
             payload,

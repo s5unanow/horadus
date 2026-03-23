@@ -363,7 +363,7 @@ async def test_replay_degraded_events_async_respects_disable_flag_for_non_lineag
     assert "for update" not in query_text
     lock_query_text = str(session.scalars.await_args_list[1].args[0]).lower()
     assert "for update" in lock_query_text
-    assert "llm_replay_queue.id in" in lock_query_text
+    assert "llm_replay_queue.id =" in lock_query_text
 
 
 @pytest.mark.asyncio
@@ -810,12 +810,52 @@ async def test_load_due_replay_items_locks_only_limited_ready_ids() -> None:
 
     assert items == [ready_item]
     lock_statement = session.scalars.await_args_list[1].args[0]
-    lock_params = tuple(lock_statement.compile().params.values())
-    assert any(
-        isinstance(value, list) and ready_item.id in value and second_ready_item.id not in value
-        for value in lock_params
-    )
+    assert lock_statement.compile().params["id_1"] == ready_item.id
     assert "for update" in str(lock_statement).lower()
+
+
+@pytest.mark.asyncio
+async def test_load_due_replay_items_skips_locked_candidate_and_keeps_scanning() -> None:
+    first_ready_item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        details={},
+        priority=10,
+        enqueued_at=datetime(2026, 3, 20, tzinfo=UTC),
+    )
+    second_ready_item = SimpleNamespace(
+        id=uuid4(),
+        event_id=uuid4(),
+        details={},
+        priority=9,
+        enqueued_at=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+    session = AsyncMock()
+    session.scalars.side_effect = [
+        SimpleNamespace(all=lambda: [first_ready_item, second_ready_item]),
+        SimpleNamespace(all=list),
+        SimpleNamespace(all=lambda: [second_ready_item]),
+    ]
+    deps = SimpleNamespace(
+        select=select,
+        LLMReplayQueueItem=LLMReplayQueueItem,
+        settings=SimpleNamespace(LLM_DEGRADED_REPLAY_ENABLED=True),
+    )
+
+    items = await _task_maintenance._load_due_replay_items(
+        deps=deps,
+        session=session,
+        now=datetime(2026, 3, 23, tzinfo=UTC),
+        limit=1,
+    )
+
+    assert items == [second_ready_item]
+    assert (
+        session.scalars.await_args_list[1].args[0].compile().params["id_1"] == first_ready_item.id
+    )
+    assert (
+        session.scalars.await_args_list[2].args[0].compile().params["id_1"] == second_ready_item.id
+    )
 
 
 def test_parse_lineage_replay_ids_skips_invalid_values() -> None:

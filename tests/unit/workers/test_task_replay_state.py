@@ -161,6 +161,49 @@ async def test_process_replay_item_requeues_after_commit_dbapi_error_when_state_
 
 
 @pytest.mark.asyncio
+async def test_process_replay_item_preserves_original_failure_during_commit_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        attempt_count=2,
+        status="processing",
+        details={},
+        last_attempt_at=None,
+        processed_at=None,
+        last_error=None,
+    )
+    refreshed_item = SimpleNamespace(id=item.id, attempt_count=2)
+    session = AsyncMock()
+    session.commit = AsyncMock(
+        side_effect=[OperationalError("commit", {}, Exception("drop")), None]
+    )
+    session.get = AsyncMock(return_value=refreshed_item)
+    handle_failure = AsyncMock()
+    original_failure = ValueError("Event not found")
+    monkeypatch.setattr(
+        _task_maintenance, "_replay_one_degraded_item", AsyncMock(side_effect=original_failure)
+    )
+    monkeypatch.setattr(_task_maintenance, "_handle_replay_item_failure", handle_failure)
+    monkeypatch.setattr(replay_helpers, "fresh_replay_state", AsyncMock(return_value=None))
+
+    had_error = await _task_maintenance._process_replay_item(
+        deps=SimpleNamespace(LLMReplayQueueItem=LLMReplayQueueItem),
+        session=session,
+        item=item,
+        tier2=object(),
+        pipeline=object(),
+        trends=[],
+        now=datetime(2026, 3, 21, tzinfo=UTC),
+    )
+
+    assert had_error is True
+    assert handle_failure.await_count == 2
+    assert handle_failure.await_args_list[0].kwargs["exc"] is original_failure
+    assert handle_failure.await_args_list[1].kwargs["exc"] is original_failure
+
+
+@pytest.mark.asyncio
 async def test_process_replay_item_stops_when_commit_dbapi_error_row_is_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

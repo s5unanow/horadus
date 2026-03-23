@@ -118,18 +118,23 @@ async def _load_due_replay_items(
     limit: int,
 ) -> list[Any]:
     rows = (await session.scalars(_pending_replay_query(deps=deps))).all()
-    candidate_ids = [item.id for item in rows if _is_replay_item_ready(item=item, now=now)][:limit]
+    candidate_ids = [item.id for item in rows if _is_replay_item_ready(item=item, now=now)]
     if not candidate_ids:
         return []
-    return list(
-        (
-            await session.scalars(
-                _pending_replay_query(deps=deps)
-                .where(deps.LLMReplayQueueItem.id.in_(tuple(candidate_ids)))
-                .with_for_update(skip_locked=True)
-            )
-        ).all()
-    )
+    locked_items: list[Any] = []
+    for candidate_id in candidate_ids:
+        locked_items.extend(
+            (
+                await session.scalars(
+                    _pending_replay_query(deps=deps)
+                    .where(deps.LLMReplayQueueItem.id == candidate_id)
+                    .with_for_update(skip_locked=True)
+                )
+            ).all()
+        )
+        if len(locked_items) >= limit:
+            break
+    return locked_items
 
 
 async def _process_replay_item(
@@ -144,6 +149,7 @@ async def _process_replay_item(
 ) -> bool:
     consumed_attempt_count = int(item.attempt_count or 0)
     had_error = False
+    replay_failure_exc: Exception | None = None
     try:
         await _replay_one_degraded_item(
             deps=deps,
@@ -156,6 +162,7 @@ async def _process_replay_item(
         )
     except Exception as exc:
         had_error = True
+        replay_failure_exc = exc
         if isinstance(exc, DBAPIError):
             await session.rollback()
             refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
@@ -192,7 +199,7 @@ async def _process_replay_item(
             deps=deps,
             session=session,
             item=refreshed_item,
-            exc=exc,
+            exc=replay_failure_exc or exc,
             now=now,
             attempt_count_override=consumed_attempt_count,
         )

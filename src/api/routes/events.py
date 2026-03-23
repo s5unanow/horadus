@@ -28,7 +28,11 @@ from src.processing.event_lineage import (
     split_event,
 )
 from src.storage.database import get_session
-from src.storage.event_extraction import provisional_extraction_payload, resolved_extraction_status
+from src.storage.event_extraction import (
+    has_canonical_extraction,
+    provisional_extraction_payload,
+    resolved_extraction_status,
+)
 from src.storage.event_state import (
     resolved_corroboration_mode,
     resolved_corroboration_score,
@@ -232,9 +236,11 @@ async def _load_event_detail_payloads(
         .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
     )
     claim_rows: list[tuple[Any, ...]]
-    provisional_claims_hidden = resolved_extraction_status(
-        event
-    ) == "provisional" and not _lineage_replay_pending(event)
+    provisional_claims_hidden = (
+        resolved_extraction_status(event) == "provisional"
+        and not _lineage_replay_pending(event)
+        and not has_canonical_extraction(event)
+    )
     if provisional_claims_hidden:
         if referenced_claim_ids:
             claim_query = claim_query.where(EventClaim.id.in_(tuple(referenced_claim_ids)))

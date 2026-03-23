@@ -104,6 +104,11 @@ def snapshot_has_canonical_extraction(snapshot: CanonicalExtractionSnapshot) -> 
     )
 
 
+def has_canonical_extraction(event: Event) -> bool:
+    """Return whether an event currently carries durable canonical extraction state."""
+    return _has_canonical_extraction(event)
+
+
 def demote_current_extraction_to_provisional(
     event: Event,
     *,

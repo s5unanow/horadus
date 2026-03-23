@@ -382,6 +382,15 @@ async def test_get_event_hides_unanchored_claims_for_provisional_events(
 ) -> None:
     event = _build_event()
     event.extraction_status = "provisional"
+    event.event_summary = None
+    event.extracted_who = None
+    event.extracted_what = None
+    event.extracted_where = None
+    event.extracted_claims = None
+    event.categories = []
+    event.has_contradictions = False
+    event.contradiction_notes = None
+    event.extraction_provenance = {}
     event.provisional_extraction = {
         "status": "provisional",
         "summary": "Held degraded summary",
@@ -410,6 +419,15 @@ async def test_get_event_keeps_evidence_anchored_claims_for_provisional_events(
 ) -> None:
     event = _build_event()
     event.extraction_status = "provisional"
+    event.event_summary = None
+    event.extracted_who = None
+    event.extracted_what = None
+    event.extracted_where = None
+    event.extracted_claims = None
+    event.categories = []
+    event.has_contradictions = False
+    event.contradiction_notes = None
+    event.extraction_provenance = {}
     event.provisional_extraction = {
         "status": "provisional",
         "summary": "Held degraded summary",
@@ -447,6 +465,44 @@ async def test_get_event_keeps_evidence_anchored_claims_for_provisional_events(
     claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
     assert "event_claims.id in" in claim_query_text
     assert "event_claims.is_active is true" not in claim_query_text
+
+
+@pytest.mark.asyncio
+async def test_get_event_preserves_canonical_claims_for_live_provisional_events(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = _build_event()
+    event.extraction_status = "provisional"
+    event.provisional_extraction = {
+        "status": "provisional",
+        "summary": "Held degraded summary",
+        "extracted_claims": {"claims": ["Held degraded claim"]},
+    }
+    mock_db_session.get.return_value = event
+    responses = iter(
+        [
+            [],
+            [],
+            [
+                (uuid4(), "__event__", "Canonical fallback", "fallback", True),
+                (uuid4(), "canonical statement", "Canonical statement", "statement", True),
+            ],
+        ]
+    )
+
+    async def _execute(_query):
+        return SimpleNamespace(all=lambda: next(responses))
+
+    mock_db_session.execute.side_effect = _execute
+    monkeypatch.setattr(events_module, "load_event_lineage", AsyncMock(return_value=[]))
+
+    result = await get_event(event_id=event.id, session=mock_db_session)
+
+    assert result.extraction_status == "provisional"
+    assert len(result.claims) == 2
+    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    assert "event_claims.is_active is true" in claim_query_text
 
 
 @pytest.mark.asyncio

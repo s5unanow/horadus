@@ -56,11 +56,7 @@ async def test_persist_failure_state_retries_with_refreshed_pending_row(
     assert persisted_item is refreshed_item
     assert persist_calls == [(item, initial_now), (refreshed_item, retry_now)]
     session.rollback.assert_awaited_once()
-    session.get.assert_awaited_once_with(
-        LLMReplayQueueItem,
-        item_id,
-        with_for_update={"skip_locked": True},
-    )
+    session.get.assert_awaited_once_with(LLMReplayQueueItem, item_id, with_for_update=True)
 
 
 @pytest.mark.asyncio
@@ -87,11 +83,7 @@ async def test_persist_failure_state_stops_when_recovery_row_is_missing() -> Non
 
     assert persisted_item is None
     session.rollback.assert_awaited_once()
-    session.get.assert_awaited_once_with(
-        LLMReplayQueueItem,
-        item_id,
-        with_for_update={"skip_locked": True},
-    )
+    session.get.assert_awaited_once_with(LLMReplayQueueItem, item_id, with_for_update=True)
 
 
 @pytest.mark.asyncio
@@ -204,22 +196,11 @@ async def test_process_replay_item_treats_error_status_as_committed_after_commit
     monkeypatch.setattr(
         _task_maintenance, "_replay_one_degraded_item", AsyncMock(side_effect=ValueError("boom"))
     )
-    handle_failure = AsyncMock()
-    monkeypatch.setattr(_task_maintenance, "_handle_replay_item_failure", handle_failure)
+    monkeypatch.setattr(replay_helpers, "persist_failure_state", AsyncMock(return_value=item))
     monkeypatch.setattr(
         replay_helpers,
         "fresh_replay_state",
-        AsyncMock(
-            return_value={
-                "status": "error",
-                "attempt_count": 2,
-                "last_attempt_at": None,
-                "processed_at": None,
-                "last_error": "Event not found",
-                "replay_failure": {"disposition": "manual_review"},
-                "replay_result": None,
-            }
-        ),
+        AsyncMock(return_value=replay_helpers.serialize_replay_state(item=item)),
     )
 
     had_error = await _task_maintenance._process_replay_item(
@@ -235,7 +216,6 @@ async def test_process_replay_item_treats_error_status_as_committed_after_commit
     assert had_error is True
     session.rollback.assert_awaited_once()
     session.get.assert_not_awaited()
-    handle_failure.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -276,11 +256,7 @@ async def test_process_replay_item_requeues_after_commit_dbapi_error_when_state_
 
     assert had_error is True
     session.rollback.assert_awaited_once()
-    session.get.assert_awaited_with(
-        LLMReplayQueueItem,
-        item.id,
-        with_for_update={"skip_locked": True},
-    )
+    session.get.assert_awaited_with(LLMReplayQueueItem, item.id, with_for_update=True)
     handle_failure.assert_awaited_once()
 
 
@@ -494,11 +470,7 @@ async def test_process_replay_item_stops_when_commit_dbapi_error_row_is_missing(
 
     assert had_error is True
     session.rollback.assert_awaited_once()
-    session.get.assert_awaited_with(
-        LLMReplayQueueItem,
-        item.id,
-        with_for_update={"skip_locked": True},
-    )
+    session.get.assert_awaited_with(LLMReplayQueueItem, item.id, with_for_update=True)
 
 
 @pytest.mark.asyncio
@@ -537,6 +509,72 @@ async def test_process_replay_item_stops_commit_recovery_when_row_is_no_longer_p
     assert had_error is True
     session.rollback.assert_awaited_once()
     handle_failure.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_replay_item_treats_refreshed_failure_state_as_committed_after_commit_dbapi_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = SimpleNamespace(
+        id=uuid4(),
+        attempt_count=2,
+        status="processing",
+        details={},
+        last_attempt_at=None,
+        processed_at=None,
+        last_error=None,
+    )
+    refreshed_item = SimpleNamespace(
+        id=item.id,
+        attempt_count=2,
+        status="pending",
+        details={
+            "replay_failure": {
+                "attempt_count": 2,
+                "disposition": "retryable",
+                "failed_at": "2026-03-23T08:55:00+00:00",
+                "next_attempt_after": "2026-03-23T09:00:00+00:00",
+            }
+        },
+        last_attempt_at=datetime(2026, 3, 23, 8, 55, tzinfo=UTC),
+        processed_at=None,
+        last_error="db down",
+    )
+    session = AsyncMock()
+    session.commit = AsyncMock(side_effect=OperationalError("commit", {}, Exception("drop")))
+    session.get = AsyncMock(return_value=refreshed_item)
+    monkeypatch.setattr(
+        _task_maintenance,
+        "_replay_one_degraded_item",
+        AsyncMock(side_effect=OperationalError("select 1", {}, Exception("db down"))),
+    )
+    monkeypatch.setattr(
+        replay_helpers, "persist_failure_state", AsyncMock(return_value=refreshed_item)
+    )
+    monkeypatch.setattr(
+        replay_helpers,
+        "serialize_replay_state",
+        lambda *, item: {"state_source": "refreshed" if item is refreshed_item else "original"},
+    )
+    monkeypatch.setattr(
+        replay_helpers,
+        "fresh_replay_state",
+        AsyncMock(return_value={"state_source": "refreshed"}),
+    )
+
+    had_error = await _task_maintenance._process_replay_item(
+        deps=SimpleNamespace(LLMReplayQueueItem=LLMReplayQueueItem),
+        session=session,
+        item=item,
+        tier2=object(),
+        pipeline=object(),
+        trends=[],
+        now=datetime(2026, 3, 23, tzinfo=UTC),
+    )
+
+    assert had_error is True
+    assert session.rollback.await_count == 2
+    session.get.assert_awaited_once_with(LLMReplayQueueItem, item.id, with_for_update=True)
 
 
 @pytest.mark.asyncio

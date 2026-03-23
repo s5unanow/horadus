@@ -82,9 +82,7 @@ async def persist_failure_state(
             return current_item
         except dbapi_error_cls:
             await session.rollback()
-            current_item = await session.get(
-                deps.LLMReplayQueueItem, item_id, with_for_update={"skip_locked": True}
-            )
+            current_item = await session.get(deps.LLMReplayQueueItem, item_id, with_for_update=True)
             if current_item is None or current_item.status != "pending":
                 return None
             current_now = datetime.now(tz=UTC)

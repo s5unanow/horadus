@@ -717,11 +717,7 @@ async def test_replay_degraded_events_async_rolls_back_before_retrying_dbapi_fai
     assert refreshed_item.attempt_count == 1
     assert refreshed_item.details["replay_failure"]["disposition"] == "retryable"
     session.rollback.assert_awaited_once()
-    session.get.assert_awaited_with(
-        LLMReplayQueueItem,
-        item.id,
-        with_for_update={"skip_locked": True},
-    )
+    session.get.assert_awaited_with(LLMReplayQueueItem, item.id, with_for_update=True)
     sync_status.assert_not_awaited()
     assert session.commit.await_count == 1
 
@@ -788,11 +784,7 @@ async def test_replay_degraded_events_async_stops_when_dbapi_row_disappears_afte
 
     assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 1, "errors": 1}
     session.rollback.assert_awaited_once()
-    session.get.assert_awaited_with(
-        LLMReplayQueueItem,
-        item.id,
-        with_for_update={"skip_locked": True},
-    )
+    session.get.assert_awaited_with(LLMReplayQueueItem, item.id, with_for_update=True)
     session.commit.assert_not_awaited()
 
 

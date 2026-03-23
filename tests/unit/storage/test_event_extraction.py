@@ -160,6 +160,16 @@ def test_resolved_extraction_status_treats_distinct_event_summary_as_canonical()
     assert resolved_extraction_status(event) == "canonical"
 
 
+def test_resolved_extraction_status_treats_summary_without_canonical_title_as_canonical() -> None:
+    event = Event(
+        canonical_summary=None,
+        event_summary="Synthesized summary",
+        extraction_status="unexpected",
+    )
+
+    assert resolved_extraction_status(event) == "canonical"
+
+
 def test_clear_canonical_extraction_state_preserves_provisional_payload() -> None:
     event = Event(
         canonical_summary="Primary item title",

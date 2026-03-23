@@ -33,6 +33,7 @@ from src.processing.event_lineage_replay import (
 from src.processing.event_lineage_replay import (
     enqueue_event_replay as _enqueue_event_replay,
 )
+from src.storage.event_extraction import clear_all_extraction_state
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EventActivityState,
@@ -426,7 +427,7 @@ async def _close_empty_merged_event(event: Event, *, replay_pending: bool = True
     if replay_pending:
         await _mark_event_replay_pending(event=event, reason="event_lineage_repair")
     else:
-        _clear_stale_event_extractions(event)
+        clear_all_extraction_state(event)
         event.extraction_provenance = {
             "status": "closed",
             "reason": "event_lineage_repair",

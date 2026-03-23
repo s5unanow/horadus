@@ -572,6 +572,8 @@ async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
         id=uuid4(),
         canonical_summary="event",
         epistemic_state=EventEpistemicState.CONTESTED.value,
+        extraction_status="provisional",
+        provisional_extraction={"summary": "held degraded summary"},
         extraction_provenance={"stage": "tier2", "model": "old"},
         extracted_claims={"claim_graph": {}},
         extracted_who=["A"],
@@ -594,6 +596,8 @@ async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
     }
     assert event.extracted_claims is None
     assert event.extracted_who is None
+    assert event.extraction_status == "none"
+    assert event.provisional_extraction == {}
     assert not event.categories
 
 

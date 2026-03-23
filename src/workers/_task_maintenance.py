@@ -179,10 +179,11 @@ async def _process_replay_item(
                 attempt_count_override=consumed_attempt_count,
             )
     try:
+        expected_state = replay_helpers.serialize_replay_state(item=item)
         await session.commit()
     except DBAPIError as exc:
         await session.rollback()
-        if await replay_helpers.fresh_replay_status(deps=deps, item_id=item.id) == "done":
+        if await replay_helpers.fresh_replay_state(deps=deps, item_id=item.id) == expected_state:
             return had_error
         refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
         if refreshed_item is None:
@@ -198,6 +199,14 @@ async def _process_replay_item(
         await session.commit()
         return True
     return had_error
+
+
+def _mark_replay_item_processing(*, item: Any, now: datetime) -> None:
+    item.status = "processing"
+    item.locked_at = now
+    item.locked_by = "workers.replay_degraded_events"
+    item.attempt_count = int(item.attempt_count or 0) + 1
+    item.last_attempt_at = now
 
 
 async def _replay_one_degraded_item(
@@ -631,36 +640,28 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
             }
 
     now = datetime.now(tz=UTC)
-    async with deps.async_session_maker() as session:
-        run_limit = max(1, int(limit))
-        items = await _load_due_replay_items(
-            deps=deps,
-            session=session,
-            now=now,
-            limit=run_limit,
-        )
-        if not items:
-            return {
-                "status": "ok",
-                "task": "replay_degraded_events",
-                "drained": 0,
-                "errors": 0,
-            }
-
-        for item in items:
-            item.status = "processing"
-            item.locked_at = now
-            item.locked_by = "workers.replay_degraded_events"
-            item.attempt_count = int(item.attempt_count or 0) + 1
-            item.last_attempt_at = now
-        trends, tier2, pipeline = await replay_helpers.build_replay_runtime(
-            deps=deps,
-            session=session,
-        )
-        await session.commit()
-
-        drained = errors = 0
-        for item in items:
+    run_limit = max(1, int(limit))
+    drained = errors = 0
+    for _ in range(run_limit):
+        async with deps.async_session_maker() as session:
+            items = await _load_due_replay_items(
+                deps=deps,
+                session=session,
+                now=now,
+                limit=1,
+            )
+            if not items:
+                break
+            item = items[0]
+            try:
+                trends, tier2, pipeline = await replay_helpers.build_replay_runtime(
+                    deps=deps,
+                    session=session,
+                )
+            except Exception:
+                await session.rollback()
+                raise
+            _mark_replay_item_processing(item=item, now=now)
             drained += 1
             if await _process_replay_item(
                 deps=deps,

@@ -1461,9 +1461,11 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
     mock_session.scalars = AsyncMock(
         side_effect=[
             MagicMock(all=lambda: [success_item, error_item]),
-            MagicMock(all=lambda: [success_item, error_item]),
+            MagicMock(all=lambda: [success_item]),
             MagicMock(all=lambda: [SimpleNamespace(id="trend-1")]),
-            MagicMock(all=list),
+            MagicMock(all=lambda: [error_item]),
+            MagicMock(all=lambda: [error_item]),
+            MagicMock(all=lambda: [SimpleNamespace(id="trend-1")]),
             MagicMock(all=list),
         ]
     )
@@ -1498,6 +1500,9 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
     monkeypatch.setattr(tasks_module, "async_session_maker", _session_maker(mock_session))
     monkeypatch.setattr(tasks_module, "Tier2Classifier", FakeTier2Classifier)
     monkeypatch.setattr(tasks_module, "ProcessingPipeline", FakePipeline)
+    monkeypatch.setattr(
+        tasks_module.maintenance_helpers, "_sync_lineage_replay_status", AsyncMock()
+    )
 
     result = await tasks_module._replay_degraded_events_async(limit=3)
     assert result == {"status": "ok", "task": "replay_degraded_events", "drained": 2, "errors": 1}
@@ -1509,7 +1514,7 @@ async def test_replay_degraded_events_async_processes_success_and_error_items(
     assert error_item.status == "error"
     assert error_item.last_error == "Event not found: missing-event"
     assert mock_session.flush.await_count == 2
-    assert mock_session.commit.await_count == 3
+    assert mock_session.commit.await_count == 2
 
 
 def test_replay_degraded_events_wrapper_uses_configured_limit(

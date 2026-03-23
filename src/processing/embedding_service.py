@@ -20,7 +20,6 @@ from src.core.config import settings
 from src.core.observability import record_embedding_input_guardrail
 from src.processing.cost_tracker import EMBEDDING, CostTracker
 from src.processing.llm_input_safety import estimate_tokens, truncate_to_token_limit
-from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, RawItem
 
 logger = structlog.get_logger(__name__)
@@ -274,7 +273,7 @@ class EmbeddingService:
         if not events:
             return EmbeddingRunResult(entity_type="events")
 
-        event_texts = [resolved_event_summary(event) for event in events]
+        event_texts = [event.canonical_summary for event in events]
         vectors, audits, cache_hits, api_calls = await self.embed_texts_with_contexts(
             event_texts,
             entity_type="event",

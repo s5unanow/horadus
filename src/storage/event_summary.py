@@ -43,6 +43,9 @@ def refresh_event_summary_from_canonical(
     if not current_event_summary:
         event.event_summary = event.canonical_summary
         return
+    if extraction_provenance.get("status") == "replay_pending":
+        event.event_summary = event.canonical_summary
+        return
     if extraction_provenance.get("stage") == "tier2":
         return
     if current_event_summary == previous_canonical:

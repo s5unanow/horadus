@@ -582,8 +582,7 @@ async def test_embed_raw_items_without_embedding_returns_empty_summary(mock_db_s
 async def test_embed_events_without_embedding_persists_vectors(mock_db_session) -> None:
     service, _embeddings_api, _cost_tracker = _build_service(mock_db_session=mock_db_session)
     first_event = Event(
-        canonical_summary="primary item title",
-        event_summary="first synthesized summary",
+        canonical_summary="primary item title", event_summary="first synthesized summary"
     )
     second_event = Event(canonical_summary="second summary")
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [first_event, second_event])
@@ -596,7 +595,7 @@ async def test_embed_events_without_embedding_persists_vectors(mock_db_session) 
     ) -> tuple[list[list[float]], list[EmbeddingInputAudit], int, int]:
         assert entity_type == "event"
         assert entity_ids == [first_event.id, second_event.id]
-        assert _texts == ["first synthesized summary", "second summary"]
+        assert _texts == ["primary item title", "second summary"]
         return (
             [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]],
             [

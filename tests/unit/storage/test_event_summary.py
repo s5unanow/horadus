@@ -57,6 +57,18 @@ def test_refresh_event_summary_from_canonical_updates_only_fallback_values() -> 
     )
     assert preserved_tier2_event.event_summary == "Old primary title"
 
+    replay_pending_event = Event(
+        id=uuid4(),
+        canonical_summary="Updated primary title",
+        event_summary="Stale synthesized summary",
+        extraction_provenance={"stage": "tier2", "status": "replay_pending"},
+    )
+    refresh_event_summary_from_canonical(
+        replay_pending_event,
+        previous_canonical_summary="Old primary title",
+    )
+    assert replay_pending_event.event_summary == "Updated primary title"
+
 
 def test_event_summary_expression_prefers_event_summary_with_canonical_fallback() -> None:
     expression = event_summary_expression()

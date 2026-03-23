@@ -11,6 +11,7 @@ from sqlalchemy.exc import DBAPIError, OperationalError
 from src.processing.pipeline_retry import build_retryable_pipeline_error
 from src.storage.event_lineage_models import EventLineage
 from src.storage.models import LLMReplayQueueItem
+from src.workers import _task_replay as replay_helpers
 
 DEFAULT_REPLAY_MAX_ATTEMPTS = 3
 DEFAULT_REPLAY_BACKOFF_SECONDS = 300
@@ -131,27 +132,72 @@ async def _load_due_replay_items(
     )
 
 
-async def _build_replay_runtime(*, deps: Any, session: Any) -> tuple[list[Any], Any, Any]:
-    trends = list(
-        (
-            await session.scalars(
-                deps.select(deps.Trend)
-                .where(deps.Trend.is_active.is_(True))
-                .order_by(deps.Trend.name.asc())
+async def _process_replay_item(
+    *,
+    deps: Any,
+    session: Any,
+    item: Any,
+    tier2: Any,
+    pipeline: Any,
+    trends: list[Any],
+    now: datetime,
+) -> bool:
+    consumed_attempt_count = int(item.attempt_count or 0)
+    had_error = False
+    try:
+        await _replay_one_degraded_item(
+            deps=deps,
+            session=session,
+            tier2=tier2,
+            pipeline=pipeline,
+            trends=trends,
+            item=item,
+            now=now,
+        )
+    except Exception as exc:
+        had_error = True
+        if isinstance(exc, DBAPIError):
+            await session.rollback()
+            refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
+            if refreshed_item is None:
+                return had_error
+            await _handle_replay_item_failure(
+                deps=deps,
+                session=session,
+                item=refreshed_item,
+                exc=exc,
+                now=now,
+                attempt_count_override=consumed_attempt_count,
             )
-        ).all()
-    )
-    tier2 = deps.Tier2Classifier(
-        session=session,
-        model=deps.settings.LLM_TIER2_MODEL,
-        secondary_model=None,
-    )
-    pipeline = deps.ProcessingPipeline(
-        session=session,
-        tier2_classifier=tier2,
-        degraded_llm_tracker=None,
-    )
-    return trends, tier2, pipeline
+        else:
+            await _handle_replay_item_failure(
+                deps=deps,
+                session=session,
+                item=item,
+                exc=exc,
+                now=now,
+                attempt_count_override=consumed_attempt_count,
+            )
+    try:
+        await session.commit()
+    except DBAPIError as exc:
+        await session.rollback()
+        if await replay_helpers.fresh_replay_status(deps=deps, item_id=item.id) == "done":
+            return had_error
+        refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
+        if refreshed_item is None:
+            return True
+        await _handle_replay_item_failure(
+            deps=deps,
+            session=session,
+            item=refreshed_item,
+            exc=exc,
+            now=now,
+            attempt_count_override=consumed_attempt_count,
+        )
+        await session.commit()
+        return True
+    return had_error
 
 
 async def _replay_one_degraded_item(
@@ -607,50 +653,25 @@ async def replay_degraded_events_async(*, deps: Any, limit: int) -> dict[str, An
             item.locked_by = "workers.replay_degraded_events"
             item.attempt_count = int(item.attempt_count or 0) + 1
             item.last_attempt_at = now
+        trends, tier2, pipeline = await replay_helpers.build_replay_runtime(
+            deps=deps,
+            session=session,
+        )
         await session.commit()
-
-        trends, tier2, pipeline = await _build_replay_runtime(deps=deps, session=session)
 
         drained = errors = 0
         for item in items:
             drained += 1
-            try:
-                await _replay_one_degraded_item(
-                    deps=deps,
-                    session=session,
-                    tier2=tier2,
-                    pipeline=pipeline,
-                    trends=trends,
-                    item=item,
-                    now=now,
-                )
-                await session.commit()
-            except Exception as exc:
+            if await _process_replay_item(
+                deps=deps,
+                session=session,
+                item=item,
+                tier2=tier2,
+                pipeline=pipeline,
+                trends=trends,
+                now=now,
+            ):
                 errors += 1
-                consumed_attempt_count = int(item.attempt_count or 0)
-                if isinstance(exc, DBAPIError):
-                    await session.rollback()
-                    refreshed_item = await session.get(deps.LLMReplayQueueItem, item.id)
-                    if refreshed_item is None:
-                        continue
-                    await _handle_replay_item_failure(
-                        deps=deps,
-                        session=session,
-                        item=refreshed_item,
-                        exc=exc,
-                        now=now,
-                        attempt_count_override=consumed_attempt_count,
-                    )
-                else:
-                    await _handle_replay_item_failure(
-                        deps=deps,
-                        session=session,
-                        item=item,
-                        exc=exc,
-                        now=now,
-                        attempt_count_override=consumed_attempt_count,
-                    )
-                await session.commit()
 
     return {
         "status": "ok",

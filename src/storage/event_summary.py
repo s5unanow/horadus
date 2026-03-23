@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import func
 
+from src.storage.event_extraction import resolved_extraction_status
 from src.storage.models import Event
 
 
@@ -45,6 +46,10 @@ def refresh_event_summary_from_canonical(
         return
     if extraction_provenance.get("status") == "replay_pending":
         event.event_summary = event.canonical_summary
+        return
+    if resolved_extraction_status(event) == "provisional":
+        if current_event_summary == previous_canonical:
+            event.event_summary = event.canonical_summary
         return
     if extraction_provenance.get("stage") == "tier2":
         return

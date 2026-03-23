@@ -441,29 +441,6 @@ spent on the most decision-relevant work first.
 
 ---
 
-### TASK-338: Separate Provisional and Canonical Extraction State in Degraded Mode
-**Priority**: P1 (High)
-**Estimate**: 4-6 hours
-
-Degraded mode correctly holds trend deltas, but event extraction can still
-populate user-visible fields while primary-quality Tier-2 behavior is
-unavailable. Separate provisional extraction from canonical extraction so
-degraded outputs do not silently become the long-lived event/report truth.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/processing/pipeline_orchestrator.py`, `src/processing/tier2_classifier.py`, `src/core/report_generator.py`, `src/api/routes/events.py`, `src/api/routes/reports.py`, `docs/ARCHITECTURE.md`, `docs/adr/008-degraded-llm-mode.md`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Persist extraction status that distinguishes provisional degraded-mode output from canonical promoted output
-- [ ] Prevent provisional extraction fields from overwriting canonical event summaries/categories or feeding normal report-generation paths without explicit promotion semantics
-- [ ] Define how primary-route replay promotes, supersedes, or discards prior provisional extraction so event history remains explainable
-- [ ] Expose provisional/canonical status in operator-facing event or report debug responses
-- [ ] Add regression coverage for degraded provisional write, post-recovery promotion, and report-path exclusion of provisional-only data
-
----
-
 ### TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces
 **Priority**: P2 (Medium)
 **Estimate**: 3-5 hours

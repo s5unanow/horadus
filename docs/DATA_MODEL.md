@@ -164,7 +164,7 @@ Clustered news events (multiple raw_items about the same story).
 |--------|------|----------|---------|-------------|
 | id | UUID | No | gen_random_uuid() | Primary key |
 | canonical_summary | TEXT | No | | Canonical summary of the current `primary_item_id` (most credible item), not simply the latest mention |
-| event_summary | TEXT | Yes | | Synthesized event-level summary used for API/reporting/Tier-2 carry-forward; falls back to `canonical_summary` until Tier-2 writes one |
+| event_summary | TEXT | Yes | | Canonical synthesized event-level summary used for API/reporting/Tier-2 carry-forward; falls back to `canonical_summary` until canonical Tier-2 writes one |
 | embedding | vector(1536) | Yes | | Text embedding for similarity |
 | embedding_model | VARCHAR(255) | Yes | | Model identifier for current embedding vector |
 | embedding_generated_at | TIMESTAMPTZ | Yes | | Timestamp when current embedding vector was generated |
@@ -185,6 +185,8 @@ Clustered news events (multiple raw_items about the same story).
 | corroboration_mode | VARCHAR(20) | No | 'fallback' | Whether corroboration currently comes from legacy fallback counts or provenance-aware grouping |
 | provenance_summary | JSONB | No | {} | Bounded debug summary of source families, syndication/duplicate groups, and raw-vs-independent counts |
 | extraction_provenance | JSONB | No | {} | Current Tier-2 extraction/runtime provenance basis (model, prompt hash, schema hash, overrides, replay/cache derivation) |
+| extraction_status | VARCHAR(20) | No | 'none' | Current extraction durability state: none, canonical, provisional |
+| provisional_extraction | JSONB | No | {} | Bounded provisional degraded-mode extraction payload kept out of normal report/API summary paths until superseded or promoted |
 | epistemic_state | VARCHAR(20) | No | 'emerging' | Evidence/support axis: emerging, confirmed, contested, retracted |
 | activity_state | VARCHAR(20) | No | 'active' | Recency/activity axis: active, dormant, closed |
 | lifecycle_status | VARCHAR(20) | No | 'emerging' | Deprecated compatibility projection derived from the split axes |
@@ -198,7 +200,8 @@ Clustered news events (multiple raw_items about the same story).
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 
 Notes:
-- Tier-2 persists its synthesized structured-output `summary` into `events.event_summary`.
+- Canonical Tier-2 persists its synthesized structured-output `summary` into `events.event_summary`.
+- Degraded-mode Tier-2 writes into `events.provisional_extraction` and marks `events.extraction_status = 'provisional'` instead of overwriting canonical report/event fields.
 - Persisted `events.canonical_summary` remains the summary of the current `primary_item_id`.
 
 **Indexes:**

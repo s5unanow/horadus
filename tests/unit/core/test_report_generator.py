@@ -373,7 +373,7 @@ async def test_load_weekly_reports_category_breakdown_source_breakdown_and_top_e
     mock_db_session.execute.side_effect = [
         _Result([(["military", " ", "diplomatic"],), ("bad",)]),
         _Result([(SimpleNamespace(value="rss"), 3), ("telegram", None)]),
-        _Result([(uuid4(), 1.25, 4, " event ", ["military"])]),
+        _Result([(uuid4(), 1.25, 4, " event ", ["military"], "canonical")]),
     ]
 
     weekly = await generator._load_weekly_reports(
@@ -402,6 +402,7 @@ async def test_load_weekly_reports_category_breakdown_source_breakdown_and_top_e
     assert sources == {"rss": 3, "telegram": 0}
     assert top_events[0]["summary"] == "event"
     assert top_events[0]["impact_score"] == 1.25
+    assert top_events[0]["extraction_status"] == "canonical"
 
 
 def test_fallback_narrative_weekly_includes_confidence_and_contradictions() -> None:

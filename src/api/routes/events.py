@@ -28,6 +28,7 @@ from src.processing.event_lineage import (
     split_event,
 )
 from src.storage.database import get_session
+from src.storage.event_extraction import provisional_extraction_payload, resolved_extraction_status
 from src.storage.event_state import (
     resolved_corroboration_mode,
     resolved_corroboration_score,
@@ -126,6 +127,8 @@ class EventDetailResponse(EventResponse):
                     "stage": "tier2",
                     "active_route": {"model": "gpt-4.1-mini"},
                 },
+                "extraction_status": "canonical",
+                "provisional_extraction": None,
                 "sources": [{"source_name": "Reuters", "url": "https://example.com/article-1"}],
                 "trend_impacts": [
                     {
@@ -145,6 +148,8 @@ class EventDetailResponse(EventResponse):
     corroboration_score: float
     provenance_summary: dict[str, Any]
     extraction_provenance: dict[str, Any]
+    extraction_status: str
+    provisional_extraction: dict[str, Any] | None
     lineage: list[dict[str, Any]]
 
 
@@ -407,6 +412,8 @@ async def get_event(
         corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
         extraction_provenance=dict(event.extraction_provenance or {}),
+        extraction_status=resolved_extraction_status(event),
+        provisional_extraction=provisional_extraction_payload(event),
         sources=sources,
         claims=claims,
         trend_impacts=trend_impacts,

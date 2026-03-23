@@ -39,6 +39,7 @@ from src.core.trend_engine import (
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
+from src.processing.event_claims import deactivate_event_claims, sync_event_claims
 from src.processing.event_clusterer import ClusterResult, EventClusterer
 from src.processing.pipeline_retry import build_retryable_pipeline_error
 from src.processing.pipeline_types import (
@@ -65,6 +66,7 @@ from src.processing.trend_impact_reconciliation import (
 from src.storage.event_extraction import (
     capture_canonical_extraction,
     demote_current_extraction_to_provisional,
+    resolved_extraction_status,
 )
 from src.storage.event_state import (
     FALLBACK_CORROBORATION_MODE,
@@ -614,6 +616,7 @@ class ProcessingPipeline:
                 )
 
             canonical_snapshot = capture_canonical_extraction(event)
+            canonical_extraction_status = resolved_extraction_status(event)
             _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
                 event=event,
                 trends=trends,
@@ -650,6 +653,7 @@ class ProcessingPipeline:
                         degraded_status=degraded_status,
                         tier2_usage=tier2_usage,
                         canonical_snapshot=canonical_snapshot,
+                        canonical_extraction_status=canonical_extraction_status,
                     )
 
             if not degraded_hold:
@@ -728,6 +732,7 @@ class ProcessingPipeline:
         degraded_status: DegradedLLMStatus,
         tier2_usage: Any,
         canonical_snapshot: Any,
+        canonical_extraction_status: str,
     ) -> bool:
         claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         policy_meta = {
@@ -757,6 +762,10 @@ class ProcessingPipeline:
             policy=policy_meta,
             replay_enqueued=replay_enqueued,
         )
+        if canonical_extraction_status == "canonical":
+            await sync_event_claims(session=self.session, event=event)
+        else:
+            await deactivate_event_claims(session=self.session, event_id=event.id)
         return replay_enqueued
 
     async def _classify_tier1(

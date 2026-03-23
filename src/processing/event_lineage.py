@@ -18,6 +18,7 @@ from src.core.trend_restatement import (
     restatement_compensation_totals_by_evidence_id,
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
+from src.processing.event_claims import deactivate_event_claims
 from src.processing.event_cluster_health import (
     apply_default_cluster_health,
     apply_repaired_cluster_health,
@@ -44,7 +45,6 @@ from src.storage.event_summary import (
 )
 from src.storage.models import (
     Event,
-    EventClaim,
     EventItem,
     RawItem,
     Source,
@@ -572,11 +572,7 @@ def _invalidation_compensation_delta(
 
 
 async def _mark_event_claims_stale(*, session: AsyncSession, event_id: UUID) -> None:
-    claims = list(
-        (await session.scalars(select(EventClaim).where(EventClaim.event_id == event_id))).all()
-    )
-    for claim in claims:
-        claim.is_active = False
+    await deactivate_event_claims(session=session, event_id=event_id)
 
 
 async def _mark_event_replay_pending(*, event: Event, reason: str) -> None:

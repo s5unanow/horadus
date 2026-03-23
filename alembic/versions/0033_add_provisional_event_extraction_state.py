@@ -78,6 +78,21 @@ def upgrade() -> None:
     )
     op.execute(
         """
+        UPDATE event_claims
+        SET is_active = false
+        WHERE event_id IN (
+          SELECT id
+          FROM events
+          WHERE extraction_status = 'provisional'
+            AND COALESCE(
+              provisional_extraction -> 'policy' ->> 'degraded_llm',
+              'false'
+            ) = 'true'
+        )
+        """
+    )
+    op.execute(
+        """
         UPDATE events
         SET extraction_status = 'canonical'
         WHERE extraction_status = 'none'

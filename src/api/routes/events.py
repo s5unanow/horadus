@@ -307,6 +307,12 @@ def _lineage_replay_pending(event: Event) -> bool:
     )
 
 
+def _visible_provisional_extraction(event: Event) -> dict[str, Any] | None:
+    if _lineage_replay_pending(event):
+        return None
+    return provisional_extraction_payload(event)
+
+
 def _to_event_repair_response(result: EventRepairResult) -> EventRepairResponse:
     return EventRepairResponse(
         action=result.action,
@@ -413,7 +419,7 @@ async def get_event(
         provenance_summary=dict(event.provenance_summary or {}),
         extraction_provenance=dict(event.extraction_provenance or {}),
         extraction_status=resolved_extraction_status(event),
-        provisional_extraction=provisional_extraction_payload(event),
+        provisional_extraction=_visible_provisional_extraction(event),
         sources=sources,
         claims=claims,
         trend_impacts=trend_impacts,

@@ -58,8 +58,8 @@ def test_event_extraction_state_migration_backfills_degraded_rows_as_provisional
     )
     assert "'reason', 'migration_backfill_degraded_llm'" in replay_backfill
     assert "ON CONFLICT (stage, event_id) DO UPDATE" in replay_backfill
-    assert any("epistemic_state = CASE" in statement for statement in executed)
-    assert any("lifecycle_status = CASE" in statement for statement in executed)
+    assert not any("epistemic_state = CASE" in statement for statement in executed)
+    assert not any("lifecycle_status = CASE" in statement for statement in executed)
     canonical_backfill = next(
         statement for statement in executed if "SET extraction_status = 'canonical'" in statement
     )

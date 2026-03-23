@@ -309,6 +309,8 @@ async def test_get_event_keeps_claims_visible_during_lineage_replay_pending(
         "status": "replay_pending",
         "reason": "event_lineage_repair",
     }
+    event.extraction_status = "provisional"
+    event.provisional_extraction = {"summary": "Held degraded summary"}
     mock_db_session.get.return_value = event
     claim_id = uuid4()
     responses = iter(
@@ -337,6 +339,7 @@ async def test_get_event_keeps_claims_visible_during_lineage_replay_pending(
 
     assert len(result.claims) == 1
     assert result.claims[0]["claim_text"] == "Claim before replay"
+    assert result.provisional_extraction is None
     claim_query_text = str(mock_db_session.execute.await_args_list[1].args[0]).lower()
     assert "event_claims.is_active is true" not in claim_query_text
 

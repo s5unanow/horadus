@@ -11,7 +11,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.storage.event_extraction import clear_all_extraction_state
+from src.storage.event_extraction import clear_canonical_extraction_state
 from src.storage.event_lineage_models import EventLineage
 from src.storage.models import Event, LLMReplayQueueItem
 
@@ -160,7 +160,7 @@ async def mark_lineages_superseded_for_replay_requests(
 
 
 def clear_stale_event_extractions(event: Event) -> None:
-    clear_all_extraction_state(event)
+    clear_canonical_extraction_state(event)
 
 
 def replay_source_provenance(event: Event) -> dict[str, Any]:

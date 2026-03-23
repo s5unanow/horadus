@@ -147,29 +147,6 @@ def upgrade() -> None:
     op.execute(
         """
         UPDATE events
-        SET
-          epistemic_state = CASE
-            WHEN epistemic_state = 'retracted' THEN epistemic_state
-            WHEN unique_source_count >= 3 THEN 'confirmed'
-            ELSE 'emerging'
-          END,
-          lifecycle_status = CASE
-            WHEN epistemic_state = 'retracted' THEN lifecycle_status
-            WHEN activity_state = 'closed' THEN 'archived'
-            WHEN activity_state = 'dormant' THEN 'fading'
-            WHEN unique_source_count >= 3 THEN 'confirmed'
-            ELSE 'emerging'
-          END
-        WHERE extraction_status = 'provisional'
-          AND COALESCE(
-            provisional_extraction -> 'policy' ->> 'degraded_llm',
-            'false'
-          ) = 'true'
-        """
-    )
-    op.execute(
-        """
-        UPDATE events
         SET extraction_status = 'canonical'
         WHERE extraction_status = 'none'
           AND COALESCE(extraction_provenance ->> 'status', '') != 'replay_pending'

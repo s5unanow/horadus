@@ -250,6 +250,16 @@ async def test_replay_degraded_events_async_rolls_back_when_runtime_build_fails(
 
 
 @pytest.mark.asyncio
+async def test_sync_lineage_replay_status_returns_when_no_relevant_lineages() -> None:
+    session = AsyncMock()
+    session.scalars.return_value = SimpleNamespace(all=list)
+
+    await _task_maintenance._sync_lineage_replay_status(session=session, event_id=uuid4())
+
+    session.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_fresh_replay_status_reads_status_from_new_session() -> None:
     replay_item = SimpleNamespace(status="done")
     inner_session = AsyncMock()

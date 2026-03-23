@@ -23,6 +23,7 @@ class LLMSemanticCache:
     """Optional cross-worker semantic cache for LLM JSON outputs."""
 
     _DEGRADE_RETRY_SECONDS = 30
+    _CACHE_KEY_VERSION = "v3"
 
     def __init__(
         self,
@@ -88,7 +89,7 @@ class LLMSemanticCache:
         payload_hash = hashlib.sha256(
             LLMSemanticCache._serialize_payload(payload).encode("utf-8")
         ).hexdigest()
-        return f"{redis_prefix}:{stage}:v2:{basis_hash}:{payload_hash}"
+        return f"{redis_prefix}:{stage}:{LLMSemanticCache._CACHE_KEY_VERSION}:{basis_hash}:{payload_hash}"
 
     def get(
         self,

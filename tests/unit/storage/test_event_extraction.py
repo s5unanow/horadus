@@ -140,6 +140,16 @@ def test_resolved_extraction_status_infers_provisional_or_none_without_valid_sta
     assert resolved_extraction_status(empty_event) == "none"
 
 
+def test_resolved_extraction_status_treats_seeded_event_summary_as_none() -> None:
+    event = Event(
+        canonical_summary="Primary item title",
+        event_summary="Primary item title",
+        extraction_status="unexpected",
+    )
+
+    assert resolved_extraction_status(event) == "none"
+
+
 def test_clear_canonical_extraction_state_preserves_provisional_payload() -> None:
     event = Event(
         canonical_summary="Primary item title",

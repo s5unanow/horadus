@@ -122,6 +122,8 @@ def upgrade() -> None:
           AND COALESCE(extraction_provenance ->> 'status', '') != 'replay_pending'
           AND (
             COALESCE(NULLIF(BTRIM(event_summary), ''), '') != ''
+            AND COALESCE(NULLIF(BTRIM(event_summary), ''), '') !=
+              COALESCE(NULLIF(BTRIM(canonical_summary), ''), '')
             OR extracted_who IS NOT NULL
             OR COALESCE(NULLIF(BTRIM(extracted_what), ''), '') != ''
             OR COALESCE(NULLIF(BTRIM(extracted_where), ''), '') != ''

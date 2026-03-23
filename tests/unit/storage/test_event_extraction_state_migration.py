@@ -54,4 +54,8 @@ def test_event_extraction_state_migration_backfills_degraded_rows_as_provisional
     assert any("SET is_active = false" in statement for statement in executed)
     assert any("epistemic_state = CASE" in statement for statement in executed)
     assert any("lifecycle_status = CASE" in statement for statement in executed)
-    assert any("SET extraction_status = 'canonical'" in statement for statement in executed)
+    canonical_backfill = next(
+        statement for statement in executed if "SET extraction_status = 'canonical'" in statement
+    )
+    assert "COALESCE(NULLIF(BTRIM(event_summary), ''), '') !=" in canonical_backfill
+    assert "COALESCE(NULLIF(BTRIM(canonical_summary), ''), '')" in canonical_backfill

@@ -19,6 +19,7 @@ EXTRACTION_STATUS_PROVISIONAL = "provisional"
 class CanonicalExtractionSnapshot:
     """Snapshot of the stable event extraction fields before a provisional write."""
 
+    canonical_summary: str | None
     event_summary: str | None
     extracted_who: list[str] | None
     extracted_what: str | None
@@ -63,6 +64,7 @@ def capture_canonical_extraction(event: Event) -> CanonicalExtractionSnapshot:
         else {}
     )
     return CanonicalExtractionSnapshot(
+        canonical_summary=getattr(event, "canonical_summary", None),
         event_summary=event.event_summary,
         extracted_who=list(event.extracted_who) if event.extracted_who is not None else None,
         extracted_what=event.extracted_what,
@@ -82,7 +84,10 @@ def capture_canonical_extraction(event: Event) -> CanonicalExtractionSnapshot:
 def snapshot_has_canonical_extraction(snapshot: CanonicalExtractionSnapshot) -> bool:
     """Return whether a captured snapshot contains durable canonical extraction state."""
     return bool(
-        _nonblank(snapshot.event_summary)
+        _has_distinct_event_summary(
+            event_summary=snapshot.event_summary,
+            canonical_summary=snapshot.canonical_summary,
+        )
         or snapshot.extracted_who
         or _nonblank(snapshot.extracted_what)
         or _nonblank(snapshot.extracted_where)
@@ -223,7 +228,10 @@ def restore_canonical_extraction(
 
 def _has_canonical_extraction(event: Event) -> bool:
     return bool(
-        _nonblank(event.event_summary)
+        _has_distinct_event_summary(
+            event_summary=event.event_summary,
+            canonical_summary=getattr(event, "canonical_summary", None),
+        )
         or event.extracted_who
         or _nonblank(event.extracted_what)
         or _nonblank(event.extracted_where)
@@ -242,6 +250,19 @@ def _has_canonical_extraction(event: Event) -> bool:
 
 def _nonblank(value: Any) -> bool:
     return isinstance(value, str) and bool(value.strip())
+
+
+def _has_distinct_event_summary(
+    *,
+    event_summary: Any,
+    canonical_summary: Any,
+) -> bool:
+    if not isinstance(event_summary, str) or not event_summary.strip():
+        return False
+    normalized_summary = event_summary.strip()
+    if not isinstance(canonical_summary, str) or not canonical_summary.strip():
+        return True
+    return normalized_summary != canonical_summary.strip()
 
 
 def _superseded_provisional_metadata(provisional: dict[str, Any]) -> dict[str, Any] | None:

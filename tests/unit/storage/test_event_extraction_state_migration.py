@@ -51,8 +51,8 @@ def test_event_extraction_state_migration_backfills_degraded_rows_as_provisional
     )
     assert any("provisional_extraction = jsonb_build_object" in statement for statement in executed)
     assert any("'replay_enqueued', 'true'::jsonb" in statement for statement in executed)
-    assert any("UPDATE event_claims" in statement for statement in executed)
-    assert any("SET is_active = false" in statement for statement in executed)
+    assert not any("UPDATE event_claims" in statement for statement in executed)
+    assert not any("SET is_active = false" in statement for statement in executed)
     replay_backfill = next(
         statement for statement in executed if "INSERT INTO llm_replay_queue" in statement
     )

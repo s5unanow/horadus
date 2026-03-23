@@ -76,21 +76,9 @@ def upgrade() -> None:
         WHERE COALESCE(extracted_claims -> '_llm_policy' ->> 'degraded_llm', 'false') = 'true'
         """
     )
-    op.execute(
-        """
-        UPDATE event_claims
-        SET is_active = false
-        WHERE event_id IN (
-          SELECT id
-          FROM events
-          WHERE extraction_status = 'provisional'
-            AND COALESCE(
-              provisional_extraction -> 'policy' ->> 'degraded_llm',
-              'false'
-            ) = 'true'
-        )
-        """
-    )
+    # Preserve legacy claim rows during backfill: pre-split degraded rows do not retain
+    # enough information to distinguish "no canonical claims existed" from "canonical
+    # claim identity only survives in event_claims until replay repairs the event".
     op.execute(
         """
         INSERT INTO llm_replay_queue (

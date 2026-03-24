@@ -657,3 +657,17 @@ async def test_classify_event_can_defer_semantic_cache_writes(
     )
 
     assert second_usage.api_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_persist_deferred_semantic_cache_write_skips_none(mock_db_session) -> None:
+    semantic_cache = SimpleNamespace(set=MagicMock())
+    classifier = _build_classifier(
+        mock_db_session,
+        client=SimpleNamespace(),
+        semantic_cache=semantic_cache,
+    )
+
+    await classifier.persist_deferred_semantic_cache_write(write=None)
+
+    semantic_cache.set.assert_not_called()

@@ -231,6 +231,22 @@ def test_review_gate_lines_uses_started_at_when_deadline_is_unavailable() -> Non
     ]
 
 
+def test_review_gate_lines_include_timeout_wait_recap_for_timed_out_result() -> None:
+    lines = review_window_module._review_gate_lines(
+        _review_gate_result(
+            status="pass",
+            reason="silent_timeout_allow",
+            summary="review gate timeout: no actionable current-head review feedback.",
+        )
+    )
+
+    assert lines == [
+        "Waiting for review gate (reviewer=chatgpt-codex-connector[bot], "
+        "head=head-sha-348, timeout=5s)...",
+        "review gate timeout: no actionable current-head review feedback.",
+    ]
+
+
 def test_review_gate_data_blocks_on_unresolved_threads_after_review(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

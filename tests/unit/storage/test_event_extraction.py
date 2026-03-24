@@ -170,6 +170,16 @@ def test_resolved_extraction_status_treats_summary_without_canonical_title_as_ca
     assert resolved_extraction_status(event) == "canonical"
 
 
+def test_resolved_extraction_status_does_not_infer_canonical_from_provenance_alone() -> None:
+    event = Event(
+        canonical_summary="Primary item title",
+        extraction_status="unexpected",
+        extraction_provenance={"stage": "tier2", "active_route": {"model": "gpt-4.1-mini"}},
+    )
+
+    assert resolved_extraction_status(event) == "none"
+
+
 def test_clear_canonical_extraction_state_preserves_provisional_payload() -> None:
     event = Event(
         canonical_summary="Primary item title",

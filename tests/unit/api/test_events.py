@@ -386,7 +386,10 @@ async def test_get_event_hides_unanchored_claims_for_provisional_events(
     event.categories = []
     event.has_contradictions = False
     event.contradiction_notes = None
-    event.extraction_provenance = {}
+    event.extraction_provenance = {
+        "stage": "tier2",
+        "active_route": {"model": "gpt-4.1-mini"},
+    }
     event.provisional_extraction = {
         "status": "provisional",
         "summary": "Held degraded summary",

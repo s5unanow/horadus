@@ -245,11 +245,6 @@ def _has_canonical_extraction(event: Event) -> bool:
         or bool(event.categories)
         or bool(event.has_contradictions)
         or _nonblank(event.contradiction_notes)
-        or (
-            isinstance(event.extraction_provenance, dict)
-            and event.extraction_provenance.get("stage") == "tier2"
-            and event.extraction_provenance.get("status") != "replay_pending"
-        )
     )
 
 

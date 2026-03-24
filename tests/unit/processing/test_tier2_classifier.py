@@ -582,7 +582,6 @@ async def test_classify_event_can_bypass_semantic_cache_reads(
     assert cost_tracker.ensure_within_budget.await_count == 2
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "context_chunk",
     [

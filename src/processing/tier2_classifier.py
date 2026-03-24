@@ -71,6 +71,17 @@ from src.storage.models import Event, EventItem, RawItem, Trend
 
 
 @dataclass(slots=True)
+class Tier2DeferredSemanticCacheWrite:
+    """Deferred semantic-cache payload for callers that need post-classification gating."""
+
+    provider: str | None
+    model: str
+    reasoning_effort: str | None
+    payload: dict[str, Any]
+    value: str
+
+
+@dataclass(slots=True)
 class Tier2Usage:
     """Usage and cost metrics for Tier 2 calls."""
 
@@ -82,6 +93,7 @@ class Tier2Usage:
     active_model: str | None = None
     active_reasoning_effort: str | None = None
     used_secondary_route: bool = False
+    deferred_semantic_cache_write: Tier2DeferredSemanticCacheWrite | None = None
 
 
 @dataclass(slots=True)
@@ -260,6 +272,7 @@ class Tier2Classifier:
         context_chunks: list[str] | None = None,
         provenance_derivation: dict[str, Any] | None = None,
         allow_semantic_cache_read: bool = True,
+        defer_semantic_cache_write: bool = False,
     ) -> tuple[Tier2EventResult, Tier2Usage]:
         """Classify one event and persist extracted fields."""
         if event.id is None:
@@ -310,14 +323,20 @@ class Tier2Classifier:
 
         output = self._parse_output(invocation.response)
         self._validate_output_alignment(output, trends=trends)
-        categories_count, trend_impacts_count = await self._persist_live_output(
+        (
+            categories_count,
+            trend_impacts_count,
+            deferred_cache_write,
+        ) = await self._persist_live_output(
             event=event,
             trends=trends,
             output=output,
             invocation=invocation,
             payload=payload,
             provenance_derivation=provenance_derivation,
+            defer_semantic_cache_write=defer_semantic_cache_write,
         )
+        usage.deferred_semantic_cache_write = deferred_cache_write
         result = Tier2EventResult(
             event_id=event.id,
             categories_count=categories_count,
@@ -454,7 +473,8 @@ class Tier2Classifier:
         invocation: Any,
         payload: dict[str, Any],
         provenance_derivation: dict[str, Any] | None,
-    ) -> tuple[int, int]:
+        defer_semantic_cache_write: bool,
+    ) -> tuple[int, int, Tier2DeferredSemanticCacheWrite | None]:
         categories_count, trend_impacts_count = await persist_tier2_output(
             session=self.session,
             sync_event_claims=sync_event_claims,
@@ -482,24 +502,42 @@ class Tier2Classifier:
             message = getattr(response_choices[0], "message", None)
             raw_content = getattr(message, "content", None)
             if isinstance(raw_content, str) and raw_content.strip():
-                cache_write_kwargs = build_semantic_cache_kwargs(
-                    stage=TIER2,
+                deferred_write = Tier2DeferredSemanticCacheWrite(
                     provider=invocation.active_provider,
                     model=invocation.active_model,
                     reasoning_effort=invocation.active_reasoning_effort,
-                    prompt_path=self.prompt_path,
-                    prompt_template=self.prompt_template,
-                    schema_name="tier2_event_classification",
-                    schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
-                    request_overrides=self.request_overrides,
-                )
-                await asyncio.to_thread(
-                    self.semantic_cache.set,
-                    **cache_write_kwargs,
                     payload=payload,
                     value=raw_content,
                 )
-        return (categories_count, trend_impacts_count)
+                if defer_semantic_cache_write:
+                    return (categories_count, trend_impacts_count, deferred_write)
+                await self.persist_deferred_semantic_cache_write(write=deferred_write)
+        return (categories_count, trend_impacts_count, None)
+
+    async def persist_deferred_semantic_cache_write(
+        self,
+        *,
+        write: Tier2DeferredSemanticCacheWrite | None,
+    ) -> None:
+        if write is None:
+            return
+        cache_write_kwargs = build_semantic_cache_kwargs(
+            stage=TIER2,
+            provider=write.provider,
+            model=write.model,
+            reasoning_effort=write.reasoning_effort,
+            prompt_path=self.prompt_path,
+            prompt_template=self.prompt_template,
+            schema_name="tier2_event_classification",
+            schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+            request_overrides=self.request_overrides,
+        )
+        await asyncio.to_thread(
+            self.semantic_cache.set,
+            **cache_write_kwargs,
+            payload=write.payload,
+            value=write.value,
+        )
 
     async def _load_unclassified_events(self, limit: int) -> list[Event]:
         query = (

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from inspect import signature
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -616,9 +617,14 @@ class ProcessingPipeline:
                 )
 
             canonical_snapshot = capture_canonical_extraction(event)
+            classify_kwargs: dict[str, Any] = {"event": event, "trends": trends}
+            if (
+                "defer_semantic_cache_write"
+                in signature(self.tier2_classifier.classify_event).parameters
+            ):
+                classify_kwargs["defer_semantic_cache_write"] = True
             _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
-                event=event,
-                trends=trends,
+                **classify_kwargs
             )
             record_processing_tier2_language_usage(
                 language=self._language_metric_label(item.language),
@@ -654,6 +660,18 @@ class ProcessingPipeline:
                     )
 
             if not degraded_hold:
+                persist_deferred_cache_write = getattr(
+                    self.tier2_classifier,
+                    "persist_deferred_semantic_cache_write",
+                    None,
+                )
+                deferred_cache_write = getattr(
+                    tier2_usage,
+                    "deferred_semantic_cache_write",
+                    None,
+                )
+                if callable(persist_deferred_cache_write) and deferred_cache_write is not None:
+                    await persist_deferred_cache_write(write=deferred_cache_write)
                 await self._capture_unresolved_trend_mapping(event=event)
                 trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
                     event=event,

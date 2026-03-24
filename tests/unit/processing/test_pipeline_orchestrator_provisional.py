@@ -10,7 +10,7 @@ import src.processing.pipeline_orchestrator as orchestrator_module
 from src.processing.event_clusterer import ClusterResult
 from src.processing.pipeline_types import _PreparedItem
 from src.processing.tier1_classifier import Tier1ItemResult
-from src.processing.tier2_classifier import Tier2Usage
+from src.processing.tier2_classifier import Tier2DeferredSemanticCacheWrite, Tier2Usage
 from src.storage.models import Event
 from tests.unit.processing.test_pipeline_orchestrator_additional import _item, _pipeline, _trend
 
@@ -353,3 +353,168 @@ async def test_process_after_tier1_reports_zero_impacts_when_degraded_payload_is
     )
 
     assert execution.result.trend_impacts_seen == 0
+
+
+@pytest.mark.asyncio
+async def test_process_after_tier1_persists_deferred_cache_write_only_after_canonical_outcome(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = _item()
+    prepared = _PreparedItem(item=item, item_id=item.id, raw_content=item.raw_content)
+    event = Event(id=uuid4(), canonical_summary="summary")
+    tracker = SimpleNamespace(
+        record_invocation=MagicMock(),
+        evaluate=MagicMock(
+            return_value=SimpleNamespace(
+                stage="tier2",
+                is_degraded=False,
+                availability_degraded=False,
+                quality_degraded=False,
+                degraded_since_epoch=None,
+                window=SimpleNamespace(total_calls=2, secondary_calls=0, failover_ratio=0.0),
+            )
+        ),
+    )
+    deferred_write = Tier2DeferredSemanticCacheWrite(
+        provider="openai",
+        model="gpt-4.1-mini",
+        reasoning_effort="medium",
+        payload={"event_id": str(event.id)},
+        value='{"summary":"summary"}',
+    )
+    captured: dict[str, object] = {}
+
+    class _Tier2:
+        def __init__(self) -> None:
+            self.persist_deferred_semantic_cache_write = AsyncMock()
+
+        async def classify_event(
+            self,
+            *,
+            event: Event,
+            trends: list[object],
+            defer_semantic_cache_write: bool,
+        ) -> tuple[object, Tier2Usage]:
+            _ = trends
+            captured["defer_semantic_cache_write"] = defer_semantic_cache_write
+            event.extracted_claims = {"trend_impacts": [{"trend_id": "eu-russia"}]}
+            return (
+                SimpleNamespace(event_id=event.id),
+                Tier2Usage(
+                    api_calls=1,
+                    active_model="gpt",
+                    deferred_semantic_cache_write=deferred_write,
+                ),
+            )
+
+    tier2 = _Tier2()
+    pipeline = _pipeline(
+        mock_db_session,
+        degraded_llm_tracker=tracker,
+        tier2_classifier=tier2,
+    )
+    pipeline.event_clusterer.cluster_item = AsyncMock(
+        return_value=ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+    )
+    pipeline._load_event = AsyncMock(return_value=event)
+    pipeline._capture_unresolved_trend_mapping = AsyncMock()
+    pipeline._apply_trend_impacts = AsyncMock(return_value=(1, 1))
+    monkeypatch.setattr(orchestrator_module, "set_llm_degraded_mode", lambda **_: None)
+    monkeypatch.setattr(
+        orchestrator_module, "record_processing_tier2_language_usage", lambda **_: None
+    )
+
+    execution = await pipeline._process_after_tier1(
+        prepared=prepared,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True),
+        trends=[_trend()],
+    )
+
+    assert execution.result.degraded_llm_hold is False
+    assert captured["defer_semantic_cache_write"] is True
+    tier2.persist_deferred_semantic_cache_write.assert_awaited_once_with(write=deferred_write)
+
+
+@pytest.mark.asyncio
+async def test_process_after_tier1_skips_deferred_cache_write_when_degraded_hold_keeps_output_provisional(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = _item()
+    prepared = _PreparedItem(item=item, item_id=item.id, raw_content=item.raw_content)
+    event = Event(id=uuid4(), canonical_summary="summary")
+    tracker = SimpleNamespace(
+        record_invocation=MagicMock(),
+        evaluate=MagicMock(
+            return_value=SimpleNamespace(
+                stage="tier2",
+                is_degraded=True,
+                availability_degraded=True,
+                quality_degraded=False,
+                degraded_since_epoch=1,
+                window=SimpleNamespace(total_calls=2, secondary_calls=1, failover_ratio=0.5),
+            )
+        ),
+    )
+    deferred_write = Tier2DeferredSemanticCacheWrite(
+        provider="openai",
+        model="gpt-4.1-nano",
+        reasoning_effort="low",
+        payload={"event_id": str(event.id)},
+        value='{"summary":"held"}',
+    )
+    captured: dict[str, object] = {}
+
+    class _Tier2:
+        def __init__(self) -> None:
+            self.persist_deferred_semantic_cache_write = AsyncMock()
+
+        async def classify_event(
+            self,
+            *,
+            event: Event,
+            trends: list[object],
+            defer_semantic_cache_write: bool,
+        ) -> tuple[object, Tier2Usage]:
+            _ = trends
+            captured["defer_semantic_cache_write"] = defer_semantic_cache_write
+            event.event_summary = "Held degraded summary"
+            event.extracted_what = "Held degraded extraction"
+            event.extracted_claims = {"trend_impacts": [{"trend_id": "eu-russia"}]}
+            return (
+                SimpleNamespace(event_id=event.id),
+                Tier2Usage(
+                    api_calls=1,
+                    active_model="gpt",
+                    deferred_semantic_cache_write=deferred_write,
+                ),
+            )
+
+    tier2 = _Tier2()
+    pipeline = _pipeline(
+        mock_db_session,
+        degraded_llm_tracker=tracker,
+        tier2_classifier=tier2,
+    )
+    pipeline.event_clusterer.cluster_item = AsyncMock(
+        return_value=ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+    )
+    pipeline._load_event = AsyncMock(return_value=event)
+    pipeline._maybe_enqueue_replay = AsyncMock(return_value=True)
+    pipeline._capture_unresolved_trend_mapping = AsyncMock()
+    pipeline._apply_trend_impacts = AsyncMock(return_value=(9, 9))
+    monkeypatch.setattr(orchestrator_module, "set_llm_degraded_mode", lambda **_: None)
+    monkeypatch.setattr(
+        orchestrator_module, "record_processing_tier2_language_usage", lambda **_: None
+    )
+
+    execution = await pipeline._process_after_tier1(
+        prepared=prepared,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True),
+        trends=[_trend()],
+    )
+
+    assert execution.result.degraded_llm_hold is True
+    assert captured["defer_semantic_cache_write"] is True
+    tier2.persist_deferred_semantic_cache_write.assert_not_awaited()

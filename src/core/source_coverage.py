@@ -547,7 +547,7 @@ def write_source_coverage_artifact(
 
     payload = serialize_coverage_report(report)
     json_text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
-    timestamp = report.generated_at.astimezone(UTC).strftime("%Y%m%dT%H%M%SZ")
+    timestamp = report.generated_at.astimezone(UTC).strftime("%Y%m%dT%H%M%S%fZ")
     output_path = output_dir / f"source-coverage-{timestamp}.json"
     latest_path = output_dir / "source-coverage-latest.json"
 

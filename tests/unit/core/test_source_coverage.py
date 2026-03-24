@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
@@ -180,6 +181,21 @@ def test_source_coverage_payload_roundtrip_and_artifact_write(tmp_path: Path) ->
     assert restored.dimensions[0].rows[0].processed_ratio == 0.5
     assert artifact_path.name.startswith("source-coverage-")
     assert (tmp_path / "source-coverage-latest.json").exists()
+
+    report_same_second = replace(
+        restored,
+        generated_at=datetime(2026, 3, 24, 12, 0, 0, 123456, tzinfo=UTC),
+    )
+    report_same_second_later = replace(
+        restored,
+        generated_at=datetime(2026, 3, 24, 12, 0, 0, 654321, tzinfo=UTC),
+    )
+    first_path = write_source_coverage_artifact(report_same_second, artifact_dir=tmp_path)
+    second_path = write_source_coverage_artifact(report_same_second_later, artifact_dir=tmp_path)
+
+    assert first_path != second_path
+    assert first_path.exists()
+    assert second_path.exists()
 
 
 def test_source_coverage_normalization_helpers_cover_fallbacks() -> None:

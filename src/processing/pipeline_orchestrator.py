@@ -660,18 +660,7 @@ class ProcessingPipeline:
                     )
 
             if not degraded_hold:
-                persist_deferred_cache_write = getattr(
-                    self.tier2_classifier,
-                    "persist_deferred_semantic_cache_write",
-                    None,
-                )
-                deferred_cache_write = getattr(
-                    tier2_usage,
-                    "deferred_semantic_cache_write",
-                    None,
-                )
-                if callable(persist_deferred_cache_write) and deferred_cache_write is not None:
-                    await persist_deferred_cache_write(write=deferred_cache_write)
+                await self._persist_deferred_tier2_cache_write(tier2_usage=tier2_usage)
                 await self._capture_unresolved_trend_mapping(event=event)
                 trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
                     event=event,
@@ -739,6 +728,20 @@ class ProcessingPipeline:
                 ),
                 usage=usage,
             )
+
+    async def _persist_deferred_tier2_cache_write(self, *, tier2_usage: Any) -> None:
+        persist_deferred_cache_write = getattr(
+            self.tier2_classifier,
+            "persist_deferred_semantic_cache_write",
+            None,
+        )
+        deferred_cache_write = getattr(
+            tier2_usage,
+            "deferred_semantic_cache_write",
+            None,
+        )
+        if callable(persist_deferred_cache_write) and deferred_cache_write is not None:
+            await persist_deferred_cache_write(write=deferred_cache_write)
 
     async def _hold_degraded_extraction(
         self,

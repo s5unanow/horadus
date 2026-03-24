@@ -281,6 +281,7 @@ def _build_alerts(
 ) -> tuple[CoverageAlert, ...]:
     previous_seen = _index_previous_seen(previous_payload)
     alerts: list[CoverageAlert] = []
+    seen_segments = {("total", "all")}
 
     def maybe_add_alert(*, dimension: str, key: str, label: str, current_seen: int) -> None:
         previous = previous_seen.get((dimension, key))
@@ -313,12 +314,17 @@ def _build_alerts(
     maybe_add_alert(dimension="total", key="all", label="all", current_seen=total.seen)
     for summary in dimensions:
         for row in summary.rows:
+            seen_segments.add((summary.dimension, row.key))
             maybe_add_alert(
                 dimension=summary.dimension,
                 key=row.key,
                 label=row.label,
                 current_seen=row.counts.seen,
             )
+    for dimension, key in previous_seen:
+        if (dimension, key) in seen_segments or dimension == "total":
+            continue
+        maybe_add_alert(dimension=dimension, key=key, label=key, current_seen=0)
 
     alerts.sort(
         key=lambda row: (

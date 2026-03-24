@@ -122,6 +122,10 @@ async def test_build_source_coverage_report_emits_drop_alerts_against_previous_s
                 "dimension": "source_family",
                 "rows": [{"key": "rss", "counts": {"seen": 8}}],
             },
+            {
+                "dimension": "topic",
+                "rows": [{"key": "missing-topic", "counts": {"seen": 7}}],
+            },
         ],
     }
 
@@ -132,10 +136,13 @@ async def test_build_source_coverage_report_emits_drop_alerts_against_previous_s
     )
 
     alert_dimensions = {alert.dimension for alert in report.alerts}
-    assert {"total", "language", "source_family"} <= alert_dimensions
+    assert {"total", "language", "source_family", "topic"} <= alert_dimensions
     assert report.alerts[0].severity == "critical"
     assert report.alerts[0].current_seen == 1
     assert report.alerts[0].previous_seen == 10
+    missing_topic_alert = next(alert for alert in report.alerts if alert.key == "missing-topic")
+    assert missing_topic_alert.current_seen == 0
+    assert missing_topic_alert.previous_seen == 7
 
 
 def test_source_coverage_payload_roundtrip_and_artifact_write(tmp_path: Path) -> None:

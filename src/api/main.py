@@ -33,6 +33,7 @@ from src.api.routes import (
     feedback,
     health,
     metrics,
+    report_coverage,
     reports,
     sources,
     trend_restatements,
@@ -308,6 +309,11 @@ def register_routes(app: FastAPI) -> None:
         tags=["Events"],
     )
 
+    app.include_router(
+        report_coverage.router,
+        prefix=f"{api_v1_prefix}/reports",
+        tags=["Reports"],
+    )
     app.include_router(
         reports.router,
         prefix=f"{api_v1_prefix}/reports",

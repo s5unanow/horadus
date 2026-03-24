@@ -110,6 +110,7 @@ def test_build_beat_schedule_omits_disabled_collectors(
         "reap-stale-processing-items",
         "replay-degraded-events",
         "check-source-freshness",
+        "monitor-source-coverage",
         "generate-weekly-reports",
         "generate-monthly-reports",
     ]

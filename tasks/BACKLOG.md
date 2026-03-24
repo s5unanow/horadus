@@ -275,29 +275,6 @@ clusters and near-miss items that do not map cleanly to current tracked trends.
 
 ---
 
-### TASK-230: Add Coverage Observability Beyond Source Freshness
-**Priority**: P1 (High)
-**Estimate**: 4-6 hours
-
-Fresh collectors do not guarantee adequate coverage. Add coverage observability
-so operators can distinguish "no signal" from "no coverage" across geography,
-language, source family, and topical dimensions.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/core/observability.py`, `src/workers/tasks.py`, `src/api/routes/reports.py`, `src/storage/models.py`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Compute bounded coverage summaries segmented by language, source family/tier, and configured topical dimensions
-- [ ] Make the coverage view distinguish at least seen, processable, processed, deferred, and skipped-by-language volume so operators can tell "no signal" from "not processed"
-- [ ] Persist or export coverage artifacts suitable for operational review and release-gate inputs
-- [ ] Expose a read-only API/report path for recent coverage health distinct from collector freshness
-- [ ] Add metrics/logs that make sudden coverage drops visible even when collectors remain healthy
-- [ ] Add regression coverage for low-coverage and balanced-coverage cases
-
----
-
 ### TASK-232: Strengthen Operator Adjudication Workflow for High-Risk Events
 **Priority**: P2 (Medium)
 **Estimate**: 4-6 hours

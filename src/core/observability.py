@@ -86,6 +86,21 @@ PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL = Counter(
     "Tier-2 classification usage segmented by language code.",
     ["language"],
 )
+SOURCE_COVERAGE_VOLUME = Gauge(
+    "source_coverage_volume",
+    "Latest source-coverage counts by dimension, key, and coverage status.",
+    ["dimension", "key", "status"],
+)
+SOURCE_COVERAGE_PROCESSED_RATIO = Gauge(
+    "source_coverage_processed_ratio",
+    "Latest processed/processable ratio for source-coverage slices.",
+    ["dimension", "key"],
+)
+SOURCE_COVERAGE_DROP_ALERTS_TOTAL = Counter(
+    "source_coverage_drop_alerts_total",
+    "Coverage drop alerts emitted by severity and dimension.",
+    ["severity", "dimension"],
+)
 LLM_SEMANTIC_CACHE_LOOKUPS_TOTAL = Counter(
     "llm_semantic_cache_lookups_total",
     "LLM semantic cache lookups by stage and result.",
@@ -144,6 +159,8 @@ RETENTION_CLEANUP_RUNS_TOTAL = Counter(
 
 _EMBEDDING_TOTAL_BY_ENTITY: dict[str, int] = defaultdict(int)
 _EMBEDDING_TRUNCATED_BY_ENTITY: dict[str, int] = defaultdict(int)
+_ACTIVE_COVERAGE_VOLUME_LABELS: set[tuple[str, str, str]] = set()
+_ACTIVE_COVERAGE_RATIO_LABELS: set[tuple[str, str]] = set()
 
 
 def record_collector_metrics(
@@ -245,6 +262,72 @@ def record_processing_tier1_language_outcome(*, language: str, outcome: str) -> 
 
 def record_processing_tier2_language_usage(*, language: str) -> None:
     PROCESSING_TIER2_LANGUAGE_USAGE_TOTAL.labels(language=language).inc()
+
+
+def record_coverage_health(*, report: object) -> None:
+    current_volume_labels: set[tuple[str, str, str]] = set()
+    current_ratio_labels: set[tuple[str, str]] = set()
+
+    def _set_counts(*, dimension: str, key: str, counts: object, processed_ratio: float) -> None:
+        label_values = {
+            "seen": int(getattr(counts, "seen", 0) or 0),
+            "processable": int(getattr(counts, "processable", 0) or 0),
+            "processed": int(getattr(counts, "processed", 0) or 0),
+            "deferred": int(getattr(counts, "deferred", 0) or 0),
+            "skipped_by_language": int(getattr(counts, "skipped_by_language", 0) or 0),
+            "pending_processable": int(getattr(counts, "pending_processable", 0) or 0),
+            "processing": int(getattr(counts, "processing", 0) or 0),
+            "error": int(getattr(counts, "error", 0) or 0),
+        }
+        for status, value in label_values.items():
+            SOURCE_COVERAGE_VOLUME.labels(
+                dimension=dimension,
+                key=key,
+                status=status,
+            ).set(max(0, value))
+            current_volume_labels.add((dimension, key, status))
+        SOURCE_COVERAGE_PROCESSED_RATIO.labels(
+            dimension=dimension,
+            key=key,
+        ).set(max(0.0, float(processed_ratio)))
+        current_ratio_labels.add((dimension, key))
+
+    total = getattr(report, "total", None)
+    if total is not None:
+        processable = int(getattr(total, "processable", 0) or 0)
+        processed = int(getattr(total, "processed", 0) or 0)
+        total_ratio = (processed / processable) if processable else 0.0
+        _set_counts(dimension="total", key="all", counts=total, processed_ratio=total_ratio)
+
+    for summary in getattr(report, "dimensions", ()):
+        dimension = str(getattr(summary, "dimension", "") or "unknown")
+        for row in getattr(summary, "rows", ()):
+            _set_counts(
+                dimension=dimension,
+                key=str(getattr(row, "key", "") or "unknown"),
+                counts=getattr(row, "counts", None),
+                processed_ratio=float(getattr(row, "processed_ratio", 0.0) or 0.0),
+            )
+
+    stale_volume_labels = _ACTIVE_COVERAGE_VOLUME_LABELS - current_volume_labels
+    for dimension, key, status in stale_volume_labels:
+        SOURCE_COVERAGE_VOLUME.labels(dimension=dimension, key=key, status=status).set(0)
+
+    stale_ratio_labels = _ACTIVE_COVERAGE_RATIO_LABELS - current_ratio_labels
+    for dimension, key in stale_ratio_labels:
+        SOURCE_COVERAGE_PROCESSED_RATIO.labels(dimension=dimension, key=key).set(0)
+
+    _ACTIVE_COVERAGE_VOLUME_LABELS.clear()
+    _ACTIVE_COVERAGE_VOLUME_LABELS.update(current_volume_labels)
+    _ACTIVE_COVERAGE_RATIO_LABELS.clear()
+    _ACTIVE_COVERAGE_RATIO_LABELS.update(current_ratio_labels)
+
+
+def record_coverage_drop_alert(*, severity: str, dimension: str) -> None:
+    SOURCE_COVERAGE_DROP_ALERTS_TOTAL.labels(
+        severity=severity.strip() or "warning",
+        dimension=dimension.strip() or "unknown",
+    ).inc()
 
 
 def record_taxonomy_gap(*, reason: str, trend_id: str, signal_type: str) -> None:

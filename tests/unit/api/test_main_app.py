@@ -61,6 +61,22 @@ def test_create_app_registers_core_middleware_routes_and_tracing(
     assert "/api/v1/events" in route_paths
 
 
+def test_create_app_registers_coverage_route_before_report_id_route(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(main_module, "configure_logging", MagicMock())
+    monkeypatch.setattr(main_module, "configure_tracing", MagicMock())
+    monkeypatch.setattr(main_module.settings, "RUNTIME_PROFILE", "server")
+    monkeypatch.setattr(main_module.settings, "AGENT_MODE", False)
+
+    app = main_module.create_app()
+
+    route_paths = [route.path for route in app.routes]
+    assert route_paths.index("/api/v1/reports/coverage") < route_paths.index(
+        "/api/v1/reports/{report_id}"
+    )
+
+
 def test_create_app_hides_docs_routes_outside_development(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

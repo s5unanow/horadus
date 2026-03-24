@@ -9,7 +9,7 @@
 
 ## Active Tasks
 
-- `TASK-230` Add Coverage Observability Beyond Source Freshness
+
 
 ## Selection Notes
 
@@ -46,3 +46,4 @@
 - `TASK-272` Keep Active Reasoning Metadata Consistent Across Mixed-Route Runs ✅
 - `TASK-202` Make degraded replay queue retryable instead of fail-once terminal ✅
 - `TASK-338` Separate Provisional and Canonical Extraction State in Degraded Mode ✅
+- `TASK-230` Add Coverage Observability Beyond Source Freshness ✅

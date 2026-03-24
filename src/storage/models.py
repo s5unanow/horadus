@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
+from src.storage.coverage_models import CoverageSnapshot
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EVENT_ACTIVITY_STATE_SQL_VALUES,
@@ -44,7 +45,14 @@ from src.storage.scoring_contract import (
 )
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
-_ = (EventLineage, HumanFeedback, PrivilegedWriteAudit, TrendRestatement, TrendStateVersion)
+_ = (
+    CoverageSnapshot,
+    EventLineage,
+    HumanFeedback,
+    PrivilegedWriteAudit,
+    TrendRestatement,
+    TrendStateVersion,
+)
 
 
 class SourceType(enum.StrEnum):
@@ -951,9 +959,6 @@ class TrendSnapshot(Base):
     # SELECT create_hypertable('trend_snapshots', 'timestamp');
 
 
-# =============================================================================
-# Report Models
-# =============================================================================
 class Report(Base):
     """
     Generated intelligence report.
@@ -1015,11 +1020,6 @@ class Report(Base):
         Index("idx_reports_type_period", "report_type", "period_end"),
         Index("idx_reports_trend", "trend_id"),
     )
-
-
-# =============================================================================
-# Cost Protection Models
-# =============================================================================
 
 
 class ApiUsage(Base):

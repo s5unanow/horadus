@@ -7,7 +7,10 @@ from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
+    CallerAwareValidationPack,
+    caller_aware_validation_packs,
     canonical_task_workflow_commands_for_task,
+    default_validation_commands,
     high_risk_pre_push_review_batching_statements,
     high_risk_pre_push_review_commands,
     high_risk_pre_push_review_fallback_statements,
@@ -96,10 +99,6 @@ _HIGH_RISK_TEXT_MARKERS = (
     ("multi-surface mutation", "task description references multi-surface mutation paths"),
     ("cross-surface", "task description references cross-surface behavior"),
 )
-_SUGGESTED_VALIDATION_COMMANDS = [
-    "make agent-check",
-    "uv run --no-sync horadus tasks local-gate --full",
-]
 
 
 class PrePushReviewGuidance(TypedDict):
@@ -108,6 +107,13 @@ class PrePushReviewGuidance(TypedDict):
     commands: list[str]
     fallback_notes: list[str]
     batching_notes: list[str]
+
+
+class CallerAwareValidationPackMatch(TypedDict):
+    pack_id: str
+    rationale: str
+    matched_paths: list[str]
+    commands: list[str]
 
 
 def _task_record_payload(record: Any, *, include_raw: bool = True) -> dict[str, object]:
@@ -397,6 +403,17 @@ def _matches_any_exact_path(paths: list[str], exact_paths: tuple[str, ...]) -> b
     return any(path in exact_paths for path in paths)
 
 
+def _matching_validation_pack_paths(paths: list[str], pack: CallerAwareValidationPack) -> list[str]:
+    return sorted(
+        {
+            path
+            for path in paths
+            if path in pack.exact_paths
+            or any(path.startswith(prefix) for prefix in pack.prefix_paths)
+        }
+    )
+
+
 def _runtime_surfaces_for_paths(paths: list[str]) -> list[str]:
     return sorted(
         {
@@ -462,6 +479,51 @@ def _pre_push_review_guidance(record: Any) -> PrePushReviewGuidance:
     }
 
 
+def _caller_aware_validation_pack_matches(record: Any) -> list[CallerAwareValidationPackMatch]:
+    if getattr(record, "archived", False):
+        return []
+
+    normalized_paths = _normalized_task_paths(record)
+    recommendations: list[CallerAwareValidationPackMatch] = []
+    for pack in caller_aware_validation_packs():
+        matched_paths = _matching_validation_pack_paths(normalized_paths, pack)
+        if not matched_paths:
+            continue
+        recommendations.append(
+            {
+                "pack_id": pack.pack_id,
+                "rationale": pack.rationale,
+                "matched_paths": matched_paths,
+                "commands": list(pack.commands),
+            }
+        )
+    return recommendations
+
+
+def _suggested_validation_commands(
+    validation_packs: list[CallerAwareValidationPackMatch],
+) -> list[str]:
+    commands = list(default_validation_commands())
+    for pack in validation_packs:
+        for command in pack["commands"]:
+            if command not in commands:
+                commands.append(command)
+    return commands
+
+
+def _append_caller_aware_validation_pack_lines(
+    lines: list[str], validation_packs: list[CallerAwareValidationPackMatch]
+) -> None:
+    if not validation_packs:
+        return
+    lines.extend(["", "## Caller-Aware Validation Packs", "Applicability: recommended"])
+    for pack in validation_packs:
+        lines.append(f"- {pack['pack_id']}: {pack['rationale']}")
+        lines.append(f"  Matched paths: {', '.join(pack['matched_paths'])}")
+        lines.append("  Commands:")
+        lines.extend(f"  {command}" for command in pack["commands"])
+
+
 def _append_pre_push_review_guidance_lines(
     lines: list[str], guidance: PrePushReviewGuidance
 ) -> None:
@@ -497,6 +559,8 @@ def handle_context_pack(args: Any) -> CommandResult:
         )
 
     planning = _planning_context(task_id, record)
+    validation_packs = _caller_aware_validation_pack_matches(record)
+    suggested_validation_commands = _suggested_validation_commands(validation_packs)
     pre_push_review = _pre_push_review_guidance(record)
     lines = [
         f"# Context Pack: {task_id}",
@@ -550,7 +614,8 @@ def handle_context_pack(args: Any) -> CommandResult:
         archived=record.archived,
     )
     lines.extend(workflow_commands)
-    lines.extend(["", "## Suggested Validation Commands", *_SUGGESTED_VALIDATION_COMMANDS])
+    lines.extend(["", "## Suggested Validation Commands", *suggested_validation_commands])
+    _append_caller_aware_validation_pack_lines(lines, validation_packs)
     _append_pre_push_review_guidance_lines(lines, pre_push_review)
     return CommandResult(
         lines=lines,
@@ -562,7 +627,8 @@ def handle_context_pack(args: Any) -> CommandResult:
             "canonical_spec_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
             "planning_gates": planning,
             "suggested_workflow_commands": workflow_commands,
-            "suggested_validation_commands": list(_SUGGESTED_VALIDATION_COMMANDS),
+            "suggested_validation_commands": suggested_validation_commands,
+            "caller_aware_validation_packs": validation_packs,
             "pre_push_review_guidance": pre_push_review,
         },
     )

@@ -20,6 +20,15 @@ class WorkflowCommand:
         return self.template.replace(TASK_ID_PLACEHOLDER, task_id)
 
 
+@dataclass(frozen=True, slots=True)
+class CallerAwareValidationPack:
+    pack_id: str
+    rationale: str
+    commands: tuple[str, ...]
+    exact_paths: tuple[str, ...] = ()
+    prefix_paths: tuple[str, ...] = ()
+
+
 CANONICAL_TASK_WORKFLOW_COMMANDS: tuple[WorkflowCommand, ...] = (
     WorkflowCommand(
         label="Start preflight",
@@ -203,6 +212,59 @@ HIGH_RISK_PRE_PUSH_REVIEW_BATCHING_STATEMENTS: tuple[str, ...] = (
     "Do not turn a high-risk task into a single-fix re-review loop when the same bucket is still open.",
 )
 
+DEFAULT_VALIDATION_COMMANDS: tuple[str, ...] = (
+    "make agent-check",
+    "uv run --no-sync horadus tasks local-gate --full",
+)
+
+CALLER_AWARE_VALIDATION_PACKS: tuple[CallerAwareValidationPack, ...] = (
+    CallerAwareValidationPack(
+        pack_id="shared-workflow-helpers",
+        rationale="Shared workflow helpers fan out to Horadus CLI and workflow callers.",
+        commands=(
+            "make typecheck",
+            "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit",
+        ),
+        exact_paths=(
+            "tools/horadus/python/horadus_cli/",
+            "tools/horadus/python/horadus_workflow/",
+            "tools/horadus/python/horadus_cli/app.py",
+            "tools/horadus/python/horadus_cli/task_repo.py",
+            "tools/horadus/python/horadus_workflow/code_shape.py",
+            "tools/horadus/python/horadus_workflow/docs_freshness.py",
+            "tools/horadus/python/horadus_workflow/import_boundaries.py",
+            "tools/horadus/python/horadus_workflow/repo_workflow.py",
+            "tools/horadus/python/horadus_workflow/result.py",
+            "tools/horadus/python/horadus_workflow/review_defaults.py",
+            "tools/horadus/python/horadus_workflow/task_repo.py",
+            "tools/horadus/python/horadus_workflow/task_workflow_shared.py",
+            "tools/horadus/python/horadus_workflow/triage.py",
+        ),
+        prefix_paths=(
+            "tools/horadus/python/horadus_cli/_task_",
+            "tools/horadus/python/horadus_cli/task_",
+            "tools/horadus/python/horadus_workflow/_docs_freshness_",
+            "tools/horadus/python/horadus_workflow/_task_",
+            "tools/horadus/python/horadus_workflow/pr_review_gate",
+            "tools/horadus/python/horadus_workflow/task_workflow_",
+        ),
+    ),
+    CallerAwareValidationPack(
+        pack_id="shared-domain-math",
+        rationale="Shared domain math fans out across probability, replay, and forecast callers.",
+        commands=(
+            "make typecheck",
+            "uv run --no-sync pytest tests/unit/ -v -m unit",
+        ),
+        exact_paths=(
+            "src/core/calibration.py",
+            "src/core/trend_engine.py",
+            "src/core/trend_forecast_contract.py",
+            "src/core/trend_restatement.py",
+        ),
+    ),
+)
+
 WORKFLOW_POLICY_GUARDRAIL_STATEMENTS: tuple[str, ...] = (
     (
         "Apply these guardrails only when changing shared workflow helpers, "
@@ -257,6 +319,14 @@ def high_risk_pre_push_review_fallback_statements() -> tuple[str, ...]:
 
 def high_risk_pre_push_review_batching_statements() -> tuple[str, ...]:
     return HIGH_RISK_PRE_PUSH_REVIEW_BATCHING_STATEMENTS
+
+
+def default_validation_commands() -> tuple[str, ...]:
+    return DEFAULT_VALIDATION_COMMANDS
+
+
+def caller_aware_validation_packs() -> tuple[CallerAwareValidationPack, ...]:
+    return CALLER_AWARE_VALIDATION_PACKS
 
 
 def workflow_policy_guardrail_statements() -> tuple[str, ...]:

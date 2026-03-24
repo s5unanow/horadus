@@ -122,6 +122,7 @@ def test_v2_emit_result_includes_lines_in_json(capsys: pytest.CaptureFixture[str
 
 def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> None:
     first_command = task_workflow_policy_module.CANONICAL_TASK_WORKFLOW_COMMANDS[0]
+    validation_packs = task_workflow_policy_module.caller_aware_validation_packs()
 
     assert first_command.render("TASK-999") == "uv run --no-sync horadus tasks preflight"
     assert "AGENTS.md" not in task_workflow_policy_module.WORKFLOW_REFERENCE_PATHS
@@ -140,6 +141,12 @@ def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> 
     )
     assert task_workflow_policy_module.high_risk_pre_push_review_fallback_statements()
     assert task_workflow_policy_module.high_risk_pre_push_review_batching_statements()
+    assert task_workflow_policy_module.default_validation_commands() == (
+        "make agent-check",
+        "uv run --no-sync horadus tasks local-gate --full",
+    )
+    assert any(pack.pack_id == "shared-workflow-helpers" for pack in validation_packs)
+    assert any(pack.pack_id == "shared-domain-math" for pack in validation_packs)
     assert task_workflow_policy_module.workflow_policy_guardrail_statements()
 
 

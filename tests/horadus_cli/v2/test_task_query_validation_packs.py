@@ -73,6 +73,23 @@ def test_caller_aware_validation_pack_requires_full_repo_typecheck_for_shared_ma
     ]
 
 
+def test_suggested_validation_commands_dedupes_pack_commands() -> None:
+    assert workflow_query_module._suggested_validation_commands(
+        [
+            {
+                "pack_id": "fixture",
+                "rationale": "Exercise duplicate command handling.",
+                "matched_paths": ["fixture.py"],
+                "commands": ["make agent-check", "make typecheck"],
+            }
+        ]
+    ) == [
+        "make agent-check",
+        "uv run --no-sync horadus tasks local-gate --full",
+        "make typecheck",
+    ]
+
+
 def test_handle_show_remains_unchanged_by_caller_aware_validation_packs(
     synthetic_task_repo: Path,
 ) -> None:

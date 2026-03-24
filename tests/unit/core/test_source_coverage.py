@@ -182,6 +182,11 @@ def test_source_coverage_normalization_helpers_cover_fallbacks() -> None:
     assert _slug_text("   !!!   ") is None
     assert _normalize_language(None) == "unknown"
     assert _normalize_language("english") == "en"
+    assert _normalize_language("english-us") == "en"
+    assert _normalize_language("Spanish") == "es"
+    assert _normalize_language("German") == "de"
+    assert _normalize_language("pt-br") == "pt"
+    assert _normalize_language("-") == "unknown"
     assert _normalize_status(" ") == "pending"
     assert _normalize_topic_values(None) == ("unconfigured",)
     assert _normalize_topic_values({"categories": ["  "], "themes": "not-a-list"}) == (

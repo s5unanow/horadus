@@ -24,6 +24,19 @@ CRITICAL_DROP_RATIO = 0.2
 MAX_ALERTS = 20
 
 _WORD_RE = re.compile(r"[a-z0-9]+")
+_LANGUAGE_CODE_BY_NAME = {
+    "arabic": "ar",
+    "chinese": "zh",
+    "english": "en",
+    "french": "fr",
+    "german": "de",
+    "hebrew": "he",
+    "portuguese": "pt",
+    "russian": "ru",
+    "spanish": "es",
+    "turkish": "tr",
+    "ukrainian": "uk",
+}
 
 
 @dataclass(slots=True)
@@ -142,9 +155,14 @@ def _normalize_language(value: str | None) -> str:
     normalized = _normalize_text(value)
     if not normalized:
         return "unknown"
-    if normalized == "english":
-        return "en"
-    return normalized.split("-")[0][:2] or "unknown"
+    if normalized in _LANGUAGE_CODE_BY_NAME:
+        return _LANGUAGE_CODE_BY_NAME[normalized]
+    primary = normalized.split("-", 1)[0]
+    if primary in _LANGUAGE_CODE_BY_NAME:
+        return _LANGUAGE_CODE_BY_NAME[primary]
+    if len(primary) >= 2:
+        return primary[:2]
+    return "unknown"
 
 
 def _normalize_status(value: ProcessingStatus | str | None) -> str:

@@ -926,7 +926,13 @@ class LLMReplayQueueItem(Base):
 
 
 class TrendSnapshot(Base):
-    """Point-in-time trend probability snapshot."""
+    """
+    Point-in-time snapshot of trend probability.
+
+    Used for time-series queries and historical analysis.
+    This table should be a TimescaleDB hypertable for efficient
+    time-range queries.
+    """
 
     __tablename__ = "trend_snapshots"
 
@@ -946,12 +952,22 @@ class TrendSnapshot(Base):
     log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
     event_count_24h: Mapped[int | None] = mapped_column(Integer)
 
-    # After table creation, TimescaleDB should promote this table to a hypertable.
+    # Relationships
     trend: Mapped[Trend] = relationship(back_populates="snapshots")
+
+    # Note: After table creation, run:
+    # SELECT create_hypertable('trend_snapshots', 'timestamp');
 
 
 class Report(Base):
-    """Generated intelligence report."""
+    """
+    Generated intelligence report.
+
+    Reports are generated periodically (weekly/monthly) and contain:
+    - Computed statistics about trends
+    - LLM-generated narrative
+    - Top contributing events
+    """
 
     __tablename__ = "reports"
 
@@ -973,11 +989,13 @@ class Report(Base):
         nullable=False,
     )
 
+    # For trend-specific reports
     trend_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("trends.id", ondelete="SET NULL"),
     )
 
+    # Report content
     statistics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     narrative: Mapped[str | None] = mapped_column(Text)
     grounding_status: Mapped[str] = mapped_column(String(20), default="not_checked", nullable=False)
@@ -997,6 +1015,7 @@ class Report(Base):
         nullable=False,
     )
 
+    # Indexes
     __table_args__ = (
         Index("idx_reports_type_period", "report_type", "period_end"),
         Index("idx_reports_trend", "trend_id"),

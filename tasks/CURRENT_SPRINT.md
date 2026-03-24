@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-344` Surface review-gate wait state and deadlines in `horadus tasks finish`
 - `TASK-345` Preflight stale review state before entering the finish review window
 - `TASK-256` Enforce the task completion contract for tests, docs, and gate re-runs
 - `TASK-354` Centralize repo-owned secret-scan policy and exclude rules
@@ -56,3 +55,4 @@
 ## Completed This Sprint
 
 - `TASK-343` Add caller-aware validation packs for shared helper changes ✅
+- `TASK-344` Surface review-gate wait state and deadlines in `horadus tasks finish` ✅

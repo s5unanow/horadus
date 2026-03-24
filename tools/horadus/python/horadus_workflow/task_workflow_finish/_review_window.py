@@ -165,12 +165,31 @@ def _prepare_current_head_review_window(
     return (review_refresh_lines, None)
 
 
-def _review_gate_lines(review_result: shared.ReviewGateResult) -> list[str]:
-    return [
-        review_result.summary,
-        *review_result.informational_lines,
-        *review_result.actionable_lines,
+def _review_gate_wait_line(review_result: shared.ReviewGateResult) -> str:
+    waiting_parts = [
+        f"reviewer={review_result.reviewer_login}",
+        f"head={review_result.current_head_oid}",
     ]
+    if review_result.remaining_seconds is not None:
+        waiting_parts.append(f"remaining={review_result.remaining_seconds}s")
+    if review_result.deadline_at:
+        waiting_parts.append(f"deadline={review_result.deadline_at}")
+    elif review_result.wait_window_started_at:
+        waiting_parts.append(f"started={review_result.wait_window_started_at}")
+    else:
+        waiting_parts.append(f"timeout={review_result.timeout_seconds}s")
+    return f"Waiting for review gate ({', '.join(waiting_parts)})..."
+
+
+def _review_gate_lines(review_result: shared.ReviewGateResult) -> list[str]:
+    lines: list[str] = []
+    if review_result.status == "waiting" or review_result.timed_out:
+        lines.append(_review_gate_wait_line(review_result))
+    if review_result.status != "waiting":
+        lines.append(review_result.summary)
+    lines.extend(review_result.informational_lines)
+    lines.extend(review_result.actionable_lines)
+    return lines
 
 
 def _review_gate_debug_lines(
@@ -381,10 +400,6 @@ def review_gate_data(
     lines = list(refresh_lines)
     refreshed_review_state = bool(refresh_lines)
     while True:
-        lines.append(
-            "Waiting for review gate "
-            f"(reviewer={config.review_bot_login}, timeout={config.review_timeout_seconds}s)..."
-        )
         review_gate, gate_lines, gate_blocker = _run_review_gate_once(
             context=context,
             pr_url=pr_url,

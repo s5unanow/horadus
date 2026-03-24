@@ -62,25 +62,6 @@ the same contract by construction.
 
 ---
 
-### TASK-344: Surface review-gate wait state and deadlines in `horadus tasks finish`
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-The `horadus tasks finish` review gate currently looks idle for long stretches
-while it is actually waiting on a current-head review window. That makes it too
-hard to distinguish “working as designed” from “hung on stale state” and slows
-down recovery when a task is in the expensive PR/merge loop.
-
-**Files**: `tools/horadus/python/horadus_workflow/task_workflow_finish/`, `tools/horadus/python/horadus_cli/`, `docs/AGENT_RUNBOOK.md`, `tests/workflow/`
-
-**Acceptance Criteria**:
-- [ ] `horadus tasks finish` prints explicit status when it is waiting on the review gate rather than appearing silent
-- [ ] The wait output includes the current PR head, the reviewer identity, and the review-window deadline or remaining time
-- [ ] The finish output distinguishes review-gate waiting from CI waiting and from stale-state refresh work
-- [ ] Tests cover at least one review-window wait path and assert the new operator-facing status text
-
----
-
 ### TASK-345: Preflight stale review state before entering the finish review window
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours

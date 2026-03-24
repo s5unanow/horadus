@@ -310,12 +310,12 @@ def register_routes(app: FastAPI) -> None:
     )
 
     app.include_router(
-        reports.router,
+        report_coverage.router,
         prefix=f"{api_v1_prefix}/reports",
         tags=["Reports"],
     )
     app.include_router(
-        report_coverage.router,
+        reports.router,
         prefix=f"{api_v1_prefix}/reports",
         tags=["Reports"],
     )

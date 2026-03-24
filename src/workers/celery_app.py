@@ -65,6 +65,10 @@ def _build_beat_schedule() -> dict[str, dict[str, Any]]:
         "task": "workers.check_source_freshness",
         "schedule": timedelta(minutes=max(1, settings.SOURCE_FRESHNESS_CHECK_INTERVAL_MINUTES)),
     }
+    schedule["monitor-source-coverage"] = {
+        "task": "workers.monitor_source_coverage",
+        "schedule": timedelta(hours=6),
+    }
     if settings.CLUSTER_DRIFT_SENTINEL_ENABLED:
         schedule["monitor-cluster-drift"] = {
             "task": "workers.monitor_cluster_drift",
@@ -109,6 +113,7 @@ celery_app.conf.update(
         "workers.process_pending_items": {"queue": "processing"},
         "workers.replay_degraded_events": {"queue": "processing"},
         "workers.check_source_freshness": {"queue": "processing"},
+        "workers.monitor_source_coverage": {"queue": "processing"},
         "workers.monitor_cluster_drift": {"queue": "processing"},
         "workers.snapshot_trends": {"queue": "processing"},
         "workers.apply_trend_decay": {"queue": "processing"},

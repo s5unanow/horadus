@@ -121,6 +121,11 @@ Checkpoint semantics:
   checkpoint instead of advancing on partial failure.
 Periodic freshness checks (`workers.check_source_freshness`) alert on stale sources
 and trigger bounded collector catch-up dispatch before gap risk accumulates.
+Separate coverage-health snapshots (`workers.monitor_source_coverage`) summarize
+recent intake by language, source family/tier, and configured source topics,
+persist JSON snapshots to the database, and export review artifacts under
+`artifacts/source_coverage/` so operators can spot "no coverage" even while
+collectors remain fresh.
 Daily cluster quality checks (`workers.monitor_cluster_drift`) compute warn-only proxy
 signals (singleton rate, large-cluster tail, contradiction incidence, language
 distribution drift) and persist JSON artifacts under `artifacts/cluster_drift/`.

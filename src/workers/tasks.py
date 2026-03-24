@@ -61,6 +61,7 @@ from src.storage.models import (
     TrendSnapshot,
 )
 from src.workers import _task_collectors as collector_helpers
+from src.workers import _task_coverage as coverage_helpers
 from src.workers import _task_maintenance as maintenance_helpers
 from src.workers import _task_processing as processing_helpers
 from src.workers import _task_retention as retention_helpers
@@ -836,6 +837,15 @@ def check_source_freshness() -> dict[str, Any]:
     )
 
 
+monitor_source_coverage = coverage_helpers.build_monitor_source_coverage_task(
+    typed_shared_task=typed_shared_task,
+    run_async=_run_async,
+    run_task_with_heartbeat=_run_task_with_heartbeat,
+    async_session_maker=async_session_maker,
+    logger=logger,
+)
+
+
 @typed_shared_task(name="workers.monitor_cluster_drift")
 def monitor_cluster_drift() -> dict[str, Any]:
     """Compute warn-only clustering drift proxies and persist daily artifact."""
@@ -876,22 +886,4 @@ def ping() -> dict[str, Any]:
     )
 
 
-__all__ = [
-    "CollectorTransientRunError",
-    "ProcessingDispatchPlan",
-    "RetentionCutoffs",
-    "apply_trend_decay",
-    "check_event_lifecycles",
-    "check_source_freshness",
-    "collect_gdelt",
-    "collect_rss",
-    "generate_monthly_reports",
-    "generate_weekly_reports",
-    "monitor_cluster_drift",
-    "ping",
-    "process_pending_items",
-    "reap_stale_processing_items",
-    "replay_degraded_events",
-    "run_data_retention_cleanup",
-    "snapshot_trends",
-]
+__all__ = ["CollectorTransientRunError", "ProcessingDispatchPlan", "RetentionCutoffs", "apply_trend_decay", "check_event_lifecycles", "check_source_freshness", "collect_gdelt", "collect_rss", "generate_monthly_reports", "generate_weekly_reports", "monitor_cluster_drift", "monitor_source_coverage", "ping", "process_pending_items", "reap_stale_processing_items", "replay_degraded_events", "run_data_retention_cleanup", "snapshot_trends"]  # fmt: skip

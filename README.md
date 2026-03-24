@@ -141,6 +141,7 @@ Authentication header:
 | GET | `/api/v1/events` | List recent events |
 | GET | `/api/v1/events/{id}` | Get event details |
 | GET | `/api/v1/reports` | List generated reports |
+| GET | `/api/v1/reports/coverage` | Get recent source coverage health |
 | GET | `/api/v1/reports/{id}` | Get report details |
 | GET | `/api/v1/reports/calibration` | Calibration dashboard + trend movement visibility |
 | GET | `/api/v1/auth/keys` | List API keys (admin) |

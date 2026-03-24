@@ -610,6 +610,32 @@ Generated intelligence reports (weekly/monthly/retrospective).
 
 ---
 
+### coverage_snapshots
+
+Persisted recent source-coverage health snapshots for operator review.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| generated_at | TIMESTAMPTZ | No | | Timestamp when the coverage report was generated |
+| window_start | TIMESTAMPTZ | No | | Inclusive start of the intake coverage window |
+| window_end | TIMESTAMPTZ | No | | Exclusive end of the intake coverage window |
+| lookback_hours | INTEGER | No | | Window size used for the report |
+| artifact_path | VARCHAR(512) | Yes | | Filesystem path to the exported JSON artifact |
+| payload | JSONB | No | `{}` | Full coverage report payload (totals, segment rows, alerts) |
+| created_at | TIMESTAMPTZ | No | NOW() | Snapshot row creation time |
+
+**Indexes:**
+- Primary key: `id`
+- Index: `generated_at`
+- Index: `window_end`
+
+Notes:
+- The payload stores bounded segment summaries for language, source family, source tier, and configured source topics.
+- Snapshot artifacts are also exported to `artifacts/source_coverage/` for release-gate and operator review surfaces.
+
+---
+
 ### api_usage
 
 Daily usage counters for budget enforcement.

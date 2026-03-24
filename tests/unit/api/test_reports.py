@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
 from fastapi import HTTPException
 
+from src.api.routes.report_coverage import get_coverage_health
 from src.api.routes.reports import (
     _normalize_top_events,
     get_calibration_dashboard,
@@ -23,6 +25,13 @@ from src.core.calibration_dashboard import (
     CalibrationDriftAlert,
     TrendCoverageSummary,
     TrendMovement,
+)
+from src.core.source_coverage import (
+    CoverageCounts,
+    CoverageDimensionSummary,
+    CoverageHealthReport,
+    CoverageSegment,
+    serialize_coverage_report,
 )
 from src.storage.models import Report
 
@@ -343,3 +352,99 @@ async def test_get_calibration_dashboard_rejects_invalid_date_range(mock_db_sess
         )
 
     assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_get_coverage_health_returns_latest_snapshot(mock_db_session, monkeypatch) -> None:
+    report = CoverageHealthReport(
+        generated_at=datetime.now(tz=UTC),
+        window_start=datetime.now(tz=UTC) - timedelta(hours=24),
+        window_end=datetime.now(tz=UTC),
+        lookback_hours=24,
+        total=CoverageCounts(seen=5, processable=4, processed=3, deferred=1),
+        dimensions=(
+            CoverageDimensionSummary(
+                dimension="language",
+                multi_value=False,
+                rows=(
+                    CoverageSegment(
+                        key="en",
+                        label="en",
+                        counts=CoverageCounts(seen=5, processable=4, processed=3),
+                        processed_ratio=0.75,
+                        pending_ratio=0.25,
+                        change_ratio=1.0,
+                    ),
+                ),
+            ),
+        ),
+        artifact_path="artifacts/source_coverage/source-coverage-latest.json",
+    )
+
+    monkeypatch.setattr(
+        "src.api.routes.report_coverage.load_latest_coverage_snapshot",
+        AsyncMock(return_value=SimpleNamespace(payload=serialize_coverage_report(report))),
+    )
+
+    result = await get_coverage_health(session=mock_db_session)
+
+    assert result.report_source == "snapshot"
+    assert result.total.seen == 5
+    assert result.dimensions[0].dimension == "language"
+    assert result.artifact_path == "artifacts/source_coverage/source-coverage-latest.json"
+
+
+@pytest.mark.asyncio
+async def test_get_coverage_health_builds_live_report_when_requested(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    report = CoverageHealthReport(
+        generated_at=datetime.now(tz=UTC),
+        window_start=datetime.now(tz=UTC) - timedelta(hours=24),
+        window_end=datetime.now(tz=UTC),
+        lookback_hours=24,
+        total=CoverageCounts(seen=2, processable=2, processed=1, pending_processable=1),
+        dimensions=(),
+    )
+
+    monkeypatch.setattr("src.api.routes.report_coverage.load_latest_coverage_snapshot", AsyncMock())
+    monkeypatch.setattr(
+        "src.api.routes.report_coverage.build_source_coverage_report",
+        AsyncMock(return_value=report),
+    )
+
+    result = await get_coverage_health(prefer_live=True, session=mock_db_session)
+
+    assert result.report_source == "live"
+    assert result.total.seen == 2
+    assert result.total.pending_processable == 1
+
+
+@pytest.mark.asyncio
+async def test_get_coverage_health_builds_live_report_without_snapshot(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    report = CoverageHealthReport(
+        generated_at=datetime.now(tz=UTC),
+        window_start=datetime.now(tz=UTC) - timedelta(hours=24),
+        window_end=datetime.now(tz=UTC),
+        lookback_hours=24,
+        total=CoverageCounts(seen=1, processable=1, processed=1),
+        dimensions=(),
+    )
+
+    monkeypatch.setattr(
+        "src.api.routes.report_coverage.load_latest_coverage_snapshot",
+        AsyncMock(return_value=None),
+    )
+    monkeypatch.setattr(
+        "src.api.routes.report_coverage.build_source_coverage_report",
+        AsyncMock(return_value=report),
+    )
+
+    result = await get_coverage_health(prefer_live=False, session=mock_db_session)
+
+    assert result.report_source == "live"
+    assert result.total.processed == 1

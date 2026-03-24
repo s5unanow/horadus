@@ -30,6 +30,7 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
+from src.storage.coverage_models import CoverageSnapshot
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EVENT_ACTIVITY_STATE_SQL_VALUES,
@@ -44,7 +45,14 @@ from src.storage.scoring_contract import (
 )
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
-_ = (EventLineage, HumanFeedback, PrivilegedWriteAudit, TrendRestatement, TrendStateVersion)
+_ = (
+    CoverageSnapshot,
+    EventLineage,
+    HumanFeedback,
+    PrivilegedWriteAudit,
+    TrendRestatement,
+    TrendStateVersion,
+)
 
 
 class SourceType(enum.StrEnum):
@@ -918,13 +926,7 @@ class LLMReplayQueueItem(Base):
 
 
 class TrendSnapshot(Base):
-    """
-    Point-in-time snapshot of trend probability.
-
-    Used for time-series queries and historical analysis.
-    This table should be a TimescaleDB hypertable for efficient
-    time-range queries.
-    """
+    """Point-in-time trend probability snapshot."""
 
     __tablename__ = "trend_snapshots"
 
@@ -944,25 +946,11 @@ class TrendSnapshot(Base):
     log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
     event_count_24h: Mapped[int | None] = mapped_column(Integer)
 
-    # Relationships
     trend: Mapped[Trend] = relationship(back_populates="snapshots")
 
-    # Note: After table creation, run:
-    # SELECT create_hypertable('trend_snapshots', 'timestamp');
 
-
-# =============================================================================
-# Report Models
-# =============================================================================
 class Report(Base):
-    """
-    Generated intelligence report.
-
-    Reports are generated periodically (weekly/monthly) and contain:
-    - Computed statistics about trends
-    - LLM-generated narrative
-    - Top contributing events
-    """
+    """Generated intelligence report."""
 
     __tablename__ = "reports"
 
@@ -984,13 +972,11 @@ class Report(Base):
         nullable=False,
     )
 
-    # For trend-specific reports
     trend_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("trends.id", ondelete="SET NULL"),
     )
 
-    # Report content
     statistics: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     narrative: Mapped[str | None] = mapped_column(Text)
     grounding_status: Mapped[str] = mapped_column(String(20), default="not_checked", nullable=False)
@@ -1010,16 +996,10 @@ class Report(Base):
         nullable=False,
     )
 
-    # Indexes
     __table_args__ = (
         Index("idx_reports_type_period", "report_type", "period_end"),
         Index("idx_reports_trend", "trend_id"),
     )
-
-
-# =============================================================================
-# Cost Protection Models
-# =============================================================================
 
 
 class ApiUsage(Base):

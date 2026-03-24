@@ -15,6 +15,7 @@ NON_APPLICABLE_TASK_ID = "TASK-904"
 EXEC_PLAN_TASK_ID = "TASK-905"
 EXEC_PLAN_NO_MARKER_TASK_ID = "TASK-906"
 HIGH_RISK_TASK_ID = "TASK-907"
+SHARED_HELPER_TASK_ID = "TASK-908"
 
 
 def _backlog_fixture_text() -> str:
@@ -105,6 +106,20 @@ def _backlog_fixture_text() -> str:
                 "",
                 "**Acceptance Criteria**:",
                 "- [ ] high-risk context pack recommends pre-push review",
+                "",
+                "---",
+                "",
+                "### TASK-908: Shared helper validation fixture",
+                "**Priority**: P1",
+                "**Estimate**: 2h",
+                "**Planning Gates**: Required — shared helper validation-pack fixture",
+                "",
+                "Exercise caller-aware validation guidance for a shared workflow helper.",
+                "",
+                "**Files**: `tools/horadus/python/horadus_workflow/task_workflow_shared.py`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] context-pack recommends dependent workflow and CLI validation",
                 "",
                 "---",
                 "",

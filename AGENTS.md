@@ -77,6 +77,7 @@ Execution context policy (keep it small):
 - For tasks with high complexity (estimate >2 hours, touches >5 files, involves migrations, LLM/pipeline changes, or probability math/ops guardrails), maintain a living execution plan at `tasks/exec_plans/TASK-XXX.md` using `tasks/exec_plans/TEMPLATE.md`.
 - If a task materially changes a Python file that is allowlisted in `config/quality/code_shape.toml`, treat planning gates and an exec plan as required even when the rest of the task would otherwise look small.
 - Keep backlog entries concise and task-shaped; detailed implementation boundaries, migration strategy, risks, and validation belong in the exec plan when one exists.
+- If `horadus tasks context-pack TASK-XXX` surfaces a caller-aware validation pack, run those dependent suites in addition to the baseline gates; shared Python helpers and shared math require explicit full-repo type checking via `make typecheck`.
 - Apply these guardrails only when changing shared workflow helpers, shared workflow config, or review/merge policy behavior; do not inflate unrelated tasks with generic process boilerplate.
 - Before changing shared workflow helpers or shared workflow config, enumerate every caller that depends on the shared behavior.
 - When shared workflow behavior changes, add at least one regression test for an unaffected caller so the change does not silently break other workflow entry points.

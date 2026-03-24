@@ -74,6 +74,10 @@ set inside `horadus tasks finish`.
 `context-pack` surfaces the pre-push review block only when the repo-owned
 heuristic sees the relevant workflow/policy/config, math, or multi-surface
 runtime signals, instead of on every ordinary task.
+`context-pack` also surfaces caller-aware validation packs for shared helper
+and shared math tasks. When a pack appears, run its dependent suites in
+addition to the baseline gates; shared Python helpers and shared math both
+require explicit full-repo type checking via `make typecheck`.
 If planning gates are required but the backlog entry is still the only artifact,
 create the missing spec or exec plan before implementation and use
 `tasks/specs/275-finish-review-gate-timeout.md` as the canonical example.

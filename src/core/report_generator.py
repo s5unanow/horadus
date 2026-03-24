@@ -727,6 +727,7 @@ class ReportGenerator:
                 func.count(TrendEvidence.id).label("evidence_count"),
                 summary_expr.label("summary"),
                 Event.categories,
+                Event.extraction_status,
             )
             .join(Event, Event.id == TrendEvidence.event_id)
             .where(TrendEvidence.trend_id == trend_id)
@@ -737,6 +738,7 @@ class ReportGenerator:
                 TrendEvidence.event_id,
                 summary_expr,
                 Event.categories,
+                Event.extraction_status,
             )
             .order_by(func.sum(func.abs(TrendEvidence.delta_log_odds)).desc())
             .limit(max(1, limit))
@@ -752,6 +754,7 @@ class ReportGenerator:
                     "evidence_count": int(row[2] or 0),
                     "summary": str(row[3] or "").strip(),
                     "categories": list(row[4] or []),
+                    "extraction_status": str(row[5] or "none"),
                 }
             )
         return top_events

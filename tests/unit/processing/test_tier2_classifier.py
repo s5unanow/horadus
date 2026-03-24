@@ -552,6 +552,36 @@ async def test_classify_event_offloads_semantic_cache_calls_to_threadpool(
 
 
 @pytest.mark.asyncio
+async def test_classify_event_can_bypass_semantic_cache_reads(
+    mock_db_session,
+) -> None:
+    semantic_cache = InMemorySemanticCache(entries={})
+    classifier, chat, cost_tracker = _build_classifier(
+        mock_db_session,
+        semantic_cache=semantic_cache,
+    )
+    event_id = uuid4()
+    first_event = Event(id=event_id, canonical_summary="Initial summary")
+    second_event = Event(id=event_id, canonical_summary="Initial summary")
+    trends = [_build_trend("eu-russia", "EU-Russia")]
+
+    await classifier.classify_event(
+        event=first_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+    )
+    _second_result, second_usage = await classifier.classify_event(
+        event=second_event,
+        trends=trends,
+        context_chunks=["Context paragraph"],
+        allow_semantic_cache_read=False,
+    )
+
+    assert second_usage.api_calls == 1
+    assert len(chat.calls) == 2
+    assert cost_tracker.ensure_within_budget.await_count == 2
+
+
 @pytest.mark.parametrize(
     "context_chunk",
     [

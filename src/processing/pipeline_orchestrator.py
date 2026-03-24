@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from inspect import signature
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -39,6 +40,7 @@ from src.core.trend_engine import (
 from src.processing.cost_tracker import BudgetExceededError
 from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
+from src.processing.event_claims import deactivate_event_claims, sync_event_claims
 from src.processing.event_clusterer import ClusterResult, EventClusterer
 from src.processing.pipeline_retry import build_retryable_pipeline_error
 from src.processing.pipeline_types import (
@@ -61,6 +63,11 @@ from src.processing.trend_impact_reconciliation import (
     reconcile_event_trend_impacts,
     resolve_indicator_decay_half_life,
     resolve_indicator_weight,
+)
+from src.storage.event_extraction import (
+    capture_canonical_extraction,
+    demote_current_extraction_to_provisional,
+    snapshot_has_canonical_extraction,
 )
 from src.storage.event_state import (
     FALLBACK_CORROBORATION_MODE,
@@ -609,9 +616,15 @@ class ProcessingPipeline:
                     usage=usage,
                 )
 
+            canonical_snapshot = capture_canonical_extraction(event)
+            classify_kwargs: dict[str, Any] = {"event": event, "trends": trends}
+            if (
+                "defer_semantic_cache_write"
+                in signature(self.tier2_classifier.classify_event).parameters
+            ):
+                classify_kwargs["defer_semantic_cache_write"] = True
             _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
-                event=event,
-                trends=trends,
+                **classify_kwargs
             )
             record_processing_tier2_language_usage(
                 language=self._language_metric_label(item.language),
@@ -620,7 +633,6 @@ class ProcessingPipeline:
             usage.tier2_completion_tokens += tier2_usage.completion_tokens
             usage.tier2_api_calls += tier2_usage.api_calls
             usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
-            await self._capture_unresolved_trend_mapping(event=event)
             degraded_hold = False
             replay_enqueued = False
             trend_impacts_seen = 0
@@ -639,32 +651,17 @@ class ProcessingPipeline:
                 )
                 degraded_hold = bool(degraded_status.is_degraded)
                 if degraded_hold:
-                    claims = (
-                        event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-                    )
-                    policy_meta = {
-                        "degraded_llm": True,
-                        "availability_degraded": bool(degraded_status.availability_degraded),
-                        "quality_degraded": bool(degraded_status.quality_degraded),
-                        "degraded_since_epoch": degraded_status.degraded_since_epoch,
-                        "window_total_calls": degraded_status.window.total_calls,
-                        "window_secondary_calls": degraded_status.window.secondary_calls,
-                        "window_failover_ratio": round(degraded_status.window.failover_ratio, 6),
-                        "tier2_active_provider": tier2_usage.active_provider,
-                        "tier2_active_model": tier2_usage.active_model,
-                        "tier2_active_reasoning_effort": tier2_usage.active_reasoning_effort,
-                        "tier2_used_secondary_route": bool(tier2_usage.used_secondary_route),
-                    }
-                    claims["_llm_policy"] = policy_meta
-                    event.extracted_claims = claims
-                    replay_enqueued = await self._maybe_enqueue_replay(
+                    replay_enqueued = await self._hold_degraded_extraction(
                         event=event,
                         trends=trends,
                         degraded_status=degraded_status,
                         tier2_usage=tier2_usage,
+                        canonical_snapshot=canonical_snapshot,
                     )
 
             if not degraded_hold:
+                await self._persist_deferred_tier2_cache_write(tier2_usage=tier2_usage)
+                await self._capture_unresolved_trend_mapping(event=event)
                 trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
                     event=event,
                     trends=trends,
@@ -731,6 +728,63 @@ class ProcessingPipeline:
                 ),
                 usage=usage,
             )
+
+    async def _persist_deferred_tier2_cache_write(self, *, tier2_usage: Any) -> None:
+        persist_deferred_cache_write = getattr(
+            self.tier2_classifier,
+            "persist_deferred_semantic_cache_write",
+            None,
+        )
+        deferred_cache_write = getattr(
+            tier2_usage,
+            "deferred_semantic_cache_write",
+            None,
+        )
+        if callable(persist_deferred_cache_write) and deferred_cache_write is not None:
+            await persist_deferred_cache_write(write=deferred_cache_write)
+
+    async def _hold_degraded_extraction(
+        self,
+        *,
+        event: Event,
+        trends: list[Trend],
+        degraded_status: DegradedLLMStatus,
+        tier2_usage: Any,
+        canonical_snapshot: Any,
+    ) -> bool:
+        claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
+        policy_meta = {
+            "degraded_llm": True,
+            "availability_degraded": bool(degraded_status.availability_degraded),
+            "quality_degraded": bool(degraded_status.quality_degraded),
+            "degraded_since_epoch": degraded_status.degraded_since_epoch,
+            "window_total_calls": degraded_status.window.total_calls,
+            "window_secondary_calls": degraded_status.window.secondary_calls,
+            "window_failover_ratio": round(degraded_status.window.failover_ratio, 6),
+            "tier2_active_provider": tier2_usage.active_provider,
+            "tier2_active_model": tier2_usage.active_model,
+            "tier2_active_reasoning_effort": tier2_usage.active_reasoning_effort,
+            "tier2_used_secondary_route": bool(tier2_usage.used_secondary_route),
+        }
+        claims["_llm_policy"] = policy_meta
+        event.extracted_claims = claims
+        replay_enqueued = await self._maybe_enqueue_replay(
+            event=event,
+            trends=trends,
+            degraded_status=degraded_status,
+            tier2_usage=tier2_usage,
+        )
+        demote_current_extraction_to_provisional(
+            event,
+            canonical_snapshot=canonical_snapshot,
+            policy=policy_meta,
+            replay_enqueued=replay_enqueued,
+        )
+        if snapshot_has_canonical_extraction(canonical_snapshot):
+            await sync_event_claims(session=self.session, event=event)
+        else:
+            await deactivate_event_claims(session=self.session, event_id=event.id)
+        return replay_enqueued
 
     async def _classify_tier1(
         self,

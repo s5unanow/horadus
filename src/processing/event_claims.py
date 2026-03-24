@@ -215,6 +215,17 @@ async def sync_event_claims(
     return resolved
 
 
+async def deactivate_event_claims(
+    *,
+    session: AsyncSession,
+    event_id: Any,
+) -> None:
+    """Mark every claim row for an event inactive without deleting identity history."""
+    result = await session.scalars(select(EventClaim).where(EventClaim.event_id == event_id))
+    for row in list(await _await_if_needed(result.all())):
+        row.is_active = False
+
+
 async def _resolve_event_claim_row(
     *,
     session: AsyncSession,

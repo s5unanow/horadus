@@ -572,6 +572,8 @@ async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
         id=uuid4(),
         canonical_summary="event",
         epistemic_state=EventEpistemicState.CONTESTED.value,
+        extraction_status="provisional",
+        provisional_extraction={"summary": "held degraded summary"},
         extraction_provenance={"stage": "tier2", "model": "old"},
         extracted_claims={"claim_graph": {}},
         extracted_who=["A"],
@@ -594,6 +596,8 @@ async def test_close_empty_merged_event_can_skip_replay_pending_state() -> None:
     }
     assert event.extracted_claims is None
     assert event.extracted_who is None
+    assert event.extraction_status == "none"
+    assert event.provisional_extraction == {}
     assert not event.categories
 
 
@@ -747,7 +751,13 @@ async def test_mark_event_claims_stale_and_replay_pending(mock_db_session) -> No
     )
     claim.is_active = True
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [claim])
-    event = Event(id=uuid4(), canonical_summary="event", extraction_provenance={"old": True})
+    event = Event(
+        id=uuid4(),
+        canonical_summary="event",
+        extraction_provenance={"old": True},
+        extraction_status="provisional",
+        provisional_extraction={"summary": "Held degraded summary"},
+    )
 
     await _mark_event_claims_stale(session=mock_db_session, event_id=claim.event_id)
     await _mark_event_replay_pending(event=event, reason="repair")
@@ -755,6 +765,8 @@ async def test_mark_event_claims_stale_and_replay_pending(mock_db_session) -> No
     assert claim.is_active is False
     assert event.extraction_provenance["reason"] == "repair"
     assert event.extracted_claims is None
+    assert event.provisional_extraction == {"summary": "Held degraded summary"}
+    assert event.extraction_status == "provisional"
 
 
 @pytest.mark.asyncio
@@ -1044,6 +1056,8 @@ def test_replay_helper_utilities_clear_stale_fields_and_preserve_original_proven
             "status": "replay_pending",
             "original_extraction_provenance": {"stage": "tier2"},
         },
+        extraction_status="provisional",
+        provisional_extraction={"summary": "Held degraded summary"},
         extracted_claims={"claim_graph": {}},
         extracted_who=["A"],
         extracted_what="what",
@@ -1064,6 +1078,8 @@ def test_replay_helper_utilities_clear_stale_fields_and_preserve_original_proven
     assert event.categories == []
     assert event.has_contradictions is False
     assert event.contradiction_notes is None
+    assert event.provisional_extraction == {"summary": "Held degraded summary"}
+    assert event.extraction_status == "provisional"
     assert replay_source_provenance(event) == {"stage": "tier2"}
     event.extraction_provenance = {"status": "done", "model": "tier2"}
     assert replay_source_provenance(event) == {"status": "done", "model": "tier2"}

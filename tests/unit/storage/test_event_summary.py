@@ -77,3 +77,35 @@ def test_event_summary_expression_prefers_event_summary_with_canonical_fallback(
     assert "coalesce" in compiled.lower()
     assert "event_summary" in compiled
     assert "canonical_summary" in compiled
+
+
+def test_refresh_event_summary_from_canonical_updates_provisional_fallback_values() -> None:
+    provisional_fallback_event = Event(
+        id=uuid4(),
+        canonical_summary="Updated primary title",
+        event_summary="Old primary title",
+        extraction_status="provisional",
+    )
+
+    refresh_event_summary_from_canonical(
+        provisional_fallback_event,
+        previous_canonical_summary="Old primary title",
+    )
+
+    assert provisional_fallback_event.event_summary == "Updated primary title"
+
+
+def test_refresh_event_summary_from_canonical_preserves_distinct_provisional_summary() -> None:
+    provisional_event = Event(
+        id=uuid4(),
+        canonical_summary="Updated primary title",
+        event_summary="Held degraded summary",
+        extraction_status="provisional",
+    )
+
+    refresh_event_summary_from_canonical(
+        provisional_event,
+        previous_canonical_summary="Old primary title",
+    )
+
+    assert provisional_event.event_summary == "Held degraded summary"

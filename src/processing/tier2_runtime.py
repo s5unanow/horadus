@@ -8,6 +8,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from src.storage.event_extraction import promote_canonical_extraction
+
 
 class Tier2Output(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -88,7 +90,7 @@ async def persist_tier2_output(
     mapped_impacts_count: Any,
 ) -> tuple[int, int]:
     apply_output(event=event, output=output, trends=trends)
-    event.extraction_provenance = extraction_provenance
+    promote_canonical_extraction(event, extraction_provenance=extraction_provenance)
     await sync_event_claims(session=session, event=event)
     await session.flush()
     return (len(event.categories or []), mapped_impacts_count(event))

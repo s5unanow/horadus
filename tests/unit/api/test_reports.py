@@ -47,7 +47,15 @@ def _build_report(*, trend_id: object | None = None, report_type: str = "weekly"
         grounding_status="grounded",
         grounding_violation_count=0,
         grounding_references=None,
-        top_events={"events": [{"event_id": str(uuid4()), "impact_score": 0.12}]},
+        top_events={
+            "events": [
+                {
+                    "event_id": str(uuid4()),
+                    "impact_score": 0.12,
+                    "extraction_status": "canonical",
+                }
+            ]
+        },
         created_at=now,
     )
 
@@ -134,6 +142,7 @@ async def test_get_report_returns_report_payload(mock_db_session) -> None:
     assert result.grounding_violation_count == 0
     assert result.top_events is not None
     assert len(result.top_events) == 1
+    assert result.top_events[0]["extraction_status"] == "canonical"
 
 
 @pytest.mark.asyncio

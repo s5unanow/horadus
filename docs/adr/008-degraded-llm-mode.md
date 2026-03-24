@@ -23,7 +23,8 @@ Introduce an explicit `degraded_llm` mode for Tier-2 that:
 - Also enters degraded mode when a Tier-2 gold-set canary gate fails for the
   configured primary Tier-2 model.
 - In degraded mode:
-  - Tier-2 extraction still runs (events remain populated),
+  - Tier-2 extraction still runs, but the output is stored as provisional state
+    rather than replacing canonical event/report fields,
   - but **trend deltas are not applied** (no `trend_evidence` writes),
   - and high-impact events are queued for replay once recovery is detected.
 - If the primary Tier-2 model fails canary but an optional emergency Tier-2 model
@@ -53,4 +54,5 @@ trend deltas once primary-quality behavior is restored.
 - Degraded-mode tracker: `src/processing/degraded_llm_tracker.py`
 - Tier-2 canary gate: `src/processing/tier2_canary.py` using `ai/eval/gold_set.jsonl`
 - Replay queue: `llm_replay_queue` table + replay worker task
-- Pipeline holds deltas when degraded; event extraction records `_llm_policy` metadata.
+- Pipeline holds deltas when degraded; provisional extraction records `_llm_policy`
+  metadata and canonical promotion records the superseded provisional provenance.

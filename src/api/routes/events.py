@@ -28,6 +28,10 @@ from src.processing.event_lineage import (
     split_event,
 )
 from src.storage.database import get_session
+from src.storage.event_extraction import (
+    has_canonical_extraction,
+    resolved_extraction_status,
+)
 from src.storage.event_state import (
     resolved_corroboration_mode,
     resolved_corroboration_score,
@@ -126,6 +130,8 @@ class EventDetailResponse(EventResponse):
                     "stage": "tier2",
                     "active_route": {"model": "gpt-4.1-mini"},
                 },
+                "extraction_status": "canonical",
+                "provisional_extraction": None,
                 "sources": [{"source_name": "Reuters", "url": "https://example.com/article-1"}],
                 "trend_impacts": [
                     {
@@ -145,6 +151,8 @@ class EventDetailResponse(EventResponse):
     corroboration_score: float
     provenance_summary: dict[str, Any]
     extraction_provenance: dict[str, Any]
+    extraction_status: str
+    provisional_extraction: dict[str, Any] | None
     lineage: list[dict[str, Any]]
 
 
@@ -226,16 +234,29 @@ async def _load_event_detail_payloads(
         .where(EventClaim.event_id == event_id)
         .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
     )
-    if referenced_claim_ids:
-        claim_query = claim_query.where(
-            or_(
-                EventClaim.is_active.is_(True),
-                EventClaim.id.in_(tuple(referenced_claim_ids)),
+    claim_rows: list[tuple[Any, ...]]
+    provisional_claims_hidden = (
+        resolved_extraction_status(event) == "provisional"
+        and not _lineage_replay_pending(event)
+        and not has_canonical_extraction(event)
+    )
+    if provisional_claims_hidden:
+        if referenced_claim_ids:
+            claim_query = claim_query.where(EventClaim.id.in_(tuple(referenced_claim_ids)))
+            claim_rows = [tuple(row) for row in (await session.execute(claim_query)).all()]
+        else:
+            claim_rows = []
+    else:
+        if referenced_claim_ids:
+            claim_query = claim_query.where(
+                or_(
+                    EventClaim.is_active.is_(True),
+                    EventClaim.id.in_(tuple(referenced_claim_ids)),
+                )
             )
-        )
-    elif not _lineage_replay_pending(event):
-        claim_query = claim_query.where(EventClaim.is_active.is_(True))
-    claim_rows = (await session.execute(claim_query)).all()
+        elif not _lineage_replay_pending(event):
+            claim_query = claim_query.where(EventClaim.is_active.is_(True))
+        claim_rows = [tuple(row) for row in (await session.execute(claim_query)).all()]
     sources = [
         {"source_name": source_name, "url": url}
         for source_name, url in source_rows
@@ -300,6 +321,11 @@ def _lineage_replay_pending(event: Event) -> bool:
         provenance.get("status") == "replay_pending"
         and provenance.get("reason") == "event_lineage_repair"
     )
+
+
+def _visible_provisional_extraction(event: Event) -> dict[str, Any] | None:
+    _ = event
+    return None
 
 
 def _to_event_repair_response(result: EventRepairResult) -> EventRepairResponse:
@@ -407,6 +433,8 @@ async def get_event(
         corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
         extraction_provenance=dict(event.extraction_provenance or {}),
+        extraction_status=resolved_extraction_status(event),
+        provisional_extraction=_visible_provisional_extraction(event),
         sources=sources,
         claims=claims,
         trend_impacts=trend_impacts,

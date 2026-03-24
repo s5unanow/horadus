@@ -385,9 +385,15 @@ async def test_process_after_tier1_covers_existing_embedding_degraded_hold_budge
         tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True),
         trends=[_trend()],
     )
-    assert execution.result.degraded_llm_hold is True
-    assert execution.result.replay_enqueued is True
-    assert execution.result.tier2_applied is False
+    assert (
+        execution.result.degraded_llm_hold,
+        execution.result.replay_enqueued,
+        execution.result.tier2_applied,
+    ) == (True, True, False)
+    assert (event.extraction_status, event.provisional_extraction["policy"]["degraded_llm"]) == (
+        "provisional",
+        True,
+    )
     pipeline._apply_trend_impacts.assert_not_called()
 
     healthy_item = _item()
@@ -440,51 +446,6 @@ async def test_process_after_tier1_covers_existing_embedding_degraded_hold_budge
     )
     assert healthy_execution.result.tier2_applied is True
     healthy_tracker.record_invocation.assert_not_called()
-
-    degraded_nonlist_item = _item()
-    degraded_nonlist_prepared = _PreparedItem(
-        item=degraded_nonlist_item,
-        item_id=degraded_nonlist_item.id,
-        raw_content=degraded_nonlist_item.raw_content,
-    )
-    degraded_nonlist_event = Event(
-        id=uuid4(),
-        canonical_summary="summary",
-        extracted_claims={"trend_impacts": "bad"},
-    )
-    pipeline_nonlist = _pipeline(
-        mock_db_session,
-        degraded_llm_tracker=tracker,
-        tier2_classifier=SimpleNamespace(
-            classify_event=AsyncMock(
-                return_value=(
-                    SimpleNamespace(event_id=degraded_nonlist_event.id),
-                    Tier2Usage(api_calls=1),
-                )
-            )
-        ),
-    )
-    pipeline_nonlist.event_clusterer.cluster_item = AsyncMock(
-        return_value=ClusterResult(
-            item_id=degraded_nonlist_item.id,
-            event_id=degraded_nonlist_event.id,
-            created=True,
-            merged=False,
-        )
-    )
-    pipeline_nonlist._load_event = AsyncMock(return_value=degraded_nonlist_event)
-    pipeline_nonlist._maybe_enqueue_replay = AsyncMock(return_value=False)
-    pipeline_nonlist._apply_trend_impacts = AsyncMock(return_value=(9, 9))
-    execution_nonlist = await pipeline_nonlist._process_after_tier1(
-        prepared=degraded_nonlist_prepared,
-        tier1_result=Tier1ItemResult(
-            item_id=degraded_nonlist_item.id,
-            max_relevance=8,
-            should_queue_tier2=True,
-        ),
-        trends=[_trend()],
-    )
-    assert execution_nonlist.result.trend_impacts_seen == 0
 
     pending_item = _item()
     pending_prepared = _PreparedItem(

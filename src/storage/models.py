@@ -352,7 +352,6 @@ class Event(Base):
     extracted_claims: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
     categories: Mapped[list[str] | None] = mapped_column(ARRAY(String))
 
-    # Aggregated metadata
     source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unique_source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     independent_evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
@@ -360,13 +359,14 @@ class Event(Base):
     corroboration_mode: Mapped[str] = mapped_column(String(20), default="fallback", nullable=False)
     provenance_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     extraction_provenance: Mapped[dict[str, Any]] = mapped_column(
-        JSONB,
-        default=dict,
-        server_default=text("'{}'::jsonb"),
-        nullable=False,
+        JSONB, default=dict, server_default=text("'{}'::jsonb"), nullable=False
     )
-
-    # NEW: Lifecycle tracking (Expert Recommendation)
+    extraction_status: Mapped[str] = mapped_column(
+        String(20), default="none", server_default=text("'none'"), nullable=False
+    )
+    provisional_extraction: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb"), nullable=False
+    )
     lifecycle_status: Mapped[str] = mapped_column(
         String(20),
         default=EventLifecycle.EMERGING.value,
@@ -382,13 +382,11 @@ class Event(Base):
         default=EventActivityState.ACTIVE.value,
         nullable=False,
     )
-
     first_seen_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         nullable=False,
     )
-    # NEW: Track when event was last mentioned (Expert Recommendation)
     last_mention_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -400,7 +398,6 @@ class Event(Base):
         onupdate=func.now(),
         nullable=False,
     )
-    # NEW: When event was confirmed (Expert Recommendation)
     confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     primary_item_id: Mapped[UUID | None] = mapped_column(
@@ -408,7 +405,6 @@ class Event(Base):
         ForeignKey("raw_items.id", ondelete="SET NULL"),
     )
 
-    # NEW: Contradiction tracking (Expert Recommendation)
     has_contradictions: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     contradiction_notes: Mapped[str | None] = mapped_column(Text)
 
@@ -439,6 +435,10 @@ class Event(Base):
         CheckConstraint(
             f"activity_state IN ({EVENT_ACTIVITY_STATE_SQL_VALUES})",
             name="check_events_activity_state_allowed",
+        ),
+        CheckConstraint(
+            "extraction_status IN ('none', 'canonical', 'provisional')",
+            name="check_events_extraction_status_allowed",
         ),
         Index("idx_events_first_seen", "first_seen_at"),
         Index("idx_events_categories", "categories", postgresql_using="gin"),

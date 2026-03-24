@@ -133,6 +133,9 @@ def test_dimension_check_constraints_present_in_model_metadata() -> None:
     assert "corroboration_mode" in Event.__table__.c
     assert "provenance_summary" in Event.__table__.c
     assert "extraction_provenance" in Event.__table__.c
+    assert "extraction_status" in Event.__table__.c
+    assert "provisional_extraction" in Event.__table__.c
+    assert "check_events_extraction_status_allowed" in event_constraint_names
     assert "idx_events_activity" in {index.name for index in Event.__table__.indexes}
 
 

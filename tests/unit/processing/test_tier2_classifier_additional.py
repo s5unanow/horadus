@@ -577,3 +577,97 @@ async def test_classify_event_ignores_invalid_cached_content_and_skips_cache_sto
         context_chunks=["context"],
     )
     classifier.semantic_cache.set.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_classify_event_can_defer_semantic_cache_writes(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entries: dict[str, str] = {}
+
+    class _SemanticCache:
+        def get(self, **kwargs):
+            return entries.get(str(kwargs["payload"]))
+
+        def set(self, **kwargs) -> None:
+            entries[str(kwargs["payload"])] = kwargs["value"]
+
+    classifier = _build_classifier(
+        mock_db_session,
+        client=SimpleNamespace(),
+        semantic_cache=_SemanticCache(),
+    )
+    event_id = uuid4()
+    first_event = Event(id=event_id, canonical_summary="summary")
+    second_event = Event(id=event_id, canonical_summary="summary")
+    trends = [_build_trend()]
+    raw_response = (
+        '{"summary":"summary","extracted_who":[],"extracted_what":"what",'
+        '"extracted_where":null,"extracted_when":null,"claims":[],'
+        '"categories":[],"has_contradictions":false,"contradiction_notes":null}'
+    )
+    invocation = SimpleNamespace(
+        response=SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content=raw_response))]
+        ),
+        prompt_tokens=3,
+        completion_tokens=4,
+        estimated_cost_usd=0.01,
+        active_provider="openai",
+        active_model="model",
+        active_reasoning_effort="medium",
+        used_secondary_route=False,
+    )
+    parsed_output = tier2_module._Tier2Output.model_validate(
+        {
+            "summary": "summary",
+            "extracted_who": [],
+            "extracted_what": "what",
+            "extracted_where": None,
+            "extracted_when": None,
+            "claims": [],
+            "categories": [],
+            "has_contradictions": False,
+            "contradiction_notes": None,
+        }
+    )
+
+    monkeypatch.setattr(tier2_module, "invoke_with_policy", AsyncMock(return_value=invocation))
+    monkeypatch.setattr(classifier, "_parse_output", lambda _response: parsed_output)
+
+    _first_result, first_usage = await classifier.classify_event(
+        event=first_event,
+        trends=trends,
+        context_chunks=["context"],
+        defer_semantic_cache_write=True,
+    )
+
+    assert first_usage.api_calls == 1
+    assert first_usage.deferred_semantic_cache_write is not None
+    assert entries == {}
+
+    await classifier.persist_deferred_semantic_cache_write(
+        write=first_usage.deferred_semantic_cache_write
+    )
+    _second_result, second_usage = await classifier.classify_event(
+        event=second_event,
+        trends=trends,
+        context_chunks=["context"],
+    )
+
+    assert second_usage.api_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_persist_deferred_semantic_cache_write_skips_none(mock_db_session) -> None:
+    semantic_cache = SimpleNamespace(set=MagicMock())
+    classifier = _build_classifier(
+        mock_db_session,
+        client=SimpleNamespace(),
+        semantic_cache=semantic_cache,
+    )
+
+    await classifier.persist_deferred_semantic_cache_write(write=None)
+
+    semantic_cache.set.assert_not_called()

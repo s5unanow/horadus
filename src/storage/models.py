@@ -946,6 +946,7 @@ class TrendSnapshot(Base):
     log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
     event_count_24h: Mapped[int | None] = mapped_column(Integer)
 
+    # After table creation, TimescaleDB should promote this table to a hypertable.
     trend: Mapped[Trend] = relationship(back_populates="snapshots")
 
 

@@ -20,24 +20,31 @@ async def monitor_source_coverage_async(
     async_session_maker: Callable[[], Any],
     logger: Any,
 ) -> dict[str, Any]:
+    artifact_path: Path | None = None
     async with async_session_maker() as session:
-        previous_snapshot = await load_latest_coverage_snapshot(session)
-        previous_payload = previous_snapshot.payload if previous_snapshot is not None else None
-        report = await build_source_coverage_report(
-            session=session,
-            lookback_hours=DEFAULT_COVERAGE_LOOKBACK_HOURS,
-            previous_snapshot_payload=previous_payload,
-        )
-        artifact_path = write_source_coverage_artifact(
-            report=report,
-            artifact_dir=DEFAULT_COVERAGE_ARTIFACT_DIR,
-        )
-        snapshot = await persist_coverage_snapshot(
-            session,
-            report=report,
-            artifact_path=str(artifact_path),
-        )
-        await session.commit()
+        try:
+            previous_snapshot = await load_latest_coverage_snapshot(session)
+            previous_payload = previous_snapshot.payload if previous_snapshot is not None else None
+            report = await build_source_coverage_report(
+                session=session,
+                lookback_hours=DEFAULT_COVERAGE_LOOKBACK_HOURS,
+                previous_snapshot_payload=previous_payload,
+            )
+            artifact_path = write_source_coverage_artifact(
+                report=report,
+                artifact_dir=DEFAULT_COVERAGE_ARTIFACT_DIR,
+            )
+            snapshot = await persist_coverage_snapshot(
+                session,
+                report=report,
+                artifact_path=str(artifact_path),
+            )
+            await session.commit()
+        except Exception:
+            if artifact_path is not None:
+                artifact_path.unlink(missing_ok=True)
+                artifact_path.with_name("source-coverage-latest.json").unlink(missing_ok=True)
+            raise
 
     record_coverage_health(report=report)
     for alert in report.alerts:

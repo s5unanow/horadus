@@ -313,6 +313,30 @@ def _build_alerts(
     return tuple(alerts[:MAX_ALERTS])
 
 
+def _build_dimension_summary(
+    *,
+    dimension: str,
+    multi_value: bool,
+    counts_by_key: dict[str, CoverageCounts],
+    previous_seen: dict[tuple[str, str], int],
+) -> CoverageDimensionSummary:
+    rows = [
+        _segment_from_counts(
+            key=key,
+            label=key,
+            counts=counts,
+            previous_seen=previous_seen.get((dimension, key)),
+        )
+        for key, counts in counts_by_key.items()
+    ]
+    rows.sort(key=lambda row: (-row.counts.seen, row.key))
+    return CoverageDimensionSummary(
+        dimension=dimension,
+        multi_value=multi_value,
+        rows=tuple(rows),
+    )
+
+
 def serialize_coverage_report(report: CoverageHealthReport) -> dict[str, Any]:
     """Serialize a coverage report into JSON-friendly structures."""
     return cast("dict[str, Any]", _json_safe(asdict(report)))
@@ -463,26 +487,12 @@ async def build_source_coverage_report(
         ("source_tier", False),
         ("topic", True),
     ):
-        rows_for_dimension = [
-            _segment_from_counts(
-                key=key,
-                label=key,
-                counts=counts,
-                previous_seen=previous_seen.get((dimension, key)),
-            )
-            for key, counts in accumulators[dimension].items()
-        ]
-        rows_for_dimension.sort(
-            key=lambda row: (
-                -row.counts.seen,
-                row.key,
-            )
-        )
         dimensions.append(
-            CoverageDimensionSummary(
+            _build_dimension_summary(
                 dimension=dimension,
                 multi_value=multi_value,
-                rows=tuple(rows_for_dimension),
+                counts_by_key=accumulators[dimension],
+                previous_seen=previous_seen,
             )
         )
 

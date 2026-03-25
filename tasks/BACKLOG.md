@@ -38,50 +38,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Open Task Ledger
 
-### TASK-361: Unblock repo-wide dependency audit for the current upstream-unfixed `pygments` CVE
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-`pip-audit` now flags `CVE-2026-4539` against the locked `pygments==2.19.2`
-dependency set, and the current audit output does not advertise a fixed
-version. That blocks new task PRs at the required `Security Scan` gate. The
-repo needs a narrow, repo-owned remediation path for this specific
-upstream-unfixed dependency finding so CI and local-gate behavior stay aligned
-without relying on ad hoc per-run operator flags.
-
-**Planning Gates**: Required — shared workflow/security policy contract change
-**Files**: `scripts/run_dependency_audit.sh`, `docs/AGENT_RUNBOOK.md`, `pyproject.toml`, `uv.lock`, `tests/unit/scripts/`, `tests/horadus_cli/`
-
-**Acceptance Criteria**:
-- [ ] The repo-owned dependency audit has a deterministic way to handle the current `pygments` `CVE-2026-4539` finding without requiring ad hoc per-run flags
-- [ ] Any remediation or temporary exception is narrow, explicit, and discoverable from versioned repo policy rather than hidden in CI-only configuration
-- [ ] Local dependency-audit validation passes against the frozen dependency set with the same behavior CI will use
-- [ ] Regression coverage fails if the exception/remediation contract drifts, broadens unexpectedly, or stops matching the documented audit path
-
-### TASK-354: Centralize repo-owned secret-scan policy and exclude rules
-**Priority**: P2 (Medium)
-**Estimate**: 2-3 hours
-
-`TASK-352` added a repo-owned server-side secret scan, but the effective policy
-still lives in more than one place. The filename excludes and scan semantics are
-currently duplicated across pre-commit and the repo-owned baseline-check helper,
-which creates drift risk and makes review catch policy mismatches that local
-verification should have prevented. Move the secret-scan policy to one
-authoritative repo-owned source so local hooks, CI, and workflow helpers apply
-the same contract by construction.
-
-**Planning Gates**: Required — shared workflow/security policy contract change
-**Files**: `.pre-commit-config.yaml`, `scripts/check_secret_baseline.py`, `scripts/run_secret_scan.sh`, `tests/unit/scripts/`, `tests/workflow/`, `docs/AGENT_RUNBOOK.md`
-
-**Acceptance Criteria**:
-- [ ] Define one authoritative repo-owned source for secret-scan excludes and any shared scan-mode semantics that must stay aligned across hook and CI paths
-- [ ] Update the pre-commit hook and server-side secret-scan helper to consume that shared policy instead of duplicating regexes or behavior in multiple files
-- [ ] Preserve the current documented repo policy for excluded low-risk/high-churn surfaces unless a narrower or broader scope is explicitly justified
-- [ ] Add regression coverage that fails when hook-side and server-side secret-scan policy drift apart
-- [ ] Document the canonical ownership point so future secret-scan changes do not require parallel manual edits in multiple workflow surfaces
-
----
-
 ### TASK-344: Surface review-gate wait state and deadlines in `horadus tasks finish`
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours

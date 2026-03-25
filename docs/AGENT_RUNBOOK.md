@@ -113,6 +113,8 @@ The matching server-side security substeps also have direct local entry points:
 - `make secret-scan` runs `detect-secrets` against tracked files using the
   repo-owned `.secrets.baseline`
 - `make dependency-audit` runs the locked-project vulnerability audit used by CI
+  and applies only the exact repo-owned allowlist entries recorded in
+  `config/security/dependency_audit_allowlist.json`
 If the gate reaches the Docker-backed integration step and the daemon is not
 ready, it attempts best-effort local auto-start on supported environments
 before failing with a specific blocker.

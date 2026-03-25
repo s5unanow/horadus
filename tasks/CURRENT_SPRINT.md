@@ -56,3 +56,4 @@
 ## Completed This Sprint
 
 - `TASK-343` Add caller-aware validation packs for shared helper changes ✅
+- `TASK-361` Unblock repo-wide dependency audit for the current upstream-unfixed `pygments` CVE ✅

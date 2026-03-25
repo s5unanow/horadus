@@ -132,6 +132,18 @@ def test_load_allowlist_validation_errors(
             "dependency audit dependency entries must include name and version",
         ),
         (
+            {
+                "dependencies": [
+                    {"name": "geopolitical-intel", "skip_reason": "not on PyPI", "vulns": []}
+                ]
+            },
+            "dependency audit skipped geopolitical-intel: not on PyPI",
+        ),
+        (
+            {"dependencies": [{"name": "pygments", "vulns": []}]},
+            "dependency audit dependency entries must include name and version",
+        ),
+        (
             {"dependencies": [{"name": "pygments", "version": "2.19.2", "vulns": {}}]},
             "dependency audit dependency 'vulns' must be a list",
         ),
@@ -489,4 +501,39 @@ def test_main_passes_without_findings(
     assert capsys.readouterr().out.splitlines() == [
         "dependency-audit: auditing the exported frozen dependency set for known vulnerabilities",
         "dependency-audit passed: no actionable vulnerabilities remain.",
+    ]
+
+
+def test_main_returns_controlled_failure_for_skipped_dependency_record(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    allowlist_path = tmp_path / "dependency_audit_allowlist.json"
+    allowlist_path.write_text(json.dumps({"allowlist": []}), encoding="utf-8")
+
+    def fake_run_command(
+        args: list[str], *, cwd: Path
+    ) -> dependency_audit_module.subprocess.CompletedProcess[str]:
+        if args[1] == "export":
+            output_index = args.index("-o") + 1
+            Path(args[output_index]).write_text("geopolitical-intel==0.1.0\n", encoding="utf-8")
+            return dependency_audit_module.subprocess.CompletedProcess(args, 0, "", "")
+        report_index = args.index("-o") + 1
+        _write_report(
+            path=Path(args[report_index]),
+            dependencies=[
+                {"name": "geopolitical-intel", "skip_reason": "not on PyPI", "vulns": []}
+            ],
+        )
+        return dependency_audit_module.subprocess.CompletedProcess(args, 1, "", "")
+
+    monkeypatch.setattr(dependency_audit_module, "ALLOWLIST_PATH", allowlist_path)
+    monkeypatch.setattr(dependency_audit_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(sys, "argv", ["check_dependency_audit.py"])
+
+    assert dependency_audit_module.main() == 2
+    assert capsys.readouterr().out.splitlines() == [
+        "dependency-audit: auditing the exported frozen dependency set for known vulnerabilities",
+        "dependency-audit failed: dependency audit skipped geopolitical-intel: not on PyPI",
     ]

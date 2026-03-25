@@ -91,8 +91,13 @@ def parse_audit_report(payload: dict[str, Any]) -> tuple[AuditFinding, ...]:
             raise ValueError("dependency audit dependency entries must be objects")
         package = str(dependency.get("name", "")).strip()
         version = str(dependency.get("version", "")).strip()
+        skip_reason = str(dependency.get("skip_reason", "")).strip()
         vulns = dependency.get("vulns", [])
-        if not package or not version:
+        if not package:
+            raise ValueError("dependency audit dependency entries must include name and version")
+        if skip_reason:
+            raise ValueError(f"dependency audit skipped {package}: {skip_reason}")
+        if not version:
             raise ValueError("dependency audit dependency entries must include name and version")
         if not isinstance(vulns, list):
             raise ValueError("dependency audit dependency 'vulns' must be a list")
@@ -245,8 +250,12 @@ def main() -> int:
             return 2
 
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        findings = parse_audit_report(report)
-        allowlist = load_allowlist()
+        try:
+            findings = parse_audit_report(report)
+            allowlist = load_allowlist()
+        except ValueError as exc:
+            print(f"dependency-audit failed: {exc}")
+            return 2
         allowed, blocked, stale = split_findings(findings, allowlist)
 
         if stale:

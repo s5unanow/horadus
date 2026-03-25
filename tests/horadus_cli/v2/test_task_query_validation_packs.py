@@ -7,6 +7,7 @@ import pytest
 
 import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+import tools.horadus.python.horadus_workflow.task_workflow_completion_contract as completion_contract_module
 import tools.horadus.python.horadus_workflow.task_workflow_query as workflow_query_module
 from tests.horadus_cli.v2.task_repo_fixtures import LIVE_TASK_ID, SHARED_HELPER_TASK_ID
 
@@ -23,14 +24,22 @@ def test_handle_context_pack_surfaces_shared_helper_validation_pack(
 
     assert result.exit_code == 0
     assert result.lines is not None
+    assert "## Completion Contract" in result.lines
     assert "## Caller-Aware Validation Packs" in result.lines
     assert "make typecheck" in result.lines
     assert "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit" in result.lines
+    assert "make test-integration-docker" in result.lines
     assert result.data is not None
-    assert result.data["suggested_validation_commands"][-2:] == [
+    assert result.data["suggested_validation_commands"][-3:] == [
         "make typecheck",
         "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit",
+        "make test-integration-docker",
     ]
+    documented = result.data["completion_contract"]["documented_requirements"]
+    assert any(
+        requirement["requirement_id"] == "integration-proof" and requirement["status"] == "required"
+        for requirement in documented
+    )
     assert result.data["caller_aware_validation_packs"] == [
         {
             "pack_id": "shared-workflow-helpers",
@@ -82,12 +91,55 @@ def test_suggested_validation_commands_dedupes_pack_commands() -> None:
                 "matched_paths": ["fixture.py"],
                 "commands": ["make agent-check", "make typecheck"],
             }
-        ]
+        ],
+        {
+            "enforced_requirements": [],
+            "documented_requirements": [],
+        },
     ) == [
         "make agent-check",
         "uv run --no-sync horadus tasks local-gate --full",
         "make typecheck",
     ]
+
+
+def test_completion_contract_marks_docs_only_targeted_test_and_integration_as_n_a() -> None:
+    contract = completion_contract_module.build_completion_contract(
+        "TASK-910",
+        normalized_paths=["docs/AGENT_RUNBOOK.md"],
+        planning={"waiver_home_path": "tasks/specs/910-docs-only.md"},
+        validation_pack_commands=[],
+    )
+
+    documented = {item["requirement_id"]: item for item in contract["documented_requirements"]}
+    assert documented["targeted-tests"]["status"] == "not_applicable"
+    assert documented["integration-proof"]["status"] == "not_applicable"
+    assert documented["docs-updates"]["status"] == "required"
+    assert "tasks/specs/910-docs-only.md" in documented["targeted-tests"]["note"]
+
+
+def test_append_completion_contract_lines_skips_commands_line_when_requirement_has_none() -> None:
+    lines: list[str] = []
+
+    workflow_query_module._append_completion_contract_lines(
+        lines,
+        {
+            "enforced_requirements": [
+                {
+                    "requirement_id": "fixture",
+                    "status": "required",
+                    "summary": "Fixture enforced requirement.",
+                    "reason": "Exercise the no-command branch.",
+                    "commands": [],
+                    "note": "Still render the note.",
+                }
+            ],
+            "documented_requirements": [],
+        },
+    )
+
+    assert "  Commands:" not in "\n".join(lines)
+    assert "  Note: Still render the note." in lines
 
 
 def test_handle_show_remains_unchanged_by_caller_aware_validation_packs(

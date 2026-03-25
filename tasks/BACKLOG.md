@@ -378,27 +378,6 @@ actually improves agent and human comprehension.
 
 ---
 
-### TASK-256: Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-The repo now has explicit lifecycle checks, a canonical `local-gate`, and
-agent-facing workflow guidance, but the remaining completion contract is still
-partly social. Tighten the post-task path around the gaps that are not already
-mechanically enforced: required validation selection, docs update expectations,
-and explicit N/A handling when a task legitimately skips a normal gate.
-
-**Files**: `AGENTS.md`, `Makefile`, `scripts/finish_task_pr.sh`, `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `docs/AGENT_RUNBOOK.md`, `tests/unit/`, `tests/workflow/`
-
-**Acceptance Criteria**:
-- [ ] The remaining implicit completion rules are enumerated explicitly, separating already-enforced requirements from still-social expectations
-- [ ] Task-finish guidance or tooling requires relevant tests for code changes unless a documented N/A condition applies
-- [ ] Task-finish guidance or tooling keeps `horadus tasks local-gate --full` as the canonical post-task local gate without reintroducing duplicate gate commands
-- [ ] Task-finish guidance or tooling explicitly requires the local integration gate where the task touches integration-covered paths or push/PR workflow requires it
-- [ ] Task-finish guidance or tooling calls out documentation updates when behavior, workflow, or operator-facing contracts changed
-- [ ] `horadus tasks context-pack` suggested validation commands stay aligned with the effective completion contract when that contract changes
-- [ ] Tests cover the intended pass path plus at least one documented N/A or blocker path so the contract does not regress back into implicit policy
-
 ### TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

@@ -352,3 +352,4 @@
 - TASK-344: Surface review-gate wait state and deadlines in `horadus tasks finish` ✅
 - TASK-361: Unblock repo-wide dependency audit for the current upstream-unfixed `pygments` CVE ✅
 - TASK-345: Preflight stale review state before entering the finish review window ✅
+- TASK-256: Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs ✅

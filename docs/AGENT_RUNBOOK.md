@@ -95,6 +95,8 @@ This covers tracked Python under `src/`, `tools/`, and `scripts/`.
 The workflow unit suite includes the repo-owned import-boundary analyzer for
 `src/` dependency direction, tooling package boundaries, and the explicit
 runtime bridge seam into app code.
+This is still a baseline gate, not a substitute for task-specific targeted
+tests when the task changes code, config, or repo-workflow behavior.
 
 6. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
@@ -120,6 +122,10 @@ ready, it attempts best-effort local auto-start on supported environments
 before failing with a specific blocker.
 If `UV_BIN` is set to an absolute `uv` path, every `uv`-backed full-gate step
 uses that same executable, including package-build validation.
+Keep this as the canonical strict post-task local gate. If a task touches
+integration-covered paths or push/PR workflow surfaces, run
+`make test-integration-docker` as focused proof when helpful, but do not treat
+that narrower command as a replacement for the full gate.
 
 Compatibility wrapper:
 - `make local-gate`
@@ -181,6 +187,10 @@ If a same-head review window already timed out and the only remaining blocker
 is unresolved review threads, resolving those threads and rerunning `finish`
 can continue on the same head without silently restarting a fresh timeout
 window.
+Before invoking `finish`, the task still owes its targeted proofs: run relevant
+task-specific tests for code/config/workflow changes, update docs when
+behavior/workflow/operator-facing contracts changed, and record any N/A or
+waived proof in the task's authoritative planning artifact when one exists.
 For completion policy, review-timeout semantics, fresh re-review ownership,
 thread handling, and completion-claim rules, see `AGENTS.md`.
 

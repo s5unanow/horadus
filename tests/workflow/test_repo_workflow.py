@@ -19,6 +19,14 @@ def test_repo_workflow_command_helpers_render_task_specific_commands() -> None:
 def test_repo_workflow_guidance_helpers_return_expected_statement_groups() -> None:
     assert "AGENTS.md" not in repo_workflow_module.WORKFLOW_REFERENCE_PATHS
     assert repo_workflow_module.completion_guidance_statements()
+    assert any(
+        "targeted tests" in statement
+        for statement in repo_workflow_module.completion_guidance_statements()
+    )
+    assert any(
+        "make test-integration-docker" in statement
+        for statement in repo_workflow_module.completion_guidance_statements()
+    )
     assert repo_workflow_module.dependency_aware_guidance_statements()
     assert repo_workflow_module.fallback_guidance_statements()
     assert repo_workflow_module.high_risk_pre_push_review_reference_paths() == (

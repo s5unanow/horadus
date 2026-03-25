@@ -454,11 +454,16 @@ def test_docs_freshness_flags_workflow_policy_duplication_outside_agents(
 ) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
+    duplicated_statement = next(
+        statement
+        for statement in completion_guidance_statements()
+        if "Do not claim a task is complete, done, or finished until" in statement
+    )
     (tmp_path / "ops" / "skills" / "horadus-cli" / "references" / "commands.md").write_text(
         "\n".join(
             [
                 "Canonical commands only.",
-                completion_guidance_statements()[3],
+                duplicated_statement,
                 "",
             ]
         ),

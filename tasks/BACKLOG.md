@@ -38,6 +38,26 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Open Task Ledger
 
+### TASK-361: Unblock repo-wide dependency audit for the current upstream-unfixed `pygments` CVE
+**Priority**: P1 (High)
+**Estimate**: 2-4 hours
+
+`pip-audit` now flags `CVE-2026-4539` against the locked `pygments==2.19.2`
+dependency set, and the current audit output does not advertise a fixed
+version. That blocks new task PRs at the required `Security Scan` gate. The
+repo needs a narrow, repo-owned remediation path for this specific
+upstream-unfixed dependency finding so CI and local-gate behavior stay aligned
+without relying on ad hoc per-run operator flags.
+
+**Planning Gates**: Required — shared workflow/security policy contract change
+**Files**: `scripts/run_dependency_audit.sh`, `docs/AGENT_RUNBOOK.md`, `pyproject.toml`, `uv.lock`, `tests/unit/scripts/`, `tests/horadus_cli/`
+
+**Acceptance Criteria**:
+- [ ] The repo-owned dependency audit has a deterministic way to handle the current `pygments` `CVE-2026-4539` finding without requiring ad hoc per-run flags
+- [ ] Any remediation or temporary exception is narrow, explicit, and discoverable from versioned repo policy rather than hidden in CI-only configuration
+- [ ] Local dependency-audit validation passes against the frozen dependency set with the same behavior CI will use
+- [ ] Regression coverage fails if the exception/remediation contract drifts, broadens unexpectedly, or stops matching the documented audit path
+
 ### TASK-354: Centralize repo-owned secret-scan policy and exclude rules
 **Priority**: P2 (Medium)
 **Estimate**: 2-3 hours

@@ -75,6 +75,7 @@ def test_script_help_entrypoints_execute_from_external_cwd(
 @pytest.mark.parametrize(
     ("stem", "attribute"),
     [
+        ("check_dependency_audit", "main"),
         ("check_code_shape", "main"),
         ("check_docs_freshness", "main"),
         ("check_pr_closure_state", "main"),
@@ -84,3 +85,45 @@ def test_script_help_entrypoints_execute_from_external_cwd(
 def test_script_imports_insert_repo_root_when_missing(stem: str, attribute: str) -> None:
     module = _load_script_without_repo_root(stem)
     assert hasattr(module, attribute)
+
+
+def test_check_dependency_audit_script_entrypoint_executes_main(tmp_path: Path) -> None:
+    fake_uv = tmp_path / "fake-uv"
+    fake_uv.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "export" ]]; then
+  output=""
+  while [[ $# -gt 0 ]]; do
+    if [[ "$1" == "-o" ]]; then
+      output="$2"
+      shift 2
+      continue
+    fi
+    shift
+  done
+  printf 'pytest==9.0.2\\n' >"$output"
+  exit 0
+fi
+output=""
+while [[ $# -gt 0 ]]; do
+  if [[ "$1" == "-o" ]]; then
+    output="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+cat >"$output" <<'JSON'
+{"dependencies":[{"name":"pygments","version":"2.19.2","vulns":[{"id":"CVE-2026-4539","aliases":[],"fix_versions":[],"description":"regex complexity"}]}],"fixes":[]}
+JSON
+exit 1
+""",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = _run_script("check_dependency_audit.py", tmp_path, str(fake_uv))
+
+    assert result.returncode == 0
+    assert "dependency-audit passed: no actionable vulnerabilities remain." in result.stdout

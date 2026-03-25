@@ -249,6 +249,12 @@ def main() -> int:
             print("dependency-audit: pip-audit failed before findings could be evaluated.")
             return 2
 
+        if not report_path.exists():
+            if audit_output:
+                print(audit_output)
+            print("dependency-audit: pip-audit failed before findings could be evaluated.")
+            return 2
+
         report = json.loads(report_path.read_text(encoding="utf-8"))
         try:
             findings = parse_audit_report(report)

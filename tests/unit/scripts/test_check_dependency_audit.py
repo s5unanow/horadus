@@ -576,6 +576,40 @@ def test_main_handles_non_findings_pip_audit_failure_without_output(
     ]
 
 
+def test_main_handles_missing_audit_report_after_findings_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    allowlist_path = tmp_path / "dependency_audit_allowlist.json"
+    allowlist_path.write_text(json.dumps({"allowlist": []}), encoding="utf-8")
+
+    def fake_run_command(
+        args: list[str], *, cwd: Path
+    ) -> dependency_audit_module.subprocess.CompletedProcess[str]:
+        if args[1] == "export":
+            output_index = args.index("-o") + 1
+            Path(args[output_index]).write_text("pytest==9.0.2\n", encoding="utf-8")
+            return dependency_audit_module.subprocess.CompletedProcess(args, 0, "", "")
+        return dependency_audit_module.subprocess.CompletedProcess(
+            args,
+            1,
+            "",
+            "No module named pip_audit",
+        )
+
+    monkeypatch.setattr(dependency_audit_module, "ALLOWLIST_PATH", allowlist_path)
+    monkeypatch.setattr(dependency_audit_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(sys, "argv", ["check_dependency_audit.py"])
+
+    assert dependency_audit_module.main() == 2
+    assert capsys.readouterr().out.splitlines() == [
+        "dependency-audit: auditing the exported frozen dependency set for known vulnerabilities",
+        "No module named pip_audit",
+        "dependency-audit: pip-audit failed before findings could be evaluated.",
+    ]
+
+
 def test_main_passes_without_findings(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

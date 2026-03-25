@@ -114,7 +114,7 @@ def parse_audit_report(payload: dict[str, Any]) -> tuple[AuditFinding, ...]:
                     version=version,
                     vuln_id=vuln_id,
                     aliases=tuple(str(alias) for alias in aliases),
-                    fix_versions=tuple(str(version) for version in fix_versions),
+                    fix_versions=tuple(str(fix_version) for fix_version in fix_versions),
                     description=str(vuln.get("description", "")).strip(),
                 )
             )
@@ -197,6 +197,7 @@ def run_pip_audit(
             "json",
             "--progress-spinner",
             "off",
+            "--strict",
             "-o",
             str(report_path),
         ],

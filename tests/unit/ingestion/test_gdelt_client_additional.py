@@ -16,6 +16,7 @@ from src.ingestion.gdelt_client import GDELTClient, GDELTQueryConfig
 from src.ingestion.source_identity import (
     gdelt_provider_source_key,
     gdelt_provider_source_key_from_mapping,
+    telegram_provider_source_key,
 )
 from src.storage.models import Source, SourceType
 
@@ -383,6 +384,62 @@ async def test_get_or_create_source_preserves_state_across_query_rename(
     assert existing.ingestion_window_end_at == watermark
     assert existing.error_count == 3
     refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_promotes_matching_legacy_row_without_provider_key(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    query = GDELTQueryConfig(
+        name="Renamed Query",
+        query="ukraine",
+        themes=["MILITARY"],
+        actors=["NATO"],
+        countries=["UA"],
+        languages=["en"],
+        source_tier="official",
+        reporting_type="firsthand",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
+    legacy_source = SimpleNamespace(
+        id=uuid4(),
+        provider_source_key=None,
+        name="Legacy Query",
+        url=client.api_url,
+        credibility_score=Decimal(str(query.credibility)),
+        source_tier=query.source_tier,
+        reporting_type=query.reporting_type,
+        config={
+            "query": query.query,
+            "themes": query.themes,
+            "actors": query.actors,
+            "countries": query.countries,
+            "languages": query.languages,
+        },
+        is_active=True,
+    )
+    mock_db_session.scalar = AsyncMock(side_effect=[None, legacy_source])
+
+    updated = await client._get_or_create_source(query)
+
+    assert updated is legacy_source
+    assert legacy_source.provider_source_key == gdelt_provider_source_key_from_mapping(
+        legacy_source.config
+    )
+    assert mock_db_session.flush.await_count == 1
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=legacy_source.id)
+
+
+def test_source_identity_helpers_cover_none_and_normalization_edges() -> None:
+    assert telegram_provider_source_key(None) is None
+    assert telegram_provider_source_key("https://t.me/Intel_Feed/42") == "telegram:intel_feed"
+    assert gdelt_provider_source_key_from_mapping(
+        {"query": "  Ukraine  ", "themes": ["MILITARY", " military ", None]}
+    ) == gdelt_provider_source_key_from_mapping({"query": "ukraine", "themes": ["military"]})
 
 
 def test_gdelt_helper_functions_cover_parsing_and_filters() -> None:

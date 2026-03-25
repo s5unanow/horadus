@@ -98,7 +98,6 @@ path = "src/processing/pipeline_orchestrator.py"
 max_lines = 1521
 [legacy_files.member_max_lines]
 "ProcessingPipeline._prepare_item_for_tier1" = 112
-"ProcessingPipeline._process_after_tier1" = 220
 
 [[legacy_files]]
 path = "src/processing/tier2_canary.py"

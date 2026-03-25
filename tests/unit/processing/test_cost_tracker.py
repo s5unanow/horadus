@@ -152,6 +152,35 @@ async def test_get_daily_summary_marks_sleep_mode_when_limit_reached(
 
 
 @pytest.mark.asyncio
+async def test_get_tier_budget_snapshot_reports_remaining_capacity(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "TIER2_MAX_DAILY_CALLS", 10)
+    monkeypatch.setattr(settings, "DAILY_COST_LIMIT_USD", 2.0)
+    today = datetime.now(tz=UTC).date()
+    rows = [
+        ApiUsage(
+            usage_date=today,
+            tier="tier2",
+            call_count=4,
+            input_tokens=4000,
+            output_tokens=1000,
+            estimated_cost_usd=0.8,
+        ),
+    ]
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: rows)
+    tracker = CostTracker(session=mock_db_session)
+
+    snapshot = await tracker.get_tier_budget_snapshot(TIER2)
+
+    assert snapshot.remaining_calls == 6
+    assert snapshot.average_cost_per_call_usd == pytest.approx(0.2)
+    assert snapshot.headroom_ratio == pytest.approx(0.6)
+    assert snapshot.estimated_remaining_calls_from_budget == 6
+
+
+@pytest.mark.asyncio
 async def test_record_usage_uses_provider_model_pricing(mock_db_session, monkeypatch) -> None:
     monkeypatch.setattr(settings, "DAILY_COST_LIMIT_USD", 10.0)
     monkeypatch.setattr(

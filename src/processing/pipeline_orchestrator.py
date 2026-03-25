@@ -4,9 +4,7 @@ Processing pipeline orchestration for pending raw items.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime
-from inspect import signature
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -50,8 +48,15 @@ from src.processing.pipeline_types import (
     PipelineUsage,
     _ItemExecution,
     _PreparedItem,
+    _StagedTier2Candidate,
 )
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
+from src.processing.tier2_candidate_processor import (
+    finalize_staged_tier2_candidate,
+    load_item_source_credibility,
+    order_tier2_candidates,
+    stage_tier2_candidate,
+)
 from src.processing.tier2_classifier import Tier2Classifier
 from src.processing.trend_impact_mapping import (
     iter_unresolved_mapping_gaps,
@@ -66,7 +71,6 @@ from src.processing.trend_impact_reconciliation import (
     resolve_indicator_weight,
 )
 from src.storage.event_extraction import (
-    capture_canonical_extraction,
     demote_current_extraction_to_provisional,
     snapshot_has_canonical_extraction,
 )
@@ -146,21 +150,11 @@ class ProcessingPipeline:
 
         run_result = PipelineRunResult(scanned=len(items))
         execution_by_item: dict[UUID, _ItemExecution] = {}
-        prepared_items: list[_PreparedItem] = []
-
-        for item in items:
-            language_label = self._language_metric_label(item.language)
-            record_processing_ingested_language(language=language_label)
-            prepared, execution = await self._prepare_item_for_tier1(item=item)
-            if prepared is not None:
-                prepared_items.append(prepared)
-                if execution is not None:
-                    self._accumulate_usage(run_result=run_result, usage=execution.usage)
-                continue
-            if execution is not None:
-                execution_by_item[self._item_id(item)] = execution
-                self._accumulate_usage(run_result=run_result, usage=execution.usage)
-                continue
+        prepared_items = await self._prepare_items_for_tier1_run(
+            items=items,
+            run_result=run_result,
+            execution_by_item=execution_by_item,
+        )
 
         tier1_result_by_item: dict[UUID, Tier1ItemResult] = {}
         tier1_failed_by_item: dict[UUID, _ItemExecution] = {}
@@ -175,59 +169,180 @@ class ProcessingPipeline:
             )
             self._accumulate_usage(run_result=run_result, usage=tier1_usage)
 
+        ready_for_tier2 = await self._resolve_prepared_items_after_tier1(
+            prepared_items=prepared_items,
+            tier1_result_by_item=tier1_result_by_item,
+            tier1_failed_by_item=tier1_failed_by_item,
+            trends=active_trends,
+            run_result=run_result,
+            execution_by_item=execution_by_item,
+        )
+        await self._run_ready_tier2_candidates(
+            ready_for_tier2=ready_for_tier2,
+            trends=active_trends,
+            run_result=run_result,
+            execution_by_item=execution_by_item,
+        )
+        await self._finalize_run_results(
+            items=items,
+            execution_by_item=execution_by_item,
+            run_result=run_result,
+        )
+        return run_result
+
+    async def _prepare_items_for_tier1_run(
+        self,
+        *,
+        items: list[RawItem],
+        run_result: PipelineRunResult,
+        execution_by_item: dict[UUID, _ItemExecution],
+    ) -> list[_PreparedItem]:
+        prepared_items: list[_PreparedItem] = []
+        for item in items:
+            record_processing_ingested_language(language=self._language_metric_label(item.language))
+            prepared, execution = await self._prepare_item_for_tier1(item=item)
+            if prepared is not None:
+                prepared_items.append(prepared)
+            if execution is not None:
+                execution_by_item[self._item_id(item)] = execution
+                self._accumulate_usage(run_result=run_result, usage=execution.usage)
+        return prepared_items
+
+    async def _resolve_prepared_items_after_tier1(
+        self,
+        *,
+        prepared_items: list[_PreparedItem],
+        tier1_result_by_item: dict[UUID, Tier1ItemResult],
+        tier1_failed_by_item: dict[UUID, _ItemExecution],
+        trends: list[Trend],
+        run_result: PipelineRunResult,
+        execution_by_item: dict[UUID, _ItemExecution],
+    ) -> list[tuple[_PreparedItem, Tier1ItemResult]]:
+        ready_for_tier2: list[tuple[_PreparedItem, Tier1ItemResult]] = []
         for prepared in prepared_items:
             if prepared.item_id in tier1_failed_by_item:
                 execution_by_item[prepared.item_id] = tier1_failed_by_item[prepared.item_id]
                 continue
-
             tier1_result = tier1_result_by_item.get(prepared.item_id)
             if tier1_result is None:
-                prepared.item.processing_status = ProcessingStatus.ERROR
-                prepared.item.processing_started_at = None
-                prepared.item.error_message = (
-                    "Tier 1 classifier returned no result for prepared pipeline item"
-                )
-                await self.session.flush()
-                execution_by_item[prepared.item_id] = _ItemExecution(
-                    result=PipelineItemResult(
-                        item_id=prepared.item_id,
-                        final_status=prepared.item.processing_status,
-                        error_message=prepared.item.error_message,
-                    )
+                execution_by_item[prepared.item_id] = await self._missing_tier1_result_execution(
+                    prepared=prepared
                 )
                 continue
-
             record_processing_tier1_language_outcome(
                 language=self._language_metric_label(prepared.item.language),
                 outcome="pass" if tier1_result.should_queue_tier2 else "noise",
             )
+            if tier1_result.should_queue_tier2:
+                ready_for_tier2.append((prepared, tier1_result))
+                continue
             execution = await self._process_after_tier1(
                 prepared=prepared,
                 tier1_result=tier1_result,
-                trends=active_trends,
+                trends=trends,
             )
             execution_by_item[prepared.item_id] = execution
             self._accumulate_usage(run_result=run_result, usage=execution.usage)
+        return ready_for_tier2
 
+    async def _run_ready_tier2_candidates(
+        self,
+        *,
+        ready_for_tier2: list[tuple[_PreparedItem, Tier1ItemResult]],
+        trends: list[Trend],
+        run_result: PipelineRunResult,
+        execution_by_item: dict[UUID, _ItemExecution],
+    ) -> None:
+        staged_candidates = await self._stage_ready_tier2_candidates(
+            ready_for_tier2=ready_for_tier2,
+            run_result=run_result,
+            execution_by_item=execution_by_item,
+        )
+        if not staged_candidates:
+            return
+        source_credibility_by_item = await load_item_source_credibility(
+            owner=self,
+            items=[candidate.prepared.item for candidate in staged_candidates],
+        )
+        ordered_candidates = await order_tier2_candidates(
+            owner=self,
+            staged_candidates=staged_candidates,
+            trends=trends,
+            source_credibility_by_item=source_credibility_by_item,
+        )
+        for candidate in ordered_candidates:
+            execution = await finalize_staged_tier2_candidate(
+                owner=self,
+                candidate=candidate,
+                trends=trends,
+            )
+            execution_by_item[candidate.prepared.item_id] = execution
+            self._accumulate_usage(run_result=run_result, usage=execution.usage)
+
+    async def _stage_ready_tier2_candidates(
+        self,
+        *,
+        ready_for_tier2: list[tuple[_PreparedItem, Tier1ItemResult]],
+        run_result: PipelineRunResult,
+        execution_by_item: dict[UUID, _ItemExecution],
+    ) -> list[_StagedTier2Candidate]:
+        staged_candidates: list[_StagedTier2Candidate] = []
+        for prepared, tier1_result in ready_for_tier2:
+            staged_candidate, execution = await stage_tier2_candidate(
+                owner=self,
+                prepared=prepared,
+                tier1_result=tier1_result,
+            )
+            if staged_candidate is not None:
+                staged_candidates.append(staged_candidate)
+            if execution is not None:
+                execution_by_item[prepared.item_id] = execution
+                self._accumulate_usage(run_result=run_result, usage=execution.usage)
+        return staged_candidates
+
+    async def _finalize_run_results(
+        self,
+        *,
+        items: list[RawItem],
+        execution_by_item: dict[UUID, _ItemExecution],
+        run_result: PipelineRunResult,
+    ) -> None:
         for item in items:
             item_id = self._item_id(item)
             execution = execution_by_item.get(item_id)
             if execution is None:
-                item.processing_status = ProcessingStatus.ERROR
-                item.processing_started_at = None
-                item.error_message = "Pipeline execution result missing"
-                await self.session.flush()
-                execution = _ItemExecution(
-                    result=PipelineItemResult(
-                        item_id=item_id,
-                        final_status=item.processing_status,
-                        error_message=item.error_message,
-                    )
-                )
+                execution = await self._missing_execution_result(item=item)
                 execution_by_item[item_id] = execution
             run_result.results.append(execution.result)
             self._accumulate_result_counters(run_result=run_result, execution=execution)
-        return run_result
+
+    async def _missing_tier1_result_execution(self, *, prepared: _PreparedItem) -> _ItemExecution:
+        prepared.item.processing_status = ProcessingStatus.ERROR
+        prepared.item.processing_started_at = None
+        prepared.item.error_message = (
+            "Tier 1 classifier returned no result for prepared pipeline item"
+        )
+        await self.session.flush()
+        return _ItemExecution(
+            result=PipelineItemResult(
+                item_id=prepared.item_id,
+                final_status=prepared.item.processing_status,
+                error_message=prepared.item.error_message,
+            )
+        )
+
+    async def _missing_execution_result(self, *, item: RawItem) -> _ItemExecution:
+        item.processing_status = ProcessingStatus.ERROR
+        item.processing_started_at = None
+        item.error_message = "Pipeline execution result missing"
+        await self.session.flush()
+        return _ItemExecution(
+            result=PipelineItemResult(
+                item_id=self._item_id(item),
+                final_status=item.processing_status,
+                error_message=item.error_message,
+            )
+        )
 
     @staticmethod
     def _accumulate_usage(*, run_result: PipelineRunResult, usage: PipelineUsage) -> None:
@@ -528,10 +643,7 @@ class ProcessingPipeline:
         tier1_result: Tier1ItemResult,
         trends: list[Trend],
     ) -> _ItemExecution:
-        usage = PipelineUsage()
         item = prepared.item
-        cluster_result: ClusterResult | None = None
-        embedded = False
         try:
             if not tier1_result.should_queue_tier2:
                 await self._capture_tier1_novelty_candidate(item=item, tier1_result=tier1_result)
@@ -545,162 +657,22 @@ class ProcessingPipeline:
                         cluster_result=None,
                         embedded=False,
                     ),
-                    usage=usage,
+                    usage=PipelineUsage(),
                 )
-            if item.embedding is None:
-                embedding_audit = None
-                embed_with_contexts = getattr(
-                    self.embedding_service, "embed_texts_with_contexts", None
-                )
-                if callable(embed_with_contexts):
-                    (
-                        vectors,
-                        audits,
-                        _cache_hits,
-                        embedding_api_calls,
-                    ) = await embed_with_contexts(
-                        [prepared.raw_content],
-                        entity_type="raw_item",
-                        entity_ids=[prepared.item_id],
-                    )
-                    embedding_audit = audits[0] if audits else None
-                else:
-                    (
-                        vectors,
-                        _cache_hits,
-                        embedding_api_calls,
-                    ) = await self.embedding_service.embed_texts([prepared.raw_content])
-                item.embedding = vectors[0]
-                item.embedding_model = getattr(
-                    self.embedding_service,
-                    "model",
-                    settings.EMBEDDING_MODEL,
-                )
-                item.embedding_generated_at = datetime.now(tz=UTC)
-                if embedding_audit is not None:
-                    item.embedding_input_tokens = embedding_audit.original_tokens
-                    item.embedding_retained_tokens = embedding_audit.retained_tokens
-                    item.embedding_was_truncated = embedding_audit.was_truncated
-                    item.embedding_truncation_strategy = (
-                        embedding_audit.strategy if embedding_audit.was_cut else None
-                    )
-                embedded = True
-                usage.embedding_api_calls += embedding_api_calls
-
-            cluster_result = await self.event_clusterer.cluster_item(item)
-            event = await self._load_event(cluster_result.event_id)
-            if event is None:
-                msg = f"Event {cluster_result.event_id} not found after clustering"
-                raise ValueError(msg)
-
-            suppression_action = await self._event_suppression_action(
-                event_id=cluster_result.event_id
+            staged_candidate, staged_execution = await stage_tier2_candidate(
+                owner=self,
+                prepared=prepared,
+                tier1_result=tier1_result,
             )
-            if suppression_action is not None:
-                item.processing_status = ProcessingStatus.NOISE
-                item.processing_started_at = None
-                await self.session.flush()
-                record_processing_event_suppression(
-                    action=suppression_action,
-                    stage="pipeline_post_cluster",
-                )
-                logger.info(
-                    "Skipping event due to human feedback suppression",
-                    item_id=str(prepared.item_id),
-                    event_id=str(cluster_result.event_id),
-                    action=suppression_action,
-                )
-                return _ItemExecution(
-                    result=self._build_item_result(
-                        item_id=prepared.item_id,
-                        status=item.processing_status,
-                        cluster_result=cluster_result,
-                        embedded=embedded,
-                    ),
-                    usage=usage,
-                )
-
-            canonical_snapshot = capture_canonical_extraction(event)
-            classify_kwargs: dict[str, Any] = {"event": event, "trends": trends}
-            if (
-                "defer_semantic_cache_write"
-                in signature(self.tier2_classifier.classify_event).parameters
-            ):
-                classify_kwargs["defer_semantic_cache_write"] = True
-            _tier2_result, tier2_usage = await self.tier2_classifier.classify_event(
-                **classify_kwargs
-            )
-            record_processing_tier2_language_usage(
-                language=self._language_metric_label(item.language),
-            )
-            usage.tier2_prompt_tokens += tier2_usage.prompt_tokens
-            usage.tier2_completion_tokens += tier2_usage.completion_tokens
-            usage.tier2_api_calls += tier2_usage.api_calls
-            usage.tier2_estimated_cost_usd += tier2_usage.estimated_cost_usd
-            degraded_hold = False
-            replay_enqueued = False
-            trend_impacts_seen = 0
-            trend_updates = 0
-            if self.degraded_llm_tracker is not None:
-                # Avoid inflating the rolling window with semantic-cache hits (no actual API call).
-                if int(tier2_usage.api_calls) > 0:
-                    await asyncio.to_thread(
-                        self.degraded_llm_tracker.record_invocation,
-                        used_secondary_route=bool(tier2_usage.used_secondary_route),
-                    )
-                degraded_status = await asyncio.to_thread(self.degraded_llm_tracker.evaluate)
-                set_llm_degraded_mode(
-                    stage=degraded_status.stage,
-                    is_degraded=bool(degraded_status.is_degraded),
-                )
-                degraded_hold = bool(degraded_status.is_degraded)
-                if degraded_hold:
-                    replay_enqueued = await self._hold_degraded_extraction(
-                        event=event,
-                        trends=trends,
-                        degraded_status=degraded_status,
-                        tier2_usage=tier2_usage,
-                        canonical_snapshot=canonical_snapshot,
-                    )
-
-            if not degraded_hold:
-                await self._persist_deferred_tier2_cache_write(tier2_usage=tier2_usage)
-                await self._capture_unresolved_trend_mapping(event=event)
-                trend_impacts_seen, trend_updates = await self._apply_trend_impacts(
-                    event=event,
-                    trends=trends,
-                )
-                if trend_updates <= 0:
-                    await self._capture_event_novelty_candidate(
-                        event=event,
-                        item=item,
-                        tier1_result=tier1_result,
-                        trend_impacts_seen=trend_impacts_seen,
-                        trend_updates=trend_updates,
-                    )
-            else:
-                # Preserve extraction fields, but hold probability semantics until replay.
-                claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
-                impacts_payload = claims.get("trend_impacts", [])
-                if isinstance(impacts_payload, list):
-                    trend_impacts_seen = len(impacts_payload)
-
-            item.processing_status = ProcessingStatus.CLASSIFIED
-            item.processing_started_at = None
-            await self.session.flush()
-            return _ItemExecution(
-                result=self._build_item_result(
-                    item_id=prepared.item_id,
-                    status=item.processing_status,
-                    cluster_result=cluster_result,
-                    embedded=embedded,
-                    tier2_applied=not degraded_hold,
-                    degraded_llm_hold=degraded_hold,
-                    replay_enqueued=replay_enqueued,
-                    trend_impacts_seen=trend_impacts_seen,
-                    trend_updates=trend_updates,
-                ),
-                usage=usage,
+            if staged_execution is not None:
+                return staged_execution
+            if staged_candidate is None:
+                msg = "Tier-2 candidate staging returned neither a candidate nor an execution"
+                raise RuntimeError(msg)
+            return await finalize_staged_tier2_candidate(
+                owner=self,
+                candidate=staged_candidate,
+                trends=trends,
             )
         except BudgetExceededError as exc:
             item.processing_status = ProcessingStatus.PENDING
@@ -716,11 +688,11 @@ class ProcessingPipeline:
                 result=self._build_item_result(
                     item_id=prepared.item_id,
                     status=item.processing_status,
-                    cluster_result=cluster_result,
-                    embedded=embedded,
+                    cluster_result=None,
+                    embedded=False,
                     error_message=str(exc),
                 ),
-                usage=usage,
+                usage=PipelineUsage(),
             )
         except Exception as exc:
             self._raise_retryable_failure_if_needed(item=item, stage="post_tier1", exc=exc)
@@ -738,7 +710,7 @@ class ProcessingPipeline:
                     final_status=item.processing_status,
                     error_message=item.error_message,
                 ),
-                usage=usage,
+                usage=PipelineUsage(),
             )
 
     async def _persist_deferred_tier2_cache_write(self, *, tier2_usage: Any) -> None:
@@ -1358,3 +1330,15 @@ class ProcessingPipeline:
             "tier2_api_calls": result.usage.tier2_api_calls,
             "tier2_estimated_cost_usd": round(result.usage.tier2_estimated_cost_usd, 8),
         }
+
+    @staticmethod
+    def record_processing_event_suppression(*, action: str, stage: str) -> None:
+        record_processing_event_suppression(action=action, stage=stage)
+
+    @staticmethod
+    def record_processing_tier2_language_usage(*, language: str) -> None:
+        record_processing_tier2_language_usage(language=language)
+
+    @staticmethod
+    def set_llm_degraded_mode(*, stage: str, is_degraded: bool) -> None:
+        set_llm_degraded_mode(stage=stage, is_degraded=is_degraded)

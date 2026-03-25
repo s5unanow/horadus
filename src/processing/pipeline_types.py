@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 if TYPE_CHECKING:
-    from src.storage.models import ProcessingStatus, RawItem
+    from src.processing.event_clusterer import ClusterResult
+    from src.processing.tier1_classifier import Tier1ItemResult
+    from src.storage.models import Event, ProcessingStatus, RawItem
 
 
 @dataclass(slots=True)
@@ -82,3 +84,15 @@ class _PreparedItem:
     item: RawItem
     item_id: UUID
     raw_content: str
+
+
+@dataclass(slots=True)
+class _StagedTier2Candidate:
+    """Prepared item that already completed pre-Tier-2 deterministic steps."""
+
+    prepared: _PreparedItem
+    tier1_result: Tier1ItemResult
+    cluster_result: ClusterResult
+    event: Event
+    embedded: bool
+    usage: PipelineUsage = field(default_factory=PipelineUsage)

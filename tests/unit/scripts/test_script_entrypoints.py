@@ -40,6 +40,7 @@ class _FakeParser:
     ("stem", "attribute"),
     [
         ("assessment_publish_gate", "decide_gate"),
+        ("check_dependency_audit", "main"),
         ("check_code_shape", "main"),
         ("check_docs_freshness", "main"),
         ("check_pr_closure_state", "main"),

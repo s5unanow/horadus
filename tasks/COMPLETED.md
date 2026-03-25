@@ -350,3 +350,4 @@
 ## Sprint 7
 - TASK-343: Add caller-aware validation packs for shared helper changes ✅
 - TASK-344: Surface review-gate wait state and deadlines in `horadus tasks finish` ✅
+- TASK-361: Unblock repo-wide dependency audit for the current upstream-unfixed `pygments` CVE ✅

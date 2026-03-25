@@ -503,6 +503,39 @@ Append-only compensating ledger for corrections applied after original evidence 
 
 ---
 
+### event_adjudications
+
+Append-only typed operator workflow ledger for high-risk event review.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| event_id | UUID | No | | FK to `events` |
+| feedback_id | UUID | Yes | | Optional FK to `human_feedback.id` when the adjudication reused an existing feedback mutation path |
+| outcome | VARCHAR(50) | No | | `confirm`, `suppress`, `restate`, or `escalate_taxonomy_review` |
+| review_status | VARCHAR(50) | No | | Derived workflow status (`resolved`, `needs_taxonomy_review`) |
+| override_intent | VARCHAR(50) | No | | Typed intent (`pin_event`, `suppress_event`, `apply_restatement`, `taxonomy_escalation`) |
+| resulting_effect | JSONB | No | `{}` | Structured payload describing linked feedback/restatement effects and queue-facing metadata |
+| notes | TEXT | Yes | | Operator rationale |
+| created_by | VARCHAR(100) | Yes | | Reviewer identity |
+| created_at | TIMESTAMPTZ | No | NOW() | Ledger timestamp |
+
+**Indexes / constraints:**
+- Primary key: `id`
+- Index: `(event_id, created_at)`
+- Index: `(review_status, created_at)`
+- Index: `feedback_id`
+- Check: `outcome`
+- Check: `review_status`
+- Check: `override_intent`
+
+**Operational intent:**
+- `event_adjudications` is the canonical typed review-state surface for risky events.
+- Existing event feedback and trend restatement paths still own the concrete mutation semantics for suppress/restate-compatible actions.
+- Read APIs derive current event/review queue status from the latest adjudication plus open taxonomy-gap counts rather than inferring workflow state from generic feedback rows alone.
+
+---
+
 ### taxonomy_gaps
 
 Runtime triage queue for deterministic trend-impact mappings that could not be
@@ -763,6 +796,7 @@ The sections above were cross-checked against SQLAlchemy runtime model declarati
 - `api_usage` table: `src/storage/models.py`
 - `trend_outcomes` table: `src/storage/models.py`
 - `human_feedback` table: `src/storage/restatement_models.py`
+- `event_adjudications` table: `src/storage/restatement_models.py`
 - `trend_restatements` table: `src/storage/restatement_models.py`
 
 ---

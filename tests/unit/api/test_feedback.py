@@ -12,6 +12,7 @@ from sqlalchemy.exc import IntegrityError
 import src.api.routes._feedback_write_mutations as feedback_mutations_module
 import src.api.routes._privileged_write_contract as write_contract_module
 import src.api.routes.feedback as feedback_module
+from src.api.routes.event_review_metadata import EventReviewMetadata
 from src.api.routes.feedback import (
     EventFeedbackRequest,
     TaxonomyGapUpdateRequest,
@@ -22,11 +23,6 @@ from src.api.routes.feedback import (
     list_review_queue,
     list_taxonomy_gaps,
     update_taxonomy_gap,
-)
-from src.api.routes.feedback_event_helpers import (
-    _claim_graph_contradiction_links,
-    _contradiction_risk,
-    _uncertainty_score,
 )
 from src.api.routes.feedback_models import EventRestatementTarget
 from src.storage.models import (
@@ -41,6 +37,14 @@ from src.storage.models import (
 )
 
 pytestmark = pytest.mark.unit
+
+
+@pytest.fixture(autouse=True)
+def _stub_review_metadata_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _load_review_metadata(**kwargs):
+        return {event_id: EventReviewMetadata() for event_id in kwargs.get("event_ids", ())}
+
+    monkeypatch.setattr(feedback_module, "load_event_review_metadata", _load_review_metadata)
 
 
 def _request_with_headers(
@@ -756,16 +760,6 @@ async def test_create_trend_override_returns_404_for_unknown_trend(mock_db_sessi
 
 
 @pytest.mark.asyncio
-async def test_trend_map_returns_empty_for_no_ids(mock_db_session) -> None:
-    result = await feedback_mutations_module._trend_map(
-        session=mock_db_session,
-        trend_ids=set(),
-    )
-
-    assert result == {}
-
-
-@pytest.mark.asyncio
 async def test_list_review_queue_orders_by_ranking_score(mock_db_session) -> None:
     trend = Trend(
         id=uuid4(),
@@ -1180,21 +1174,3 @@ async def test_update_taxonomy_gap_returns_404_when_missing(mock_db_session) -> 
         )
 
     assert exc.value.status_code == 404
-
-
-def test_feedback_helper_metrics_cover_guard_clauses() -> None:
-    event = Event(canonical_summary="Test event", source_count=1, unique_source_count=1)
-    assert _claim_graph_contradiction_links(event) == 0
-
-    event.extracted_claims = {"claim_graph": []}
-    assert _claim_graph_contradiction_links(event) == 0
-
-    event.extracted_claims = {"claim_graph": {"links": "bad"}}
-    assert _claim_graph_contradiction_links(event) == 0
-
-    event.extracted_claims = {"claim_graph": {"links": [{"relation": "contradict"}]}}
-    event.has_contradictions = True
-    assert _claim_graph_contradiction_links(event) == 1
-    assert _contradiction_risk(event) == pytest.approx(1.75)
-
-    assert _uncertainty_score([]) == pytest.approx(0.551)

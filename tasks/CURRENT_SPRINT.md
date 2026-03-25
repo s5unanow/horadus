@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-232` Strengthen operator adjudication workflow for high-risk events
 - `TASK-238` Prioritize Tier-2 budget with value-of-information scheduling
 - `TASK-225` Make `horadus triage collect` return task-aware search hits
 
@@ -29,9 +28,8 @@
 4. `TASK-256` Tighten the remaining completion contract around tests, docs, and reruns.
 5. `TASK-354` Unify secret-scan policy ownership across local and CI enforcement paths.
 6. `TASK-229` Add a bounded novelty lane once the workflow surfaces are tighter.
-7. `TASK-232` Build the richer operator adjudication path on top of the `TASK-231` restatement model.
-8. `TASK-238` Spend Tier-2 budget according to bounded value-of-information signals.
-9. `TASK-225` Improve triage bundle usefulness for the next backlog review cycle.
+7. `TASK-238` Spend Tier-2 budget according to bounded value-of-information signals.
+8. `TASK-225` Improve triage bundle usefulness for the next backlog review cycle.
 
 ## Human Blocker Metadata
 
@@ -56,3 +54,4 @@
 - `TASK-354` Centralize repo-owned secret-scan policy and exclude rules ✅
 - `TASK-207` Use stable source identity keys for GDELT and Telegram watermarks ✅
 - `TASK-229` Add a Novelty Lane Outside the Active Trend List ✅
+- `TASK-232` Strengthen operator adjudication workflow for high-risk events ✅

@@ -356,3 +356,4 @@
 - TASK-354: Centralize repo-owned secret-scan policy and exclude rules ✅
 - TASK-207: Use stable source identity keys for GDELT and Telegram watermarks ✅
 - TASK-229: Add a Novelty Lane Outside the Active Trend List ✅
+- TASK-232: Strengthen operator adjudication workflow for high-risk events ✅

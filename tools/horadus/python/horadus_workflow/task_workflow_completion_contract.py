@@ -15,6 +15,7 @@ _CODE_OR_CONFIG_PREFIXES = (
     "alembic/",
     ".github/workflows/",
     "config/",
+    "tests/",
 )
 _CODE_OR_CONFIG_EXACT_PATHS = (
     "Makefile",
@@ -57,8 +58,15 @@ _SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_cli/task_",
     "tools/horadus/python/horadus_cli/_task_",
 )
-_RUNTIME_TARGETED_TEST_PREFIXES = ("src/", "alembic/")
-_WORKFLOW_TARGETED_TEST_PREFIXES = ("tools/", "scripts/", ".github/workflows/", "config/")
+_RUNTIME_TARGETED_TEST_PREFIXES = ("src/", "alembic/", "tests/unit/")
+_WORKFLOW_TARGETED_TEST_PREFIXES = (
+    "tools/",
+    "scripts/",
+    ".github/workflows/",
+    "config/",
+    "tests/horadus_cli/",
+    "tests/workflow/",
+)
 _WORKFLOW_TARGETED_TEST_EXACT_PATHS = (
     "Makefile",
     ".pre-commit-config.yaml",
@@ -120,6 +128,16 @@ def _fallback_targeted_validation_commands(normalized_paths: list[str]) -> list[
         exact_paths=_WORKFLOW_TARGETED_TEST_EXACT_PATHS,
     ):
         commands.append("uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit")
+    return commands
+
+
+def _merged_targeted_validation_commands(
+    validation_pack_commands: list[str], normalized_paths: list[str]
+) -> list[str]:
+    commands = list(validation_pack_commands)
+    for command in _fallback_targeted_validation_commands(normalized_paths):
+        if command not in commands:
+            commands.append(command)
     return commands
 
 
@@ -246,8 +264,8 @@ def _documented_requirements(
         exact_paths=_INTEGRATION_REQUIRED_EXACT_PATHS,
     )
     docs_update_required = _docs_update_required(normalized_paths)
-    targeted_test_commands = validation_pack_commands or _fallback_targeted_validation_commands(
-        normalized_paths
+    targeted_test_commands = _merged_targeted_validation_commands(
+        validation_pack_commands, normalized_paths
     )
 
     return [

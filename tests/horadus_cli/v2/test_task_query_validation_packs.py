@@ -170,6 +170,43 @@ def test_completion_contract_uses_workflow_fallback_targeted_commands() -> None:
     ]
 
 
+def test_completion_contract_marks_test_only_workflow_paths_as_required() -> None:
+    contract = completion_contract_module.build_completion_contract(
+        "TASK-916",
+        normalized_paths=["tests/workflow/test_task_workflow.py"],
+        planning={"waiver_home_path": "tasks/exec_plans/TASK-916.md"},
+        validation_pack_commands=[],
+    )
+
+    documented = {item["requirement_id"]: item for item in contract["documented_requirements"]}
+    assert documented["targeted-tests"]["status"] == "required"
+    assert documented["targeted-tests"]["commands"] == [
+        "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit"
+    ]
+
+
+def test_completion_contract_merges_pack_and_fallback_targeted_commands() -> None:
+    contract = completion_contract_module.build_completion_contract(
+        "TASK-917",
+        normalized_paths=[
+            "src/api/routes.py",
+            "tools/horadus/python/horadus_workflow/task_workflow_query.py",
+        ],
+        planning={"waiver_home_path": "tasks/exec_plans/TASK-917.md"},
+        validation_pack_commands=[
+            "make typecheck",
+            "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit",
+        ],
+    )
+
+    documented = {item["requirement_id"]: item for item in contract["documented_requirements"]}
+    assert documented["targeted-tests"]["commands"] == [
+        "make typecheck",
+        "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit",
+        "uv run --no-sync pytest tests/unit/ -v -m unit",
+    ]
+
+
 def test_completion_contract_keeps_missing_file_scope_conditional() -> None:
     contract = completion_contract_module.build_completion_contract(
         "TASK-914",

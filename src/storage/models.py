@@ -307,11 +307,8 @@ class RawItem(Base):
         nullable=False,
     )
 
-    # Relationships
     source: Mapped[Source] = relationship(back_populates="items")
     event_links: Mapped[list[EventItem]] = relationship(back_populates="item")
-
-    # Constraints
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_source_external"),
         Index("idx_raw_items_status", "processing_status"),

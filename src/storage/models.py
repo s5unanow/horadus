@@ -38,17 +38,16 @@ from src.storage.event_state import (
     EventActivityState,
     EventEpistemicState,
 )
+from src.storage.novelty_models import NoveltyCandidate
 from src.storage.restatement_models import HumanFeedback, PrivilegedWriteAudit, TrendRestatement
-from src.storage.scoring_contract import (
-    TREND_SCORING_MATH_VERSION,
-    TREND_SCORING_PARAMETER_SET,
-)
+from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
 _ = (
     CoverageSnapshot,
     EventLineage,
     HumanFeedback,
+    NoveltyCandidate,
     PrivilegedWriteAudit,
     TrendRestatement,
     TrendStateVersion,

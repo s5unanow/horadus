@@ -537,6 +537,47 @@ scored safely.
 
 ---
 
+### novelty_candidates
+
+Bounded operator-facing lane for persistent signals that do not safely map onto
+the active trend catalog.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| cluster_key | VARCHAR(64) | No | | Deterministic novelty-cluster identity |
+| candidate_kind | VARCHAR(32) | No | | `near_threshold_item` or `event_gap` |
+| event_id | UUID | Yes | | Optional FK to the most recent representative `events` row |
+| raw_item_id | UUID | Yes | | Optional FK to the most recent representative `raw_items` row |
+| summary | TEXT | No | | Operator-facing representative summary/snippet |
+| details | JSONB | No | `{}` | Bounded ranking/context payload (`actors`, `where`, `top_trend_scores`, unresolved mapping counts, etc.) |
+| recurrence_count | INTEGER | No | `1` | Number of captures rolled into this novelty cluster |
+| distinct_source_count | INTEGER | No | `1` | Max observed unique-source count across captures |
+| actor_location_hits | INTEGER | No | `0` | Count of captures with unusual actor/location structure |
+| near_threshold_hits | INTEGER | No | `0` | Count of repeated Tier-1 near-threshold misses |
+| unmapped_signal_count | INTEGER | No | `0` | Max unresolved deterministic-mapping count seen for the cluster |
+| last_tier1_max_relevance | INTEGER | Yes | | Highest Tier-1 score seen for the cluster |
+| ranking_score | DECIMAL(8,4) | No | `0` | Deterministic novelty ranking used by the operator queue |
+| first_seen_at | TIMESTAMPTZ | No | NOW() | First capture timestamp |
+| last_seen_at | TIMESTAMPTZ | No | NOW() | Most recent capture timestamp |
+| created_at | TIMESTAMPTZ | No | NOW() | Row creation timestamp |
+
+**Indexes:**
+- Primary key: `id`
+- Unique: `cluster_key`
+- Index: `last_seen_at DESC`
+- Index: `(candidate_kind, last_seen_at DESC)`
+- Index: `(ranking_score DESC, last_seen_at DESC)`
+- Index: `event_id`
+- Index: `raw_item_id`
+
+**Operational intent:**
+- Novelty capture is deterministic and bounded; it reuses Tier-1/Tier-2 outputs and does not add LLM work.
+- Novelty candidates never apply `trend_evidence` deltas by themselves.
+- API queue path: `GET /api/v1/novelty-queue`.
+
+---
+
 ### trend_snapshots
 
 Time-series of trend probabilities (TimescaleDB hypertable).

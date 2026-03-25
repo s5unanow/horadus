@@ -42,6 +42,7 @@ from src.processing.deduplication_service import DeduplicationService
 from src.processing.embedding_service import EmbeddingService
 from src.processing.event_claims import deactivate_event_claims, sync_event_claims
 from src.processing.event_clusterer import ClusterResult, EventClusterer
+from src.processing.novelty_lane import NoveltyLaneService
 from src.processing.pipeline_retry import build_retryable_pipeline_error
 from src.processing.pipeline_types import (
     PipelineItemResult,
@@ -107,6 +108,7 @@ class ProcessingPipeline:
         tier2_classifier: Tier2Classifier | None = None,
         trend_engine: TrendEngine | None = None,
         degraded_llm_tracker: DegradedLLMTracker | None = None,
+        novelty_lane_service: NoveltyLaneService | None = None,
     ) -> None:
         self.session = session
         self.deduplication_service = deduplication_service or DeduplicationService(session=session)
@@ -116,6 +118,7 @@ class ProcessingPipeline:
         self.tier2_classifier = tier2_classifier or Tier2Classifier(session=session)
         self.trend_engine = trend_engine or TrendEngine(session=session)
         self.degraded_llm_tracker = degraded_llm_tracker
+        self.novelty_lane_service = novelty_lane_service or NoveltyLaneService(session=session)
 
     async def process_pending_items(
         self,
@@ -531,6 +534,7 @@ class ProcessingPipeline:
         embedded = False
         try:
             if not tier1_result.should_queue_tier2:
+                await self._capture_tier1_novelty_candidate(item=item, tier1_result=tier1_result)
                 item.processing_status = ProcessingStatus.NOISE
                 item.processing_started_at = None
                 await self.session.flush()
@@ -666,6 +670,14 @@ class ProcessingPipeline:
                     event=event,
                     trends=trends,
                 )
+                if trend_updates <= 0:
+                    await self._capture_event_novelty_candidate(
+                        event=event,
+                        item=item,
+                        tier1_result=tier1_result,
+                        trend_impacts_seen=trend_impacts_seen,
+                        trend_updates=trend_updates,
+                    )
             else:
                 # Preserve extraction fields, but hold probability semantics until replay.
                 claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
@@ -869,6 +881,47 @@ class ProcessingPipeline:
         if normalized_action not in {"mark_noise", "invalidate"}:
             return None
         return normalized_action
+
+    async def _capture_tier1_novelty_candidate(
+        self,
+        *,
+        item: RawItem,
+        tier1_result: Tier1ItemResult,
+    ) -> None:
+        try:
+            await self.novelty_lane_service.capture_tier1_near_miss(
+                item=item,
+                tier1_result=tier1_result,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to capture near-threshold novelty candidate",
+                item_id=str(item.id),
+            )
+
+    async def _capture_event_novelty_candidate(
+        self,
+        *,
+        event: Event,
+        item: RawItem,
+        tier1_result: Tier1ItemResult,
+        trend_impacts_seen: int,
+        trend_updates: int,
+    ) -> None:
+        try:
+            await self.novelty_lane_service.capture_event_candidate(
+                event=event,
+                item=item,
+                tier1_result=tier1_result,
+                trend_impacts_seen=trend_impacts_seen,
+                trend_updates=trend_updates,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to capture event novelty candidate",
+                event_id=str(event.id) if event.id is not None else None,
+                item_id=str(item.id),
+            )
 
     async def _apply_trend_impacts(
         self,

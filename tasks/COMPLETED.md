@@ -355,3 +355,4 @@
 - TASK-256: Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs ✅
 - TASK-354: Centralize repo-owned secret-scan policy and exclude rules ✅
 - TASK-207: Use stable source identity keys for GDELT and Telegram watermarks ✅
+- TASK-229: Add a Novelty Lane Outside the Active Trend List ✅

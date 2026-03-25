@@ -142,28 +142,6 @@ contexts.
 
 ---
 
-### TASK-229: Add a Novelty Lane Outside the Active Trend List
-**Priority**: P1 (High)
-**Estimate**: 6-8 hours
-
-Tier-1 routing against only the active trend catalog is cost-efficient but can
-create tunnel vision. Add a bounded side channel that surfaces persistent novel
-clusters and near-miss items that do not map cleanly to current tracked trends.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/processing/`, `src/storage/models.py`, `src/api/routes/feedback.py`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Persist bounded novelty candidates derived from unscored or low-confidence items/events without applying trend deltas
-- [ ] Rank novelty candidates using stable signals such as recurrence, unusual actor/location combinations, or repeated near-threshold relevance
-- [ ] Keep the novelty lane budget-safe and independent from the normal active-trend scoring path
-- [ ] Expose novelty candidates in an operator-facing API or review queue endpoint
-- [ ] Add regression coverage showing that novel persistent signals surface even when they do not map to active trends
-
----
-
 ### TASK-232: Strengthen Operator Adjudication Workflow for High-Risk Events
 **Priority**: P2 (Medium)
 **Estimate**: 4-6 hours

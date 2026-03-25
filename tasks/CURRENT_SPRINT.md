@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-229` Add a novelty lane outside the active trend list
 - `TASK-232` Strengthen operator adjudication workflow for high-risk events
 - `TASK-238` Prioritize Tier-2 budget with value-of-information scheduling
 - `TASK-225` Make `horadus triage collect` return task-aware search hits
@@ -56,3 +55,4 @@
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs ✅
 - `TASK-354` Centralize repo-owned secret-scan policy and exclude rules ✅
 - `TASK-207` Use stable source identity keys for GDELT and Telegram watermarks ✅
+- `TASK-229` Add a Novelty Lane Outside the Active Trend List ✅

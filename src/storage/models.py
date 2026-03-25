@@ -191,6 +191,7 @@ class Source(Base):
         Enum(SourceType, name="source_type", values_callable=enum_values),
         nullable=False,
     )
+    provider_source_key: Mapped[str | None] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str | None] = mapped_column(Text)
     credibility_score: Mapped[float] = mapped_column(
@@ -198,13 +199,11 @@ class Source(Base):
         default=0.50,
         nullable=False,
     )
-    # NEW: Source tier (Expert Recommendation)
     source_tier: Mapped[str] = mapped_column(
         String(20),
         default=SourceTier.REGIONAL.value,
         nullable=False,
     )
-    # NEW: Reporting type (Expert Recommendation)
     reporting_type: Mapped[str] = mapped_column(
         String(20),
         default=ReportingType.SECONDARY.value,
@@ -227,11 +226,7 @@ class Source(Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-    # Relationships
     items: Mapped[list[RawItem]] = relationship(back_populates="source")
-
-    # Constraints
     __table_args__ = (
         CheckConstraint(
             "credibility_score >= 0 AND credibility_score <= 1",
@@ -249,6 +244,13 @@ class Source(Base):
         Index("idx_sources_type", "type"),
         Index("idx_sources_tier", "source_tier"),
         Index("idx_sources_ingestion_window_end_at", "ingestion_window_end_at"),
+        Index(
+            "uq_sources_type_provider_source_key",
+            "type",
+            "provider_source_key",
+            unique=True,
+            postgresql_where=text("provider_source_key IS NOT NULL"),
+        ),
     )
 
 
@@ -305,11 +307,8 @@ class RawItem(Base):
         nullable=False,
     )
 
-    # Relationships
     source: Mapped[Source] = relationship(back_populates="items")
     event_links: Mapped[list[EventItem]] = relationship(back_populates="item")
-
-    # Constraints
     __table_args__ = (
         UniqueConstraint("source_id", "external_id", name="uq_source_external"),
         Index("idx_raw_items_status", "processing_status"),

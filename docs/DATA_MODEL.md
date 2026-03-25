@@ -67,6 +67,7 @@ Stores configuration for data sources (RSS feeds, Telegram channels, etc.)
 |--------|------|----------|---------|-------------|
 | id | UUID | No | gen_random_uuid() | Primary key |
 | type | VARCHAR(50) | No | | Source type: rss, telegram, gdelt, api |
+| provider_source_key | VARCHAR(255) | Yes | | Stable provider identity key used to preserve source state across harmless renames |
 | name | VARCHAR(255) | No | | Human-readable name |
 | url | TEXT | Yes | | Source URL (for RSS/API) |
 | credibility_score | DECIMAL(3,2) | No | 0.50 | Reliability score (0.00-1.00) |
@@ -83,6 +84,7 @@ Stores configuration for data sources (RSS feeds, Telegram channels, etc.)
 
 **Indexes:**
 - Primary key: `id`
+- Unique partial index: `(type, provider_source_key)` when `provider_source_key IS NOT NULL`
 - Index: `is_active`
 - Index: `type`
 - Index: `source_tier`
@@ -94,7 +96,7 @@ Stores configuration for data sources (RSS feeds, Telegram channels, etc.)
 {"check_interval_minutes": 30, "max_articles_per_fetch": 50}
 
 // Telegram
-{"channel_id": -1001234567890, "include_media": false}
+{"channel": "@example_channel", "include_media": false}
 
 // GDELT
 {"themes": ["TAX_FNCACT", "MILITARY"], "countries": ["RS", "UA"]}

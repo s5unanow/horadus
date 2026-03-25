@@ -89,8 +89,12 @@ def test_report_grounding_columns_present_in_model_metadata() -> None:
 
 def test_source_ingestion_watermark_column_present_in_model_metadata() -> None:
     assert "ingestion_window_end_at" in Source.__table__.c
+    assert "provider_source_key" in Source.__table__.c
     assert any(
         index.name == "idx_sources_ingestion_window_end_at" for index in Source.__table__.indexes
+    )
+    assert any(
+        index.name == "uq_sources_type_provider_source_key" for index in Source.__table__.indexes
     )
 
 

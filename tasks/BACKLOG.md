@@ -105,34 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
----
-
-### TASK-207: Use stable source identity keys for GDELT and Telegram watermarks
-**Priority**: P2 (Medium)
-**Estimate**: 2-4 hours
-
-GDELT and Telegram source lookup still keys on mutable display names. Renaming a
-configured source can create a new `sources` row and reset watermarks, fetch
-history, and failure tracking.
-
-**Scope Note**:
-- The GDELT half is independently actionable now.
-- The Telegram half remains bounded by `TASK-080` and the current
-  launch-scope exclusion; if that continues to block implementation, split the
-  Telegram follow-up into a separate task instead of stalling the GDELT fix.
-
-**Assessment-Ref**:
-- User review intake 2026-03-05, Reviewer 3 finding 3
-
-**Files**: `src/ingestion/gdelt_client.py`, `src/ingestion/telegram_harvester.py`, `src/storage/models.py`, `alembic/`, `docs/ARCHITECTURE.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Look up or persist GDELT/Telegram sources by stable provider identifier (for example query id / query fingerprint and channel handle) instead of mutable display name
-- [ ] Preserve existing watermarks, error counters, and fetch history across harmless config renames
-- [ ] Add tests covering rename/no-reset behavior for both collectors
-
----
-
 ### TASK-225: Make `horadus triage collect` Return Task-Aware Search Hits
 **Priority**: P2 (Medium)
 **Estimate**: 1-2 hours

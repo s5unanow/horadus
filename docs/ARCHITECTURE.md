@@ -117,6 +117,9 @@ Checkpoint semantics:
 - GDELT uses backward pagination cursors only for in-run paging; persisted
   `ingestion_window_end_at` is forward-only and based on the max successfully processed
   publication timestamp (with no-regression against prior watermark).
+- GDELT and Telegram source rows now persist a stable `provider_source_key`
+  (query fingerprint / normalized channel handle) so harmless display-name
+  renames preserve existing checkpoints, fetch history, and error counters.
 - On collector failure, watermark persistence is skipped so retries resume from the prior
   checkpoint instead of advancing on partial failure.
 Periodic freshness checks (`workers.check_source_freshness`) alert on stale sources

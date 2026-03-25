@@ -11,6 +11,10 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from src.ingestion.source_identity import (
+    normalize_telegram_channel_handle,
+    telegram_provider_source_key,
+)
 from src.ingestion.telegram_harvester import ChannelConfig, TelegramHarvester
 from src.storage.models import ProcessingStatus
 
@@ -683,6 +687,7 @@ async def test_get_or_create_source_creates_and_updates_records(
     created = await harvester._get_or_create_source(channel)
 
     assert created.name == "Intel Feed"
+    assert created.provider_source_key == telegram_provider_source_key(channel.channel)
     assert created.url == "https://t.me/intel_feed"
     assert created.credibility_score == 0.9
     assert created.config["region"] == "EMEA"
@@ -691,6 +696,7 @@ async def test_get_or_create_source_creates_and_updates_records(
 
     existing = SimpleNamespace(
         id=uuid4(),
+        provider_source_key=telegram_provider_source_key(channel.channel),
         name="Old Feed",
         url=None,
         credibility_score=0.1,
@@ -740,6 +746,7 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
     monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
     existing = SimpleNamespace(
         id=uuid4(),
+        provider_source_key=telegram_provider_source_key(channel.channel),
         name="Intel Feed",
         url="https://t.me/intel_feed",
         credibility_score=Decimal(str(channel.credibility)),
@@ -776,6 +783,7 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
     monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
     existing = SimpleNamespace(
         id=uuid4(),
+        provider_source_key=telegram_provider_source_key(channel.channel),
         name="Intel Feed",
         url="https://t.me/intel_feed",
         credibility_score=Decimal("0.1"),
@@ -790,6 +798,125 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
 
     assert existing.credibility_score == pytest.approx(0.9)
     refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_preserves_state_across_channel_rename(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harvester = TelegramHarvester(
+        session=mock_db_session,
+        client=FakeTelegramClient(),
+    )
+    original = ChannelConfig(
+        name="Original Feed",
+        channel="@intel_feed",
+        credibility=0.9,
+        source_tier="tier1",
+        reporting_type="primary",
+    )
+    renamed = ChannelConfig(
+        name="Renamed Feed",
+        channel=original.channel,
+        credibility=original.credibility,
+        source_tier=original.source_tier,
+        reporting_type=original.reporting_type,
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
+    watermark = datetime(2026, 3, 25, 12, 0, tzinfo=UTC)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        provider_source_key=telegram_provider_source_key(original.channel),
+        name=original.name,
+        url="https://t.me/intel_feed",
+        credibility_score=Decimal(str(original.credibility)),
+        source_tier=original.source_tier,
+        reporting_type=original.reporting_type,
+        config={},
+        is_active=True,
+        ingestion_window_end_at=watermark,
+        error_count=2,
+        last_error="boom",
+    )
+    mock_db_session.scalar.return_value = existing
+
+    updated = await harvester._get_or_create_source(renamed)
+
+    assert updated is existing
+    assert existing.name == renamed.name
+    assert existing.ingestion_window_end_at == watermark
+    assert existing.error_count == 2
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_promotes_matching_legacy_row_without_provider_key(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    harvester = TelegramHarvester(
+        session=mock_db_session,
+        client=FakeTelegramClient(),
+    )
+    channel = ChannelConfig(
+        name="Renamed Feed",
+        channel="@intel_feed",
+        credibility=0.9,
+        source_tier="tier1",
+        reporting_type="primary",
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.telegram_harvester.refresh_events_for_source", refresh_mock)
+    legacy_source = SimpleNamespace(
+        id=uuid4(),
+        provider_source_key=None,
+        name="Legacy Feed",
+        url="https://t.me/intel_feed",
+        credibility_score=Decimal(str(channel.credibility)),
+        source_tier=channel.source_tier,
+        reporting_type=channel.reporting_type,
+        config={"channel": channel.channel},
+        is_active=True,
+    )
+    mock_db_session.scalar = AsyncMock(side_effect=[None, legacy_source])
+
+    updated = await harvester._get_or_create_source(channel)
+
+    assert updated is legacy_source
+    assert legacy_source.provider_source_key == telegram_provider_source_key(channel.channel)
+    assert mock_db_session.flush.await_count == 1
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=legacy_source.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_falls_back_to_name_when_channel_handle_is_unusable(
+    mock_db_session,
+) -> None:
+    harvester = TelegramHarvester(
+        session=mock_db_session,
+        client=FakeTelegramClient(),
+    )
+    channel = ChannelConfig(name="Alias Feed", channel="intel_feed", credibility=0.9)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        provider_source_key=None,
+        name="Alias Feed",
+        url=None,
+        credibility_score=Decimal(str(channel.credibility)),
+        source_tier="regional",
+        reporting_type="secondary",
+        config={},
+        is_active=True,
+    )
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+
+    updated = await harvester._get_or_create_source(channel)
+
+    assert updated is existing
+    assert existing.provider_source_key is None
+    assert normalize_telegram_channel_handle(channel.channel) is None
 
 
 @pytest.mark.asyncio

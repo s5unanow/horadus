@@ -81,6 +81,16 @@ def _matches_path_rule(
     )
 
 
+def _docs_update_required(normalized_paths: list[str]) -> bool:
+    return _matches_path_rule(
+        normalized_paths,
+        prefixes=_DOC_UPDATE_REQUIRED_PREFIXES,
+        exact_paths=_DOC_UPDATE_REQUIRED_EXACT_PATHS,
+    ) or any(
+        path.startswith(prefix) for prefix in _SHARED_WORKFLOW_PREFIXES for path in normalized_paths
+    )
+
+
 def _documented_requirements(
     *,
     normalized_paths: list[str],
@@ -97,13 +107,7 @@ def _documented_requirements(
         prefixes=_INTEGRATION_REQUIRED_PREFIXES,
         exact_paths=_INTEGRATION_REQUIRED_EXACT_PATHS,
     )
-    docs_update_required = _matches_path_rule(
-        normalized_paths,
-        prefixes=_DOC_UPDATE_REQUIRED_PREFIXES,
-        exact_paths=_DOC_UPDATE_REQUIRED_EXACT_PATHS,
-    ) or any(
-        path.startswith(prefix) for prefix in _SHARED_WORKFLOW_PREFIXES for path in normalized_paths
-    )
+    docs_update_required = _docs_update_required(normalized_paths)
 
     return [
         {

@@ -57,6 +57,13 @@ _SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_cli/task_",
     "tools/horadus/python/horadus_cli/_task_",
 )
+_RUNTIME_TARGETED_TEST_PREFIXES = ("src/", "alembic/")
+_WORKFLOW_TARGETED_TEST_PREFIXES = ("tools/", "scripts/", ".github/workflows/", "config/")
+_WORKFLOW_TARGETED_TEST_EXACT_PATHS = (
+    "Makefile",
+    ".pre-commit-config.yaml",
+    "pyproject.toml",
+)
 
 
 class CompletionContractRequirement(TypedDict):
@@ -91,12 +98,143 @@ def _docs_update_required(normalized_paths: list[str]) -> bool:
     )
 
 
+def _requirement_status(*, required: bool, scope_declared: bool) -> str:
+    if required:
+        return "required"
+    if scope_declared:
+        return "not_applicable"
+    return "conditional"
+
+
+def _fallback_targeted_validation_commands(normalized_paths: list[str]) -> list[str]:
+    commands: list[str] = []
+    if any(
+        path.startswith(prefix)
+        for prefix in _RUNTIME_TARGETED_TEST_PREFIXES
+        for path in normalized_paths
+    ):
+        commands.append("uv run --no-sync pytest tests/unit/ -v -m unit")
+    if _matches_path_rule(
+        normalized_paths,
+        prefixes=_WORKFLOW_TARGETED_TEST_PREFIXES,
+        exact_paths=_WORKFLOW_TARGETED_TEST_EXACT_PATHS,
+    ):
+        commands.append("uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit")
+    return commands
+
+
+def _targeted_tests_requirement(
+    *,
+    required: bool,
+    scope_declared: bool,
+    waiver_home_display: str,
+    commands: list[str],
+) -> CompletionContractRequirement:
+    return {
+        "requirement_id": "targeted-tests",
+        "status": _requirement_status(required=required, scope_declared=scope_declared),
+        "summary": "Run relevant targeted tests for code, config, or workflow changes before claiming completion.",
+        "reason": (
+            "task files declare code/config/runtime surfaces"
+            if required
+            else (
+                "task files only declare docs/ledger-style surfaces"
+                if scope_declared
+                else "task does not declare file scope"
+            )
+        ),
+        "commands": commands if required else [],
+        "note": (
+            "`make agent-check` and `uv run --no-sync horadus tasks local-gate --full` remain the baseline gates."
+            if required
+            else (
+                f"Record the targeted-test N/A in {waiver_home_display}."
+                if scope_declared
+                else "Inspect the task scope and run the relevant targeted tests before treating this as N/A."
+            )
+        ),
+    }
+
+
+def _integration_requirement(
+    *,
+    required: bool,
+    scope_declared: bool,
+    waiver_home_display: str,
+) -> CompletionContractRequirement:
+    return {
+        "requirement_id": "integration-proof",
+        "status": _requirement_status(required=required, scope_declared=scope_declared),
+        "summary": "Run local integration proof when the task touches integration-covered or push/PR workflow surfaces.",
+        "reason": (
+            "task files declare integration-covered or push/PR workflow paths"
+            if required
+            else (
+                "task files do not declare integration-covered or push/PR workflow paths"
+                if scope_declared
+                else "task does not declare file scope"
+            )
+        ),
+        "commands": [targeted_integration_validation_command()] if required else [],
+        "note": (
+            "`uv run --no-sync horadus tasks local-gate --full` stays the canonical strict gate; this is the focused integration proof."
+            if required
+            else (
+                f"Record the integration-proof N/A in {waiver_home_display}."
+                if scope_declared
+                else "Confirm whether the task touches integration-covered or push/PR workflow paths before recording N/A."
+            )
+        ),
+    }
+
+
+def _docs_updates_requirement(
+    *, required: bool, waiver_home_display: str
+) -> CompletionContractRequirement:
+    return {
+        "requirement_id": "docs-updates",
+        "status": "required" if required else "conditional",
+        "summary": "Update docs in the same branch when behavior, workflow, or operator-facing contracts change.",
+        "reason": (
+            "task files declare workflow/policy/operator-facing surfaces"
+            if required
+            else "docs applicability depends on whether the implementation changes user-facing behavior"
+        ),
+        "commands": [],
+        "note": (
+            "Update AGENTS/runbook/README or other operator-facing docs alongside the code."
+            if required
+            else f"If docs are unchanged, record that N/A decision in {waiver_home_display}."
+        ),
+    }
+
+
+def _na_recording_requirement(waiver_home_display: str) -> CompletionContractRequirement:
+    return {
+        "requirement_id": "n-a-recording",
+        "status": "required",
+        "summary": "Document any skipped normal proof as an explicit N/A or waiver.",
+        "reason": (
+            f"planning artifact available at {waiver_home_display}"
+            if waiver_home_display != "same-branch task notes"
+            else "no authoritative planning artifact is available for this task"
+        ),
+        "commands": [],
+        "note": (
+            f"Record N/A or waiver decisions under `Gate Outcomes / Waivers` in {waiver_home_display}."
+            if waiver_home_display != "same-branch task notes"
+            else "Record N/A or waiver decisions in the task's same-branch notes and PR summary."
+        ),
+    }
+
+
 def _documented_requirements(
     *,
     normalized_paths: list[str],
     validation_pack_commands: list[str],
     waiver_home_display: str,
 ) -> list[CompletionContractRequirement]:
+    scope_declared = bool(normalized_paths)
     targeted_test_required = _matches_path_rule(
         normalized_paths,
         prefixes=_CODE_OR_CONFIG_PREFIXES,
@@ -108,84 +246,26 @@ def _documented_requirements(
         exact_paths=_INTEGRATION_REQUIRED_EXACT_PATHS,
     )
     docs_update_required = _docs_update_required(normalized_paths)
+    targeted_test_commands = validation_pack_commands or _fallback_targeted_validation_commands(
+        normalized_paths
+    )
 
     return [
-        {
-            "requirement_id": "targeted-tests",
-            "status": "required" if targeted_test_required else "not_applicable",
-            "summary": (
-                "Run relevant targeted tests for code, config, or workflow changes before "
-                "claiming completion."
-            ),
-            "reason": (
-                "task files declare code/config/runtime surfaces"
-                if targeted_test_required
-                else "task files only declare docs/ledger-style surfaces"
-            ),
-            "commands": validation_pack_commands,
-            "note": (
-                "`make agent-check` and `uv run --no-sync horadus tasks local-gate --full` "
-                "remain the baseline gates."
-                if targeted_test_required
-                else f"Record the targeted-test N/A in {waiver_home_display}."
-            ),
-        },
-        {
-            "requirement_id": "integration-proof",
-            "status": "required" if integration_required else "not_applicable",
-            "summary": (
-                "Run local integration proof when the task touches integration-covered or "
-                "push/PR workflow surfaces."
-            ),
-            "reason": (
-                "task files declare integration-covered or push/PR workflow paths"
-                if integration_required
-                else "task files do not declare integration-covered or push/PR workflow paths"
-            ),
-            "commands": [targeted_integration_validation_command()] if integration_required else [],
-            "note": (
-                "`uv run --no-sync horadus tasks local-gate --full` stays the canonical "
-                "strict gate; this is the focused integration proof."
-                if integration_required
-                else f"Record the integration-proof N/A in {waiver_home_display}."
-            ),
-        },
-        {
-            "requirement_id": "docs-updates",
-            "status": "required" if docs_update_required else "conditional",
-            "summary": (
-                "Update docs in the same branch when behavior, workflow, or operator-facing "
-                "contracts change."
-            ),
-            "reason": (
-                "task files declare workflow/policy/operator-facing surfaces"
-                if docs_update_required
-                else "docs applicability depends on whether the implementation changes user-facing behavior"
-            ),
-            "commands": [],
-            "note": (
-                "Update AGENTS/runbook/README or other operator-facing docs alongside the code."
-                if docs_update_required
-                else f"If docs are unchanged, record that N/A decision in {waiver_home_display}."
-            ),
-        },
-        {
-            "requirement_id": "n-a-recording",
-            "status": "required",
-            "summary": "Document any skipped normal proof as an explicit N/A or waiver.",
-            "reason": (
-                f"planning artifact available at {waiver_home_display}"
-                if waiver_home_display != "same-branch task notes"
-                else "no authoritative planning artifact is available for this task"
-            ),
-            "commands": [],
-            "note": (
-                f"Record N/A or waiver decisions under `Gate Outcomes / Waivers` in "
-                f"{waiver_home_display}."
-                if waiver_home_display != "same-branch task notes"
-                else "Record N/A or waiver decisions in the task's same-branch notes and PR summary."
-            ),
-        },
+        _targeted_tests_requirement(
+            required=targeted_test_required,
+            scope_declared=scope_declared,
+            waiver_home_display=waiver_home_display,
+            commands=targeted_test_commands,
+        ),
+        _integration_requirement(
+            required=integration_required,
+            scope_declared=scope_declared,
+            waiver_home_display=waiver_home_display,
+        ),
+        _docs_updates_requirement(
+            required=docs_update_required, waiver_home_display=waiver_home_display
+        ),
+        _na_recording_requirement(waiver_home_display),
     ]
 
 

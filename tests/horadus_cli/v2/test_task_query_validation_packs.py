@@ -140,6 +140,50 @@ def test_completion_contract_marks_shared_workflow_paths_as_required() -> None:
     assert documented["integration-proof"]["commands"] == ["make test-integration-docker"]
 
 
+def test_completion_contract_uses_runtime_fallback_targeted_commands() -> None:
+    contract = completion_contract_module.build_completion_contract(
+        "TASK-913",
+        normalized_paths=["src/api/routes.py"],
+        planning={"waiver_home_path": "tasks/exec_plans/TASK-913.md"},
+        validation_pack_commands=[],
+    )
+
+    documented = {item["requirement_id"]: item for item in contract["documented_requirements"]}
+    assert documented["targeted-tests"]["status"] == "required"
+    assert documented["targeted-tests"]["commands"] == [
+        "uv run --no-sync pytest tests/unit/ -v -m unit"
+    ]
+
+
+def test_completion_contract_uses_workflow_fallback_targeted_commands() -> None:
+    contract = completion_contract_module.build_completion_contract(
+        "TASK-915",
+        normalized_paths=["scripts/finish_task_pr.sh"],
+        planning={"waiver_home_path": "tasks/exec_plans/TASK-915.md"},
+        validation_pack_commands=[],
+    )
+
+    documented = {item["requirement_id"]: item for item in contract["documented_requirements"]}
+    assert documented["targeted-tests"]["status"] == "required"
+    assert documented["targeted-tests"]["commands"] == [
+        "uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit"
+    ]
+
+
+def test_completion_contract_keeps_missing_file_scope_conditional() -> None:
+    contract = completion_contract_module.build_completion_contract(
+        "TASK-914",
+        normalized_paths=[],
+        planning={"waiver_home_path": "tasks/exec_plans/TASK-914.md"},
+        validation_pack_commands=[],
+    )
+
+    documented = {item["requirement_id"]: item for item in contract["documented_requirements"]}
+    assert documented["targeted-tests"]["status"] == "conditional"
+    assert documented["integration-proof"]["status"] == "conditional"
+    assert "Inspect the task scope" in documented["targeted-tests"]["note"]
+
+
 def test_append_completion_contract_lines_skips_commands_line_when_requirement_has_none() -> None:
     lines: list[str] = []
 

@@ -76,6 +76,26 @@ def test_review_gate_parse_blocker_message_falls_back_to_unreadable_result() -> 
     )
 
 
+def test_review_state_section_helper_skips_empty_input() -> None:
+    lines = ["existing"]
+
+    review_window_module._append_review_state_section(
+        lines,
+        header="Stale or outdated review state handled before entering the review wait:",
+        section_lines=[],
+    )
+
+    assert lines == ["existing"]
+
+
+def test_current_head_review_thread_lines_handle_empty_and_non_empty_inputs() -> None:
+    assert review_window_module._current_head_review_thread_lines([]) == []
+    assert review_window_module._current_head_review_thread_lines(["- path.py:1"]) == [
+        "Current-head review-thread blockers:",
+        "- path.py:1",
+    ]
+
+
 def test_unresolved_review_thread_blocker_marks_manual_inspection() -> None:
     exit_code, data, lines = review_window_module._unresolved_review_thread_blocker(
         context=_context(),

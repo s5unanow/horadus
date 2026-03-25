@@ -1056,6 +1056,7 @@ def test_prepare_current_head_review_window_uses_compat_exports_across_split_mod
 
     assert blocker is None
     assert refresh_lines == [
+        "Stale or outdated review state handled before entering the review wait:",
         "Resolved outdated review thread automatically: thread-stale-1",
         "Requested fresh review.",
         "Refreshed stale review state for the current head; discarding the previous review window and starting a fresh 5s review window.",
@@ -1098,3 +1099,57 @@ def test_prepare_current_head_review_window_uses_compat_exports_across_split_mod
             pr_url="https://example.invalid/pr/290",
             config=config,
         )
+
+
+def test_prepare_current_head_review_window_separates_refresh_from_current_head_blockers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _finish_config()
+    context = task_commands_module.FinishContext(
+        branch_name="codex/task-345-review-preflight",
+        branch_task_id="TASK-345",
+        task_id="TASK-345",
+    )
+
+    monkeypatch.setattr(
+        task_commands_module, "_current_head_finish_blocker", lambda **_kwargs: None
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_outdated_unresolved_review_thread_ids",
+        lambda **_kwargs: ["thread-stale-1"],
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_resolve_review_threads",
+        lambda **_kwargs: (True, ["Resolved outdated review thread automatically: thread-stale-1"]),
+    )
+    monkeypatch.setattr(
+        task_commands_module,
+        "_unresolved_review_thread_lines",
+        lambda **_kwargs: [
+            "- tools/horadus/python/horadus_workflow/task_workflow_finish/_review_window.py:88 https://example.invalid/comment/345-thread (chatgpt-codex-connector[bot])",
+            "  Resolve this current-head thread before the review wait can continue.",
+        ],
+    )
+
+    refresh_lines, blocker = task_commands_module._prepare_current_head_review_window(
+        context=context,
+        pr_url=PR_URL,
+        config=config,
+    )
+
+    assert refresh_lines == [
+        "Stale or outdated review state handled before entering the review wait:",
+        "Resolved outdated review thread automatically: thread-stale-1",
+    ]
+    assert blocker == (
+        "PR still has unresolved review threads marked current on GitHub.",
+        {"manual_thread_inspection_required": True},
+        [
+            "GitHub still marks these threads as current after review-state refresh; inspect whether they are stale older-head threads that now require manual resolution.",
+            "Current-head review-thread blockers:",
+            "- tools/horadus/python/horadus_workflow/task_workflow_finish/_review_window.py:88 https://example.invalid/comment/345-thread (chatgpt-codex-connector[bot])",
+            "  Resolve this current-head thread before the review wait can continue.",
+        ],
+    )

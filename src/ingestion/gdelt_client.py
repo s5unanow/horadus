@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.ingestion.rate_limiter import DomainRateLimiter
+from src.ingestion.source_identity import gdelt_provider_source_key_from_mapping
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
@@ -325,10 +326,6 @@ class GDELTClient:
         raise RuntimeError(msg)
 
     async def _get_or_create_source(self, query: GDELTQueryConfig) -> Source:
-        existing_query = select(Source).where(
-            Source.type == SourceType.GDELT, Source.name == query.name
-        )
-        source = await self.session.scalar(existing_query)
         config_payload = {
             "query": query.query,
             "themes": query.themes,
@@ -340,10 +337,31 @@ class GDELTClient:
             "max_pages": query.max_pages,
             **query.extra,
         }
-
+        provider_source_key = gdelt_provider_source_key_from_mapping(config_payload)
+        source = await self.session.scalar(
+            select(Source).where(
+                Source.type == SourceType.GDELT,
+                Source.provider_source_key == provider_source_key,
+            )
+        )
+        if source is None:
+            legacy_source = await self.session.scalar(
+                select(Source).where(
+                    Source.type == SourceType.GDELT,
+                    Source.name == query.name,
+                    Source.provider_source_key.is_(None),
+                )
+            )
+            if (
+                legacy_source
+                and gdelt_provider_source_key_from_mapping(legacy_source.config)
+                == provider_source_key
+            ):
+                source = legacy_source
         if source is None:
             source = Source(
                 type=SourceType.GDELT,
+                provider_source_key=provider_source_key,
                 name=query.name,
                 url=self.api_url,
                 credibility_score=query.credibility,
@@ -357,12 +375,14 @@ class GDELTClient:
             return source
         url_changed = source.url != self.api_url
         name_changed = source.name != query.name
+        provider_key_changed = source.provider_source_key != provider_source_key
         existing_credibility = (
             float(source.credibility_score) if source.credibility_score is not None else None
         )
         credibility_changed = existing_credibility != float(query.credibility)
         source_tier_changed = source.source_tier != query.source_tier
         reporting_type_changed = source.reporting_type != query.reporting_type
+        source.provider_source_key = provider_source_key
         source.name = query.name
         source.url = self.api_url
         source.credibility_score = query.credibility
@@ -370,6 +390,8 @@ class GDELTClient:
         source.reporting_type = query.reporting_type
         source.config = config_payload
         source.is_active = query.enabled
+        if provider_key_changed and source.id is not None:
+            await self.session.flush()
         if (
             url_changed
             or name_changed
@@ -377,7 +399,8 @@ class GDELTClient:
             or source_tier_changed
             or reporting_type_changed
         ) and source.id is not None:
-            await self.session.flush()
+            if not provider_key_changed:
+                await self.session.flush()
             await refresh_events_for_source(session=self.session, source_id=source.id)
         return source
 
@@ -527,22 +550,18 @@ class GDELTClient:
         default_lookback_hours = int(raw_settings.get("default_lookback_hours", 12))
         default_max_records = int(raw_settings.get("default_max_records_per_page", 100))
         default_max_pages = int(raw_settings.get("default_max_pages", 3))
-
         parsed_queries: list[GDELTQueryConfig] = []
         for raw_query in raw_queries:
             if not isinstance(raw_query, dict):
                 continue
-
             name = GDELTClient._safe_str(raw_query.get("name"))
             if name is None:
                 continue
-
             query = GDELTClient._safe_str(raw_query.get("query")) or ""
             themes = GDELTClient._parse_str_list(raw_query.get("themes"))
             actors = GDELTClient._parse_str_list(raw_query.get("actors"))
             if not query and not themes and not actors:
                 continue
-
             known_keys = {
                 "name",
                 "query",
@@ -559,7 +578,6 @@ class GDELTClient:
                 "enabled",
             }
             extra = {key: value for key, value in raw_query.items() if key not in known_keys}
-
             parsed_queries.append(
                 GDELTQueryConfig(
                     name=name,
@@ -580,7 +598,6 @@ class GDELTClient:
                     extra=extra,
                 )
             )
-
         return parsed_queries
 
     @staticmethod
@@ -599,7 +616,6 @@ class GDELTClient:
         clauses: list[str] = []
         if query.query:
             clauses.append(f"({query.query})")
-
         if query.themes:
             theme_clause = " OR ".join(f"theme:{theme}" for theme in query.themes)
             clauses.append(f"({theme_clause})")
@@ -628,7 +644,6 @@ class GDELTClient:
         }
         if query.themes and not any(theme.lower() in article_themes for theme in query.themes):
             return False
-
         actor_terms = " ".join(
             GDELTClient._split_terms(article.get("persons"))
             + GDELTClient._split_terms(article.get("v2persons"))
@@ -640,7 +655,6 @@ class GDELTClient:
         ).lower()
         if query.actors and not any(actor.lower() in actor_terms for actor in query.actors):
             return False
-
         if query.countries:
             article_country = GDELTClient._safe_str(
                 article.get("sourcecountry") or article.get("source_country")
@@ -650,7 +664,6 @@ class GDELTClient:
             allowed_countries = {country.upper() for country in query.countries}
             if article_country.upper() not in allowed_countries:
                 return False
-
         if query.languages:
             raw_language = GDELTClient._safe_str(article.get("language"))
             normalized_language = GDELTClient._normalize_language(raw_language)
@@ -665,7 +678,6 @@ class GDELTClient:
             }
             if normalized_language not in allowed_languages:
                 return False
-
         return True
 
     @staticmethod
@@ -690,12 +702,10 @@ class GDELTClient:
         parts: list[str] = []
         if title:
             parts.append(title)
-
         for key in ("snippet", "summary", "description"):
             value = GDELTClient._safe_str(article.get(key))
             if value:
                 parts.append(value)
-
         themes = GDELTClient._split_terms(article.get("themes")) + GDELTClient._split_terms(
             article.get("v2themes")
         )
@@ -709,20 +719,16 @@ class GDELTClient:
             parts.append(f"Themes: {', '.join(themes)}")
         if actors:
             parts.append(f"Actors: {', '.join(actors)}")
-
         source_country = GDELTClient._safe_str(
             article.get("sourcecountry") or article.get("source_country")
         )
         if source_country:
             parts.append(f"Source country: {source_country}")
-
         domain = GDELTClient._safe_str(article.get("domain"))
         if domain:
             parts.append(f"Domain: {domain}")
-
         if normalized_url:
             parts.append(f"URL: {normalized_url}")
-
         if not parts:
             return None
         return "\n\n".join(parts)
@@ -746,17 +752,13 @@ class GDELTClient:
     def _parse_datetime_value(raw_value: Any) -> datetime | None:
         if raw_value is None:
             return None
-
         if isinstance(raw_value, int | float):
             return datetime.fromtimestamp(float(raw_value), tz=UTC)
-
         if not isinstance(raw_value, str):
             return None
-
         stripped = raw_value.strip()
         if not stripped:
             return None
-
         compact_utc = (
             len(stripped) == 16
             and stripped[8] == "T"
@@ -777,7 +779,6 @@ class GDELTClient:
                 )
             except ValueError:
                 return None
-
         compact_without_tz = len(stripped) == 14 and stripped.isdigit()
         if compact_without_tz:
             try:
@@ -792,7 +793,6 @@ class GDELTClient:
                 )
             except ValueError:
                 return None
-
         try:
             parsed_iso = datetime.fromisoformat(stripped.replace("Z", "+00:00"))
         except ValueError:

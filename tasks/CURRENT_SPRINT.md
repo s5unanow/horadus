@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-207` Use stable source identity keys for GDELT and Telegram watermarks
 - `TASK-229` Add a novelty lane outside the active trend list
 - `TASK-232` Strengthen operator adjudication workflow for high-risk events
 - `TASK-238` Prioritize Tier-2 budget with value-of-information scheduling
@@ -30,11 +29,10 @@
 3. `TASK-345` Preflight stale review state once wait-state reporting is explicit.
 4. `TASK-256` Tighten the remaining completion contract around tests, docs, and reruns.
 5. `TASK-354` Unify secret-scan policy ownership across local and CI enforcement paths.
-6. `TASK-207` Fix stable source identity first for the independently actionable GDELT watermark path.
-7. `TASK-229` Add a bounded novelty lane once the workflow surfaces are tighter.
-8. `TASK-232` Build the richer operator adjudication path on top of the `TASK-231` restatement model.
-9. `TASK-238` Spend Tier-2 budget according to bounded value-of-information signals.
-10. `TASK-225` Improve triage bundle usefulness for the next backlog review cycle.
+6. `TASK-229` Add a bounded novelty lane once the workflow surfaces are tighter.
+7. `TASK-232` Build the richer operator adjudication path on top of the `TASK-231` restatement model.
+8. `TASK-238` Spend Tier-2 budget according to bounded value-of-information signals.
+9. `TASK-225` Improve triage bundle usefulness for the next backlog review cycle.
 
 ## Human Blocker Metadata
 
@@ -57,3 +55,4 @@
 - `TASK-345` Preflight stale review state before entering the finish review window ✅
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs ✅
 - `TASK-354` Centralize repo-owned secret-scan policy and exclude rules ✅
+- `TASK-207` Use stable source identity keys for GDELT and Telegram watermarks ✅

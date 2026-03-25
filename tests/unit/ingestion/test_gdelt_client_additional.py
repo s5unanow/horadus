@@ -13,6 +13,10 @@ import pytest
 from sqlalchemy.exc import IntegrityError
 
 from src.ingestion.gdelt_client import GDELTClient, GDELTQueryConfig
+from src.ingestion.source_identity import (
+    gdelt_provider_source_key,
+    gdelt_provider_source_key_from_mapping,
+)
 from src.storage.models import Source, SourceType
 
 pytestmark = pytest.mark.unit
@@ -175,10 +179,18 @@ async def test_get_or_create_source_and_store_article_cover_update_and_early_ret
     assert isinstance(created, Source)
     assert created.type == SourceType.GDELT
     assert created.is_active is False
+    assert created.provider_source_key == gdelt_provider_source_key_from_mapping(created.config)
     refresh_mock.assert_not_awaited()
 
     existing = SimpleNamespace(
         id=uuid4(),
+        provider_source_key=gdelt_provider_source_key(
+            query=query.query,
+            themes=query.themes,
+            actors=query.actors,
+            countries=query.countries,
+            languages=query.languages,
+        ),
         name="Old Query",
         url="old",
         credibility_score=0.1,
@@ -248,6 +260,13 @@ async def test_get_or_create_source_skips_provenance_refresh_when_metadata_is_un
     monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
     existing = SimpleNamespace(
         id=uuid4(),
+        provider_source_key=gdelt_provider_source_key(
+            query=query.query,
+            themes=query.themes,
+            actors=query.actors,
+            countries=query.countries,
+            languages=query.languages,
+        ),
         name="Query",
         url=client.api_url,
         credibility_score=Decimal(str(query.credibility)),
@@ -282,6 +301,13 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
     monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
     existing = SimpleNamespace(
         id=uuid4(),
+        provider_source_key=gdelt_provider_source_key(
+            query=query.query,
+            themes=query.themes,
+            actors=query.actors,
+            countries=query.countries,
+            languages=query.languages,
+        ),
         name="Query",
         url=client.api_url,
         credibility_score=Decimal("0.1"),
@@ -295,6 +321,67 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
     await client._get_or_create_source(query)
 
     assert existing.credibility_score == pytest.approx(0.9)
+    refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_source_preserves_state_across_query_rename(
+    mock_db_session,
+    mock_http_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
+    original = GDELTQueryConfig(
+        name="Original Query",
+        query="ukraine",
+        themes=["MILITARY"],
+        actors=["NATO"],
+        countries=["UA"],
+        languages=["en"],
+        source_tier="official",
+        reporting_type="firsthand",
+    )
+    renamed = GDELTQueryConfig(
+        name="Renamed Query",
+        query=original.query,
+        themes=original.themes,
+        actors=original.actors,
+        countries=original.countries,
+        languages=original.languages,
+        source_tier=original.source_tier,
+        reporting_type=original.reporting_type,
+    )
+    refresh_mock = AsyncMock(return_value=1)
+    monkeypatch.setattr("src.ingestion.gdelt_client.refresh_events_for_source", refresh_mock)
+    watermark = datetime(2026, 3, 25, 12, 0, tzinfo=UTC)
+    existing = SimpleNamespace(
+        id=uuid4(),
+        provider_source_key=gdelt_provider_source_key(
+            query=original.query,
+            themes=original.themes,
+            actors=original.actors,
+            countries=original.countries,
+            languages=original.languages,
+        ),
+        name=original.name,
+        url=client.api_url,
+        credibility_score=Decimal(str(original.credibility)),
+        source_tier=original.source_tier,
+        reporting_type=original.reporting_type,
+        config={},
+        is_active=True,
+        ingestion_window_end_at=watermark,
+        error_count=3,
+        last_error="boom",
+    )
+    mock_db_session.scalar = AsyncMock(return_value=existing)
+
+    updated = await client._get_or_create_source(renamed)
+
+    assert updated is existing
+    assert existing.name == renamed.name
+    assert existing.ingestion_window_end_at == watermark
+    assert existing.error_count == 3
     refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 

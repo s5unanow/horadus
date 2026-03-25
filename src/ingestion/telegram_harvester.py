@@ -20,6 +20,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telethon import TelegramClient
 
 from src.core.config import settings
+from src.ingestion.source_identity import (
+    normalize_telegram_channel_handle,
+    telegram_provider_source_key,
+)
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
@@ -367,11 +371,35 @@ class TelegramHarvester:
         return result.is_duplicate
 
     async def _get_or_create_source(self, channel: ChannelConfig) -> Source:
-        source_query = select(Source).where(
-            Source.type == SourceType.TELEGRAM,
-            Source.name == channel.name,
-        )
-        source = await self.session.scalar(source_query)
+        provider_source_key = telegram_provider_source_key(channel.channel)
+        source = None
+        if provider_source_key is not None:
+            source = await self.session.scalar(
+                select(Source).where(
+                    Source.type == SourceType.TELEGRAM,
+                    Source.provider_source_key == provider_source_key,
+                )
+            )
+        if source is None and provider_source_key is not None:
+            legacy_query = select(Source).where(
+                Source.type == SourceType.TELEGRAM,
+                Source.name == channel.name,
+                Source.provider_source_key.is_(None),
+            )
+            legacy_source = await self.session.scalar(legacy_query)
+            legacy_channel = None if legacy_source is None else legacy_source.config.get("channel")
+            if (
+                legacy_source is not None
+                and telegram_provider_source_key(legacy_channel) == provider_source_key
+            ):
+                source = legacy_source
+        if source is None and provider_source_key is None:
+            source = await self.session.scalar(
+                select(Source).where(
+                    Source.type == SourceType.TELEGRAM,
+                    Source.name == channel.name,
+                )
+            )
         config_payload = {
             "channel": channel.channel,
             "categories": channel.categories,
@@ -386,6 +414,7 @@ class TelegramHarvester:
         if source is None:
             source = Source(
                 type=SourceType.TELEGRAM,
+                provider_source_key=provider_source_key,
                 name=channel.name,
                 url=channel_url,
                 credibility_score=channel.credibility,
@@ -400,12 +429,14 @@ class TelegramHarvester:
 
         url_changed = source.url != channel_url
         name_changed = source.name != channel.name
+        provider_key_changed = source.provider_source_key != provider_source_key
         existing_credibility = (
             float(source.credibility_score) if source.credibility_score is not None else None
         )
         credibility_changed = existing_credibility != float(channel.credibility)
         source_tier_changed = source.source_tier != channel.source_tier
         reporting_type_changed = source.reporting_type != channel.reporting_type
+        source.provider_source_key = provider_source_key
         source.name = channel.name
         source.url = channel_url
         source.credibility_score = channel.credibility
@@ -413,6 +444,8 @@ class TelegramHarvester:
         source.reporting_type = channel.reporting_type
         source.config = config_payload
         source.is_active = channel.enabled
+        if provider_key_changed and source.id is not None:
+            await self.session.flush()
         if (
             url_changed
             or name_changed
@@ -420,7 +453,8 @@ class TelegramHarvester:
             or source_tier_changed
             or reporting_type_changed
         ) and source.id is not None:
-            await self.session.flush()
+            if not provider_key_changed:
+                await self.session.flush()
             await refresh_events_for_source(session=self.session, source_id=source.id)
         return source
 
@@ -528,25 +562,17 @@ class TelegramHarvester:
 
     @staticmethod
     def _message_url(channel: ChannelConfig, message_id: int) -> str | None:
-        channel_ref = channel.channel.strip()
-        if channel_ref.startswith("@"):
-            return f"https://t.me/{channel_ref[1:]}/{message_id}"
-        if channel_ref.startswith("https://t.me/"):
-            return f"{channel_ref.rstrip('/')}/{message_id}"
-        if channel_ref.startswith("t.me/"):
-            return f"https://{channel_ref.rstrip('/')}/{message_id}"
-        return None
+        handle = normalize_telegram_channel_handle(channel.channel)
+        if handle is None:
+            return None
+        return f"https://t.me/{handle}/{message_id}"
 
     @staticmethod
     def _channel_url(channel_ref: str) -> str | None:
-        normalized = channel_ref.strip()
-        if normalized.startswith("@"):
-            return f"https://t.me/{normalized[1:]}"
-        if normalized.startswith("https://t.me/"):
-            return normalized.rstrip("/")
-        if normalized.startswith("t.me/"):
-            return f"https://{normalized.rstrip('/')}"
-        return None
+        handle = normalize_telegram_channel_handle(channel_ref)
+        if handle is None:
+            return None
+        return f"https://t.me/{handle}"
 
     @staticmethod
     def _message_author(message: Any) -> str | None:

@@ -91,6 +91,7 @@ def test_unresolved_review_thread_blocker_marks_manual_inspection() -> None:
         lines[0]
         == "Task finish blocked: PR still has unresolved review threads marked current on GitHub."
     )
+    assert "Current-head review-thread blockers:" in lines
     assert any("manual resolution" in line for line in lines)
 
 
@@ -280,6 +281,7 @@ def test_review_gate_data_blocks_on_unresolved_threads_after_review(
 
     assert exit_code == review_window_module.ExitCode.VALIDATION_ERROR
     assert lines[0] == "Task finish blocked: PR is blocked by unresolved review comments."
+    assert "Current-head review-thread blockers:" in lines
 
 
 def test_run_review_gate_single_poll_appends_flag_and_short_timeout(

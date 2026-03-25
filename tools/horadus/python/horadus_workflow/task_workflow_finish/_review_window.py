@@ -13,6 +13,25 @@ from . import _review_threads as threads_module
 from . import checks, preconditions
 
 
+def _append_review_state_section(
+    lines: list[str], *, header: str, section_lines: list[str]
+) -> None:
+    if not section_lines:
+        return
+    if not lines:
+        lines.append(header)
+    lines.extend(section_lines)
+
+
+def _current_head_review_thread_lines(unresolved_review_lines: list[str]) -> list[str]:
+    if not unresolved_review_lines:
+        return []
+    return [
+        "Current-head review-thread blockers:",
+        *unresolved_review_lines,
+    ]
+
+
 def _current_head_finish_blocker(
     *, context: shared.FinishContext, pr_url: str, config: shared.FinishConfig
 ) -> tuple[str, dict[str, object], list[str]] | None:
@@ -113,7 +132,11 @@ def _prepare_current_head_review_window(
                     stale_thread_lines,
                 ),
             )
-        review_refresh_lines.extend(stale_thread_lines)
+        _append_review_state_section(
+            review_refresh_lines,
+            header="Stale or outdated review state handled before entering the review wait:",
+            section_lines=stale_thread_lines,
+        )
     unresolved_review_lines, unresolved_blocker = _unresolved_review_threads_or_blocker(
         pr_url=pr_url,
         config=config,
@@ -121,6 +144,7 @@ def _prepare_current_head_review_window(
     if unresolved_blocker is not None:
         return (review_refresh_lines, unresolved_blocker)
     if unresolved_review_lines:
+        blocker_lines = _current_head_review_thread_lines(unresolved_review_lines)
         return (
             review_refresh_lines,
             (
@@ -138,7 +162,7 @@ def _prepare_current_head_review_window(
                         if needs_fresh_review_request
                         else []
                     ),
-                    *unresolved_review_lines,
+                    *blocker_lines,
                 ],
             ),
         )
@@ -151,16 +175,28 @@ def _prepare_current_head_review_window(
     )
     if request_blocker is not None:
         return ([], request_blocker)
-    review_refresh_lines.extend(request_lines)
+    _append_review_state_section(
+        review_refresh_lines,
+        header="Stale or outdated review state handled before entering the review wait:",
+        section_lines=request_lines,
+    )
     if stale_thread_ids:
-        review_refresh_lines.append(
-            "Refreshed stale review state for the current head; discarding the previous "
-            f"review window and starting a fresh {config.review_timeout_seconds}s review window."
+        _append_review_state_section(
+            review_refresh_lines,
+            header="Stale or outdated review state handled before entering the review wait:",
+            section_lines=[
+                "Refreshed stale review state for the current head; discarding the previous "
+                f"review window and starting a fresh {config.review_timeout_seconds}s review window."
+            ],
         )
     else:
-        review_refresh_lines.append(
-            "Detected reviewer activity on an older head; discarding the previous "
-            f"review window and starting a fresh {config.review_timeout_seconds}s review window."
+        _append_review_state_section(
+            review_refresh_lines,
+            header="Stale or outdated review state handled before entering the review wait:",
+            section_lines=[
+                "Detected reviewer activity on an older head; discarding the previous "
+                f"review window and starting a fresh {config.review_timeout_seconds}s review window."
+            ],
         )
     return (review_refresh_lines, None)
 
@@ -327,7 +363,7 @@ def _unresolved_review_thread_blocker(
     extra_lines = [*review_lines]
     if intro_line is not None:
         extra_lines.append(intro_line)
-    extra_lines.extend(unresolved_review_lines)
+    extra_lines.extend(_current_head_review_thread_lines(unresolved_review_lines))
     return shared._task_blocked(
         (
             "PR still has unresolved review threads marked current on GitHub."

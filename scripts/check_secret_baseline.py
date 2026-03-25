@@ -13,14 +13,21 @@ from typing import cast
 from detect_secrets.core.secrets_collection import SecretsCollection
 from detect_secrets.settings import configure_settings_from_baseline
 
-REPO_EXCLUDE_PATTERN = re.compile(r"(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)")
-
 
 @dataclass(frozen=True, order=True)
 class SecretFingerprint:
     filename: str
     secret_type: str
     hashed_secret: str
+
+
+@dataclass(frozen=True)
+class SecretScanPolicy:
+    baseline_path: str
+    exclude_pattern: str
+
+    def compiled_exclude_pattern(self) -> re.Pattern[str]:
+        return re.compile(self.exclude_pattern)
 
 
 def fingerprint_counts(results: dict[str, list[dict[str, object]]]) -> Counter[SecretFingerprint]:
@@ -64,8 +71,28 @@ def actionable_findings(
     return findings
 
 
-def is_excluded_path(path: str) -> bool:
-    return bool(REPO_EXCLUDE_PATTERN.search(path))
+def repo_root_from_script(script_file: str | None = None) -> Path:
+    script_path = Path(script_file or __file__).resolve()
+    return script_path.parents[1]
+
+
+def load_secret_scan_policy(repo_root: Path) -> SecretScanPolicy:
+    policy_path = repo_root / "config" / "security" / "secret_scan_policy.json"
+    payload = json.loads(policy_path.read_text(encoding="utf-8"))
+    baseline_path = payload.get("baseline_path")
+    exclude_pattern = payload.get("exclude_pattern")
+    if not isinstance(baseline_path, str) or not baseline_path:
+        raise ValueError("secret scan policy is missing a valid 'baseline_path' value")
+    if not isinstance(exclude_pattern, str) or not exclude_pattern:
+        raise ValueError("secret scan policy is missing a valid 'exclude_pattern' value")
+    return SecretScanPolicy(
+        baseline_path=baseline_path,
+        exclude_pattern=exclude_pattern,
+    )
+
+
+def is_excluded_path(path: str, policy: SecretScanPolicy) -> bool:
+    return bool(policy.compiled_exclude_pattern().search(path))
 
 
 def parse_line_number(value: object) -> int:
@@ -76,25 +103,25 @@ def parse_line_number(value: object) -> int:
     return 0
 
 
-def tracked_files(repo_root: Path) -> list[str]:
+def tracked_files(repo_root: Path, policy: SecretScanPolicy) -> list[str]:
     git_bin = shutil.which("git")
     if git_bin is None:
         raise RuntimeError("git is required for the secret scan.")
 
     result = subprocess.run(  # nosec B603 - fixed git argv against repo-owned paths
-        [git_bin, "ls-files", "-z", "--", ".", ":(exclude).secrets.baseline"],
+        [git_bin, "ls-files", "-z", "--", ".", f":(exclude){policy.baseline_path}"],
         cwd=repo_root,
         capture_output=True,
         check=True,
     )
     output = result.stdout.decode("utf-8")
-    return [path for path in output.split("\0") if path and not is_excluded_path(path)]
+    return [path for path in output.split("\0") if path and not is_excluded_path(path, policy)]
 
 
 def scan_results(
-    *, baseline: dict[str, object], files: list[str]
+    *, baseline: dict[str, object], files: list[str], policy: SecretScanPolicy
 ) -> dict[str, list[dict[str, object]]]:
-    configure_settings_from_baseline(baseline, filename=".secrets.baseline")
+    configure_settings_from_baseline(baseline, filename=policy.baseline_path)
     collection = SecretsCollection()
     collection.scan_files(*files)
     return collection.json()
@@ -108,17 +135,18 @@ def baseline_results(baseline: dict[str, object]) -> dict[str, list[dict[str, ob
 
 
 def main() -> int:
-    repo_root = Path(__file__).resolve().parents[1]
-    baseline_path = repo_root / ".secrets.baseline"
+    repo_root = repo_root_from_script()
+    policy = load_secret_scan_policy(repo_root)
+    baseline_path = repo_root / policy.baseline_path
     baseline = json.loads(baseline_path.read_text(encoding="utf-8"))
-    files = tracked_files(repo_root)
+    files = tracked_files(repo_root, policy)
     if not files:
         print("secret-scan: no tracked files to scan.")
         return 0
 
     print("secret-scan: scanning tracked files against .secrets.baseline")
     findings = actionable_findings(
-        current_results=scan_results(baseline=baseline, files=files),
+        current_results=scan_results(baseline=baseline, files=files, policy=policy),
         baseline_results=baseline_results(baseline),
     )
     if findings:

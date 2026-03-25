@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-354` Centralize repo-owned secret-scan policy and exclude rules
 - `TASK-207` Use stable source identity keys for GDELT and Telegram watermarks
 - `TASK-229` Add a novelty lane outside the active trend list
 - `TASK-232` Strengthen operator adjudication workflow for high-risk events
@@ -57,3 +56,4 @@
 - `TASK-361` Unblock repo-wide dependency audit for the current upstream-unfixed `pygments` CVE ✅
 - `TASK-345` Preflight stale review state before entering the finish review window ✅
 - `TASK-256` Enforce the Task Completion Contract for Tests, Docs, and Gate Re-Runs ✅
+- `TASK-354` Centralize repo-owned secret-scan policy and exclude rules ✅

@@ -155,9 +155,13 @@ def test_actionable_findings_ignore_verification_state_changes() -> None:
     assert findings == []
 
 
-def test_is_excluded_path_matches_repo_owned_secret_scan_policy() -> None:
-    assert secret_scan_module.is_excluded_path("docs/runbook.md") is True
-    assert secret_scan_module.is_excluded_path("tasks/CURRENT_SPRINT.md") is True
-    assert secret_scan_module.is_excluded_path("ai/eval/baselines/example.json") is True
-    assert secret_scan_module.is_excluded_path(".env.example") is True
-    assert secret_scan_module.is_excluded_path("src/core/config.py") is False
+def test_load_secret_scan_policy_matches_repo_owned_excludes() -> None:
+    repo_root = Path(__file__).resolve().parents[3]
+    policy = secret_scan_module.load_secret_scan_policy(repo_root)
+
+    assert policy.baseline_path == ".secrets.baseline"
+    assert secret_scan_module.is_excluded_path("docs/runbook.md", policy) is True
+    assert secret_scan_module.is_excluded_path("tasks/CURRENT_SPRINT.md", policy) is True
+    assert secret_scan_module.is_excluded_path("ai/eval/baselines/example.json", policy) is True
+    assert secret_scan_module.is_excluded_path(".env.example", policy) is True
+    assert secret_scan_module.is_excluded_path("src/core/config.py", policy) is False

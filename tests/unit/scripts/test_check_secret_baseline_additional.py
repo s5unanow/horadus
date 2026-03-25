@@ -28,9 +28,13 @@ def test_tracked_files_requires_git_and_filters_repo_excludes(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     module = _load_module()
+    policy = module.SecretScanPolicy(
+        baseline_path=".secrets.baseline",
+        exclude_pattern=r"(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)",
+    )
     monkeypatch.setattr(module.shutil, "which", lambda _name: None)
     with pytest.raises(RuntimeError, match="git is required"):
-        module.tracked_files(tmp_path)
+        module.tracked_files(tmp_path, policy)
 
     monkeypatch.setattr(module.shutil, "which", lambda _name: "/usr/bin/git")
     monkeypatch.setattr(
@@ -41,7 +45,7 @@ def test_tracked_files_requires_git_and_filters_repo_excludes(
         ),
     )
 
-    files = module.tracked_files(tmp_path)
+    files = module.tracked_files(tmp_path, policy)
 
     assert files == ["src/app.py", "scripts/task.py"]
 
@@ -50,6 +54,10 @@ def test_scan_results_and_baseline_results_cover_helper_paths(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = _load_module()
+    policy = module.SecretScanPolicy(
+        baseline_path=".secrets.baseline",
+        exclude_pattern=r"(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)",
+    )
     configured: list[tuple[dict[str, object], str]] = []
     scanned: list[tuple[str, ...]] = []
 
@@ -68,7 +76,7 @@ def test_scan_results_and_baseline_results_cover_helper_paths(
     monkeypatch.setattr(module, "SecretsCollection", _FakeCollection)
 
     baseline = {"results": {"src/app.py": []}}
-    assert module.scan_results(baseline=baseline, files=["src/app.py"]) == {
+    assert module.scan_results(baseline=baseline, files=["src/app.py"], policy=policy) == {
         "src/app.py": [{"type": "x", "hashed_secret": "y"}]
     }
     assert configured == [(baseline, ".secrets.baseline")]
@@ -91,16 +99,27 @@ def test_parse_line_number_and_main_branches(
 
     repo_root = tmp_path / "repo"
     scripts_dir = repo_root / "scripts"
+    config_dir = repo_root / "config" / "security"
     scripts_dir.mkdir(parents=True, exist_ok=True)
+    config_dir.mkdir(parents=True, exist_ok=True)
     baseline_path = repo_root / ".secrets.baseline"
     baseline_path.write_text(json.dumps({"results": {}}), encoding="utf-8")
+    (config_dir / "secret_scan_policy.json").write_text(
+        json.dumps(
+            {
+                "baseline_path": ".secrets.baseline",
+                "exclude_pattern": r"(^docs/|^tasks/|^ai/eval/baselines/|\.env\.example$)",
+            }
+        ),
+        encoding="utf-8",
+    )
     monkeypatch.setattr(module, "__file__", str(scripts_dir / "check_secret_baseline.py"))
 
-    monkeypatch.setattr(module, "tracked_files", lambda _root: [])
+    monkeypatch.setattr(module, "tracked_files", lambda _root, _policy: [])
     assert module.main() == 0
     assert capsys.readouterr().out.splitlines() == ["secret-scan: no tracked files to scan."]
 
-    monkeypatch.setattr(module, "tracked_files", lambda _root: ["src/app.py"])
+    monkeypatch.setattr(module, "tracked_files", lambda _root, _policy: ["src/app.py"])
     monkeypatch.setattr(module, "scan_results", lambda **_: {"src/app.py": []})
     monkeypatch.setattr(module, "baseline_results", lambda _baseline: {})
     monkeypatch.setattr(module, "actionable_findings", lambda **_: [])
@@ -121,3 +140,19 @@ def test_parse_line_number_and_main_branches(
         "Secret scan failed: findings outside .secrets.baseline were detected.",
         "- src/app.py:12 AWS Access Key",
     ]
+
+
+def test_load_secret_scan_policy_rejects_missing_required_values(tmp_path: Path) -> None:
+    module = _load_module()
+    policy_dir = tmp_path / "config" / "security"
+    policy_dir.mkdir(parents=True, exist_ok=True)
+
+    (policy_dir / "secret_scan_policy.json").write_text(json.dumps({"baseline_path": ""}))
+    with pytest.raises(ValueError, match="baseline_path"):
+        module.load_secret_scan_policy(tmp_path)
+
+    (policy_dir / "secret_scan_policy.json").write_text(
+        json.dumps({"baseline_path": ".secrets.baseline"})
+    )
+    with pytest.raises(ValueError, match="exclude_pattern"):
+        module.load_secret_scan_policy(tmp_path)

@@ -19,6 +19,7 @@ from src.storage.models import (
     ApiUsage,
     Event,
     EventItem,
+    NoveltyCandidate,
     ProcessingStatus,
     RawItem,
     Source,
@@ -101,6 +102,34 @@ class FakeTier2Completions:
             "extracted_when": "2026-02-07T12:00:00Z",
             "claims": ["Troop deployment increased near the border."],
             "categories": ["military", "security"],
+        }
+
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(message=SimpleNamespace(content=json.dumps(response_payload))),
+            ],
+            usage=SimpleNamespace(prompt_tokens=180, completion_tokens=70),
+        )
+
+
+class FakeTier2NoImpactCompletions:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    async def create(self, **kwargs):
+        self.calls += 1
+        messages = kwargs.get("messages", [])
+        user_content = messages[-1]["content"] if messages else "{}"
+        _payload = _load_wrapped_json_payload(user_content)
+
+        response_payload = {
+            "summary": "Logistics convoys appeared near a remote crossing.",
+            "extracted_who": ["Regional logistics crews", "Border police"],
+            "extracted_what": "Logistics convoys appeared near a remote crossing",
+            "extracted_where": "Remote border crossing",
+            "extracted_when": "2026-02-07T12:00:00Z",
+            "claims": ["Logistics convoys appeared near the crossing."],
+            "categories": ["logistics"],
         }
 
         return SimpleNamespace(
@@ -346,3 +375,101 @@ async def test_processing_pipeline_keeps_item_pending_when_budget_exceeded(monke
         assert result.errors == 0
         assert result.results[0].final_status == ProcessingStatus.PENDING
         assert tier1_completions.calls == 0
+
+
+@pytest.mark.asyncio
+async def test_processing_pipeline_persists_novelty_candidate_when_no_trend_updates(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pricing = dict(settings.LLM_TOKEN_PRICING_USD_PER_1M)
+    pricing["openai:test-embedding-model"] = (0.02, 0.0)
+    monkeypatch.setattr(settings, "LLM_TOKEN_PRICING_USD_PER_1M", pricing)
+
+    async with async_session_maker() as session:
+        source = Source(
+            type=SourceType.RSS,
+            name=f"Novelty Source {uuid4()}",
+            url=f"https://integration.local/{uuid4()}/feed",
+            credibility_score=0.9,
+            config={},
+            is_active=True,
+        )
+        trend = Trend(
+            name=f"Novelty Trend {uuid4()}",
+            description="Trend kept active while novelty lane captures unrelated signals",
+            runtime_trend_id="novelty-trend",
+            definition={"id": "novelty-trend"},
+            baseline_log_odds=-2.197225,
+            current_log_odds=-2.197225,
+            indicators={
+                "sanctions": {
+                    "weight": 0.04,
+                    "direction": "escalatory",
+                    "keywords": ["sanctions", "tariffs"],
+                }
+            },
+            decay_half_life_days=30,
+            is_active=True,
+        )
+        session.add_all([source, trend])
+        await session.flush()
+
+        item_url = f"https://integration.local/{uuid4()}/novelty-item"
+        item = RawItem(
+            source_id=source.id,
+            external_id=item_url,
+            url=item_url,
+            title="Convoys gather near remote crossing",
+            raw_content="Logistics convoys appeared repeatedly near a remote border crossing.",
+            content_hash=f"novelty-item-{uuid4().hex}",
+            fetched_at=datetime(2000, 1, 1, tzinfo=UTC),
+            processing_status=ProcessingStatus.PENDING,
+        )
+        session.add(item)
+        await session.commit()
+
+        embedding_service = EmbeddingService(
+            session=session,
+            client=SimpleNamespace(embeddings=FakeEmbeddingsAPI()),
+            model="test-embedding-model",
+        )
+        tier1_classifier = Tier1Classifier(
+            session=session,
+            client=SimpleNamespace(chat=SimpleNamespace(completions=FakeTier1Completions())),
+            model="gpt-4.1-nano",
+        )
+        tier2_classifier = Tier2Classifier(
+            session=session,
+            client=SimpleNamespace(
+                chat=SimpleNamespace(completions=FakeTier2NoImpactCompletions())
+            ),
+            model="gpt-4o-mini",
+        )
+        pipeline = ProcessingPipeline(
+            session=session,
+            embedding_service=embedding_service,
+            tier1_classifier=tier1_classifier,
+            tier2_classifier=tier2_classifier,
+        )
+
+        result = await pipeline.process_pending_items(limit=10, trends=[trend])
+        await session.commit()
+
+        saved_trend = await session.scalar(select(Trend).where(Trend.id == trend.id))
+        novelty_candidates = (
+            await session.scalars(
+                select(NoveltyCandidate).order_by(NoveltyCandidate.created_at.asc())
+            )
+        ).all()
+
+        assert result.scanned == 1
+        assert result.classified == 1
+        assert result.trend_updates == 0
+        assert saved_trend is not None
+        assert float(saved_trend.current_log_odds) == pytest.approx(
+            float(saved_trend.baseline_log_odds)
+        )
+        assert len(novelty_candidates) == 1
+        assert novelty_candidates[0].candidate_kind == "event_gap"
+        assert novelty_candidates[0].event_id is not None
+        assert novelty_candidates[0].summary.startswith("Logistics convoys appeared")

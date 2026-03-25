@@ -111,6 +111,13 @@ def _pipeline(mock_db_session, **kwargs) -> ProcessingPipeline:
         ),
         trend_engine=kwargs.pop("trend_engine", SimpleNamespace(apply_evidence=AsyncMock())),
         degraded_llm_tracker=kwargs.pop("degraded_llm_tracker", None),
+        novelty_lane_service=kwargs.pop(
+            "novelty_lane_service",
+            SimpleNamespace(
+                capture_tier1_near_miss=AsyncMock(),
+                capture_event_candidate=AsyncMock(),
+            ),
+        ),
     )
 
 
@@ -146,11 +153,102 @@ async def test_process_items_marks_missing_execution_as_error(mock_db_session) -
     item = _item()
     pipeline = _pipeline(mock_db_session)
     pipeline._prepare_item_for_tier1 = AsyncMock(return_value=(None, None))
-
     result = await pipeline.process_items([item], trends=[_trend()])
 
     assert result.errors == 1
     assert result.results[0].error_message == "Pipeline execution result missing"
+
+
+@pytest.mark.asyncio
+async def test_process_after_tier1_records_near_threshold_novelty_candidate(
+    mock_db_session,
+) -> None:
+    item = _item()
+    novelty_lane = SimpleNamespace(
+        capture_tier1_near_miss=AsyncMock(),
+        capture_event_candidate=AsyncMock(),
+    )
+    pipeline = _pipeline(mock_db_session, novelty_lane_service=novelty_lane)
+    prepared = _PreparedItem(item=item, item_id=item.id, raw_content=item.raw_content)
+
+    result = await pipeline._process_after_tier1(
+        prepared=prepared,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=4, should_queue_tier2=False),
+        trends=[_trend()],
+    )
+
+    assert result.result.final_status == ProcessingStatus.NOISE
+    novelty_lane.capture_tier1_near_miss.assert_awaited_once_with(
+        item=item,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=4, should_queue_tier2=False),
+    )
+    novelty_lane.capture_event_candidate.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_process_after_tier1_records_event_novelty_when_no_trend_updates(
+    mock_db_session,
+) -> None:
+    item = _item()
+    event = Event(id=uuid4(), canonical_summary="Novelty event")
+    novelty_lane = SimpleNamespace(
+        capture_tier1_near_miss=AsyncMock(),
+        capture_event_candidate=AsyncMock(),
+    )
+    pipeline = _pipeline(mock_db_session, novelty_lane_service=novelty_lane)
+    pipeline._persist_deferred_tier2_cache_write = AsyncMock(return_value=None)
+    pipeline._capture_unresolved_trend_mapping = AsyncMock(return_value=None)
+    pipeline._apply_trend_impacts = AsyncMock(return_value=(0, 0))
+    mock_db_session.scalar = AsyncMock(side_effect=[event, None])
+
+    prepared = _PreparedItem(item=item, item_id=item.id, raw_content=item.raw_content)
+    result = await pipeline._process_after_tier1(
+        prepared=prepared,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True),
+        trends=[_trend()],
+    )
+
+    assert result.result.final_status == ProcessingStatus.CLASSIFIED
+    novelty_lane.capture_event_candidate.assert_awaited_once_with(
+        event=event,
+        item=item,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=8, should_queue_tier2=True),
+        trend_impacts_seen=0,
+        trend_updates=0,
+    )
+
+
+@pytest.mark.asyncio
+async def test_capture_tier1_novelty_candidate_logs_and_swallows_failures(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    item = _item()
+    pipeline = _pipeline(
+        mock_db_session,
+        novelty_lane_service=SimpleNamespace(
+            capture_tier1_near_miss=AsyncMock(side_effect=RuntimeError("boom")),
+            capture_event_candidate=AsyncMock(),
+        ),
+    )
+    logged: list[dict[str, str]] = []
+
+    def _log_exception(message: str, **kwargs) -> None:
+        logged.append({"message": message, "item_id": kwargs["item_id"]})
+
+    monkeypatch.setattr(orchestrator_module.logger, "exception", _log_exception)
+
+    await pipeline._capture_tier1_novelty_candidate(
+        item=item,
+        tier1_result=Tier1ItemResult(item_id=item.id, max_relevance=4, should_queue_tier2=False),
+    )
+
+    assert logged == [
+        {
+            "message": "Failed to capture near-threshold novelty candidate",
+            "item_id": str(item.id),
+        }
+    ]
 
 
 @pytest.mark.asyncio

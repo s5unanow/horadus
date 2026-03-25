@@ -172,6 +172,8 @@ Launch language policy:
 │ score 0-10  │
 └──────┬──────┘
        │
+       ├──────── near-threshold / repeated misses ───▶ bounded novelty lane capture
+       │
        ├──────── score < threshold ───▶ mark as noise
        │
        ▼
@@ -199,6 +201,8 @@ Launch language policy:
 │ deltas (log-odds update +   │
 │ evidence provenance record) │
 └─────────────────────────────┘
+       │
+       └──────── no safe trend update ───▶ bounded novelty lane capture
 ```
 
 Retry semantics:
@@ -210,6 +214,7 @@ Taxonomy drift safety:
 - Tier-2 now emits extracted facts/claims only; deterministic code maps those facts onto eligible trend indicators after classification.
 - If deterministic mapping cannot resolve a unique indicator (`unknown_trend_id`, `unknown_signal_type`, `ambiguous_mapping`, or `no_matching_indicator`), the impact is skipped.
 - Skipped or unresolved impacts are recorded in `taxonomy_gaps` for analyst triage (`open`/`resolved`/`rejected`) with structured mapping details.
+- Separately, low-signal or unmapped items/events can be persisted into `novelty_candidates` so operators see persistent out-of-taxonomy clusters without applying any trend deltas.
 - This preserves safety (no unknown-delta application) while surfacing taxonomy gaps for closure.
 - Active runtime trend routing is pinned to the normalized, unique `trends.runtime_trend_id` value (mirrored in `definition.id`) so duplicate config/API writes fail closed instead of shadowing one trend behind another.
 - Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed through append-only `trend_restatements`, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata plus current extraction runtime provenance for audit/replay.

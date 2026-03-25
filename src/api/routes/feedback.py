@@ -29,6 +29,7 @@ from src.api.routes.feedback_event_helpers import build_review_queue_item
 from src.api.routes.feedback_models import (
     EventFeedbackRequest,
     FeedbackResponse,
+    NoveltyQueueItem,
     ReviewQueueItem,
     TaxonomyGapListResponse,
     TaxonomyGapResponse,
@@ -36,6 +37,7 @@ from src.api.routes.feedback_models import (
     TaxonomyGapUpdateRequest,
     TrendOverrideRequest,
     to_feedback_response,
+    to_novelty_queue_item,
     to_taxonomy_gap_response,
 )
 from src.storage.database import get_session
@@ -47,6 +49,7 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
+from src.storage.novelty_models import NoveltyCandidate
 from src.storage.restatement_models import HumanFeedback
 
 router = APIRouter()
@@ -393,6 +396,35 @@ async def list_review_queue(
         )
     )
     return queue_items[:limit_value]
+
+
+@router.get("/novelty-queue", response_model=list[NoveltyQueueItem])
+async def list_novelty_queue(
+    days: int = Query(default=14, ge=1, le=30),
+    limit: int = Query(default=50, ge=1, le=200),
+    candidate_kind: Literal["near_threshold_item", "event_gap"] | None = Query(default=None),
+    session: AsyncSession = Depends(get_session),
+) -> list[NoveltyQueueItem]:
+    """Return ranked novelty candidates outside the active trend lane."""
+
+    since = datetime.now(tz=UTC) - timedelta(days=days if isinstance(days, int) else 14)
+    limit_value = limit if isinstance(limit, int) else 50
+
+    query = (
+        select(NoveltyCandidate)
+        .where(NoveltyCandidate.last_seen_at >= since)
+        .order_by(
+            NoveltyCandidate.ranking_score.desc(),
+            NoveltyCandidate.last_seen_at.desc(),
+            NoveltyCandidate.created_at.desc(),
+        )
+        .limit(limit_value)
+    )
+    if candidate_kind is not None:
+        query = query.where(NoveltyCandidate.candidate_kind == candidate_kind)
+
+    candidates = list((await session.scalars(query)).all())
+    return [to_novelty_queue_item(candidate) for candidate in candidates]
 
 
 @router.post(

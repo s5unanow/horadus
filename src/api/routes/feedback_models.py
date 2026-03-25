@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 if TYPE_CHECKING:
     from src.storage.models import TaxonomyGap
+    from src.storage.novelty_models import NoveltyCandidate
     from src.storage.restatement_models import HumanFeedback
 
 
@@ -114,6 +115,27 @@ class ReviewQueueItem(BaseModel):
     trend_impacts: list[ReviewQueueTrendImpact]
 
 
+class NoveltyQueueItem(BaseModel):
+    """Persistent novelty candidate surfaced to operators."""
+
+    id: UUID
+    cluster_key: str
+    candidate_kind: str
+    summary: str
+    recurrence_count: int
+    distinct_source_count: int
+    actor_location_hits: int
+    near_threshold_hits: int
+    unmapped_signal_count: int
+    last_tier1_max_relevance: int | None
+    ranking_score: float
+    first_seen_at: datetime
+    last_seen_at: datetime
+    event_id: UUID | None
+    raw_item_id: UUID | None
+    details: dict[str, Any]
+
+
 class TaxonomyGapResponse(BaseModel):
     """Serialized taxonomy-gap record."""
 
@@ -209,4 +231,32 @@ def to_taxonomy_gap_response(
         resolved_at=gap.resolved_at,
         revision_token=revision_token,
         observed_at=observed_at,
+    )
+
+
+def to_novelty_queue_item(candidate: NoveltyCandidate) -> NoveltyQueueItem:
+    """Normalize a novelty-candidate row into the API contract."""
+
+    candidate_id = candidate.id if candidate.id is not None else uuid4()
+    first_seen_at = (
+        candidate.first_seen_at if candidate.first_seen_at is not None else datetime.now(tz=UTC)
+    )
+    last_seen_at = candidate.last_seen_at if candidate.last_seen_at is not None else first_seen_at
+    return NoveltyQueueItem(
+        id=candidate_id,
+        cluster_key=candidate.cluster_key,
+        candidate_kind=candidate.candidate_kind,
+        summary=candidate.summary,
+        recurrence_count=int(candidate.recurrence_count or 0),
+        distinct_source_count=int(candidate.distinct_source_count or 0),
+        actor_location_hits=int(candidate.actor_location_hits or 0),
+        near_threshold_hits=int(candidate.near_threshold_hits or 0),
+        unmapped_signal_count=int(candidate.unmapped_signal_count or 0),
+        last_tier1_max_relevance=candidate.last_tier1_max_relevance,
+        ranking_score=float(candidate.ranking_score or 0.0),
+        first_seen_at=first_seen_at,
+        last_seen_at=last_seen_at,
+        event_id=candidate.event_id,
+        raw_item_id=candidate.raw_item_id,
+        details=candidate.details if isinstance(candidate.details, dict) else {},
     )

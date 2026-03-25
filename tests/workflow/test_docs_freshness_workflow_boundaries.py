@@ -58,11 +58,21 @@ def test_docs_freshness_flags_finish_dedupe_policy_duplication_outside_agents(
 ) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
+    duplicated_statement = next(
+        (
+            statement
+            for statement in completion_guidance_statements()
+            if "`horadus tasks finish` deduplicates bootstrap by open head branch first"
+            in statement
+        ),
+        None,
+    )
+    assert duplicated_statement is not None
     (tmp_path / "ops" / "skills" / "horadus-cli" / "SKILL.md").write_text(
         "\n".join(
             [
                 "Thin helper only.",
-                completion_guidance_statements()[5],
+                duplicated_statement,
                 "",
             ]
         ),

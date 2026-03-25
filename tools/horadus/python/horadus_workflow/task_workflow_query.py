@@ -6,6 +6,14 @@ from typing import Any, TypedDict
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
+from tools.horadus.python.horadus_workflow.task_workflow_completion_contract import (
+    CompletionContract,
+    build_completion_contract,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_context_pack_support import (
+    append_planning_context_lines,
+    context_pack_payload,
+)
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     CallerAwareValidationPack,
     caller_aware_validation_packs,
@@ -502,13 +510,38 @@ def _caller_aware_validation_pack_matches(record: Any) -> list[CallerAwareValida
 
 def _suggested_validation_commands(
     validation_packs: list[CallerAwareValidationPackMatch],
+    completion_contract: CompletionContract,
 ) -> list[str]:
     commands = list(default_validation_commands())
     for pack in validation_packs:
         for command in pack["commands"]:
             if command not in commands:
                 commands.append(command)
+    for requirement in completion_contract["documented_requirements"]:
+        if requirement["status"] != "required":
+            continue
+        for command in requirement["commands"]:
+            if command not in commands:
+                commands.append(command)
     return commands
+
+
+def _append_completion_contract_lines(lines: list[str], contract: CompletionContract) -> None:
+    lines.extend(["", "## Completion Contract", "Already enforced by tooling:"])
+    for requirement in contract["enforced_requirements"]:
+        lines.append(f"- {requirement['summary']}")
+        lines.append(f"  Reason: {requirement['reason']}")
+        if requirement["commands"]:
+            lines.append(f"  Commands: {', '.join(requirement['commands'])}")
+        lines.append(f"  Note: {requirement['note']}")
+    lines.append("")
+    lines.append("Still documented / operator-owned expectations:")
+    for requirement in contract["documented_requirements"]:
+        lines.append(f"- [{requirement['status']}] {requirement['summary']}")
+        lines.append(f"  Reason: {requirement['reason']}")
+        if requirement["commands"]:
+            lines.append(f"  Commands: {', '.join(requirement['commands'])}")
+        lines.append(f"  Note: {requirement['note']}")
 
 
 def _append_caller_aware_validation_pack_lines(
@@ -560,7 +593,17 @@ def handle_context_pack(args: Any) -> CommandResult:
 
     planning = _planning_context(task_id, record)
     validation_packs = _caller_aware_validation_pack_matches(record)
-    suggested_validation_commands = _suggested_validation_commands(validation_packs)
+    completion_contract = build_completion_contract(
+        task_id,
+        normalized_paths=_normalized_task_paths(record),
+        planning=planning,
+        validation_pack_commands=[
+            command for pack in validation_packs for command in pack["commands"]
+        ],
+    )
+    suggested_validation_commands = _suggested_validation_commands(
+        validation_packs, completion_contract
+    )
     pre_push_review = _pre_push_review_guidance(record)
     lines = [
         f"# Context Pack: {task_id}",
@@ -581,30 +624,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             _CANONICAL_PLANNING_EXAMPLE_PATH,
         ]
     )
-    if planning["required"]:
-        lines.extend(
-            [
-                "",
-                "## Planning Gates",
-                "Applicability: required",
-                f"State: {planning['state']}",
-            ]
-        )
-        if planning["marker_value"] is not None:
-            lines.append(
-                f"Marker: {planning['marker_value']} ({planning['marker_source'] or 'unknown source'})"
-            )
-        if planning["authoritative_artifact_path"] is not None:
-            lines.append(
-                f"Authoritative planning artifact: {planning['authoritative_artifact_path']}"
-            )
-        if planning["gate_home_path"] is not None:
-            lines.append(f"Phase -1 gates home: {planning['gate_home_path']}")
-        if planning["waiver_home_path"] is not None:
-            lines.append(f"Gate Outcomes / Waivers home: {planning['waiver_home_path']}")
-        if planning["missing_artifact_notice"] is not None:
-            lines.append(f"Missing artifact notice: {planning['missing_artifact_notice']}")
-        lines.append(f"Canonical example: {planning['canonical_example_path']}")
+    append_planning_context_lines(lines, planning)
     lines.extend(["", "## Likely Code Areas"])
     lines.extend(record.files or ["(not specified in backlog entry)"])
     lines.extend(["", "## Suggested Workflow Commands"])
@@ -615,22 +635,23 @@ def handle_context_pack(args: Any) -> CommandResult:
     )
     lines.extend(workflow_commands)
     lines.extend(["", "## Suggested Validation Commands", *suggested_validation_commands])
+    _append_completion_contract_lines(lines, completion_contract)
     _append_caller_aware_validation_pack_lines(lines, validation_packs)
     _append_pre_push_review_guidance_lines(lines, pre_push_review)
     return CommandResult(
         lines=lines,
-        data={
-            "task": _task_record_payload(record),
-            "sprint_lines": record.sprint_lines,
-            "spec_paths": record.spec_paths,
-            "spec_template_path": "tasks/specs/TEMPLATE.md",
-            "canonical_spec_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
-            "planning_gates": planning,
-            "suggested_workflow_commands": workflow_commands,
-            "suggested_validation_commands": suggested_validation_commands,
-            "caller_aware_validation_packs": validation_packs,
-            "pre_push_review_guidance": pre_push_review,
-        },
+        data=context_pack_payload(
+            task_payload=_task_record_payload(record),
+            sprint_lines=record.sprint_lines,
+            spec_paths=record.spec_paths,
+            planning=planning,
+            workflow_commands=workflow_commands,
+            suggested_validation_commands=suggested_validation_commands,
+            completion_contract=completion_contract,
+            validation_packs=validation_packs,
+            pre_push_review=pre_push_review,
+            canonical_spec_example_path=_CANONICAL_PLANNING_EXAMPLE_PATH,
+        ),
     )
 
 
@@ -640,6 +661,7 @@ __all__ = [
     "_planning_context",
     "_planning_marker_from_relative_path",
     "_pre_push_review_guidance",
+    "_suggested_validation_commands",
     "_task_record_payload",
     "_workflow_commands_for_context_pack",
     "handle_context_pack",

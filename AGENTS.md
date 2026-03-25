@@ -150,6 +150,11 @@ After completing work:
 - Treat repo-facing work as incomplete until requested deliverables, required repo updates, and required verification/gate runs are finished or explicitly reported blocked.
 - Implementation, required tests/gates, and required task/doc/status updates remain part of the same task unless they are explicitly blocked.
 - If a task is blocked, report the exact missing item, the blocker causing it, and the furthest completed lifecycle step rather than a vague partial-completion claim.
+- `horadus tasks local-gate --full` remains the canonical strict post-task local gate; do not substitute a narrower gate command for completion.
+- Code or repo-workflow changes still require relevant targeted tests before completion; docs-only or ledger-only tasks may record a documented N/A instead of inventing empty proof.
+- If the task touches integration-covered paths or push/PR workflow surfaces, run local integration proof before completion; keep `horadus tasks local-gate --full` as the canonical strict gate even when you also run `make test-integration-docker` earlier.
+- If behavior, workflow, or operator-facing contracts change, update the corresponding docs in the same task branch.
+- Record N/A or waived completion proofs in the task's authoritative planning artifact when one exists.
 - Do not claim a task is complete, done, or finished until `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or `horadus tasks finish TASK-XXX` completes successfully.
 - `horadus tasks finish` owns canonical missing-branch push and missing-PR bootstrap when it can derive policy-valid PR metadata; a missing PR alone is not a manual-recovery signal.
 - `horadus tasks finish` deduplicates bootstrap by open head branch first; `Primary-Task` PR search remains a lifecycle recovery surface, not the bootstrap dedupe key.

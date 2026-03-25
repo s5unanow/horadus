@@ -103,6 +103,30 @@ COMPLETION_GUIDANCE_STATEMENTS: tuple[str, ...] = (
         "vague partial-completion claim."
     ),
     (
+        "`horadus tasks local-gate --full` remains the canonical strict "
+        "post-task local gate; do not substitute a narrower gate command for "
+        "completion."
+    ),
+    (
+        "Code or repo-workflow changes still require relevant targeted tests "
+        "before completion; docs-only or ledger-only tasks may record a "
+        "documented N/A instead of inventing empty proof."
+    ),
+    (
+        "If the task touches integration-covered paths or push/PR workflow "
+        "surfaces, run local integration proof before completion; keep "
+        "`horadus tasks local-gate --full` as the canonical strict gate even "
+        "when you also run `make test-integration-docker` earlier."
+    ),
+    (
+        "If behavior, workflow, or operator-facing contracts change, update "
+        "the corresponding docs in the same task branch."
+    ),
+    (
+        "Record N/A or waived completion proofs in the task's authoritative "
+        "planning artifact when one exists."
+    ),
+    (
         "Do not claim a task is complete, done, or finished until "
         "`uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` passes or "
         "`horadus tasks finish TASK-XXX` completes successfully."
@@ -217,6 +241,8 @@ DEFAULT_VALIDATION_COMMANDS: tuple[str, ...] = (
     "uv run --no-sync horadus tasks local-gate --full",
 )
 
+TARGETED_INTEGRATION_VALIDATION_COMMAND = "make test-integration-docker"
+
 CALLER_AWARE_VALIDATION_PACKS: tuple[CallerAwareValidationPack, ...] = (
     CallerAwareValidationPack(
         pack_id="shared-workflow-helpers",
@@ -323,6 +349,10 @@ def high_risk_pre_push_review_batching_statements() -> tuple[str, ...]:
 
 def default_validation_commands() -> tuple[str, ...]:
     return DEFAULT_VALIDATION_COMMANDS
+
+
+def targeted_integration_validation_command() -> str:
+    return TARGETED_INTEGRATION_VALIDATION_COMMAND
 
 
 def caller_aware_validation_packs() -> tuple[CallerAwareValidationPack, ...]:

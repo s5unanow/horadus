@@ -133,6 +133,14 @@ def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> 
         -1
     ] == ("uv run --no-sync horadus tasks finish TASK-999")
     assert task_workflow_policy_module.completion_guidance_statements()
+    assert any(
+        "targeted tests" in statement
+        for statement in task_workflow_policy_module.completion_guidance_statements()
+    )
+    assert (
+        task_workflow_policy_module.targeted_integration_validation_command()
+        == "make test-integration-docker"
+    )
     assert task_workflow_policy_module.dependency_aware_guidance_statements()
     assert task_workflow_policy_module.fallback_guidance_statements()
     assert task_workflow_policy_module.high_risk_pre_push_review_reference_paths()

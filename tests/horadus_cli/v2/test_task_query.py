@@ -34,6 +34,7 @@ def test_main_tasks_context_pack_json_output(
     assert payload["status"] == "ok"
     assert payload["data"]["task"]["task_id"] == LIVE_TASK_ID
     assert "suggested_validation_commands" in payload["data"]
+    assert "completion_contract" in payload["data"]
 
 
 def test_main_tasks_list_active_json_excludes_non_active_human_blockers(

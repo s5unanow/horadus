@@ -91,7 +91,8 @@ def test_repo_workflow_configs_include_repo_owned_security_scans() -> None:
     ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
 
-    assert "--baseline, .secrets.baseline, --no-verify" in precommit
+    assert "./scripts/run_secret_scan.sh" in precommit
+    assert "https://github.com/Yelp/detect-secrets" not in precommit
     assert "./scripts/run_secret_scan.sh" in ci_workflow
     assert "./scripts/run_dependency_audit.sh" in ci_workflow
     assert "bandit -c pyproject.toml -r src/ tools/horadus/python scripts" in ci_workflow

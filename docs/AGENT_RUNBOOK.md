@@ -112,8 +112,10 @@ the workflow tooling home under `tools/`, plus tracked Python under `scripts/`,
 using the same repo-owned coverage gate script that CI and the pre-push hook
 call, so local and remote enforcement stay aligned.
 The matching server-side security substeps also have direct local entry points:
-- `make secret-scan` runs `detect-secrets` against tracked files using the
-  repo-owned `.secrets.baseline`
+- `make secret-scan` and the pre-commit `secret-scan` hook both run the
+  repo-owned tracked-file scanner via `./scripts/run_secret_scan.sh`, which
+  applies the canonical policy from
+  `config/security/secret_scan_policy.json` against `.secrets.baseline`
 - `make dependency-audit` runs the locked-project vulnerability audit used by CI
   and applies only the exact repo-owned allowlist entries recorded in
   `config/security/dependency_audit_allowlist.json`

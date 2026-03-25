@@ -34,7 +34,13 @@ def _config(*, review_poll_seconds: int = 1) -> review_window_module.shared.Fini
 
 
 def _review_gate_result(
-    *, status: str, reason: str, summary: str
+    *,
+    status: str,
+    reason: str,
+    summary: str,
+    wait_window_started_at: str | None = None,
+    deadline_at: str | None = None,
+    remaining_seconds: int | None = None,
 ) -> review_window_module.shared.ReviewGateResult:
     return review_window_module.shared.ReviewGateResult(
         status=status,
@@ -51,6 +57,9 @@ def _review_gate_result(
         summary=summary,
         informational_lines=[],
         actionable_lines=[],
+        wait_window_started_at=wait_window_started_at,
+        deadline_at=deadline_at,
+        remaining_seconds=remaining_seconds,
     )
 
 
@@ -94,7 +103,10 @@ def test_review_gate_data_sleeps_between_waiting_polls(
                 _review_gate_result(
                     status="waiting",
                     reason="waiting",
-                    summary="Waiting for review gate (reviewer=chatgpt-codex-connector[bot], head=head-sha-348, remaining=4s, deadline=2026-03-17T12:30:00+00:00)...",
+                    summary="Waiting for review gate ...",
+                    wait_window_started_at="2026-03-17T12:29:56+00:00",
+                    deadline_at="2026-03-17T12:30:00+00:00",
+                    remaining_seconds=4,
                 ),
                 [],
                 None,
@@ -146,7 +158,14 @@ def test_review_gate_data_sleeps_between_waiting_polls(
 
     assert exit_code == review_window_module.ExitCode.OK
     assert sleep_calls == [1]
-    assert any(line.startswith("Waiting for review gate ") for line in lines)
+    assert (
+        "Waiting for review gate (reviewer=chatgpt-codex-connector[bot], "
+        "head=head-sha-348, remaining=4s, deadline=2026-03-17T12:30:00+00:00)..."
+    ) in lines
+    assert not any(
+        line == "Waiting for review gate (reviewer=chatgpt-codex-connector[bot], timeout=5s)..."
+        for line in lines
+    )
 
 
 def test_review_gate_data_returns_environment_blocker_when_thread_state_is_unreadable_after_review(
@@ -193,6 +212,39 @@ def test_review_gate_data_returns_environment_blocker_when_thread_state_is_unrea
         == "Task finish blocked: unable to determine unresolved review thread state on the current head."
     )
     assert lines[-1] == "graphql failed"
+
+
+def test_review_gate_lines_uses_started_at_when_deadline_is_unavailable() -> None:
+    lines = review_window_module._review_gate_lines(
+        _review_gate_result(
+            status="waiting",
+            reason="waiting",
+            summary="Waiting for review gate ...",
+            wait_window_started_at="2026-03-17T12:29:56+00:00",
+            remaining_seconds=4,
+        )
+    )
+
+    assert lines == [
+        "Waiting for review gate (reviewer=chatgpt-codex-connector[bot], "
+        "head=head-sha-348, remaining=4s, started=2026-03-17T12:29:56+00:00)..."
+    ]
+
+
+def test_review_gate_lines_include_timeout_wait_recap_for_timed_out_result() -> None:
+    lines = review_window_module._review_gate_lines(
+        _review_gate_result(
+            status="pass",
+            reason="silent_timeout_allow",
+            summary="review gate timeout: no actionable current-head review feedback.",
+        )
+    )
+
+    assert lines == [
+        "Waiting for review gate (reviewer=chatgpt-codex-connector[bot], "
+        "head=head-sha-348, timeout=5s)...",
+        "review gate timeout: no actionable current-head review feedback.",
+    ]
 
 
 def test_review_gate_data_blocks_on_unresolved_threads_after_review(

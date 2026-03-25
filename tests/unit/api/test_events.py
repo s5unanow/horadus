@@ -23,6 +23,17 @@ from src.storage.models import Event
 pytestmark = pytest.mark.unit
 
 
+@pytest.fixture(autouse=True)
+def _stub_review_metadata_loader(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def _load_review_metadata(**kwargs):
+        return {
+            event_id: events_module.EventReviewMetadata()
+            for event_id in kwargs.get("event_ids", ())
+        }
+
+    monkeypatch.setattr(events_module, "load_event_review_metadata", _load_review_metadata)
+
+
 def _build_event(
     *,
     event_id: UUID | None = None,
@@ -139,6 +150,43 @@ async def test_list_events_prefers_event_summary_when_present(mock_db_session) -
     result = await list_events(days=7, limit=5, session=mock_db_session)
 
     assert result[0].summary == "Synthesized cross-border event summary"
+
+
+@pytest.mark.asyncio
+async def test_event_responses_include_operator_review_metadata(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    event = _build_event()
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [event])
+    mock_db_session.get.return_value = event
+    mock_db_session.execute.side_effect = [
+        SimpleNamespace(all=list),
+        SimpleNamespace(all=list),
+        SimpleNamespace(all=list),
+    ]
+    monkeypatch.setattr(
+        events_module,
+        "load_event_review_metadata",
+        AsyncMock(
+            return_value={
+                event.id: events_module.EventReviewMetadata(
+                    review_status="needs_taxonomy_review",
+                    open_taxonomy_gap_count=2,
+                    latest_adjudication_outcome="escalate_taxonomy_review",
+                    latest_adjudication_at=datetime.now(tz=UTC),
+                )
+            }
+        ),
+    )
+    monkeypatch.setattr(events_module, "load_event_lineage", AsyncMock(return_value=[]))
+
+    list_result = await list_events(days=7, limit=5, session=mock_db_session)
+    detail_result = await get_event(event_id=event.id, session=mock_db_session)
+
+    assert list_result[0].review_status == "needs_taxonomy_review"
+    assert list_result[0].open_taxonomy_gap_count == 2
+    assert detail_result.latest_adjudication_outcome == "escalate_taxonomy_review"
 
 
 @pytest.mark.asyncio

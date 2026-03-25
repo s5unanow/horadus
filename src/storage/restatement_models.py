@@ -32,6 +32,13 @@ RESTATEMENT_KIND_SQL_VALUES = (
     "'full_invalidation', 'partial_restatement', 'manual_compensation', 'reclassification'"
 )
 RESTATEMENT_SOURCE_SQL_VALUES = "'event_feedback', 'trend_override', 'tier2_reconciliation'"
+EVENT_ADJUDICATION_OUTCOME_SQL_VALUES = (
+    "'confirm', 'suppress', 'restate', 'escalate_taxonomy_review'"
+)
+EVENT_ADJUDICATION_REVIEW_STATUS_SQL_VALUES = "'resolved', 'needs_taxonomy_review'"
+EVENT_ADJUDICATION_OVERRIDE_INTENT_SQL_VALUES = (
+    "'pin_event', 'suppress_event', 'apply_restatement', 'taxonomy_escalation'"
+)
 
 
 class HumanFeedback(Base):
@@ -56,6 +63,61 @@ class HumanFeedback(Base):
     __table_args__ = (
         Index("idx_feedback_target", "target_type", "target_id"),
         Index("idx_feedback_action", "action"),
+    )
+
+
+class EventAdjudication(Base):
+    """Append-only typed operator adjudication record for one event."""
+
+    __tablename__ = "event_adjudications"
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+    event_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("events.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    feedback_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("human_feedback.id", ondelete="SET NULL"),
+    )
+    outcome: Mapped[str] = mapped_column(String(50), nullable=False)
+    review_status: Mapped[str] = mapped_column(String(50), nullable=False)
+    override_intent: Mapped[str] = mapped_column(String(50), nullable=False)
+    resulting_effect: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        default=dict,
+        server_default=text("'{}'::jsonb"),
+        nullable=False,
+    )
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_by: Mapped[str | None] = mapped_column(String(100))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            f"outcome IN ({EVENT_ADJUDICATION_OUTCOME_SQL_VALUES})",
+            name="check_event_adjudications_outcome_allowed",
+        ),
+        CheckConstraint(
+            f"review_status IN ({EVENT_ADJUDICATION_REVIEW_STATUS_SQL_VALUES})",
+            name="check_event_adjudications_review_status_allowed",
+        ),
+        CheckConstraint(
+            f"override_intent IN ({EVENT_ADJUDICATION_OVERRIDE_INTENT_SQL_VALUES})",
+            name="check_event_adjudications_override_intent_allowed",
+        ),
+        Index("idx_event_adjudications_event_created", "event_id", "created_at"),
+        Index(
+            "idx_event_adjudications_review_status_created",
+            "review_status",
+            "created_at",
+        ),
+        Index("idx_event_adjudications_feedback", "feedback_id"),
     )
 
 

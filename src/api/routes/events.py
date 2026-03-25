@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.api.middleware.auth import require_privileged_access
 from src.api.routes._privileged_write_contract import event_revision_token
+from src.api.routes.event_review_metadata import EventReviewMetadata, load_event_review_metadata
 from src.processing.event_cluster_health import (
     cluster_health_payload,
     resolve_cluster_health,
@@ -91,6 +92,10 @@ class EventResponse(BaseModel):
     lifecycle_status: str
     has_contradictions: bool
     contradiction_notes: str | None
+    review_status: str
+    open_taxonomy_gap_count: int
+    latest_adjudication_outcome: str | None
+    latest_adjudication_at: datetime | None
     first_seen_at: datetime
     last_mention_at: datetime
     revision_token: str
@@ -289,8 +294,10 @@ def _to_event_response(
     event: Event,
     *,
     cluster_health: dict[str, float] | None = None,
+    review_metadata: EventReviewMetadata | None = None,
 ) -> EventResponse:
     resolved_cluster_health = cluster_health or cluster_health_payload(event)
+    resolved_review_metadata = review_metadata or EventReviewMetadata()
     return EventResponse(
         id=event.id,
         summary=resolved_event_summary(event),
@@ -304,6 +311,10 @@ def _to_event_response(
         lifecycle_status=event.lifecycle_status,
         has_contradictions=event.has_contradictions,
         contradiction_notes=event.contradiction_notes,
+        review_status=resolved_review_metadata.review_status,
+        open_taxonomy_gap_count=resolved_review_metadata.open_taxonomy_gap_count,
+        latest_adjudication_outcome=resolved_review_metadata.latest_adjudication_outcome,
+        latest_adjudication_at=resolved_review_metadata.latest_adjudication_at,
         first_seen_at=event.first_seen_at,
         last_mention_at=event.last_mention_at,
         revision_token=event_revision_token(event),
@@ -396,10 +407,15 @@ async def list_events(
         for event in events
         if event.id is not None
     }
+    review_metadata_by_event_id = await load_event_review_metadata(
+        session=session,
+        event_ids=[event.id for event in events if event.id is not None],
+    )
     return [
         _to_event_response(
             event,
             cluster_health=cluster_health_by_event_id.get(event.id),
+            review_metadata=review_metadata_by_event_id.get(event.id),
         )
         for event in events
     ]
@@ -428,8 +444,15 @@ async def get_event(
         event_id=event_id,
     )
     lineage = await load_event_lineage(session=session, event_id=event_id)
+    review_metadata = (await load_event_review_metadata(session=session, event_ids=[event_id])).get(
+        event_id
+    )
     return EventDetailResponse(
-        **_to_event_response(event, cluster_health=cluster_health).model_dump(),
+        **_to_event_response(
+            event,
+            cluster_health=cluster_health,
+            review_metadata=review_metadata,
+        ).model_dump(),
         corroboration_score=resolved_corroboration_score(event),
         provenance_summary=dict(event.provenance_summary or {}),
         extraction_provenance=dict(event.extraction_provenance or {}),

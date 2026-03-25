@@ -41,7 +41,7 @@ Semantics:
 
 Current route matrix:
 - Idempotency only: `POST /api/v1/auth/keys`, `POST /api/v1/auth/keys/{key_id}/rotate`, `DELETE /api/v1/auth/keys/{key_id}`, `POST /api/v1/trends`, `POST /api/v1/trends/sync-config`, `POST /api/v1/trends/{trend_id}/outcomes`
-- Idempotency + revision token: `PATCH /api/v1/trends/{trend_id}`, `DELETE /api/v1/trends/{trend_id}`, `PATCH /api/v1/taxonomy-gaps/{gap_id}`, `POST /api/v1/events/{event_id}/feedback`, `POST /api/v1/trends/{trend_id}/override`
+- Idempotency + revision token: `PATCH /api/v1/trends/{trend_id}`, `DELETE /api/v1/trends/{trend_id}`, `PATCH /api/v1/taxonomy-gaps/{gap_id}`, `POST /api/v1/events/{event_id}/feedback`, `POST /api/v1/events/{event_id}/adjudications`, `POST /api/v1/trends/{trend_id}/override`
 
 Revision tokens are surfaced on the resource payloads used for read-before-write
 flows:
@@ -210,10 +210,12 @@ curl "http://localhost:8000/api/v1/trends/<trend-id>/calibration"
 Feedback mutations are exposed under:
 - `PATCH /api/v1/taxonomy-gaps/{gap_id}`
 - `POST /api/v1/events/{event_id}/feedback`
+- `POST /api/v1/events/{event_id}/adjudications`
 - `POST /api/v1/trends/{trend_id}/override`
 
 These routes require both `X-API-Key` and `X-Admin-API-Key`.
 `PATCH /api/v1/taxonomy-gaps/{gap_id}`, `POST /api/v1/events/{event_id}/feedback`,
+`POST /api/v1/events/{event_id}/adjudications`,
 and `POST /api/v1/trends/{trend_id}/override` also require:
 - `X-Idempotency-Key`
 - `If-Match` with the latest `revision_token` for the target taxonomy gap/event/trend
@@ -320,6 +322,7 @@ curl -X POST http://localhost:8000/api/v1/auth/keys \
 - `GET /api/v1/review-queue`
 - `GET /api/v1/taxonomy-gaps`
 - `POST /api/v1/events/{event_id}/feedback` (`pin`, `mark_noise`, `invalidate`)
+- `POST /api/v1/events/{event_id}/adjudications` (`confirm`, `suppress`, `restate`, `escalate_taxonomy_review`)
 - `POST /api/v1/trends/{trend_id}/override`
 - `PATCH /api/v1/taxonomy-gaps/{gap_id}` (`open`, `resolved`, `rejected`)
 
@@ -334,8 +337,15 @@ curl -X POST "http://localhost:8000/api/v1/events/<event-id>/feedback" \
 Review queue example:
 
 ```bash
-curl "http://localhost:8000/api/v1/review-queue?days=7&limit=25&unreviewed_only=true"
+curl "http://localhost:8000/api/v1/review-queue?days=7&limit=25&review_status=needs_taxonomy_review&queue_reason=taxonomy_gap"
 ```
+
+Review queue items and event payloads now surface typed operator-review metadata:
+- `review_status` (`pending`, `resolved`, `needs_taxonomy_review`)
+- `open_taxonomy_gap_count`
+- `latest_adjudication_outcome`
+- `latest_adjudication_at`
+- queue-only `queue_reason_codes`, `taxonomy_gap_risk`, and `adjudication_count`
 
 Taxonomy gaps example:
 

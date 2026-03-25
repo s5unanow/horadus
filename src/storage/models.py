@@ -39,12 +39,18 @@ from src.storage.event_state import (
     EventEpistemicState,
 )
 from src.storage.novelty_models import NoveltyCandidate
-from src.storage.restatement_models import HumanFeedback, PrivilegedWriteAudit, TrendRestatement
+from src.storage.restatement_models import (
+    EventAdjudication,
+    HumanFeedback,
+    PrivilegedWriteAudit,
+    TrendRestatement,
+)
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
 _ = (
     CoverageSnapshot,
+    EventAdjudication,
     EventLineage,
     HumanFeedback,
     NoveltyCandidate,
@@ -420,7 +426,6 @@ class Event(Base):
         nullable=False,
     )
 
-    # Relationships
     item_links: Mapped[list[EventItem]] = relationship(back_populates="event")
     claims: Mapped[list[EventClaim]] = relationship(back_populates="event")
     evidence_records: Mapped[list[TrendEvidence]] = relationship(
@@ -487,7 +492,6 @@ class EventItem(Base):
         nullable=False,
     )
 
-    # Relationships
     event: Mapped[Event] = relationship(back_populates="item_links")
     item: Mapped[RawItem] = relationship(back_populates="event_links")
 
@@ -653,7 +657,6 @@ class Trend(Base):
         nullable=False,
     )
 
-    # Relationships
     evidence_records: Mapped[list[TrendEvidence]] = relationship(back_populates="trend")
     snapshots: Mapped[list[TrendSnapshot]] = relationship(back_populates="trend")
     outcomes: Mapped[list[TrendOutcome]] = relationship(back_populates="trend")
@@ -752,7 +755,6 @@ class TrendEvidence(Base):
         ForeignKey("human_feedback.id", ondelete="SET NULL"),
     )
 
-    # Relationships
     trend: Mapped[Trend] = relationship(back_populates="evidence_records")
     event: Mapped[Event] = relationship(
         back_populates="evidence_records",

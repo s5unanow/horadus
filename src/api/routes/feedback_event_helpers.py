@@ -121,17 +121,50 @@ def _contradiction_risk(event: Event) -> float:
     return min(3.0, risk)
 
 
+def _taxonomy_gap_risk(open_taxonomy_gap_count: int) -> float:
+    return min(2.0, 1.0 + 0.35 * max(0, open_taxonomy_gap_count))
+
+
+def _queue_reason_codes(
+    *,
+    event: Event,
+    projected_delta: float,
+    uncertainty_score: float,
+    open_taxonomy_gap_count: int,
+) -> list[str]:
+    reasons: list[str] = []
+    if projected_delta >= 0.2 and uncertainty_score >= 0.4:
+        reasons.append("high_delta_low_confidence")
+    if event.has_contradictions or _claim_graph_contradiction_links(event) >= 2:
+        reasons.append("contradiction_heavy")
+    if open_taxonomy_gap_count > 0:
+        reasons.append("taxonomy_gap")
+    return reasons
+
+
 def build_review_queue_item(
     *,
     event: Event,
     event_evidence: list[tuple[Any, ...]],
     feedback_actions: list[str],
+    adjudication_count: int = 0,
+    review_status: str = "pending",
+    open_taxonomy_gap_count: int = 0,
+    latest_adjudication_outcome: str | None = None,
+    latest_adjudication_at: datetime | None = None,
 ) -> ReviewQueueItem:
     """Project one ranked review-queue row from an event and its evidence."""
 
     projected_delta = sum(abs(float(row[4])) for row in event_evidence)
     uncertainty_score = _uncertainty_score(event_evidence)
     contradiction_risk = _contradiction_risk(event)
+    taxonomy_gap_risk = _taxonomy_gap_risk(open_taxonomy_gap_count)
+    queue_reason_codes = _queue_reason_codes(
+        event=event,
+        projected_delta=projected_delta,
+        uncertainty_score=uncertainty_score,
+        open_taxonomy_gap_count=open_taxonomy_gap_count,
+    )
     state = event_state_snapshot(event)
     impacts = sorted(
         (
@@ -164,9 +197,16 @@ def build_review_queue_item(
         projected_delta=projected_delta,
         uncertainty_score=uncertainty_score,
         contradiction_risk=contradiction_risk,
-        ranking_score=uncertainty_score * projected_delta * contradiction_risk,
+        taxonomy_gap_risk=taxonomy_gap_risk,
+        ranking_score=uncertainty_score * projected_delta * contradiction_risk * taxonomy_gap_risk,
         feedback_count=len(feedback_actions),
         feedback_actions=feedback_actions,
-        requires_human_verification=len(feedback_actions) == 0,
+        adjudication_count=adjudication_count,
+        review_status=review_status,
+        queue_reason_codes=queue_reason_codes,
+        open_taxonomy_gap_count=open_taxonomy_gap_count,
+        latest_adjudication_outcome=latest_adjudication_outcome,
+        latest_adjudication_at=latest_adjudication_at,
+        requires_human_verification=review_status != "resolved",
         trend_impacts=impacts[:3],
     )

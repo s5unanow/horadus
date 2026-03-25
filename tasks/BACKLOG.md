@@ -142,33 +142,6 @@ contexts.
 
 ---
 
-### TASK-232: Strengthen Operator Adjudication Workflow for High-Risk Events
-**Priority**: P2 (Medium)
-**Estimate**: 4-6 hours
-
-The backend already exposes review-oriented primitives, but high-risk event
-handling still needs a more explicit adjudication workflow. Harden the operator
-path for contradiction-heavy, high-delta, low-confidence, and taxonomy-gap
-cases so review is first-class rather than ad hoc.
-
-This task should build on `TASK-231` for any persisted `restate` semantics so
-the operator workflow reuses one canonical compensating-restatement model.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/api/routes/feedback.py`, `src/api/routes/events.py`, `src/storage/models.py`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Extend review-queue ranking and filtering for high-delta low-confidence, contradiction-heavy, and taxonomy-gap-linked events
-- [ ] Persist operator workflow state needed to track review status beyond simple feedback rows
-- [ ] Support explicit adjudication outcomes such as confirm, suppress, restate, and escalate-for-taxonomy-review
-- [ ] Replace catch-all operator actions with a typed, append-only adjudication model that distinguishes review state, override intent, and resulting state effect
-- [ ] Expose enough queue metadata for a future UI without coupling the backend to a frontend implementation
-- [ ] Add regression coverage for ranking, status transitions, and adjudication outcome effects
-
----
-
 ### TASK-233: Support Multi-Horizon Trend Variants for the Same Underlying Theme
 **Priority**: P2 (Medium)
 **Estimate**: 6-8 hours

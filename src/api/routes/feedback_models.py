@@ -61,6 +61,31 @@ class EventFeedbackRequest(BaseModel):
     restatement_targets: list[EventRestatementTarget] = Field(default_factory=list)
 
 
+class EventAdjudicationRequest(BaseModel):
+    """Typed operator adjudication request for an event."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "outcome": "restate",
+                "notes": "Evidence stands, but the impact should be halved.",
+                "created_by": "analyst@horadus",
+                "restatement_targets": [
+                    {
+                        "evidence_id": "7c9e6679-7425-40de-944b-e07fc1f90ae7",
+                        "compensation_delta_log_odds": -0.2,
+                    }
+                ],
+            }
+        }
+    )
+
+    outcome: Literal["confirm", "suppress", "restate", "escalate_taxonomy_review"]
+    notes: str | None = None
+    created_by: str | None = None
+    restatement_targets: list[EventRestatementTarget] = Field(default_factory=list)
+
+
 class TrendOverrideRequest(BaseModel):
     """Manual trend delta override request."""
 
@@ -108,11 +133,34 @@ class ReviewQueueItem(BaseModel):
     projected_delta: float
     uncertainty_score: float
     contradiction_risk: float
+    taxonomy_gap_risk: float
     ranking_score: float
     feedback_count: int
     feedback_actions: list[str]
+    adjudication_count: int
+    review_status: str
+    queue_reason_codes: list[str]
+    open_taxonomy_gap_count: int
+    latest_adjudication_outcome: str | None
+    latest_adjudication_at: datetime | None
     requires_human_verification: bool
     trend_impacts: list[ReviewQueueTrendImpact]
+
+
+class EventAdjudicationResponse(BaseModel):
+    """Serialized event adjudication record."""
+
+    id: UUID
+    event_id: UUID
+    feedback_id: UUID | None
+    outcome: str
+    review_status: str
+    override_intent: str
+    resulting_effect: dict[str, Any]
+    notes: str | None
+    created_by: str | None
+    target_revision_token: str | None = None
+    created_at: datetime
 
 
 class NoveltyQueueItem(BaseModel):

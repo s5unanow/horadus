@@ -10,6 +10,7 @@ from sqlalchemy.dialects import postgresql
 from src.storage.models import (
     ApiUsage,
     Event,
+    EventAdjudication,
     EventClaim,
     EventItem,
     EventLineage,
@@ -233,6 +234,25 @@ def test_trend_restatement_columns_and_constraints_present_in_model_metadata() -
     assert "check_trend_restatements_source_allowed" in constraint_names
     assert "idx_trend_restatements_trend_recorded" in index_names
     assert "idx_trend_restatements_state_recorded" in index_names
+
+
+def test_event_adjudication_columns_and_constraints_present_in_model_metadata() -> None:
+    constraint_names = {
+        constraint.name
+        for constraint in EventAdjudication.__table__.constraints
+        if getattr(constraint, "name", None)
+    }
+    index_names = {index.name for index in EventAdjudication.__table__.indexes}
+
+    assert "feedback_id" in EventAdjudication.__table__.c
+    assert "review_status" in EventAdjudication.__table__.c
+    assert "override_intent" in EventAdjudication.__table__.c
+    assert "resulting_effect" in EventAdjudication.__table__.c
+    assert "check_event_adjudications_outcome_allowed" in constraint_names
+    assert "check_event_adjudications_review_status_allowed" in constraint_names
+    assert "check_event_adjudications_override_intent_allowed" in constraint_names
+    assert "idx_event_adjudications_event_created" in index_names
+    assert "idx_event_adjudications_review_status_created" in index_names
 
 
 def test_event_lineage_columns_and_constraints_present_in_model_metadata() -> None:

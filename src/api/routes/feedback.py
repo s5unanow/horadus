@@ -25,8 +25,15 @@ from src.api.routes._privileged_write_contract import (
     taxonomy_gap_revision_token,
     trend_revision_token,
 )
+from src.api.routes.event_review_metadata import load_event_review_metadata
+from src.api.routes.feedback_adjudication_helpers import (
+    apply_event_adjudication_mutation,
+    to_event_adjudication_response,
+)
 from src.api.routes.feedback_event_helpers import build_review_queue_item
 from src.api.routes.feedback_models import (
+    EventAdjudicationRequest,
+    EventAdjudicationResponse,
     EventFeedbackRequest,
     FeedbackResponse,
     NoveltyQueueItem,
@@ -53,6 +60,84 @@ from src.storage.novelty_models import NoveltyCandidate
 from src.storage.restatement_models import HumanFeedback
 
 router = APIRouter()
+
+
+def _resolved_review_status(review_status: str | None) -> str:
+    return review_status if review_status is not None else "pending"
+
+
+def _candidate_event_ids(events: list[Event]) -> list[UUID]:
+    return [event.id for event in events if event.id is not None]
+
+
+def _is_reviewed_candidate(review_status: str | None, feedback_actions: list[str]) -> bool:
+    return _resolved_review_status(review_status) == "resolved" or bool(feedback_actions)
+
+
+def _review_evidence_query(
+    *,
+    event_ids: list[UUID],
+    trend_id: UUID | None,
+) -> Any:
+    query = (
+        select(
+            TrendEvidence.event_id,
+            TrendEvidence.trend_id,
+            Trend.name,
+            TrendEvidence.signal_type,
+            TrendEvidence.delta_log_odds,
+            TrendEvidence.confidence_score,
+            TrendEvidence.corroboration_factor,
+        )
+        .join(Trend, Trend.id == TrendEvidence.trend_id)
+        .where(TrendEvidence.event_id.in_(tuple(event_ids)))
+        .where(TrendEvidence.is_invalidated.is_(False))
+    )
+    if trend_id is not None:
+        query = query.where(TrendEvidence.trend_id == trend_id)
+    return query
+
+
+def _review_queue_item_matches_filters(
+    item: ReviewQueueItem,
+    *,
+    review_status: Literal["pending", "resolved", "needs_taxonomy_review"] | None,
+    queue_reason: Literal["high_delta_low_confidence", "contradiction_heavy", "taxonomy_gap"]
+    | None,
+) -> bool:
+    if review_status is not None and item.review_status != review_status:
+        return False
+    return queue_reason is None or queue_reason in item.queue_reason_codes
+
+
+def _build_review_queue_item_for_event(
+    *,
+    event: Event,
+    event_evidence: list[tuple[Any, ...]],
+    feedback_actions: list[str],
+    review_metadata: Any,
+) -> ReviewQueueItem | None:
+    if not event_evidence:
+        return None
+    if sum(abs(float(row[4])) for row in event_evidence) <= 0:
+        return None
+    review_status = _resolved_review_status(
+        getattr(review_metadata, "review_status", None),
+    )
+    return build_review_queue_item(
+        event=event,
+        event_evidence=event_evidence,
+        feedback_actions=feedback_actions,
+        adjudication_count=getattr(review_metadata, "adjudication_count", 0),
+        review_status=review_status,
+        open_taxonomy_gap_count=getattr(review_metadata, "open_taxonomy_gap_count", 0),
+        latest_adjudication_outcome=getattr(
+            review_metadata,
+            "latest_adjudication_outcome",
+            None,
+        ),
+        latest_adjudication_at=getattr(review_metadata, "latest_adjudication_at", None),
+    )
 
 
 @router.get("/feedback", response_model=list[FeedbackResponse])
@@ -289,11 +374,76 @@ async def create_event_feedback(
         return response
 
 
+@router.post(
+    "/events/{event_id}/adjudications",
+    response_model=EventAdjudicationResponse,
+    dependencies=[Depends(require_privileged_access("feedback.event_adjudication"))],
+)
+async def create_event_adjudication(
+    event_id: UUID,
+    payload: EventAdjudicationRequest,
+    request: Request = Depends(request_dependency),
+    session: AsyncSession = Depends(get_session),
+) -> EventAdjudicationResponse:
+    """Record a typed operator adjudication for a high-risk event."""
+
+    event = await session.get(Event, event_id)
+    if event is None:
+        await record_privileged_write_rejection(
+            route_session=session,
+            request=request,
+            action="feedback.event_adjudication",
+            target_type="event",
+            target_identifier=str(event_id),
+            intent=normalize_request_intent(payload.model_dump(mode="json", exclude_none=True)),
+            outcome="not_found",
+            detail=f"Event '{event_id}' not found",
+            operator_identity=payload.created_by,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Event '{event_id}' not found",
+        )
+    current_revision_token = event_revision_token(event)
+    intent = normalize_request_intent(payload.model_dump(mode="json", exclude_none=True))
+    async with privileged_write(
+        route_session=session,
+        request=request,
+        action="feedback.event_adjudication",
+        target_type="event",
+        target_identifier=str(event_id),
+        intent=intent,
+        operator_identity=payload.created_by,
+        require_revision=True,
+        observed_revision_token=current_revision_token,
+    ) as audit_guard:
+        result = await apply_event_adjudication_mutation(
+            session=session,
+            event_id=event_id,
+            event=event,
+            payload=payload,
+        )
+        response = to_event_adjudication_response(
+            result.adjudication,
+            target_revision_token=result.target_revision_token,
+        )
+        await audit_guard.succeed(
+            observed_revision_token=result.target_revision_token,
+            result_links=result.result_links,
+        )
+        return response
+
+
 @router.get("/review-queue", response_model=list[ReviewQueueItem])
 async def list_review_queue(
     days: int = Query(default=7, ge=1, le=30),
     limit: int = Query(default=50, ge=1, le=200),
     trend_id: UUID | None = Query(default=None),
+    review_status: Literal["pending", "resolved", "needs_taxonomy_review"] | None = Query(
+        default=None
+    ),
+    queue_reason: Literal["high_delta_low_confidence", "contradiction_heavy", "taxonomy_gap"]
+    | None = Query(default=None),
     unreviewed_only: bool = Query(default=True),
     session: AsyncSession = Depends(get_session),
 ) -> list[ReviewQueueItem]:
@@ -306,6 +456,8 @@ async def list_review_queue(
     days_value = days if isinstance(days, int) else 7
     limit_value = limit if isinstance(limit, int) else 50
     unreviewed_only_value = unreviewed_only if isinstance(unreviewed_only, bool) else True
+    review_status_value = review_status if isinstance(review_status, str) else None
+    queue_reason_value = queue_reason if isinstance(queue_reason, str) else None
 
     since = datetime.now(tz=UTC) - timedelta(days=days_value)
     candidate_limit = min(1000, max(limit_value * 4, limit_value))
@@ -320,30 +472,18 @@ async def list_review_queue(
             )
         ).all()
     )
-    if not events:
-        return []
-
-    event_ids = [event.id for event in events if event.id is not None]
+    event_ids = _candidate_event_ids(events)
     if not event_ids:
         return []
 
-    evidence_query = (
-        select(
-            TrendEvidence.event_id,
-            TrendEvidence.trend_id,
-            Trend.name,
-            TrendEvidence.signal_type,
-            TrendEvidence.delta_log_odds,
-            TrendEvidence.confidence_score,
-            TrendEvidence.corroboration_factor,
+    evidence_rows = (
+        await session.execute(
+            _review_evidence_query(
+                event_ids=event_ids,
+                trend_id=trend_id,
+            )
         )
-        .join(Trend, Trend.id == TrendEvidence.trend_id)
-        .where(TrendEvidence.event_id.in_(tuple(event_ids)))
-        .where(TrendEvidence.is_invalidated.is_(False))
-    )
-    if trend_id is not None:
-        evidence_query = evidence_query.where(TrendEvidence.trend_id == trend_id)
-    evidence_rows = (await session.execute(evidence_query)).all()
+    ).all()
 
     feedback_rows = (
         await session.execute(
@@ -364,28 +504,36 @@ async def list_review_queue(
     for target_id, action in feedback_rows:
         if isinstance(target_id, UUID) and isinstance(action, str):
             feedback_by_event[target_id].append(action)
+    review_metadata_by_event = await load_event_review_metadata(
+        session=session,
+        event_ids=event_ids,
+    )
 
     queue_items: list[ReviewQueueItem] = []
     for event in events:
         if event.id is None:
             continue
-        event_evidence = evidence_by_event.get(event.id, [])
-        if not event_evidence:
+        review_metadata = review_metadata_by_event.get(event.id)
+        if unreviewed_only_value and _is_reviewed_candidate(
+            getattr(review_metadata, "review_status", None),
+            feedback_by_event.get(event.id, []),
+        ):
             continue
-
-        feedback_actions = feedback_by_event.get(event.id, [])
-        if unreviewed_only_value and feedback_actions:
-            continue
-
-        if sum(abs(float(row[4])) for row in event_evidence) <= 0:
-            continue
-        queue_items.append(
-            build_review_queue_item(
-                event=event,
-                event_evidence=event_evidence,
-                feedback_actions=feedback_actions,
-            )
+        queue_item = _build_review_queue_item_for_event(
+            event=event,
+            event_evidence=evidence_by_event.get(event.id, []),
+            feedback_actions=feedback_by_event.get(event.id, []),
+            review_metadata=review_metadata,
         )
+        if queue_item is None:
+            continue
+        if not _review_queue_item_matches_filters(
+            queue_item,
+            review_status=review_status_value,
+            queue_reason=queue_reason_value,
+        ):
+            continue
+        queue_items.append(queue_item)
 
     queue_items.sort(
         key=lambda item: (

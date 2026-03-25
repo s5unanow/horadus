@@ -84,6 +84,32 @@ def test_split_findings_flags_stale_allowlist_entries() -> None:
     assert stale == allowlist
 
 
+def test_split_findings_blocks_allowlisted_finding_once_fix_version_exists() -> None:
+    finding = dependency_audit_module.AuditFinding(
+        package="pygments",
+        version="2.19.2",
+        vuln_id="CVE-2026-4539",
+        aliases=(),
+        fix_versions=("2.19.3",),
+        description="regex complexity",
+    )
+    allowlist = (
+        dependency_audit_module.AllowlistEntry(
+            vuln_id="CVE-2026-4539",
+            package="pygments",
+            version="2.19.2",
+            reason="temporary upstream gap",
+            review_after="2026-04-08",
+        ),
+    )
+
+    allowed, blocked, stale = dependency_audit_module.split_findings((finding,), allowlist)
+
+    assert allowed == ()
+    assert blocked == (finding,)
+    assert stale == allowlist
+
+
 @pytest.mark.parametrize(
     ("payload", "expected_message"),
     [
@@ -410,6 +436,82 @@ def test_main_fails_for_stale_allowlist(
         "dependency-audit failed: stale allowlist entries no longer match current findings."
         in output_lines
     )
+    assert (
+        "- stale allowlist entry: pygments 2.19.2 CVE-2026-4539 (review_after=2026-04-08)"
+        in output_lines
+    )
+
+
+def test_main_fails_when_allowlisted_finding_has_fix_versions(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    allowlist_path = tmp_path / "dependency_audit_allowlist.json"
+    allowlist_path.write_text(
+        json.dumps(
+            {
+                "allowlist": [
+                    {
+                        "id": "CVE-2026-4539",
+                        "package": "pygments",
+                        "version": "2.19.2",
+                        "reason": "temporary upstream gap",
+                        "review_after": "2026-04-08",
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def fake_run_command(
+        args: list[str], *, cwd: Path
+    ) -> dependency_audit_module.subprocess.CompletedProcess[str]:
+        if args[1] == "export":
+            output_index = args.index("-o") + 1
+            Path(args[output_index]).write_text("pytest==9.0.2\n", encoding="utf-8")
+            return dependency_audit_module.subprocess.CompletedProcess(args, 0, "", "")
+        report_index = args.index("-o") + 1
+        Path(args[report_index]).write_text(
+            json.dumps(
+                {
+                    "dependencies": [
+                        {
+                            "name": "pygments",
+                            "version": "2.19.2",
+                            "vulns": [
+                                {
+                                    "id": "CVE-2026-4539",
+                                    "aliases": [],
+                                    "fix_versions": ["2.19.3"],
+                                    "description": "regex complexity",
+                                }
+                            ],
+                        }
+                    ],
+                    "fixes": [],
+                }
+            ),
+            encoding="utf-8",
+        )
+        return dependency_audit_module.subprocess.CompletedProcess(args, 1, "", "")
+
+    monkeypatch.setattr(dependency_audit_module, "ALLOWLIST_PATH", allowlist_path)
+    monkeypatch.setattr(dependency_audit_module, "_run_command", fake_run_command)
+    monkeypatch.setattr(sys, "argv", ["check_dependency_audit.py"])
+
+    assert dependency_audit_module.main() == 1
+    output_lines = capsys.readouterr().out.splitlines()
+    assert (
+        "dependency-audit failed: stale allowlist entries no longer match current findings."
+        in output_lines
+    )
+    assert (
+        "dependency-audit failed: actionable vulnerabilities remain after allowlist filtering."
+        in output_lines
+    )
+    assert "- pygments 2.19.2 CVE-2026-4539 fix_versions=2.19.3" in output_lines
     assert (
         "- stale allowlist entry: pygments 2.19.2 CVE-2026-4539 (review_after=2026-04-08)"
         in output_lines

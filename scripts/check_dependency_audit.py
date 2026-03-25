@@ -137,7 +137,7 @@ def split_findings(
     blocked: list[AuditFinding] = []
     used_keys: set[tuple[str, str, str]] = set()
     for finding in findings:
-        if finding.key in allowlist_by_key:
+        if finding.key in allowlist_by_key and not finding.fix_versions:
             allowed.append(finding)
             used_keys.add(finding.key)
         else:
@@ -258,6 +258,24 @@ def main() -> int:
             return 2
         allowed, blocked, stale = split_findings(findings, allowlist)
 
+        if blocked:
+            print(
+                "dependency-audit failed: actionable vulnerabilities remain after allowlist filtering."
+            )
+            for finding in blocked:
+                print(f"- {_format_finding(finding)}")
+            if stale:
+                print(
+                    "dependency-audit failed: stale allowlist entries no longer match current findings."
+                )
+                for entry in stale:
+                    print(
+                        "- stale allowlist entry: "
+                        f"{entry.package} {entry.version} {entry.vuln_id} "
+                        f"(review_after={entry.review_after})"
+                    )
+            return 1
+
         if stale:
             print(
                 "dependency-audit failed: stale allowlist entries no longer match current findings."
@@ -268,14 +286,6 @@ def main() -> int:
                     f"{entry.package} {entry.version} {entry.vuln_id} "
                     f"(review_after={entry.review_after})"
                 )
-            return 1
-
-        if blocked:
-            print(
-                "dependency-audit failed: actionable vulnerabilities remain after allowlist filtering."
-            )
-            for finding in blocked:
-                print(f"- {_format_finding(finding)}")
             return 1
 
         if allowed:

@@ -29,6 +29,7 @@ from src.processing.event_lineage import (
     split_event,
 )
 from src.storage.database import get_session
+from src.storage.entity_models import CanonicalEntity, EventEntity
 from src.storage.event_extraction import (
     has_canonical_extraction,
     resolved_extraction_status,
@@ -151,6 +152,7 @@ class EventDetailResponse(EventResponse):
     )
 
     sources: list[dict[str, Any]]
+    entities: list[dict[str, Any]]
     claims: list[dict[str, Any]]
     trend_impacts: list[dict[str, Any]]
     corroboration_score: float
@@ -195,12 +197,116 @@ class EventRepairResponse(BaseModel):
 # =============================================================================
 
 
+def _format_event_entity_payloads(entity_rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": entity_id,
+            "role": entity_role,
+            "entity_type": entity_type,
+            "mention_text": mention_text,
+            "resolution_status": resolution_status,
+            "resolution_reason": resolution_reason,
+            "canonical_entity": (
+                None
+                if canonical_entity_id is None
+                else {
+                    "id": canonical_entity_id,
+                    "name": canonical_name,
+                    "entity_type": canonical_entity_type,
+                }
+            ),
+        }
+        for (
+            entity_id,
+            entity_role,
+            entity_type,
+            mention_text,
+            resolution_status,
+            resolution_reason,
+            canonical_entity_id,
+            canonical_name,
+            canonical_entity_type,
+        ) in entity_rows
+    ]
+
+
+async def _load_event_entity_rows(
+    *,
+    session: AsyncSession,
+    event_id: UUID,
+) -> list[tuple[Any, ...]]:
+    return [
+        tuple(row)
+        for row in (
+            await session.execute(
+                select(
+                    EventEntity.id,
+                    EventEntity.entity_role,
+                    EventEntity.entity_type,
+                    EventEntity.mention_text,
+                    EventEntity.resolution_status,
+                    EventEntity.resolution_reason,
+                    CanonicalEntity.id,
+                    CanonicalEntity.canonical_name,
+                    CanonicalEntity.entity_type,
+                )
+                .outerjoin(CanonicalEntity, CanonicalEntity.id == EventEntity.canonical_entity_id)
+                .where(EventEntity.event_id == event_id)
+                .order_by(
+                    EventEntity.entity_role.asc(),
+                    EventEntity.entity_type.asc(),
+                    EventEntity.mention_text.asc(),
+                )
+            )
+        ).all()
+    ]
+
+
+async def _load_event_claim_rows(
+    *,
+    session: AsyncSession,
+    event: Event,
+    event_id: UUID,
+    referenced_claim_ids: set[UUID],
+) -> list[tuple[Any, ...]]:
+    claim_query = (
+        select(
+            EventClaim.id,
+            EventClaim.claim_key,
+            EventClaim.claim_text,
+            EventClaim.claim_type,
+            EventClaim.is_active,
+        )
+        .where(EventClaim.event_id == event_id)
+        .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+    )
+    provisional_claims_hidden = (
+        resolved_extraction_status(event) == "provisional"
+        and not _lineage_replay_pending(event)
+        and not has_canonical_extraction(event)
+    )
+    if provisional_claims_hidden and not referenced_claim_ids:
+        return []
+    if provisional_claims_hidden:
+        claim_query = claim_query.where(EventClaim.id.in_(tuple(referenced_claim_ids)))
+    elif referenced_claim_ids:
+        claim_query = claim_query.where(
+            or_(
+                EventClaim.is_active.is_(True),
+                EventClaim.id.in_(tuple(referenced_claim_ids)),
+            )
+        )
+    elif not _lineage_replay_pending(event):
+        claim_query = claim_query.where(EventClaim.is_active.is_(True))
+    return [tuple(row) for row in (await session.execute(claim_query)).all()]
+
+
 async def _load_event_detail_payloads(
     *,
     session: AsyncSession,
     event: Event,
     event_id: UUID,
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     source_rows = (
         await session.execute(
             select(Source.name, RawItem.url)
@@ -228,45 +334,19 @@ async def _load_event_detail_payloads(
     referenced_claim_ids = {
         event_claim_id for _, event_claim_id, _, _, _ in impact_rows if event_claim_id is not None
     }
-    claim_query = (
-        select(
-            EventClaim.id,
-            EventClaim.claim_key,
-            EventClaim.claim_text,
-            EventClaim.claim_type,
-            EventClaim.is_active,
-        )
-        .where(EventClaim.event_id == event_id)
-        .order_by(EventClaim.claim_order.asc(), EventClaim.created_at.asc())
+    entity_rows = await _load_event_entity_rows(session=session, event_id=event_id)
+    claim_rows = await _load_event_claim_rows(
+        session=session,
+        event=event,
+        event_id=event_id,
+        referenced_claim_ids=referenced_claim_ids,
     )
-    claim_rows: list[tuple[Any, ...]]
-    provisional_claims_hidden = (
-        resolved_extraction_status(event) == "provisional"
-        and not _lineage_replay_pending(event)
-        and not has_canonical_extraction(event)
-    )
-    if provisional_claims_hidden:
-        if referenced_claim_ids:
-            claim_query = claim_query.where(EventClaim.id.in_(tuple(referenced_claim_ids)))
-            claim_rows = [tuple(row) for row in (await session.execute(claim_query)).all()]
-        else:
-            claim_rows = []
-    else:
-        if referenced_claim_ids:
-            claim_query = claim_query.where(
-                or_(
-                    EventClaim.is_active.is_(True),
-                    EventClaim.id.in_(tuple(referenced_claim_ids)),
-                )
-            )
-        elif not _lineage_replay_pending(event):
-            claim_query = claim_query.where(EventClaim.is_active.is_(True))
-        claim_rows = [tuple(row) for row in (await session.execute(claim_query)).all()]
     sources = [
         {"source_name": source_name, "url": url}
         for source_name, url in source_rows
         if source_name is not None
     ]
+    entities = _format_event_entity_payloads(entity_rows)
     claims = [
         {
             "id": claim_id,
@@ -287,7 +367,7 @@ async def _load_event_detail_payloads(
         }
         for trend_id, event_claim_id, claim_text, signal_type, delta_log_odds in impact_rows
     ]
-    return (sources, claims, trend_impacts)
+    return (sources, entities, claims, trend_impacts)
 
 
 def _to_event_response(
@@ -438,7 +518,7 @@ async def get_event(
             detail=f"Event '{event_id}' not found",
         )
     cluster_health = await resolve_cluster_health(session=session, event=event)
-    sources, claims, trend_impacts = await _load_event_detail_payloads(
+    sources, entities, claims, trend_impacts = await _load_event_detail_payloads(
         session=session,
         event=event,
         event_id=event_id,
@@ -459,6 +539,7 @@ async def get_event(
         extraction_status=resolved_extraction_status(event),
         provisional_extraction=_visible_provisional_extraction(event),
         sources=sources,
+        entities=entities,
         claims=claims,
         trend_impacts=trend_impacts,
         lineage=lineage,

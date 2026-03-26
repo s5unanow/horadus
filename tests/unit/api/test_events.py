@@ -89,6 +89,16 @@ def _assert_event_detail_summary(result, *, event: Event) -> None:
     assert result.provisional_extraction is None
 
 
+def _assert_event_detail_entities(result) -> None:
+    assert len(result.entities) == 2
+    entities_by_mention = {entity["mention_text"]: entity for entity in result.entities}
+    assert entities_by_mention["Country A"]["role"] == "actor"
+    assert entities_by_mention["Country A"]["entity_type"] == "organization"
+    assert entities_by_mention["Country A"]["canonical_entity"]["name"] == "Country A"
+    assert entities_by_mention["Border Guard"]["resolution_status"] == "ambiguous"
+    assert entities_by_mention["Border Guard"]["canonical_entity"] is None
+
+
 def _assert_event_detail_relations(result, *, mock_db_session) -> None:
     assert len(result.sources) == 2
     assert result.sources[0]["source_name"] == "Reuters"
@@ -100,7 +110,7 @@ def _assert_event_detail_relations(result, *, mock_db_session) -> None:
     assert result.trend_impacts[0]["claim_text"] == "Troops advanced into border region"
     assert result.trend_impacts[0]["direction"] == "escalatory"
     assert result.trend_impacts[1]["direction"] == "de_escalatory"
-    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    claim_query_text = str(mock_db_session.execute.await_args_list[3].args[0]).lower()
     assert "event_claims.is_active is true" in claim_query_text
     assert "event_claims.id in" in claim_query_text
 
@@ -161,6 +171,7 @@ async def test_event_responses_include_operator_review_metadata(
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [event])
     mock_db_session.get.return_value = event
     mock_db_session.execute.side_effect = [
+        SimpleNamespace(all=list),
         SimpleNamespace(all=list),
         SimpleNamespace(all=list),
         SimpleNamespace(all=list),
@@ -284,6 +295,30 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
                 (uuid4(), uuid4(), "Negotiators resumed talks", "diplomatic_talks", -0.05),
             ],
             [
+                (
+                    uuid4(),
+                    "actor",
+                    "organization",
+                    "Country A",
+                    "resolved",
+                    "exact_alias",
+                    uuid4(),
+                    "Country A",
+                    "organization",
+                ),
+                (
+                    uuid4(),
+                    "actor",
+                    "organization",
+                    "Border Guard",
+                    "ambiguous",
+                    "ambiguous_alias",
+                    None,
+                    None,
+                    None,
+                ),
+            ],
+            [
                 (uuid4(), "__event__", "Cluster summary", "fallback", True),
                 (
                     impacted_claim_id,
@@ -318,6 +353,7 @@ async def test_get_event_returns_detail_with_sources_and_impacts(
     result = await get_event(event_id=event.id, session=mock_db_session)
 
     _assert_event_detail_summary(result, event=event)
+    _assert_event_detail_entities(result)
     _assert_event_detail_relations(result, mock_db_session=mock_db_session)
 
 
@@ -329,7 +365,7 @@ async def test_get_event_computes_missing_cluster_health_without_mutating_event(
     event = _build_event()
     event.provenance_summary = {"method": "provenance_aware"}
     mock_db_session.get.return_value = event
-    responses = iter([[], [], []])
+    responses = iter([[], [], [], []])
 
     async def _execute(_query):
         return SimpleNamespace(all=lambda: next(responses))
@@ -362,19 +398,7 @@ async def test_get_event_keeps_claims_visible_during_lineage_replay_pending(
     mock_db_session.get.return_value = event
     claim_id = uuid4()
     responses = iter(
-        [
-            [],
-            [],
-            [
-                (
-                    claim_id,
-                    "__event__",
-                    "Claim before replay",
-                    "fallback",
-                    False,
-                )
-            ],
-        ]
+        [[], [], [], [(claim_id, "__event__", "Claim before replay", "fallback", False)]]
     )
 
     async def _execute(_query):
@@ -388,7 +412,7 @@ async def test_get_event_keeps_claims_visible_during_lineage_replay_pending(
     assert len(result.claims) == 1
     assert result.claims[0]["claim_text"] == "Claim before replay"
     assert result.provisional_extraction is None
-    claim_query_text = str(mock_db_session.execute.await_args_list[1].args[0]).lower()
+    claim_query_text = str(mock_db_session.execute.await_args_list[3].args[0]).lower()
     assert "event_claims.is_active is true" not in claim_query_text
 
 
@@ -405,7 +429,7 @@ async def test_get_event_hides_provisional_extraction_payload_on_public_route(
         "categories": ["security"],
     }
     mock_db_session.get.return_value = event
-    responses = iter([[], [], []])
+    responses = iter([[], [], [], []])
 
     async def _execute(_query):
         return SimpleNamespace(all=lambda: next(responses))
@@ -444,7 +468,7 @@ async def test_get_event_hides_unanchored_claims_for_provisional_events(
         "extracted_claims": {"claims": ["Held degraded claim"]},
     }
     mock_db_session.get.return_value = event
-    responses = iter([[], []])
+    responses = iter([[], [], []])
 
     async def _execute(_query):
         return SimpleNamespace(all=lambda: next(responses))
@@ -456,7 +480,7 @@ async def test_get_event_hides_unanchored_claims_for_provisional_events(
 
     assert result.extraction_status == "provisional"
     assert result.claims == []
-    assert mock_db_session.execute.await_count == 2
+    assert mock_db_session.execute.await_count == 3
 
 
 @pytest.mark.asyncio
@@ -486,6 +510,7 @@ async def test_get_event_keeps_evidence_anchored_claims_for_provisional_events(
         [
             [],
             [(uuid4(), referenced_claim_id, "Anchored canonical claim", "military_movement", 0.12)],
+            [],
             [
                 (
                     referenced_claim_id,
@@ -509,7 +534,7 @@ async def test_get_event_keeps_evidence_anchored_claims_for_provisional_events(
     assert result.extraction_status == "provisional"
     assert len(result.claims) == 1
     assert result.claims[0]["id"] == referenced_claim_id
-    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    claim_query_text = str(mock_db_session.execute.await_args_list[3].args[0]).lower()
     assert "event_claims.id in" in claim_query_text
     assert "event_claims.is_active is true" not in claim_query_text
 
@@ -531,6 +556,7 @@ async def test_get_event_preserves_canonical_claims_for_live_provisional_events(
         [
             [],
             [],
+            [],
             [
                 (uuid4(), "__event__", "Canonical fallback", "fallback", True),
                 (uuid4(), "canonical statement", "Canonical statement", "statement", True),
@@ -548,7 +574,7 @@ async def test_get_event_preserves_canonical_claims_for_live_provisional_events(
 
     assert result.extraction_status == "provisional"
     assert len(result.claims) == 2
-    claim_query_text = str(mock_db_session.execute.await_args_list[2].args[0]).lower()
+    claim_query_text = str(mock_db_session.execute.await_args_list[3].args[0]).lower()
     assert "event_claims.is_active is true" in claim_query_text
 
 
@@ -565,6 +591,7 @@ async def test_event_responses_use_resolved_fallback_corroboration_values(
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [fallback_event])
     mock_db_session.get.return_value = fallback_event
     mock_db_session.execute.side_effect = [
+        SimpleNamespace(all=list),
         SimpleNamespace(all=list),
         SimpleNamespace(all=list),
         SimpleNamespace(all=list),

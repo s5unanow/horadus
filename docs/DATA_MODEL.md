@@ -205,6 +205,9 @@ Notes:
 - Canonical Tier-2 persists its synthesized structured-output `summary` into `events.event_summary`.
 - Degraded-mode Tier-2 writes into `events.provisional_extraction` and marks `events.extraction_status = 'provisional'` instead of overwriting canonical report/event fields.
 - Persisted `events.canonical_summary` remains the summary of the current `primary_item_id`.
+- Exact-match entity resolution now persists typed event mentions into `event_entities`
+  and links them to `canonical_entities` when an exact unique alias match exists
+  or when Tier-2 safely seeds a new canonical row.
 
 **Indexes:**
 - Primary key: `id`
@@ -231,6 +234,76 @@ Operational note:
 - Use `uv run horadus eval embedding-lineage` to detect mixed model populations and estimate re-embed scope.
 - `provenance_summary.cluster_health` now carries bounded merge-audit diagnostics
   (`cluster_cohesion_score`, `split_risk_score`) for operator review.
+
+---
+
+### canonical_entities
+
+Durable canonical entity registry for event actors and locations.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| entity_type | VARCHAR(20) | No | | `person`, `organization`, or `location` |
+| canonical_name | TEXT | No | | Durable display name for the canonical entity |
+| normalized_name | VARCHAR(255) | No | | Exact-match lookup key after bounded normalization |
+| entity_metadata | JSONB | No | {} | Bounded metadata such as seed provenance |
+| is_auto_seeded | BOOLEAN | No | false | Whether the row was seeded automatically from Tier-2 output |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+| updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
+
+**Indexes / uniqueness:**
+- Primary key: `id`
+- Unique: `(entity_type, normalized_name)`
+- Index: `(entity_type, normalized_name)`
+
+---
+
+### canonical_entity_aliases
+
+Exact alias rows used for bounded canonical-entity matching.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| canonical_entity_id | UUID | No | | Foreign key to `canonical_entities` |
+| alias | TEXT | No | | Stored alias text |
+| normalized_alias | VARCHAR(255) | No | | Exact-match lookup key for the alias |
+| language | VARCHAR(16) | Yes | | Optional language/locale hint for the alias |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+
+**Indexes / uniqueness:**
+- Primary key: `id`
+- Unique: `(canonical_entity_id, normalized_alias)`
+- Index: `normalized_alias`
+
+---
+
+### event_entities
+
+Typed entity mentions extracted from one event and linked to canonical rows when
+resolution is safe.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| id | UUID | No | gen_random_uuid() | Primary key |
+| event_id | UUID | No | | Foreign key to `events` |
+| entity_role | VARCHAR(20) | No | | Mention role: `actor` or `location` |
+| entity_type | VARCHAR(20) | No | | Mention type: `person`, `organization`, or `location` |
+| mention_text | TEXT | No | | Canonical English mention text from Tier-2 |
+| mention_normalized | VARCHAR(255) | No | | Exact-match normalized lookup key |
+| canonical_entity_id | UUID | Yes | | Optional FK to `canonical_entities` when resolution succeeds |
+| resolution_status | VARCHAR(20) | No | | `resolved`, `ambiguous`, or `unresolved` |
+| resolution_reason | VARCHAR(40) | Yes | | Deterministic reason such as `exact_alias`, `seeded_new_canonical`, or `ambiguous_alias` |
+| resolution_details | JSONB | No | {} | Bounded debug payload for ambiguous matches |
+| created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
+| updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
+
+**Indexes / uniqueness:**
+- Primary key: `id`
+- Unique: `(event_id, entity_role, entity_type, mention_normalized)`
+- Index: `(event_id, entity_role)`
+- Index: `canonical_entity_id`
 
 ---
 
@@ -792,6 +865,9 @@ Manual corrections/annotations used for governance and evaluation.
 
 The sections above were cross-checked against SQLAlchemy runtime model declarations:
 
+- `canonical_entities` table: `src/storage/entity_models.py`
+- `canonical_entity_aliases` table: `src/storage/entity_models.py`
+- `event_entities` table: `src/storage/entity_models.py`
 - `trend_definition_versions` table: `src/storage/models.py`
 - `reports` table: `src/storage/models.py`
 - `api_usage` table: `src/storage/models.py`

@@ -105,29 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
-### TASK-236: Add Canonical Entity Registry for Actors, Organizations, and Locations
-**Priority**: P2 (Medium)
-**Estimate**: 8-12 hours
-
-Event extraction currently stores useful text fields, but the system lacks a
-canonical entity layer for actors, organizations, locations, facilities, and
-aliases. Add a bounded entity registry to improve clustering quality, review
-workflow clarity, and future causal/precursor analysis.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/storage/models.py`, `src/processing/tier2_classifier.py`, `src/api/routes/events.py`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Introduce canonical entity records with alias support for at least people/organizations/locations
-- [ ] Link extracted event entities to canonical entities without blocking the pipeline on perfect resolution
-- [ ] Keep the entity-matching path bounded and safe under multilingual/alias ambiguity
-- [ ] Expose canonical entity references in event detail responses
-- [ ] Add regression coverage for alias resolution, unresolved entities, and mixed-language cases
-
----
-
 ### TASK-237: Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
 **Priority**: P2 (Medium)
 **Estimate**: 6-8 hours

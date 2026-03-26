@@ -77,6 +77,8 @@ from src.core.trend_config import (
     TrendConfigSyncPathError,
     normalize_definition_payload,
     resolve_trend_config_sync_dir,
+    safe_horizon_variant_from_definition,
+    trend_variant_sort_key,
 )
 from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob
 from src.core.trend_state import (
@@ -325,6 +327,9 @@ async def _to_response(
         )
     except ValueError:
         forecast_contract = None
+    horizon_variant = safe_horizon_variant_from_definition(
+        trend.definition if isinstance(trend.definition, dict) else None
+    )
 
     return TrendResponse(
         id=trend.id,
@@ -332,6 +337,7 @@ async def _to_response(
         description=trend.description,
         definition=trend.definition,
         forecast_contract=forecast_contract,
+        horizon_variant=horizon_variant,
         baseline_probability=logodds_to_prob(float(trend.baseline_log_odds)),
         current_probability=probability,
         risk_level=get_risk_level(probability).value,
@@ -633,6 +639,7 @@ async def list_trends(
         query = query.where(Trend.is_active.is_(True))
 
     trends = list((await session.scalars(query)).all())
+    trends.sort(key=trend_variant_sort_key)
     return [await _to_response(trend, session=session) for trend in trends]
 
 

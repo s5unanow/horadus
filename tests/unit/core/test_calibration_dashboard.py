@@ -869,6 +869,15 @@ async def test_load_trend_movements_assembles_summaries_for_active_trends() -> N
         name="Trend A",
         is_active=True,
         current_log_odds=0.0,
+        definition={
+            "id": "trend-a",
+            "horizon_variant": {
+                "theme_key": "shared-theme",
+                "label": "7d",
+                "window_days": 7,
+                "sort_order": 1,
+            },
+        },
     )
     scalars_result = MagicMock()
     scalars_result.all.return_value = [trend]
@@ -884,6 +893,12 @@ async def test_load_trend_movements_assembles_summaries_for_active_trends() -> N
 
     assert len(movements) == 1
     assert movements[0].trend_name == "Trend A"
+    assert movements[0].horizon_variant == {
+        "theme_key": "shared-theme",
+        "label": "7d",
+        "window_days": 7,
+        "sort_order": 1,
+    }
     assert movements[0].weekly_change == 0.15
     assert movements[0].top_movers_7d == ["reason"]
     assert movements[0].movement_chart == "._-"

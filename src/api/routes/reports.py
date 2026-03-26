@@ -129,6 +129,7 @@ class TrendMovementResponse(BaseModel):
 
     trend_id: UUID
     trend_name: str
+    horizon_variant: dict[str, Any] | None = None
     current_probability: float
     weekly_change: float
     risk_level: str
@@ -431,9 +432,7 @@ async def get_calibration_dashboard(
 
     service = CalibrationDashboardService(session)
     dashboard = await service.build_dashboard(
-        trend_id=trend_id,
-        start_date=start_date,
-        end_date=end_date,
+        trend_id=trend_id, start_date=start_date, end_date=end_date
     )
     return CalibrationDashboardResponse(
         generated_at=dashboard.generated_at,
@@ -467,6 +466,7 @@ async def get_calibration_dashboard(
             TrendMovementResponse(
                 trend_id=row.trend_id,
                 trend_name=row.trend_name,
+                horizon_variant=row.horizon_variant,
                 current_probability=row.current_probability,
                 weekly_change=row.weekly_change,
                 risk_level=row.risk_level,

@@ -327,3 +327,53 @@ async def test_build_report_generation_manifest_records_live_state_inputs(
     assert manifest["inputs"]["counts"]["live_state_evidence"] == 2
     assert manifest["inputs"]["counts"]["live_state_events"] == 2
     assert manifest["scoring"]["math_version"] == "trend-scoring-v1"
+
+
+@pytest.mark.asyncio
+async def test_build_report_generation_manifest_includes_horizon_variant_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _Rows:
+        def all(self) -> list[tuple[object, object]]:
+            return []
+
+    session = AsyncMock()
+    session.execute.side_effect = [_Rows(), _Rows()]
+    monkeypatch.setattr(
+        report_runtime,
+        "_load_active_trend_scoring_contract",
+        AsyncMock(return_value=current_trend_scoring_contract()),
+    )
+
+    manifest = await report_runtime.build_report_generation_manifest(
+        session=session,
+        trend=SimpleNamespace(
+            id=uuid4(),
+            runtime_trend_id="trend-runtime",
+            definition={
+                "id": "trend-runtime",
+                "horizon_variant": {
+                    "theme_key": "shared-theme",
+                    "label": "7d",
+                    "window_days": 7,
+                    "sort_order": 1,
+                },
+            },
+        ),
+        period_start=datetime(2026, 3, 1, tzinfo=UTC),
+        period_end=datetime(2026, 3, 8, tzinfo=UTC),
+        report_type="weekly",
+        top_events=[],
+        narrative=report_runtime.NarrativeResult(
+            narrative="narrative",
+            grounding_status="grounded",
+            grounding_violation_count=0,
+        ),
+    )
+
+    assert manifest["trend"]["horizon_variant"] == {
+        "theme_key": "shared-theme",
+        "label": "7d",
+        "window_days": 7,
+        "sort_order": 1,
+    }

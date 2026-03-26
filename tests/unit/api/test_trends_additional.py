@@ -38,7 +38,13 @@ from tests.unit.trend_forecast_contract_fixtures import (
 pytestmark = pytest.mark.unit
 
 
-def _build_trend(*, trend_id=None, name: str = "Trend A", is_active: bool = True) -> Trend:
+def _build_trend(
+    *,
+    trend_id=None,
+    name: str = "Trend A",
+    is_active: bool = True,
+    horizon_variant: dict[str, object] | None = None,
+) -> Trend:
     now = datetime.now(tz=UTC)
     return Trend(
         id=trend_id or uuid4(),
@@ -48,6 +54,7 @@ def _build_trend(*, trend_id=None, name: str = "Trend A", is_active: bool = True
         definition={
             "id": name.lower().replace(" ", "-"),
             "forecast_contract": sample_binary_forecast_contract(),
+            **({"horizon_variant": horizon_variant} if horizon_variant is not None else {}),
         },
         baseline_log_odds=prob_to_logodds(0.1),
         current_log_odds=prob_to_logodds(0.2),
@@ -443,6 +450,80 @@ def test_trend_write_helper_rejects_overlength_runtime_id() -> None:
             definition={"id": "x" * 256},
             forecast_contract=sample_binary_forecast_contract(),
         )
+
+
+def test_trend_write_helper_preserves_horizon_variant_metadata() -> None:
+    payload = trend_write_contract_module.build_validated_trend_write_payload(
+        name="Trend",
+        description=None,
+        baseline_probability=0.2,
+        decay_half_life_days=30,
+        indicators={},
+        definition={
+            "id": "trend",
+            "horizon_variant": {
+                "theme_key": "shared-theme",
+                "theme_name": "Shared Theme",
+                "label": "90d",
+                "window_days": 90,
+                "sort_order": 3,
+            },
+        },
+        forecast_contract=sample_binary_forecast_contract(),
+    )
+
+    assert payload.definition["horizon_variant"] == {
+        "theme_key": "shared-theme",
+        "theme_name": "Shared Theme",
+        "label": "90d",
+        "window_days": 90,
+        "sort_order": 3,
+    }
+
+
+@pytest.mark.asyncio
+async def test_list_trends_sorts_horizon_variants_within_theme(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    slower = _build_trend(
+        name="Shared Theme 30d",
+        horizon_variant={
+            "theme_key": "shared-theme",
+            "label": "30d",
+            "window_days": 30,
+            "sort_order": 2,
+        },
+    )
+    faster = _build_trend(
+        name="Shared Theme 7d",
+        horizon_variant={
+            "theme_key": "shared-theme",
+            "label": "7d",
+            "window_days": 7,
+            "sort_order": 1,
+        },
+    )
+    mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [slower, faster])
+    monkeypatch.setattr(trends_module, "_get_evidence_stats", AsyncMock(return_value=(8, 0.75, 1)))
+    monkeypatch.setattr(
+        trends_module,
+        "_get_top_movers_7d",
+        AsyncMock(return_value=["Signal corroborated across multiple outlets"]),
+    )
+
+    result = await trends_module.list_trends(
+        session=mock_db_session,
+        sync_from_config=False,
+    )
+
+    assert [
+        trend.horizon_variant.label if trend.horizon_variant is not None else None
+        for trend in result
+    ] == [
+        "7d",
+        "30d",
+    ]
 
 
 @pytest.mark.asyncio

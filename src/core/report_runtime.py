@@ -16,6 +16,7 @@ from src.core.narrative_grounding import (
     evaluate_narrative_grounding,
 )
 from src.core.runtime_provenance import build_prompt_provenance, current_trend_scoring_contract
+from src.core.trend_config import horizon_variant_payload_from_definition
 from src.core.trend_state import resolve_active_definition_hash, resolve_active_scoring_contract
 from src.storage.models import TrendEvidence
 
@@ -118,6 +119,9 @@ async def build_report_generation_manifest(
                 str(getattr(trend, "active_state_version_id", None))
                 if getattr(trend, "active_state_version_id", None) is not None
                 else None
+            ),
+            "horizon_variant": horizon_variant_payload_from_definition(
+                getattr(trend, "definition", None)
             ),
         },
         "inputs": {

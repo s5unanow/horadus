@@ -52,6 +52,44 @@ indicators:
     assert indicators["military_incident"]["description"] is None
 
 
+def test_load_trends_from_config_dir_preserves_horizon_variant_metadata(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "eu-russia-30d.yaml").write_text(
+        f"""
+id: "eu-russia-30d"
+name: "EU-Russia 30d"
+baseline_probability: 0.10
+decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
+horizon_variant:
+  theme_key: "eu-russia-conflict"
+  theme_name: "EU-Russia Conflict"
+  label: "30d"
+  window_days: 30
+  sort_order: 2
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    trends = load_trends_from_config_dir(config_dir=config_dir)
+
+    assert trends[0].definition["horizon_variant"] == {
+        "theme_key": "eu-russia-conflict",
+        "theme_name": "EU-Russia Conflict",
+        "label": "30d",
+        "window_days": 30,
+        "sort_order": 2,
+    }
+
+
 def test_load_trends_from_config_dir_rejects_missing_directory(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="Trend config directory not found"):
         load_trends_from_config_dir(config_dir=tmp_path / "missing")

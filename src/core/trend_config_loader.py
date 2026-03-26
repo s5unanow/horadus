@@ -73,6 +73,16 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
                         mode="json",
                         exclude_none=True,
                     ),
+                    **(
+                        {
+                            "horizon_variant": parsed.horizon_variant.model_dump(
+                                mode="json",
+                                exclude_none=True,
+                            )
+                        }
+                        if parsed.horizon_variant is not None
+                        else {}
+                    ),
                 },
                 description=parsed.description,
                 indicators={

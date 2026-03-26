@@ -56,6 +56,7 @@ def _build_dashboard_report() -> CalibrationDashboardReport:
             TrendMovement(
                 trend_id=uuid4(),
                 trend_name="EU-Russia",
+                horizon_variant=None,
                 current_probability=0.31,
                 weekly_change=0.03,
                 risk_level="elevated",
@@ -65,6 +66,7 @@ def _build_dashboard_report() -> CalibrationDashboardReport:
             TrendMovement(
                 trend_id=uuid4(),
                 trend_name="US-China",
+                horizon_variant=None,
                 current_probability=0.22,
                 weekly_change=-0.01,
                 risk_level="guarded",

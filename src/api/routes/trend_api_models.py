@@ -9,6 +9,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 import src.core.risk as risk_module  # noqa: TC001
+import src.core.trend_config as trend_config_module  # noqa: TC001
 import src.core.trend_forecast_contract as trend_forecast_contract_module  # noqa: TC001
 import src.storage.models as storage_models  # noqa: TC001
 
@@ -205,6 +206,7 @@ class TrendResponse(BaseModel):
     description: str | None
     definition: dict[str, Any]
     forecast_contract: trend_forecast_contract_module.TrendForecastContract | None
+    horizon_variant: trend_config_module.TrendHorizonVariant | None = None
     baseline_probability: float
     current_probability: float
     risk_level: str

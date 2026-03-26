@@ -44,20 +44,28 @@ def test_main_tasks_list_active_json_excludes_non_active_human_blockers(
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
+        lambda: task_repo_module.date(2026, 4, 8),
     )
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
+        lambda: task_repo_module.date(2026, 4, 8),
     )
 
     result = main(["tasks", "list-active", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
-    assert payload["data"]["human_blockers"] == []
-    assert payload["data"]["overdue_human_blockers"] == []
+    assert [item["task_id"] for item in payload["data"]["human_blockers"]] == [
+        "TASK-189",
+        "TASK-190",
+        "TASK-288",
+    ]
+    assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == [
+        "TASK-189",
+        "TASK-190",
+        "TASK-288",
+    ]
 
 
 def test_main_tasks_list_active_honors_root_format_flag(
@@ -67,12 +75,12 @@ def test_main_tasks_list_active_honors_root_format_flag(
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
+        lambda: task_repo_module.date(2026, 4, 8),
     )
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
+        lambda: task_repo_module.date(2026, 4, 8),
     )
 
     result = main(["--format", "json", "tasks", "list-active"])
@@ -132,20 +140,20 @@ def test_main_tasks_list_active_text_omits_non_active_human_blockers(
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
+        lambda: task_repo_module.date(2026, 4, 8),
     )
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
+        lambda: task_repo_module.date(2026, 4, 8),
     )
 
     result = main(["tasks", "list-active"])
 
     assert result == 0
     output = capsys.readouterr().out
-    assert "[OVERDUE" not in output
-    assert "overdue_human_blockers=" not in output
+    assert "TASK-080" not in output
+    assert "overdue_human_blockers=3" in output
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(

@@ -7,7 +7,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -237,13 +237,41 @@ async def build_source_reliability_diagnostics(
     min_sample_size = max(1, settings.CALIBRATION_COVERAGE_MIN_RESOLVED_PER_TREND)
     outcome_metrics = _build_outcome_metrics(scored_outcomes)
     if not outcome_metrics:
-        return ReliabilityDiagnosticsBundle(
-            source_reliability=empty_reliability_summary("source"),
-            source_tier_reliability=empty_reliability_summary("source_tier"),
-            geography_reliability=empty_reliability_summary("geography"),
-            topic_family_reliability=empty_reliability_summary("topic_family"),
-        )
+        return _empty_reliability_bundle()
 
+    rows = await _load_reliability_rows(session=session, outcome_ids=tuple(outcome_metrics.keys()))
+    (
+        source_pairs,
+        tier_pairs,
+        geography_pairs,
+        topic_pairs,
+        source_reference_by_key,
+    ) = _expand_dimension_pairs(rows)
+    return _build_reliability_bundle(
+        min_sample_size=min_sample_size,
+        outcome_metrics=outcome_metrics,
+        source_pairs=source_pairs,
+        tier_pairs=tier_pairs,
+        geography_pairs=geography_pairs,
+        topic_pairs=topic_pairs,
+        source_reference_by_key=source_reference_by_key,
+    )
+
+
+def _empty_reliability_bundle() -> ReliabilityDiagnosticsBundle:
+    return ReliabilityDiagnosticsBundle(
+        source_reliability=empty_reliability_summary("source"),
+        source_tier_reliability=empty_reliability_summary("source_tier"),
+        geography_reliability=empty_reliability_summary("geography"),
+        topic_family_reliability=empty_reliability_summary("topic_family"),
+    )
+
+
+async def _load_reliability_rows(
+    *,
+    session: AsyncSession,
+    outcome_ids: tuple[UUID, ...],
+) -> list[tuple[Any, ...]]:
     pair_query = (
         select(
             TrendOutcome.id,
@@ -265,12 +293,23 @@ async def build_source_reliability_diagnostics(
         .join(EventItem, EventItem.event_id == TrendEvidence.event_id)
         .join(RawItem, RawItem.id == EventItem.item_id)
         .join(Source, Source.id == RawItem.source_id)
-        .where(TrendOutcome.id.in_(tuple(outcome_metrics.keys())))
+        .where(TrendOutcome.id.in_(outcome_ids))
         .where(TrendEvidence.is_invalidated.is_(False))
         .distinct()
     )
     rows = (await session.execute(pair_query)).all()
+    return cast("list[tuple[Any, ...]]", list(rows))
 
+
+def _expand_dimension_pairs(
+    rows: list[tuple[Any, ...]],
+) -> tuple[
+    list[tuple[str, str, UUID]],
+    list[tuple[str, str, UUID]],
+    list[tuple[str, str, UUID]],
+    list[tuple[str, str, UUID]],
+    dict[str, float],
+]:
     source_pairs: list[tuple[str, str, UUID]] = []
     tier_pairs: list[tuple[str, str, UUID]] = []
     geography_pairs: list[tuple[str, str, UUID]] = []
@@ -310,6 +349,25 @@ async def build_source_reliability_diagnostics(
         for key, values in source_reference.items()
         if values
     }
+    return (
+        source_pairs,
+        tier_pairs,
+        geography_pairs,
+        topic_pairs,
+        source_reference_by_key,
+    )
+
+
+def _build_reliability_bundle(
+    *,
+    min_sample_size: int,
+    outcome_metrics: dict[UUID, OutcomeReliabilityMetrics],
+    source_pairs: list[tuple[str, str, UUID]],
+    tier_pairs: list[tuple[str, str, UUID]],
+    geography_pairs: list[tuple[str, str, UUID]],
+    topic_pairs: list[tuple[str, str, UUID]],
+    source_reference_by_key: dict[str, float],
+) -> ReliabilityDiagnosticsBundle:
     return ReliabilityDiagnosticsBundle(
         source_reliability=build_reliability_summary_from_pairs(
             dimension="source",

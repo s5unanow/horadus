@@ -188,6 +188,14 @@ class ReliabilityDiagnosticRowResponse(BaseModel):
     confidence: str
     eligible: bool
     advisory_note: str
+    recent_sample_size: int = 0
+    baseline_sample_size: int = 0
+    recent_observed_rate: float | None = None
+    baseline_observed_rate: float | None = None
+    drift_state: str = "insufficient_recent_data"
+    configured_effective_credibility: float | None = None
+    advisory_delta: float | None = None
+    advisory_effective_credibility: float | None = None
 
 
 class ReliabilityDiagnosticsResponse(BaseModel):
@@ -199,6 +207,7 @@ class ReliabilityDiagnosticsResponse(BaseModel):
     eligible_rows: int
     sparse_rows: int
     rows: list[ReliabilityDiagnosticRowResponse]
+    recent_window_days: int = 30
 
 
 class CalibrationDashboardResponse(BaseModel):
@@ -337,6 +346,43 @@ class CalibrationDashboardResponse(BaseModel):
     coverage: CalibrationCoverageResponse
     source_reliability: ReliabilityDiagnosticsResponse
     source_tier_reliability: ReliabilityDiagnosticsResponse
+    geography_reliability: ReliabilityDiagnosticsResponse
+    topic_family_reliability: ReliabilityDiagnosticsResponse
+
+
+def _reliability_response(summary: Any) -> ReliabilityDiagnosticsResponse:
+    """Map advisory reliability summaries onto API response models."""
+    return ReliabilityDiagnosticsResponse(
+        dimension=summary.dimension,
+        advisory_only=summary.advisory_only,
+        min_sample_size=summary.min_sample_size,
+        eligible_rows=summary.eligible_rows,
+        sparse_rows=summary.sparse_rows,
+        recent_window_days=summary.recent_window_days,
+        rows=[
+            ReliabilityDiagnosticRowResponse(
+                key=row.key,
+                label=row.label,
+                sample_size=row.sample_size,
+                mean_predicted_probability=row.mean_predicted_probability,
+                observed_rate=row.observed_rate,
+                mean_brier_score=row.mean_brier_score,
+                calibration_gap=row.calibration_gap,
+                confidence=row.confidence,
+                eligible=row.eligible,
+                advisory_note=row.advisory_note,
+                recent_sample_size=row.recent_sample_size,
+                baseline_sample_size=row.baseline_sample_size,
+                recent_observed_rate=row.recent_observed_rate,
+                baseline_observed_rate=row.baseline_observed_rate,
+                drift_state=row.drift_state,
+                configured_effective_credibility=row.configured_effective_credibility,
+                advisory_delta=row.advisory_delta,
+                advisory_effective_credibility=row.advisory_effective_credibility,
+            )
+            for row in summary.rows
+        ],
+    )
 
 
 def _normalize_top_events(value: Any) -> list[dict[str, Any]] | None:
@@ -509,50 +555,10 @@ async def get_calibration_dashboard(
             ],
             coverage_sufficient=dashboard.coverage.coverage_sufficient,
         ),
-        source_reliability=ReliabilityDiagnosticsResponse(
-            dimension=dashboard.source_reliability.dimension,
-            advisory_only=dashboard.source_reliability.advisory_only,
-            min_sample_size=dashboard.source_reliability.min_sample_size,
-            eligible_rows=dashboard.source_reliability.eligible_rows,
-            sparse_rows=dashboard.source_reliability.sparse_rows,
-            rows=[
-                ReliabilityDiagnosticRowResponse(
-                    key=row.key,
-                    label=row.label,
-                    sample_size=row.sample_size,
-                    mean_predicted_probability=row.mean_predicted_probability,
-                    observed_rate=row.observed_rate,
-                    mean_brier_score=row.mean_brier_score,
-                    calibration_gap=row.calibration_gap,
-                    confidence=row.confidence,
-                    eligible=row.eligible,
-                    advisory_note=row.advisory_note,
-                )
-                for row in dashboard.source_reliability.rows
-            ],
-        ),
-        source_tier_reliability=ReliabilityDiagnosticsResponse(
-            dimension=dashboard.source_tier_reliability.dimension,
-            advisory_only=dashboard.source_tier_reliability.advisory_only,
-            min_sample_size=dashboard.source_tier_reliability.min_sample_size,
-            eligible_rows=dashboard.source_tier_reliability.eligible_rows,
-            sparse_rows=dashboard.source_tier_reliability.sparse_rows,
-            rows=[
-                ReliabilityDiagnosticRowResponse(
-                    key=row.key,
-                    label=row.label,
-                    sample_size=row.sample_size,
-                    mean_predicted_probability=row.mean_predicted_probability,
-                    observed_rate=row.observed_rate,
-                    mean_brier_score=row.mean_brier_score,
-                    calibration_gap=row.calibration_gap,
-                    confidence=row.confidence,
-                    eligible=row.eligible,
-                    advisory_note=row.advisory_note,
-                )
-                for row in dashboard.source_tier_reliability.rows
-            ],
-        ),
+        source_reliability=_reliability_response(dashboard.source_reliability),
+        source_tier_reliability=_reliability_response(dashboard.source_tier_reliability),
+        geography_reliability=_reliability_response(dashboard.geography_reliability),
+        topic_family_reliability=_reliability_response(dashboard.topic_family_reliability),
     )
 
 

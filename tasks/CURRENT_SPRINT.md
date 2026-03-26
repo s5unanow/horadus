@@ -12,7 +12,6 @@
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]
 - `TASK-190` Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN]
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
-- `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
 
 ## Selection Notes
 
@@ -49,3 +48,4 @@
 - `TASK-233` Support Multi-Horizon Trend Variants for the Same Underlying Theme
 - `TASK-234` Make Uncertainty and Momentum First-Class Trend State ✅
 - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations ✅
+- `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility ✅

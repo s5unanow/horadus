@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from src.core import calibration_dashboard as calibration_dashboard_module
+from src.core import source_reliability_diagnostics as reliability_module
 from src.core.calibration_dashboard import (
     CalibrationBucketSummary,
     CalibrationCoverageSummary,
@@ -15,6 +16,10 @@ from src.core.calibration_dashboard import (
     CalibrationDashboardService,
     CalibrationDriftAlert,
     TrendCoverageSummary,
+)
+from src.core.source_reliability_diagnostics import (
+    ReliabilityDiagnosticsBundle,
+    ReliabilityDiagnosticsSummary,
 )
 from src.storage.models import OutcomeType
 
@@ -531,9 +536,41 @@ async def test_build_dashboard_assembles_report_from_dependencies() -> None:
     service._count_predictions_by_trend = lambda loaded: {trend_id: len(loaded)}
     service._load_trend_names = AsyncMock(return_value={trend_id: "Trend"})
     service._build_coverage_summary = build_coverage_summary
-    service._build_source_reliability_diagnostics = AsyncMock(
-        return_value=("source-summary", "tier-summary")
+    diagnostics = ReliabilityDiagnosticsBundle(
+        source_reliability=ReliabilityDiagnosticsSummary(
+            dimension="source",
+            advisory_only=True,
+            min_sample_size=2,
+            eligible_rows=1,
+            sparse_rows=0,
+            rows=[],
+        ),
+        source_tier_reliability=ReliabilityDiagnosticsSummary(
+            dimension="source_tier",
+            advisory_only=True,
+            min_sample_size=2,
+            eligible_rows=1,
+            sparse_rows=0,
+            rows=[],
+        ),
+        geography_reliability=ReliabilityDiagnosticsSummary(
+            dimension="geography",
+            advisory_only=True,
+            min_sample_size=2,
+            eligible_rows=1,
+            sparse_rows=0,
+            rows=[],
+        ),
+        topic_family_reliability=ReliabilityDiagnosticsSummary(
+            dimension="topic_family",
+            advisory_only=True,
+            min_sample_size=2,
+            eligible_rows=1,
+            sparse_rows=0,
+            rows=[],
+        ),
     )
+    service._build_reliability_diagnostics_bundle = AsyncMock(return_value=diagnostics)
     service._build_brier_timeseries = build_brier_timeseries
     service._build_drift_alerts = lambda **_: drift_alerts
     service._emit_drift_notifications = AsyncMock()
@@ -563,8 +600,10 @@ async def test_build_dashboard_assembles_report_from_dependencies() -> None:
         "When we predicted 40%-50%, it happened 100% of the time (n=1)."
     ]
     assert report.trend_movements == movements
-    assert report.source_reliability == "source-summary"
-    assert report.source_tier_reliability == "tier-summary"
+    assert report.source_reliability.dimension == "source"
+    assert report.source_tier_reliability.dimension == "source_tier"
+    assert report.geography_reliability.dimension == "geography"
+    assert report.topic_family_reliability.dimension == "topic_family"
     service._emit_drift_notifications.assert_awaited_once()
 
 
@@ -642,37 +681,69 @@ async def test_build_source_reliability_diagnostics_handles_empty_and_populated_
         predicted_probability=0.8,
         outcome=OutcomeType.OCCURRED.value,
         brier_score=None,
+        prediction_date=datetime(2026, 2, 1, tzinfo=UTC),
     )
     partial = SimpleNamespace(
         id=uuid4(),
         predicted_probability=0.6,
         outcome=OutcomeType.PARTIAL.value,
         brier_score=0.01,
+        prediction_date=datetime(2026, 2, 20, tzinfo=UTC),
     )
     ignored = SimpleNamespace(
         id=uuid4(),
         predicted_probability=0.3,
         outcome=OutcomeType.SUPERSEDED.value,
         brier_score=None,
+        prediction_date=datetime(2026, 2, 22, tzinfo=UTC),
     )
     invalid = SimpleNamespace(
         id=uuid4(),
         predicted_probability=0.4,
         outcome="invalid",
         brier_score=0.2,
+        prediction_date=datetime(2026, 2, 22, tzinfo=UTC),
     )
     missing = SimpleNamespace(
         id=uuid4(),
         predicted_probability=0.5,
         outcome=None,
         brier_score=0.1,
+        prediction_date=datetime(2026, 2, 22, tzinfo=UTC),
     )
     ap_source_id = uuid4()
     execute_result = MagicMock()
     execute_result.all.return_value = [
-        (occurred.id, uuid4(), "Reuters", "wire"),
-        (partial.id, ap_source_id, "AP", None),
-        (partial.id, ap_source_id, "AP", None),
+        (
+            occurred.id,
+            uuid4(),
+            "Reuters",
+            0.9,
+            "wire",
+            "firsthand",
+            "Kyiv, Ukraine",
+            ["conflict"],
+        ),
+        (
+            partial.id,
+            ap_source_id,
+            "AP",
+            0.8,
+            None,
+            "secondary",
+            None,
+            ["conflict"],
+        ),
+        (
+            partial.id,
+            ap_source_id,
+            "AP",
+            0.8,
+            None,
+            "secondary",
+            None,
+            ["conflict"],
+        ),
     ]
     session.execute = AsyncMock(return_value=execute_result)
 
@@ -692,7 +763,7 @@ async def test_build_source_reliability_diagnostics_skips_rows_without_brier_sco
 ) -> None:
     session = AsyncMock()
     service = CalibrationDashboardService(session=session, drift_alert_notifier=AsyncMock())
-    monkeypatch.setattr(calibration_dashboard_module, "calculate_brier_score", lambda *_: None)
+    monkeypatch.setattr(reliability_module, "calculate_brier_score", lambda *_: None)
 
     source_summary, tier_summary = await service._build_source_reliability_diagnostics(
         scored_outcomes=[
@@ -701,6 +772,7 @@ async def test_build_source_reliability_diagnostics_skips_rows_without_brier_sco
                 predicted_probability=0.6,
                 outcome=OutcomeType.OCCURRED.value,
                 brier_score=None,
+                prediction_date=datetime(2026, 2, 1, tzinfo=UTC),
             )
         ]
     )

@@ -347,6 +347,8 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
     assert result.coverage.coverage_sufficient is True
     assert result.source_reliability.dimension == "source"
     assert result.source_tier_reliability.dimension == "source_tier"
+    assert result.geography_reliability.dimension == "geography"
+    assert result.topic_family_reliability.dimension == "topic_family"
 
 
 @pytest.mark.asyncio

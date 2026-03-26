@@ -105,25 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
-### TASK-226: Add Compact Assessment Summaries to `horadus triage collect`
-**Priority**: P2 (Medium)
-**Estimate**: 1-2 hours
-
-The current triage bundle returns long flat assessment path lists. Replace that
-with compact summaries that preserve recent-signal value without flooding agent
-contexts.
-
-**Files**: `tools/horadus/python/horadus_cli/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tests/horadus_cli/`, `tests/workflow/`
-
-**Acceptance Criteria**:
-- [ ] Group recent assessments by role with counts and latest artifact metadata
-- [ ] Add an option to bound or summarize assessment lists for agent-oriented JSON output
-- [ ] Keep full path enumeration available when explicitly requested
-- [ ] Keep text output concise while still indicating assessment coverage
-- [ ] Add regression tests for grouped summaries and explicit full-list mode
-
----
-
 ### TASK-233: Support Multi-Horizon Trend Variants for the Same Underlying Theme
 **Priority**: P2 (Medium)
 **Estimate**: 6-8 hours

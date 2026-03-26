@@ -360,3 +360,5 @@
 - TASK-238: Prioritize Tier-2 Budget with Value-of-Information Scheduling ✅
 - TASK-225: Make `horadus triage collect` Return Task-Aware Search Hits ✅
 - TASK-362: Close Sprint 7 and seed Sprint 8 from the live backlog ✅
+## Sprint 8
+- TASK-226: Add Compact Assessment Summaries to `horadus triage collect` ✅

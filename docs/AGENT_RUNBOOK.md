@@ -149,7 +149,10 @@ When: diagnose local config/DB/Redis readiness quickly.
 When: collect current sprint/backlog/completed/assessment inputs for backlog triage.
 Keyword/path/proposal matches now default to deduplicated task-aware records
 with `task_id`, title, status, matched fields, and concise context excerpts.
-Use `--include-raw` only when line-level hit details are explicitly needed.
+Recent assessments now default to grouped per-role summaries with latest
+artifact metadata; use `--assessment-path-limit N` for a bounded path preview
+or `--include-assessment-paths` for the full path list. Use `--include-raw`
+only when line-level hit details are explicitly needed.
 
 10. `uv run horadus pipeline dry-run --fixture-path ai/eval/fixtures/pipeline_dry_run_items.jsonl`
 When: deterministic no-network/no-LLM regression exercise.

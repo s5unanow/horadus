@@ -22,7 +22,8 @@ def test_parse_human_blockers_derives_urgency(monkeypatch: pytest.MonkeyPatch) -
     blockers = task_repo_module.parse_human_blockers()
 
     assert blockers
-    urgency = blockers[0].urgency
+    blocker = next(item for item in blockers if item.task_id == "TASK-080")
+    urgency = blocker.urgency
     assert urgency is not None
     assert urgency.as_of == "2026-03-06"
     assert urgency.state == "overdue"

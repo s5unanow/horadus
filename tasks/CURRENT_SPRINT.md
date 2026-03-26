@@ -43,6 +43,7 @@
 - TASK-189 | owner=human-operator | last_touched=2026-03-26 | next_action=2026-04-07 | escalate_after_days=7
 - TASK-190 | owner=human-operator | last_touched=2026-03-26 | next_action=2026-04-07 | escalate_after_days=7
 - TASK-288 | owner=human-operator | last_touched=2026-03-26 | next_action=2026-04-07 | escalate_after_days=7
+- TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
 
 ## Telegram Launch Scope
 

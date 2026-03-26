@@ -222,11 +222,6 @@ path = "tools/horadus/python/horadus_workflow/task_workflow_lifecycle.py"
 "task_lifecycle_data" = 24
 
 [[legacy_files]]
-path = "tools/horadus/python/horadus_workflow/triage.py"
-[legacy_files.member_max_complexity]
-"handle_collect" = 26
-
-[[legacy_files]]
 path = "tests/horadus_cli/v2/task_finish/test_finish_data.py"
 max_lines = 4692
 [legacy_files.member_max_lines]

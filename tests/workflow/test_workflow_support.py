@@ -119,17 +119,29 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
         task_id: str
         urgency: _Urgency | None
 
-    @dataclass
-    class _Hit:
-        path: str
-        line_number: int
-        line_text: str
-
     active_task = _ActiveTask(task_id="TASK-123")
     overdue = _Blocker(task_id="TASK-123", urgency=_Urgency(is_overdue=True))
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-123",
+        title="Coverage task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=["Alpha keyword support for backlog review."],
+        files=["`src/core`"],
+        acceptance_criteria=["- [ ] Keep task-aware payloads concise"],
+        assessment_refs=[],
+        raw_block="### TASK-123: Coverage task",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
 
     monkeypatch.setattr(triage, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage, "backlog_path", lambda: tmp_path / "tasks" / "BACKLOG.md")
+    monkeypatch.setattr(triage, "backlog_task_records", lambda: {"TASK-123": record})
     monkeypatch.setattr(triage, "completed_path", lambda: tmp_path / "tasks" / "COMPLETED.md")
+    monkeypatch.setattr(triage, "completed_task_ids", lambda: set())
     monkeypatch.setattr(
         triage,
         "current_sprint_path",
@@ -139,12 +151,34 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
     monkeypatch.setattr(
         triage,
         "line_search",
-        lambda path, pattern: [
-            _Hit(path=str(path), line_number=1, line_text=f"{pattern}:{Path(path).name}")
-        ],
+        lambda path, _pattern: (
+            [
+                task_repo_module.SearchHit(
+                    source="artifacts/x.md",
+                    line_number=1,
+                    line="P-1 references TASK-123",
+                )
+            ]
+            if Path(path) == tmp_path / "artifacts" / "x.md"
+            else []
+        ),
     )
     monkeypatch.setattr(triage, "parse_active_tasks", lambda: [active_task])
     monkeypatch.setattr(triage, "parse_human_blockers", lambda **_kwargs: [overdue])
+
+    def _task_record(
+        task_id: str,
+        *,
+        include_archive: bool = False,
+    ) -> task_repo_module.TaskRecord | None:
+        assert include_archive is False or include_archive is True
+        return record if task_id == "TASK-123" else None
+
+    monkeypatch.setattr(
+        triage,
+        "task_record",
+        _task_record,
+    )
 
     result = triage.handle_collect(
         SimpleNamespace(
@@ -152,6 +186,7 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
             path=["src/core"],
             proposal_id=["P-1"],
             lookback_days=14,
+            include_raw=False,
         )
     )
 
@@ -159,8 +194,236 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
     assert result.data is not None
     assert result.data["recent_assessments"] == ["artifacts/x.md"]
     assert result.data["current_sprint"]["overdue_human_blockers"][0]["task_id"] == "TASK-123"
+    assert result.data["searches"]["include_raw"] is False
+    assert result.data["searches"]["keyword_hits"][0]["task_id"] == "TASK-123"
+    assert result.data["searches"]["path_hits"][0]["contexts"][0]["field"] == "files"
+    assert result.data["searches"]["proposal_hits"][0]["contexts"][0]["field"] == (
+        "proposal_reference"
+    )
     assert result.lines is not None
-    assert any("keyword_hits=2" in line for line in result.lines)
+    assert any("keyword_hits=1" in line for line in result.lines)
+    assert any("keyword_tasks=TASK-123" in line for line in result.lines)
+
+
+def _triage_branch_test_context(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> tuple[object, task_repo_module.TaskRecord, task_repo_module.TaskRecord]:
+    triage = importlib.reload(triage_module)
+
+    tasks_dir = tmp_path / "tasks"
+    tasks_dir.mkdir()
+    backlog = tasks_dir / "BACKLOG.md"
+    backlog.write_text(
+        "\n".join(
+            [
+                "Preamble",
+                "### TASK-200: Example task",
+                "**Priority**: P2",
+                "Alpha backlog line",
+                "**Files**: `src/core`",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    completed = tasks_dir / "COMPLETED.md"
+
+    backlog_record = task_repo_module.TaskRecord(
+        task_id="TASK-200",
+        title="Example task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=["Alpha backlog line"],
+        files=["`src/core`"],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="### TASK-200: Example task",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
+    archived_record = task_repo_module.TaskRecord(
+        task_id="TASK-201",
+        title="Archived task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=[],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="### TASK-201: Archived task",
+        status="completed",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="archive/closed_tasks/2026-Q1.md",
+    )
+    proposal_path = tmp_path / "artifacts" / "x.md"
+    proposal_path.parent.mkdir(parents=True)
+
+    def _line_search(path: Path, _pattern: str) -> list[task_repo_module.SearchHit]:
+        if path == backlog:
+            return [
+                task_repo_module.SearchHit(
+                    source="tasks/BACKLOG.md",
+                    line_number=1,
+                    line="Preamble",
+                ),
+                task_repo_module.SearchHit(
+                    source="tasks/BACKLOG.md",
+                    line_number=4,
+                    line="Alpha backlog line",
+                ),
+            ]
+        if path == completed:
+            return [
+                task_repo_module.SearchHit(
+                    source="tasks/COMPLETED.md",
+                    line_number=1,
+                    line="done without task ref",
+                ),
+                task_repo_module.SearchHit(
+                    source="tasks/COMPLETED.md",
+                    line_number=2,
+                    line="TASK-201 done",
+                ),
+            ]
+        if path == proposal_path:
+            return [
+                task_repo_module.SearchHit(
+                    source="artifacts/x.md",
+                    line_number=1,
+                    line="proposal without task ref",
+                ),
+                task_repo_module.SearchHit(
+                    source="artifacts/x.md",
+                    line_number=2,
+                    line="P-1 references TASK-201",
+                ),
+            ]
+        return []
+
+    def _task_record(
+        task_id: str,
+        *,
+        include_archive: bool = False,
+    ) -> task_repo_module.TaskRecord | None:
+        if task_id == "TASK-201" and include_archive:
+            return archived_record
+        return None
+
+    monkeypatch.setattr(triage, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage, "backlog_path", lambda: backlog)
+    monkeypatch.setattr(triage, "backlog_task_records", lambda: {"TASK-200": backlog_record})
+    monkeypatch.setattr(triage, "completed_path", lambda: completed)
+    monkeypatch.setattr(triage, "completed_task_ids", lambda: {"TASK-201"})
+    monkeypatch.setattr(triage, "line_search", _line_search)
+    monkeypatch.setattr(triage, "task_record", _task_record)
+    return triage, backlog_record, archived_record
+
+
+def test_workflow_triage_helper_branches_cover_dedupe_and_fallback(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    triage, _backlog_record, _archived_record = _triage_branch_test_context(monkeypatch, tmp_path)
+
+    assert triage._task_status("TASK-201", active_task_ids=set(), completed_ids={"TASK-201"}) == (
+        "completed"
+    )
+    assert triage._fallback_task_details(
+        "TASK-999",
+        active_task_ids=set(),
+        completed_ids={"TASK-999"},
+    ) == ("TASK-999", "completed")
+
+    hit_map: dict[str, triage._TaskHitState] = {}
+    triage._add_contexts(
+        hit_map,
+        task_id="TASK-200",
+        title="Example task",
+        status="backlog",
+        contexts=[],
+    )
+    assert hit_map == {}
+
+    duplicate_context = triage.TaskAwareContext(
+        field="description",
+        source="tasks/BACKLOG.md",
+        excerpt="Alpha backlog line",
+    )
+    triage._add_contexts(
+        hit_map,
+        task_id="TASK-200",
+        title="Example task",
+        status="backlog",
+        contexts=[duplicate_context, duplicate_context],
+    )
+    assert len(hit_map["TASK-200"].contexts) == 1
+
+    triage._add_raw_hit(
+        hit_map,
+        task_id="TASK-200",
+        title="Example task",
+        status="backlog",
+        source="tasks/BACKLOG.md",
+        line_number=4,
+        line="Alpha backlog line",
+    )
+    triage._add_raw_hit(
+        hit_map,
+        task_id="TASK-200",
+        title="Example task",
+        status="backlog",
+        source="tasks/BACKLOG.md",
+        line_number=4,
+        line="Alpha backlog line",
+    )
+    assert len(hit_map["TASK-200"].raw_hits) == 1
+    assert triage._backlog_line_task_ids()[2] == "TASK-200"
+
+
+def test_workflow_triage_helper_branches_cover_raw_search_paths(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    triage, _backlog_record, _archived_record = _triage_branch_test_context(monkeypatch, tmp_path)
+
+    backlog_raw_map: dict[str, triage._TaskHitState] = {}
+    triage._attach_backlog_raw_hits(
+        backlog_raw_map,
+        pattern="Alpha",
+        active_task_ids=set(),
+        completed_ids=set(),
+    )
+    assert backlog_raw_map["TASK-200"].raw_hits[0]["line_number"] == 4
+
+    completed_hit_map: dict[str, triage._TaskHitState] = {}
+    triage._attach_completed_hits(
+        completed_hit_map,
+        pattern="done",
+        active_task_ids=set(),
+        completed_ids={"TASK-201"},
+        include_raw=True,
+    )
+    assert completed_hit_map["TASK-201"].raw_hits[0]["line_number"] == 2
+
+    proposal_hit_map = triage._search_proposal_hits(
+        "P-1",
+        recent_paths=["artifacts/x.md"],
+        active_task_ids=set(),
+        completed_ids={"TASK-201"},
+        include_raw=True,
+    )
+    assert proposal_hit_map["TASK-201"].raw_hits[0]["line_number"] == 2
+
+    _, path_hits, _ = triage._collect_search_hits(
+        keyword_pattern=None,
+        path_pattern="src/core",
+        proposal_pattern=None,
+        recent_paths=[],
+        active_task_ids=set(),
+        completed_ids=set(),
+        include_raw=True,
+    )
+    assert path_hits[0]["raw_hits"][0]["line_number"] == 4
 
 
 def test_pr_review_gate_helper_functions_cover_success_and_error_paths(

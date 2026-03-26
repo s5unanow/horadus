@@ -33,6 +33,7 @@ def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> 
     assert payload["status"] == "ok"
     assert payload["data"]["lookback_days"] == 14
     assert "current_sprint" in payload["data"]
+    assert payload["data"]["searches"]["include_raw"] is False
     assert "keyword_hits" in payload["data"]["searches"]
 
 
@@ -141,11 +142,6 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
     assert triage_commands_module._compile_or_pattern([" ", "alpha", "beta?"]) == "alpha|beta\\?"
     assert triage_commands_module._compile_or_pattern([" ", ""]) is None
 
-    line_hit = task_repo_module.SearchHit(
-        source="tasks/BACKLOG.md",
-        line_number=1,
-        line="TASK-253 hit",
-    )
     active_task = task_repo_module.ActiveTask(
         task_id="TASK-253",
         title="Coverage task",
@@ -153,9 +149,31 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
         note=None,
         raw_line="- `TASK-253` Coverage task",
     )
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-253",
+        title="Coverage task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=["Agent-focused backlog review support."],
+        files=["`src/core`"],
+        acceptance_criteria=["- [ ] Preserve agent-friendly JSON"],
+        assessment_refs=[],
+        raw_block="### TASK-253: Coverage task",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
 
     monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage_commands_module, "backlog_path", lambda: tmp_path / "BACKLOG.md")
+    monkeypatch.setattr(
+        triage_commands_module,
+        "backlog_task_records",
+        lambda: {"TASK-253": record},
+    )
     monkeypatch.setattr(triage_commands_module, "completed_path", lambda: tmp_path / "COMPLETED.md")
+    monkeypatch.setattr(triage_commands_module, "completed_task_ids", lambda: set())
     monkeypatch.setattr(
         triage_commands_module,
         "current_sprint_path",
@@ -169,10 +187,34 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
     monkeypatch.setattr(
         triage_commands_module,
         "line_search",
-        lambda _path, _pattern: [line_hit],
+        lambda path, _pattern: (
+            [
+                task_repo_module.SearchHit(
+                    source="artifacts/assessments/ops/daily/2026-03-06.md",
+                    line_number=1,
+                    line="PROPOSAL-1 references TASK-253",
+                )
+            ]
+            if path == tmp_path / "artifacts" / "assessments" / "ops" / "daily" / "2026-03-06.md"
+            else []
+        ),
     )
     monkeypatch.setattr(triage_commands_module, "parse_active_tasks", lambda: [active_task])
     monkeypatch.setattr(triage_commands_module, "parse_human_blockers", lambda **_kwargs: [])
+
+    def _task_record(
+        task_id: str,
+        *,
+        include_archive: bool = False,
+    ) -> task_repo_module.TaskRecord | None:
+        assert include_archive is False or include_archive is True
+        return record if task_id == "TASK-253" else None
+
+    monkeypatch.setattr(
+        triage_commands_module,
+        "task_record",
+        _task_record,
+    )
 
     result = triage_commands_module.handle_collect(
         argparse.Namespace(
@@ -180,13 +222,104 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
             path=["src/core"],
             proposal_id=["PROPOSAL-1"],
             lookback_days=14,
+            include_raw=False,
         )
     )
 
     assert result.lines is not None
     assert "- paths=src/core" in result.lines
     assert "- proposal_ids=PROPOSAL-1" in result.lines
+    assert "- keyword_tasks=TASK-253" in result.lines
     assert all("overdue_tasks=" not in line for line in result.lines)
     assert result.data is not None
-    assert result.data["searches"]["path_hits"][0]["source"] == "tasks/BACKLOG.md"
-    assert result.data["searches"]["proposal_hits"][0]["line"] == "TASK-253 hit"
+    assert result.data["searches"]["include_raw"] is False
+    assert result.data["searches"]["keyword_hits"][0]["matched_fields"] == [
+        "description",
+        "acceptance_criteria",
+    ]
+    assert result.data["searches"]["path_hits"][0]["contexts"][0]["field"] == "files"
+    assert result.data["searches"]["proposal_hits"][0]["task_id"] == "TASK-253"
+    assert "raw_hits" not in result.data["searches"]["keyword_hits"][0]
+
+
+def test_handle_collect_can_include_raw_line_hits(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    backlog_path = tmp_path / "BACKLOG.md"
+    backlog_path.write_text(
+        "\n".join(
+            [
+                "### TASK-253: Coverage task",
+                "**Priority**: P2",
+                "**Estimate**: 1-2 hours",
+                "Agent-focused backlog review support.",
+                "",
+                "---",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-253",
+        title="Coverage task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=["Agent-focused backlog review support."],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="### TASK-253: Coverage task",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
+
+    monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage_commands_module, "backlog_path", lambda: backlog_path)
+    monkeypatch.setattr(
+        triage_commands_module,
+        "backlog_task_records",
+        lambda: {"TASK-253": record},
+    )
+    monkeypatch.setattr(triage_commands_module, "completed_path", lambda: tmp_path / "COMPLETED.md")
+    monkeypatch.setattr(triage_commands_module, "completed_task_ids", lambda: set())
+    monkeypatch.setattr(
+        triage_commands_module,
+        "_recent_assessment_paths",
+        lambda _lookback_days: [],
+    )
+    monkeypatch.setattr(
+        triage_commands_module,
+        "line_search",
+        lambda path, _pattern: (
+            [
+                task_repo_module.SearchHit(
+                    source="tasks/BACKLOG.md",
+                    line_number=4,
+                    line="Agent-focused backlog review support.",
+                )
+            ]
+            if path == backlog_path
+            else []
+        ),
+    )
+    monkeypatch.setattr(triage_commands_module, "parse_active_tasks", list)
+    monkeypatch.setattr(triage_commands_module, "parse_human_blockers", lambda **_kwargs: [])
+
+    result = triage_commands_module.handle_collect(
+        argparse.Namespace(
+            keyword=["agent"],
+            path=[],
+            proposal_id=[],
+            lookback_days=14,
+            include_raw=True,
+        )
+    )
+
+    assert result.data is not None
+    keyword_hit = result.data["searches"]["keyword_hits"][0]
+    assert result.data["searches"]["include_raw"] is True
+    assert keyword_hit["raw_hits"][0]["source"] == "tasks/BACKLOG.md"
+    assert keyword_hit["raw_hits"][0]["line_number"] == 4

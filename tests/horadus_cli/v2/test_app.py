@@ -519,6 +519,7 @@ def test_build_parser_accepts_triage_collect_command() -> None:
             "PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe",
             "--lookback-days",
             "7",
+            "--include-raw",
             "--format",
             "json",
         ]
@@ -530,6 +531,7 @@ def test_build_parser_accepts_triage_collect_command() -> None:
     assert args.path == ["tools/horadus/python/horadus_cli/app.py"]
     assert args.proposal_id == ["PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe"]
     assert args.lookback_days == 7
+    assert args.include_raw is True
     assert args.output_format == "json"
 
 

@@ -780,7 +780,6 @@ class TrendEngine:
         from src.storage.models import TrendSnapshot
 
         at = _as_utc(at)
-
         result = await self.session.execute(
             select(TrendSnapshot.log_odds)
             .where(TrendSnapshot.trend_id == trend_id)
@@ -789,10 +788,10 @@ class TrendEngine:
             .limit(1)
         )
         row = result.scalar_one_or_none()
-
-        if row is None:
+        if isawaitable(row):
+            row = await row
+        if row is None or not isinstance(row, int | float | Decimal):
             return None
-
         return logodds_to_prob(float(row))
 
     async def get_direction(

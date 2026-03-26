@@ -138,6 +138,28 @@ class TrendUpdate(BaseModel):
     activation_notes: str | None = None
 
 
+class TrendUncertaintyStateResponse(BaseModel):
+    """Bounded uncertainty payload for operator-facing trend responses."""
+
+    score: float = Field(..., ge=0, le=1)
+    level: Literal["low", "medium", "high"]
+    band_width: float = Field(..., ge=0, le=1)
+    evidence_count_30d: int = Field(..., ge=0)
+    avg_corroboration_30d: float = Field(..., ge=0, le=1)
+    days_since_last_evidence: int = Field(..., ge=0)
+
+
+class TrendMomentumStateResponse(BaseModel):
+    """Recent directional trend movement tied to explicit windows."""
+
+    direction: Literal["rising_fast", "rising", "stable", "falling", "falling_fast"]
+    window_days: int = Field(..., ge=1)
+    delta_probability: float = Field(..., ge=-1, le=1)
+    previous_window_delta: float | None = Field(default=None, ge=-1, le=1)
+    acceleration: float | None = Field(default=None, ge=-1, le=1)
+    evidence_count_window: int = Field(..., ge=0)
+
+
 class TrendResponse(BaseModel):
     """Response body for a trend."""
 
@@ -183,6 +205,22 @@ class TrendResponse(BaseModel):
                 "risk_level": "guarded",
                 "probability_band": [0.11, 0.25],
                 "confidence": "medium",
+                "uncertainty": {
+                    "score": 0.233333,
+                    "level": "medium",
+                    "band_width": 0.14,
+                    "evidence_count_30d": 8,
+                    "avg_corroboration_30d": 0.75,
+                    "days_since_last_evidence": 1,
+                },
+                "momentum": {
+                    "direction": "rising",
+                    "window_days": 7,
+                    "delta_probability": 0.03,
+                    "previous_window_delta": 0.01,
+                    "acceleration": 0.02,
+                    "evidence_count_window": 4,
+                },
                 "top_movers_7d": [
                     "Multiple sources corroborate force-movement reports.",
                     "Diplomatic talks were suspended after border incident.",
@@ -212,6 +250,8 @@ class TrendResponse(BaseModel):
     risk_level: str
     probability_band: tuple[float, float]
     confidence: risk_module.ConfidenceRating
+    uncertainty: TrendUncertaintyStateResponse
+    momentum: TrendMomentumStateResponse
     top_movers_7d: list[str]
     indicators: dict[str, Any]
     active_definition_version_id: UUID | None

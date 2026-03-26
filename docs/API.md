@@ -139,6 +139,8 @@ Trend responses now include:
 - `risk_level` (`low`/`guarded`/`elevated`/`high`/`severe`)
 - `probability_band` (lower/upper bound)
 - `confidence` (`low`/`medium`/`high`)
+- `uncertainty` (bounded dispersion summary with score/level and recent evidence context)
+- `momentum` (recent directional movement tied to explicit snapshot/evidence windows)
 - `top_movers_7d` (highest-impact recent evidence summaries)
 - `forecast_contract` (explicit question, structured horizon, resolver source/basis, and closure semantics)
 - `revision_token` (optimistic-concurrency token for privileged writes)
@@ -243,6 +245,10 @@ List monthly reports:
 ```bash
 curl "http://localhost:8000/api/v1/reports?report_type=monthly&limit=10"
 ```
+
+Weekly/monthly report `statistics` now also carry the same first-class
+`uncertainty` and `momentum` payloads used by trend API responses so operator
+surfaces read from one deterministic state contract.
 
 Calibration dashboard example:
 

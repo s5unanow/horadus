@@ -105,28 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
-### TASK-234: Make Uncertainty and Momentum First-Class Trend State
-**Priority**: P2 (Medium)
-**Estimate**: 4-6 hours
-
-Probability alone is too compressive for operator-facing interpretation. Promote
-uncertainty and recent directional momentum from derived presentation details to
-first-class tracked trend state and reporting context.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/core/risk.py`, `src/api/routes/trends.py`, `src/core/report_generator.py`, `src/storage/models.py`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Define bounded, explainable representations for trend uncertainty and recent momentum that do not duplicate raw probability
-- [ ] Persist or deterministically derive these fields in a way that is stable across API and report paths
-- [ ] Expose them directly in trend APIs and report statistics
-- [ ] Keep historical interpretation possible by tying momentum to recent snapshot/evidence windows
-- [ ] Add regression coverage for stable, accelerating, and highly uncertain trend cases
-
----
-
 ### TASK-236: Add Canonical Entity Registry for Actors, Organizations, and Locations
 **Priority**: P2 (Medium)
 **Estimate**: 8-12 hours

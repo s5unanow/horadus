@@ -363,3 +363,4 @@
 ## Sprint 8
 - TASK-226: Add Compact Assessment Summaries to `horadus triage collect` ✅
 - TASK-233: Support Multi-Horizon Trend Variants for the Same Underlying Theme ✅
+- TASK-234: Make Uncertainty and Momentum First-Class Trend State ✅

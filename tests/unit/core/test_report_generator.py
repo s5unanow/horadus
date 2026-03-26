@@ -8,6 +8,7 @@ from uuid import uuid4
 
 import pytest
 
+import src.core.report_generator as report_generator_module
 from src.core.config import settings
 from src.core.report_generator import NarrativeResult, ReportGenerator, _as_utc
 from src.processing.cost_tracker import TIER2, BudgetExceededError
@@ -200,7 +201,10 @@ async def test_load_active_trends_and_find_existing_report(mock_db_session) -> N
 
 
 @pytest.mark.asyncio
-async def test_build_weekly_statistics_includes_contradiction_analytics(mock_db_session) -> None:
+async def test_build_weekly_statistics_includes_contradiction_analytics(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend = SimpleNamespace(id=uuid4())
     trend_engine = SimpleNamespace(
@@ -218,7 +222,16 @@ async def test_build_weekly_statistics_includes_contradiction_analytics(mock_db_
         "resolution_actions": {"invalidate": 1},
     }
     generator._load_contradiction_analytics = AsyncMock(return_value=analytics)
-
+    monkeypatch.setattr(
+        report_generator_module,
+        "build_report_uncertainty_state",
+        AsyncMock(return_value={"score": 0.2, "level": "medium", "band_width": 0.12}),
+    )
+    monkeypatch.setattr(
+        report_generator_module,
+        "build_report_momentum_state",
+        AsyncMock(return_value={"direction": "rising", "delta_probability": 0.05}),
+    )
     now = datetime.now(tz=UTC)
     result = await generator._build_weekly_statistics(
         trend=trend,
@@ -231,6 +244,8 @@ async def test_build_weekly_statistics_includes_contradiction_analytics(mock_db_
     assert result["weekly_change"] == 0.05
     assert result["direction"] == "rising"
     assert result["evidence_count_weekly"] == 7
+    assert result["uncertainty"]["level"] == "medium"
+    assert result["momentum"]["direction"] == "rising"
     assert result["contradiction_analytics"] == analytics
 
 
@@ -253,7 +268,10 @@ async def test_build_weekly_statistics_requires_trend_id(mock_db_session) -> Non
 
 
 @pytest.mark.asyncio
-async def test_build_monthly_statistics_includes_contradiction_analytics(mock_db_session) -> None:
+async def test_build_monthly_statistics_includes_contradiction_analytics(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend = SimpleNamespace(id=uuid4())
     trend_engine = SimpleNamespace(
@@ -262,7 +280,6 @@ async def test_build_monthly_statistics_includes_contradiction_analytics(mock_db
         get_direction=AsyncMock(return_value="stable"),
     )
     mock_db_session.scalar.return_value = 11
-    generator._calculate_previous_period_change = AsyncMock(return_value=0.03)
     generator._load_category_breakdown = AsyncMock(return_value={"military": 4})
     generator._load_source_breakdown = AsyncMock(return_value={"rss": 6})
     generator._load_weekly_reports = AsyncMock(return_value=[])
@@ -275,6 +292,19 @@ async def test_build_monthly_statistics_includes_contradiction_analytics(mock_db
         "resolution_actions": {"mark_noise": 2, "invalidate": 1},
     }
     generator._load_contradiction_analytics = AsyncMock(return_value=analytics)
+    monkeypatch.setattr(
+        report_generator_module, "calculate_previous_period_change", AsyncMock(return_value=0.03)
+    )
+    monkeypatch.setattr(
+        report_generator_module,
+        "build_report_uncertainty_state",
+        AsyncMock(return_value={"score": 0.45, "level": "high", "band_width": 0.27}),
+    )
+    monkeypatch.setattr(
+        report_generator_module,
+        "build_report_momentum_state",
+        AsyncMock(return_value={"direction": "stable", "delta_probability": 0.02}),
+    )
 
     now = datetime.now(tz=UTC)
     result = await generator._build_monthly_statistics(
@@ -289,12 +319,15 @@ async def test_build_monthly_statistics_includes_contradiction_analytics(mock_db
     assert result["change_vs_previous_month"] == -0.01
     assert result["direction"] == "stable"
     assert result["evidence_count_monthly"] == 11
+    assert result["uncertainty"]["level"] == "high"
+    assert result["momentum"]["direction"] == "stable"
     assert result["contradiction_analytics"] == analytics
 
 
 @pytest.mark.asyncio
 async def test_build_monthly_statistics_handles_missing_previous_month_change(
     mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     generator = ReportGenerator(session=mock_db_session, client=None)
     trend = SimpleNamespace(id=uuid4())
@@ -304,11 +337,23 @@ async def test_build_monthly_statistics_handles_missing_previous_month_change(
         get_direction=AsyncMock(return_value="stable"),
     )
     mock_db_session.scalar.return_value = None
-    generator._calculate_previous_period_change = AsyncMock(return_value=None)
     generator._load_category_breakdown = AsyncMock(return_value={})
     generator._load_source_breakdown = AsyncMock(return_value={})
     generator._load_weekly_reports = AsyncMock(return_value=[{"id": "weekly"}])
     generator._load_contradiction_analytics = AsyncMock(return_value={})
+    monkeypatch.setattr(
+        report_generator_module, "calculate_previous_period_change", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        report_generator_module,
+        "build_report_uncertainty_state",
+        AsyncMock(return_value={"level": "medium"}),
+    )
+    monkeypatch.setattr(
+        report_generator_module,
+        "build_report_momentum_state",
+        AsyncMock(return_value={"direction": "stable"}),
+    )
 
     now = datetime.now(tz=UTC)
     result = await generator._build_monthly_statistics(
@@ -321,6 +366,8 @@ async def test_build_monthly_statistics_handles_missing_previous_month_change(
     assert result["monthly_change"] == 0.0
     assert result["change_vs_previous_month"] is None
     assert result["weekly_reports_count"] == 1
+    assert result["uncertainty"]["level"] == "medium"
+    assert result["momentum"]["direction"] == "stable"
 
 
 @pytest.mark.asyncio
@@ -343,12 +390,11 @@ async def test_build_monthly_statistics_requires_trend_id(mock_db_session) -> No
 
 @pytest.mark.asyncio
 async def test_calculate_previous_period_change_handles_missing_snapshots(mock_db_session) -> None:
-    generator = ReportGenerator(session=mock_db_session, client=None)
     trend_engine = SimpleNamespace(
         get_probability_at=AsyncMock(side_effect=[0.4, None]),
     )
 
-    result = await generator._calculate_previous_period_change(
+    result = await report_generator_module.calculate_previous_period_change(
         trend_id=uuid4(),
         trend_engine=trend_engine,
         period_start=datetime(2026, 3, 1, tzinfo=UTC),
@@ -968,12 +1014,11 @@ async def test_generate_monthly_reports_creates_new_and_skips_idless_trends(
 async def test_calculate_previous_period_change_returns_delta_when_snapshots_exist(
     mock_db_session,
 ) -> None:
-    generator = ReportGenerator(session=mock_db_session, client=None)
     trend_engine = SimpleNamespace(
         get_probability_at=AsyncMock(side_effect=[0.45, 0.40]),
     )
 
-    result = await generator._calculate_previous_period_change(
+    result = await report_generator_module.calculate_previous_period_change(
         trend_id=uuid4(),
         trend_engine=trend_engine,
         period_start=datetime(2026, 3, 1, tzinfo=UTC),

@@ -43,12 +43,14 @@ from src.api.routes.trend_api_models import (
     RemoveEventImpactSimulationRequest,
     TrendCalibrationResponse,
     TrendCreate,
+    TrendMomentumStateResponse,
     TrendOutcomeCreate,
     TrendOutcomeResponse,
     TrendResponse,
     TrendRetrospectiveResponse,
     TrendSimulationRequest,
     TrendSimulationResponse,
+    TrendUncertaintyStateResponse,
     TrendUpdate,
 )
 from src.api.routes.trend_response_models import (
@@ -80,12 +82,17 @@ from src.core.trend_config import (
     safe_horizon_variant_from_definition,
     trend_variant_sort_key,
 )
-from src.core.trend_engine import calculate_evidence_delta, logodds_to_prob
+from src.core.trend_engine import TrendEngine, calculate_evidence_delta, logodds_to_prob
 from src.core.trend_state import (
     activate_trend_state,
     ensure_definition_version,
     resolve_active_definition_hash,
     resolve_active_scoring_contract,
+)
+from src.core.trend_state_presentation import (
+    EvidenceWindowStats,
+    build_momentum_state,
+    build_uncertainty_state,
 )
 from src.storage.database import get_session
 from src.storage.models import (
@@ -294,6 +301,22 @@ async def _get_top_movers_7d(
     return [record.signal_type for record in records[:limit]]
 
 
+async def _get_momentum_state(
+    session: AsyncSession,
+    *,
+    trend: Trend,
+) -> dict[str, float | int | str | None]:
+    """Build recent momentum state for trend responses."""
+    trend_engine = TrendEngine(session)
+    momentum = await build_momentum_state(
+        session,
+        trend_engine=trend_engine,
+        trend=trend,
+        state_version_id=trend.active_state_version_id,
+    )
+    return momentum.to_dict()
+
+
 async def _to_response(
     trend: Trend,
     *,
@@ -315,6 +338,19 @@ async def _to_response(
         band_width=band_high - band_low,
         evidence_count=evidence_count,
         avg_corroboration=avg_corroboration,
+    )
+    uncertainty = TrendUncertaintyStateResponse.model_validate(
+        build_uncertainty_state(
+            probability=probability,
+            evidence_stats=EvidenceWindowStats(
+                evidence_count=evidence_count,
+                avg_corroboration=avg_corroboration,
+                days_since_last_evidence=days_since_last,
+            ),
+        ).to_dict()
+    )
+    momentum = TrendMomentumStateResponse.model_validate(
+        await _get_momentum_state(session, trend=trend)
     )
     top_movers = await _get_top_movers_7d(
         session,
@@ -343,6 +379,8 @@ async def _to_response(
         risk_level=get_risk_level(probability).value,
         probability_band=(band_low, band_high),
         confidence=confidence,
+        uncertainty=uncertainty,
+        momentum=momentum,
         top_movers_7d=top_movers,
         indicators=trend.indicators,
         active_definition_version_id=trend.active_definition_version_id,

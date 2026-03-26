@@ -28,6 +28,11 @@ from src.core.report_runtime import (
 from src.core.report_runtime import (
     _fallback_narrative as fallback_narrative_text,
 )
+from src.core.report_statistics import (
+    build_report_momentum_state,
+    build_report_uncertainty_state,
+    calculate_previous_period_change,
+)
 from src.core.trend_engine import TrendEngine
 from src.processing.cost_tracker import BudgetExceededError, CostTracker
 from src.processing.llm_input_safety import (
@@ -401,12 +406,26 @@ class ReportGenerator:
             period_start=period_start,
             period_end=period_end,
         )
+        uncertainty = await build_report_uncertainty_state(
+            self.session,
+            trend=trend,
+            probability=current_probability,
+            now=period_end,
+        )
+        momentum = await build_report_momentum_state(
+            self.session,
+            trend=trend,
+            trend_engine=trend_engine,
+            now=period_end,
+        )
 
         return {
             "current_probability": round(current_probability, 6),
             "weekly_change": round(weekly_change, 6),
             "direction": direction,
             "evidence_count_weekly": int(evidence_count or 0),
+            "uncertainty": uncertainty,
+            "momentum": momentum,
             "contradiction_analytics": contradiction_analytics,
         }
 
@@ -431,7 +450,7 @@ class ReportGenerator:
         monthly_change = (
             current_probability - previous_probability if previous_probability is not None else 0.0
         )
-        previous_month_change = await self._calculate_previous_period_change(
+        previous_month_change = await calculate_previous_period_change(
             trend_id=trend_id,
             trend_engine=trend_engine,
             period_start=period_start,
@@ -465,6 +484,18 @@ class ReportGenerator:
             period_start=period_start,
             period_end=period_end,
         )
+        uncertainty = await build_report_uncertainty_state(
+            self.session,
+            trend=trend,
+            probability=current_probability,
+            now=period_end,
+        )
+        momentum = await build_report_momentum_state(
+            self.session,
+            trend=trend,
+            trend_engine=trend_engine,
+            now=period_end,
+        )
 
         comparison_delta: float | None = None
         if previous_month_change is not None:
@@ -481,32 +512,10 @@ class ReportGenerator:
             "source_breakdown": source_breakdown,
             "weekly_reports_used": weekly_reports,
             "weekly_reports_count": len(weekly_reports),
+            "uncertainty": uncertainty,
+            "momentum": momentum,
             "contradiction_analytics": contradiction_analytics,
         }
-
-    async def _calculate_previous_period_change(
-        self,
-        *,
-        trend_id: UUID,
-        trend_engine: TrendEngine,
-        period_start: datetime,
-        period_end: datetime,
-    ) -> float | None:
-        period_length = period_end - period_start
-        previous_period_end = period_start
-        previous_period_start = previous_period_end - period_length
-
-        previous_end_probability = await trend_engine.get_probability_at(
-            trend_id=trend_id,
-            at=previous_period_end,
-        )
-        previous_start_probability = await trend_engine.get_probability_at(
-            trend_id=trend_id,
-            at=previous_period_start,
-        )
-        if previous_end_probability is None or previous_start_probability is None:
-            return None
-        return round(previous_end_probability - previous_start_probability, 6)
 
     async def _load_weekly_reports(
         self,

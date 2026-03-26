@@ -63,22 +63,11 @@ def _mentions_from_output(output: Any) -> list[_EntityMention] | None:
     return mentions
 
 
-async def sync_event_entities(*, session: AsyncSession, event: Any, output: Any) -> None:
-    """Replace persisted event-entity rows when Tier-2 emitted an entity payload."""
-
-    event_id = getattr(event, "id", None)
-    if event_id is None:
-        msg = "Event must have an id before syncing canonical entities"
-        raise ValueError(msg)
-
-    mentions = _mentions_from_output(output)
-    if mentions is None:
-        return
-
-    await session.execute(delete(EventEntity).where(EventEntity.event_id == event_id))
-    if not mentions:
-        return
-
+async def _load_alias_matches(
+    *,
+    session: AsyncSession,
+    mentions: list[_EntityMention],
+) -> dict[tuple[str, str], list[tuple[Any, ...]]]:
     alias_rows = (
         await session.execute(
             select(
@@ -103,39 +92,77 @@ async def sync_event_entities(*, session: AsyncSession, event: Any, output: Any)
         matches_by_key.setdefault((normalized_alias, entity_type), []).append(
             (entity_id, entity_type, canonical_name)
         )
+    return matches_by_key
+
+
+def _add_event_entity(
+    *,
+    session: AsyncSession,
+    event_id: Any,
+    mention: _EntityMention,
+    canonical_entity_id: Any | None,
+    resolution_status: str,
+    resolution_reason: str,
+    resolution_details: dict[str, Any] | None = None,
+) -> None:
+    session.add(
+        EventEntity(
+            event_id=event_id,
+            entity_role=mention.entity_role,
+            entity_type=mention.entity_type,
+            mention_text=mention.name,
+            mention_normalized=mention.normalized_name,
+            canonical_entity_id=canonical_entity_id,
+            resolution_status=resolution_status,
+            resolution_reason=resolution_reason,
+            resolution_details=resolution_details or {},
+        )
+    )
+
+
+async def sync_event_entities(*, session: AsyncSession, event: Any, output: Any) -> None:
+    """Replace persisted event-entity rows when Tier-2 emitted an entity payload."""
+
+    event_id = getattr(event, "id", None)
+    if event_id is None:
+        msg = "Event must have an id before syncing canonical entities"
+        raise ValueError(msg)
+
+    mentions = _mentions_from_output(output)
+    if mentions is None:
+        return
+
+    await session.execute(delete(EventEntity).where(EventEntity.event_id == event_id))
+    if not mentions:
+        return
+
+    matches_by_key = await _load_alias_matches(session=session, mentions=mentions)
 
     for mention in mentions:
         matches = matches_by_key.get((mention.normalized_name, mention.entity_type), [])
         if len(matches) == 1:
             entity_id, _entity_type, _canonical_name = matches[0]
-            session.add(
-                EventEntity(
-                    event_id=event_id,
-                    entity_role=mention.entity_role,
-                    entity_type=mention.entity_type,
-                    mention_text=mention.name,
-                    mention_normalized=mention.normalized_name,
-                    canonical_entity_id=entity_id,
-                    resolution_status="resolved",
-                    resolution_reason="exact_alias",
-                )
+            _add_event_entity(
+                session=session,
+                event_id=event_id,
+                mention=mention,
+                canonical_entity_id=entity_id,
+                resolution_status="resolved",
+                resolution_reason="exact_alias",
             )
             continue
         if len(matches) > 1:
-            session.add(
-                EventEntity(
-                    event_id=event_id,
-                    entity_role=mention.entity_role,
-                    entity_type=mention.entity_type,
-                    mention_text=mention.name,
-                    mention_normalized=mention.normalized_name,
-                    resolution_status="ambiguous",
-                    resolution_reason="ambiguous_alias",
-                    resolution_details={
-                        "candidate_entity_ids": [str(entity_id) for entity_id, _, _ in matches],
-                        "candidate_names": [canonical_name for _, _, canonical_name in matches],
-                    },
-                )
+            _add_event_entity(
+                session=session,
+                event_id=event_id,
+                mention=mention,
+                canonical_entity_id=None,
+                resolution_status="ambiguous",
+                resolution_reason="ambiguous_alias",
+                resolution_details={
+                    "candidate_entity_ids": [str(entity_id) for entity_id, _, _ in matches],
+                    "candidate_names": [canonical_name for _, _, canonical_name in matches],
+                },
             )
             continue
 
@@ -155,15 +182,11 @@ async def sync_event_entities(*, session: AsyncSession, event: Any, output: Any)
                 normalized_alias=mention.normalized_name,
             )
         )
-        session.add(
-            EventEntity(
-                event_id=event_id,
-                entity_role=mention.entity_role,
-                entity_type=mention.entity_type,
-                mention_text=mention.name,
-                mention_normalized=mention.normalized_name,
-                canonical_entity_id=canonical_entity.id,
-                resolution_status="resolved",
-                resolution_reason="seeded_new_canonical",
-            )
+        _add_event_entity(
+            session=session,
+            event_id=event_id,
+            mention=mention,
+            canonical_entity_id=canonical_entity.id,
+            resolution_status="resolved",
+            resolution_reason="seeded_new_canonical",
         )

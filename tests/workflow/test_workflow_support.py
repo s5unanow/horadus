@@ -126,6 +126,19 @@ def test_workflow_triage_helpers_cover_recent_paths_and_patterns(
             latest_date=None,
         ),
     ]
+    assert triage._assessment_role_summaries(
+        [
+            "artifacts/assessments/security/daily/2026-03-09.md",
+            "artifacts/assessments/security/daily/2026-03-10.md",
+        ]
+    ) == [
+        triage.AssessmentRoleSummary(
+            role="security",
+            count=2,
+            latest_path="artifacts/assessments/security/daily/2026-03-10.md",
+            latest_date="2026-03-10",
+        )
+    ]
     assert (
         triage._assessment_role_summary_line(
             [

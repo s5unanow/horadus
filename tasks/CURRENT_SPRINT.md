@@ -12,7 +12,6 @@
 - `TASK-189` Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]
 - `TASK-190` Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN]
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
-- `TASK-226` Add Compact Assessment Summaries to `horadus triage collect`
 - `TASK-233` Support Multi-Horizon Trend Variants for the Same Underlying Theme
 - `TASK-234` Make Uncertainty and Momentum First-Class Trend State
 - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations
@@ -32,11 +31,10 @@
 1. `TASK-189` Restrict `/health` and `/metrics` exposure outside development.
 2. `TASK-190` Harden admin-key compare and API key store file permissions.
 3. `TASK-288` Convert RFC-001 into a human-approved implementation queue.
-4. `TASK-226` Add compact assessment summaries to `horadus triage collect`.
-5. `TASK-233` Add multi-horizon trend variants for the same underlying theme.
-6. `TASK-234` Make uncertainty and momentum first-class trend state.
-7. `TASK-236` Add a canonical entity registry for actors, organizations, and locations.
-8. `TASK-237` Add dynamic reliability diagnostics and time-varying source credibility.
+4. `TASK-233` Add multi-horizon trend variants for the same underlying theme.
+5. `TASK-234` Make uncertainty and momentum first-class trend state.
+6. `TASK-236` Add a canonical entity registry for actors, organizations, and locations.
+7. `TASK-237` Add dynamic reliability diagnostics and time-varying source credibility.
 
 ## Human Blocker Metadata
 
@@ -53,4 +51,4 @@
 
 ## Completed This Sprint
 
-- None yet.
+- `TASK-226` Add Compact Assessment Summaries to `horadus triage collect`

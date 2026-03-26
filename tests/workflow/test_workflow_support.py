@@ -99,6 +99,46 @@ def test_workflow_triage_helpers_cover_recent_paths_and_patterns(
     ]
     assert triage._compile_or_pattern([" ", "alpha", "beta?"]) == "alpha|beta\\?"
     assert triage._compile_or_pattern([" ", ""]) is None
+    assert triage._recent_assessment_artifact("notes/not-a-date.md") == (
+        triage.RecentAssessmentArtifact(
+            path="notes/not-a-date.md",
+            role="unknown",
+            report_date=None,
+        )
+    )
+    assert triage._assessment_role_summaries(
+        [
+            "artifacts/assessments/ops/daily/2026-03-10.md",
+            "artifacts/assessments/ops/daily/2026-03-09.md",
+            "artifacts/assessments/unknown/daily/not-a-date.md",
+        ]
+    ) == [
+        triage.AssessmentRoleSummary(
+            role="ops",
+            count=2,
+            latest_path="artifacts/assessments/ops/daily/2026-03-10.md",
+            latest_date="2026-03-10",
+        ),
+        triage.AssessmentRoleSummary(
+            role="unknown",
+            count=1,
+            latest_path="artifacts/assessments/unknown/daily/not-a-date.md",
+            latest_date=None,
+        ),
+    ]
+    assert (
+        triage._assessment_role_summary_line(
+            [
+                {
+                    "role": "unknown",
+                    "count": 1,
+                    "latest_path": "artifacts/assessments/unknown/daily/not-a-date.md",
+                    "latest_date": None,
+                }
+            ]
+        )
+        == "- assessment_roles=unknown:1"
+    )
 
 
 def test_workflow_triage_handle_collect_returns_expected_payload(
@@ -147,19 +187,24 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
         "current_sprint_path",
         lambda: tmp_path / "tasks" / "CURRENT_SPRINT.md",
     )
-    monkeypatch.setattr(triage, "_recent_assessment_paths", lambda _days: ["artifacts/x.md"])
+    monkeypatch.setattr(
+        triage,
+        "_recent_assessment_paths",
+        lambda _days: ["artifacts/assessments/ops/daily/2026-03-07.md"],
+    )
     monkeypatch.setattr(
         triage,
         "line_search",
         lambda path, _pattern: (
             [
                 task_repo_module.SearchHit(
-                    source="artifacts/x.md",
+                    source="artifacts/assessments/ops/daily/2026-03-07.md",
                     line_number=1,
                     line="P-1 references TASK-123",
                 )
             ]
-            if Path(path) == tmp_path / "artifacts" / "x.md"
+            if Path(path)
+            == tmp_path / "artifacts" / "assessments" / "ops" / "daily" / "2026-03-07.md"
             else []
         ),
     )
@@ -187,12 +232,28 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
             proposal_id=["P-1"],
             lookback_days=14,
             include_raw=False,
+            assessment_path_limit=None,
+            include_assessment_paths=False,
         )
     )
 
     assert result.exit_code == 0
     assert result.data is not None
-    assert result.data["recent_assessments"] == ["artifacts/x.md"]
+    assert result.data["recent_assessments"] == {
+        "total_count": 1,
+        "roles": [
+            {
+                "role": "ops",
+                "count": 1,
+                "latest_path": "artifacts/assessments/ops/daily/2026-03-07.md",
+                "latest_date": "2026-03-07",
+            }
+        ],
+        "path_mode": "summary",
+        "path_limit": None,
+        "paths_truncated": False,
+        "paths": [],
+    }
     assert result.data["current_sprint"]["overdue_human_blockers"][0]["task_id"] == "TASK-123"
     assert result.data["searches"]["include_raw"] is False
     assert result.data["searches"]["keyword_hits"][0]["task_id"] == "TASK-123"
@@ -201,6 +262,7 @@ def test_workflow_triage_handle_collect_returns_expected_payload(
         "proposal_reference"
     )
     assert result.lines is not None
+    assert any("assessment_roles=ops:1(latest=2026-03-07)" in line for line in result.lines)
     assert any("keyword_hits=1" in line for line in result.lines)
     assert any("keyword_tasks=TASK-123" in line for line in result.lines)
 

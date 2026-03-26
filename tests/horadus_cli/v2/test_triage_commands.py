@@ -35,6 +35,7 @@ def test_main_triage_collect_json_output(capsys: pytest.CaptureFixture[str]) -> 
     assert "current_sprint" in payload["data"]
     assert payload["data"]["searches"]["include_raw"] is False
     assert "keyword_hits" in payload["data"]["searches"]
+    assert payload["data"]["recent_assessments"]["path_mode"] == "summary"
 
 
 def test_main_triage_collect_includes_overdue_blockers(
@@ -223,6 +224,8 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
             proposal_id=["PROPOSAL-1"],
             lookback_days=14,
             include_raw=False,
+            assessment_path_limit=None,
+            include_assessment_paths=False,
         )
     )
 
@@ -237,6 +240,21 @@ def test_compile_or_pattern_and_handle_collect_cover_optional_paths(
         "description",
         "acceptance_criteria",
     ]
+    assert result.data["recent_assessments"] == {
+        "total_count": 1,
+        "roles": [
+            {
+                "role": "ops",
+                "count": 1,
+                "latest_path": "artifacts/assessments/ops/daily/2026-03-06.md",
+                "latest_date": "2026-03-06",
+            }
+        ],
+        "path_mode": "summary",
+        "path_limit": None,
+        "paths_truncated": False,
+        "paths": [],
+    }
     assert result.data["searches"]["path_hits"][0]["contexts"][0]["field"] == "files"
     assert result.data["searches"]["proposal_hits"][0]["task_id"] == "TASK-253"
     assert "raw_hits" not in result.data["searches"]["keyword_hits"][0]
@@ -315,6 +333,8 @@ def test_handle_collect_can_include_raw_line_hits(
             proposal_id=[],
             lookback_days=14,
             include_raw=True,
+            assessment_path_limit=None,
+            include_assessment_paths=False,
         )
     )
 
@@ -323,3 +343,134 @@ def test_handle_collect_can_include_raw_line_hits(
     assert result.data["searches"]["include_raw"] is True
     assert keyword_hit["raw_hits"][0]["source"] == "tasks/BACKLOG.md"
     assert keyword_hit["raw_hits"][0]["line_number"] == 4
+
+
+def test_handle_collect_can_include_full_assessment_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    active_task = task_repo_module.ActiveTask(
+        task_id="TASK-253",
+        title="Coverage task",
+        requires_human=False,
+        note=None,
+        raw_line="- `TASK-253` Coverage task",
+    )
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-253",
+        title="Coverage task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=["Agent-focused backlog review support."],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="### TASK-253: Coverage task",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
+
+    monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage_commands_module, "backlog_path", lambda: tmp_path / "BACKLOG.md")
+    monkeypatch.setattr(
+        triage_commands_module,
+        "backlog_task_records",
+        lambda: {"TASK-253": record},
+    )
+    monkeypatch.setattr(triage_commands_module, "completed_path", lambda: tmp_path / "COMPLETED.md")
+    monkeypatch.setattr(triage_commands_module, "completed_task_ids", lambda: set())
+    monkeypatch.setattr(
+        triage_commands_module,
+        "_recent_assessment_paths",
+        lambda _lookback_days: [
+            "artifacts/assessments/ops/daily/2026-03-05.md",
+            "artifacts/assessments/security/daily/2026-03-06.md",
+        ],
+    )
+    monkeypatch.setattr(triage_commands_module, "parse_active_tasks", lambda: [active_task])
+    monkeypatch.setattr(triage_commands_module, "parse_human_blockers", lambda **_kwargs: [])
+
+    result = triage_commands_module.handle_collect(
+        argparse.Namespace(
+            keyword=[],
+            path=[],
+            proposal_id=[],
+            lookback_days=14,
+            include_raw=False,
+            assessment_path_limit=None,
+            include_assessment_paths=True,
+        )
+    )
+
+    assert result.data is not None
+    assert result.data["recent_assessments"]["path_mode"] == "full"
+    assert result.data["recent_assessments"]["paths"] == [
+        "artifacts/assessments/ops/daily/2026-03-05.md",
+        "artifacts/assessments/security/daily/2026-03-06.md",
+    ]
+    assert result.data["recent_assessments"]["paths_truncated"] is False
+
+
+def test_handle_collect_can_bound_assessment_paths(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    record = task_repo_module.TaskRecord(
+        task_id="TASK-253",
+        title="Coverage task",
+        priority="P2",
+        estimate="1-2 hours",
+        description=["Agent-focused backlog review support."],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="### TASK-253: Coverage task",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path="tasks/BACKLOG.md",
+    )
+
+    monkeypatch.setattr(triage_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(triage_commands_module, "backlog_path", lambda: tmp_path / "BACKLOG.md")
+    monkeypatch.setattr(
+        triage_commands_module,
+        "backlog_task_records",
+        lambda: {"TASK-253": record},
+    )
+    monkeypatch.setattr(triage_commands_module, "completed_path", lambda: tmp_path / "COMPLETED.md")
+    monkeypatch.setattr(triage_commands_module, "completed_task_ids", lambda: set())
+    monkeypatch.setattr(
+        triage_commands_module,
+        "_recent_assessment_paths",
+        lambda _lookback_days: [
+            "artifacts/assessments/ops/daily/2026-03-04.md",
+            "artifacts/assessments/security/daily/2026-03-05.md",
+            "artifacts/assessments/po/daily/2026-03-06.md",
+        ],
+    )
+    monkeypatch.setattr(triage_commands_module, "parse_active_tasks", list)
+    monkeypatch.setattr(triage_commands_module, "parse_human_blockers", lambda **_kwargs: [])
+
+    result = triage_commands_module.handle_collect(
+        argparse.Namespace(
+            keyword=[],
+            path=[],
+            proposal_id=[],
+            lookback_days=14,
+            include_raw=False,
+            assessment_path_limit=2,
+            include_assessment_paths=False,
+        )
+    )
+
+    assert result.data is not None
+    assert result.data["recent_assessments"]["path_mode"] == "bounded"
+    assert result.data["recent_assessments"]["path_limit"] == 2
+    assert result.data["recent_assessments"]["paths_truncated"] is True
+    assert result.data["recent_assessments"]["paths"] == [
+        "artifacts/assessments/security/daily/2026-03-05.md",
+        "artifacts/assessments/po/daily/2026-03-06.md",
+    ]

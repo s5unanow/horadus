@@ -519,6 +519,8 @@ def test_build_parser_accepts_triage_collect_command() -> None:
             "PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe",
             "--lookback-days",
             "7",
+            "--assessment-path-limit",
+            "3",
             "--include-raw",
             "--format",
             "json",
@@ -531,8 +533,42 @@ def test_build_parser_accepts_triage_collect_command() -> None:
     assert args.path == ["tools/horadus/python/horadus_cli/app.py"]
     assert args.proposal_id == ["PROPOSAL-2026-03-02-agents-cross-role-promotion-dedupe"]
     assert args.lookback_days == 7
+    assert args.assessment_path_limit == 3
+    assert args.include_assessment_paths is False
     assert args.include_raw is True
     assert args.output_format == "json"
+
+
+def test_build_parser_accepts_triage_collect_full_assessment_paths() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "triage",
+            "collect",
+            "--include-assessment-paths",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert args.command == "triage"
+    assert args.triage_command == "collect"
+    assert args.include_assessment_paths is True
+    assert args.assessment_path_limit is None
+
+
+def test_build_parser_rejects_non_positive_assessment_path_limit() -> None:
+    parser = _build_parser()
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "triage",
+                "collect",
+                "--assessment-path-limit",
+                "0",
+            ]
+        )
 
 
 def test_build_parser_preserves_root_flags_for_ops_command() -> None:

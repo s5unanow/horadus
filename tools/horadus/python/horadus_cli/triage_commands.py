@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import argparse
 import re
 from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING, Any
@@ -41,6 +42,14 @@ def _compile_or_pattern(values: list[str]) -> str | None:
     if not cleaned:
         return None
     return "|".join(re.escape(value) for value in cleaned)
+
+
+def _positive_int(value: str) -> int:
+    parsed = int(value)
+    if parsed < 1:
+        msg = "must be a positive integer"
+        raise argparse.ArgumentTypeError(msg)
+    return parsed
 
 
 def handle_collect(args: Any) -> CommandResult:
@@ -99,11 +108,23 @@ def register_triage_commands(subparsers: Any) -> None:
         action="store_true",
         help="Include raw line-level search hits alongside task-aware matches.",
     )
+    assessment_path_group = collect_parser.add_mutually_exclusive_group()
+    assessment_path_group.add_argument(
+        "--assessment-path-limit",
+        type=_positive_int,
+        help="Include at most N recent assessment paths in JSON output.",
+    )
+    assessment_path_group.add_argument(
+        "--include-assessment-paths",
+        action="store_true",
+        help="Include the full recent assessment path list in JSON output.",
+    )
     collect_parser.set_defaults(handler=handle_collect)
 
 
 __all__ = [
     "_compile_or_pattern",
+    "_positive_int",
     "_recent_assessment_paths",
     "completed_path",
     "current_sprint_path",

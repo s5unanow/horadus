@@ -16,6 +16,9 @@ Canonical automation role instructions live in:
 - `agents/automation/`
 - Repo workflow/triage CLI for agent use:
   - `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
+  - JSON output now summarizes recent assessments by role with count + latest
+    artifact metadata by default; add `--assessment-path-limit N` for a bounded
+    path preview or `--include-assessment-paths` to enumerate every path.
 
 Directory convention for raw outputs:
 

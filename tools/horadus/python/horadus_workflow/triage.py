@@ -3,7 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import Any
+from pathlib import PurePosixPath
+from typing import Any, cast
 
 from tools.horadus.python.horadus_workflow.result import CommandResult
 from tools.horadus.python.horadus_workflow.task_repo import (
@@ -51,6 +52,21 @@ class _TaskHitState:
     raw_keys: set[tuple[str, int, str]]
 
 
+@dataclass(slots=True)
+class RecentAssessmentArtifact:
+    path: str
+    role: str
+    report_date: str | None
+
+
+@dataclass(slots=True)
+class AssessmentRoleSummary:
+    role: str
+    count: int
+    latest_path: str
+    latest_date: str | None
+
+
 def _recent_assessment_paths(lookback_days: int) -> list[str]:
     cutoff = datetime.now(tz=UTC).date() - timedelta(days=max(0, lookback_days))
     paths: list[str] = []
@@ -69,6 +85,104 @@ def _compile_or_pattern(values: list[str]) -> str | None:
     if not cleaned:
         return None
     return "|".join(re.escape(value) for value in cleaned)
+
+
+def _recent_assessment_artifact(relative_path: str) -> RecentAssessmentArtifact:
+    path = PurePosixPath(relative_path)
+    role = "unknown"
+    if len(path.parts) >= 4 and path.parts[0:2] == ("artifacts", "assessments"):
+        role = path.parts[2]
+
+    report_date: str | None = None
+    try:
+        report_date = date.fromisoformat(path.stem).isoformat()
+    except ValueError:
+        report_date = None
+
+    return RecentAssessmentArtifact(path=relative_path, role=role, report_date=report_date)
+
+
+def _assessment_role_summaries(
+    recent_paths: list[str],
+) -> list[AssessmentRoleSummary]:
+    summaries: dict[str, AssessmentRoleSummary] = {}
+    for relative_path in recent_paths:
+        artifact = _recent_assessment_artifact(relative_path)
+        current = summaries.get(artifact.role)
+        if current is None:
+            summaries[artifact.role] = AssessmentRoleSummary(
+                role=artifact.role,
+                count=1,
+                latest_path=artifact.path,
+                latest_date=artifact.report_date,
+            )
+            continue
+
+        latest_date = current.latest_date
+        latest_path = current.latest_path
+        artifact_key = (artifact.report_date or "", artifact.path)
+        current_key = (current.latest_date or "", current.latest_path)
+        if artifact_key >= current_key:
+            latest_date = artifact.report_date
+            latest_path = artifact.path
+
+        summaries[artifact.role] = AssessmentRoleSummary(
+            role=artifact.role,
+            count=current.count + 1,
+            latest_path=latest_path,
+            latest_date=latest_date,
+        )
+
+    return sorted(summaries.values(), key=lambda item: item.role)
+
+
+def _assessment_paths_payload(
+    recent_paths: list[str],
+    *,
+    include_all_paths: bool,
+    path_limit: int | None,
+) -> tuple[str, list[str], bool]:
+    if include_all_paths:
+        return "full", list(recent_paths), False
+    if path_limit is None:
+        return "summary", [], False
+    limited_paths = list(recent_paths[-path_limit:])
+    return "bounded", limited_paths, len(limited_paths) < len(recent_paths)
+
+
+def _recent_assessment_payload(
+    recent_paths: list[str],
+    *,
+    include_all_paths: bool,
+    path_limit: int | None,
+) -> dict[str, object]:
+    path_mode, paths, paths_truncated = _assessment_paths_payload(
+        recent_paths,
+        include_all_paths=include_all_paths,
+        path_limit=path_limit,
+    )
+    return {
+        "total_count": len(recent_paths),
+        "roles": [asdict(item) for item in _assessment_role_summaries(recent_paths)],
+        "path_mode": path_mode,
+        "path_limit": None if path_mode != "bounded" else path_limit,
+        "paths_truncated": paths_truncated,
+        "paths": paths,
+    }
+
+
+def _assessment_role_summary_line(role_summaries: list[dict[str, object]]) -> str | None:
+    if not role_summaries:
+        return None
+
+    parts: list[str] = []
+    for summary in role_summaries:
+        latest_date = summary.get("latest_date")
+        if latest_date:
+            parts.append(f"{summary['role']}:{summary['count']}(latest={latest_date})")
+            continue
+        parts.append(f"{summary['role']}:{summary['count']}")
+    return f"- assessment_roles={', '.join(parts)}"
 
 
 def _task_status(task_id: str, *, active_task_ids: set[str], completed_ids: set[str]) -> str:
@@ -429,7 +543,7 @@ def _summary_lines_for_hits(
     active_tasks: list[Any],
     blockers: list[Any],
     overdue_blockers: list[Any],
-    recent_paths: list[str],
+    recent_assessments: dict[str, object],
     keyword_hits: list[dict[str, object]],
     path_hits: list[dict[str, object]],
     proposal_hits: list[dict[str, object]],
@@ -440,7 +554,7 @@ def _summary_lines_for_hits(
         f"- active_tasks={len(active_tasks)}",
         f"- human_blockers={len(blockers)}",
         f"- overdue_human_blockers={len(overdue_blockers)}",
-        f"- recent_assessments={len(recent_paths)}",
+        f"- recent_assessments={recent_assessments['total_count']}",
         f"- keyword_hits={len(keyword_hits)}",
         f"- path_hits={len(path_hits)}",
         f"- proposal_hits={len(proposal_hits)}",
@@ -455,6 +569,15 @@ def _summary_lines_for_hits(
         lines.append(
             f"- overdue_tasks={', '.join(blocker.task_id for blocker in overdue_blockers)}"
         )
+    role_summaries_obj = recent_assessments.get("roles")
+    role_summaries = (
+        cast("list[dict[str, object]]", role_summaries_obj)
+        if isinstance(role_summaries_obj, list)
+        else []
+    )
+    assessment_role_line = _assessment_role_summary_line(role_summaries)
+    if assessment_role_line is not None:
+        lines.append(assessment_role_line)
     for label, hits in (
         ("keyword_tasks", keyword_hits),
         ("path_tasks", path_hits),
@@ -472,6 +595,13 @@ def handle_collect(args: Any) -> CommandResult:
     proposal_pattern = _compile_or_pattern(args.proposal_id or [])
     recent_paths = _recent_assessment_paths(args.lookback_days)
     include_raw = bool(getattr(args, "include_raw", False))
+    include_assessment_paths = bool(getattr(args, "include_assessment_paths", False))
+    assessment_path_limit = getattr(args, "assessment_path_limit", None)
+    recent_assessments = _recent_assessment_payload(
+        recent_paths,
+        include_all_paths=include_assessment_paths,
+        path_limit=assessment_path_limit,
+    )
 
     active_tasks = parse_active_tasks()
     active_task_ids = {task.task_id for task in active_tasks}
@@ -496,7 +626,7 @@ def handle_collect(args: Any) -> CommandResult:
         active_tasks=active_tasks,
         blockers=blockers,
         overdue_blockers=overdue_blockers,
-        recent_paths=recent_paths,
+        recent_assessments=recent_assessments,
         keyword_hits=keyword_hits,
         path_hits=path_hits,
         proposal_hits=proposal_hits,
@@ -521,7 +651,7 @@ def handle_collect(args: Any) -> CommandResult:
                 "path_hits": path_hits,
                 "proposal_hits": proposal_hits,
             },
-            "recent_assessments": recent_paths,
+            "recent_assessments": recent_assessments,
             "lookback_days": args.lookback_days,
         },
     )

@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-238` Prioritize Tier-2 budget with value-of-information scheduling
 - `TASK-225` Make `horadus triage collect` return task-aware search hits
 
 ## Selection Notes
@@ -55,3 +54,4 @@
 - `TASK-207` Use stable source identity keys for GDELT and Telegram watermarks ✅
 - `TASK-229` Add a Novelty Lane Outside the Active Trend List ✅
 - `TASK-232` Strengthen operator adjudication workflow for high-risk events ✅
+- `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling ✅

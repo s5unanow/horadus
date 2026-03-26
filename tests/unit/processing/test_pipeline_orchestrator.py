@@ -391,7 +391,6 @@ async def test_process_items_batches_tier1_and_preserves_result_order(mock_db_se
     tier2.classify_event.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 async def test_process_items_tier1_batch_fallback_handles_partial_failures(mock_db_session) -> None:
     item_fail = _build_item_with_title("Pipeline item fail")
     item_ok = _build_item_with_title("Pipeline item ok")

@@ -4,6 +4,7 @@ Cost tracking and budget enforcement for LLM usage.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
@@ -24,6 +25,22 @@ TIER2 = "tier2"
 EMBEDDING = "embedding"
 
 KNOWN_TIERS = (TIER1, TIER2, EMBEDDING)
+
+
+@dataclass(frozen=True, slots=True)
+class TierBudgetSnapshot:
+    """Bounded budget headroom view for one LLM tier."""
+
+    tier: str
+    calls_used: int
+    call_limit: int
+    remaining_calls: int | None
+    cost_usd: float
+    average_cost_per_call_usd: float | None
+    budget_remaining_usd: float | None
+    daily_cost_limit_usd: float
+    headroom_ratio: float | None
+    estimated_remaining_calls_from_budget: int | None
 
 
 class BudgetExceededError(RuntimeError):
@@ -161,7 +178,13 @@ class CostTracker:
         """Return a compact budget summary for the current UTC date."""
         today = datetime.now(tz=UTC).date()
         query = select(ApiUsage).where(ApiUsage.usage_date == today).order_by(ApiUsage.tier.asc())
-        rows = list((await self.session.scalars(query)).all())
+        scalar_result = await self.session.scalars(query)
+        rows = scalar_result.all() if hasattr(scalar_result, "all") else scalar_result
+        if hasattr(rows, "__await__"):
+            rows = await rows
+        if not isinstance(rows, list | tuple):
+            rows = []
+        rows = list(rows)
         rows_by_tier = {row.tier: row for row in rows}
 
         tiers: dict[str, dict[str, Any]] = {}
@@ -195,6 +218,49 @@ class CostTracker:
             else None,
             "tiers": tiers,
         }
+
+    async def get_tier_budget_snapshot(self, tier: str) -> TierBudgetSnapshot:
+        """Return bounded per-tier headroom signals for scheduling decisions."""
+        normalized_tier = self._normalize_tier(tier)
+        summary = await self.get_daily_summary()
+        tier_payload = summary.get("tiers", {}).get(normalized_tier, {})
+
+        calls_used = int(tier_payload.get("calls", 0) or 0)
+        call_limit = int(tier_payload.get("call_limit", 0) or 0)
+        remaining_calls = max(0, call_limit - calls_used) if call_limit > 0 else None
+        cost_usd = float(tier_payload.get("cost_usd", 0.0) or 0.0)
+        average_cost_per_call_usd = (
+            float(cost_usd / calls_used) if calls_used > 0 and cost_usd > 0 else None
+        )
+        budget_remaining_raw = summary.get("budget_remaining_usd")
+        budget_remaining_usd = (
+            float(budget_remaining_raw) if isinstance(budget_remaining_raw, int | float) else None
+        )
+        daily_cost_limit_usd = float(summary.get("daily_cost_limit_usd", 0.0) or 0.0)
+        headroom_ratio = (
+            max(0.0, budget_remaining_usd / daily_cost_limit_usd)
+            if budget_remaining_usd is not None and daily_cost_limit_usd > 0
+            else None
+        )
+        estimated_remaining_calls_from_budget = (
+            int(Decimal(str(budget_remaining_usd)) / Decimal(str(average_cost_per_call_usd)))
+            if budget_remaining_usd is not None
+            and average_cost_per_call_usd is not None
+            and average_cost_per_call_usd > 0
+            else None
+        )
+        return TierBudgetSnapshot(
+            tier=normalized_tier,
+            calls_used=calls_used,
+            call_limit=call_limit,
+            remaining_calls=remaining_calls,
+            cost_usd=cost_usd,
+            average_cost_per_call_usd=average_cost_per_call_usd,
+            budget_remaining_usd=budget_remaining_usd,
+            daily_cost_limit_usd=daily_cost_limit_usd,
+            headroom_ratio=headroom_ratio,
+            estimated_remaining_calls_from_budget=estimated_remaining_calls_from_budget,
+        )
 
     async def _get_or_create_usage(
         self,

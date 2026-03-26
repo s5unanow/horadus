@@ -210,6 +210,11 @@ Retry semantics:
 - Retryable provider/network/LLM failures are not converted into raw-item `error` rows. They bubble to the Celery task, which retries with backoff.
 - The processing task keeps one database transaction for the batch; when a retryable failure escapes, the session rollback restores item/event/trend writes so replay is safe and idempotent at current scale.
 
+Tier-2 scheduling:
+- When Tier-2 budget pressure is absent, queued candidates continue in their current batch order.
+- Under bounded Tier-2 pressure, the pipeline reorders only the queued Tier-2 lane using deterministic value-of-information factors drawn from Tier-1 relevance, bounded impact proxies, contradiction/ambiguity risk, novelty, and source credibility.
+- The scheduler preserves explainability through structured scheduling logs and reserves bounded fairness slots so late-arriving or low-volume high-impact candidates are not starved by earlier noisy traffic.
+
 Taxonomy drift safety:
 - Tier-2 now emits extracted facts/claims only; deterministic code maps those facts onto eligible trend indicators after classification.
 - If deterministic mapping cannot resolve a unique indicator (`unknown_trend_id`, `unknown_signal_type`, `ambiguous_mapping`, or `no_matching_indicator`), the impact is skipped.

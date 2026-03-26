@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from pydantic import ValidationError
 
-from src.core.trend_config import build_trend_config, resolve_runtime_trend_id
+from src.core.trend_config import (
+    build_trend_config,
+    horizon_variant_from_definition,
+    horizon_variant_payload_from_definition,
+    resolve_runtime_trend_id,
+    safe_horizon_variant_from_definition,
+    trend_variant_sort_key,
+)
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 from tests.unit.trend_forecast_contract_fixtures import (
     sample_binary_forecast_contract,
@@ -50,6 +58,44 @@ indicators:
         "Force repositioning without direct hostile contact."
     )
     assert indicators["military_incident"]["description"] is None
+
+
+def test_load_trends_from_config_dir_preserves_horizon_variant_metadata(tmp_path: Path) -> None:
+    config_dir = tmp_path / "trends"
+    config_dir.mkdir()
+    (config_dir / "eu-russia-30d.yaml").write_text(
+        f"""
+id: "eu-russia-30d"
+name: "EU-Russia 30d"
+baseline_probability: 0.10
+decay_half_life_days: 30
+{sample_forecast_contract_yaml()}
+horizon_variant:
+  theme_key: "eu-russia-conflict"
+  theme_name: "EU-Russia Conflict"
+  label: "30d"
+  window_days: 30
+  sort_order: 2
+indicators:
+  signal:
+    weight: 0.05
+    direction: escalatory
+    type: leading
+    keywords: ["one"]
+""".strip()
+        + "\n",
+        encoding="utf-8",
+    )
+
+    trends = load_trends_from_config_dir(config_dir=config_dir)
+
+    assert trends[0].definition["horizon_variant"] == {
+        "theme_key": "eu-russia-conflict",
+        "theme_name": "EU-Russia Conflict",
+        "label": "30d",
+        "window_days": 30,
+        "sort_order": 2,
+    }
 
 
 def test_load_trends_from_config_dir_rejects_missing_directory(tmp_path: Path) -> None:
@@ -273,3 +319,57 @@ def test_build_trend_config_rejects_non_mapping_indicators() -> None:
             indicators=["not-a-mapping"],  # type: ignore[arg-type]
             definition={"forecast_contract": sample_binary_forecast_contract()},
         )
+
+
+def test_horizon_variant_helpers_cover_invalid_and_valid_definition_shapes() -> None:
+    with pytest.raises(ValueError, match=r"definition\.horizon_variant must be a mapping"):
+        horizon_variant_from_definition({"horizon_variant": "bad"})
+
+    assert safe_horizon_variant_from_definition({"horizon_variant": "bad"}) is None
+
+    payload = horizon_variant_payload_from_definition(
+        {
+            "horizon_variant": {
+                "theme_key": "shared-theme",
+                "label": "30d",
+                "window_days": 30,
+                "sort_order": 2,
+            }
+        }
+    )
+
+    assert payload == {
+        "theme_key": "shared-theme",
+        "label": "30d",
+        "window_days": 30,
+        "sort_order": 2,
+    }
+
+
+def test_trend_variant_sort_key_falls_back_without_runtime_identity() -> None:
+    fallback = SimpleNamespace(name="Fallback Trend", definition={})
+    keyed = SimpleNamespace(
+        name="Shared Theme 7d",
+        runtime_trend_id="shared-theme-7d",
+        definition={
+            "horizon_variant": {
+                "theme_key": "shared-theme",
+                "label": "7d",
+                "window_days": 7,
+                "sort_order": 1,
+            }
+        },
+    )
+
+    assert trend_variant_sort_key(fallback) == (
+        "fallback trend",
+        0,
+        "fallback trend",
+        "fallback trend",
+    )
+    assert trend_variant_sort_key(keyed) == (
+        "shared-theme",
+        1,
+        "7d",
+        "shared-theme-7d",
+    )

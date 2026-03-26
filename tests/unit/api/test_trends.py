@@ -62,6 +62,7 @@ def _build_trend(
     trend_id: UUID | None = None,
     name: str = "Test Trend",
     is_active: bool = True,
+    horizon_variant: dict[str, object] | None = None,
 ) -> Trend:
     now = datetime.now(tz=UTC)
     return Trend(
@@ -72,6 +73,7 @@ def _build_trend(
         definition={
             "id": "test-trend",
             "forecast_contract": sample_binary_forecast_contract(),
+            **({"horizon_variant": horizon_variant} if horizon_variant is not None else {}),
         },
         baseline_log_odds=prob_to_logodds(0.1),
         current_log_odds=prob_to_logodds(0.2),
@@ -89,7 +91,15 @@ def _use_tmp_trend_root(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
 
 @pytest.mark.asyncio
 async def test_list_trends_returns_response_models(mock_db_session) -> None:
-    trend = _build_trend()
+    trend = _build_trend(
+        horizon_variant={
+            "theme_key": "shared-theme",
+            "theme_name": "Shared Theme",
+            "label": "30d",
+            "window_days": 30,
+            "sort_order": 2,
+        }
+    )
     mock_db_session.scalars.return_value = SimpleNamespace(all=lambda: [trend])
 
     result = await list_trends(
@@ -107,6 +117,9 @@ async def test_list_trends_returns_response_models(mock_db_session) -> None:
     assert result[0].probability_band[1] == pytest.approx(0.29765, rel=0.01)
     assert result[0].confidence == "medium"
     assert len(result[0].top_movers_7d) == 1
+    assert result[0].horizon_variant is not None
+    assert result[0].horizon_variant.theme_key == "shared-theme"
+    assert result[0].horizon_variant.label == "30d"
     assert mock_db_session.scalars.await_count == 1
 
 

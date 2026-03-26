@@ -105,29 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
-### TASK-233: Support Multi-Horizon Trend Variants for the Same Underlying Theme
-**Priority**: P2 (Medium)
-**Estimate**: 6-8 hours
-
-Many forecast subjects behave differently across 7-day, 30-day, and 90-day
-horizons. Add bounded support for multi-horizon trend variants so the system
-can represent short-, medium-, and longer-horizon probabilities without
-pretending they are interchangeable.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/core/trend_config.py`, `src/api/routes/trends.py`, `src/storage/models.py`, `config/trends/`, `tests/`, `alembic/`
-
-**Acceptance Criteria**:
-- [ ] Extend trend definitions so related horizon variants can be modeled explicitly without overloading one trend record
-- [ ] Keep scoring, decay, outcomes, and calibration paths horizon-aware
-- [ ] Preserve backward compatibility for existing single-horizon trends
-- [ ] Expose horizon metadata clearly in APIs and reporting outputs
-- [ ] Add regression coverage for multiple horizon variants under the same theme
-
----
-
 ### TASK-234: Make Uncertainty and Momentum First-Class Trend State
 **Priority**: P2 (Medium)
 **Estimate**: 4-6 hours

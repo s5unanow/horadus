@@ -362,3 +362,4 @@
 - TASK-362: Close Sprint 7 and seed Sprint 8 from the live backlog ✅
 ## Sprint 8
 - TASK-226: Add Compact Assessment Summaries to `horadus triage collect` ✅
+- TASK-233: Support Multi-Horizon Trend Variants for the Same Underlying Theme ✅

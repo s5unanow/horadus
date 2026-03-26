@@ -21,6 +21,7 @@ from src.core.config import settings
 from src.core.drift_alert_notifier import DriftAlertWebhookNotifier
 from src.core.observability import record_calibration_drift_alert
 from src.core.risk import get_risk_level
+from src.core.trend_config import horizon_variant_payload_from_definition, trend_variant_sort_key
 from src.core.trend_engine import logodds_to_prob
 from src.storage.models import (
     EventItem,
@@ -69,6 +70,7 @@ class TrendMovement:
     risk_level: str
     top_movers_7d: list[str]
     movement_chart: str
+    horizon_variant: dict[str, object] | None = None
 
 
 @dataclass
@@ -816,23 +818,16 @@ class CalibrationDashboardService:
         if trend_id is not None:
             trends_query = trends_query.where(Trend.id == trend_id)
         trends = list((await self.session.scalars(trends_query)).all())
-
+        trends.sort(key=trend_variant_sort_key)
         trend_movements: list[TrendMovement] = []
         for trend in trends:
             current_probability = logodds_to_prob(float(trend.current_log_odds))
             weekly_change = await self._calculate_weekly_change(
-                trend_id=trend.id,
-                current_probability=current_probability,
-                as_of=period_end,
+                trend_id=trend.id, current_probability=current_probability, as_of=period_end
             )
-            top_movers = await self._load_top_movers(
-                trend_id=trend.id,
-                as_of=period_end,
-            )
+            top_movers = await self._load_top_movers(trend_id=trend.id, as_of=period_end)
             chart = await self._build_movement_chart(
-                trend_id=trend.id,
-                current_probability=current_probability,
-                as_of=period_end,
+                trend_id=trend.id, current_probability=current_probability, as_of=period_end
             )
             trend_movements.append(
                 TrendMovement(
@@ -843,6 +838,9 @@ class CalibrationDashboardService:
                     risk_level=get_risk_level(current_probability).value,
                     top_movers_7d=top_movers,
                     movement_chart=chart,
+                    horizon_variant=horizon_variant_payload_from_definition(
+                        getattr(trend, "definition", None)
+                    ),
                 )
             )
         return trend_movements

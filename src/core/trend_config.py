@@ -48,6 +48,16 @@ class TrendIndicatorConfig(BaseModel):
     keywords: list[str] = Field(default_factory=list)
 
 
+class TrendHorizonVariant(BaseModel):
+    """Explicit grouping metadata for related trend horizons under one theme."""
+
+    theme_key: str = Field(..., min_length=1)
+    theme_name: str | None = Field(default=None, min_length=1)
+    label: str = Field(..., min_length=1)
+    window_days: int | None = Field(default=None, ge=1)
+    sort_order: int = 0
+
+
 class TrendConfig(BaseModel):
     """Validated shape for `config/trends/*.yaml` files."""
 
@@ -59,6 +69,7 @@ class TrendConfig(BaseModel):
     baseline_probability: float = Field(..., ge=0.0, le=1.0)
     decay_half_life_days: int = Field(default=30, ge=1)
     forecast_contract: trend_forecast_contract_module.TrendForecastContract | None = None
+    horizon_variant: TrendHorizonVariant | None = None
     indicators: dict[str, TrendIndicatorConfig] = Field(default_factory=dict)
     disqualifiers: list[TrendDisqualifier] = Field(default_factory=list)
     falsification_criteria: TrendFalsificationCriteria = Field(
@@ -85,6 +96,43 @@ def normalize_definition_payload(definition: Mapping[str, Any] | None) -> dict[s
     """Return a mutable definition mapping for downstream normalization."""
 
     return dict(definition) if isinstance(definition, Mapping) else {}
+
+
+def horizon_variant_from_definition(
+    definition: Mapping[str, Any] | None,
+) -> TrendHorizonVariant | None:
+    """Load validated multi-horizon metadata from a trend definition mapping."""
+
+    normalized_definition = normalize_definition_payload(definition)
+    raw_variant = normalized_definition.get("horizon_variant")
+    if raw_variant is None:
+        return None
+    if not isinstance(raw_variant, Mapping):
+        msg = "definition.horizon_variant must be a mapping"
+        raise ValueError(msg)
+    return TrendHorizonVariant.model_validate(dict(raw_variant))
+
+
+def safe_horizon_variant_from_definition(
+    definition: Mapping[str, Any] | None,
+) -> TrendHorizonVariant | None:
+    """Return definition-backed horizon metadata when it is present and valid."""
+
+    try:
+        return horizon_variant_from_definition(definition)
+    except (TypeError, ValueError):
+        return None
+
+
+def horizon_variant_payload_from_definition(
+    definition: Mapping[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Return a JSON-safe horizon-variant payload for outward responses."""
+
+    variant = safe_horizon_variant_from_definition(definition)
+    if variant is None:
+        return None
+    return variant.model_dump(mode="json", exclude_none=True)
 
 
 def resolve_trend_config_sync_dir(
@@ -208,3 +256,26 @@ def index_trends_by_runtime_id(trends: Sequence[Any]) -> dict[str, Any]:
             raise ValueError(msg)
         trend_by_id[runtime_trend_id] = trend
     return trend_by_id
+
+
+def trend_variant_sort_key(trend: Any) -> tuple[str, int, str, str]:
+    """Sort trends by shared theme, explicit horizon order, then display identity."""
+
+    try:
+        runtime_trend_id = trend_runtime_id_for_record(trend)
+    except ValueError:
+        runtime_trend_id = str(
+            getattr(trend, "runtime_trend_id", "")
+            or getattr(trend, "name", "")
+            or getattr(trend, "id", "")
+        )
+    variant = safe_horizon_variant_from_definition(getattr(trend, "definition", None))
+    theme_key = variant.theme_key if variant is not None else runtime_trend_id
+    sort_order = variant.sort_order if variant is not None else 0
+    label = variant.label if variant is not None else str(getattr(trend, "name", "") or "")
+    return (
+        theme_key.lower(),
+        sort_order,
+        label.lower(),
+        runtime_trend_id.lower(),
+    )

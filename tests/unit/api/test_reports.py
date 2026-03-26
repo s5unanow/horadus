@@ -258,6 +258,12 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
             TrendMovement(
                 trend_id=trend_id,
                 trend_name="EU-Russia",
+                horizon_variant={
+                    "theme_key": "shared-theme",
+                    "label": "30d",
+                    "window_days": 30,
+                    "sort_order": 2,
+                },
                 current_probability=0.31,
                 weekly_change=0.04,
                 risk_level="elevated",
@@ -329,6 +335,12 @@ async def test_get_calibration_dashboard_returns_payload(mock_db_session, monkey
     assert result.mean_brier_score == pytest.approx(0.19)
     assert result.calibration_curve[0].actual_rate == pytest.approx(0.4)
     assert result.trend_movements[0].trend_name == "EU-Russia"
+    assert result.trend_movements[0].horizon_variant == {
+        "theme_key": "shared-theme",
+        "label": "30d",
+        "window_days": 30,
+        "sort_order": 2,
+    }
     assert result.trend_movements[0].movement_chart == "._-=+*"
     assert len(result.drift_alerts) == 1
     assert result.drift_alerts[0].alert_type == "mean_brier_drift"

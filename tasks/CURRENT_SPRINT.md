@@ -9,8 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-225` Make `horadus triage collect` return task-aware search hits
-
 ## Selection Notes
 
 - Sprint 7 opens early because Sprint 6's active queue is complete and the live sprint surface should reflect the next real execution window.
@@ -55,3 +53,4 @@
 - `TASK-229` Add a Novelty Lane Outside the Active Trend List ✅
 - `TASK-232` Strengthen operator adjudication workflow for high-risk events ✅
 - `TASK-238` Prioritize Tier-2 Budget with Value-of-Information Scheduling ✅
+- `TASK-225` Make `horadus triage collect` return task-aware search hits ✅

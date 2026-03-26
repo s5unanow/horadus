@@ -12,11 +12,15 @@ if TYPE_CHECKING:
     from tools.horadus.python.horadus_workflow.result import CommandResult
 
 completed_path = workflow_task_repo.completed_path
+backlog_path = workflow_task_repo.backlog_path
+backlog_task_records = workflow_task_repo.backlog_task_records
+completed_task_ids = workflow_task_repo.completed_task_ids
 current_sprint_path = workflow_task_repo.current_sprint_path
 line_search = workflow_task_repo.line_search
 parse_active_tasks = workflow_task_repo.parse_active_tasks
 parse_human_blockers = workflow_task_repo.parse_human_blockers
 repo_root = workflow_task_repo.repo_root
+task_record = workflow_task_repo.task_record
 
 
 def _recent_assessment_paths(lookback_days: int) -> list[str]:
@@ -43,13 +47,17 @@ def handle_collect(args: Any) -> CommandResult:
     original_repo_root = workflow_task_repo.repo_root
     workflow_task_repo.repo_root = repo_root
     workflow_triage.repo_root = repo_root
+    workflow_triage.backlog_path = backlog_path
+    workflow_triage.backlog_task_records = backlog_task_records
     workflow_triage.completed_path = completed_path
+    workflow_triage.completed_task_ids = completed_task_ids
     workflow_triage.current_sprint_path = current_sprint_path
     workflow_triage.line_search = line_search
     workflow_triage.parse_active_tasks = parse_active_tasks
     workflow_triage.parse_human_blockers = parse_human_blockers
     workflow_triage._recent_assessment_paths = _recent_assessment_paths
     workflow_triage._compile_or_pattern = _compile_or_pattern
+    workflow_triage.task_record = task_record
     try:
         return workflow_triage.handle_collect(args)
     finally:
@@ -85,6 +93,11 @@ def register_triage_commands(subparsers: Any) -> None:
         type=int,
         default=14,
         help="How many days of assessment artifacts to include.",
+    )
+    collect_parser.add_argument(
+        "--include-raw",
+        action="store_true",
+        help="Include raw line-level search hits alongside task-aware matches.",
     )
     collect_parser.set_defaults(handler=handle_collect)
 

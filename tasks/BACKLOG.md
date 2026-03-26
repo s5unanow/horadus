@@ -105,24 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
-### TASK-225: Make `horadus triage collect` Return Task-Aware Search Hits
-**Priority**: P2 (Medium)
-**Estimate**: 1-2 hours
-
-Replace raw line-grep style search hits in triage bundles with deduplicated,
-task-aware matches that are directly useful to agents during backlog review.
-
-**Files**: `tools/horadus/python/horadus_cli/triage_commands.py`, `tools/horadus/python/horadus_workflow/triage.py`, `tools/horadus/python/horadus_workflow/task_repo.py`, `tests/horadus_cli/`, `tests/workflow/`
-
-**Acceptance Criteria**:
-- [ ] Convert keyword/path/proposal search hits into task-aware records with `task_id`, title, status, and matched fields
-- [ ] Deduplicate multiple matching lines from the same task while preserving enough context to explain the hit
-- [ ] Keep raw line-level details optional rather than the default payload
-- [ ] Preserve JSON stability for agent consumption and concise text summaries for humans
-- [ ] Add regression tests covering keyword, path, and proposal matching
-
----
-
 ### TASK-226: Add Compact Assessment Summaries to `horadus triage collect`
 **Priority**: P2 (Medium)
 **Estimate**: 1-2 hours

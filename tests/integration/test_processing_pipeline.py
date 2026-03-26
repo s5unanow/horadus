@@ -17,7 +17,9 @@ from src.processing.tier2_classifier import Tier2Classifier
 from src.storage.database import async_session_maker
 from src.storage.models import (
     ApiUsage,
+    CanonicalEntity,
     Event,
+    EventEntity,
     EventItem,
     NoveltyCandidate,
     ProcessingStatus,
@@ -100,6 +102,11 @@ class FakeTier2Completions:
             "extracted_what": "Cross-border military force movement",
             "extracted_where": "Baltic region",
             "extracted_when": "2026-02-07T12:00:00Z",
+            "entities": [
+                {"name": "NATO", "entity_type": "organization", "role": "actor"},
+                {"name": "Russia", "entity_type": "organization", "role": "actor"},
+                {"name": "Baltic region", "entity_type": "location", "role": "location"},
+            ],
             "claims": ["Troop deployment increased near the border."],
             "categories": ["military", "security"],
         }
@@ -138,6 +145,52 @@ class FakeTier2NoImpactCompletions:
             ],
             usage=SimpleNamespace(prompt_tokens=180, completion_tokens=70),
         )
+
+
+def _assert_pipeline_event_registry_state(
+    *,
+    event: Event,
+    event_entities: list[EventEntity],
+    canonical_entities: list[CanonicalEntity],
+) -> None:
+    assert event.extracted_what == "Cross-border military force movement"
+    assert event.categories == ["military", "security"]
+    assert len(event_entities) == 3
+    assert {row.mention_text for row in event_entities} == {"NATO", "Russia", "Baltic region"}
+    assert all(row.canonical_entity_id is not None for row in event_entities)
+    assert len(canonical_entities) == 3
+
+
+def _assert_pipeline_trend_updates(
+    *,
+    result: Any,
+    item: RawItem,
+    saved_item: RawItem,
+    event: Event,
+    saved_trend: Trend,
+    evidence_records: list[TrendEvidence],
+) -> None:
+    assert result.scanned >= 1
+    assert result.processed >= 1
+    assert result.classified >= 1
+    assert result.errors == 0
+    assert result.trend_impacts_seen >= 1
+    assert result.trend_updates >= 1
+    assert any(
+        row.item_id == item.id and row.final_status == ProcessingStatus.CLASSIFIED
+        for row in result.results
+    )
+    assert saved_item.processing_status == ProcessingStatus.CLASSIFIED
+    assert saved_item.embedding is not None
+    assert isinstance(event.extracted_claims, dict)
+    assert len(event.extracted_claims["trend_impacts"]) == 1
+    assert float(saved_trend.current_log_odds) > float(saved_trend.baseline_log_odds)
+    assert len(evidence_records) == 1
+    assert evidence_records[0].signal_type == "military_movement"
+    assert float(evidence_records[0].base_weight) == pytest.approx(0.04, rel=0.001)
+    assert float(evidence_records[0].direction_multiplier) == pytest.approx(1.0)
+    assert isinstance(evidence_records[0].trend_definition_hash, str)
+    assert len(evidence_records[0].trend_definition_hash) == 64
 
 
 @pytest.mark.asyncio
@@ -227,6 +280,10 @@ async def test_processing_pipeline_runs_end_to_end(monkeypatch: pytest.MonkeyPat
 
         event = await session.scalar(select(Event).where(Event.id == event_link.event_id))
         assert event is not None
+        event_entities = (
+            await session.scalars(select(EventEntity).where(EventEntity.event_id == event.id))
+        ).all()
+        canonical_entities = (await session.scalars(select(CanonicalEntity))).all()
         saved_trend = await session.scalar(select(Trend).where(Trend.id == trend.id))
         assert saved_trend is not None
         evidence_records = (
@@ -238,29 +295,19 @@ async def test_processing_pipeline_runs_end_to_end(monkeypatch: pytest.MonkeyPat
             )
         ).all()
 
-        assert result.scanned >= 1
-        assert result.processed >= 1
-        assert result.classified >= 1
-        assert result.errors == 0
-        assert result.trend_impacts_seen >= 1
-        assert result.trend_updates >= 1
-        assert any(
-            row.item_id == item.id and row.final_status == ProcessingStatus.CLASSIFIED
-            for row in result.results
+        _assert_pipeline_trend_updates(
+            result=result,
+            item=item,
+            saved_item=saved_item,
+            event=event,
+            saved_trend=saved_trend,
+            evidence_records=evidence_records,
         )
-        assert saved_item.processing_status == ProcessingStatus.CLASSIFIED
-        assert saved_item.embedding is not None
-        assert event.extracted_what == "Cross-border military force movement"
-        assert event.categories == ["military", "security"]
-        assert isinstance(event.extracted_claims, dict)
-        assert len(event.extracted_claims["trend_impacts"]) == 1
-        assert float(saved_trend.current_log_odds) > float(saved_trend.baseline_log_odds)
-        assert len(evidence_records) == 1
-        assert evidence_records[0].signal_type == "military_movement"
-        assert float(evidence_records[0].base_weight) == pytest.approx(0.04, rel=0.001)
-        assert float(evidence_records[0].direction_multiplier) == pytest.approx(1.0)
-        assert isinstance(evidence_records[0].trend_definition_hash, str)
-        assert len(evidence_records[0].trend_definition_hash) == 64
+        _assert_pipeline_event_registry_state(
+            event=event,
+            event_entities=event_entities,
+            canonical_entities=canonical_entities,
+        )
 
 
 @pytest.mark.asyncio

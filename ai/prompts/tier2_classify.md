@@ -20,6 +20,13 @@ Return JSON only, with this exact shape:
   "extracted_what": "what happened",
   "extracted_where": "location or null",
   "extracted_when": "ISO-8601 datetime or null",
+  "entities": [
+    {
+      "name": "entity text",
+      "entity_type": "person | organization | location",
+      "role": "actor | location"
+    }
+  ],
   "claims": ["factual claim"],
   "categories": ["taxonomy-tag"],
   "has_contradictions": false,
@@ -30,8 +37,11 @@ Return JSON only, with this exact shape:
 Rules:
 - Set `has_contradictions=true` when sources materially disagree on key factual claims.
 - Set `contradiction_notes` to a short sentence describing the disagreement, else `null`.
+- Return `entities` as the typed canonical-mention list for durable registry linking.
+- Use `role="actor"` for people and organizations in `extracted_who`; use `role="location"` only for locations.
 - Keep `claims` in a single language per event; use the dominant source language (`en`, `uk`, or `ru`) and avoid mixing languages in one event payload.
 - Keep `summary`, `extracted_who`, `extracted_what`, and `extracted_where` in concise English canonical phrasing even when the source material is Ukrainian or Russian.
+- Keep each `entities[].name` aligned to the same concise English canonical phrasing used in `extracted_who` / `extracted_where`.
 - Make each claim specific enough that deterministic code can later map it to trend indicators without guessing.
 - Keep `summary` concise (2 sentences).
 - Persist `summary` as the event-level synthesized summary (`events.event_summary`).

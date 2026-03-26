@@ -31,6 +31,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
 from src.storage.coverage_models import CoverageSnapshot
+from src.storage.entity_models import CanonicalEntity, CanonicalEntityAlias, EventEntity
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
     EVENT_ACTIVITY_STATE_SQL_VALUES,
@@ -48,16 +49,11 @@ from src.storage.restatement_models import (
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
-_ = (
-    CoverageSnapshot,
-    EventAdjudication,
-    EventLineage,
-    HumanFeedback,
-    NoveltyCandidate,
-    PrivilegedWriteAudit,
-    TrendRestatement,
-    TrendStateVersion,
-)
+# fmt: off
+_ = (CanonicalEntity, CanonicalEntityAlias, CoverageSnapshot, EventAdjudication, EventEntity,
+     EventLineage, HumanFeedback, NoveltyCandidate, PrivilegedWriteAudit, TrendRestatement,
+     TrendStateVersion)
+# fmt: on
 
 
 class SourceType(enum.StrEnum):

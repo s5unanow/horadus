@@ -6,9 +6,28 @@ import json
 from datetime import UTC, datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from src.processing.entity_registry import sync_event_entities
 from src.storage.event_extraction import promote_canonical_extraction
+
+
+class Tier2Entity(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    entity_type: str = Field(pattern="^(person|organization|location)$")
+    role: str = Field(pattern="^(actor|location)$")
+
+    @model_validator(mode="after")
+    def _validate_role(self) -> Tier2Entity:
+        if self.role == "location" and self.entity_type != "location":
+            msg = "Location-role entities must use entity_type='location'"
+            raise ValueError(msg)
+        if self.role == "actor" and self.entity_type not in {"person", "organization"}:
+            msg = "Actor-role entities must use entity_type='person' or 'organization'"
+            raise ValueError(msg)
+        return self
 
 
 class Tier2Output(BaseModel):
@@ -21,6 +40,7 @@ class Tier2Output(BaseModel):
     extracted_when: str | None = None
     claims: list[str] = Field(default_factory=list)
     categories: list[str] = Field(default_factory=list)
+    entities: list[Tier2Entity] = Field(default_factory=list)
     has_contradictions: bool = False
     contradiction_notes: str | None = None
 
@@ -90,6 +110,7 @@ async def persist_tier2_output(
     mapped_impacts_count: Any,
 ) -> tuple[int, int]:
     apply_output(event=event, output=output, trends=trends)
+    await sync_event_entities(session=session, event=event, output=output)
     promote_canonical_extraction(event, extraction_provenance=extraction_provenance)
     await sync_event_claims(session=session, event=event)
     await session.flush()

@@ -232,6 +232,13 @@ Supported event filters:
 - `contradicted` (`true`/`false`)
 - `days` (1..30), `limit` (1..200)
 
+`GET /api/v1/events/{event_id}` now also includes `entities`, a typed list of
+event mentions with:
+- `role` / `entity_type`
+- `mention_text`
+- `resolution_status` / `resolution_reason`
+- optional `canonical_entity` (`id`, `name`, `entity_type`) when a canonical link exists
+
 ## Reports
 
 - `GET /api/v1/reports`

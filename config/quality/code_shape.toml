@@ -242,11 +242,6 @@ path = "tests/unit/core/test_observability.py"
 "test_observability_recorders_cover_metric_paths" = 32
 
 [[legacy_files]]
-path = "tests/integration/test_processing_pipeline.py"
-[legacy_files.member_max_complexity]
-"test_processing_pipeline_runs_end_to_end" = 28
-
-[[legacy_files]]
 path = "tests/unit/eval/test_benchmark.py"
 [legacy_files.member_max_complexity]
 "test_run_gold_set_benchmark_writes_results" = 39

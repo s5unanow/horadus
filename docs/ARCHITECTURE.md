@@ -440,6 +440,7 @@ Suggested alert thresholds (initial defaults, tune by workload):
 | EvidenceRecorder | Audit trail | Append-only records |
 | SnapshotService | Time-series | Hourly snapshots |
 | ReportGenerator | Weekly/monthly reports | Stats + LLM narrative |
+| CalibrationDashboardService | Operator diagnostics | Calibration + advisory source reliability by source/tier/topic/geography |
 
 ### Storage Layer
 

@@ -17,8 +17,6 @@ path = "src/api/routes/feedback.py"
 
 [[legacy_files]]
 path = "src/api/routes/reports.py"
-[legacy_files.member_max_lines]
-"get_calibration_dashboard" = 141
 
 [[legacy_files]]
 path = "src/api/routes/trends.py"

@@ -105,30 +105,6 @@ umask.
 - [ ] Tests cover: compare primitive, permission enforcement behavior, and failure/warn paths
 - [ ] Human sign-off recorded before merge
 
-### TASK-237: Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility
-**Priority**: P2 (Medium)
-**Estimate**: 6-8 hours
-
-Static source credibility tiers are useful as a baseline, but they are too
-blunt to fully represent topic-specific, region-specific, and time-varying
-source behavior. Extend the existing reliability diagnostics so the system can
-surface empirical source reliability patterns and optionally derive bounded
-advisory adjustments without replacing the operator-controlled base ratings.
-
-**Assessment-Ref**:
-- User-provided external architecture evaluation on 2026-03-06
-
-**Files**: `src/core/calibration_dashboard.py`, `src/core/source_credibility.py`, `src/api/routes/reports.py`, `src/storage/models.py`, `tests/`, `docs/`
-
-**Acceptance Criteria**:
-- [ ] Extend reliability diagnostics to segment outcome-linked source behavior by bounded dimensions such as source, source tier, topic family, or geography where data is available
-- [ ] Define a conservative time-varying reliability signal or advisory adjustment layer that never silently overrides configured base credibility
-- [ ] Keep sparse-data handling fail-safe by suppressing or flagging low-sample diagnostics instead of producing misleading precision
-- [ ] Expose source-reliability diagnostics in an operator-facing API/report path with enough context to distinguish configured credibility from empirical advisory signals
-- [ ] Add regression coverage for stable, drifting, and low-sample reliability cases
-
----
-
 ### TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces
 **Priority**: P2 (Medium)
 **Estimate**: 3-5 hours

@@ -1,11 +1,3 @@
 {
-  "allowlist": [
-    {
-      "id": "CVE-2026-4539",
-      "package": "pygments",
-      "version": "2.19.2",
-      "reason": "pip-audit reports no fixed version as of 2026-03-25; the finding is currently present only via dev-extra transitive dependencies.",
-      "review_after": "2026-04-08"
-    }
-  ]
+  "allowlist": []
 }

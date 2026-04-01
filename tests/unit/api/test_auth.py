@@ -41,6 +41,10 @@ def _build_app(manager: APIKeyManager) -> FastAPI:
     app = FastAPI()
     app.add_middleware(APIKeyAuthMiddleware, manager=manager)
 
+    @app.get("/health/live")
+    async def health_live() -> dict[str, str]:
+        return {"status": "up"}
+
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
@@ -55,6 +59,15 @@ def _build_app(manager: APIKeyManager) -> FastAPI:
     )
     async def admin_protected() -> dict[str, str]:
         return {"status": "admin-ok"}
+
+    @app.get(
+        "/api/v1/ops-protected",
+        dependencies=[
+            Depends(auth_middleware_module.require_production_privileged_access("test.ops"))
+        ],
+    )
+    async def ops_protected() -> dict[str, str]:
+        return {"status": "ops-ok"}
 
     app.include_router(auth_module.router, prefix="/api/v1/auth", tags=["Auth"])
 
@@ -161,14 +174,47 @@ def test_privileged_route_allows_admin_header(
     assert last_log.kwargs["outcome"] == "authorized"
 
 
-def test_health_route_bypasses_auth() -> None:
+def test_liveness_route_bypasses_auth() -> None:
     manager, _credential = _build_manager()
     client = TestClient(_build_app(manager))
 
-    response = client.get("/health")
+    response = client.get("/health/live")
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "up"}
+
+
+def test_production_privileged_access_is_skipped_in_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "ENVIRONMENT", "development")
+    client = TestClient(_build_app(manager))
+
+    response = client.get(
+        "/api/v1/ops-protected",
+        headers={"X-API-Key": credential},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ops-ok"}
+
+
+def test_production_privileged_access_requires_admin_outside_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    manager, credential = _build_manager()
+    monkeypatch.setattr(auth_middleware_module.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    client = TestClient(_build_app(manager))
+
+    response = client.get(
+        "/api/v1/ops-protected",
+        headers={"X-API-Key": credential},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == "Admin API key required"
 
 
 @pytest.mark.asyncio

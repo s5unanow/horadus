@@ -115,9 +115,9 @@ while [[ $# -gt 0 ]]; do
   shift
 done
 cat >"$output" <<'JSON'
-{"dependencies":[{"name":"pygments","version":"2.19.2","vulns":[{"id":"CVE-2026-4539","aliases":[],"fix_versions":[],"description":"regex complexity"}]}],"fixes":[]}
+{"dependencies":[],"fixes":[]}
 JSON
-exit 1
+exit 0
 """,
         encoding="utf-8",
     )

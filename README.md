@@ -129,8 +129,9 @@ Authentication header:
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/metrics` | Prometheus metrics |
+| GET | `/health/live` | Minimal unauthenticated liveness probe |
+| GET | `/health` | Detailed health status (admin-auth outside development) |
+| GET | `/metrics` | Prometheus metrics (admin-auth outside development) |
 | GET | `/api/v1/trends` | List all trends with current probabilities |
 | GET | `/api/v1/trends/{id}` | Get trend details |
 | GET | `/api/v1/trends/{id}/history` | Get probability time series |

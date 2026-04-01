@@ -82,9 +82,16 @@ OPENAPI_TAGS = [
     },
 ]
 
-_DEFAULT_AUTH_EXEMPT_PREFIXES = (
+_DEVELOPMENT_AUTH_EXEMPT_PREFIXES = (
     "/health",
     "/metrics",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+)
+
+_PRODUCTION_AUTH_EXEMPT_PREFIXES = (
+    "/health/live",
     "/docs",
     "/redoc",
     "/openapi.json",
@@ -164,7 +171,9 @@ def _api_docs_urls() -> tuple[str | None, str | None, str | None]:
 
 
 def _auth_exempt_prefixes() -> tuple[str, ...]:
-    return _DEFAULT_AUTH_EXEMPT_PREFIXES
+    if settings.is_development:
+        return _DEVELOPMENT_AUTH_EXEMPT_PREFIXES
+    return _PRODUCTION_AUTH_EXEMPT_PREFIXES
 
 
 def create_app() -> FastAPI:

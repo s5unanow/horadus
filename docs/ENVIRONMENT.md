@@ -34,7 +34,7 @@ This document lists environment variables used by the Horadus backend.
 | `API_RATE_LIMIT_WINDOW_SECONDS` | `60` | Distributed rate-limit window size. |
 | `API_RATE_LIMIT_STRATEGY` | `fixed_window` | Rate-limit algorithm (`fixed_window` or `sliding_window`). |
 | `API_RATE_LIMIT_REDIS_PREFIX` | `horadus:api_rate_limit` | Redis key prefix for per-key rate-limit buckets. |
-| `API_KEYS_PERSIST_PATH` | empty | Optional file path for persisted runtime API key metadata. |
+| `API_KEYS_PERSIST_PATH` | empty | Optional writable file path for persisted runtime API key metadata. Keep it separate from read-only `*_FILE` secret mounts and use a private parent directory (`0700`) plus owner-only file mode (`0600`). |
 | `CORS_ORIGINS` | local origins | Comma-separated origin list. |
 | `HORADUS_PUBLIC_DOMAIN` | `localhost` | Public hostname served by production HTTPS ingress (Caddy). |
 | `CADDY_ACME_EMAIL` | `admin@localhost` | Email identity used for ACME certificate registration/renewal. |

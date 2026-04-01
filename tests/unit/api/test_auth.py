@@ -217,6 +217,35 @@ def test_production_privileged_access_requires_admin_outside_development(
     assert response.json()["detail"] == "Admin API key required"
 
 
+def test_verify_privileged_access_uses_compare_digest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, tuple[str, str]] = {}
+
+    def _fake_compare_digest(left: str, right: str) -> bool:
+        observed["args"] = (left, right)
+        return True
+
+    monkeypatch.setattr(auth_middleware_module.settings, "API_ADMIN_KEY", "admin-secret")
+    monkeypatch.setattr(auth_middleware_module.secrets, "compare_digest", _fake_compare_digest)
+    request = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/api/v1/auth/keys",
+            "headers": [(b"x-admin-api-key", b"admin-secret")],
+            "query_string": b"",
+            "client": ("127.0.0.1", 1234),
+            "server": ("testserver", 80),
+            "scheme": "http",
+        }
+    )
+
+    auth_middleware_module.verify_privileged_access(request)
+
+    assert observed["args"] == ("admin-secret", "admin-secret")
+
+
 @pytest.mark.asyncio
 async def test_auth_disabled_bypasses_protected_route() -> None:
     middleware = APIKeyAuthMiddleware(FastAPI(), manager=SimpleNamespace(auth_required=False))

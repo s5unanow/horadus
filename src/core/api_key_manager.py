@@ -8,7 +8,10 @@ import base64
 import binascii
 import hashlib
 import json
+import os
 import secrets
+import stat
+import tempfile
 import time
 from collections import deque
 from collections.abc import Callable
@@ -43,6 +46,10 @@ class APIKeyRecord:
     source: Literal["env", "runtime", "persisted"]
 
 
+class APIKeyPersistenceError(RuntimeError):
+    """Persisted API key metadata could not be stored safely."""
+
+
 class APIKeyManager:
     """Manage API keys and request rate limits."""
 
@@ -54,6 +61,8 @@ class APIKeyManager:
     _SCRYPT_DKLEN = 32
     _RATE_LIMIT_DEGRADE_RETRY_SECONDS = 30
     _RATE_LIMIT_STRATEGY_VALUES: ClassVar[set[str]] = {"fixed_window", "sliding_window"}
+    _PERSIST_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
+    _PERSIST_DIR_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
     _SLIDING_WINDOW_LUA = """
 local key = KEYS[1]
 local now_ms = tonumber(ARGV[1])
@@ -492,10 +501,92 @@ return {0, retry_ms}
             row["revoked_at"] = record.revoked_at.isoformat() if record.revoked_at else None
             rows.append(row)
 
+        payload = json.dumps(rows, indent=2, sort_keys=True)
         self._persist_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._persist_path.with_suffix(f"{self._persist_path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(rows, indent=2, sort_keys=True), encoding="utf-8")
-        tmp_path.replace(self._persist_path)
+        self._set_path_mode_and_verify(
+            self._persist_path.parent,
+            expected_mode=self._PERSIST_DIR_MODE,
+            label="API key persist directory",
+        )
+        fd, tmp_name = tempfile.mkstemp(
+            prefix=f".{self._persist_path.name}.",
+            suffix=".tmp",
+            dir=str(self._persist_path.parent),
+            text=True,
+        )
+        tmp_path = Path(tmp_name)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as tmp_file:
+                self._set_fd_mode_and_verify(
+                    tmp_file.fileno(),
+                    path=tmp_path,
+                    expected_mode=self._PERSIST_FILE_MODE,
+                    label="temporary API key store",
+                )
+                tmp_file.write(payload)
+                tmp_file.flush()
+                os.fsync(tmp_file.fileno())
+            os.replace(tmp_path, self._persist_path)
+            self._set_path_mode_and_verify(
+                self._persist_path,
+                expected_mode=self._PERSIST_FILE_MODE,
+                label="persisted API key store",
+            )
+        except Exception:
+            try:
+                tmp_path.unlink(missing_ok=True)
+            except OSError:
+                logger.warning(
+                    "Failed to clean up temporary API key store file",
+                    path=str(tmp_path),
+                )
+            raise
+
+    def _set_fd_mode_and_verify(
+        self,
+        fd: int,
+        *,
+        path: Path,
+        expected_mode: int,
+        label: str,
+    ) -> None:
+        try:
+            if hasattr(os, "fchmod"):
+                os.fchmod(fd, expected_mode)
+            else:
+                path.chmod(expected_mode)
+        except OSError as exc:
+            msg = f"Could not harden {label} at '{path}' to mode {oct(expected_mode)}"
+            raise APIKeyPersistenceError(msg) from exc
+        self._verify_path_mode(path, expected_mode=expected_mode, label=label)
+
+    def _set_path_mode_and_verify(
+        self,
+        path: Path,
+        *,
+        expected_mode: int,
+        label: str,
+    ) -> None:
+        try:
+            path.chmod(expected_mode)
+        except OSError as exc:
+            msg = f"Could not harden {label} at '{path}' to mode {oct(expected_mode)}"
+            raise APIKeyPersistenceError(msg) from exc
+        self._verify_path_mode(path, expected_mode=expected_mode, label=label)
+
+    @staticmethod
+    def _verify_path_mode(path: Path, *, expected_mode: int, label: str) -> None:
+        try:
+            actual_mode = stat.S_IMODE(path.stat().st_mode)
+        except OSError as exc:
+            msg = f"Could not verify mode for {label} at '{path}'"
+            raise APIKeyPersistenceError(msg) from exc
+        if actual_mode != expected_mode:
+            msg = (
+                f"{label} at '{path}' must have mode {oct(expected_mode)}, "
+                f"but actual mode is {oct(actual_mode)}"
+            )
+            raise APIKeyPersistenceError(msg)
 
     @staticmethod
     def _parse_datetime(value: object) -> datetime | None:

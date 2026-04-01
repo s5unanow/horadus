@@ -37,6 +37,8 @@ Production secret policy:
 - Mount read-only secret files into containers and wire via `*_FILE`.
 - Follow `docs/SECRETS_RUNBOOK.md` for provisioning, rotation, and rollback.
 - If you set `SECRET_KEY` directly (instead of `SECRET_KEY_FILE`), use at least 32 characters and avoid weak/default values.
+- Treat `API_KEYS_PERSIST_PATH` separately from `*_FILE` input secrets: it is a
+  writable runtime metadata output path, not a read-only mounted secret.
 
 For a full variable reference, see `docs/ENVIRONMENT.md`.
 For release and rollback governance, see `docs/RELEASING.md`.
@@ -61,6 +63,33 @@ Recommended production hardening:
 - Restrict `CORS_ORIGINS` to trusted frontend domains only.
 - Provide `POSTGRES_PASSWORD` via runtime environment (not committed files) when running bundled `postgres`.
 - Keep `API_RATE_LIMIT_STRATEGY=fixed_window` by default for low-overhead operation; switch to `sliding_window` only when boundary-burst smoothing is required.
+
+Runtime API key persistence:
+
+- If you use `/api/v1/auth/keys*` to create or rotate runtime API keys and need
+  those keys to survive container restarts, set `API_KEYS_PERSIST_PATH` to a
+  writable file path that is mounted into the `api` container.
+- Do not point `API_KEYS_PERSIST_PATH` inside `/run/secrets/...`; that mount is
+  intended for read-only input secrets.
+- Use a dedicated parent directory for the persisted file and keep it
+  owner-only (`0700`) with the file itself owner read/write only (`0600`).
+- Example host-side setup:
+
+```bash
+sudo install -d -m 0700 /srv/horadus/runtime
+sudo install -m 0600 /dev/null /srv/horadus/runtime/api_keys.json
+```
+
+- Example compose wiring:
+
+```yaml
+services:
+  api:
+    volumes:
+      - /srv/horadus/runtime:/var/lib/horadus:rw
+    environment:
+      API_KEYS_PERSIST_PATH: /var/lib/horadus/api_keys.json
+```
 
 ## 1b) Rehearse in staging before production (recommended)
 
@@ -372,6 +401,9 @@ Recommended practice:
   `/health/ready`, and `/metrics` require both `X-API-Key` and
   `X-Admin-API-Key`.
 - Privileged API mutations additionally require `X-Admin-API-Key`; keep the admin secret in an operator-only secret backend and rotate it with the same care as SSH/VPN admin credentials.
+- Runtime-created API keys persist only when `API_KEYS_PERSIST_PATH` points to a
+  writable, private path mounted into the `api` container; the application now
+  fails closed if it cannot harden that path to restrictive permissions.
 - `worker` runs Celery worker queues: `default`, `ingestion`, `processing`.
 - `beat` schedules periodic ingestion, snapshots, decay, and report jobs.
 - Postgres and Redis use named volumes (`postgres_data`, `redis_data`) for persistence.

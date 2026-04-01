@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-04-01
-- Current state: In progress with local validation complete
+- Current state: Ready for canonical finish after human sign-off and task-close-state updates
 - Planning Gates: Required — security-sensitive network exposure and auth policy change across runtime routes, docs, and tests
 
 ## Goal (1-3 lines)
@@ -112,6 +112,9 @@ operator boundary.
   after confirming it is limited to transitive dev-dependency lockfile updates
   plus stale allowlist cleanup. Reason: this was the smallest path to restore
   the canonical local gate without widening the runtime change set materially.
+- 2026-04-01: Human operator explicitly authorized end-to-end completion and
+  merge in-thread. Reason: `TASK-189` is marked `[REQUIRES_HUMAN]` and the
+  task cannot enter canonical finish without recorded human sign-off.
 
 ## Risks / Foot-guns
 

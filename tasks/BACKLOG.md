@@ -57,33 +57,6 @@ CLI contract so local-review avoids unnecessary compatibility noise.
 
 ---
 
-### TASK-189: Restrict `/health` and `/metrics` exposure outside development [REQUIRES_HUMAN]
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-Reduce unauthenticated reconnaissance risk by restricting detailed health and
-metrics endpoints outside development environments, while preserving a minimal
-unauthenticated liveness endpoint.
-
-**Assessment-Ref**:
-- `artifacts/assessments/security/daily/2026-03-02.md` (`FINDING-2026-03-02-security-public-health-metrics`)
-
-**Dependency Note**:
-- Reuse the privileged-route policy from `TASK-200` rather than defining a
-  second standalone authorization model for operational endpoints.
-
-**Exec Plan**: Required (`tasks/exec_plans/README.md`)
-**Files**: `src/api/middleware/auth.py`, `src/api/routes/health.py`, `src/api/routes/metrics.py`, `docs/DEPLOYMENT.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] `/health` and `/metrics` are not publicly accessible in non-development environments (policy: admin-auth or explicit private-network-only)
-- [ ] `/health/live` remains minimal and unauthenticated (coarse “up” only)
-- [ ] Externally reachable health responses do not include raw exception strings or dependency internals
-- [ ] Tests cover status codes and payload shapes for dev vs production-like profiles
-- [ ] Human sign-off recorded before merge
-
----
-
 ### TASK-190: Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN]
 **Priority**: P2 (Medium)
 **Estimate**: 1-2 hours

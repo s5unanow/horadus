@@ -28,8 +28,7 @@ class APIKeyAuthMiddleware(BaseHTTPMiddleware):
         *,
         manager: APIKeyManager | None = None,
         exempt_prefixes: tuple[str, ...] = (
-            "/health",
-            "/metrics",
+            "/health/live",
             "/docs",
             "/redoc",
             "/openapi.json",
@@ -155,4 +154,17 @@ def require_privileged_access(action: str) -> Callable[[Request], None]:
         )
 
     _dependency.__name__ = f"require_privileged_access_{action.replace('.', '_')}"
+    return _dependency
+
+
+def require_production_privileged_access(action: str) -> Callable[[Request], None]:
+    """Require privileged access outside development environments."""
+    privileged_dependency = require_privileged_access(action)
+
+    def _dependency(request: Request) -> None:
+        if settings.is_development:
+            return
+        privileged_dependency(request)
+
+    _dependency.__name__ = f"require_production_privileged_access_{action.replace('.', '_')}"
     return _dependency

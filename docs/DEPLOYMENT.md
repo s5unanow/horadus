@@ -91,9 +91,10 @@ deployment steps.
    - prompt/model changes still require the benchmark workflow from
      `docs/PROMPT_EVAL_POLICY.md`; the release gate already includes the
      eval audit and taxonomy validation
-5. Perform post-deploy smoke checks in staging (`/health`, `/health/ready`,
-   `/metrics`, auth-protected endpoints, and disabled docs/schema routes) and only then promote the same commit
-   to production.
+5. Perform post-deploy smoke checks in staging (`/health/live`,
+   admin-authenticated `/health`, `/health/ready`, `/metrics`,
+   auth-protected endpoints, and disabled docs/schema routes) and only then
+   promote the same commit to production.
 
 ## 2) Build production images
 
@@ -130,16 +131,23 @@ docker compose -f docker-compose.prod.yml up -d ingress api worker beat postgres
 
 ```bash
 export HORADUS_BASE_URL="https://${HORADUS_PUBLIC_DOMAIN}"
+export HORADUS_API_KEY="<operator-api-key>"
+export HORADUS_ADMIN_API_KEY="<operator-admin-key>"
 
-curl -sSf "${HORADUS_BASE_URL}/health"
-curl -sSf "${HORADUS_BASE_URL}/health/ready"
-curl -sSf "${HORADUS_BASE_URL}/metrics" | head
+curl -sSf "${HORADUS_BASE_URL}/health/live"
+curl -sSf -H "X-API-Key: ${HORADUS_API_KEY}" -H "X-Admin-API-Key: ${HORADUS_ADMIN_API_KEY}" "${HORADUS_BASE_URL}/health"
+curl -sSf -H "X-API-Key: ${HORADUS_API_KEY}" -H "X-Admin-API-Key: ${HORADUS_ADMIN_API_KEY}" "${HORADUS_BASE_URL}/health/ready"
+curl -sSf -H "X-API-Key: ${HORADUS_API_KEY}" -H "X-Admin-API-Key: ${HORADUS_ADMIN_API_KEY}" "${HORADUS_BASE_URL}/metrics" | head
+
+# Detailed health endpoints must not stay public outside development.
+curl -sSI "${HORADUS_BASE_URL}/health" | sed -n '1,5p'
+curl -sSI "${HORADUS_BASE_URL}/metrics" | sed -n '1,5p'
 
 # HTTP must not serve plaintext content externally (redirect to HTTPS is allowed).
-curl -sSI "http://${HORADUS_PUBLIC_DOMAIN}/health" | sed -n '1,5p'
+curl -sSI "http://${HORADUS_PUBLIC_DOMAIN}/health/live" | sed -n '1,5p'
 
 # Security headers must be present at the edge.
-curl -sSI "${HORADUS_BASE_URL}/health" | grep -Ei "strict-transport-security|x-content-type-options|x-frame-options"
+curl -sSI "${HORADUS_BASE_URL}/health/live" | grep -Ei "strict-transport-security|x-content-type-options|x-frame-options"
 
 # API container should not publish host port 8000 directly.
 docker compose -f docker-compose.prod.yml port api 8000 || echo "api:8000 not published (expected)"
@@ -359,7 +367,10 @@ Recommended practice:
 
 ## Operational Notes
 
-- `api` serves FastAPI (`/health`, `/metrics`, `/docs`).
+- `api` serves FastAPI (`/health/live`, `/health`, `/metrics`, `/docs`).
+- Outside development, only `/health/live` stays unauthenticated; `/health`,
+  `/health/ready`, and `/metrics` require both `X-API-Key` and
+  `X-Admin-API-Key`.
 - Privileged API mutations additionally require `X-Admin-API-Key`; keep the admin secret in an operator-only secret backend and rotate it with the same care as SSH/VPN admin credentials.
 - `worker` runs Celery worker queues: `default`, `ingestion`, `processing`.
 - `beat` schedules periodic ingestion, snapshots, decay, and report jobs.

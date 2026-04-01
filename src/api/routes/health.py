@@ -18,6 +18,10 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.api.routes.operational_route_auth import (
+    AUTHORIZE_HEALTH_READINESS,
+    AUTHORIZE_HEALTH_STATUS,
+)
 from src.core.config import settings
 from src.core.migration_parity import check_migration_parity
 from src.storage.database import get_session
@@ -86,7 +90,26 @@ class ComponentHealth(BaseModel):
 # =============================================================================
 
 
-@router.get("/health", response_model=HealthStatus)
+def _sanitize_component_check(payload: dict[str, Any]) -> dict[str, str]:
+    """Remove internal fields from externally reachable health payloads."""
+    return {"status": str(payload.get("status", "unknown"))}
+
+
+def _sanitize_checks(checks: dict[str, Any]) -> dict[str, dict[str, str]]:
+    return {
+        name: _sanitize_component_check(payload)
+        for name, payload in checks.items()
+        if isinstance(payload, dict)
+    }
+
+
+def _external_health_checks(checks: dict[str, Any]) -> dict[str, Any]:
+    if settings.is_development:
+        return checks
+    return _sanitize_checks(checks)
+
+
+@router.get("/health", response_model=HealthStatus, dependencies=[AUTHORIZE_HEALTH_STATUS])
 async def health_check(
     session: AsyncSession = Depends(get_session),
 ) -> HealthStatus:
@@ -137,7 +160,7 @@ async def health_check(
         timestamp=datetime.now(UTC).isoformat(),
         version="1.0.0",
         docs_enabled=settings.is_development,
-        checks=checks,
+        checks=_external_health_checks(checks),
     )
 
 
@@ -149,10 +172,10 @@ async def liveness_check() -> dict[str, str]:
     Simple check that the application is running.
     Does not check dependencies.
     """
-    return {"status": "alive"}
+    return {"status": "up"}
 
 
-@router.get("/health/ready", response_model=None)
+@router.get("/health/ready", response_model=None, dependencies=[AUTHORIZE_HEALTH_READINESS])
 async def readiness_check(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, str] | JSONResponse:
@@ -182,15 +205,22 @@ async def readiness_check(
         if failing_checks:
             return JSONResponse(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                content={"status": "not_ready", "checks": failing_checks},
+                content={
+                    "status": "not_ready",
+                    "checks": _external_health_checks(failing_checks),
+                },
             )
 
         return {"status": "ready"}
     except Exception as e:
         logger.warning("Readiness check failed", error=str(e))
+        if settings.is_development:
+            content = {"status": "not_ready", "reason": str(e)}
+        else:
+            content = {"status": "not_ready"}
         return JSONResponse(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            content={"status": "not_ready", "reason": str(e)},
+            content=content,
         )
 
 

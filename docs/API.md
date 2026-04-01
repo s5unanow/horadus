@@ -58,10 +58,20 @@ curl -H "X-API-Key: dev-key" http://localhost:8000/api/v1/trends
 
 ## Health
 
-- `GET /health`
 - `GET /health/live`
+- `GET /health`
 - `GET /health/ready`
 - `GET /metrics` (Prometheus exposition format)
+
+Access semantics:
+- `/health/live` stays minimal and unauthenticated in every environment.
+- In development, `/health`, `/health/ready`, and `/metrics` stay open for local
+  debugging.
+- In staging/production, `/health`, `/health/ready`, and `/metrics` require a
+  valid `X-API-Key` plus `X-Admin-API-Key`.
+- Production-like `/health` and `/health/ready` responses expose coarse status
+  only; raw exception strings, dependency latencies, and other internals remain
+  development-only.
 
 Readiness semantics:
 - `/health/ready` returns `200` only when critical dependencies are healthy.
@@ -70,7 +80,7 @@ Readiness semantics:
 Example:
 
 ```bash
-curl http://localhost:8000/health
+curl http://localhost:8000/health/live
 ```
 
 ## Sources

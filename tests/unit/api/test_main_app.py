@@ -92,8 +92,7 @@ def test_create_app_hides_docs_routes_outside_development(
         middleware for middleware in app.user_middleware if middleware.cls is APIKeyAuthMiddleware
     )
     assert auth_middleware.kwargs["exempt_prefixes"] == (
-        "/health",
-        "/metrics",
+        "/health/live",
         "/docs",
         "/redoc",
         "/openapi.json",

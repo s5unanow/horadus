@@ -8,8 +8,13 @@ from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock
 
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 import src.api.routes.health as health_module
+from src.api.middleware.auth import APIKeyAuthMiddleware
+from src.core.api_key_manager import APIKeyManager
+from src.storage.database import get_session
 
 pytestmark = pytest.mark.unit
 
@@ -27,6 +32,64 @@ def _install_fake_redis(
 
     monkeypatch.setitem(sys.modules, "redis", redis_package)
     monkeypatch.setitem(sys.modules, "redis.asyncio", redis_asyncio)
+
+
+def _build_manager() -> tuple[APIKeyManager, str]:
+    manager = APIKeyManager(
+        auth_enabled=True,
+        legacy_api_key=None,
+        static_api_keys=[],
+        default_rate_limit_per_minute=5,
+    )
+    _record, raw_credential = manager.create_key(name="test-client")
+    return (manager, raw_credential)
+
+
+def _build_health_app(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    exempt_prefixes: tuple[str, ...],
+) -> tuple[TestClient, str]:
+    manager, credential = _build_manager()
+    app = FastAPI()
+    app.add_middleware(
+        APIKeyAuthMiddleware,
+        manager=manager,
+        exempt_prefixes=exempt_prefixes,
+    )
+    app.include_router(health_module.router)
+
+    async def _override_get_session():
+        yield MagicMock()
+
+    app.dependency_overrides[get_session] = _override_get_session
+
+    async def fake_db(_session):
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_redis():
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_worker():
+        return {
+            "status": "healthy",
+            "age_seconds": 5.0,
+            "last_task": "workers.collect_rss",
+        }
+
+    async def fake_migration(_session):
+        return {
+            "status": "healthy",
+            "current_revision": "0008_vector_index_profile",
+            "expected_head": "0008_vector_index_profile",
+        }
+
+    monkeypatch.setattr(health_module, "check_database", fake_db)
+    monkeypatch.setattr(health_module, "check_redis", fake_redis)
+    monkeypatch.setattr(health_module, "check_worker_activity", fake_worker)
+    monkeypatch.setattr(health_module, "check_migration_parity", fake_migration)
+    monkeypatch.setattr(health_module.settings, "MIGRATION_PARITY_CHECK_ENABLED", True)
+    return (TestClient(app), credential)
 
 
 @pytest.mark.asyncio
@@ -207,8 +270,56 @@ async def test_health_check_is_unhealthy_when_database_fails_and_migrations_disa
 
 
 @pytest.mark.asyncio
-async def test_liveness_check_returns_alive() -> None:
-    assert await health_module.liveness_check() == {"status": "alive"}
+async def test_liveness_check_returns_up() -> None:
+    assert await health_module.liveness_check() == {"status": "up"}
+
+
+def test_health_route_requires_privileged_access_outside_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, credential = _build_health_app(
+        monkeypatch,
+        exempt_prefixes=("/health/live",),
+    )
+    monkeypatch.setattr(health_module.settings, "ENVIRONMENT", "staging")
+    monkeypatch.setattr(health_module.settings, "API_ADMIN_KEY", "admin-secret")
+
+    no_auth_response = client.get("/health")
+    api_key_only_response = client.get("/health", headers={"X-API-Key": credential})
+    privileged_response = client.get(
+        "/health",
+        headers={
+            "X-API-Key": credential,
+            "X-Admin-API-Key": "admin-secret",
+        },
+    )
+
+    assert no_auth_response.status_code == 401
+    assert api_key_only_response.status_code == 403
+    assert privileged_response.status_code == 200
+    assert privileged_response.json()["checks"] == {
+        "database": {"status": "healthy"},
+        "redis": {"status": "healthy"},
+        "worker": {"status": "healthy"},
+        "migrations": {"status": "healthy"},
+    }
+
+
+def test_health_route_keeps_detailed_payload_in_development(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, _credential = _build_health_app(
+        monkeypatch,
+        exempt_prefixes=("/health", "/metrics"),
+    )
+    monkeypatch.setattr(health_module.settings, "ENVIRONMENT", "development")
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["checks"]["database"]["latency_ms"] == 1.0
+    assert payload["checks"]["worker"]["last_task"] == "workers.collect_rss"
 
 
 @pytest.mark.asyncio
@@ -277,6 +388,43 @@ async def test_readiness_check_returns_503_payload_on_dependency_failure(
 
 
 @pytest.mark.asyncio
+async def test_readiness_check_redacts_dependency_details_outside_development(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    async def fake_db(_session):
+        return {"status": "healthy", "latency_ms": 1.0}
+
+    async def fake_redis():
+        return {"status": "unhealthy", "message": "redis unavailable", "latency_ms": 99.0}
+
+    async def fake_worker():
+        return {"status": "healthy", "age_seconds": 1.0}
+
+    async def fake_migration(_session):
+        return {"status": "healthy"}
+
+    monkeypatch.setattr(health_module, "check_database", fake_db)
+    monkeypatch.setattr(health_module, "check_redis", fake_redis)
+    monkeypatch.setattr(health_module, "check_worker_activity", fake_worker)
+    monkeypatch.setattr(health_module, "check_migration_parity", fake_migration)
+    monkeypatch.setattr(health_module.settings, "MIGRATION_PARITY_CHECK_ENABLED", True)
+    monkeypatch.setattr(health_module.settings, "ENVIRONMENT", "staging")
+
+    result = await health_module.readiness_check(session=mock_db_session)
+
+    assert result.status_code == 503
+    assert json.loads(result.body.decode("utf-8")) == {
+        "status": "not_ready",
+        "checks": {
+            "redis": {
+                "status": "unhealthy",
+            }
+        },
+    }
+
+
+@pytest.mark.asyncio
 async def test_readiness_check_returns_ready_when_migration_checks_disabled(
     mock_db_session,
     monkeypatch,
@@ -323,6 +471,29 @@ async def test_readiness_check_returns_503_payload_on_exception(
     assert json.loads(result.body.decode("utf-8")) == {
         "status": "not_ready",
         "reason": "db blew up",
+    }
+    logger.warning.assert_called_once_with("Readiness check failed", error="db blew up")
+
+
+@pytest.mark.asyncio
+async def test_readiness_check_redacts_exception_reason_outside_development(
+    mock_db_session,
+    monkeypatch,
+) -> None:
+    logger = MagicMock()
+
+    async def fake_db(_session):
+        raise RuntimeError("db blew up")
+
+    monkeypatch.setattr(health_module, "logger", logger)
+    monkeypatch.setattr(health_module, "check_database", fake_db)
+    monkeypatch.setattr(health_module.settings, "ENVIRONMENT", "production")
+
+    result = await health_module.readiness_check(session=mock_db_session)
+
+    assert result.status_code == 503
+    assert json.loads(result.body.decode("utf-8")) == {
+        "status": "not_ready",
     }
     logger.warning.assert_called_once_with("Readiness check failed", error="db blew up")
 

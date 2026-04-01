@@ -8,6 +8,7 @@ from fastapi import APIRouter
 from fastapi.responses import Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
+from src.api.routes.operational_route_auth import AUTHORIZE_METRICS
 from src.core.observability import (
     CALIBRATION_DRIFT_ALERTS_TOTAL,
     INGESTION_ITEMS_TOTAL,
@@ -27,7 +28,7 @@ _REGISTERED_METRICS = (
 )
 
 
-@router.get("/metrics", include_in_schema=False)
+@router.get("/metrics", include_in_schema=False, dependencies=[AUTHORIZE_METRICS])
 async def get_metrics() -> Response:
     """Expose Prometheus metrics in text format."""
     payload = generate_latest()

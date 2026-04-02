@@ -123,6 +123,19 @@ class DockerReadiness:
     lines: list[str]
 
 
+@dataclass(slots=True)
+class TaskIntakeEntry:
+    intake_id: str
+    recorded_at: str
+    title: str
+    note: str
+    refs: list[str]
+    source_task_id: str | None
+    status: str
+    groom_notes: list[str]
+    promoted_task_id: str | None
+
+
 def _run_command(
     args: list[str],
     *,
@@ -517,6 +530,7 @@ __all__ = [
     "FinishConfig",
     "FinishContext",
     "ReviewGateResult",
+    "TaskIntakeEntry",
     "_check_rollup_state",
     "_compat_attr",
     "_docker_info_result",

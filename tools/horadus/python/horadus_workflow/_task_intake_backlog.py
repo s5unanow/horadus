@@ -4,7 +4,7 @@ import re
 import textwrap
 
 _NEXT_TASK_ID_PATTERN = re.compile(
-    r"^(?P<prefix>- Next available task IDs start at `TASK-)(?P<number>\d{3})(?P<suffix>`\.)$",
+    r"^(?P<prefix>- Next available task IDs start at `TASK-)(?P<number>\d{3,})(?P<suffix>`\.)$",
     re.MULTILINE,
 )
 _FUTURE_IDEAS_MARKER = "\n---\n\n## Future Ideas (Not Scheduled)\n"

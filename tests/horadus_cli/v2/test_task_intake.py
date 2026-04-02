@@ -343,6 +343,18 @@ def test_task_intake_next_id_and_backlog_helpers_cover_edge_cases() -> None:
     with pytest.raises(ValueError, match="terminal Future Ideas section"):
         task_commands_module._insert_backlog_task_block("# Backlog\n", "### TASK-371: Title")
 
+    promoted_task_id, updated_backlog_text = intake_backlog_module.allocate_backlog_task_id(
+        "- Next available task IDs start at `TASK-999`.\n"
+    )
+    assert promoted_task_id == "TASK-999"
+    assert updated_backlog_text == "- Next available task IDs start at `TASK-1000`.\n"
+
+    next_promoted_task_id, next_updated_backlog_text = (
+        intake_backlog_module.allocate_backlog_task_id(updated_backlog_text)
+    )
+    assert next_promoted_task_id == "TASK-1000"
+    assert next_updated_backlog_text == "- Next available task IDs start at `TASK-1001`.\n"
+
 
 def test_task_intake_add_and_list_data_happy_path(
     synthetic_intake_repo: Path, monkeypatch: pytest.MonkeyPatch

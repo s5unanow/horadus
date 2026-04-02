@@ -4,31 +4,20 @@ import json
 import re
 import tempfile
 from collections.abc import Callable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 from tools.horadus.python.horadus_workflow import _task_intake_backlog as backlog_support
+from tools.horadus.python.horadus_workflow import _task_intake_promote as promote_support
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
 _INTAKE_ID_PATTERN = re.compile(r"^INTAKE-(?P<number>\d{4})$")
 _VALID_INTAKE_STATUSES = ("pending", "promoted", "dismissed")
-
-
-@dataclass(slots=True)
-class TaskIntakeEntry:
-    intake_id: str
-    recorded_at: str
-    title: str
-    note: str
-    refs: list[str]
-    source_task_id: str | None
-    status: str
-    groom_notes: list[str]
-    promoted_task_id: str | None
+TaskIntakeEntry = shared.TaskIntakeEntry
 
 
 def _task_intake_log_path() -> Path:
@@ -277,6 +266,36 @@ def _insert_backlog_task_block(backlog_text: str, task_block: str) -> str:
     return backlog_support.insert_backlog_task_block(backlog_text, task_block)
 
 
+def _promote_success_result(
+    *,
+    intake_id: str,
+    promoted_task_id: str,
+    backlog_path: Path,
+    log_path: Path,
+    dry_run: bool,
+    task_block: str,
+) -> tuple[int, dict[str, object], list[str]]:
+    lines = [
+        "Task intake promoted.",
+        f"Intake id: {intake_id}",
+        f"Created task: {promoted_task_id}",
+        f"Updated backlog: {_relative_display_path(backlog_path)}",
+        f"Updated intake log: {_relative_display_path(log_path)}",
+    ]
+    return (
+        ExitCode.OK,
+        {
+            "intake_id": intake_id,
+            "promoted_task_id": promoted_task_id,
+            "backlog_path": _relative_display_path(backlog_path),
+            "log_path": _relative_display_path(log_path),
+            "dry_run": dry_run,
+            "task_block": task_block,
+        },
+        lines,
+    )
+
+
 def task_intake_add_data(
     *,
     title: str,
@@ -508,52 +527,45 @@ def task_intake_promote_data(
     assessment_refs: list[str] | None,
     dry_run: bool,
 ) -> tuple[int, dict[str, object], list[str]]:
+    failure_prefix = "Task intake promotion failed."
     try:
         normalized_intake_id = _normalize_intake_id(intake_id)
     except ValueError as exc:
-        return (ExitCode.VALIDATION_ERROR, {}, ["Task intake promotion failed.", str(exc)])
+        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, str(exc)])
 
     priority_text = priority.strip()
     estimate_text = estimate.strip()
     acceptance_items = _normalize_text_list(acceptance)
     if not priority_text:
-        return (
-            ExitCode.VALIDATION_ERROR,
-            {},
-            ["Task intake promotion failed.", "--priority must not be empty."],
-        )
+        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, "--priority must not be empty."])
     if not estimate_text:
-        return (
-            ExitCode.VALIDATION_ERROR,
-            {},
-            ["Task intake promotion failed.", "--estimate must not be empty."],
-        )
+        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, "--estimate must not be empty."])
     if not acceptance_items:
         return (
             ExitCode.VALIDATION_ERROR,
             {},
-            ["Task intake promotion failed.", "At least one --acceptance value is required."],
+            [failure_prefix, "At least one --acceptance value is required."],
         )
 
     log_path = _task_intake_log_path()
     try:
         entries = _load_task_intake_entries(log_path)
     except ValueError as exc:
-        return (ExitCode.VALIDATION_ERROR, {}, ["Task intake promotion failed.", str(exc)])
+        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, str(exc)])
 
     target_entry = _find_entry(entries, normalized_intake_id)
     if target_entry is None:
         return (
             ExitCode.NOT_FOUND,
             {"intake_id": normalized_intake_id},
-            ["Task intake promotion failed.", f"{normalized_intake_id} was not found."],
+            [failure_prefix, f"{normalized_intake_id} was not found."],
         )
     if target_entry.status != "pending":
         return (
             ExitCode.VALIDATION_ERROR,
             {"intake_id": normalized_intake_id, "status": target_entry.status},
             [
-                "Task intake promotion failed.",
+                failure_prefix,
                 f"{normalized_intake_id} is {target_entry.status}; only pending entries can be promoted.",
             ],
         )
@@ -574,50 +586,30 @@ def task_intake_promote_data(
         )
         updated_backlog = _insert_backlog_task_block(backlog_with_incremented_id, task_block)
     except ValueError as exc:
-        return (ExitCode.VALIDATION_ERROR, {}, ["Task intake promotion failed.", str(exc)])
+        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, str(exc)])
 
-    updated_entries: list[TaskIntakeEntry] = []
-    for entry in entries:
-        if entry.intake_id != normalized_intake_id:
-            updated_entries.append(entry)
-            continue
-        updated_entries.append(
-            TaskIntakeEntry(
-                intake_id=entry.intake_id,
-                recorded_at=entry.recorded_at,
-                title=entry.title,
-                note=entry.note,
-                refs=list(entry.refs),
-                source_task_id=entry.source_task_id,
-                status="promoted",
-                groom_notes=list(entry.groom_notes),
-                promoted_task_id=promoted_task_id,
-            )
-        )
+    updated_entries = promote_support.build_promoted_entries(
+        entries,
+        intake_id=normalized_intake_id,
+        promoted_task_id=promoted_task_id,
+    )
 
     if not dry_run:
-        backlog_path.write_text(updated_backlog, encoding="utf-8")
-        _write_task_intake_entries(log_path, updated_entries)
+        promote_support.persist_promoted_intake(
+            backlog_path=backlog_path,
+            updated_backlog=updated_backlog,
+            log_path=log_path,
+            updated_entries=updated_entries,
+            write_entries=_write_task_intake_entries,
+        )
 
-    lines = [
-        "Task intake promoted.",
-        f"Intake id: {normalized_intake_id}",
-        f"Created task: {promoted_task_id}",
-        f"Updated backlog: {_relative_display_path(backlog_path)}",
-        f"Updated intake log: {_relative_display_path(log_path)}",
-    ]
-
-    return (
-        ExitCode.OK,
-        {
-            "intake_id": normalized_intake_id,
-            "promoted_task_id": promoted_task_id,
-            "backlog_path": _relative_display_path(backlog_path),
-            "log_path": _relative_display_path(log_path),
-            "dry_run": dry_run,
-            "task_block": task_block,
-        },
-        lines,
+    return _promote_success_result(
+        intake_id=normalized_intake_id,
+        promoted_task_id=promoted_task_id,
+        backlog_path=backlog_path,
+        log_path=log_path,
+        dry_run=dry_run,
+        task_block=task_block,
     )
 
 

@@ -937,7 +937,7 @@ def test_task_intake_promote_data_covers_validation_and_dry_run_edges(
             ),
         ],
     )
-    exit_code, data, _lines = task_commands_module.task_intake_promote_data(
+    exit_code, data, lines = task_commands_module.task_intake_promote_data(
         intake_id="INTAKE-0001",
         priority="P1",
         estimate="2h",
@@ -950,6 +950,8 @@ def test_task_intake_promote_data_covers_validation_and_dry_run_edges(
     assert exit_code == 0
     assert data["dry_run"] is True
     assert "### TASK-371: First" in data["task_block"]
+    assert lines[0] == "Dry run: would promote task intake."
+    assert any(line == "Would update backlog: tasks/BACKLOG.md" for line in lines)
     assert task_commands_module._load_task_intake_entries(log_path)[0].status == "pending"
 
 

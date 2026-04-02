@@ -269,13 +269,22 @@ def _promote_success_result(
     dry_run: bool,
     task_block: str,
 ) -> tuple[int, dict[str, object], list[str]]:
-    lines = [
-        "Task intake promoted.",
-        f"Intake id: {intake_id}",
-        f"Created task: {promoted_task_id}",
-        f"Updated backlog: {_relative_display_path(backlog_path)}",
-        f"Updated intake log: {_relative_display_path(log_path)}",
-    ]
+    if dry_run:
+        lines = [
+            "Dry run: would promote task intake.",
+            f"Intake id: {intake_id}",
+            f"Would create task: {promoted_task_id}",
+            f"Would update backlog: {_relative_display_path(backlog_path)}",
+            f"Would update intake log: {_relative_display_path(log_path)}",
+        ]
+    else:
+        lines = [
+            "Task intake promoted.",
+            f"Intake id: {intake_id}",
+            f"Created task: {promoted_task_id}",
+            f"Updated backlog: {_relative_display_path(backlog_path)}",
+            f"Updated intake log: {_relative_display_path(log_path)}",
+        ]
     return (
         ExitCode.OK,
         {

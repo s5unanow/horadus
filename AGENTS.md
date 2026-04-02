@@ -185,9 +185,11 @@ After completing work:
 - If unrelated work is discovered mid-task, create a new task immediately but do not switch branches by default; continue current task unless the new work is a blocker/urgent.
 - Never mix two tasks in one commit/PR; blockers must be handled via a separate task branch after a safe checkpoint.
 - Backlog capture rule for discovered follow-ups:
-  - If new backlog tasks are discovered during `TASK-XXX` and are relevant to that task scope, add them in the same `TASK-XXX` branch/PR (prefer a separate docs commit in that branch).
+  - If new follow-up work is discovered during `TASK-XXX` and is still part of that task's scope, keep it in the same `TASK-XXX` branch/PR (prefer a separate docs commit in that branch).
+  - If the follow-up is unrelated, later, or still needs triage, capture it first with `uv run --no-sync horadus tasks intake add ...` instead of editing `tasks/BACKLOG.md` immediately.
+  - Promote an intake item into `tasks/BACKLOG.md` only through the deliberate `uv run --no-sync horadus tasks intake promote ...` flow.
   - Split backlog edits to a separate task branch only when: scope is unrelated, the original task is already merged/closed, or an urgent blocker requires immediate isolation.
-  - Before merge, verify backlog updates were either included in-branch or explicitly split with rationale in PR/task notes.
+  - Before merge, verify backlog updates were either included in-branch, captured in intake for later grooming, or explicitly split with rationale in PR/task notes.
 
 ## Git Conventions
 

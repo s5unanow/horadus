@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-370`.
+- Next available task IDs start at `TASK-371`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -266,6 +266,30 @@ feedback looks for those patterns consistently instead of relying on a generic
 - [ ] When changed-file code-health output is available, the local-review prompt includes or references that structural summary instead of asking providers to rediscover it from scratch
 - [ ] The existing marker-line output contract and findings-first review format remain stable across providers
 - [ ] Tests cover prompt rendering and provider-adapter behavior without requiring network access
+
+---
+
+### TASK-370: Add Agent-Friendly Task Intake and Batched Backlog Grooming
+**Priority**: P1 (High)
+**Estimate**: 4-6 hours
+
+Capturing follow-up work from audits, reviews, and operator ideas is currently
+too tightly coupled to editing `tasks/BACKLOG.md`, which creates avoidable
+dirty-tree friction during unrelated active tasks. Add a non-authoritative
+intake surface plus first-class Horadus CLI flows so agents can capture ideas
+immediately, list pending intake items, promote selected items into the
+canonical backlog, and groom multiple intake items in one deliberate batch.
+
+**Planning Gates**: Required — shared workflow/tooling contract and live task-capture policy
+**Files**: `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `tasks/`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tests/`
+
+**Acceptance Criteria**:
+- [ ] Add a repo-owned non-authoritative intake surface so agents can record new work without editing `tasks/BACKLOG.md` during capture
+- [ ] Add convenient Horadus CLI commands for the common agent workflows: add to intake, list intake items, promote selected intake items, and groom intake in batches
+- [ ] Intake capture remains usable when the working tree is otherwise dirty, while canonical backlog promotion stays deliberate and policy-compliant
+- [ ] Promotion into `tasks/BACKLOG.md` preserves the repo's task-id and task-shape conventions instead of creating ad hoc backlog entries
+- [ ] Docs explain when agents should keep a discovered follow-up in the current task branch versus sending it to intake for later grooming
+- [ ] Tests cover the agent-oriented happy paths and at least one dirty-tree scenario without requiring network access
 
 ---
 

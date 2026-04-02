@@ -10,12 +10,14 @@
 ## Active Tasks
 
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
+- `TASK-370` Add Agent-Friendly Task Intake and Batched Backlog Grooming
 
 ## Selection Notes
 
 - Sprint 8 opens immediately after Sprint 7 closes and keeps the active lane capped to eight tasks.
 - The selected queue starts with overdue security and workflow-context asks before moving into deeper trend-state and analytical model upgrades.
 - `TASK-190` and `TASK-288` are explicitly reactivated for this sprint by human request, but they still require human review/sign-off before completion.
+- `TASK-370` is pulled into the sprint to reduce operator and agent friction when capturing audit follow-ups and external ideas during active task work.
 - `TASK-237` remains in the same sprint because bounded dynamic source diagnostics compounds the operator value of the upgraded trend state.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
 
@@ -25,6 +27,7 @@
 2. `TASK-288` Convert RFC-001 into a human-approved implementation queue.
 3. `TASK-234` Make uncertainty and momentum first-class trend state.
 4. `TASK-237` Add dynamic reliability diagnostics and time-varying source credibility.
+5. `TASK-370` Add agent-friendly task intake and batched backlog grooming.
 
 ## Human Blocker Metadata
 

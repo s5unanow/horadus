@@ -75,6 +75,95 @@ def test_task_commands_registers_local_review_and_keeps_local_gate_wiring() -> N
     assert gate_args.handler is task_commands_module.handle_local_gate
 
 
+def test_task_commands_registers_task_intake_subcommands() -> None:
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="command")
+
+    task_parser_module.register_task_commands(subparsers)
+    add_args = parser.parse_args(
+        [
+            "tasks",
+            "intake",
+            "add",
+            "--title",
+            "Capture follow-up",
+            "--note",
+            "Need a local intake flow.",
+            "--ref",
+            "docs/AGENT_RUNBOOK.md",
+            "--source-task",
+            "TASK-370",
+            "--format",
+            "json",
+            "--dry-run",
+        ]
+    )
+    groom_args = parser.parse_args(
+        [
+            "tasks",
+            "intake",
+            "groom",
+            "--intake-id",
+            "INTAKE-0001",
+            "--intake-id",
+            "INTAKE-0002",
+            "--dismiss",
+            "--append-note",
+            "Defer to later.",
+        ]
+    )
+    promote_args = parser.parse_args(
+        [
+            "tasks",
+            "intake",
+            "promote",
+            "INTAKE-0001",
+            "--priority",
+            "P1",
+            "--estimate",
+            "2h",
+            "--acceptance",
+            "promotion writes a canonical task block",
+            "--file",
+            "tools/horadus/python/horadus_workflow/task_workflow_intake.py",
+            "--assessment-ref",
+            "tasks/assessments/example.md",
+        ]
+    )
+
+    assert add_args.tasks_command == "intake"
+    assert add_args.task_intake_command == "add"
+    assert add_args.refs == ["docs/AGENT_RUNBOOK.md"]
+    assert add_args.source_task == "TASK-370"
+    assert add_args.handler is task_commands_module.handle_task_intake_add
+
+    assert groom_args.task_intake_command == "groom"
+    assert groom_args.intake_ids == ["INTAKE-0001", "INTAKE-0002"]
+    assert groom_args.dismiss is True
+    assert groom_args.handler is task_commands_module.handle_task_intake_groom
+
+    assert promote_args.task_intake_command == "promote"
+    assert promote_args.intake_id == "INTAKE-0001"
+    assert promote_args.acceptance == ["promotion writes a canonical task block"]
+    assert promote_args.files == ["tools/horadus/python/horadus_workflow/task_workflow_intake.py"]
+    assert promote_args.assessment_refs == ["tasks/assessments/example.md"]
+    assert promote_args.handler is task_commands_module.handle_task_intake_promote
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(
+            [
+                "tasks",
+                "intake",
+                "promote",
+                "INTAKE-0001",
+                "--priority",
+                "P1",
+                "--estimate",
+                "2h",
+            ]
+        )
+
+
 def test_task_commands_registers_automation_lock_subcommands() -> None:
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="command")

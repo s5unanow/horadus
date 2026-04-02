@@ -31,6 +31,8 @@ DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
 FRICTION_LOG_FILENAME = "entries.jsonl"
 FRICTION_SUMMARY_DIRECTORY = FRICTION_LOG_DIRECTORY / "daily"
+INTAKE_LOG_DIRECTORY = Path("artifacts/agent/task-intake")
+INTAKE_LOG_FILENAME = "entries.jsonl"
 VALID_FRICTION_TYPES: tuple[str, ...] = (
     "missing_cli_surface",
     "forced_fallback",
@@ -504,6 +506,8 @@ __all__ = [
     "FRICTION_LOG_DIRECTORY",
     "FRICTION_LOG_FILENAME",
     "FRICTION_SUMMARY_DIRECTORY",
+    "INTAKE_LOG_DIRECTORY",
+    "INTAKE_LOG_FILENAME",
     "REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV",
     "TASK_BRANCH_PATTERN",
     "VALID_FRICTION_TYPES",

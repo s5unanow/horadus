@@ -138,6 +138,68 @@ def test_build_parser_accepts_task_safe_start_command() -> None:
     assert args.dry_run is True
 
 
+def test_build_parser_accepts_task_intake_add_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "intake",
+            "add",
+            "--title",
+            "Capture follow-up",
+            "--note",
+            "Need a local intake flow.",
+            "--ref",
+            "docs/AGENT_RUNBOOK.md",
+            "--source-task",
+            "TASK-370",
+            "--format",
+            "json",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "intake"
+    assert args.task_intake_command == "add"
+    assert args.title == "Capture follow-up"
+    assert args.note == "Need a local intake flow."
+    assert args.refs == ["docs/AGENT_RUNBOOK.md"]
+    assert args.source_task == "TASK-370"
+    assert args.output_format == "json"
+
+
+def test_build_parser_accepts_task_intake_promote_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "tasks",
+            "intake",
+            "promote",
+            "INTAKE-0001",
+            "--priority",
+            "P1",
+            "--estimate",
+            "2h",
+            "--acceptance",
+            "promotion writes a canonical task block",
+            "--file",
+            "tools/horadus/python/horadus_workflow/task_workflow_intake.py",
+            "--assessment-ref",
+            "tasks/assessments/example.md",
+            "--dry-run",
+        ]
+    )
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "intake"
+    assert args.task_intake_command == "promote"
+    assert args.intake_id == "INTAKE-0001"
+    assert args.acceptance == ["promotion writes a canonical task block"]
+    assert args.files == ["tools/horadus/python/horadus_workflow/task_workflow_intake.py"]
+    assert args.assessment_refs == ["tasks/assessments/example.md"]
+    assert args.dry_run is True
+
+
 def test_build_parser_accepts_task_record_friction_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(

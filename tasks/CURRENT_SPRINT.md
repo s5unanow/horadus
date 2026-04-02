@@ -10,7 +10,6 @@
 ## Active Tasks
 
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
-- `TASK-370` Add Agent-Friendly Task Intake and Batched Backlog Grooming
 
 ## Selection Notes
 
@@ -49,3 +48,4 @@
 - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations ✅
 - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility ✅
 - `TASK-190` Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN] ✅
+- `TASK-370` Add Agent-Friendly Task Intake and Batched Backlog Grooming ✅

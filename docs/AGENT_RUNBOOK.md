@@ -212,27 +212,39 @@ needed workflow step yet, or when the CLI explicitly tells you a manual
 recovery step is required.
 A missing PR alone is no longer a manual-recovery signal for `finish`.
 
-14. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
+14. `uv run --no-sync horadus tasks intake add --title "..." --note "..." [--ref "..."] [--source-task TASK-XXX]`
+When: capture a non-authoritative follow-up locally without editing tracked ledgers.
+The intake log lives under the gitignored `artifacts/agent/task-intake/entries.jsonl`
+path, so normal capture does not create tracked task-ledger diffs.
+Use `uv run --no-sync horadus tasks intake list` to review pending intake items,
+`uv run --no-sync horadus tasks intake groom --intake-id INTAKE-XXXX --dismiss`
+or `--restore` to batch-triage them, and
+`uv run --no-sync horadus tasks intake promote INTAKE-XXXX --priority ... --estimate ... --acceptance "..."`
+only when you are deliberately writing a canonical backlog entry.
+Keep same-scope work in the current task branch; use intake for unrelated or later
+follow-ups that should wait for grooming.
+
+15. `uv run --no-sync horadus tasks record-friction TASK-XXX --command-attempted "..." --fallback-used "..." --friction-type forced_fallback --note "..." --suggested-improvement "..."`
 When: record a real Horadus workflow gap or forced fallback in a structured
 local friction log under `artifacts/agent/horadus-cli-feedback/`.
 Use this only for genuine friction or forced fallback after sensible recovery
 attempts, not routine success cases or expected empty results, and do not
 treat the log as required reading during normal task flow.
 
-15. `uv run --no-sync horadus tasks automation-lock check --automation-id <id>`
+16. `uv run --no-sync horadus tasks automation-lock check --automation-id <id>`
 When: inspect or recover the repo-owned external lock path used by a Codex automation.
 Use `automation-lock lock --automation-id <id> --owner-pid "$PPID"` to acquire the lock and `automation-lock unlock --automation-id <id> --owner-pid "$PPID"` to release it when the caller is a markdown-driven automation step.
 Use another `--owner-pid <stable-process-pid>` value only when the caller can provide a long-lived owner PID that survives across helper invocations.
 This is the portable replacement for host-specific `flock` usage in the sprint autopilot path.
 
-16. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
+17. `uv run --no-sync horadus tasks summarize-friction --date YYYY-MM-DD`
 When: generate the compact daily friction report at
 `artifacts/agent/horadus-cli-feedback/daily/YYYY-MM-DD.md`.
 The report groups duplicate patterns, highlights candidate CLI/skill
 improvements, and keeps follow-up work in human-review-only form. Do not
 auto-create backlog tasks from the report.
 
-17. `make test-integration-docker`
+18. `make test-integration-docker`
 When: run integration tests locally in an ephemeral Docker stack (safe defaults).
 Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 `HORADUS_SKIP_INTEGRATION_TESTS=1` for exceptional cases.

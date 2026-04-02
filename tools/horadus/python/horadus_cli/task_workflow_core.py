@@ -13,6 +13,7 @@ from tools.horadus.python.horadus_workflow import (
 )
 from tools.horadus.python.horadus_workflow import task_workflow_finish as finish_module
 from tools.horadus.python.horadus_workflow import task_workflow_friction as friction_module
+from tools.horadus.python.horadus_workflow import task_workflow_intake as intake_module
 from tools.horadus.python.horadus_workflow import task_workflow_ledgers as ledgers_module
 from tools.horadus.python.horadus_workflow import task_workflow_lifecycle as lifecycle_module
 from tools.horadus.python.horadus_workflow import task_workflow_local_review as local_review_module
@@ -55,6 +56,7 @@ _MODULE_EXPORTS: dict[object, list[str]] = {
     ],
     shared_module: list(shared_module.__all__),
     preflight_module: list(preflight_module.__all__),
+    intake_module: list(intake_module.__all__),
     ledgers_module: list(ledgers_module.__all__),
     lifecycle_module: list(lifecycle_module.__all__),
     automation_lock_module: list(automation_lock_module.__all__),

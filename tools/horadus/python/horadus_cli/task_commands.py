@@ -13,6 +13,12 @@ from tools.horadus.python.horadus_cli.task_friction import (
     handle_record_friction,
     handle_summarize_friction,
 )
+from tools.horadus.python.horadus_cli.task_intake import (
+    handle_task_intake_add,
+    handle_task_intake_groom,
+    handle_task_intake_list,
+    handle_task_intake_promote,
+)
 from tools.horadus.python.horadus_cli.task_ledgers import handle_close_ledgers
 from tools.horadus.python.horadus_cli.task_lifecycle import handle_lifecycle
 from tools.horadus.python.horadus_cli.task_preflight import (
@@ -104,6 +110,131 @@ def _register_local_gate_parser(tasks_subparsers: Any) -> None:
         help="Run the full CI-parity local gate.",
     )
     local_gate_parser.set_defaults(handler=handle_local_gate)
+
+
+def _register_task_intake_add_parser(intake_subparsers: Any) -> None:
+    add_parser = intake_subparsers.add_parser(
+        "add",
+        help="Add a pending task-intake entry under gitignored local storage.",
+    )
+    add_leaf_cli_options(add_parser)
+    add_parser.add_argument("--title", required=True, help="Short intake title.")
+    add_parser.add_argument("--note", required=True, help="Short intake note.")
+    add_parser.add_argument(
+        "--ref",
+        dest="refs",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Optional free-form reference to keep with the intake item.",
+    )
+    add_parser.add_argument(
+        "--source-task",
+        help="Optional source task id. Defaults to the current task branch when detectable.",
+    )
+    add_parser.set_defaults(handler=handle_task_intake_add)
+
+
+def _register_task_intake_list_parser(intake_subparsers: Any) -> None:
+    list_parser = intake_subparsers.add_parser(
+        "list",
+        help="List local task-intake entries.",
+    )
+    add_leaf_cli_options(list_parser)
+    list_parser.add_argument(
+        "--status",
+        choices=["pending", "promoted", "dismissed"],
+        help="Optional status filter.",
+    )
+    list_parser.add_argument(
+        "--limit",
+        type=int,
+        help="Optional maximum number of entries to return.",
+    )
+    list_parser.set_defaults(handler=handle_task_intake_list)
+
+
+def _register_task_intake_groom_parser(intake_subparsers: Any) -> None:
+    groom_parser = intake_subparsers.add_parser(
+        "groom",
+        help="Batch-dismiss or restore local task-intake entries.",
+    )
+    add_leaf_cli_options(groom_parser)
+    groom_parser.add_argument(
+        "--intake-id",
+        dest="intake_ids",
+        action="append",
+        required=True,
+        help="Intake id to update. Repeat to groom multiple entries.",
+    )
+    action_group = groom_parser.add_mutually_exclusive_group(required=True)
+    action_group.add_argument(
+        "--dismiss",
+        action="store_true",
+        help="Mark the selected entries as dismissed.",
+    )
+    action_group.add_argument(
+        "--restore",
+        action="store_true",
+        help="Restore the selected entries to pending.",
+    )
+    groom_parser.add_argument(
+        "--append-note",
+        dest="append_notes",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Optional grooming note to append to each updated entry.",
+    )
+    groom_parser.set_defaults(handler=handle_task_intake_groom)
+
+
+def _register_task_intake_promote_parser(intake_subparsers: Any) -> None:
+    promote_parser = intake_subparsers.add_parser(
+        "promote",
+        help="Promote a pending intake entry into the canonical backlog.",
+    )
+    add_leaf_cli_options(promote_parser)
+    promote_parser.add_argument("intake_id", help="Intake id (INTAKE-XXXX).")
+    promote_parser.add_argument("--priority", required=True, help="Backlog priority line value.")
+    promote_parser.add_argument("--estimate", required=True, help="Backlog estimate line value.")
+    promote_parser.add_argument(
+        "--acceptance",
+        action="append",
+        required=True,
+        help="Acceptance criteria text. Repeat for multiple items.",
+    )
+    promote_parser.add_argument(
+        "--file",
+        dest="files",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Optional file or path hint. Repeat for multiple items.",
+    )
+    promote_parser.add_argument(
+        "--description",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Optional description line. Repeat for multiple lines.",
+    )
+    promote_parser.add_argument(
+        "--assessment-ref",
+        dest="assessment_refs",
+        action="append",
+        default=argparse.SUPPRESS,
+        help="Optional assessment reference to carry into the backlog block.",
+    )
+    promote_parser.set_defaults(handler=handle_task_intake_promote)
+
+
+def _register_task_intake_parser(tasks_subparsers: Any) -> None:
+    intake_parser = tasks_subparsers.add_parser(
+        "intake",
+        help="Capture, groom, and promote local non-authoritative task intake.",
+    )
+    intake_subparsers = intake_parser.add_subparsers(dest="task_intake_command")
+    _register_task_intake_add_parser(intake_subparsers)
+    _register_task_intake_list_parser(intake_subparsers)
+    _register_task_intake_groom_parser(intake_subparsers)
+    _register_task_intake_promote_parser(intake_subparsers)
 
 
 def _register_automation_lock_parser(tasks_subparsers: Any) -> None:
@@ -259,6 +390,8 @@ def register_task_commands(subparsers: Any) -> None:
     safe_start_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
     safe_start_parser.add_argument("--name", required=True, help="Short branch suffix.")
     safe_start_parser.set_defaults(handler=handle_safe_start)
+
+    _register_task_intake_parser(tasks_subparsers)
 
     close_ledgers_parser = tasks_subparsers.add_parser(
         "close-ledgers",

@@ -24,6 +24,7 @@ EXPECTED_TASK_SUBCOMMANDS = sorted(
         "context-pack",
         "eligibility",
         "finish",
+        "intake",
         "lifecycle",
         "list-active",
         "local-gate",

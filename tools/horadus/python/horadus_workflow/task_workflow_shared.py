@@ -31,6 +31,8 @@ DEFAULT_DOCKER_READY_POLL_SECONDS = 2
 FRICTION_LOG_DIRECTORY = Path("artifacts/agent/horadus-cli-feedback")
 FRICTION_LOG_FILENAME = "entries.jsonl"
 FRICTION_SUMMARY_DIRECTORY = FRICTION_LOG_DIRECTORY / "daily"
+INTAKE_LOG_DIRECTORY = Path("artifacts/agent/task-intake")
+INTAKE_LOG_FILENAME = "entries.jsonl"
 VALID_FRICTION_TYPES: tuple[str, ...] = (
     "missing_cli_surface",
     "forced_fallback",
@@ -119,6 +121,19 @@ class DockerReadiness:
     attempted_start: bool
     supported_auto_start: bool
     lines: list[str]
+
+
+@dataclass(slots=True)
+class TaskIntakeEntry:
+    intake_id: str
+    recorded_at: str
+    title: str
+    note: str
+    refs: list[str]
+    source_task_id: str | None
+    status: str
+    groom_notes: list[str]
+    promoted_task_id: str | None
 
 
 def _run_command(
@@ -504,6 +519,8 @@ __all__ = [
     "FRICTION_LOG_DIRECTORY",
     "FRICTION_LOG_FILENAME",
     "FRICTION_SUMMARY_DIRECTORY",
+    "INTAKE_LOG_DIRECTORY",
+    "INTAKE_LOG_FILENAME",
     "REVIEW_TIMEOUT_OVERRIDE_APPROVAL_ENV",
     "TASK_BRANCH_PATTERN",
     "VALID_FRICTION_TYPES",
@@ -513,6 +530,7 @@ __all__ = [
     "FinishConfig",
     "FinishContext",
     "ReviewGateResult",
+    "TaskIntakeEntry",
     "_check_rollup_state",
     "_compat_attr",
     "_docker_info_result",

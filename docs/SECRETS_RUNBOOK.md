@@ -20,6 +20,8 @@ Runtime API key note:
 - If runtime API key management endpoints must survive restarts, provision a
   separate writable directory for `API_KEYS_PERSIST_PATH` and keep that path
   outside `/run/secrets/...`.
+- `API_KEYS_PERSIST_PATH` must include an explicit parent directory; do not use
+  a bare filename such as `api_keys.json`.
 - Recommended persisted metadata permissions are parent directory `0700` and
   file `0600`.
 

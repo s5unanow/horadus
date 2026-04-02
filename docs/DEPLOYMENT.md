@@ -71,6 +71,9 @@ Runtime API key persistence:
   writable file path that is mounted into the `api` container.
 - Do not point `API_KEYS_PERSIST_PATH` inside `/run/secrets/...`; that mount is
   intended for read-only input secrets.
+- Do not set `API_KEYS_PERSIST_PATH` to a bare filename such as
+  `api_keys.json`; it must include an explicit parent directory so hardening is
+  scoped to a dedicated path instead of the process working directory.
 - Use a dedicated parent directory for the persisted file and keep it
   owner-only (`0700`) with the file itself owner read/write only (`0600`).
 - Example host-side setup:

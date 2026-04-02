@@ -264,6 +264,14 @@ def test_runtime_key_persistence_fails_closed_when_directory_hardening_fails(
     assert not persist_path.exists()
 
 
+def test_runtime_key_persistence_rejects_implicit_working_directory_path() -> None:
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="explicit parent directory",
+    ):
+        _build_manager(persist_path="api_keys.json")
+
+
 def test_set_fd_mode_and_verify_falls_back_to_path_chmod_without_fchmod(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

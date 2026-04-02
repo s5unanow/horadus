@@ -111,6 +111,11 @@ return {0, retry_ms}
         self._fixed_window_counts: dict[str, tuple[int, int]] = {}
         self._lock = RLock()
         self._persist_path = Path(persist_path).expanduser() if persist_path else None
+        self._persist_directory = (
+            self._resolve_persist_directory(self._persist_path)
+            if self._persist_path is not None
+            else None
+        )
         self._rate_limit_backend = rate_limit_backend
         self._rate_limit_window_seconds = max(1, settings.API_RATE_LIMIT_WINDOW_SECONDS)
         configured_strategy = (
@@ -487,6 +492,9 @@ return {0, retry_ms}
     def _save_persisted_keys(self) -> None:
         if self._persist_path is None:
             return
+        if self._persist_directory is None:
+            msg = "Persist directory must be configured before saving API key metadata"
+            raise APIKeyPersistenceError(msg)
 
         persisted = [
             record
@@ -502,16 +510,16 @@ return {0, retry_ms}
             rows.append(row)
 
         payload = json.dumps(rows, indent=2, sort_keys=True)
-        self._persist_path.parent.mkdir(parents=True, exist_ok=True)
+        self._persist_directory.mkdir(parents=True, exist_ok=True)
         self._set_path_mode_and_verify(
-            self._persist_path.parent,
+            self._persist_directory,
             expected_mode=self._PERSIST_DIR_MODE,
             label="API key persist directory",
         )
         fd, tmp_name = tempfile.mkstemp(
             prefix=f".{self._persist_path.name}.",
             suffix=".tmp",
-            dir=str(self._persist_path.parent),
+            dir=str(self._persist_directory),
             text=True,
         )
         tmp_path = Path(tmp_name)
@@ -573,6 +581,17 @@ return {0, retry_ms}
             msg = f"Could not harden {label} at '{path}' to mode {oct(expected_mode)}"
             raise APIKeyPersistenceError(msg) from exc
         self._verify_path_mode(path, expected_mode=expected_mode, label=label)
+
+    @staticmethod
+    def _resolve_persist_directory(path: Path) -> Path:
+        parent = path.parent
+        if parent == Path("."):
+            msg = (
+                "API_KEYS_PERSIST_PATH must include an explicit parent directory; "
+                "refusing to harden the process working directory"
+            )
+            raise APIKeyPersistenceError(msg)
+        return parent
 
     @staticmethod
     def _verify_path_mode(path: Path, *, expected_mode: int, label: str) -> None:

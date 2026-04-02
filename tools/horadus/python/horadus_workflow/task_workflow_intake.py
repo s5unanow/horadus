@@ -67,7 +67,7 @@ def _normalize_optional_task_id(value: str | None) -> str | None:
     match = _TASK_ID_PATTERN.match(stripped.upper())
     if match is None:
         raise ValueError(f"Invalid task id {value!r}. Expected TASK-XXX.")
-    return f"TASK-{int(match.group('number'))}"
+    return f"TASK-{match.group('number')}"
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:

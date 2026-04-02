@@ -130,6 +130,7 @@ def test_task_intake_helper_functions_cover_normalization_and_branch_detection(
     assert intake_workflow_module._normalize_optional_task_id(None) is None
     assert intake_workflow_module._normalize_optional_task_id("   ") is None
     assert intake_workflow_module._normalize_optional_task_id("370") == "TASK-370"
+    assert intake_workflow_module._normalize_optional_task_id("080") == "TASK-080"
     assert intake_workflow_module._normalize_optional_task_id("TASK-1000") == "TASK-1000"
     assert intake_workflow_module._normalize_text_list(None) == []
     assert intake_workflow_module._normalize_text_list([" one ", " ", "two"]) == ["one", "two"]

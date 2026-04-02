@@ -272,6 +272,18 @@ def test_runtime_key_persistence_rejects_implicit_working_directory_path() -> No
         _build_manager(persist_path="api_keys.json")
 
 
+def test_save_persisted_keys_raises_when_persist_directory_is_missing(tmp_path: Path) -> None:
+    persist_path = tmp_path / "persist" / "api_keys.json"
+    manager = _build_manager(persist_path=str(persist_path))
+    manager._persist_directory = None
+
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="Persist directory must be configured",
+    ):
+        manager._save_persisted_keys()
+
+
 def test_set_fd_mode_and_verify_falls_back_to_path_chmod_without_fchmod(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

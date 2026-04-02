@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from tools.horadus.python.horadus_workflow import _task_intake_backlog as backlog_support
+from tools.horadus.python.horadus_workflow import _task_intake_entry_validation as entry_validation
 from tools.horadus.python.horadus_workflow import _task_intake_promote as promote_support
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
@@ -122,14 +123,7 @@ def _validate_intake_entry(payload: object, *, line_number: int) -> TaskIntakeEn
     recorded_at = _parse_timestamp(str(payload["recorded_at"]))
     title = str(payload["title"]).strip()
     note = str(payload["note"]).strip()
-    if not title:
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: title must not be empty."
-        )
-    if not note:
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: note must not be empty."
-        )
+    entry_validation.validate_entry_title_note(title, note, line_number=line_number)
 
     source_task_id_raw = payload["source_task_id"]
     if source_task_id_raw is not None and not isinstance(source_task_id_raw, str):
@@ -152,15 +146,11 @@ def _validate_intake_entry(payload: object, *, line_number: int) -> TaskIntakeEn
             f"Invalid task intake entry at line {line_number}: promoted_task_id must be a string or null."
         )
     promoted_task_id = _normalize_optional_task_id(promoted_task_id_raw)
-    if status == "promoted" and promoted_task_id is None:
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: promoted entries must include promoted_task_id."
-        )
-    if status != "promoted" and promoted_task_id is not None:
-        raise ValueError(
-            "Invalid task intake entry at line "
-            f"{line_number}: only promoted entries may include promoted_task_id."
-        )
+    entry_validation.validate_entry_promotion_fields(
+        status=status,
+        promoted_task_id=promoted_task_id,
+        line_number=line_number,
+    )
 
     return TaskIntakeEntry(
         intake_id=intake_id,
@@ -315,6 +305,12 @@ def task_intake_add_data(
             ExitCode.VALIDATION_ERROR,
             {},
             ["Task intake failed.", "--title must not be empty."],
+        )
+    if "\n" in title_text or "\r" in title_text:
+        return (
+            ExitCode.VALIDATION_ERROR,
+            {},
+            ["Task intake failed.", "--title must be a single line."],
         )
     if not note_text:
         return (ExitCode.VALIDATION_ERROR, {}, ["Task intake failed.", "--note must not be empty."])

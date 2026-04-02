@@ -200,6 +200,10 @@ def test_task_intake_helper_functions_cover_validation_failures() -> None:
         )
     with pytest.raises(ValueError, match="title must not be empty"):
         intake_workflow_module._validate_intake_entry({**base_payload, "title": " "}, line_number=1)
+    with pytest.raises(ValueError, match="title must be a single line"):
+        intake_workflow_module._validate_intake_entry(
+            {**base_payload, "title": "Title\nWrapped"}, line_number=1
+        )
     with pytest.raises(ValueError, match="note must not be empty"):
         intake_workflow_module._validate_intake_entry({**base_payload, "note": " "}, line_number=1)
     with pytest.raises(ValueError, match="source_task_id must be a string or null"):
@@ -462,6 +466,16 @@ def test_task_intake_add_and_list_data_cover_validation_edges(
         task_commands_module.task_intake_add_data(
             title="title",
             note=" ",
+            refs=None,
+            source_task="TASK-370",
+            dry_run=False,
+        )[0]
+        == task_commands_module.ExitCode.VALIDATION_ERROR
+    )
+    assert (
+        task_commands_module.task_intake_add_data(
+            title="title\nwrapped",
+            note="note",
             refs=None,
             source_task="TASK-370",
             dry_run=False,

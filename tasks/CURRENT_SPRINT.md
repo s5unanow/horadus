@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-190` Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN]
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 
 ## Selection Notes
@@ -29,7 +28,6 @@
 
 ## Human Blocker Metadata
 
-- TASK-190 | owner=human-operator | last_touched=2026-03-26 | next_action=2026-04-07 | escalate_after_days=7
 - TASK-288 | owner=human-operator | last_touched=2026-03-26 | next_action=2026-04-07 | escalate_after_days=7
 - TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
 
@@ -47,3 +45,4 @@
 - `TASK-234` Make Uncertainty and Momentum First-Class Trend State ✅
 - `TASK-236` Add Canonical Entity Registry for Actors, Organizations, and Locations ✅
 - `TASK-237` Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility ✅
+- `TASK-190` Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN] ✅

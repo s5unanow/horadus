@@ -76,6 +76,11 @@ def allocate_backlog_task_id(backlog_text: str) -> tuple[str, str]:
     if match is None:
         raise ValueError("Unable to locate the next available task id marker in tasks/BACKLOG.md.")
     next_number = int(match.group("number"))
+    if next_number > 999:
+        raise ValueError(
+            "Next available task id exceeds the repo-supported `TASK-###` range; "
+            "extend core task-id support before promoting more intake items."
+        )
     task_id = f"TASK-{next_number:03d}"
     updated_text = (
         backlog_text[: match.start()]

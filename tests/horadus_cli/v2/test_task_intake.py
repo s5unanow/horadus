@@ -395,11 +395,8 @@ def test_task_intake_next_id_and_backlog_helpers_cover_edge_cases() -> None:
     assert promoted_task_id == "TASK-999"
     assert updated_backlog_text == "- Next available task IDs start at `TASK-1000`.\n"
 
-    next_promoted_task_id, next_updated_backlog_text = (
+    with pytest.raises(ValueError, match="repo-supported `TASK-###` range"):
         intake_backlog_module.allocate_backlog_task_id(updated_backlog_text)
-    )
-    assert next_promoted_task_id == "TASK-1000"
-    assert next_updated_backlog_text == "- Next available task IDs start at `TASK-1001`.\n"
 
 
 def test_task_intake_add_and_list_data_happy_path(

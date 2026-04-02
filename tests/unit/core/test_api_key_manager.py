@@ -272,6 +272,14 @@ def test_runtime_key_persistence_rejects_implicit_working_directory_path() -> No
         _build_manager(persist_path="api_keys.json")
 
 
+def test_runtime_key_persistence_rejects_filesystem_root_path() -> None:
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="filesystem root",
+    ):
+        _build_manager(persist_path="/api_keys.json")
+
+
 def test_save_persisted_keys_raises_when_persist_directory_is_missing(tmp_path: Path) -> None:
     persist_path = tmp_path / "persist" / "api_keys.json"
     manager = _build_manager(persist_path=str(persist_path))

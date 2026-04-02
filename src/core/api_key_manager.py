@@ -1,6 +1,4 @@
-"""
-API key authentication and distributed per-key rate limiting.
-"""
+"""API key authentication and distributed per-key rate limiting."""
 
 from __future__ import annotations
 
@@ -53,8 +51,7 @@ class APIKeyPersistenceError(RuntimeError):
 class APIKeyManager:
     """Manage API keys and request rate limits."""
 
-    _HASH_VERSION_SCRYPT_V1 = "scrypt-v1"
-    _HASH_VERSION_SHA256_V1 = "sha256-v1"
+    _HASH_VERSION_SCRYPT_V1, _HASH_VERSION_SHA256_V1 = ("scrypt-v1", "sha256-v1")
     _SCRYPT_N = 2**14
     _SCRYPT_R = 8
     _SCRYPT_P = 1
@@ -590,6 +587,9 @@ return {0, retry_ms}
                 "API_KEYS_PERSIST_PATH must include an explicit parent directory; "
                 "refusing to harden the process working directory"
             )
+            raise APIKeyPersistenceError(msg)
+        if parent.anchor and parent == Path(parent.anchor):
+            msg = "API_KEYS_PERSIST_PATH must not use the filesystem root as its parent directory"
             raise APIKeyPersistenceError(msg)
         return parent
 

@@ -16,7 +16,7 @@ from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
-_INTAKE_ID_PATTERN = re.compile(r"^INTAKE-(?P<number>\d{4})$")
+_INTAKE_ID_PATTERN = re.compile(r"^INTAKE-(?P<number>\d{4,})$")
 _TASK_ID_PATTERN = re.compile(r"^(?:TASK-)?(?P<number>\d{3,})$")
 _VALID_INTAKE_STATUSES = ("pending", "promoted", "dismissed")
 TaskIntakeEntry = shared.TaskIntakeEntry

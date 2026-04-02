@@ -320,6 +320,24 @@ def test_task_intake_next_id_and_backlog_helpers_cover_edge_cases() -> None:
         )
         == "INTAKE-0011"
     )
+    assert (
+        task_commands_module._next_intake_id(
+            [
+                task_commands_module.TaskIntakeEntry(
+                    intake_id="INTAKE-9999",
+                    recorded_at="2026-04-02T10:00:00Z",
+                    title="Title",
+                    note="Note",
+                    refs=[],
+                    source_task_id=None,
+                    status="pending",
+                    groom_notes=[],
+                    promoted_task_id=None,
+                )
+            ]
+        )
+        == "INTAKE-10000"
+    )
 
     description = intake_backlog_module._render_description_lines(
         [" first line ", "", "second line"], "fallback"

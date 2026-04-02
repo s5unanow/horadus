@@ -16,6 +16,7 @@ from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
 _INTAKE_ID_PATTERN = re.compile(r"^INTAKE-(?P<number>\d{4})$")
+_TASK_ID_PATTERN = re.compile(r"^(?:TASK-)?(?P<number>\d{3,})$")
 _VALID_INTAKE_STATUSES = ("pending", "promoted", "dismissed")
 TaskIntakeEntry = shared.TaskIntakeEntry
 
@@ -63,7 +64,10 @@ def _normalize_optional_task_id(value: str | None) -> str | None:
     stripped = value.strip()
     if not stripped:
         return None
-    return task_repo.normalize_task_id(stripped)
+    match = _TASK_ID_PATTERN.match(stripped.upper())
+    if match is None:
+        raise ValueError(f"Invalid task id {value!r}. Expected TASK-XXX.")
+    return f"TASK-{int(match.group('number'))}"
 
 
 def _normalize_text_list(values: list[str] | None) -> list[str]:
@@ -317,7 +321,7 @@ def task_intake_add_data(
 
     try:
         source_task_id = (
-            task_repo.normalize_task_id(source_task)
+            _normalize_optional_task_id(source_task)
             if source_task is not None
             else _detect_current_task_id()
         )

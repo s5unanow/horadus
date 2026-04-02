@@ -130,6 +130,7 @@ def test_task_intake_helper_functions_cover_normalization_and_branch_detection(
     assert intake_workflow_module._normalize_optional_task_id(None) is None
     assert intake_workflow_module._normalize_optional_task_id("   ") is None
     assert intake_workflow_module._normalize_optional_task_id("370") == "TASK-370"
+    assert intake_workflow_module._normalize_optional_task_id("TASK-1000") == "TASK-1000"
     assert intake_workflow_module._normalize_text_list(None) == []
     assert intake_workflow_module._normalize_text_list([" one ", " ", "two"]) == ["one", "two"]
 
@@ -773,7 +774,7 @@ def test_task_intake_list_data_limit_and_rendering_cover_promoted_entries(
                 source_task_id=None,
                 status="promoted",
                 groom_notes=[],
-                promoted_task_id="TASK-371",
+                promoted_task_id="TASK-1000",
             ),
             task_commands_module.TaskIntakeEntry(
                 intake_id="INTAKE-0002",
@@ -794,7 +795,7 @@ def test_task_intake_list_data_limit_and_rendering_cover_promoted_entries(
     assert exit_code == 0
     assert data["count"] == 1
     assert [entry["intake_id"] for entry in data["entries"]] == ["INTAKE-0001"]
-    assert any(line == "  promoted_task_id: TASK-371" for line in lines)
+    assert any(line == "  promoted_task_id: TASK-1000" for line in lines)
     assert all("source_task:" not in line for line in lines)
     assert all("  refs:" not in line for line in lines)
 

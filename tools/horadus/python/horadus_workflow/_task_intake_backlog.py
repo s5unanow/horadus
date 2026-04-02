@@ -89,7 +89,13 @@ def insert_backlog_task_block(backlog_text: str, task_block: str) -> str:
     marker_index = backlog_text.rfind(_FUTURE_IDEAS_MARKER)
     if marker_index == -1:
         raise ValueError("Unable to locate the terminal Future Ideas section in tasks/BACKLOG.md.")
-    return backlog_text[:marker_index] + "\n\n---\n\n" + task_block + backlog_text[marker_index:]
+    return (
+        backlog_text[:marker_index].rstrip()
+        + "\n\n---\n\n"
+        + task_block
+        + "\n"
+        + backlog_text[marker_index:]
+    )
 
 
 __all__ = [

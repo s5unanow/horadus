@@ -264,20 +264,31 @@ def test_runtime_key_persistence_fails_closed_when_directory_hardening_fails(
     assert not persist_path.exists()
 
 
-def test_runtime_key_persistence_rejects_implicit_working_directory_path() -> None:
+def test_runtime_key_persistence_rejects_paths_resolving_to_working_directory() -> None:
     with pytest.raises(
         api_key_manager_module.APIKeyPersistenceError,
-        match="explicit parent directory",
+        match="process working directory",
     ):
         _build_manager(persist_path="api_keys.json")
 
 
-def test_runtime_key_persistence_rejects_filesystem_root_path() -> None:
+def test_runtime_key_persistence_rejects_paths_resolving_to_filesystem_root() -> None:
     with pytest.raises(
         api_key_manager_module.APIKeyPersistenceError,
         match="filesystem root",
     ):
         _build_manager(persist_path="/api_keys.json")
+
+
+@pytest.mark.parametrize("persist_path", ["runtime/../api_keys.json", "/var/../api_keys.json"])
+def test_runtime_key_persistence_rejects_parent_directory_traversal(
+    persist_path: str,
+) -> None:
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="parent directory traversal",
+    ):
+        _build_manager(persist_path=persist_path)
 
 
 def test_save_persisted_keys_raises_when_persist_directory_is_missing(tmp_path: Path) -> None:

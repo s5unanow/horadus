@@ -58,8 +58,7 @@ class APIKeyManager:
     _SCRYPT_DKLEN = 32
     _RATE_LIMIT_DEGRADE_RETRY_SECONDS = 30
     _RATE_LIMIT_STRATEGY_VALUES: ClassVar[set[str]] = {"fixed_window", "sliding_window"}
-    _PERSIST_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR
-    _PERSIST_DIR_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR
+    _PERSIST_FILE_MODE, _PERSIST_DIR_MODE = 0o600, 0o700
     _SLIDING_WINDOW_LUA = """
 local key = KEYS[1]
 local now_ms = tonumber(ARGV[1])
@@ -107,12 +106,11 @@ return {0, retry_ms}
         self._request_windows: dict[str, deque[float]] = {}
         self._fixed_window_counts: dict[str, tuple[int, int]] = {}
         self._lock = RLock()
-        self._persist_path = Path(persist_path).expanduser() if persist_path else None
-        self._persist_directory = (
-            self._resolve_persist_directory(self._persist_path)
-            if self._persist_path is not None
-            else None
-        )
+        self._persist_path = self._persist_directory = None
+        if persist_path:
+            raw_persist_path = Path(persist_path).expanduser()
+            self._persist_directory = self._resolve_persist_directory(raw_persist_path)
+            self._persist_path = self._persist_directory / raw_persist_path.name
         self._rate_limit_backend = rate_limit_backend
         self._rate_limit_window_seconds = max(1, settings.API_RATE_LIMIT_WINDOW_SECONDS)
         configured_strategy = (
@@ -581,16 +579,20 @@ return {0, retry_ms}
 
     @staticmethod
     def _resolve_persist_directory(path: Path) -> Path:
-        parent = path.parent
-        if parent == Path("."):
-            msg = (
-                "API_KEYS_PERSIST_PATH must include an explicit parent directory; "
-                "refusing to harden the process working directory"
+        raw_parent = path.parent
+        if ".." in raw_parent.parts:
+            raise APIKeyPersistenceError(
+                "API_KEYS_PERSIST_PATH must not contain parent directory traversal"
             )
-            raise APIKeyPersistenceError(msg)
+        parent = raw_parent.resolve(strict=False)
+        if parent == Path.cwd():
+            raise APIKeyPersistenceError(
+                "API_KEYS_PERSIST_PATH must resolve outside the process working directory"
+            )
         if parent.anchor and parent == Path(parent.anchor):
-            msg = "API_KEYS_PERSIST_PATH must not use the filesystem root as its parent directory"
-            raise APIKeyPersistenceError(msg)
+            raise APIKeyPersistenceError(
+                "API_KEYS_PERSIST_PATH must not use the filesystem root as parent"
+            )
         return parent
 
     @staticmethod

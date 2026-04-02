@@ -8,8 +8,22 @@ Production policy:
 - Do not store raw secret values in production `.env`.
 - Store secret values in host files mounted read-only into containers.
 - Use only `*_FILE` environment variables for secret wiring.
+- `API_KEYS_PERSIST_PATH` is not part of this read-only secret mount flow; it
+  is a separate writable path for runtime-created API key metadata.
 
 For full variable mapping, see `docs/ENVIRONMENT.md`.
+
+Runtime API key note:
+
+- Use this runbook for input secrets such as `SECRET_KEY_FILE`,
+  `API_ADMIN_KEY_FILE`, and `OPENAI_API_KEY_FILE`.
+- If runtime API key management endpoints must survive restarts, provision a
+  separate writable directory for `API_KEYS_PERSIST_PATH` and keep that path
+  outside `/run/secrets/...`.
+- `API_KEYS_PERSIST_PATH` must include an explicit parent directory; do not use
+  a bare filename such as `api_keys.json`.
+- Recommended persisted metadata permissions are parent directory `0700` and
+  file `0600`.
 
 ## 1) Provisioning
 

@@ -4,6 +4,7 @@ API authentication middleware using API keys.
 
 from __future__ import annotations
 
+import secrets
 from collections.abc import Awaitable, Callable
 from http import HTTPStatus
 from typing import Any
@@ -123,7 +124,7 @@ def verify_privileged_access(request: Request) -> None:
         )
 
     header_value = request.headers.get("X-Admin-API-Key", "").strip()
-    if header_value == configured_admin_key:
+    if secrets.compare_digest(header_value, configured_admin_key):
         return
 
     raise HTTPException(

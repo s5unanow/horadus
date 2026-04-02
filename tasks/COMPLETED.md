@@ -367,3 +367,4 @@
 - TASK-234: Make Uncertainty and Momentum First-Class Trend State ✅
 - TASK-236: Add Canonical Entity Registry for Actors, Organizations, and Locations ✅
 - TASK-237: Add Dynamic Reliability Diagnostics and Time-Varying Source Credibility ✅
+- TASK-190: Harden admin-key compare + API key store file permissions [REQUIRES_HUMAN] ✅

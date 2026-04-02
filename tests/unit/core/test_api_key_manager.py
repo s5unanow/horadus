@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import stat
 from base64 import urlsafe_b64encode
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -210,14 +212,225 @@ def test_sliding_window_blocks_boundary_burst() -> None:
     assert retry_second > 0
 
 
-def test_runtime_keys_persist_and_reload(tmp_path: Path) -> None:
-    persist_path = str(tmp_path / "api_keys.json")
-    manager = _build_manager(persist_path=persist_path)
+def test_runtime_keys_persist_and_reload(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    observed: dict[str, int] = {}
+    original_replace = api_key_manager_module.os.replace
+
+    def _record_tmp_mode(src: str | bytes, dst: str | bytes) -> None:
+        observed["tmp_mode"] = stat.S_IMODE(Path(src).stat().st_mode)
+        original_replace(src, dst)
+
+    manager = _build_manager(persist_path=str(persist_path))
+    monkeypatch.setattr(
+        api_key_manager_module.os,
+        "replace",
+        _record_tmp_mode,
+    )
     _record, raw_key = manager.create_key(name="persisted")
 
-    reloaded_manager = _build_manager(persist_path=persist_path)
+    reloaded_manager = _build_manager(persist_path=str(persist_path))
 
     assert reloaded_manager.authenticate(raw_key) is not None
+    assert observed["tmp_mode"] == 0o600
+    assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o700
+    assert stat.S_IMODE(persist_path.stat().st_mode) == 0o600
+
+
+def test_runtime_key_persistence_fails_closed_when_directory_hardening_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_path = tmp_path / "persist" / "api_keys.json"
+    original_chmod = Path.chmod
+
+    def _fail_directory_chmod(self: Path, mode: int) -> None:
+        if self == persist_path.parent:
+            raise OSError("chmod blocked")
+        original_chmod(self, mode)
+
+    monkeypatch.setattr(Path, "chmod", _fail_directory_chmod)
+    manager = _build_manager(persist_path=str(persist_path))
+
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="API key persist directory",
+    ):
+        manager.create_key(name="persisted")
+
+    assert not persist_path.exists()
+
+
+def test_runtime_key_persistence_rejects_paths_resolving_to_working_directory() -> None:
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="process working directory",
+    ):
+        _build_manager(persist_path="api_keys.json")
+
+
+def test_runtime_key_persistence_rejects_paths_resolving_to_filesystem_root() -> None:
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="filesystem root",
+    ):
+        _build_manager(persist_path="/api_keys.json")
+
+
+@pytest.mark.parametrize("persist_path", ["runtime/../api_keys.json", "/var/../api_keys.json"])
+def test_runtime_key_persistence_rejects_parent_directory_traversal(
+    persist_path: str,
+) -> None:
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="parent directory traversal",
+    ):
+        _build_manager(persist_path=persist_path)
+
+
+def test_save_persisted_keys_raises_when_persist_directory_is_missing(tmp_path: Path) -> None:
+    persist_path = tmp_path / "persist" / "api_keys.json"
+    manager = _build_manager(persist_path=str(persist_path))
+    manager._persist_directory = None
+
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="Persist directory must be configured",
+    ):
+        manager._save_persisted_keys()
+
+
+def test_set_fd_mode_and_verify_falls_back_to_path_chmod_without_fchmod(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    persist_path.write_text("[]", encoding="utf-8")
+    manager = _build_manager(persist_path=str(persist_path))
+
+    monkeypatch.delattr(api_key_manager_module.os, "fchmod", raising=False)
+    with persist_path.open("r+", encoding="utf-8") as handle:
+        manager._set_fd_mode_and_verify(
+            handle.fileno(),
+            path=persist_path,
+            expected_mode=0o600,
+            label="persisted API key store",
+        )
+
+    assert stat.S_IMODE(persist_path.stat().st_mode) == 0o600
+
+
+def test_set_fd_mode_and_verify_raises_when_fallback_chmod_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    persist_path.write_text("[]", encoding="utf-8")
+    manager = _build_manager(persist_path=str(persist_path))
+    original_chmod = Path.chmod
+
+    def _fail_chmod(self: Path, mode: int) -> None:
+        if self == persist_path:
+            raise OSError("chmod blocked")
+        original_chmod(self, mode)
+
+    monkeypatch.delattr(api_key_manager_module.os, "fchmod", raising=False)
+    monkeypatch.setattr(Path, "chmod", _fail_chmod)
+    with (
+        persist_path.open("r+", encoding="utf-8") as handle,
+        pytest.raises(
+            api_key_manager_module.APIKeyPersistenceError,
+            match="persisted API key store",
+        ),
+    ):
+        manager._set_fd_mode_and_verify(
+            handle.fileno(),
+            path=persist_path,
+            expected_mode=0o600,
+            label="persisted API key store",
+        )
+
+
+def test_verify_path_mode_raises_when_stat_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    persist_path.write_text("[]", encoding="utf-8")
+    original_stat = Path.stat
+
+    def _fail_stat(self: Path, *args: object, **kwargs: object):
+        if self == persist_path:
+            raise OSError("stat blocked")
+        return original_stat(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "stat", _fail_stat)
+
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="Could not verify mode",
+    ):
+        APIKeyManager._verify_path_mode(
+            persist_path,
+            expected_mode=0o600,
+            label="persisted API key store",
+        )
+
+
+def test_verify_path_mode_raises_when_mode_does_not_match(tmp_path: Path) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    persist_path.write_text("[]", encoding="utf-8")
+    persist_path.chmod(0o644)
+
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="actual mode is 0o644",
+    ):
+        APIKeyManager._verify_path_mode(
+            persist_path,
+            expected_mode=0o600,
+            label="persisted API key store",
+        )
+
+
+def test_save_persisted_keys_logs_when_temp_cleanup_fails(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    persist_path = tmp_path / "api_keys.json"
+    manager = _build_manager(persist_path=str(persist_path))
+    warning_logger = MagicMock()
+    original_unlink = Path.unlink
+
+    def _raise_persistence_error(
+        fd: int,
+        *,
+        path: Path,
+        expected_mode: int,
+        label: str,
+    ) -> None:
+        _ = (fd, path, expected_mode, label)
+        raise api_key_manager_module.APIKeyPersistenceError("temp hardening failed")
+
+    def _fail_tmp_unlink(self: Path, *args: object, **kwargs: object) -> None:
+        if self.parent == tmp_path and self.suffix == ".tmp":
+            raise OSError("unlink blocked")
+        original_unlink(self, *args, **kwargs)
+
+    monkeypatch.setattr(api_key_manager_module, "logger", warning_logger)
+    monkeypatch.setattr(manager, "_set_fd_mode_and_verify", _raise_persistence_error)
+    monkeypatch.setattr(Path, "unlink", _fail_tmp_unlink)
+
+    with pytest.raises(
+        api_key_manager_module.APIKeyPersistenceError,
+        match="temp hardening failed",
+    ):
+        manager.create_key(name="persisted")
+
+    warning_logger.warning.assert_called_once()
 
 
 def test_authenticate_migrates_legacy_sha256_hash(tmp_path: Path) -> None:

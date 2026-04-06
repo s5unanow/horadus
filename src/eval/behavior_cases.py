@@ -293,15 +293,13 @@ def _weekly_report_prompt() -> tuple[Path, str]:
     return (prompt_path, prompt_path.read_text(encoding="utf-8"))
 
 
-def _degraded_hold_fixture() -> (
-    tuple[
-        Event,
-        CanonicalExtractionSnapshot,
-        dict[str, Any],
-        dict[str, Any],
-        datetime,
-    ]
-):
+def _degraded_hold_fixture() -> tuple[
+    Event,
+    CanonicalExtractionSnapshot,
+    dict[str, Any],
+    dict[str, Any],
+    datetime,
+]:
     canonical_when = datetime(2026, 1, 5, 9, 30, tzinfo=UTC)
     degraded_when = datetime(2026, 1, 6, 14, 45, tzinfo=UTC)
     canonical_claims = {"trend_impacts": [{"trend_id": "nato-russia", "signal_type": "deploy"}]}

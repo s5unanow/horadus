@@ -21,6 +21,110 @@ def add_ops_leaf_options(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _register_eval_behavior_parser(
+    eval_subparsers: Any,
+    *,
+    add_leaf_options: Callable[[argparse.ArgumentParser], None],
+    runtime_result: Callable[[str, Any], Any],
+) -> None:
+    parser = eval_subparsers.add_parser(
+        "behavior",
+        help="Run deterministic behavior-oriented eval suites for runtime safety contracts.",
+    )
+    add_leaf_options(parser)
+    parser.add_argument(
+        "--output-dir", default="ai/eval/results", help="Directory for behavior-eval artifacts."
+    )
+    parser.add_argument(
+        "--suite",
+        action="append",
+        help="Optional behavior suite filter (repeat to run multiple suites).",
+    )
+    parser.add_argument(
+        "--tag",
+        action="append",
+        help="Optional behavior tag filter (repeat to match any selected tag).",
+    )
+    parser.set_defaults(handler=lambda args: runtime_result("eval-behavior", args))
+
+
+def _register_eval_replay_parser(
+    eval_subparsers: Any,
+    *,
+    add_leaf_options: Callable[[argparse.ArgumentParser], None],
+    runtime_result: Callable[[str, Any], Any],
+    replay_config_choices: tuple[str, ...],
+) -> None:
+    parser = eval_subparsers.add_parser(
+        "replay", help="Run historical champion/challenger replay over stored outcomes."
+    )
+    add_leaf_options(parser)
+    parser.add_argument(
+        "--output-dir", default="ai/eval/results", help="Directory for replay result artifacts."
+    )
+    parser.add_argument(
+        "--champion-config",
+        default="stable",
+        choices=replay_config_choices,
+        help="Champion replay policy config.",
+    )
+    parser.add_argument(
+        "--challenger-config",
+        default="fast_lower_threshold",
+        choices=replay_config_choices,
+        help="Challenger replay policy config.",
+    )
+    parser.add_argument("--trend-id", default=None, help="Optional trend UUID scope.")
+    parser.add_argument("--start-date", default=None, help="Optional ISO-8601 start datetime.")
+    parser.add_argument("--end-date", default=None, help="Optional ISO-8601 end datetime.")
+    parser.add_argument(
+        "--days",
+        type=int,
+        default=90,
+        help="Replay window in days when start-date is not provided.",
+    )
+    parser.set_defaults(handler=lambda args: runtime_result("eval-replay", args))
+
+
+def _register_eval_vector_parser(
+    eval_subparsers: Any,
+    *,
+    add_leaf_options: Callable[[argparse.ArgumentParser], None],
+    runtime_result: Callable[[str, Any], Any],
+) -> None:
+    parser = eval_subparsers.add_parser(
+        "vector-benchmark", help="Benchmark exact vs IVFFlat vs HNSW retrieval quality/latency."
+    )
+    add_leaf_options(parser)
+    parser.add_argument(
+        "--output-dir", default="ai/eval/results", help="Directory for vector benchmark artifacts."
+    )
+    parser.add_argument("--database-url", default=None, help="Optional PostgreSQL URL override.")
+    parser.add_argument(
+        "--dataset-size", type=int, default=4000, help="Number of benchmark vectors to generate."
+    )
+    parser.add_argument(
+        "--query-count", type=int, default=200, help="Number of query vectors to evaluate."
+    )
+    parser.add_argument(
+        "--dimensions",
+        type=int,
+        default=64,
+        help="Embedding dimensions for synthetic benchmark vectors.",
+    )
+    parser.add_argument("--top-k", type=int, default=10, help="Neighbors returned per query.")
+    parser.add_argument(
+        "--similarity-threshold",
+        type=float,
+        default=0.88,
+        help="Cosine similarity threshold used for retrieval filtering.",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed for deterministic synthetic data."
+    )
+    parser.set_defaults(handler=lambda args: runtime_result("eval-vector-benchmark", args))
+
+
 def register_ops_commands(
     subparsers: Any,
     *,
@@ -141,6 +245,12 @@ def register_ops_commands(
     )
     eval_audit_parser.set_defaults(handler=lambda args: runtime_result("eval-audit", args))
 
+    _register_eval_behavior_parser(
+        eval_subparsers,
+        add_leaf_options=add_leaf_options,
+        runtime_result=runtime_result,
+    )
+
     eval_taxonomy_parser = eval_subparsers.add_parser(
         "validate-taxonomy",
         help="Validate trend config taxonomy contract against the evaluation gold set.",
@@ -189,76 +299,17 @@ def register_ops_commands(
         handler=lambda args: runtime_result("eval-validate-taxonomy", args)
     )
 
-    eval_replay_parser = eval_subparsers.add_parser(
-        "replay", help="Run historical champion/challenger replay over stored outcomes."
+    _register_eval_replay_parser(
+        eval_subparsers,
+        add_leaf_options=add_leaf_options,
+        runtime_result=runtime_result,
+        replay_config_choices=replay_config_choices,
     )
-    add_leaf_options(eval_replay_parser)
-    eval_replay_parser.add_argument(
-        "--output-dir", default="ai/eval/results", help="Directory for replay result artifacts."
-    )
-    eval_replay_parser.add_argument(
-        "--champion-config",
-        default="stable",
-        choices=replay_config_choices,
-        help="Champion replay policy config.",
-    )
-    eval_replay_parser.add_argument(
-        "--challenger-config",
-        default="fast_lower_threshold",
-        choices=replay_config_choices,
-        help="Challenger replay policy config.",
-    )
-    eval_replay_parser.add_argument("--trend-id", default=None, help="Optional trend UUID scope.")
-    eval_replay_parser.add_argument(
-        "--start-date", default=None, help="Optional ISO-8601 start datetime."
-    )
-    eval_replay_parser.add_argument(
-        "--end-date", default=None, help="Optional ISO-8601 end datetime."
-    )
-    eval_replay_parser.add_argument(
-        "--days",
-        type=int,
-        default=90,
-        help="Replay window in days when start-date is not provided.",
-    )
-    eval_replay_parser.set_defaults(handler=lambda args: runtime_result("eval-replay", args))
 
-    eval_vector_parser = eval_subparsers.add_parser(
-        "vector-benchmark", help="Benchmark exact vs IVFFlat vs HNSW retrieval quality/latency."
-    )
-    add_leaf_options(eval_vector_parser)
-    eval_vector_parser.add_argument(
-        "--output-dir", default="ai/eval/results", help="Directory for vector benchmark artifacts."
-    )
-    eval_vector_parser.add_argument(
-        "--database-url", default=None, help="Optional PostgreSQL URL override."
-    )
-    eval_vector_parser.add_argument(
-        "--dataset-size", type=int, default=4000, help="Number of benchmark vectors to generate."
-    )
-    eval_vector_parser.add_argument(
-        "--query-count", type=int, default=200, help="Number of query vectors to evaluate."
-    )
-    eval_vector_parser.add_argument(
-        "--dimensions",
-        type=int,
-        default=64,
-        help="Embedding dimensions for synthetic benchmark vectors.",
-    )
-    eval_vector_parser.add_argument(
-        "--top-k", type=int, default=10, help="Neighbors returned per query."
-    )
-    eval_vector_parser.add_argument(
-        "--similarity-threshold",
-        type=float,
-        default=0.88,
-        help="Cosine similarity threshold used for retrieval filtering.",
-    )
-    eval_vector_parser.add_argument(
-        "--seed", type=int, default=42, help="Random seed for deterministic synthetic data."
-    )
-    eval_vector_parser.set_defaults(
-        handler=lambda args: runtime_result("eval-vector-benchmark", args)
+    _register_eval_vector_parser(
+        eval_subparsers,
+        add_leaf_options=add_leaf_options,
+        runtime_result=runtime_result,
     )
 
     eval_embedding_lineage_parser = eval_subparsers.add_parser(

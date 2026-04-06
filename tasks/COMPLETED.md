@@ -371,3 +371,4 @@
 - TASK-370: Add Agent-Friendly Task Intake and Batched Backlog Grooming ✅
 ## Sprint 9
 - TASK-371: Close Sprint 8 and seed Sprint 9 from the live backlog ✅
+- TASK-363: Add Behavior-Oriented Eval Suites for High-Risk LLM Safety Paths ✅

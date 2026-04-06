@@ -68,11 +68,21 @@ Required handling:
 - Metadata-only prompt/payload enrichments still require the same benchmark evidence; do not assume richer indicator descriptions improve Tier-2 accuracy without a fresh artifact comparison.
 - GPT-5 candidate evaluations may stay on Chat Completions in this repo as long as the benchmark artifact records any stage-specific `reasoning_effort` / `temperature` overrides; current Tier-1/Tier-2 Responses-mode structured-output parity is not required just to compare GPT-5 candidates.
 
-4. Compare candidate vs pinned baseline
+4. Run required behavior suites for high-risk safety surfaces
+- Benchmark remains mandatory; behavior suites are additive and do not replace it.
+- Run the full pack when the change spans multiple safety surfaces or when scope is unclear: `uv run --no-sync horadus eval behavior --output-dir ai/eval/results`
+- Run targeted suites when the touched surface is narrow:
+  - taxonomy/mapping/trend-indicator changes: `uv run --no-sync horadus eval behavior --suite taxonomy-safety`
+  - degraded-mode/provisional-write/replay-hold changes: `uv run --no-sync horadus eval behavior --suite degraded-mode-safety`
+  - weekly/monthly report prompt or report-grounding changes: `uv run --no-sync horadus eval behavior --suite report-grounding`
+  - semantic-cache basis or invalidation changes: `uv run --no-sync horadus eval behavior --suite cache-invalidation`
+- If operator scope is already clear, tags can narrow further without requiring the whole pack (for example `--tag grounding`).
+
+5. Compare candidate vs pinned baseline
 - Compare the same config(s), same dataset scope, same dataset fingerprint, and same queue threshold assumptions.
 - Record comparison notes in PR description.
 
-5. Decision
+6. Decision
 - Promote only if candidate passes all required gates below.
 
 ## Required Gates (Initial Defaults)
@@ -109,6 +119,19 @@ Default replay promotion criteria:
 - `latency.estimated_p95_latency_ms`: challenger must not increase by more than `20%`
 
 If replay gate fails, keep champion and revise challenger config/prompt.
+
+## Behavior Suites
+
+Behavior suites exist for contracts the benchmark does not measure directly:
+- fail-closed taxonomy mapping
+- degraded-mode provisional-write safety
+- report grounding and uncertainty prompt/runtime contracts
+- semantic-cache/runtime invalidation safety
+
+Use them when a change touches those surfaces, especially if aggregate benchmark
+metrics could stay flat while the runtime contract regresses. Treat a matching
+behavior-suite failure as release-blocking for the touched surface, even if the
+benchmark still passes.
 
 ## Promotion and Deployment
 

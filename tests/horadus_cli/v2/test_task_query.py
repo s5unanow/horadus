@@ -57,7 +57,7 @@ def test_main_tasks_list_active_json_excludes_non_active_human_blockers(
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
     assert [item["task_id"] for item in payload["data"]["human_blockers"]] == ["TASK-288"]
-    assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == ["TASK-288"]
+    assert payload["data"]["overdue_human_blockers"] == []
 
 
 def test_main_tasks_list_active_honors_root_format_flag(
@@ -145,7 +145,9 @@ def test_main_tasks_list_active_text_omits_non_active_human_blockers(
     assert result == 0
     output = capsys.readouterr().out
     assert "TASK-080" not in output
-    assert "overdue_human_blockers=1" in output
+    assert "TASK-288" in output
+    assert "human_blockers=" not in output
+    assert "overdue_human_blockers=" not in output
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(

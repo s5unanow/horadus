@@ -76,6 +76,48 @@ def test_behavior_cases_require_raises_on_false_condition() -> None:
         behavior_cases_module._require(False, "boom")
 
 
+def test_degraded_behavior_case_checks_full_restore_contract() -> None:
+    evidence = behavior_cases_module._eval_degraded_hold_preserves_canonical_extraction()
+
+    assert evidence["restored_fields_checked"] == [
+        "event_summary",
+        "extracted_who",
+        "extracted_what",
+        "extracted_where",
+        "extracted_when",
+        "extracted_claims",
+        "categories",
+        "has_contradictions",
+        "contradiction_notes",
+        "extraction_provenance",
+        "lifecycle_status",
+        "epistemic_state",
+        "activity_state",
+    ]
+    assert evidence["provisional_fields_checked"] == [
+        "summary",
+        "extracted_claims",
+        "provenance",
+        "extracted_when",
+        "replay_enqueued",
+        "policy",
+    ]
+
+
+def test_semantic_cache_behavior_case_tracks_api_mode_and_other_basis_inputs() -> None:
+    evidence = behavior_cases_module._eval_semantic_cache_basis_changes_invalidate_keys()
+
+    assert evidence["invalidated_inputs"] == [
+        "provider",
+        "model",
+        "reasoning_effort",
+        "api_mode",
+        "prompt_template",
+        "schema_payload",
+        "request_overrides",
+    ]
+
+
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [

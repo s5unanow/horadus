@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
@@ -12,6 +13,7 @@ from src.eval.behavior_types import BehaviorEvalCaseDefinition
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.trend_impact_mapping import map_event_trend_impacts
 from src.storage.event_extraction import (
+    CanonicalExtractionSnapshot,
     capture_canonical_extraction,
     demote_current_extraction_to_provisional,
 )
@@ -111,21 +113,7 @@ def _eval_taxonomy_no_match_fail_closed() -> dict[str, Any]:
 
 
 def _eval_degraded_hold_preserves_canonical_extraction() -> dict[str, Any]:
-    event = Event(
-        id=uuid4(),
-        canonical_summary="primary title",
-        event_summary="Stable canonical summary",
-        extracted_what="Canonical extraction",
-        categories=["military"],
-        extraction_provenance={"stage": "tier2", "active_route": {"model": "gpt-4.1-mini"}},
-        extraction_status="canonical",
-    )
-    snapshot = capture_canonical_extraction(event)
-    event.event_summary = "Held degraded summary"
-    event.extracted_what = "Held degraded extraction"
-    event.categories = ["security"]
-    event.extracted_claims = {"trend_impacts": [{"trend_id": "eu-russia"}]}
-    event.extraction_provenance = {"stage": "tier2", "active_route": {"model": "gpt-4.1-nano"}}
+    event, snapshot, degraded_claims, degraded_provenance, degraded_when = _degraded_hold_fixture()
 
     demote_current_extraction_to_provisional(
         event,
@@ -135,31 +123,40 @@ def _eval_degraded_hold_preserves_canonical_extraction() -> dict[str, Any]:
     )
 
     _require(event.extraction_status == "provisional", "Degraded hold did not mark provisional")
-    _require(
-        event.event_summary == "Stable canonical summary",
-        "Degraded hold overwrote canonical event summary",
-    )
-    _require(
-        event.extracted_what == "Canonical extraction",
-        "Degraded hold overwrote canonical extraction text",
-    )
-    _require(event.categories == ["military"], "Degraded hold overwrote canonical categories")
+    _require_snapshot_restored(event, snapshot)
     provisional = event.provisional_extraction
-    _require(
-        provisional["summary"] == "Held degraded summary",
-        "Provisional payload did not retain degraded summary",
-    )
-    _require(
-        provisional["replay_enqueued"] is True,
-        "Provisional payload did not record replay enqueue state",
-    )
-    _require(
-        provisional["policy"] == {"degraded_llm": True},
-        "Provisional payload did not record degraded policy metadata",
+    _require_provisional_payload_retained(
+        provisional,
+        degraded_claims=degraded_claims,
+        degraded_provenance=degraded_provenance,
+        degraded_when=degraded_when,
     )
     return {
         "restored_summary": event.event_summary,
+        "restored_fields_checked": [
+            "event_summary",
+            "extracted_who",
+            "extracted_what",
+            "extracted_where",
+            "extracted_when",
+            "extracted_claims",
+            "categories",
+            "has_contradictions",
+            "contradiction_notes",
+            "extraction_provenance",
+            "lifecycle_status",
+            "epistemic_state",
+            "activity_state",
+        ],
         "provisional_summary": provisional["summary"],
+        "provisional_fields_checked": [
+            "summary",
+            "extracted_claims",
+            "provenance",
+            "extracted_when",
+            "replay_enqueued",
+            "policy",
+        ],
         "replay_enqueued": provisional["replay_enqueued"],
         "policy": provisional["policy"],
     }
@@ -270,73 +267,151 @@ def _eval_weekly_report_prompt_contract() -> dict[str, Any]:
 
 
 def _eval_semantic_cache_basis_changes_invalidate_keys() -> dict[str, Any]:
-    base_key = LLMSemanticCache.build_cache_key(
-        stage="tier2",
-        provider="openai",
-        model="gpt-4.1-mini",
-        api_mode="chat_completions",
-        prompt_path="ai/prompts/tier2_classify.md",
-        prompt_template="prompt-v1",
-        schema_name="tier2_event_classification",
-        schema_payload={"type": "object"},
-        request_overrides={"service_tier": "default"},
-        payload={"event_id": "1"},
-        redis_prefix="cache",
-    )
-    prompt_changed = LLMSemanticCache.build_cache_key(
-        stage="tier2",
-        provider="openai",
-        model="gpt-4.1-mini",
-        api_mode="chat_completions",
-        prompt_path="ai/prompts/tier2_classify.md",
-        prompt_template="prompt-v2",
-        schema_name="tier2_event_classification",
-        schema_payload={"type": "object"},
-        request_overrides={"service_tier": "default"},
-        payload={"event_id": "1"},
-        redis_prefix="cache",
-    )
-    schema_changed = LLMSemanticCache.build_cache_key(
-        stage="tier2",
-        provider="openai",
-        model="gpt-4.1-mini",
-        api_mode="chat_completions",
-        prompt_path="ai/prompts/tier2_classify.md",
-        prompt_template="prompt-v1",
-        schema_name="tier2_event_classification",
-        schema_payload={"type": "array"},
-        request_overrides={"service_tier": "default"},
-        payload={"event_id": "1"},
-        redis_prefix="cache",
-    )
-    overrides_changed = LLMSemanticCache.build_cache_key(
-        stage="tier2",
-        provider="openai",
-        model="gpt-4.1-mini",
-        api_mode="chat_completions",
-        prompt_path="ai/prompts/tier2_classify.md",
-        prompt_template="prompt-v1",
-        schema_name="tier2_event_classification",
-        schema_payload={"type": "object"},
-        request_overrides={"service_tier": "flex"},
-        payload={"event_id": "1"},
-        redis_prefix="cache",
-    )
-    _require(prompt_changed != base_key, "Prompt change did not invalidate cache key")
-    _require(schema_changed != base_key, "Schema change did not invalidate cache key")
-    _require(
-        overrides_changed != base_key,
-        "Request override change did not invalidate cache key",
-    )
+    base_key = _behavior_cache_key()
+    changed_inputs = {
+        "provider": _behavior_cache_key(provider="openai-secondary"),
+        "model": _behavior_cache_key(model="gpt-4o-mini"),
+        "reasoning_effort": _behavior_cache_key(reasoning_effort="high"),
+        "api_mode": _behavior_cache_key(api_mode="responses"),
+        "prompt_template": _behavior_cache_key(prompt_template="prompt-v2"),
+        "schema_payload": _behavior_cache_key(schema_payload={"type": "array"}),
+        "request_overrides": _behavior_cache_key(request_overrides={"service_tier": "flex"}),
+    }
+    for input_name, changed_key in changed_inputs.items():
+        _require(
+            changed_key != base_key,
+            f"{input_name} change did not invalidate cache key",
+        )
     return {
         "base_key_prefix": base_key.split(":")[:4],
-        "invalidated_inputs": ["prompt_template", "schema_payload", "request_overrides"],
+        "invalidated_inputs": list(changed_inputs),
     }
 
 
 def _weekly_report_prompt() -> tuple[Path, str]:
     prompt_path = _REPO_ROOT / "ai/prompts/weekly_report.md"
     return (prompt_path, prompt_path.read_text(encoding="utf-8"))
+
+
+def _degraded_hold_fixture() -> tuple[
+    Event,
+    CanonicalExtractionSnapshot,
+    dict[str, Any],
+    dict[str, Any],
+    datetime,
+]:
+    canonical_when = datetime(2026, 1, 5, 9, 30, tzinfo=UTC)
+    degraded_when = datetime(2026, 1, 6, 14, 45, tzinfo=UTC)
+    canonical_claims = {"trend_impacts": [{"trend_id": "nato-russia", "signal_type": "deploy"}]}
+    canonical_provenance = {
+        "stage": "tier2",
+        "active_route": {"model": "gpt-4.1-mini"},
+        "prompt_hash": "canonical-hash",
+    }
+    event = Event(
+        id=uuid4(),
+        canonical_summary="primary title",
+        event_summary="Stable canonical summary",
+        extracted_who=["NATO", "Russia"],
+        extracted_what="Canonical extraction",
+        extracted_where="Baltics",
+        extracted_when=canonical_when,
+        extracted_claims=canonical_claims,
+        categories=["military"],
+        has_contradictions=True,
+        contradiction_notes="Conflicting source framing remains unresolved.",
+        extraction_provenance=canonical_provenance,
+        extraction_status="canonical",
+        lifecycle_status="confirmed",
+        epistemic_state="confirmed",
+        activity_state="dormant",
+    )
+    snapshot = capture_canonical_extraction(event)
+    degraded_claims = {"trend_impacts": [{"trend_id": "eu-russia", "signal_type": "incident"}]}
+    degraded_provenance = {
+        "stage": "tier2",
+        "active_route": {"model": "gpt-4.1-nano"},
+        "prompt_hash": "degraded-hash",
+    }
+    event.event_summary = "Held degraded summary"
+    event.extracted_who = ["Operator note"]
+    event.extracted_what = "Held degraded extraction"
+    event.extracted_where = "Black Sea"
+    event.extracted_when = degraded_when
+    event.categories = ["security"]
+    event.extracted_claims = degraded_claims
+    event.has_contradictions = False
+    event.contradiction_notes = None
+    event.extraction_provenance = degraded_provenance
+    event.lifecycle_status = "emerging"
+    event.epistemic_state = "emerging"
+    event.activity_state = "active"
+    return event, snapshot, degraded_claims, degraded_provenance, degraded_when
+
+
+def _require_snapshot_restored(event: Event, snapshot: CanonicalExtractionSnapshot) -> None:
+    restored_checks = (
+        ("event_summary", event.event_summary, snapshot.event_summary),
+        ("extracted_who", event.extracted_who, snapshot.extracted_who),
+        ("extracted_what", event.extracted_what, snapshot.extracted_what),
+        ("extracted_where", event.extracted_where, snapshot.extracted_where),
+        ("extracted_when", event.extracted_when, snapshot.extracted_when),
+        ("extracted_claims", event.extracted_claims, snapshot.extracted_claims),
+        ("categories", event.categories, snapshot.categories),
+        ("has_contradictions", event.has_contradictions, snapshot.has_contradictions),
+        ("contradiction_notes", event.contradiction_notes, snapshot.contradiction_notes),
+        ("extraction_provenance", event.extraction_provenance, snapshot.extraction_provenance),
+        ("lifecycle_status", event.lifecycle_status, snapshot.lifecycle_status),
+        ("epistemic_state", event.epistemic_state, snapshot.epistemic_state),
+        ("activity_state", event.activity_state, snapshot.activity_state),
+    )
+    for field_name, actual, expected in restored_checks:
+        _require(actual == expected, f"Degraded hold lost canonical {field_name}")
+
+
+def _require_provisional_payload_retained(
+    provisional: dict[str, Any],
+    *,
+    degraded_claims: dict[str, Any],
+    degraded_provenance: dict[str, Any],
+    degraded_when: datetime,
+) -> None:
+    expected_checks = (
+        ("summary", provisional["summary"], "Held degraded summary"),
+        ("extracted_claims", provisional["extracted_claims"], degraded_claims),
+        ("provenance", provisional["provenance"], degraded_provenance),
+        ("extracted_when", provisional["extracted_when"], degraded_when.isoformat()),
+        ("replay_enqueued", provisional["replay_enqueued"], True),
+        ("policy", provisional["policy"], {"degraded_llm": True}),
+    )
+    for field_name, actual, expected in expected_checks:
+        _require(actual == expected, f"Provisional payload did not retain {field_name}")
+
+
+def _behavior_cache_key(
+    *,
+    provider: str = "openai",
+    model: str = "gpt-4.1-mini",
+    reasoning_effort: str = "medium",
+    api_mode: str = "chat_completions",
+    prompt_template: str = "prompt-v1",
+    schema_payload: dict[str, Any] | None = None,
+    request_overrides: dict[str, Any] | None = None,
+) -> str:
+    return LLMSemanticCache.build_cache_key(
+        stage="tier2",
+        provider=provider,
+        model=model,
+        reasoning_effort=reasoning_effort,
+        api_mode=api_mode,
+        prompt_path="ai/prompts/tier2_classify.md",
+        prompt_template=prompt_template,
+        schema_name="tier2_event_classification",
+        schema_payload=schema_payload or {"type": "object"},
+        request_overrides=request_overrides or {"service_tier": "default"},
+        payload={"event_id": "1"},
+        redis_prefix="cache",
+    )
 
 
 def _trend(
@@ -468,8 +543,9 @@ _BEHAVIOR_CASE_DEFINITIONS = (
         suite="cache-invalidation",
         tags=("cache", "invalidation", "runtime", "safety"),
         production_contract=(
-            "Semantic cache entries must invalidate when model, prompt, schema, "
-            "or request-basis inputs change."
+            "Semantic cache entries must invalidate when provider, model, "
+            "reasoning effort, API mode, prompt, schema, or request-basis "
+            "inputs change."
         ),
         expected_behavior=(
             "Equivalent payloads produce distinct cache keys when a tracked basis input changes."

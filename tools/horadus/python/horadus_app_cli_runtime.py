@@ -173,6 +173,55 @@ def _collect_eval_audit(args: Any) -> tuple[dict[str, Any], list[str], int]:
     )
 
 
+def _collect_eval_behavior(args: Any) -> tuple[dict[str, Any], list[str], int]:
+    from src.eval.behavior import run_behavior_evals
+
+    try:
+        result = run_behavior_evals(
+            output_dir=args.output_dir,
+            suites=args.suite,
+            tags=args.tag,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        return (
+            {"error": message},
+            [f"Behavior eval configuration error: {message}"],
+            ExitCode.VALIDATION_ERROR,
+        )
+
+    lines = [
+        f"Behavior eval output: {result.output_path}",
+        f"Selected cases: {result.selected_cases}/{result.total_cases}",
+        f"Passed: {result.passed_cases}",
+        f"Failed: {result.failed_cases}",
+    ]
+    if result.selected_suites:
+        lines.append("Suites: " + ", ".join(result.selected_suites))
+    if result.selected_tags:
+        lines.append("Tags: " + ", ".join(result.selected_tags))
+    if result.failed_cases:
+        lines.append("Failed cases:")
+        lines.extend(
+            f"- {case.case_id}: {case.failure_message or 'failed'}"
+            for case in result.case_results
+            if not case.passed
+        )
+    return (
+        {
+            "output_path": str(result.output_path),
+            "passes_validation": result.passes_validation,
+            "selected_cases": result.selected_cases,
+            "passed_cases": result.passed_cases,
+            "failed_cases": result.failed_cases,
+            "selected_suites": list(result.selected_suites),
+            "selected_tags": list(result.selected_tags),
+        },
+        lines,
+        ExitCode.OK if result.passes_validation else ExitCode.VALIDATION_ERROR,
+    )
+
+
 def _collect_eval_validate_taxonomy(args: Any) -> tuple[dict[str, Any], list[str], int]:
     from src.eval.taxonomy_validation import run_trend_taxonomy_validation
 
@@ -535,6 +584,11 @@ def _action_eval_audit(payload: dict[str, Any]) -> dict[str, Any]:
     return _result_payload(exit_code=exit_code, data=data, lines=lines)
 
 
+def _action_eval_behavior(payload: dict[str, Any]) -> dict[str, Any]:
+    data, lines, exit_code = _collect_eval_behavior(_namespace(payload))
+    return _result_payload(exit_code=exit_code, data=data, lines=lines)
+
+
 def _action_eval_validate_taxonomy(payload: dict[str, Any]) -> dict[str, Any]:
     data, lines, exit_code = _collect_eval_validate_taxonomy(_namespace(payload))
     return _result_payload(exit_code=exit_code, data=data, lines=lines)
@@ -574,6 +628,7 @@ _ACTIONS: dict[str, Any] = {
     "dashboard-export": _action_dashboard_export,
     "doctor": _action_doctor,
     "eval-audit": _action_eval_audit,
+    "eval-behavior": _action_eval_behavior,
     "eval-benchmark": _action_eval_benchmark,
     "eval-embedding-lineage": _action_eval_embedding_lineage,
     "eval-replay": _action_eval_replay,
@@ -618,6 +673,7 @@ __all__ = [
     "_collect_dashboard_export",
     "_collect_doctor",
     "_collect_eval_audit",
+    "_collect_eval_behavior",
     "_collect_eval_benchmark",
     "_collect_eval_embedding_lineage",
     "_collect_eval_replay",

@@ -51,6 +51,30 @@ Run quality audit:
 uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl --output-dir ai/eval/results --max-items 200
 ```
 
+Run deterministic behavior suites for runtime safety contracts:
+
+```bash
+uv run --no-sync horadus eval behavior --output-dir ai/eval/results
+```
+
+Run only the relevant targeted behavior suites:
+
+```bash
+uv run --no-sync horadus eval behavior --suite taxonomy-safety
+uv run --no-sync horadus eval behavior --suite report-grounding --tag grounding
+```
+
+Current behavior suites:
+- `taxonomy-safety` - fail-closed deterministic mapping for ambiguous or unmapped signals
+- `degraded-mode-safety` - provisional-write behavior when degraded Tier-2 output must not overwrite canonical extraction
+- `report-grounding` - fallback grounding plus prompt-contract checks for grounded and uncertainty language
+- `cache-invalidation` - semantic-cache basis invalidation when prompt/schema/runtime inputs change
+
+Behavior-suite guidance:
+- Use these suites alongside the benchmark when a change touches the matching runtime contract surface.
+- Use `--suite` and `--tag` for focused prompt/runtime work; run the full `eval behavior` pack when scope crosses multiple safety surfaces or the risk bucket is unclear.
+- Behavior-suite artifacts stay exploratory in `ai/eval/results/` unless a later task explicitly promotes a milestone snapshot.
+
 Validate trend-taxonomy and gold-set contract (strict mode):
 
 ```bash

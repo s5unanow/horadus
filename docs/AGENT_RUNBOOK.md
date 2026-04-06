@@ -310,6 +310,28 @@ sync transitions without changing merge policy or timeout policy.
 - GPT-5 benchmark candidates stay available for targeted comparisons, but must
   be requested explicitly with repeated `--config` flags.
 
+## Behavior Eval Commands
+
+- `uv run --no-sync horadus eval behavior`
+When: run the full deterministic behavior-eval pack for high-risk prompt/runtime
+work that touches multiple safety surfaces.
+
+- `uv run --no-sync horadus eval behavior --suite taxonomy-safety`
+When: changes touch deterministic mapping, taxonomy, or indicator-selection
+contracts and you need the fail-closed safety checks without the whole pack.
+
+- `uv run --no-sync horadus eval behavior --suite degraded-mode-safety`
+When: changes touch degraded-mode holding, provisional extraction, or replay-hold
+behavior.
+
+- `uv run --no-sync horadus eval behavior --suite report-grounding`
+When: changes touch weekly/monthly report prompts, fallback narratives, or
+grounding thresholds/contracts.
+
+- `uv run --no-sync horadus eval behavior --tag grounding`
+When: a narrower operator/review flow needs only behavior cases tagged for the
+grounding contract family.
+
 ## Research-Heavy Workflows
 
 - Use bounded research mode only for triage, assessments, architecture review

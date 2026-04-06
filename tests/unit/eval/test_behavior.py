@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 import src.eval.behavior as behavior_module
+import src.eval.behavior_cases as behavior_cases_module
 
 pytestmark = pytest.mark.unit
 
@@ -68,6 +69,11 @@ def test_run_case_and_suite_summary_record_failures() -> None:
             "failed_cases": 1,
         }
     ]
+
+
+def test_behavior_cases_require_raises_on_false_condition() -> None:
+    with pytest.raises(ValueError, match="boom"):
+        behavior_cases_module._require(False, "boom")
 
 
 @pytest.mark.parametrize(

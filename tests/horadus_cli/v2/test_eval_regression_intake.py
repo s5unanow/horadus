@@ -6,7 +6,6 @@ from types import SimpleNamespace
 import pytest
 
 import src.eval.regression_intake as intake_module
-import src.eval.regression_intake_runtime as intake_runtime_module
 import tools.horadus.python.horadus_app_cli_runtime as runtime_module
 from tools.horadus.python.horadus_cli.app import _build_parser
 from tools.horadus.python.horadus_cli.result import ExitCode
@@ -40,7 +39,7 @@ def test_collect_eval_regression_intake_returns_validation_error_for_bad_inputs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        intake_runtime_module,
+        intake_module,
         "run_regression_intake",
         lambda **_kwargs: (_ for _ in ()).throw(ValueError("bad input")),
     )
@@ -68,7 +67,7 @@ def test_collect_eval_regression_intake_reports_run_summary(
         total_records=3,
         emitted_cases=2,
     )
-    monkeypatch.setattr(intake_runtime_module, "run_regression_intake", lambda **_kwargs: result)
+    monkeypatch.setattr(intake_module, "run_regression_intake", lambda **_kwargs: result)
 
     data, lines, exit_code = runtime_module._collect_eval_regression_intake(
         SimpleNamespace(
@@ -89,8 +88,8 @@ def test_collect_eval_regression_intake_reports_run_summary(
 
 def test_action_eval_regression_intake_wraps_collector(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        intake_runtime_module,
-        "collect_eval_regression_intake",
+        runtime_module,
+        "_collect_eval_regression_intake",
         lambda _args: ({"value": "x"}, ["line"], ExitCode.OK),
     )
 
@@ -105,8 +104,8 @@ def test_action_eval_regression_intake_omits_lines_for_empty_output(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        intake_runtime_module,
-        "collect_eval_regression_intake",
+        runtime_module,
+        "_collect_eval_regression_intake",
         lambda _args: ({"value": "x"}, [], ExitCode.OK),
     )
 

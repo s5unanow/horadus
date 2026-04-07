@@ -11,12 +11,14 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
 
-import src.eval.regression_intake_runtime as regression_intake_runtime
 from src.core.config import settings as runtime_settings
+from src.core.embedding_lineage_runtime import (
+    collect_embedding_lineage_runtime,
+    format_embedding_model_counts,
+)
 
 settings = runtime_settings
-_action_eval_regression_intake = regression_intake_runtime.action_eval_regression_intake
-_collect_eval_regression_intake = regression_intake_runtime.collect_eval_regression_intake
+_format_embedding_model_counts = format_embedding_model_counts
 
 
 class ExitCode(IntEnum):
@@ -62,12 +64,6 @@ def _parse_iso_datetime(value: str | None) -> datetime | None:
     if normalized.endswith("Z"):
         normalized = normalized[:-1] + "+00:00"
     return datetime.fromisoformat(normalized)
-
-
-def _format_embedding_model_counts(summary: Any) -> str:
-    if not summary.model_counts:
-        return "none"
-    return ", ".join(f"{entry.model}={entry.count}" for entry in summary.model_counts)
 
 
 async def _collect_trends_status(limit: int) -> tuple[dict[str, Any], list[str]]:
@@ -225,6 +221,41 @@ def _collect_eval_behavior(args: Any) -> tuple[dict[str, Any], list[str], int]:
     )
 
 
+def _collect_eval_regression_intake(args: Any) -> tuple[dict[str, Any], list[str], int]:
+    from src.eval.regression_intake import run_regression_intake
+
+    try:
+        result = run_regression_intake(
+            source_surface=args.source_surface,
+            input_path=args.input,
+            output_dir=args.output_dir,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        return (
+            {"error": message},
+            [f"Regression intake configuration error: {message}"],
+            ExitCode.VALIDATION_ERROR,
+        )
+
+    lines = [
+        f"Regression intake output: {result.output_path}",
+        f"Source surface: {result.source_surface}",
+        f"Source records: {result.total_records}",
+        f"Emitted cases: {result.emitted_cases}",
+    ]
+    return (
+        {
+            "output_path": str(result.output_path),
+            "source_surface": result.source_surface,
+            "total_records": result.total_records,
+            "emitted_cases": result.emitted_cases,
+        },
+        lines,
+        ExitCode.OK,
+    )
+
+
 def _collect_eval_validate_taxonomy(args: Any) -> tuple[dict[str, Any], list[str], int]:
     from src.eval.taxonomy_validation import run_trend_taxonomy_validation
 
@@ -300,57 +331,9 @@ async def _collect_eval_vector_benchmark(args: Any) -> tuple[dict[str, Any], lis
 
 
 async def _collect_eval_embedding_lineage(args: Any) -> tuple[dict[str, Any], list[str], int]:
-    from src.core.embedding_lineage import build_embedding_lineage_report
-    from src.storage.database import async_session_maker
-
-    async with async_session_maker() as session:
-        report = await build_embedding_lineage_report(session, target_model=args.target_model)
-
-    lines = [f"Embedding target model: {report.target_model}"]
-    summaries = []
-    for summary in (report.raw_items, report.events):
-        summaries.append(
-            {
-                "entity": summary.entity,
-                "vectors": summary.vectors,
-                "target_model_vectors": summary.target_model_vectors,
-                "vectors_other_models": summary.vectors_other_models,
-                "vectors_missing_model": summary.vectors_missing_model,
-                "reembed_scope": summary.reembed_scope,
-                "model_counts": [
-                    {"model": entry.model, "count": entry.count} for entry in summary.model_counts
-                ],
-            }
-        )
-        lines.append(
-            f"{summary.entity}: vectors={summary.vectors}, "
-            f"target={summary.target_model_vectors}, "
-            f"other_models={summary.vectors_other_models}, "
-            f"missing_model={summary.vectors_missing_model}, "
-            f"reembed_scope={summary.reembed_scope}"
-        )
-        lines.append(f"  model_counts: {_format_embedding_model_counts(summary)}")
-
-    lines.append(
-        f"total_vectors={report.total_vectors}, "
-        f"total_reembed_scope={report.total_reembed_scope}, "
-        f"mixed_population={str(report.has_mixed_populations).lower()}"
-    )
-    exit_code = (
-        ExitCode.VALIDATION_ERROR
-        if args.fail_on_mixed and report.has_mixed_populations
-        else ExitCode.OK
-    )
-    return (
-        {
-            "target_model": report.target_model,
-            "summaries": summaries,
-            "total_vectors": report.total_vectors,
-            "total_reembed_scope": report.total_reembed_scope,
-            "has_mixed_populations": report.has_mixed_populations,
-        },
-        lines,
-        exit_code,
+    return await collect_embedding_lineage_runtime(
+        target_model=args.target_model,
+        fail_on_mixed=args.fail_on_mixed,
     )
 
 
@@ -589,6 +572,11 @@ def _action_eval_audit(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _action_eval_behavior(payload: dict[str, Any]) -> dict[str, Any]:
     data, lines, exit_code = _collect_eval_behavior(_namespace(payload))
+    return _result_payload(exit_code=exit_code, data=data, lines=lines)
+
+
+def _action_eval_regression_intake(payload: dict[str, Any]) -> dict[str, Any]:
+    data, lines, exit_code = _collect_eval_regression_intake(_namespace(payload))
     return _result_payload(exit_code=exit_code, data=data, lines=lines)
 
 

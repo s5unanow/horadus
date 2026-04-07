@@ -60,3 +60,13 @@ that queues a worker task, and inspect traces at:
 3. Verify worker spans share the same trace ID as the originating API request.
 4. Confirm child spans include DB (`sqlalchemy`), Redis, and HTTP client calls.
 5. If spans are missing, validate endpoint/headers and `OTEL_ENABLED=true`.
+
+## Regression Intake Provenance
+
+When exporting runtime failures for `horadus eval regression-intake`:
+
+- Preserve trace metadata when it is already available in the local artifact
+  wrapper (`trace_id`, `span_id`, `traceparent`, `request_id`).
+- Do not copy auth headers or secrets into the intake artifact.
+- Treat trace metadata as provenance only; review and redact freeform operator
+  notes before promoting a case into tracked eval data.

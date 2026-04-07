@@ -86,6 +86,36 @@ def _register_eval_replay_parser(
     parser.set_defaults(handler=lambda args: runtime_result("eval-replay", args))
 
 
+def _register_eval_regression_intake_parser(
+    eval_subparsers: Any,
+    *,
+    add_leaf_options: Callable[[argparse.ArgumentParser], None],
+    runtime_result: Callable[[str, Any], Any],
+) -> None:
+    parser = eval_subparsers.add_parser(
+        "regression-intake",
+        help="Convert runtime failure exports into reviewable eval-regression intake artifacts.",
+    )
+    add_leaf_options(parser)
+    parser.add_argument(
+        "--source-surface",
+        choices=["taxonomy-gap", "report-grounding"],
+        required=True,
+        help="Runtime failure surface to normalize.",
+    )
+    parser.add_argument(
+        "--input",
+        required=True,
+        help="Path to a local JSON export from the selected runtime surface.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default="ai/eval/results",
+        help="Directory for regression-intake artifacts.",
+    )
+    parser.set_defaults(handler=lambda args: runtime_result("eval-regression-intake", args))
+
+
 def _register_eval_vector_parser(
     eval_subparsers: Any,
     *,
@@ -304,6 +334,11 @@ def register_ops_commands(
         add_leaf_options=add_leaf_options,
         runtime_result=runtime_result,
         replay_config_choices=replay_config_choices,
+    )
+    _register_eval_regression_intake_parser(
+        eval_subparsers,
+        add_leaf_options=add_leaf_options,
+        runtime_result=runtime_result,
     )
 
     _register_eval_vector_parser(

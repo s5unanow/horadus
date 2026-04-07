@@ -11,9 +11,12 @@ from types import SimpleNamespace
 from typing import Any, cast
 from uuid import UUID
 
+import src.eval.regression_intake_runtime as regression_intake_runtime
 from src.core.config import settings as runtime_settings
 
 settings = runtime_settings
+_action_eval_regression_intake = regression_intake_runtime.action_eval_regression_intake
+_collect_eval_regression_intake = regression_intake_runtime.collect_eval_regression_intake
 
 
 class ExitCode(IntEnum):
@@ -631,6 +634,7 @@ _ACTIONS: dict[str, Any] = {
     "eval-behavior": _action_eval_behavior,
     "eval-benchmark": _action_eval_benchmark,
     "eval-embedding-lineage": _action_eval_embedding_lineage,
+    "eval-regression-intake": _action_eval_regression_intake,
     "eval-replay": _action_eval_replay,
     "eval-source-freshness": _action_eval_source_freshness,
     "eval-validate-taxonomy": _action_eval_validate_taxonomy,
@@ -676,6 +680,7 @@ __all__ = [
     "_collect_eval_behavior",
     "_collect_eval_benchmark",
     "_collect_eval_embedding_lineage",
+    "_collect_eval_regression_intake",
     "_collect_eval_replay",
     "_collect_eval_source_freshness",
     "_collect_eval_validate_taxonomy",

@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-364` Build a Runtime-to-Eval Regression Intake Loop
 - `TASK-366` Add a Code-Health Erosion Eval for Changed Python Surfaces
 - `TASK-367` Ratchet Changed-File Code-Health Regressions in Local Gates
 - `TASK-368` Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files
@@ -54,3 +53,4 @@
 - `TASK-371` Close Sprint 8 and seed Sprint 9 from the live backlog ✅
 - `TASK-363` Add Behavior-Oriented Eval Suites for High-Risk LLM Safety Paths ✅
 - `TASK-372` Tighten behavior eval restore/cache coverage ✅
+- `TASK-364` Build a Runtime-to-Eval Regression Intake Loop ✅

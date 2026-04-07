@@ -96,27 +96,6 @@ priorities, and rollout order.
 
 ---
 
-### TASK-364: Build a Runtime-to-Eval Regression Intake Loop
-**Priority**: P2 (Medium)
-**Estimate**: 3-5 hours
-
-Turn real runtime/operator failures into eval seeds instead of relying only on
-handcrafted benchmark rows. Add a small workflow that converts selected
-taxonomy-gap, replay-failure, grounding-violation, or operator-invalidation
-artifacts into a reviewable regression-intake format with provenance and
-redaction expectations.
-
-**Planning Gates**: Not Required — scoped evaluation-data workflow improvement
-**Files**: `src/eval/`, `tools/horadus/python/horadus_cli/`, `ai/eval/`, `docs/TRACING.md`, `ai/eval/README.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Define a repo-owned intake format for candidate regression cases with provenance metadata and redaction expectations
-- [ ] Support collecting seeds from at least two existing failure surfaces
-- [ ] Document the review flow for promoting an intake case into the gold set or a behavior suite
-- [ ] Tests cover normalization and provenance handling without requiring network access
-
----
-
 ### TASK-365: Add Retrieval Behavior Evals for RFC-001 Context Surfaces
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours

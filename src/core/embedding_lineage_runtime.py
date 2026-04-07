@@ -5,7 +5,6 @@ from __future__ import annotations
 from typing import Any
 
 from src.core import embedding_lineage as embedding_lineage_module
-from src.storage import database as database_module
 
 
 def format_embedding_model_counts(summary: Any) -> str:
@@ -22,6 +21,8 @@ async def collect_embedding_lineage_runtime(
     fail_on_mixed: bool,
 ) -> tuple[dict[str, Any], list[str], int]:
     """Collect embedding-lineage data in the CLI runtime payload shape."""
+
+    from src.storage import database as database_module
 
     async with database_module.async_session_maker() as session:
         report = await embedding_lineage_module.build_embedding_lineage_report(

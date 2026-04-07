@@ -373,3 +373,4 @@
 - TASK-371: Close Sprint 8 and seed Sprint 9 from the live backlog ✅
 - TASK-363: Add Behavior-Oriented Eval Suites for High-Risk LLM Safety Paths ✅
 - TASK-372: Tighten behavior eval restore/cache coverage ✅
+- TASK-364: Build a Runtime-to-Eval Regression Intake Loop ✅

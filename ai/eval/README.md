@@ -57,6 +57,22 @@ Run deterministic behavior suites for runtime safety contracts:
 uv run --no-sync horadus eval behavior --output-dir ai/eval/results
 ```
 
+Convert runtime failure exports into regression-intake artifacts:
+
+```bash
+uv run --no-sync horadus eval regression-intake \
+  --source-surface taxonomy-gap \
+  --input artifacts/runtime/taxonomy-gaps.json \
+  --output-dir ai/eval/results
+```
+
+```bash
+uv run --no-sync horadus eval regression-intake \
+  --source-surface report-grounding \
+  --input artifacts/runtime/report-grounding.json \
+  --output-dir ai/eval/results
+```
+
 Run only the relevant targeted behavior suites:
 
 ```bash
@@ -69,6 +85,24 @@ Current behavior suites:
 - `degraded-mode-safety` - provisional-write behavior when degraded Tier-2 output must not overwrite canonical extraction
 - `report-grounding` - fallback grounding plus prompt-contract checks for grounded and uncertainty language
 - `cache-invalidation` - semantic-cache basis invalidation when prompt/schema/runtime inputs change
+
+Regression-intake artifact contract:
+- Artifacts are exploratory JSON outputs under `ai/eval/results/` and are not source-of-truth by default.
+- `horadus eval regression-intake` currently supports:
+  - `taxonomy-gap` exports from `GET /api/v1/taxonomy-gaps`
+  - `report-grounding` exports from report payloads that include `grounding_status`
+- Each intake case records:
+  - runtime surface, failure mode, and a normalized seed payload
+  - source-artifact provenance (path + SHA256) plus source-control provenance
+  - explicit redaction expectations for freeform text and operator identifiers
+  - the recommended behavior suite and `ai/eval/gold_set.jsonl` as the alternate promotion target
+
+Promotion flow:
+1. Export the smallest local runtime artifact that captures the failure.
+2. Run `horadus eval regression-intake` for the matching surface.
+3. Review the emitted case and remove operator identifiers, ticket references, or unsafe freeform text.
+4. Promote to `ai/eval/gold_set.jsonl` when the failure should become a labeled example.
+5. Promote to the recommended behavior suite when the failure is a deterministic contract regression.
 
 Behavior-suite guidance:
 - Use these suites alongside the benchmark when a change touches the matching runtime contract surface.

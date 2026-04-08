@@ -116,6 +116,38 @@ def _register_eval_regression_intake_parser(
     parser.set_defaults(handler=lambda args: runtime_result("eval-regression-intake", args))
 
 
+def _register_eval_code_health_parser(
+    eval_subparsers: Any,
+    *,
+    add_leaf_options: Callable[[argparse.ArgumentParser], None],
+    handle_code_health: Callable[[Any], Any],
+) -> None:
+    parser = eval_subparsers.add_parser(
+        "code-health",
+        help="Compare changed Python files against a base revision using repo-owned code-shape metrics.",
+    )
+    add_leaf_options(parser)
+    parser.add_argument(
+        "--output-dir", default="ai/eval/results", help="Directory for code-health artifacts."
+    )
+    parser.add_argument(
+        "--base-ref",
+        default=None,
+        help="Optional explicit git base ref. Defaults to merge-base against --merge-base-target.",
+    )
+    parser.add_argument(
+        "--head-ref",
+        default="HEAD",
+        help="Git head ref to compare. Defaults to HEAD.",
+    )
+    parser.add_argument(
+        "--merge-base-target",
+        default="main",
+        help="Target ref used for merge-base discovery when --base-ref is omitted.",
+    )
+    parser.set_defaults(handler=handle_code_health)
+
+
 def _register_eval_vector_parser(
     eval_subparsers: Any,
     *,
@@ -160,6 +192,7 @@ def register_ops_commands(
     *,
     add_leaf_options: Callable[[argparse.ArgumentParser], None],
     runtime_result: Callable[[str, Any], Any],
+    handle_eval_code_health: Callable[[Any], Any],
     handle_agent_smoke: Callable[[Any], Any],
     default_embedding_model: Callable[[], str],
     default_agent_base_url: Callable[[], str],
@@ -339,6 +372,11 @@ def register_ops_commands(
         eval_subparsers,
         add_leaf_options=add_leaf_options,
         runtime_result=runtime_result,
+    )
+    _register_eval_code_health_parser(
+        eval_subparsers,
+        add_leaf_options=add_leaf_options,
+        handle_code_health=handle_eval_code_health,
     )
 
     _register_eval_vector_parser(

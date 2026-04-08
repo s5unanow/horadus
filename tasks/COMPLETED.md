@@ -374,3 +374,4 @@
 - TASK-363: Add Behavior-Oriented Eval Suites for High-Risk LLM Safety Paths ✅
 - TASK-372: Tighten behavior eval restore/cache coverage ✅
 - TASK-364: Build a Runtime-to-Eval Regression Intake Loop ✅
+- TASK-366: Add a Code-Health Erosion Eval for Changed Python Surfaces ✅

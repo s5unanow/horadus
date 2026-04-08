@@ -251,6 +251,15 @@ Note: the repo `pre-push` hook runs the same gate by default; bypass only with
 If Docker auto-start is unsupported in the current environment, start Docker
 manually before rerunning the workflow command.
 
+19. `uv run --no-sync horadus eval code-health [--base-ref <ref>] [--head-ref <ref>] [--merge-base-target <ref>]`
+When: compare changed tracked Python files using the repo-owned code-shape
+metrics and emit a deterministic structural-regression artifact under
+`ai/eval/results/` (or a provided output directory).
+Use `--base-ref` plus `--head-ref` for an explicit diff, or omit `--base-ref`
+to compare the current branch head against `merge-base(<target>, <head>)`.
+The eval reports per-file metric deltas and fails closed when any modified file
+regresses on tracked verbosity/shape metrics.
+
 ## Optional Local Review
 
 `uv run --no-sync horadus tasks local-review --format json`

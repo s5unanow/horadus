@@ -40,6 +40,8 @@ class FileMeasurement:
     module_lines: int
     member_lines: dict[str, int]
     member_complexities: dict[str, int]
+    callable_count: int
+    statement_count: int
     is_test: bool
 
 
@@ -334,17 +336,52 @@ def _collect_member_complexities(tree: ast.AST) -> dict[str, int]:
     return member_complexities
 
 
-def measure_python_file(repo_root: Path, path: Path) -> FileMeasurement:
-    relative_path = path.relative_to(repo_root).as_posix()
-    text = path.read_text(encoding="utf-8")
+def _docstring_statement_ids(tree: ast.AST) -> set[int]:
+    docstring_ids: set[int] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        body = getattr(node, "body", [])
+        if not body:
+            continue
+        first_statement = body[0]
+        if (
+            isinstance(first_statement, ast.Expr)
+            and isinstance(first_statement.value, ast.Constant)
+            and isinstance(first_statement.value.value, str)
+        ):
+            docstring_ids.add(id(first_statement))
+    return docstring_ids
+
+
+def _statement_count(tree: ast.AST) -> int:
+    docstring_ids = _docstring_statement_ids(tree)
+    return sum(
+        1
+        for node in ast.walk(tree)
+        if isinstance(node, ast.stmt)
+        and not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+        and id(node) not in docstring_ids
+    )
+
+
+def measure_python_source(relative_path: str, text: str) -> FileMeasurement:
     tree = ast.parse(text, filename=relative_path)
+    member_lines = _collect_member_lines(tree)
     return FileMeasurement(
         path=relative_path,
         module_lines=len(text.splitlines()),
-        member_lines=_collect_member_lines(tree),
+        member_lines=member_lines,
         member_complexities=_collect_member_complexities(tree),
+        callable_count=len(member_lines),
+        statement_count=_statement_count(tree),
         is_test=relative_path.startswith("tests/"),
     )
+
+
+def measure_python_file(repo_root: Path, path: Path) -> FileMeasurement:
+    relative_path = path.relative_to(repo_root).as_posix()
+    return measure_python_source(relative_path, path.read_text(encoding="utf-8"))
 
 
 def _module_budget(measurement: FileMeasurement, budgets: CodeShapeBudgets) -> int:
@@ -604,6 +641,7 @@ __all__ = [
     "LegacyFilePolicy",
     "load_code_shape_policy",
     "measure_python_file",
+    "measure_python_source",
     "render_code_shape_issues",
     "run_code_shape_check",
 ]

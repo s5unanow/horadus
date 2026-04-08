@@ -17,6 +17,8 @@ from tools.horadus.python.horadus_cli import _ops_registration as registration
 from tools.horadus.python.horadus_cli import _ops_runtime_bridge as runtime_bridge
 from tools.horadus.python.horadus_cli import _ops_smoke as smoke_helpers
 from tools.horadus.python.horadus_cli.result import CommandResult, ExitCode
+from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo
+from tools.horadus.python.horadus_workflow.code_health import run_code_health_eval
 
 _RUNTIME_BRIDGE_MODULE = "tools.horadus.python.horadus_app_cli_runtime"
 _INTERNAL_ARG_KEYS = {
@@ -165,6 +167,7 @@ def register_ops_commands(subparsers: Any) -> None:
         subparsers,
         add_leaf_options=_ops_leaf_options,
         runtime_result=_runtime_result,
+        handle_eval_code_health=_handle_eval_code_health,
         handle_agent_smoke=_handle_agent_smoke,
         default_embedding_model=_default_embedding_model,
         default_agent_base_url=_default_agent_base_url,
@@ -195,3 +198,69 @@ def _handle_agent_smoke(args: Any) -> CommandResult:
         api_key=(args.api_key or "").strip() or None,
     )
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
+def _handle_eval_code_health(args: Any) -> CommandResult:
+    try:
+        resolved_repo_root = workflow_task_repo.repo_root()
+    except RuntimeError as exc:
+        message = str(exc)
+        return CommandResult(
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            error_lines=[f"Code-health eval environment error: {message}"],
+            data={"error": message},
+        )
+
+    try:
+        result = run_code_health_eval(
+            output_dir=args.output_dir,
+            repo_root=resolved_repo_root,
+            base_ref=args.base_ref,
+            head_ref=args.head_ref,
+            merge_base_target=args.merge_base_target,
+        )
+    except ValueError as exc:
+        message = str(exc)
+        return CommandResult(
+            exit_code=ExitCode.VALIDATION_ERROR,
+            lines=[f"Code-health eval configuration error: {message}"],
+            data={"error": message},
+        )
+
+    regressions = [
+        {
+            "path": row.path,
+            "change_type": row.change_type,
+            "worsened_metrics": list(row.worsened_metrics),
+        }
+        for row in result.file_results
+        if row.worsened_metrics
+    ]
+    lines = [
+        f"Code-health output: {result.output_path}",
+        f"Comparison: {result.base_ref} -> {result.head_ref} ({result.comparison_mode})",
+        f"Compared files: {result.compared_files}",
+        f"Flagged regressions: {result.flagged_files}",
+    ]
+    if regressions:
+        lines.append("Regressions:")
+        lines.extend(
+            f"- {row['path']}: {', '.join(row['worsened_metrics'])}" for row in regressions
+        )
+    return CommandResult(
+        exit_code=ExitCode.OK if result.passes_validation else ExitCode.VALIDATION_ERROR,
+        lines=lines,
+        data={
+            "output_path": str(result.output_path),
+            "passes_validation": result.passes_validation,
+            "comparison_mode": result.comparison_mode,
+            "base_ref": result.base_ref,
+            "resolved_base_ref": result.resolved_base_ref,
+            "head_ref": result.head_ref,
+            "resolved_head_ref": result.resolved_head_ref,
+            "merge_base_target": result.merge_base_target,
+            "compared_files": result.compared_files,
+            "flagged_files": result.flagged_files,
+            "regressions": regressions,
+        },
+    )

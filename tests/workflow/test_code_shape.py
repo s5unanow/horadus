@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 
 from tools.horadus.python.horadus_workflow.code_shape import (
+    _docstring_statement_ids,
     _is_irrefutable_match_pattern,
+    _statement_count,
     measure_python_file,
     render_code_shape_issues,
     run_code_shape_check,
@@ -784,3 +786,39 @@ exclude_globs = []
     result = run_code_shape_check(repo_root=tmp_path, policy_path=policy_path)
 
     assert result.issues == ()
+
+
+def test_statement_count_ignores_docstrings_and_handles_empty_manual_bodies() -> None:
+    tree = ast.Module(
+        body=[
+            ast.FunctionDef(
+                name="run",
+                args=ast.arguments(
+                    posonlyargs=[],
+                    args=[],
+                    kwonlyargs=[],
+                    kw_defaults=[],
+                    defaults=[],
+                ),
+                body=[
+                    ast.Expr(value=ast.Constant(value="doc")),
+                    ast.Return(value=ast.Constant(value=1)),
+                ],
+                decorator_list=[],
+            ),
+            ast.ClassDef(
+                name="Empty",
+                bases=[],
+                keywords=[],
+                body=[],
+                decorator_list=[],
+            ),
+        ],
+        type_ignores=[],
+    )
+    ast.fix_missing_locations(tree)
+
+    docstring_ids = _docstring_statement_ids(tree)
+
+    assert len(docstring_ids) == 1
+    assert _statement_count(tree) == 1

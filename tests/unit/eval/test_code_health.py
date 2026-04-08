@@ -152,6 +152,30 @@ def test_run_code_health_eval_defaults_to_merge_base_against_main(tmp_path: Path
     assert result.file_results[0].improved_metrics == ("statement_count",)
 
 
+def test_run_code_health_eval_treats_rename_with_edits_as_modified(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    _write_policy(tmp_path)
+    _write_file(tmp_path, "src/app.py", "def run() -> int:\n    return 1\n")
+    base_ref = _commit_all(tmp_path, "base")
+
+    _git(tmp_path, "checkout", "-b", "feature")
+    (tmp_path / "src" / "app.py").unlink()
+    _write_file(tmp_path, "src/refined.py", "def run() -> int:\n    value = 1; return value\n")
+    head_ref = _commit_all(tmp_path, "head")
+
+    result = run_code_health_eval(
+        output_dir=tmp_path / "artifacts",
+        repo_root=tmp_path,
+        base_ref=base_ref,
+        head_ref=head_ref,
+    )
+
+    assert result.flagged_files == 1
+    assert result.file_results[0].path == "src/refined.py"
+    assert result.file_results[0].change_type == "modified"
+    assert result.file_results[0].worsened_metrics == ("statement_count",)
+
+
 def test_code_health_helpers_cover_filtered_records_and_non_modified_results(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

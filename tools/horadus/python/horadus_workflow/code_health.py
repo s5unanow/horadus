@@ -173,7 +173,7 @@ def _changed_python_records(
 ) -> tuple[tuple[str, str | None, str | None], ...]:
     status_output = _run_git_command(
         repo_root,
-        ("diff", "--name-status", "--find-renames=100%", base_ref, head_ref),
+        ("diff", "--name-status", "--find-renames=20%", base_ref, head_ref),
         error_context="Unable to determine changed files for code-health eval",
     )
     records: list[tuple[str, str | None, str | None]] = []

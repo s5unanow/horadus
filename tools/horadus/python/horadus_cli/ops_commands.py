@@ -4,7 +4,6 @@ import asyncio
 import os
 import subprocess  # nosec B404
 import sys
-from pathlib import Path
 from typing import Any
 from urllib import error as urllib_error
 from urllib import request as urllib_request
@@ -18,6 +17,7 @@ from tools.horadus.python.horadus_cli import _ops_registration as registration
 from tools.horadus.python.horadus_cli import _ops_runtime_bridge as runtime_bridge
 from tools.horadus.python.horadus_cli import _ops_smoke as smoke_helpers
 from tools.horadus.python.horadus_cli.result import CommandResult, ExitCode
+from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo
 from tools.horadus.python.horadus_workflow.code_health import run_code_health_eval
 
 _RUNTIME_BRIDGE_MODULE = "tools.horadus.python.horadus_app_cli_runtime"
@@ -202,9 +202,19 @@ def _handle_agent_smoke(args: Any) -> CommandResult:
 
 def _handle_eval_code_health(args: Any) -> CommandResult:
     try:
+        resolved_repo_root = workflow_task_repo.repo_root()
+    except RuntimeError as exc:
+        message = str(exc)
+        return CommandResult(
+            exit_code=ExitCode.ENVIRONMENT_ERROR,
+            error_lines=[f"Code-health eval environment error: {message}"],
+            data={"error": message},
+        )
+
+    try:
         result = run_code_health_eval(
             output_dir=args.output_dir,
-            repo_root=Path.cwd(),
+            repo_root=resolved_repo_root,
             base_ref=args.base_ref,
             head_ref=args.head_ref,
             merge_base_target=args.merge_base_target,

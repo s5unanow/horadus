@@ -64,6 +64,28 @@ def test_handle_eval_code_health_returns_validation_error_for_bad_inputs(
     assert result.exit_code == ExitCode.VALIDATION_ERROR
 
 
+def test_handle_eval_code_health_returns_environment_error_when_repo_root_lookup_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "tools.horadus.python.horadus_cli.ops_commands.workflow_task_repo.repo_root",
+        lambda: (_ for _ in ()).throw(RuntimeError("missing repo")),
+    )
+
+    result = _handle_eval_code_health(
+        SimpleNamespace(
+            output_dir="ai/eval/results",
+            base_ref="HEAD~1",
+            head_ref="HEAD",
+            merge_base_target="main",
+        )
+    )
+
+    assert result.data == {"error": "missing repo"}
+    assert result.error_lines == ["Code-health eval environment error: missing repo"]
+    assert result.exit_code == ExitCode.ENVIRONMENT_ERROR
+
+
 def test_handle_eval_code_health_reports_run_summary(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -118,6 +140,57 @@ def test_handle_eval_code_health_reports_run_summary(
     assert any("Flagged regressions: 1" in line for line in command_result.lines)
     assert any("src/app.py: statement_count" in line for line in command_result.lines)
     assert command_result.exit_code == ExitCode.VALIDATION_ERROR
+
+
+def test_handle_eval_code_health_resolves_repo_root_instead_of_cwd(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    subdir = repo_root / "tools" / "nested"
+    subdir.mkdir(parents=True)
+    captured: dict[str, object] = {}
+    result = CodeHealthRunResult(
+        output_path=tmp_path / "code-health.json",
+        passes_validation=True,
+        comparison_mode="explicit",
+        base_ref="HEAD~1",
+        resolved_base_ref="abc123",
+        head_ref="HEAD",
+        resolved_head_ref="def456",
+        merge_base_target=None,
+        compared_files=0,
+        flagged_files=0,
+        file_results=(),
+    )
+
+    monkeypatch.chdir(subdir)
+    monkeypatch.setattr(
+        "tools.horadus.python.horadus_cli.ops_commands.workflow_task_repo.repo_root",
+        lambda: repo_root,
+    )
+
+    def fake_run_code_health_eval(**kwargs: object) -> CodeHealthRunResult:
+        captured.update(kwargs)
+        return result
+
+    monkeypatch.setattr(
+        "tools.horadus.python.horadus_cli.ops_commands.run_code_health_eval",
+        fake_run_code_health_eval,
+    )
+
+    command_result = _handle_eval_code_health(
+        SimpleNamespace(
+            output_dir=str(tmp_path),
+            base_ref="HEAD~1",
+            head_ref="HEAD",
+            merge_base_target="main",
+        )
+    )
+
+    assert command_result.exit_code == ExitCode.OK
+    assert captured["repo_root"] == repo_root
+    assert captured["repo_root"] != Path.cwd()
 
 
 def test_handle_eval_code_health_omits_regression_section_when_clean(

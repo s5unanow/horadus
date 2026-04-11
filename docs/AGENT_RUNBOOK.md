@@ -90,7 +90,8 @@ to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
 `tasks/COMPLETED.md` before merge.
 
 5. `make agent-check`
-When: fast local quality gate (lint + typecheck + code-shape + unit tests).
+When: fast local quality gate (lint + typecheck + code-shape +
+changed-file code-health ratchet + unit tests).
 This covers tracked Python under `src/`, `tools/`, and `scripts/`.
 The workflow unit suite includes the repo-owned import-boundary analyzer for
 `src/` dependency direction, tooling package boundaries, and the explicit
@@ -105,6 +106,9 @@ The full gate also runs the repo-owned code-shape checker, which enforces the
 current module/function line budgets, member cyclomatic-complexity budgets,
 and ratcheting limits for explicitly tracked legacy hotspots in
 `config/quality/code_shape.toml`.
+It also fail-closes on the diff-scoped changed-file code-health eval, so only
+Python files made worse by the current branch are blocked; untouched legacy
+hotspots remain non-blocking.
 It also fail-closes on repo-owned eval dataset-quality/provenance checks that
 previously lived partly as opt-in commands.
 The unit-coverage step fails closed at `100%` measured coverage for `src/` and

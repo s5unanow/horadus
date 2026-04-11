@@ -120,30 +120,6 @@ minimal and phase-appropriate.
 
 ---
 
-### TASK-367: Ratchet Changed-File Code-Health Regressions in Local Gates
-**Priority**: P1 (High)
-**Estimate**: 3-5 hours
-
-Once a code-health eval exists, use it as a ratchet on touched files instead of
-waiting for long-horizon structural decay to become another allowlist entry.
-Integrate the eval into the repo's quality workflow so authors get an early,
-consistent signal when a branch makes changed code harder to extend, even when
-the branch still passes ordinary tests and static thresholds.
-
-**Dependency Note**:
-- Sequence after `TASK-366`.
-
-**Planning Gates**: Required — shared workflow/gate behavior across agent-check and canonical local validation
-**Files**: `Makefile`, `tools/horadus/python/horadus_workflow/task_workflow_gate_steps.py`, `docs/AGENT_RUNBOOK.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] `make agent-check` surfaces changed-file code-health results in a clear author-facing form
-- [ ] `uv run --no-sync horadus tasks local-gate --full` fail-closes on touched-file structural regressions beyond the ratcheted policy
-- [ ] Unchanged legacy hotspots do not fail merely for existing debt; only regressions on files in scope are blocked
-- [ ] Tests cover no-op diffs, improving diffs, regressing diffs, and unaffected-file behavior
-
----
-
 ### TASK-368: Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files
 **Priority**: P2 (Medium)
 **Estimate**: 2-4 hours

@@ -35,6 +35,10 @@ def _audit_eval_gate_command(uv_bin: str) -> str:
     )
 
 
+def _code_health_gate_command(uv_bin: str) -> str:
+    return f"{uv_bin} run --no-sync horadus eval code-health --output-dir ai/eval/results"
+
+
 def full_local_gate_steps() -> list[LocalGateStep]:
     uv_bin = shlex.quote(shared.getenv("UV_BIN") or "uv")
     return [
@@ -48,6 +52,7 @@ def full_local_gate_steps() -> list[LocalGateStep]:
         LocalGateStep(
             name="code-shape", command=f"{uv_bin} run --no-sync python scripts/check_code_shape.py"
         ),
+        LocalGateStep(name="code-health", command=_code_health_gate_command(uv_bin)),
         LocalGateStep(
             name="ruff-format-check",
             command=f"{uv_bin} run --no-sync ruff format src/ tools/ scripts/ tests/ --check",

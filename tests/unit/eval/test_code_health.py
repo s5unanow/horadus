@@ -129,6 +129,48 @@ def test_run_code_health_eval_reports_flat_modified_files_without_regressions(
     assert result.file_results[0].improved_metrics == ()
 
 
+def test_run_code_health_eval_reports_noop_diff_without_failures(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    _write_policy(tmp_path)
+    _write_file(tmp_path, "src/app.py", "def run() -> int:\n    return 1\n")
+    base_ref = _commit_all(tmp_path, "base")
+
+    result = run_code_health_eval(
+        output_dir=tmp_path / "artifacts",
+        repo_root=tmp_path,
+        base_ref=base_ref,
+        head_ref=base_ref,
+    )
+
+    assert result.passes_validation is True
+    assert result.compared_files == 0
+    assert result.flagged_files == 0
+    assert result.file_results == ()
+
+
+def test_run_code_health_eval_ignores_unaffected_non_python_diffs(tmp_path: Path) -> None:
+    _init_repo(tmp_path)
+    _write_policy(tmp_path)
+    _write_file(tmp_path, "src/app.py", "def run() -> int:\n    return 1\n")
+    base_ref = _commit_all(tmp_path, "base")
+
+    _git(tmp_path, "checkout", "-b", "feature")
+    _write_file(tmp_path, "README.md", "# Updated docs\n")
+    head_ref = _commit_all(tmp_path, "docs-only")
+
+    result = run_code_health_eval(
+        output_dir=tmp_path / "artifacts",
+        repo_root=tmp_path,
+        base_ref=base_ref,
+        head_ref=head_ref,
+    )
+
+    assert result.passes_validation is True
+    assert result.compared_files == 0
+    assert result.flagged_files == 0
+    assert result.file_results == ()
+
+
 def test_run_code_health_eval_defaults_to_merge_base_against_main(tmp_path: Path) -> None:
     _init_repo(tmp_path)
     _write_policy(tmp_path)

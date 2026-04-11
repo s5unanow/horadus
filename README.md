@@ -260,7 +260,10 @@ The project uses a `Makefile` to simplify common tasks. Run `make help` to see a
 Fast local development commands:
 
 ```bash
+# Includes the changed-file code-health ratchet for the current branch diff.
 make agent-check
+
+# Canonical strict local validation; also fail-closes on changed-file code-health regressions.
 uv run --no-sync horadus tasks local-gate --full
 ```
 

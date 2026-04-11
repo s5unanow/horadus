@@ -20,6 +20,7 @@
 
 - Sprint 9 opens immediately after Sprint 8 and seeds a nine-task queue from the live backlog based on the next relevant autonomous work plus one carried-forward human blocker.
 - The selected queue focuses first on behavior evals and deterministic code-health guardrails, then on review/authoring workflow polish.
+- `TASK-373` is an in-sprint blocker-clear task added after the sprint reset because the repo-wide dependency audit now fails on an upstream-fixed `cryptography` CVE and prevents strict local-gate completion for active work.
 - `TASK-366` should land before `TASK-367`, and `TASK-369` should reuse the changed-file/code-health output once it exists.
 - `TASK-288` is carried into Sprint 9 as a tracked hold item only; it remains human-gated and is not part of the autonomous implementation lane unless the human explicitly reactivates it.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
@@ -29,12 +30,13 @@
 1. `TASK-363` Add behavior-oriented eval suites for high-risk LLM safety paths.
 2. `TASK-364` Build a runtime-to-eval regression intake loop.
 3. `TASK-366` Add a code-health erosion eval for changed Python surfaces.
-4. `TASK-367` Ratchet changed-file code-health regressions in local gates.
-5. `TASK-368` Enforce hotspot-touch debt capture for allowlisted production files.
-6. `TASK-369` Make local pre-push review slop-aware for changed files.
-7. `TASK-255` Add a targeted docstring quality gate for high-value surfaces.
-8. `TASK-334` Align Gemini local-review approval-mode flags with installed CLI.
-9. `TASK-288` Keep as a carried human-blocked planning item; do not start autonomously.
+4. `TASK-373` Bump cryptography to 46.0.7 for dependency audit.
+5. `TASK-367` Ratchet changed-file code-health regressions in local gates.
+6. `TASK-368` Enforce hotspot-touch debt capture for allowlisted production files.
+7. `TASK-369` Make local pre-push review slop-aware for changed files.
+8. `TASK-255` Add a targeted docstring quality gate for high-value surfaces.
+9. `TASK-334` Align Gemini local-review approval-mode flags with installed CLI.
+10. `TASK-288` Keep as a carried human-blocked planning item; do not start autonomously.
 
 ## Human Blocker Metadata
 
@@ -54,3 +56,4 @@
 - `TASK-372` Tighten behavior eval restore/cache coverage ✅
 - `TASK-364` Build a Runtime-to-Eval Regression Intake Loop ✅
 - `TASK-366` Add a Code-Health Erosion Eval for Changed Python Surfaces ✅
+- `TASK-373` Bump cryptography to 46.0.7 for dependency audit ✅

@@ -375,3 +375,4 @@
 - TASK-372: Tighten behavior eval restore/cache coverage ✅
 - TASK-364: Build a Runtime-to-Eval Regression Intake Loop ✅
 - TASK-366: Add a Code-Health Erosion Eval for Changed Python Surfaces ✅
+- TASK-373: Bump cryptography to 46.0.7 for dependency audit ✅

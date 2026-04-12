@@ -517,6 +517,17 @@ def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes
         )
         == ()
     )
+    assert (
+        planning_module._hotspot_outcome_issues(
+            relative_path="tasks/exec_plans/TASK-330.md",
+            content="- Hotspot Outcome: follow-up-task-created — TASK-330 cleanup\n",
+            planning_state={
+                "hotspot_paths": ("src/core/hotspot.py",),
+                "authoritative_artifact": "tasks/exec_plans/TASK-330.md",
+            },
+        )
+        == ()
+    )
 
     duplicate_outcomes = planning_module._hotspot_outcome_issues(
         relative_path="tasks/exec_plans/TASK-330.md",

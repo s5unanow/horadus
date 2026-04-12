@@ -257,6 +257,21 @@ def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path
     ) == ("src/core/hotspot.py",)
     assert planning_module._parse_hotspot_outcome_marker(None) is None
     assert planning_module._parse_hotspot_outcome_marker("not-a-real-outcome") is None
+    assert (
+        planning_module._hotspot_outcome_marker_value(
+            "- Hotspot Outcome: keep-flat-with-rationale — fixture\n"
+        )
+        == "keep-flat-with-rationale — fixture"
+    )
+    assert planning_module.hotspot_outcome_marker_values(
+        "\n".join(
+            [
+                "- Hotspot Outcome: reduce — first",
+                "- Hotspot Outcome: follow-up-task-created — TASK-330 next",
+            ]
+        )
+        + "\n"
+    ) == ("reduce — first", "follow-up-task-created — TASK-330 next")
 
 
 def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes(
@@ -326,6 +341,19 @@ def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes
         },
     )
     assert {issue.rule_id for issue in missing_detail} == {"planning_hotspot_outcome_invalid"}
+
+    assert (
+        planning_module._hotspot_outcome_issues(
+            relative_path="tasks/exec_plans/TASK-330.md",
+            content="- Hotspot Outcome: follow-up-task-created — TASK-330 cleanup\n",
+            planning_state={
+                "hotspot_paths": ("src/core/hotspot.py",),
+                "authoritative_artifact": "tasks/exec_plans/TASK-330.md",
+            },
+            known_task_ids={"TASK-330"},
+        )
+        == ()
+    )
 
     duplicate_outcomes = planning_module._hotspot_outcome_issues(
         relative_path="tasks/exec_plans/TASK-330.md",

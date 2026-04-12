@@ -23,6 +23,7 @@ from ._docs_freshness_planning_hotspots import (
 from ._docs_freshness_planning_hotspots import (
     hotspot_outcome_marker_value as _hotspot_outcome_marker_value,
 )
+from ._docs_freshness_planning_hotspots import hotspot_outcome_marker_values
 from ._docs_freshness_planning_hotspots import (
     matches_declared_task_path as _matches_declared_task_path,
 )
@@ -68,4 +69,5 @@ __all__ = [
     "_task_spec_paths",
     "_template_planning_issues",
     "_validate_planning_artifact",
+    "hotspot_outcome_marker_values",
 ]

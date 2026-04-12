@@ -6,7 +6,9 @@ from typing import Any
 
 from tools.horadus.python.horadus_workflow._docs_freshness_planning_hotspots import (
     hotspot_outcome_marker_value,
+    hotspot_outcome_marker_values,
     matching_allowlisted_hotspot_paths,
+    parse_hotspot_outcome_marker,
 )
 
 
@@ -16,7 +18,13 @@ def hotspot_outcome_from_relative_path(
     path = repo_root / relative_path
     if not path.exists():
         return None, None
-    value = hotspot_outcome_marker_value(path.read_text(encoding="utf-8"))
+    content = path.read_text(encoding="utf-8")
+    marker_values = hotspot_outcome_marker_values(content)
+    if len(marker_values) != 1:
+        return None, None
+    value = hotspot_outcome_marker_value(content)
+    if parse_hotspot_outcome_marker(value) is None:
+        return None, None
     return value, relative_path if value is not None else None
 
 

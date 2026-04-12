@@ -93,3 +93,43 @@ def test_hotspot_outcome_notice_mentions_authoritative_artifact() -> None:
 
     assert notice is not None
     assert "tasks/exec_plans/TASK-999.md" in notice
+
+
+def test_hotspot_outcome_from_relative_path_requires_single_valid_marker(
+    tmp_path: Path,
+) -> None:
+    artifact_path = tmp_path / "tasks" / "exec_plans" / "TASK-999.md"
+    artifact_path.parent.mkdir(parents=True, exist_ok=True)
+
+    artifact_path.write_text("- Hotspot Outcome: typo\n", encoding="utf-8")
+    assert planning_context_module.hotspot_outcome_from_relative_path(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-999.md",
+    ) == (None, None)
+
+    artifact_path.write_text(
+        "\n".join(
+            [
+                "- Hotspot Outcome: reduce — ok",
+                "- Hotspot Outcome: follow-up-task-created — TASK-999 later",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert planning_context_module.hotspot_outcome_from_relative_path(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-999.md",
+    ) == (None, None)
+
+    artifact_path.write_text(
+        "- Hotspot Outcome: keep-flat-with-rationale — valid fixture\n",
+        encoding="utf-8",
+    )
+    assert planning_context_module.hotspot_outcome_from_relative_path(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-999.md",
+    ) == (
+        "keep-flat-with-rationale — valid fixture",
+        "tasks/exec_plans/TASK-999.md",
+    )

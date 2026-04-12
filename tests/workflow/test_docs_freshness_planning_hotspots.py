@@ -179,6 +179,19 @@ def test_validate_planning_artifact_requires_hotspot_outcome_for_allowlisted_pro
     }
 
     (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-999 cleanup later\n",
+        encoding="utf-8",
+    )
+    unknown_followup_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in unknown_followup_issues} == {
+        "planning_hotspot_followup_unknown_task"
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
         base_exec_plan
         + "- Hotspot Outcome: keep-flat-with-rationale — validator-only change stays inside the existing hotspot.\n",
         encoding="utf-8",
@@ -313,3 +326,19 @@ def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes
         },
     )
     assert {issue.rule_id for issue in missing_detail} == {"planning_hotspot_outcome_invalid"}
+
+    duplicate_outcomes = planning_module._hotspot_outcome_issues(
+        relative_path="tasks/exec_plans/TASK-330.md",
+        content="\n".join(
+            [
+                "- Hotspot Outcome: reduce — ok",
+                "- Hotspot Outcome: follow-up-task-created — TASK-330 follow-up",
+            ]
+        )
+        + "\n",
+        planning_state={
+            "hotspot_paths": ("src/core/hotspot.py",),
+            "authoritative_artifact": "tasks/exec_plans/TASK-330.md",
+        },
+    )
+    assert {issue.rule_id for issue in duplicate_outcomes} == {"planning_hotspot_outcome_duplicate"}

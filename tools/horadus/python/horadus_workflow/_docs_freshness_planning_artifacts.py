@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ._docs_freshness_models import DocsFreshnessIssue
 
+from ._docs_freshness_parsing import _extract_task_ids
 from ._docs_freshness_planning_hotspots import (
     backlog_planning_issues as _backlog_planning_issues,
 )
@@ -299,6 +300,7 @@ def _validate_planning_artifact(
                 relative_path=relative_path,
                 content=content,
                 planning_state=planning_state,
+                known_task_ids=_extract_task_ids(backlog_text),
             ),
         )
 
@@ -316,6 +318,7 @@ def _validate_planning_artifact(
                 relative_path=relative_path,
                 content=content,
                 planning_state=planning_state,
+                known_task_ids=_extract_task_ids(backlog_text),
             ),
         )
 

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
 
 from ._docs_freshness_models import DocsFreshnessIssue
@@ -72,11 +72,18 @@ def task_hotspot_paths(
 
 
 def hotspot_outcome_marker_value(content: str) -> str | None:
-    match = _HOTSPOT_OUTCOME_LINE_PATTERN.search(content)
-    if match is None:
+    values = hotspot_outcome_marker_values(content)
+    if not values:
         return None
-    value = match.group("value").strip()
-    return value or None
+    return values[0]
+
+
+def hotspot_outcome_marker_values(content: str) -> tuple[str, ...]:
+    return tuple(
+        value
+        for match in _HOTSPOT_OUTCOME_LINE_PATTERN.finditer(content)
+        if (value := match.group("value").strip())
+    )
 
 
 def parse_hotspot_outcome_marker(value: str | None) -> tuple[str, str | None] | None:
@@ -292,6 +299,7 @@ def hotspot_outcome_issues(
     relative_path: str,
     content: str,
     planning_state: dict[str, object],
+    known_task_ids: Collection[str] | None = None,
 ) -> tuple[DocsFreshnessIssue, ...]:
     raw_hotspot_paths = planning_state.get("hotspot_paths")
     hotspot_paths: tuple[str, ...] = (
@@ -304,13 +312,13 @@ def hotspot_outcome_issues(
     authoritative_artifact = planning_state.get("authoritative_artifact")
     if authoritative_artifact is not None and relative_path != authoritative_artifact:
         return ()
-    marker_value = hotspot_outcome_marker_value(content)
+    marker_values = hotspot_outcome_marker_values(content)
     canonical_marker = (
         "`- Hotspot Outcome: reduce — ...` or "
         "`- Hotspot Outcome: keep-flat-with-rationale — ...` or "
         "`- Hotspot Outcome: follow-up-task-created — TASK-XXX ...`"
     )
-    if marker_value is None:
+    if not marker_values:
         return (
             _warning_issue(
                 rule_id="planning_hotspot_outcome_missing",
@@ -321,7 +329,18 @@ def hotspot_outcome_issues(
                 path=relative_path,
             ),
         )
-    parsed_marker = parse_hotspot_outcome_marker(marker_value)
+    if len(marker_values) > 1:
+        return (
+            _warning_issue(
+                rule_id="planning_hotspot_outcome_duplicate",
+                message=(
+                    f"{relative_path} must record exactly one Hotspot Outcome for "
+                    f"{', '.join(hotspot_paths)}. Use {canonical_marker} once."
+                ),
+                path=relative_path,
+            ),
+        )
+    parsed_marker = parse_hotspot_outcome_marker(marker_values[0])
     if parsed_marker is None:
         return (
             _warning_issue(
@@ -356,6 +375,19 @@ def hotspot_outcome_issues(
                 path=relative_path,
             ),
         )
+    if outcome == "follow-up-task-created" and known_task_ids is not None:
+        referenced_task_ids = set(_TASK_ID_PATTERN.findall(detail))
+        if referenced_task_ids and not referenced_task_ids.intersection(known_task_ids):
+            return (
+                _warning_issue(
+                    rule_id="planning_hotspot_followup_unknown_task",
+                    message=(
+                        f"{relative_path} should reference an existing backlog task when the "
+                        "Hotspot Outcome is follow-up-task-created."
+                    ),
+                    path=relative_path,
+                ),
+            )
     return ()
 
 
@@ -386,6 +418,7 @@ __all__ = [
     "backlog_planning_issues",
     "hotspot_outcome_issues",
     "hotspot_outcome_marker_value",
+    "hotspot_outcome_marker_values",
     "matches_declared_task_path",
     "matching_allowlisted_hotspot_paths",
     "parse_hotspot_outcome_marker",

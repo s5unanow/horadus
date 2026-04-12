@@ -148,24 +148,6 @@ feedback looks for those patterns consistently instead of relying on a generic
 
 ---
 
-### TASK-374: Add /ship-it task completion workflow
-**Priority**: P3
-**Estimate**: 1-2 hours
-**Spec**: `tasks/specs/374-ship-it-task-completion-workflow.md`
-
-Codify a repo-owned chat-first /ship-it workflow that points agents at the
-canonical Horadus task lifecycle instead of stopping at implementation.
-
-**Planning Gates**: Required — shared agent workflow/policy guidance and operator-facing docs
-**Files**: `ops/skills/ship-it/SKILL.md`, `AGENTS.md`, `README.md`
-
-**Acceptance Criteria**:
-- [ ] A repo-owned /ship-it skill exists and tells agents to select or infer the active eligible task, honor planning gates, and drive the canonical safe-start to finish lifecycle.
-- [ ] Repo policy/docs explicitly map '/ship-it' to that skill so chat requests use the same workflow contract consistently.
-- [ ] The skill defines blocked-state reporting in terms of exact blocker and furthest completed lifecycle step instead of vague partial completion.
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

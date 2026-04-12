@@ -378,3 +378,4 @@
 - TASK-373: Bump cryptography to 46.0.7 for dependency audit ✅
 - TASK-367: Ratchet Changed-File Code-Health Regressions in Local Gates ✅
 - TASK-368: Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files ✅
+- TASK-374: Add /ship-it task completion workflow ✅

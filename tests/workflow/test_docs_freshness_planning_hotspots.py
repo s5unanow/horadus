@@ -88,6 +88,117 @@ def test_planning_state_requires_artifact_for_allowlisted_production_hotspot(
 def test_validate_planning_artifact_requires_hotspot_outcome_for_allowlisted_production_files(
     tmp_path: Path,
 ) -> None:
+    backlog_text, base_exec_plan = _seed_hotspot_exec_plan_fixture(tmp_path)
+    missing_marker_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in missing_marker_issues} == {
+        "planning_hotspot_outcome_missing"
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — cleanup later\n",
+        encoding="utf-8",
+    )
+    followup_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in followup_issues} == {
+        "planning_hotspot_followup_missing_task"
+    }
+
+
+def test_validate_planning_artifact_requires_distinct_existing_followup_tasks(
+    tmp_path: Path,
+) -> None:
+    backlog_text, base_exec_plan = _seed_hotspot_exec_plan_fixture(tmp_path)
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-999 cleanup later\n",
+        encoding="utf-8",
+    )
+    unknown_followup_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in unknown_followup_issues} == {
+        "planning_hotspot_followup_unknown_task"
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-320 cleanup later\n",
+        encoding="utf-8",
+    )
+    same_task_followup_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in same_task_followup_issues} == {
+        "planning_hotspot_followup_same_task"
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan
+        + "- Hotspot Outcome: follow-up-task-created — TASK-320 and TASK-999 cleanup later\n",
+        encoding="utf-8",
+    )
+    mixed_same_and_unknown_followup_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_text,
+    )
+    assert {issue.rule_id for issue in mixed_same_and_unknown_followup_issues} == {
+        "planning_hotspot_followup_unknown_task"
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-999 cleanup later\n",
+        encoding="utf-8",
+    )
+    backlog_with_prose_reference = backlog_text.replace(
+        "Body.",
+        "Body. Historical note: TASK-999 existed in a draft but was never promoted.",
+        1,
+    )
+    unknown_from_prose_reference_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_with_prose_reference,
+    )
+    assert {issue.rule_id for issue in unknown_from_prose_reference_issues} == {
+        "planning_hotspot_followup_unknown_task"
+    }
+
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan
+        + "- Hotspot Outcome: keep-flat-with-rationale — validator-only change stays inside the existing hotspot.\n",
+        encoding="utf-8",
+    )
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/exec_plans/TASK-320.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/exec_plans/TASK-321.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+
+def _seed_hotspot_exec_plan_fixture(tmp_path: Path) -> tuple[str, str]:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
     (tmp_path / "tasks" / "exec_plans").mkdir(parents=True, exist_ok=True)
@@ -157,94 +268,7 @@ def test_validate_planning_artifact_requires_hotspot_outcome_for_allowlisted_pro
         base_exec_plan,
         encoding="utf-8",
     )
-
-    missing_marker_issues = docs_freshness_module._validate_planning_artifact(
-        repo_root=tmp_path,
-        relative_path="tasks/exec_plans/TASK-320.md",
-        backlog_text=backlog_text,
-    )
-    assert {issue.rule_id for issue in missing_marker_issues} == {
-        "planning_hotspot_outcome_missing"
-    }
-
-    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
-        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — cleanup later\n",
-        encoding="utf-8",
-    )
-    followup_issues = docs_freshness_module._validate_planning_artifact(
-        repo_root=tmp_path,
-        relative_path="tasks/exec_plans/TASK-320.md",
-        backlog_text=backlog_text,
-    )
-    assert {issue.rule_id for issue in followup_issues} == {
-        "planning_hotspot_followup_missing_task"
-    }
-
-    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
-        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-999 cleanup later\n",
-        encoding="utf-8",
-    )
-    unknown_followup_issues = docs_freshness_module._validate_planning_artifact(
-        repo_root=tmp_path,
-        relative_path="tasks/exec_plans/TASK-320.md",
-        backlog_text=backlog_text,
-    )
-    assert {issue.rule_id for issue in unknown_followup_issues} == {
-        "planning_hotspot_followup_unknown_task"
-    }
-
-    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
-        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-320 cleanup later\n",
-        encoding="utf-8",
-    )
-    same_task_followup_issues = docs_freshness_module._validate_planning_artifact(
-        repo_root=tmp_path,
-        relative_path="tasks/exec_plans/TASK-320.md",
-        backlog_text=backlog_text,
-    )
-    assert {issue.rule_id for issue in same_task_followup_issues} == {
-        "planning_hotspot_followup_same_task"
-    }
-
-    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
-        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-999 cleanup later\n",
-        encoding="utf-8",
-    )
-    backlog_with_prose_reference = backlog_text.replace(
-        "Body.",
-        "Body. Historical note: TASK-999 existed in a draft but was never promoted.",
-        1,
-    )
-    unknown_from_prose_reference_issues = docs_freshness_module._validate_planning_artifact(
-        repo_root=tmp_path,
-        relative_path="tasks/exec_plans/TASK-320.md",
-        backlog_text=backlog_with_prose_reference,
-    )
-    assert {issue.rule_id for issue in unknown_from_prose_reference_issues} == {
-        "planning_hotspot_followup_unknown_task"
-    }
-
-    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
-        base_exec_plan
-        + "- Hotspot Outcome: keep-flat-with-rationale — validator-only change stays inside the existing hotspot.\n",
-        encoding="utf-8",
-    )
-    assert (
-        docs_freshness_module._validate_planning_artifact(
-            repo_root=tmp_path,
-            relative_path="tasks/exec_plans/TASK-320.md",
-            backlog_text=backlog_text,
-        )
-        == ()
-    )
-    assert (
-        docs_freshness_module._validate_planning_artifact(
-            repo_root=tmp_path,
-            relative_path="tasks/exec_plans/TASK-321.md",
-            backlog_text=backlog_text,
-        )
-        == ()
-    )
+    return backlog_text, base_exec_plan
 
 
 def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path: Path) -> None:

@@ -418,12 +418,15 @@ def _followup_task_issues(
                 path=relative_path,
             ),
         )
-    if referenced_task_ids and not referenced_task_ids.intersection(known_task_ids):
+    valid_followup_task_ids = referenced_task_ids.intersection(known_task_ids)
+    if current_task_id is not None:
+        valid_followup_task_ids.discard(current_task_id)
+    if referenced_task_ids and not valid_followup_task_ids:
         return (
             _warning_issue(
                 rule_id="planning_hotspot_followup_unknown_task",
                 message=(
-                    f"{relative_path} should reference an existing backlog task when the "
+                    f"{relative_path} should reference an existing distinct backlog task when the "
                     "Hotspot Outcome is follow-up-task-created."
                 ),
                 path=relative_path,

@@ -306,6 +306,7 @@ def hotspot_outcome_issues(
     content: str,
     planning_state: dict[str, object],
     known_task_ids: Collection[str] | None = None,
+    current_task_id: str | None = None,
 ) -> tuple[DocsFreshnessIssue, ...]:
     raw_hotspot_paths = planning_state.get("hotspot_paths")
     hotspot_paths: tuple[str, ...] = (
@@ -370,7 +371,29 @@ def hotspot_outcome_issues(
                 path=relative_path,
             ),
         )
-    if outcome == "follow-up-task-created" and _TASK_ID_PATTERN.search(detail) is None:
+    followup_issues = _followup_task_issues(
+        relative_path=relative_path,
+        outcome=outcome,
+        detail=detail,
+        known_task_ids=known_task_ids,
+        current_task_id=current_task_id,
+    )
+    if followup_issues:
+        return followup_issues
+    return ()
+
+
+def _followup_task_issues(
+    *,
+    relative_path: str,
+    outcome: str,
+    detail: str,
+    known_task_ids: Collection[str] | None,
+    current_task_id: str | None,
+) -> tuple[DocsFreshnessIssue, ...]:
+    if outcome != "follow-up-task-created":
+        return ()
+    if _TASK_ID_PATTERN.search(detail) is None:
         return (
             _warning_issue(
                 rule_id="planning_hotspot_followup_missing_task",
@@ -381,19 +404,31 @@ def hotspot_outcome_issues(
                 path=relative_path,
             ),
         )
-    if outcome == "follow-up-task-created" and known_task_ids is not None:
-        referenced_task_ids = set(_TASK_ID_PATTERN.findall(detail))
-        if referenced_task_ids and not referenced_task_ids.intersection(known_task_ids):
-            return (
-                _warning_issue(
-                    rule_id="planning_hotspot_followup_unknown_task",
-                    message=(
-                        f"{relative_path} should reference an existing backlog task when the "
-                        "Hotspot Outcome is follow-up-task-created."
-                    ),
-                    path=relative_path,
+    if known_task_ids is None:
+        return ()
+    referenced_task_ids = set(_TASK_ID_PATTERN.findall(detail))
+    if current_task_id is not None and referenced_task_ids == {current_task_id}:
+        return (
+            _warning_issue(
+                rule_id="planning_hotspot_followup_same_task",
+                message=(
+                    f"{relative_path} should reference a distinct follow-up backlog task when "
+                    "the Hotspot Outcome is follow-up-task-created."
                 ),
-            )
+                path=relative_path,
+            ),
+        )
+    if referenced_task_ids and not referenced_task_ids.intersection(known_task_ids):
+        return (
+            _warning_issue(
+                rule_id="planning_hotspot_followup_unknown_task",
+                message=(
+                    f"{relative_path} should reference an existing backlog task when the "
+                    "Hotspot Outcome is follow-up-task-created."
+                ),
+                path=relative_path,
+            ),
+        )
     return ()
 
 

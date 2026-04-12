@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -291,6 +292,48 @@ def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path
         )
         + "\n"
     ) == ("reduce — first", "follow-up-task-created — TASK-330 next")
+
+
+def test_allowlisted_hotspot_paths_include_merge_base_policy_entries(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    _write_code_shape_policy(tmp_path)
+
+    merge_base_policy_text = "\n".join(
+        [
+            "[budgets]",
+            "production_module_lines = 700",
+            "test_module_lines = 1200",
+            "production_function_lines = 100",
+            "test_function_lines = 160",
+            "production_member_complexity = 20",
+            "test_member_complexity = 25",
+            "",
+            "[paths]",
+            'include_roots = ["src", "tools", "tests", "scripts"]',
+            'exclude_globs = ["**/__pycache__/**"]',
+            "",
+            "[[legacy_files]]",
+            'path = "src/core/hotspot.py"',
+            "max_lines = 900",
+            "",
+        ]
+    )
+
+    def _fake_run(*args: object, **kwargs: object) -> SimpleNamespace:
+        command = args[0]
+        assert isinstance(command, list)
+        if command[1:3] == ["merge-base", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="abc123\n")
+        if command[1] == "show":
+            return SimpleNamespace(returncode=0, stdout=merge_base_policy_text)
+        raise AssertionError(f"unexpected command: {command}")
+
+    assert planning_module._allowlisted_production_hotspot_paths(
+        tmp_path,
+        git_which=lambda _name: "git",
+        run=_fake_run,
+    ) == ("src/core/hotspot.py",)
 
 
 def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes(

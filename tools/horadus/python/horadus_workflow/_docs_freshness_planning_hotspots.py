@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import re
+import shutil
+import subprocess  # nosec B404
+import tomllib
 from collections.abc import Callable, Collection, Sequence
 from pathlib import Path
+from typing import Any
 
 from ._docs_freshness_models import DocsFreshnessIssue
 from ._docs_freshness_parsing import _extract_task_ids
-from .code_shape import load_code_shape_policy
 
 _FILES_LINE_PATTERN = re.compile(r"^\*\*Files\*\*:\s*(?P<value>.+)$", re.MULTILINE)
 _BACKTICKED_PATH_PATTERN = re.compile(r"`([^`]+)`")
@@ -21,6 +24,7 @@ _HOTSPOT_OUTCOME_VALUE_PATTERN = re.compile(
 )
 _TASK_ID_PATTERN = re.compile(r"\bTASK-\d{3}\b")
 _CODE_SHAPE_POLICY_RELATIVE_PATH = Path("config/quality/code_shape.toml")
+_CODE_SHAPE_MERGE_BASE_TARGET = "main"
 
 
 def task_file_paths_from_block(task_block: str) -> tuple[str, ...]:
@@ -393,23 +397,84 @@ def hotspot_outcome_issues(
     return ()
 
 
-def _allowlisted_production_hotspot_paths(repo_root: Path) -> tuple[str, ...]:
+def _allowlisted_production_hotspot_paths(
+    repo_root: Path,
+    *,
+    git_which: Callable[[str], str | None] = shutil.which,
+    run: Callable[..., Any] = subprocess.run,
+) -> tuple[str, ...]:
     policy_path = repo_root / _CODE_SHAPE_POLICY_RELATIVE_PATH
-    if not policy_path.exists():
-        return ()
-    policy = load_code_shape_policy(policy_path)
-    return tuple(
-        sorted(
-            path
-            for path, legacy_policy in policy.legacy_files.items()
-            if not path.startswith("tests/")
-            and (
-                legacy_policy.max_lines is not None
-                or bool(legacy_policy.member_max_lines)
-                or bool(legacy_policy.member_max_complexity)
+    hotspot_paths: set[str] = set()
+    if policy_path.exists():
+        hotspot_paths.update(
+            _allowlisted_production_hotspot_paths_from_policy_text(
+                policy_path.read_text(encoding="utf-8")
             )
         )
+    merge_base_policy_text = _merge_base_code_shape_policy_text(
+        repo_root,
+        git_which=git_which,
+        run=run,
     )
+    if merge_base_policy_text is not None:
+        hotspot_paths.update(
+            _allowlisted_production_hotspot_paths_from_policy_text(merge_base_policy_text)
+        )
+    return tuple(sorted(hotspot_paths))
+
+
+def _merge_base_code_shape_policy_text(
+    repo_root: Path,
+    *,
+    git_which: Callable[[str], str | None],
+    run: Callable[..., Any],
+) -> str | None:
+    git_bin = git_which("git")
+    if git_bin is None:
+        return None
+    try:
+        merge_base_result = run(  # nosec B603
+            [git_bin, "merge-base", "HEAD", _CODE_SHAPE_MERGE_BASE_TARGET],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if merge_base_result.returncode != 0:
+            return None
+        merge_base = merge_base_result.stdout.strip()
+        if not merge_base:
+            return None
+        show_result = run(  # nosec B603
+            [git_bin, "show", f"{merge_base}:{_CODE_SHAPE_POLICY_RELATIVE_PATH.as_posix()}"],
+            cwd=repo_root,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if show_result.returncode != 0:
+            return None
+    except FileNotFoundError:
+        return None
+    return str(show_result.stdout)
+
+
+def _allowlisted_production_hotspot_paths_from_policy_text(
+    policy_text: str,
+) -> tuple[str, ...]:
+    payload = tomllib.loads(policy_text)
+    hotspot_paths: list[str] = []
+    for entry in payload.get("legacy_files", []):
+        path = str(entry.get("path", "")).strip()
+        if not path or path.startswith("tests/"):
+            continue
+        if (
+            entry.get("max_lines") is not None
+            or bool(entry.get("member_max_lines"))
+            or bool(entry.get("member_max_complexity"))
+        ):
+            hotspot_paths.append(path)
+    return tuple(sorted(dict.fromkeys(hotspot_paths)))
 
 
 def _warning_issue(*, rule_id: str, message: str, path: str) -> DocsFreshnessIssue:
@@ -417,6 +482,7 @@ def _warning_issue(*, rule_id: str, message: str, path: str) -> DocsFreshnessIss
 
 
 __all__ = [
+    "_allowlisted_production_hotspot_paths",
     "backlog_planning_issues",
     "hotspot_outcome_issues",
     "hotspot_outcome_marker_value",

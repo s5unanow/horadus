@@ -15,6 +15,10 @@ from ._docs_freshness_planning_artifacts import (
     _validate_planning_artifact,
 )
 from ._docs_freshness_planning_hotspots import (
+    _allowlisted_production_hotspot_paths,
+    hotspot_outcome_marker_values,
+)
+from ._docs_freshness_planning_hotspots import (
     backlog_planning_issues as _backlog_planning_issues,
 )
 from ._docs_freshness_planning_hotspots import (
@@ -23,7 +27,6 @@ from ._docs_freshness_planning_hotspots import (
 from ._docs_freshness_planning_hotspots import (
     hotspot_outcome_marker_value as _hotspot_outcome_marker_value,
 )
-from ._docs_freshness_planning_hotspots import hotspot_outcome_marker_values
 from ._docs_freshness_planning_hotspots import (
     matches_declared_task_path as _matches_declared_task_path,
 )
@@ -48,6 +51,7 @@ from ._docs_freshness_planning_hotspots import (
 
 __all__ = [
     "_PLANNING_CHANGED_DEFAULT_BASE_REF",
+    "_allowlisted_production_hotspot_paths",
     "_backlog_planning_issues",
     "_changed_planning_artifact_paths",
     "_exec_plan_required_from_backlog",

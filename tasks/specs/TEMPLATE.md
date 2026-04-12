@@ -48,6 +48,10 @@ than treating the backlog body as the permanent gate/waiver home.
 - `Code Shape Gate`: Triggered | Not applicable — if the task touches an
   allowlisted oversized Python file, say whether it reduces the hotspot, keeps
   it flat, or carries explicit follow-up debt
+- `Hotspot Outcome`: `reduce` | `keep-flat-with-rationale` |
+  `follow-up-task-created` — required when the task touches an allowlisted
+  production hotspot; use `- Hotspot Outcome: keep-flat-with-rationale — ...`
+  style syntax so planning validation can read it directly
 - `Determinism Gate`: Triggered | Not applicable — short reason
 - `LLM Budget/Safety Gate`: Triggered | Not applicable — short reason
 - `Observability Gate`: Triggered | Not applicable — short reason

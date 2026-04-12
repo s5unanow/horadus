@@ -266,6 +266,33 @@ def test_append_planning_context_lines_skips_non_required_planning_state() -> No
     assert lines == ["header"]
 
 
+def test_append_planning_context_lines_renders_hotspot_outcome_without_notice() -> None:
+    lines: list[str] = []
+
+    context_pack_support_module.append_planning_context_lines(
+        lines,
+        {
+            "required": True,
+            "state": "applicable_with_authoritative_artifact_present",
+            "marker_value": "Required — fixture",
+            "marker_source": "tasks/exec_plans/TASK-912.md",
+            "authoritative_artifact_path": "tasks/exec_plans/TASK-912.md",
+            "gate_home_path": "tasks/exec_plans/TASK-912.md",
+            "waiver_home_path": "tasks/exec_plans/TASK-912.md",
+            "missing_artifact_notice": None,
+            "canonical_example_path": "tasks/specs/275-finish-review-gate-timeout.md",
+            "hotspot_paths": ["src/core/hotspot.py"],
+            "hotspot_outcome_value": "reduce — fixture",
+            "hotspot_outcome_source": "tasks/exec_plans/TASK-912.md",
+            "hotspot_outcome_notice": None,
+        },
+    )
+
+    assert "Allowlisted production hotspots: src/core/hotspot.py" in lines
+    assert any(line.startswith("Hotspot Outcome: reduce — fixture") for line in lines)
+    assert not any(line.startswith("Hotspot outcome notice:") for line in lines)
+
+
 def test_context_pack_payload_keeps_expected_keys() -> None:
     payload = context_pack_support_module.context_pack_payload(
         task_payload={"task_id": "TASK-912"},

@@ -34,6 +34,10 @@
 - Accepted design / smallest safe shape:
 - Rejected simpler alternative:
 - First integration proof:
+- Hotspot Outcome: reduce | keep-flat-with-rationale |
+  follow-up-task-created — required when the task materially edits an
+  allowlisted production hotspot; use `TASK-XXX` in the detail when the
+  outcome is `follow-up-task-created`
 - Waivers:
 
 ## Plan (Keep Updated)

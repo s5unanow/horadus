@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-368` Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files
 - `TASK-369` Make Local Pre-Push Review Slop-Aware for Changed Files
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
 - `TASK-334` Align Gemini local-review approval-mode flags with installed CLI
@@ -57,3 +56,4 @@
 - `TASK-366` Add a Code-Health Erosion Eval for Changed Python Surfaces ✅
 - `TASK-373` Bump cryptography to 46.0.7 for dependency audit ✅
 - `TASK-367` Ratchet Changed-File Code-Health Regressions in Local Gates ✅
+- `TASK-368` Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files ✅

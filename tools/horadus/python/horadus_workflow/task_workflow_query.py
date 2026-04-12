@@ -14,6 +14,9 @@ from tools.horadus.python.horadus_workflow.task_workflow_context_pack_support im
     append_planning_context_lines,
     context_pack_payload,
 )
+from tools.horadus.python.horadus_workflow.task_workflow_planning_context import (
+    build_planning_context,
+)
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     CallerAwareValidationPack,
     caller_aware_validation_packs,
@@ -26,10 +29,6 @@ from tools.horadus.python.horadus_workflow.task_workflow_policy import (
 )
 
 _CANONICAL_PLANNING_EXAMPLE_PATH = "tasks/specs/275-finish-review-gate-timeout.md"
-_PLANNING_STATE_PRESENT = "applicable_with_authoritative_artifact_present"
-_PLANNING_STATE_SPEC_ONLY = "applicable_spec_backed_without_exec_plan"
-_PLANNING_STATE_MISSING = "applicable_backlog_only_missing_artifact"
-_PLANNING_STATE_QUIET = "non_applicable"
 _HIGH_RISK_SHARED_WORKFLOW_PREFIXES = (
     "tools/horadus/python/horadus_workflow/task_workflow_",
     "tools/horadus/python/horadus_workflow/_task_",
@@ -313,90 +312,23 @@ def _planning_context(task_id: str, record: Any) -> dict[str, object]:
     task_requires_exec_plan = shared._compat_attr("task_requires_exec_plan", task_repo)
     backlog_path = shared._compat_attr("backlog_path", task_repo)
     repo_root = shared._compat_attr("repo_root", task_repo)
+    normalized_paths = _normalized_task_paths(record)
     spec_paths = list(record.spec_paths or spec_paths_for_task(task_id))
     exec_plan_paths = exec_plan_paths_for_task(task_id)
-
-    explicit_value = None
-    marker_source = None
-    for relative_path in [*exec_plan_paths, *spec_paths]:
-        explicit_value, marker_source = _planning_marker_from_relative_path(relative_path)
-        if explicit_value is not None:
-            break
-    if explicit_value is None:
-        explicit_value = task_planning_gates_value(record)
-        if explicit_value is not None:
-            marker_source = record.source_path or str(backlog_path().relative_to(repo_root()))
-
-    required = planning_gates_required(explicit_value)
-    if required is None:
-        required = task_requires_exec_plan(record) or bool(exec_plan_paths)
-
-    if not required:
-        return {
-            "required": False,
-            "state": _PLANNING_STATE_QUIET,
-            "marker_value": explicit_value,
-            "marker_source": marker_source,
-            "authoritative_artifact_path": None,
-            "gate_home_path": None,
-            "waiver_home_path": None,
-            "missing_artifact_notice": None,
-            "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
-            "spec_paths": spec_paths,
-            "exec_plan_paths": exec_plan_paths,
-        }
-
-    if exec_plan_paths:
-        gate_home_path = spec_paths[0] if spec_paths else exec_plan_paths[0]
-        return {
-            "required": True,
-            "state": _PLANNING_STATE_PRESENT,
-            "marker_value": explicit_value,
-            "marker_source": marker_source,
-            "authoritative_artifact_path": exec_plan_paths[0],
-            "gate_home_path": gate_home_path,
-            "waiver_home_path": exec_plan_paths[0],
-            "missing_artifact_notice": None,
-            "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
-            "spec_paths": spec_paths,
-            "exec_plan_paths": exec_plan_paths,
-        }
-
-    if spec_paths:
-        return {
-            "required": True,
-            "state": _PLANNING_STATE_SPEC_ONLY,
-            "marker_value": explicit_value,
-            "marker_source": marker_source or spec_paths[0],
-            "authoritative_artifact_path": spec_paths[0],
-            "gate_home_path": spec_paths[0],
-            "waiver_home_path": spec_paths[0],
-            "missing_artifact_notice": None,
-            "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
-            "spec_paths": spec_paths,
-            "exec_plan_paths": exec_plan_paths,
-        }
-
-    notice = (
-        f"{task_id} requires planning gates, but no spec or exec plan exists yet. "
-        "Add a task spec or exec plan before implementation; backlog markers do not "
-        "replace the Phase -1 gates or Gate Outcomes / Waivers sections."
+    return build_planning_context(
+        task_id=task_id,
+        record=record,
+        repo_root=repo_root(),
+        backlog_path_display=str(backlog_path().relative_to(repo_root())),
+        spec_paths=spec_paths,
+        exec_plan_paths=exec_plan_paths,
+        normalized_paths=normalized_paths,
+        canonical_example_path=_CANONICAL_PLANNING_EXAMPLE_PATH,
+        planning_marker_from_relative_path=_planning_marker_from_relative_path,
+        task_planning_gates_value=task_planning_gates_value,
+        planning_gates_required=planning_gates_required,
+        task_requires_exec_plan=task_requires_exec_plan,
     )
-    return {
-        "required": True,
-        "state": _PLANNING_STATE_MISSING,
-        "marker_value": explicit_value,
-        "marker_source": marker_source
-        or record.source_path
-        or str(backlog_path().relative_to(repo_root())),
-        "authoritative_artifact_path": None,
-        "gate_home_path": None,
-        "waiver_home_path": None,
-        "missing_artifact_notice": notice,
-        "canonical_example_path": _CANONICAL_PLANNING_EXAMPLE_PATH,
-        "spec_paths": spec_paths,
-        "exec_plan_paths": exec_plan_paths,
-    }
 
 
 def _normalized_task_paths(record: Any) -> list[str]:

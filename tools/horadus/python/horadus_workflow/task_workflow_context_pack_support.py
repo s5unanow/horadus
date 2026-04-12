@@ -25,6 +25,22 @@ def append_planning_context_lines(lines: list[str], planning: dict[str, object])
         lines.append(f"Phase -1 gates home: {planning['gate_home_path']}")
     if planning["waiver_home_path"] is not None:
         lines.append(f"Gate Outcomes / Waivers home: {planning['waiver_home_path']}")
+    raw_hotspot_paths = planning.get("hotspot_paths")
+    hotspot_paths = (
+        [str(item) for item in raw_hotspot_paths]
+        if isinstance(raw_hotspot_paths, list | tuple)
+        else []
+    )
+    if hotspot_paths:
+        lines.append(f"Allowlisted production hotspots: {', '.join(hotspot_paths)}")
+        if planning.get("hotspot_outcome_value") is not None:
+            lines.append(
+                "Hotspot Outcome: "
+                f"{planning['hotspot_outcome_value']} "
+                f"({planning.get('hotspot_outcome_source') or 'unknown source'})"
+            )
+        if planning.get("hotspot_outcome_notice") is not None:
+            lines.append(f"Hotspot outcome notice: {planning['hotspot_outcome_notice']}")
     if planning["missing_artifact_notice"] is not None:
         lines.append(f"Missing artifact notice: {planning['missing_artifact_notice']}")
     lines.append(f"Canonical example: {planning['canonical_example_path']}")

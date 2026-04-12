@@ -107,6 +107,9 @@ After completing work:
 - `.claude/settings.local.json` is a local override and must remain untracked.
 - Keep only `.claude/settings.example.json` versioned as the baseline policy.
 - Local setup instructions live in `.claude/README.md`.
+- Repo-owned workflow skill aliases live under `ops/skills/`.
+- If the user invokes `/ship-it` or otherwise explicitly asks to "ship it",
+  open `ops/skills/ship-it/SKILL.md` and follow that workflow.
 
 ## Human-Gated Tasks
 

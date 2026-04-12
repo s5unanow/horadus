@@ -377,3 +377,4 @@
 - TASK-366: Add a Code-Health Erosion Eval for Changed Python Surfaces ✅
 - TASK-373: Bump cryptography to 46.0.7 for dependency audit ✅
 - TASK-367: Ratchet Changed-File Code-Health Regressions in Local Gates ✅
+- TASK-368: Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files ✅

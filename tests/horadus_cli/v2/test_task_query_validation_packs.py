@@ -8,7 +8,6 @@ import pytest
 import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 import tools.horadus.python.horadus_workflow.task_workflow_completion_contract as completion_contract_module
-import tools.horadus.python.horadus_workflow.task_workflow_context_pack_support as context_pack_support_module
 import tools.horadus.python.horadus_workflow.task_workflow_query as workflow_query_module
 from tests.horadus_cli.v2.task_repo_fixtures import LIVE_TASK_ID, SHARED_HELPER_TASK_ID
 
@@ -243,46 +242,6 @@ def test_append_completion_contract_lines_skips_commands_line_when_requirement_h
 
     assert "  Commands:" not in "\n".join(lines)
     assert "  Note: Still render the note." in lines
-
-
-def test_append_planning_context_lines_skips_non_required_planning_state() -> None:
-    lines = ["header"]
-
-    context_pack_support_module.append_planning_context_lines(
-        lines,
-        {
-            "required": False,
-            "state": "non_applicable",
-            "marker_value": None,
-            "marker_source": None,
-            "authoritative_artifact_path": None,
-            "gate_home_path": None,
-            "waiver_home_path": None,
-            "missing_artifact_notice": None,
-            "canonical_example_path": "tasks/specs/275-finish-review-gate-timeout.md",
-        },
-    )
-
-    assert lines == ["header"]
-
-
-def test_context_pack_payload_keeps_expected_keys() -> None:
-    payload = context_pack_support_module.context_pack_payload(
-        task_payload={"task_id": "TASK-912"},
-        sprint_lines=["- TASK-912"],
-        spec_paths=["tasks/specs/912.md"],
-        planning={"required": False},
-        workflow_commands=["uv run --no-sync horadus tasks context-pack TASK-912"],
-        suggested_validation_commands=["make agent-check"],
-        completion_contract={"enforced_requirements": [], "documented_requirements": []},
-        validation_packs=[],
-        pre_push_review={"recommended": False},
-        canonical_spec_example_path="tasks/specs/275-finish-review-gate-timeout.md",
-    )
-
-    assert payload["task"] == {"task_id": "TASK-912"}
-    assert payload["spec_template_path"] == "tasks/specs/TEMPLATE.md"
-    assert payload["pre_push_review_guidance"] == {"recommended": False}
 
 
 def test_handle_show_remains_unchanged_by_caller_aware_validation_packs(

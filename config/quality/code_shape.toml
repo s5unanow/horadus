@@ -131,13 +131,6 @@ path = "tools/horadus/python/horadus_workflow/_docs_freshness_current_sprint.py"
 "check_current_sprint" = 21
 
 [[legacy_files]]
-path = "tools/horadus/python/horadus_workflow/_docs_freshness_planning.py"
-[legacy_files.member_max_lines]
-"_validate_planning_artifact" = 180
-[legacy_files.member_max_complexity]
-"_validate_planning_artifact" = 27
-
-[[legacy_files]]
 path = "tools/horadus/python/horadus_workflow/_task_preflight_guard.py"
 [legacy_files.member_max_lines]
 "task_preflight_data" = 138
@@ -272,7 +265,6 @@ max_lines = 2159
 [legacy_files.member_max_lines]
 "_seed_repo_layout" = 203
 "test_planning_helper_functions_cover_marker_state_and_git_diff_edges" = 200
-"test_validate_planning_artifact_covers_template_and_exec_plan_paths" = 317
 [legacy_files.member_max_complexity]
 "test_planning_helper_functions_cover_marker_state_and_git_diff_edges" = 30
 

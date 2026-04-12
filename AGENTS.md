@@ -61,7 +61,10 @@ Status precedence:
 - Touching an allowlisted oversized Python file materially requires
   `Planning Gates: Required` and an exec plan. The plan/spec must state whether
   the task reduces the hotspot, keeps it flat, or carries forward debt with an
-  explicit follow-up.
+  explicit follow-up. Record that decision with a machine-checkable marker:
+  `- Hotspot Outcome: reduce — ...` or
+  `- Hotspot Outcome: keep-flat-with-rationale — ...` or
+  `- Hotspot Outcome: follow-up-task-created — TASK-XXX ...`.
 
 ## Workflow (How To Work In This Repo)
 

@@ -61,11 +61,21 @@ Marker precedence is deterministic:
   required by default
 Shared workflow/policy changes should opt into the same marker scheme rather
 than relying on narrative-only guidance.
+When a task’s declared files match an allowlisted production hotspot from
+`config/quality/code_shape.toml`, planning gates are required even if the
+backlog entry forgot to say so. The authoritative planning artifact must then
+include exactly one hotspot decision marker:
+- `- Hotspot Outcome: reduce — ...`
+- `- Hotspot Outcome: keep-flat-with-rationale — ...`
+- `- Hotspot Outcome: follow-up-task-created — TASK-XXX ...`
+Use the last form only when the cleanup follow-up task already exists.
 `context-pack` now surfaces the planning state automatically for applicable
 tasks:
 - authoritative artifact present
 - spec-backed without exec plan
 - backlog-only / missing artifact
+For hotspot-driven tasks it also lists the matched allowlisted paths and tells
+you where the missing `Hotspot Outcome` marker belongs.
 Non-applicable tasks stay on the quiet path with no planning banner.
 For high-risk cross-surface tasks (for example migrations, shared workflow
 tooling or config, shared math, or multi-surface mutation work), front-load

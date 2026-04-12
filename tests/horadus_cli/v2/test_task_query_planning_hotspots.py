@@ -107,6 +107,12 @@ def test_hotspot_outcome_from_relative_path_requires_single_valid_marker(
         relative_path="tasks/exec_plans/TASK-999.md",
     ) == (None, None)
 
+    artifact_path.write_text("- Hotspot Outcome: reduce\n", encoding="utf-8")
+    assert planning_context_module.hotspot_outcome_from_relative_path(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-999.md",
+    ) == (None, None)
+
     artifact_path.write_text(
         "\n".join(
             [

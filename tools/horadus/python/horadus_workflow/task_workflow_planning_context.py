@@ -23,7 +23,8 @@ def hotspot_outcome_from_relative_path(
     if len(marker_values) != 1:
         return None, None
     value = hotspot_outcome_marker_value(content)
-    if parse_hotspot_outcome_marker(value) is None:
+    parsed_marker = parse_hotspot_outcome_marker(value)
+    if parsed_marker is None or not parsed_marker[1]:
         return None, None
     return value, relative_path if value is not None else None
 

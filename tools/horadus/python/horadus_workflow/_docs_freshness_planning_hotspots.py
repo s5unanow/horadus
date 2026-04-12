@@ -32,7 +32,7 @@ def task_file_paths_from_block(task_block: str) -> tuple[str, ...]:
         backticked_paths = [item.strip() for item in _BACKTICKED_PATH_PATTERN.findall(raw_value)]
         if backticked_paths:
             paths.extend(backticked_paths)
-            continue
+            raw_value = _BACKTICKED_PATH_PATTERN.sub("", raw_value)
         paths.extend(item.strip() for item in raw_value.split(",") if item.strip())
     return tuple(dict.fromkeys(paths))
 

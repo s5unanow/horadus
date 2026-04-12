@@ -215,6 +215,9 @@ def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path
     assert planning_module._task_file_paths_from_block(
         "**Files**: src/core/hotspot.py, docs/guide.md\n"
     ) == ("src/core/hotspot.py", "docs/guide.md")
+    assert planning_module._task_file_paths_from_block(
+        "**Files**: `docs/a.md`, src/core/hotspot.py\n"
+    ) == ("docs/a.md", "src/core/hotspot.py")
     assert planning_module._matches_declared_task_path("   ", "src/core/hotspot.py") is False
     assert (
         planning_module._task_hotspot_paths(
@@ -224,6 +227,21 @@ def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path
         )
         == ()
     )
+    assert planning_module._task_hotspot_paths(
+        tmp_path,
+        task_id="TASK-310",
+        backlog_text="\n".join(
+            [
+                "# Backlog",
+                "",
+                "### TASK-310: Mixed files fixture",
+                "**Files**: `docs/a.md`, src/core/hotspot.py",
+                "",
+                "---",
+                "",
+            ]
+        ),
+    ) == ("src/core/hotspot.py",)
     assert planning_module._parse_hotspot_outcome_marker(None) is None
     assert planning_module._parse_hotspot_outcome_marker("not-a-real-outcome") is None
 

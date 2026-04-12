@@ -461,6 +461,66 @@ def test_allowlisted_hotspot_paths_include_merge_base_policy_entries(tmp_path: P
     )
 
 
+def test_planning_state_uses_archived_task_block_after_backlog_removal(tmp_path: Path) -> None:
+    marker_date = datetime.now(tz=UTC).date().isoformat()
+    _seed_repo_layout(tmp_path, marker_date=marker_date)
+    (tmp_path / "tasks" / "exec_plans").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "archive" / "closed_tasks").mkdir(parents=True, exist_ok=True)
+    _write_code_shape_policy(
+        tmp_path,
+        "[[legacy_files]]",
+        'path = "src/core/hotspot.py"',
+        "max_lines = 900",
+    )
+    archived_task_block = "\n".join(
+        [
+            "### TASK-320: Archived hotspot fixture",
+            "**Priority**: P2",
+            "**Estimate**: 1h",
+            "**Exec Plan**: Required (`tasks/exec_plans/README.md`)",
+            "",
+            "Body.",
+            "",
+            "**Files**: `src/core/hotspot.py`",
+            "",
+            "**Acceptance Criteria**:",
+            "- [ ] hotspot marker required",
+            "",
+            "---",
+            "",
+        ]
+    )
+    (tmp_path / "tasks" / "BACKLOG.md").write_text("# Backlog\n", encoding="utf-8")
+    (tmp_path / "archive" / "closed_tasks" / "2026-Q2.md").write_text(
+        "# Closed Tasks\n\n" + archived_task_block,
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        "\n".join(
+            [
+                "# fixture",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: ok",
+                "- Rejected simpler alternative: ok",
+                "- First integration proof: ok",
+                "- Waivers: none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text="# Backlog\n",
+    )
+
+    assert {issue.rule_id for issue in issues} == {"planning_hotspot_outcome_missing"}
+
+
 def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes(
     tmp_path: Path,
 ) -> None:

@@ -98,6 +98,17 @@ def _extract_task_block(content: str, task_id: str) -> str | None:
     return match.group(0)
 
 
+def _archived_task_block(repo_root: Path, task_id: str) -> str | None:
+    archive_root = repo_root / "archive" / "closed_tasks"
+    if not archive_root.exists():
+        return None
+    for archive_path in sorted(archive_root.glob("*.md")):
+        task_block = _extract_task_block(archive_path.read_text(encoding="utf-8"), task_id)
+        if task_block is not None:
+            return task_block
+    return None
+
+
 def _backlog_task_ids(content: str) -> set[str]:
     return {match.group("task_id") for match in _BACKLOG_TASK_HEADER_PATTERN.finditer(content)}
 
@@ -138,7 +149,9 @@ def _planning_state_for_task(
     task_id: str,
     backlog_text: str,
 ) -> dict[str, object]:
-    backlog_block = _extract_task_block(backlog_text, task_id) or ""
+    backlog_block = (
+        _extract_task_block(backlog_text, task_id) or _archived_task_block(repo_root, task_id) or ""
+    )
     spec_paths = _task_spec_paths(repo_root, task_id)
     exec_plan_paths = _task_exec_plan_paths(repo_root, task_id)
     hotspot_paths = _matching_allowlisted_hotspot_paths(

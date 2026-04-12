@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import tools.horadus.python.horadus_workflow._docs_freshness_planning as planning_module
+import tools.horadus.python.horadus_workflow._docs_freshness_planning_hotspots as hotspots_module
 import tools.horadus.python.horadus_workflow.docs_freshness as docs_freshness_module
 from tests.workflow.test_docs_freshness import _seed_repo_layout
 
@@ -334,6 +335,89 @@ def test_allowlisted_hotspot_paths_include_merge_base_policy_entries(tmp_path: P
         git_which=lambda _name: "git",
         run=_fake_run,
     ) == ("src/core/hotspot.py",)
+    assert (
+        hotspots_module._merge_base_code_shape_policy_text(
+            tmp_path,
+            git_which=lambda _name: None,
+            run=_fake_run,
+        )
+        is None
+    )
+
+    def _fake_run_without_merge_base(*args: object, **kwargs: object) -> SimpleNamespace:
+        command = args[0]
+        assert isinstance(command, list)
+        if command[1:3] == ["merge-base", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="\n")
+        raise AssertionError(f"unexpected command: {command}")
+
+    assert (
+        hotspots_module._merge_base_code_shape_policy_text(
+            tmp_path,
+            git_which=lambda _name: "git",
+            run=_fake_run_without_merge_base,
+        )
+        is None
+    )
+
+    def _fake_run_without_show(*args: object, **kwargs: object) -> SimpleNamespace:
+        command = args[0]
+        assert isinstance(command, list)
+        if command[1:3] == ["merge-base", "HEAD"]:
+            return SimpleNamespace(returncode=0, stdout="abc123\n")
+        if command[1] == "show":
+            return SimpleNamespace(returncode=1, stdout="")
+        raise AssertionError(f"unexpected command: {command}")
+
+    assert (
+        hotspots_module._merge_base_code_shape_policy_text(
+            tmp_path,
+            git_which=lambda _name: "git",
+            run=_fake_run_without_show,
+        )
+        is None
+    )
+
+    def _fake_run_missing_git(*args: object, **kwargs: object) -> SimpleNamespace:
+        raise FileNotFoundError
+
+    assert (
+        hotspots_module._merge_base_code_shape_policy_text(
+            tmp_path,
+            git_which=lambda _name: "git",
+            run=_fake_run_missing_git,
+        )
+        is None
+    )
+
+    assert (
+        hotspots_module._allowlisted_production_hotspot_paths_from_policy_text(
+            "\n".join(
+                [
+                    "[budgets]",
+                    "production_module_lines = 700",
+                    "test_module_lines = 1200",
+                    "production_function_lines = 100",
+                    "test_function_lines = 160",
+                    "production_member_complexity = 20",
+                    "test_member_complexity = 25",
+                    "",
+                    "[paths]",
+                    'include_roots = ["src", "tools", "tests", "scripts"]',
+                    'exclude_globs = ["**/__pycache__/**"]',
+                    "",
+                    "[[legacy_files]]",
+                    'path = "src/core/non_hotspot.py"',
+                    "",
+                    "[[legacy_files]]",
+                    'path = "tests/unit/test_hotspot.py"',
+                    "max_lines = 1500",
+                    "",
+                ]
+            )
+        )
+        == ()
+    )
 
 
 def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes(

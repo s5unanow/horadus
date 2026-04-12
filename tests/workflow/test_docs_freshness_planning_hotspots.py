@@ -257,6 +257,7 @@ def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path
     ) == ("src/core/hotspot.py",)
     assert planning_module._parse_hotspot_outcome_marker(None) is None
     assert planning_module._parse_hotspot_outcome_marker("not-a-real-outcome") is None
+    assert planning_module._hotspot_outcome_marker_value("no hotspot marker here\n") is None
     assert (
         planning_module._hotspot_outcome_marker_value(
             "- Hotspot Outcome: keep-flat-with-rationale — fixture\n"

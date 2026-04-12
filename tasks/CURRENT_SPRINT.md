@@ -13,6 +13,7 @@
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces
 - `TASK-334` Align Gemini local-review approval-mode flags with installed CLI
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
+- `TASK-374` Add /ship-it Task Completion Workflow
 
 ## Selection Notes
 

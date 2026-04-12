@@ -272,6 +272,7 @@ Repo workflow guidance:
 - `AGENTS.md`: canonical workflow policy and completion rules
 - `docs/AGENT_RUNBOOK.md`: short command index for day-to-day operator work
 - `ops/skills/horadus-cli/`: thin agent-oriented CLI helper
+- `ops/skills/ship-it/`: end-to-end task-delivery skill for full Horadus lifecycle execution (`/ship-it`)
 
 If you are doing repo workflow work, start from `AGENTS.md` and use the
 runbook/skill as quick references instead of separate policy sources.

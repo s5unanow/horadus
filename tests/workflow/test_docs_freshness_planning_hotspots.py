@@ -191,6 +191,20 @@ def test_validate_planning_artifact_requires_hotspot_outcome_for_allowlisted_pro
         "planning_hotspot_followup_unknown_task"
     }
 
+    backlog_with_prose_reference = backlog_text.replace(
+        "Body.",
+        "Body. Historical note: TASK-999 existed in a draft but was never promoted.",
+        1,
+    )
+    unknown_from_prose_reference_issues = docs_freshness_module._validate_planning_artifact(
+        repo_root=tmp_path,
+        relative_path="tasks/exec_plans/TASK-320.md",
+        backlog_text=backlog_with_prose_reference,
+    )
+    assert {issue.rule_id for issue in unknown_from_prose_reference_issues} == {
+        "planning_hotspot_followup_unknown_task"
+    }
+
     (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
         base_exec_plan
         + "- Hotspot Outcome: keep-flat-with-rationale — validator-only change stays inside the existing hotspot.\n",
@@ -232,6 +246,10 @@ def test_planning_hotspot_helpers_cover_empty_paths_and_invalid_markers(tmp_path
         "**Files**: `docs/a.md`, src/core/hotspot.py\n"
     ) == ("docs/a.md", "src/core/hotspot.py")
     assert planning_module._matches_declared_task_path("   ", "src/core/hotspot.py") is False
+    assert planning_module._matches_declared_task_path(
+        "./src/core/hotspot.py",
+        "src/core/hotspot.py",
+    )
     assert (
         planning_module._task_hotspot_paths(
             tmp_path,

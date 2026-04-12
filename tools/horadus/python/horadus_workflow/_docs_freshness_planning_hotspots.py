@@ -39,6 +39,8 @@ def task_file_paths_from_block(task_block: str) -> tuple[str, ...]:
 
 def matches_declared_task_path(declared_path: str, candidate_path: str) -> bool:
     normalized = declared_path.strip().strip("`").rstrip("/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
     if not normalized:
         return False
     return candidate_path == normalized or candidate_path.startswith(f"{normalized}/")

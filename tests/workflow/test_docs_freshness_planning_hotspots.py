@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 import tools.horadus.python.horadus_workflow._docs_freshness_planning as planning_module
+import tools.horadus.python.horadus_workflow._docs_freshness_planning_artifacts as planning_artifacts_module
 import tools.horadus.python.horadus_workflow._docs_freshness_planning_hotspots as hotspots_module
 import tools.horadus.python.horadus_workflow.docs_freshness as docs_freshness_module
 from tests.workflow.test_docs_freshness import _seed_repo_layout
@@ -519,6 +520,31 @@ def test_planning_state_uses_archived_task_block_after_backlog_removal(tmp_path:
     )
 
     assert {issue.rule_id for issue in issues} == {"planning_hotspot_outcome_missing"}
+
+
+def test_archived_task_block_helper_covers_missing_and_present_archives(tmp_path: Path) -> None:
+    assert planning_artifacts_module._archived_task_block(tmp_path, "TASK-320") is None
+
+    archive_root = tmp_path / "archive" / "closed_tasks"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    (archive_root / "2026-Q2.md").write_text("# Closed Tasks\n", encoding="utf-8")
+    assert planning_artifacts_module._archived_task_block(tmp_path, "TASK-320") is None
+
+    (archive_root / "2026-Q2.md").write_text(
+        "\n".join(
+            [
+                "# Closed Tasks",
+                "",
+                "### TASK-320: Archived hotspot fixture",
+                "**Priority**: P2",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    assert planning_artifacts_module._archived_task_block(tmp_path, "TASK-320") is not None
 
 
 def test_planning_hotspot_issue_helpers_cover_hotspot_notes_and_invalid_outcomes(

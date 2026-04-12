@@ -305,6 +305,7 @@ def _validate_planning_artifact(
                 content=content,
                 planning_state=planning_state,
                 known_task_ids=_backlog_task_ids(backlog_text),
+                current_task_id=artifact_task_id,
             ),
         )
 
@@ -323,6 +324,7 @@ def _validate_planning_artifact(
                 content=content,
                 planning_state=planning_state,
                 known_task_ids=_backlog_task_ids(backlog_text),
+                current_task_id=artifact_task_id,
             ),
         )
 

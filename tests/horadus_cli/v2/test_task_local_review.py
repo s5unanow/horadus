@@ -376,8 +376,7 @@ def test_local_review_helper_functions_cover_provider_config_and_prompt_shapes(
     assert "Task id: unknown" in prompt
     assert "Changed files:\n- (none)" in prompt
     codex_prompt = task_commands_module._render_codex_review_prompt(
-        context=context,
-        instructions=None,
+        context=context, instructions=None
     )
     assert "Review the current repository changes against the provided base branch." in codex_prompt
 

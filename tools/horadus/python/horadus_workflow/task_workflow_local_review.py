@@ -13,8 +13,7 @@ from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
 from ._task_workflow_local_review_code_health import (
-    augment_review_instructions,
-    load_code_health_prompt_context,
+    resolve_review_instructions,
 )
 from ._task_workflow_local_review_config import (
     _harness_value as _harness_value_impl,
@@ -484,19 +483,11 @@ def local_review_data(
         selection_source=selection_source,
         allow_provider_fallback=allow_provider_fallback,
     )
-    head_result = _run_git(["rev-parse", "--verify", "HEAD"])
-    merge_base_result = _run_git(["merge-base", base_branch, "HEAD"])
-    code_health_artifact_path = code_health_summary = None
-    if head_result.returncode == 0 and merge_base_result.returncode == 0:
-        code_health_artifact_path, code_health_summary = load_code_health_prompt_context(
-            repo_root=task_repo.repo_root(),
-            resolved_base_ref=merge_base_result.stdout.strip(),
-            resolved_head_ref=head_result.stdout.strip(),
-        )
-    effective_instructions = augment_review_instructions(
-        instructions,
-        artifact_path=code_health_artifact_path,
-        summary=code_health_summary,
+    code_health_artifact_path, effective_instructions = resolve_review_instructions(
+        repo_root=task_repo.repo_root(),
+        base_branch=base_branch,
+        instructions=instructions,
+        run_git=_run_git,
     )
     lines = build_configuration_lines(
         context=context,

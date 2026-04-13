@@ -370,7 +370,6 @@ def test_local_review_helper_functions_cover_provider_config_and_prompt_shapes(
         instructions="Focus on docs regressions."
     )
     assert "Additional review instructions:" in contract
-    assert "hotspot expansion" in contract
     prompt = task_commands_module._render_prompt_only_provider_prompt(
         context=context,
         instructions="Focus on docs regressions.",

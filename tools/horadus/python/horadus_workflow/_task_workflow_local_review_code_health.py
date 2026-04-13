@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -47,6 +48,29 @@ def augment_review_instructions(
     if instructions and instructions.strip():
         return f"{instructions.strip()}\n\n{code_health_notes}"
     return code_health_notes
+
+
+def resolve_review_instructions(
+    *,
+    repo_root: Path,
+    base_branch: str,
+    instructions: str | None,
+    run_git: Callable[[list[str]], Any],
+) -> tuple[str | None, str | None]:
+    head_result = run_git(["rev-parse", "--verify", "HEAD"])
+    merge_base_result = run_git(["merge-base", base_branch, "HEAD"])
+    artifact_path = summary = None
+    if head_result.returncode == 0 and merge_base_result.returncode == 0:
+        artifact_path, summary = load_code_health_prompt_context(
+            repo_root=repo_root,
+            resolved_base_ref=merge_base_result.stdout.strip(),
+            resolved_head_ref=head_result.stdout.strip(),
+        )
+    return artifact_path, augment_review_instructions(
+        instructions,
+        artifact_path=artifact_path,
+        summary=summary,
+    )
 
 
 def _latest_matching_artifact(

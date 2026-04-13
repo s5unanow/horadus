@@ -254,6 +254,14 @@ def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
         )
         is not None
     )
+    merged_instructions = code_health_prompt_module.augment_review_instructions(
+        "Focus on contract drift.",
+        artifact_path=None,
+        summary="Compared tracked Python files: 1; flagged regressions: 0.",
+    )
+    assert merged_instructions is not None
+    assert merged_instructions.startswith("Focus on contract drift.")
+    assert "Changed-file code-health artifact:" not in merged_instructions
     assert not code_health_prompt_module._matches_refs(
         payload=None,
         resolved_base_ref="merge-base-sha",
@@ -295,3 +303,22 @@ def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
         resolved_base_ref="merge-base-sha",
         resolved_head_ref="head-sha",
     ) == (None, None)
+
+
+def test_resolve_review_instructions_skips_code_health_lookup_when_git_refs_fail() -> None:
+    def fake_run_git(args: list[str]) -> object:
+        mapping = {
+            ("rev-parse", "--verify", "HEAD"): _completed(["git", *args], returncode=1),
+            ("merge-base", "main", "HEAD"): _completed(["git", *args], returncode=1),
+        }
+        return mapping[tuple(args)]
+
+    artifact_path, instructions = code_health_prompt_module.resolve_review_instructions(
+        repo_root=Path("/tmp/repo"),
+        base_branch="main",
+        instructions="Focus on contract drift.",
+        run_git=fake_run_git,
+    )
+
+    assert artifact_path is None
+    assert instructions == "Focus on contract drift."

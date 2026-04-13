@@ -306,6 +306,13 @@ Artifacts and scope:
 - Claude and Gemini run against the repo-owned prompt contract directly;
   Codex uses its native `review --base` flow and Horadus normalizes the review
   result into the same local-review surface.
+- The repo-owned prompt contract now asks reviewers to flag hotspot expansion,
+  multi-concern growth inside touched modules, and verbosity or duplication
+  regressions alongside ordinary bug-risk findings.
+- When a matching changed-file code-health artifact is available under
+  `ai/eval/results/`, Horadus includes a bounded structural summary in the
+  local-review prompt so providers can focus on the existing deterministic
+  signal instead of rediscovering it from the diff alone.
 - Use this command for advisory local branch-diff review before push; keep
   remote PR review and `horadus tasks finish` as the merge gate.
 - If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,

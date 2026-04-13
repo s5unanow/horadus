@@ -12,6 +12,7 @@ from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
+from ._task_workflow_local_review_code_health import load_code_health_prompt_context
 from ._task_workflow_local_review_config import (
     _harness_value as _harness_value_impl,
 )
@@ -135,6 +136,8 @@ def _review_context(
                 f"Base branch `{base_branch}` is not available locally.",
             ],
         )
+    head_result = _run_git(["rev-parse", "--verify", "HEAD"])
+    merge_base_result = _run_git(["merge-base", base_branch, "HEAD"])
 
     diff_result = _run_git(["diff", "--no-ext-diff", "--find-renames", f"{base_branch}...HEAD"])
     if diff_result.returncode != 0:
@@ -165,6 +168,13 @@ def _review_context(
     status_result = _run_git(["status", "--short"])
     changed_files = [line.strip() for line in name_only_result.stdout.splitlines() if line.strip()]
     task_id = shared._task_id_from_branch_name(current_branch)
+    code_health_artifact_path = code_health_summary = None
+    if head_result.returncode == 0 and merge_base_result.returncode == 0:
+        code_health_artifact_path, code_health_summary = load_code_health_prompt_context(
+            repo_root=task_repo.repo_root(),
+            resolved_base_ref=merge_base_result.stdout.strip(),
+            resolved_head_ref=head_result.stdout.strip(),
+        )
     return LocalReviewContext(
         current_branch=current_branch,
         task_id=task_id,
@@ -175,6 +185,8 @@ def _review_context(
         diff_stat=diff_stat_result.stdout.strip(),
         changed_files=changed_files,
         working_tree_dirty=bool(status_result.stdout.strip()),
+        code_health_summary=code_health_summary,
+        code_health_artifact_path=code_health_artifact_path,
     )
 
 
@@ -268,6 +280,14 @@ def _configuration_lines(
         f"- base branch: {context.base_branch}",
         f"- target: {context.review_target_value}",
         f"- provider timeout: {DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS}s",
+        (
+            "- changed-file code-health: "
+            + (
+                context.code_health_artifact_path
+                if context.code_health_artifact_path is not None
+                else "not available"
+            )
+        ),
         f"- instructions supplied: {'yes' if instructions and instructions.strip() else 'no'}",
         f"- usefulness: {usefulness}",
         f"- raw output: {'keep' if save_raw_output else 'discard on success'}",

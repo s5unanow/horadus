@@ -45,23 +45,11 @@ def _render_prompt_contract(*, instructions: str | None) -> str:
         "After the marker line:",
         "- If there are findings, report concise bullets ordered by severity and include file paths when possible.",
         "- If there are no findings, write one short sentence only.",
-        "Prioritize bugs, regressions, behavior changes, missing tests, and contract drift.",
-        "Also flag hotspot expansion, multi-concern growth inside touched modules, and verbosity or duplication regressions.",
-        "When a changed-file code-health summary is provided, use it to focus the review instead of rediscovering the same structural signals from scratch.",
+        "Prioritize bugs, regressions, behavior changes, missing tests, contract drift, hotspot expansion, multi-concern growth inside touched modules, and verbosity or duplication regressions.",
     ]
     if instructions is not None and instructions.strip():
         lines.extend(["Additional review instructions:", instructions.strip()])
     return "\n".join(lines)
-
-
-def _render_code_health_block(context: LocalReviewContext) -> str:
-    if not context.code_health_summary:
-        return "Changed-file code-health summary:\n(not available for this review target)\n\n"
-    lines = ["Changed-file code-health summary:"]
-    if context.code_health_artifact_path:
-        lines.append(f"Artifact: {context.code_health_artifact_path}")
-    lines.append(context.code_health_summary)
-    return "\n".join(lines) + "\n\n"
 
 
 def _render_prompt_only_provider_prompt(
@@ -85,7 +73,6 @@ def _render_prompt_only_provider_prompt(
         f"{files_block}\n\n"
         "Diff stat:\n"
         f"{diff_stat}\n\n"
-        f"{_render_code_health_block(context)}"
         "Git diff:\n"
         f"{context.diff_text}\n"
     )
@@ -105,8 +92,7 @@ def _render_codex_review_prompt(
         f"Current branch: {context.current_branch}\n"
         f"Review target: {context.review_target_value}\n"
         f"Working tree dirty: {'yes' if context.working_tree_dirty else 'no'}\n\n"
-        f"{contract}\n\n"
-        f"{_render_code_health_block(context)}"
+        f"{contract}\n"
     )
 
 

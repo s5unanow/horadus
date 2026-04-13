@@ -9,9 +9,6 @@ import pytest
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 import tools.horadus.python.horadus_workflow.task_repo as task_repo_module
 from tests.horadus_cli.v2.helpers import _completed
-from tools.horadus.python.horadus_workflow import (
-    _task_workflow_local_review_code_health as code_health_prompt_module,
-)
 
 pytestmark = pytest.mark.unit
 
@@ -27,58 +24,6 @@ def _seed_repo_root(tmp_path: Path) -> None:
     task_repo_module.set_repo_root_override(tmp_path)
     (tmp_path / "tasks").mkdir(parents=True, exist_ok=True)
     (tmp_path / "pyproject.toml").write_text("[project]\nname='horadus'\n", encoding="utf-8")
-
-
-def _write_code_health_artifact(
-    tmp_path: Path,
-    *,
-    compared_files: int = 1,
-    flagged_files: int = 1,
-    files: list[dict[str, object]] | None = None,
-) -> None:
-    results_dir = tmp_path / "ai" / "eval" / "results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    payload = {
-        "format_version": "code-health.v1",
-        "generated_at": "2026-04-13T10:00:00+00:00",
-        "passes_validation": flagged_files == 0,
-        "comparison": {
-            "mode": "merge-base",
-            "base_ref": "merge-base(main, HEAD)",
-            "resolved_base_ref": "merge-base-sha",
-            "head_ref": "HEAD",
-            "resolved_head_ref": "head-sha",
-            "merge_base_target": "main",
-        },
-        "summary": {
-            "compared_files": compared_files,
-            "flagged_files": flagged_files,
-            "change_counts": {"added": 0, "modified": compared_files, "removed": 0},
-            "metrics": [
-                "module_lines",
-                "callable_count",
-                "statement_count",
-                "total_member_lines",
-                "max_member_lines",
-                "total_member_complexity",
-                "max_member_complexity",
-            ],
-        },
-        "files": files
-        or [
-            {
-                "path": "foo.py",
-                "change_type": "modified",
-                "delta": {"statement_count": 3, "max_member_lines": 7},
-                "worsened_metrics": ["statement_count", "max_member_lines"],
-                "improved_metrics": [],
-            }
-        ],
-    }
-    (results_dir / "code-health-20260413T100000Z-fixture.json").write_text(
-        json.dumps(payload) + "\n",
-        encoding="utf-8",
-    )
 
 
 def _fake_review_git(args: list[str], *, branch: str = "codex/task-286-local-review") -> object:
@@ -432,41 +377,6 @@ def test_local_review_helper_functions_cover_provider_config_and_prompt_shapes(
     )
     assert "Task id: unknown" in prompt
     assert "Changed files:\n- (none)" in prompt
-    assert "Changed-file code-health summary:\n(not available for this review target)" in prompt
-    prompt_with_code_health = task_commands_module._render_prompt_only_provider_prompt(
-        context=task_commands_module.LocalReviewContext(
-            current_branch="feature/local-review",
-            task_id="TASK-286",
-            base_branch="main",
-            review_target_kind="branch_diff",
-            review_target_value="main...feature/local-review",
-            diff_text="diff --git a/foo b/foo\n",
-            diff_stat="1 file changed\n",
-            changed_files=["foo.py"],
-            working_tree_dirty=False,
-            code_health_summary="Compared tracked Python files: 1; flagged regressions: 1.",
-            code_health_artifact_path="ai/eval/results/code-health-latest.json",
-        ),
-        instructions=None,
-    )
-    assert "Artifact: ai/eval/results/code-health-latest.json" in prompt_with_code_health
-    prompt_with_summary_only = task_commands_module._render_prompt_only_provider_prompt(
-        context=task_commands_module.LocalReviewContext(
-            current_branch="feature/local-review",
-            task_id="TASK-286",
-            base_branch="main",
-            review_target_kind="branch_diff",
-            review_target_value="main...feature/local-review",
-            diff_text="diff --git a/foo b/foo\n",
-            diff_stat="1 file changed\n",
-            changed_files=["foo.py"],
-            working_tree_dirty=False,
-            code_health_summary="Compared tracked Python files: 1; flagged regressions: 0.",
-        ),
-        instructions=None,
-    )
-    assert "Compared tracked Python files: 1; flagged regressions: 0." in prompt_with_summary_only
-    assert "Artifact:" not in prompt_with_summary_only
     codex_prompt = task_commands_module._render_codex_review_prompt(
         context=context,
         instructions=None,
@@ -595,171 +505,6 @@ def test_local_review_helper_functions_cover_git_run_output_parsing_and_artifact
     )
 
 
-def test_review_context_loads_matching_code_health_summary_when_available(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _seed_repo_root(tmp_path)
-    _write_code_health_artifact(tmp_path)
-    monkeypatch.setattr(task_commands_module, "_run_git", _fake_review_git)
-
-    context = task_commands_module._review_context(base_branch="main")
-
-    assert isinstance(context, task_commands_module.LocalReviewContext)
-    assert context.code_health_artifact_path == (
-        "ai/eval/results/code-health-20260413T100000Z-fixture.json"
-    )
-    assert context.code_health_summary is not None
-    assert (
-        "Compared tracked Python files: 1; flagged regressions: 1." in context.code_health_summary
-    )
-    assert "foo.py: worsened statement_count (+3), max_member_lines (+7)" in (
-        context.code_health_summary
-    )
-
-
-def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: Path,
-) -> None:
-    _seed_repo_root(tmp_path)
-    results_dir = tmp_path / "ai" / "eval" / "results"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    (results_dir / "code-health-20260413T090000Z-old.json").write_text(
-        json.dumps(
-            {
-                "format_version": "code-health.v1",
-                "comparison": {
-                    "resolved_base_ref": "other-base",
-                    "resolved_head_ref": "head-sha",
-                },
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (results_dir / "code-health-20260413T100000Z-match.json").write_text(
-        json.dumps(
-            {
-                "format_version": "code-health.v1",
-                "comparison": {
-                    "resolved_base_ref": "merge-base-sha",
-                    "resolved_head_ref": "head-sha",
-                },
-                "summary": {
-                    "compared_files": 4,
-                    "flagged_files": 4,
-                },
-                "files": [
-                    {
-                        "path": "a.py",
-                        "worsened_metrics": ["statement_count"],
-                        "delta": {"statement_count": 1},
-                    },
-                    {
-                        "path": "b.py",
-                        "worsened_metrics": ["max_member_lines"],
-                        "delta": {"max_member_lines": 2},
-                    },
-                    {
-                        "path": "c.py",
-                        "worsened_metrics": ["callable_count"],
-                        "delta": {"callable_count": 3},
-                    },
-                    {
-                        "path": "d.py",
-                        "worsened_metrics": ["statement_count"],
-                        "delta": {"statement_count": 4},
-                    },
-                ],
-            }
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-
-    artifact_path, summary = code_health_prompt_module.load_code_health_prompt_context(
-        repo_root=tmp_path,
-        resolved_base_ref="merge-base-sha",
-        resolved_head_ref="head-sha",
-    )
-
-    assert artifact_path == "ai/eval/results/code-health-20260413T100000Z-match.json"
-    assert summary is not None
-    assert "Compared tracked Python files: 4; flagged regressions: 4." in summary
-    assert "1 more flagged file(s) omitted from the prompt summary." in summary
-    assert code_health_prompt_module.load_code_health_prompt_context(
-        repo_root=tmp_path,
-        resolved_base_ref="missing-base",
-        resolved_head_ref="head-sha",
-    ) == (None, None)
-    assert (
-        code_health_prompt_module._render_code_health_summary({"summary": None})
-        == "Changed-file code-health artifact was present, but its summary was unreadable."
-    )
-    assert (
-        "No tracked Python files were included"
-        in code_health_prompt_module._render_code_health_summary(
-            {"summary": {"compared_files": 0, "flagged_files": 0}}
-        )
-    )
-    assert (
-        "No structural regressions were flagged"
-        in code_health_prompt_module._render_code_health_summary(
-            {"summary": {"compared_files": 2, "flagged_files": 0}}
-        )
-    )
-    assert (
-        "Flagged file details were unavailable."
-        in code_health_prompt_module._render_code_health_summary(
-            {"summary": {"compared_files": 1, "flagged_files": 1}, "files": None}
-        )
-    )
-    assert code_health_prompt_module._worsened_metrics({"worsened_metrics": "not-a-list"}) == []
-    assert code_health_prompt_module._signed_delta("bad") == "n/a"
-    assert not code_health_prompt_module._matches_refs(
-        payload=None,
-        resolved_base_ref="merge-base-sha",
-        resolved_head_ref="head-sha",
-    )
-    assert not code_health_prompt_module._matches_refs(
-        payload={"format_version": "wrong"},
-        resolved_base_ref="merge-base-sha",
-        resolved_head_ref="head-sha",
-    )
-    assert not code_health_prompt_module._matches_refs(
-        payload={"format_version": "code-health.v1", "comparison": None},
-        resolved_base_ref="merge-base-sha",
-        resolved_head_ref="head-sha",
-    )
-
-    invalid_path = results_dir / "code-health-invalid.json"
-    invalid_path.write_text("{not-json\n", encoding="utf-8")
-    assert code_health_prompt_module._load_json(invalid_path) is None
-    seen_match = {"count": 0}
-
-    def flaky_load_json(path: Path) -> dict[str, object] | None:
-        if not path.name.endswith("match.json"):
-            return None
-        seen_match["count"] += 1
-        if seen_match["count"] == 1:
-            return {
-                "format_version": "code-health.v1",
-                "comparison": {
-                    "resolved_base_ref": "merge-base-sha",
-                    "resolved_head_ref": "head-sha",
-                },
-            }
-        return None
-
-    monkeypatch.setattr(code_health_prompt_module, "_load_json", flaky_load_json)
-    assert code_health_prompt_module.load_code_health_prompt_context(
-        repo_root=tmp_path,
-        resolved_base_ref="merge-base-sha",
-        resolved_head_ref="head-sha",
-    ) == (None, None)
-
-
 @pytest.mark.parametrize(
     ("responses", "expected_line"),
     [
@@ -786,8 +531,6 @@ def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
             {
                 ("rev-parse", "--abbrev-ref", "HEAD"): _completed(["git"], stdout="feature\n"),
                 ("rev-parse", "--verify", "main"): _completed(["git"], stdout="sha\n"),
-                ("rev-parse", "--verify", "HEAD"): _completed(["git"], stdout="head-sha\n"),
-                ("merge-base", "main", "HEAD"): _completed(["git"], stdout="merge-base-sha\n"),
                 (
                     "diff",
                     "--no-ext-diff",
@@ -801,8 +544,6 @@ def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
             {
                 ("rev-parse", "--abbrev-ref", "HEAD"): _completed(["git"], stdout="feature\n"),
                 ("rev-parse", "--verify", "main"): _completed(["git"], stdout="sha\n"),
-                ("rev-parse", "--verify", "HEAD"): _completed(["git"], stdout="head-sha\n"),
-                ("merge-base", "main", "HEAD"): _completed(["git"], stdout="merge-base-sha\n"),
                 (
                     "diff",
                     "--no-ext-diff",
@@ -832,37 +573,6 @@ def test_review_context_reports_expected_blockers(
         task_commands_module.ExitCode.VALIDATION_ERROR,
     }
     assert expected_line in lines
-
-
-def test_review_context_skips_code_health_summary_when_refs_are_unavailable(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    responses = {
-        ("rev-parse", "--abbrev-ref", "HEAD"): _completed(["git"], stdout="feature\n"),
-        ("rev-parse", "--verify", "main"): _completed(["git"], stdout="base-sha\n"),
-        ("rev-parse", "--verify", "HEAD"): _completed(["git"], returncode=1),
-        ("merge-base", "main", "HEAD"): _completed(["git"], returncode=1),
-        (
-            "diff",
-            "--no-ext-diff",
-            "--find-renames",
-            "main...HEAD",
-        ): _completed(["git"], stdout="diff --git a/foo.py b/foo.py\n+line\n"),
-        ("diff", "--stat", "--no-ext-diff", "main...HEAD"): _completed(
-            ["git"], stdout=" foo.py | 1 +\n"
-        ),
-        ("diff", "--name-only", "--no-ext-diff", "main...HEAD"): _completed(
-            ["git"], stdout="foo.py\n"
-        ),
-        ("status", "--short"): _completed(["git"], stdout=""),
-    }
-    monkeypatch.setattr(task_commands_module, "_run_git", lambda args: responses[tuple(args)])
-
-    context = task_commands_module._review_context(base_branch="main")
-
-    assert isinstance(context, task_commands_module.LocalReviewContext)
-    assert context.code_health_summary is None
-    assert context.code_health_artifact_path is None
 
 
 def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths(

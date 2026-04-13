@@ -14,8 +14,6 @@ class LocalReviewContext:
     diff_stat: str
     changed_files: list[str]
     working_tree_dirty: bool
-    code_health_summary: str | None = None
-    code_health_artifact_path: str | None = None
 
 
 @dataclass(slots=True)

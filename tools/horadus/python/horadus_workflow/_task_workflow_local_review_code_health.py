@@ -32,6 +32,23 @@ def load_code_health_prompt_context(
     )
 
 
+def augment_review_instructions(
+    instructions: str | None,
+    *,
+    artifact_path: str | None,
+    summary: str | None,
+) -> str | None:
+    code_health_notes = _code_health_review_instructions(
+        artifact_path=artifact_path,
+        summary=summary,
+    )
+    if code_health_notes is None:
+        return instructions
+    if instructions and instructions.strip():
+        return f"{instructions.strip()}\n\n{code_health_notes}"
+    return code_health_notes
+
+
 def _latest_matching_artifact(
     *,
     repo_root: Path,
@@ -129,3 +146,19 @@ def _signed_delta(value: Any) -> str:
     except (TypeError, ValueError):
         return "n/a"
     return f"+{number}" if number >= 0 else str(number)
+
+
+def _code_health_review_instructions(
+    *,
+    artifact_path: str | None,
+    summary: str | None,
+) -> str | None:
+    if not summary:
+        return None
+    lines = [
+        "Use the changed-file code-health summary below as structural context instead of rediscovering the same signals from the diff alone.",
+    ]
+    if artifact_path:
+        lines.append(f"Changed-file code-health artifact: {artifact_path}")
+    lines.extend(["Changed-file code-health summary:", summary])
+    return "\n".join(lines)

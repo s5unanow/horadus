@@ -12,9 +12,6 @@ from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
-from ._task_workflow_local_review_code_health import (
-    resolve_review_instructions,
-)
 from ._task_workflow_local_review_config import (
     _harness_value as _harness_value_impl,
 )
@@ -49,7 +46,7 @@ from ._task_workflow_local_review_models import (
     LocalReviewParsedOutput,
     LocalReviewProviderRun,
 )
-from ._task_workflow_local_review_output import build_configuration_lines
+from ._task_workflow_local_review_output import prepare_review_run
 from ._task_workflow_local_review_provider import (
     _execute_provider,
     _parse_provider_output,
@@ -478,26 +475,17 @@ def local_review_data(
             },
             lines,
         )
-    provider_order = _provider_attempt_order(
-        selected_provider,
-        selection_source=selection_source,
-        allow_provider_fallback=allow_provider_fallback,
-    )
-    code_health_artifact_path, effective_instructions = resolve_review_instructions(
-        repo_root=task_repo.repo_root(),
-        base_branch=base_branch,
-        instructions=instructions,
-        run_git=_run_git,
-    )
-    lines = build_configuration_lines(
+    provider_order, effective_instructions, lines = prepare_review_run(
         context=context,
         selected_provider=selected_provider,
         selection_source=selection_source,
-        provider_order=provider_order,
+        allow_provider_fallback=allow_provider_fallback,
+        provider_attempt_order=_provider_attempt_order,
         instructions=instructions,
         save_raw_output=save_raw_output,
         usefulness=usefulness,
-        code_health_artifact_path=code_health_artifact_path,
+        repo_root=task_repo.repo_root(),
+        run_git=_run_git,
     )
     if dry_run:
         return _dry_run_result(

@@ -379,3 +379,4 @@
 - TASK-367: Ratchet Changed-File Code-Health Regressions in Local Gates ✅
 - TASK-368: Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files ✅
 - TASK-374: Add /ship-it task completion workflow ✅
+- TASK-375: Bump pytest to 9.0.3 for dependency audit ✅

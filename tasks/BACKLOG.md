@@ -57,25 +57,6 @@ CLI contract so local-review avoids unnecessary compatibility noise.
 
 ---
 
-### TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces
-**Priority**: P2 (Medium)
-**Estimate**: 3-5 hours
-
-Detailed code explanations are valuable in complex domain logic, but blanket
-“document every function exhaustively” rules would create noise and stale prose.
-Add an automated docstring policy for the parts of the codebase where it
-actually improves agent and human comprehension.
-
-**Files**: `pyproject.toml`, `Makefile`, `.github/workflows/ci.yml`, `src/core/`, `src/processing/`, `src/workers/`, `docs/AGENT_RUNBOOK.md`, `tests/`
-
-**Acceptance Criteria**:
-- [ ] Define a scoped docstring policy covering module docs, public APIs, and complex algorithms/invariants in selected high-value paths
-- [ ] Add an automated check for that scoped policy in local and/or CI quality gates
-- [ ] Avoid forcing exhaustive comments for trivial private helpers where names and types are already sufficient
-- [ ] Document when to prefer docstrings versus short inline comments versus no extra prose
-
----
-
 ### TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

@@ -135,6 +135,9 @@ jobs:
       - name: Check code-shape budgets and ratchets
         run: uv run --no-sync python scripts/check_code_shape.py
 
+      - name: Check scoped docstring policy
+        run: uv run --no-sync python scripts/check_docstring_policy.py
+
       - name: Validate eval taxonomy contract
         run: |
           uv run --no-sync horadus eval validate-taxonomy \

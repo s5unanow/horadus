@@ -52,6 +52,10 @@ def full_local_gate_steps() -> list[LocalGateStep]:
         LocalGateStep(
             name="code-shape", command=f"{uv_bin} run --no-sync python scripts/check_code_shape.py"
         ),
+        LocalGateStep(
+            name="docstring-policy",
+            command=f"{uv_bin} run --no-sync python scripts/check_docstring_policy.py",
+        ),
         LocalGateStep(name="code-health", command=_code_health_gate_command(uv_bin)),
         LocalGateStep(
             name="ruff-format-check",

@@ -381,3 +381,4 @@
 - TASK-374: Add /ship-it task completion workflow ✅
 - TASK-375: Bump pytest to 9.0.3 for dependency audit ✅
 - TASK-369: Make Local Pre-Push Review Slop-Aware for Changed Files ✅
+- TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces ✅

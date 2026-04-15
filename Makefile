@@ -10,7 +10,7 @@
         test-integration-docker \
         docker-up docker-down docker-logs docker-prod-build docker-prod-up \
         docker-prod-down docker-prod-migrate backup-db restore-db verify-backups db-migrate db-upgrade db-downgrade \
-        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness code-shape pre-commit check all \
+        run run-worker run-beat export-dashboard benchmark-eval benchmark-eval-human validate-taxonomy-eval audit-eval docs-freshness code-shape docstring-policy pre-commit check all \
         db-migration-gate release-gate release-gate-runtime branch-guard task-preflight agent-task-preflight task-context-pack task-start agent-safe-start task-finish local-gate protect-main doctor agent-smoke-run agent-check \
         check-tracked-artifacts secret-scan dependency-audit validate-assessments automations-export automations-apply install-horadus-cli-skill
 
@@ -95,10 +95,11 @@ typecheck: deps-dev ## Run type checker (mypy)
 check: format lint typecheck ## Run all code quality checks
 	@echo "$(GREEN)All checks passed!$(RESET)"
 
-agent-check: deps-dev ## Fast local gate for agent iteration (lint, typecheck, changed-file ratchets, unit tests)
+agent-check: deps-dev ## Fast local gate for agent iteration (lint, docstrings, typecheck, changed-file ratchets, unit tests)
 	./scripts/run_with_backpressure.sh ruff-check $(UV_RUN) ruff check src/ tools/ scripts/ tests/
 	./scripts/run_with_backpressure.sh mypy $(UV_RUN) mypy src/ tools/horadus/python scripts
 	./scripts/run_with_backpressure.sh code-shape $(UV_RUN) python scripts/check_code_shape.py
+	./scripts/run_with_backpressure.sh docstring-policy $(UV_RUN) python scripts/check_docstring_policy.py
 	./scripts/run_with_backpressure.sh code-health $(UV_RUN) horadus eval code-health --output-dir ai/eval/results
 	./scripts/run_with_backpressure.sh pytest-unit $(UV_RUN) pytest tests/unit/ tests/horadus_cli/ tests/workflow/ -v -m unit
 
@@ -297,6 +298,9 @@ docs-freshness: deps-dev ## Validate docs freshness and runtime consistency inva
 
 code-shape: deps-dev ## Validate repo code-shape budgets and ratchets
 	$(UV_RUN) python scripts/check_code_shape.py
+
+docstring-policy: deps-dev ## Validate scoped docstring requirements for high-value Python surfaces
+	$(UV_RUN) python scripts/check_docstring_policy.py
 
 release-gate: deps-dev ## Run the canonical full local gate plus release-only migration validation
 	@if [ -z "$(RELEASE_GATE_DATABASE_URL)" ]; then \

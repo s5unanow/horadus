@@ -23,6 +23,7 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
         "check-tracked-artifacts",
         "docs-freshness",
         "code-shape",
+        "docstring-policy",
         "code-health",
         "ruff-format-check",
         "ruff-check",
@@ -40,25 +41,26 @@ def test_full_local_gate_steps_match_expected_ci_parity_commands(
     assert steps[0].command == "./scripts/check_no_tracked_artifacts.sh"
     assert steps[1].command == "uv run --no-sync python scripts/check_docs_freshness.py"
     assert steps[2].command == "uv run --no-sync python scripts/check_code_shape.py"
+    assert steps[3].command == "uv run --no-sync python scripts/check_docstring_policy.py"
     assert (
-        steps[3].command == "uv run --no-sync horadus eval code-health --output-dir ai/eval/results"
+        steps[4].command == "uv run --no-sync horadus eval code-health --output-dir ai/eval/results"
     )
-    assert steps[4].command == "uv run --no-sync ruff format src/ tools/ scripts/ tests/ --check"
-    assert steps[5].command == "uv run --no-sync ruff check src/ tools/ scripts/ tests/"
-    assert steps[6].command == "uv run --no-sync mypy src/ tools/horadus/python scripts"
-    assert steps[7].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
-    assert steps[8].command == (
+    assert steps[5].command == "uv run --no-sync ruff format src/ tools/ scripts/ tests/ --check"
+    assert steps[6].command == "uv run --no-sync ruff check src/ tools/ scripts/ tests/"
+    assert steps[7].command == "uv run --no-sync mypy src/ tools/horadus/python scripts"
+    assert steps[8].command.startswith("uv run --no-sync horadus eval validate-taxonomy ")
+    assert steps[9].command == (
         "uv run --no-sync horadus eval audit --gold-set ai/eval/gold_set.jsonl "
         "--output-dir ai/eval/results --max-items 0 --fail-on-warnings"
     )
-    assert steps[9].command == "./scripts/run_unit_coverage_gate.sh"
-    assert steps[10].command == "./scripts/run_secret_scan.sh"
-    assert steps[11].command == (
+    assert steps[10].command == "./scripts/run_unit_coverage_gate.sh"
+    assert steps[11].command == "./scripts/run_secret_scan.sh"
+    assert steps[12].command == (
         "uv run --no-sync bandit -c pyproject.toml -r src/ tools/horadus/python scripts"
     )
-    assert steps[12].command == "./scripts/run_dependency_audit.sh"
-    assert steps[14].command == "./scripts/test_integration_docker.sh"
-    assert steps[15].command == (
+    assert steps[13].command == "./scripts/run_dependency_audit.sh"
+    assert steps[15].command == "./scripts/test_integration_docker.sh"
+    assert steps[16].command == (
         "rm -rf dist build *.egg-info && "
         "uv run --no-sync python -m build --no-isolation && "
         "uv run --no-sync twine check dist/*"
@@ -78,11 +80,14 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     assert "--cov=scripts" in ci_workflow
     assert "--cov-config=pyproject.toml" in ci_workflow
     assert "python scripts/check_code_shape.py" in ci_workflow
+    assert "python scripts/check_docstring_policy.py" in ci_workflow
     assert "--cov-fail-under=100" in ci_workflow
     assert "--cov=scripts" in makefile
     assert "--cov-config=pyproject.toml" in makefile
     assert "code-shape: deps-dev" in makefile
+    assert "docstring-policy: deps-dev" in makefile
     assert "python scripts/check_code_shape.py" in makefile
+    assert "python scripts/check_docstring_policy.py" in makefile
     assert "horadus eval code-health --output-dir ai/eval/results" in makefile
     assert "test-unit-cov: deps-dev" in makefile
     assert "./scripts/run_unit_coverage_gate.sh" in makefile

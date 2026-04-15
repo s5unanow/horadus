@@ -218,6 +218,7 @@ class ProcessingPipeline:
         run_result: PipelineRunResult,
         execution_by_item: dict[UUID, _ItemExecution],
     ) -> list[tuple[_PreparedItem, Tier1ItemResult]]:
+        """Convert Tier-1 results into either terminal executions or Tier-2 work."""
         ready_for_tier2: list[tuple[_PreparedItem, Tier1ItemResult]] = []
         for prepared in prepared_items:
             if prepared.item_id in tier1_failed_by_item:
@@ -253,6 +254,7 @@ class ProcessingPipeline:
         run_result: PipelineRunResult,
         execution_by_item: dict[UUID, _ItemExecution],
     ) -> None:
+        """Finalize queued Tier-2 candidates in scheduler-selected order."""
         staged_candidates = await self._stage_ready_tier2_candidates(
             ready_for_tier2=ready_for_tier2,
             run_result=run_result,
@@ -363,6 +365,7 @@ class ProcessingPipeline:
         run_result: PipelineRunResult,
         execution: _ItemExecution,
     ) -> None:
+        """Fold a single item execution into the aggregate pipeline counters."""
         status = execution.result.final_status
         if status == ProcessingStatus.ERROR:
             run_result.errors += 1
@@ -427,6 +430,7 @@ class ProcessingPipeline:
         *,
         item: RawItem,
     ) -> tuple[_PreparedItem | None, _ItemExecution | None]:
+        """Move an item into processing and short-circuit deterministic exits."""
         item_id = self._item_id(item)
         item.processing_status = ProcessingStatus.PROCESSING
         item.processing_started_at = datetime.now(tz=UTC)
@@ -520,10 +524,7 @@ class ProcessingPipeline:
             item.processing_started_at = None
             item.error_message = str(exc)[:1000]
             await self.session.flush()
-            logger.exception(
-                "Processing pipeline failed for item",
-                item_id=str(item_id),
-            )
+            logger.exception("Processing pipeline failed for item", item_id=str(item_id))
             return (
                 None,
                 _ItemExecution(
@@ -541,6 +542,7 @@ class ProcessingPipeline:
         prepared_items: list[_PreparedItem],
         trends: list[Trend],
     ) -> tuple[dict[UUID, Tier1ItemResult], dict[UUID, _ItemExecution], PipelineUsage]:
+        """Prefer batch Tier-1 classification, then degrade to per-item fallback safely."""
         items = [prepared.item for prepared in prepared_items]
         usage = PipelineUsage()
         result_by_item: dict[UUID, Tier1ItemResult] = {}
@@ -580,9 +582,7 @@ class ProcessingPipeline:
             return ({}, failed_by_item, usage)
         except Exception as exc:
             retryable_error = build_retryable_pipeline_error(
-                item_id=None,
-                stage="tier1_batch",
-                exc=exc,
+                item_id=None, stage="tier1_batch", exc=exc
             )
             if retryable_error is not None:
                 for prepared in prepared_items:
@@ -643,6 +643,7 @@ class ProcessingPipeline:
         tier1_result: Tier1ItemResult,
         trends: list[Trend],
     ) -> _ItemExecution:
+        """Handle non-batch Tier-2 staging or deterministic noise resolution after Tier-1."""
         item = prepared.item
         try:
             if not tier1_result.should_queue_tier2:
@@ -736,6 +737,7 @@ class ProcessingPipeline:
         tier2_usage: Any,
         canonical_snapshot: Any,
     ) -> bool:
+        """Persist degraded-mode extraction metadata and enqueue replay when warranted."""
         claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         policy_meta = {
             "degraded_llm": True,
@@ -920,6 +922,7 @@ class ProcessingPipeline:
         degraded_status: DegradedLLMStatus,
         tier2_usage: Any,
     ) -> bool:
+        """Queue a degraded Tier-2 replay only for bounded high-impact events."""
         if not settings.LLM_DEGRADED_REPLAY_ENABLED:
             return False
         if event.id is None:
@@ -994,6 +997,7 @@ class ProcessingPipeline:
         event: Event,
         trends: list[Trend],
     ) -> tuple[bool, float, bool]:
+        """Estimate whether replay could materially change event-driven trend output."""
         claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}
         impacts_payload = claims.get("trend_impacts", [])
         if not isinstance(impacts_payload, list) or not impacts_payload:
@@ -1066,6 +1070,7 @@ class ProcessingPipeline:
         reason: TaxonomyGapReason,
         details: dict[str, Any],
     ) -> None:
+        """Persist and emit observability for one unresolved taxonomy mapping gap."""
         try:
             self.session.add(
                 TaxonomyGap(
@@ -1093,6 +1098,7 @@ class ProcessingPipeline:
             )
 
     async def _capture_unresolved_trend_mapping(self, *, event: Event) -> None:
+        """Emit taxonomy-gap rows for unresolved Tier-2 trend impact diagnostics."""
         if event.id is None:
             return
         for diagnostic in iter_unresolved_mapping_gaps(event):
@@ -1279,6 +1285,7 @@ class ProcessingPipeline:
         trend_updates: int = 0,
         error_message: str | None = None,
     ) -> PipelineItemResult:
+        """Normalize per-item execution details into the persisted result envelope."""
         event_id = cluster_result.event_id if cluster_result is not None else None
         event_created = cluster_result.created if cluster_result is not None else False
         event_merged = (
@@ -1333,12 +1340,15 @@ class ProcessingPipeline:
 
     @staticmethod
     def record_processing_event_suppression(*, action: str, stage: str) -> None:
+        """Proxy event-suppression metrics for staging helpers that depend on the owner."""
         record_processing_event_suppression(action=action, stage=stage)
 
     @staticmethod
     def record_processing_tier2_language_usage(*, language: str) -> None:
+        """Proxy Tier-2 language metrics for staged candidate helpers."""
         record_processing_tier2_language_usage(language=language)
 
     @staticmethod
     def set_llm_degraded_mode(*, stage: str, is_degraded: bool) -> None:
+        """Proxy degraded-mode telemetry so helper modules can flip the shared gauge."""
         set_llm_degraded_mode(stage=stage, is_degraded=is_degraded)

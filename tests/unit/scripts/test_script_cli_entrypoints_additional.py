@@ -48,6 +48,7 @@ def _load_script_without_repo_root(stem: str) -> ModuleType:
     ("script_name", "args", "expected_output"),
     [
         ("check_code_shape.py", ("--help",), "usage:"),
+        ("check_docstring_policy.py", ("--help",), "usage:"),
         ("check_docs_freshness.py", ("--help",), "usage:"),
         ("check_pr_review_gate.py", ("--help",), "usage:"),
         (
@@ -77,6 +78,7 @@ def test_script_help_entrypoints_execute_from_external_cwd(
     [
         ("check_dependency_audit", "main"),
         ("check_code_shape", "main"),
+        ("check_docstring_policy", "main"),
         ("check_docs_freshness", "main"),
         ("check_pr_closure_state", "main"),
         ("check_pr_review_gate", "main"),

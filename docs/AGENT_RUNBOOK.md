@@ -100,14 +100,27 @@ to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
 `tasks/COMPLETED.md` before merge.
 
 5. `make agent-check`
-When: fast local quality gate (lint + typecheck + code-shape +
-changed-file code-health ratchet + unit tests).
+When: fast local quality gate (lint + scoped docstring policy + typecheck +
+code-shape + changed-file code-health ratchet + unit tests).
 This covers tracked Python under `src/`, `tools/`, and `scripts/`.
 The workflow unit suite includes the repo-owned import-boundary analyzer for
 `src/` dependency direction, tooling package boundaries, and the explicit
 runtime bridge seam into app code.
 This is still a baseline gate, not a substitute for task-specific targeted
 tests when the task changes code, config, or repo-workflow behavior.
+Direct policy check:
+- `make docstring-policy`
+- When: inspect only the scoped docstring gate outside the broader agent-check
+  loop.
+The scoped docstring policy currently applies to selected owner modules:
+- `src/core/trend_engine.py`
+- `src/processing/pipeline_orchestrator.py`
+- `src/workers/tasks.py`
+Use docstrings for module purpose, public entrypoints, and large helper bodies
+that hide orchestration or invariant logic. Prefer short inline comments for a
+local branch or ordering note inside an otherwise documented function, and use
+no extra prose for trivial private helpers whose names and types already make
+the behavior obvious.
 
 6. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
@@ -116,6 +129,10 @@ The full gate also runs the repo-owned code-shape checker, which enforces the
 current module/function line budgets, member cyclomatic-complexity budgets,
 and ratcheting limits for explicitly tracked legacy hotspots in
 `config/quality/code_shape.toml`.
+It also runs the repo-owned docstring-policy checker for selected high-value
+owner modules so public entrypoints and large helper bodies carry enough prose
+to explain the surrounding orchestration or invariants without requiring
+repo-wide exhaustive docstrings.
 It also fail-closes on the diff-scoped changed-file code-health eval, so only
 Python files made worse by the current branch are blocked; untouched legacy
 hotspots remain non-blocking.

@@ -1,0 +1,18 @@
+[policy]
+require_module_docstrings = true
+require_public_class_docstrings = true
+require_public_function_docstrings = true
+require_public_method_docstrings = true
+complex_member_min_lines = 25
+
+[[targets]]
+path = "src/core/trend_engine.py"
+reason = "Domain math and probability update API"
+
+[[targets]]
+path = "src/processing/pipeline_orchestrator.py"
+reason = "Pipeline orchestration and tier handoff invariants"
+
+[[targets]]
+path = "src/workers/tasks.py"
+reason = "Worker entrypoints and orchestration helpers"

@@ -80,6 +80,7 @@ RetentionCutoffs = retention_helpers.RetentionCutoffs
 
 
 def _deps() -> SimpleNamespace:
+    """Assemble the dependency bundle passed into worker helper modules."""
     return SimpleNamespace(
         asyncio=asyncio,
         httpx=httpx,
@@ -148,6 +149,7 @@ def _deps() -> SimpleNamespace:
 
 
 def typed_shared_task(*task_args: Any, **task_kwargs: Any) -> Callable[[Any], Any]:
+    """Wrap Celery's shared-task decorator with the repo's typing helper."""
     return shared_helpers.typed_shared_task(
         *task_args,
         shared_task_decorator=shared_task,

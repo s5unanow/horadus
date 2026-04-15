@@ -42,6 +42,7 @@ class _FakeParser:
         ("assessment_publish_gate", "decide_gate"),
         ("check_dependency_audit", "main"),
         ("check_code_shape", "main"),
+        ("check_docstring_policy", "main"),
         ("check_docs_freshness", "main"),
         ("check_pr_closure_state", "main"),
         ("check_pr_review_gate", "main"),

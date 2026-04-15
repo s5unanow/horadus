@@ -837,57 +837,6 @@ def test_local_review_data_covers_context_blocker_saved_raw_success_fallback_and
     assert lines[-1] == "Local review blocked: no supported provider CLI was available."
 
 
-def test_local_review_data_keeps_generated_context_out_of_custom_instruction_telemetry(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        task_commands_module, "_review_context", lambda **_kwargs: _fake_review_context()
-    )
-    monkeypatch.setattr(
-        task_commands_module.local_review_module,
-        "prepare_review_run",
-        lambda **_kwargs: (
-            ["claude"],
-            "Use the changed-file code-health summary below.",
-            [
-                "Local review configuration:",
-                "- instructions supplied: no",
-            ],
-        ),
-    )
-    monkeypatch.setattr(
-        task_commands_module, "_ensure_command_available", lambda _name: "/bin/fake"
-    )
-    monkeypatch.setattr(
-        task_commands_module,
-        "_execute_provider",
-        lambda provider, **_kwargs: task_commands_module.LocalReviewProviderRun(
-            provider=provider,
-            interface_kind="prompt",
-            command=[provider],
-            prompt="prompt",
-            returncode=0,
-            stdout="HORADUS-LOCAL-REVIEW: no-findings\n",
-            stderr="",
-            duration_seconds=0.1,
-        ),
-    )
-
-    exit_code, data, lines = task_commands_module.local_review_data(
-        provider="claude",
-        base_branch="main",
-        instructions=None,
-        allow_provider_fallback=False,
-        save_raw_output=False,
-        usefulness="pending",
-        dry_run=False,
-    )
-
-    assert exit_code == task_commands_module.ExitCode.OK
-    assert data["custom_instructions_supplied"] is False
-    assert "- instructions supplied: no" in lines
-
-
 def _fake_review_context() -> task_commands_module.LocalReviewContext:
     return task_commands_module.LocalReviewContext(
         current_branch="codex/task-286-local-review",

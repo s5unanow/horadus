@@ -231,17 +231,25 @@ jobs:
 
       - name: Verify required Postgres extensions
         run: |
-          installed_count=$(
-            docker exec geoint-postgres-ci \
-              psql -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}" \
-              -tAc "SELECT count(*) FROM pg_extension WHERE extname IN ('timescaledb', 'vector');"
-          )
-          if [ "$installed_count" -ne 2 ]; then
-            docker exec geoint-postgres-ci \
-              psql -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}" \
-              -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;"
-            exit 1
-          fi
+          installed_count=""
+          for attempt in {1..15}; do
+            if installed_count=$(
+              docker exec geoint-postgres-ci \
+                psql -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}" \
+                -tAc "SELECT count(*) FROM pg_extension WHERE extname IN ('timescaledb', 'vector');"
+            ); then
+              if [ "$installed_count" -eq 2 ]; then
+                break
+              fi
+            fi
+            if [ "$attempt" -eq 15 ]; then
+              docker exec geoint-postgres-ci \
+                psql -U "${{ env.INTEGRATION_DB_USER }}" -d "${{ env.INTEGRATION_DB_NAME }}" \
+                -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;" || true
+              exit 1
+            fi
+            sleep 2
+          done
 
       - name: Run integration migrations and tests
         env:

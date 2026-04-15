@@ -82,18 +82,26 @@ done
 sleep 2
 
 echo "Verifying required Postgres extensions..."
-installed_count="$(
-  docker exec "${POSTGRES_CONTAINER}" \
-    psql -U postgres -d "${DB_NAME}" \
-    -tAc "SELECT count(*) FROM pg_extension WHERE extname IN ('timescaledb', 'vector');"
-)"
-if [[ "${installed_count}" -ne 2 ]]; then
-  docker exec "${POSTGRES_CONTAINER}" \
-    psql -U postgres -d "${DB_NAME}" \
-    -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;"
-  echo "integration-docker failed: missing required extensions (expected timescaledb + vector)." >&2
-  exit 1
-fi
+installed_count=""
+for attempt in $(seq 1 15); do
+  if installed_count="$(
+    docker exec "${POSTGRES_CONTAINER}" \
+      psql -U postgres -d "${DB_NAME}" \
+      -tAc "SELECT count(*) FROM pg_extension WHERE extname IN ('timescaledb', 'vector');"
+  )"; then
+    if [[ "${installed_count}" -eq 2 ]]; then
+      break
+    fi
+  fi
+  if [[ "${attempt}" -eq 15 ]]; then
+    docker exec "${POSTGRES_CONTAINER}" \
+      psql -U postgres -d "${DB_NAME}" \
+      -c "SELECT extname, extversion FROM pg_extension ORDER BY extname;" || true
+    echo "integration-docker failed: missing required extensions (expected timescaledb + vector)." >&2
+    exit 1
+  fi
+  sleep 2
+done
 
 export DATABASE_URL="postgresql+asyncpg://postgres:postgres@localhost:${POSTGRES_PORT}/${DB_NAME}" # pragma: allowlist secret
 export REDIS_URL="redis://localhost:${REDIS_PORT}/0"

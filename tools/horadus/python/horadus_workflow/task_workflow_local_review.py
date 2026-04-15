@@ -554,11 +554,7 @@ def _run_provider_review(
                 missing_provider=provider_name,
                 duration_seconds=time.monotonic() - started,
             )
-        provider_run = _execute_provider(
-            provider_name,
-            context=context,
-            instructions=instructions,
-        )
+        provider_run = _execute_provider(provider_name, context=context, instructions=instructions)
         lines.append(
             f"Ran `{provider_name}` local review ({provider_run.interface_kind} adapter, "
             f"{provider_run.duration_seconds:.2f}s)."

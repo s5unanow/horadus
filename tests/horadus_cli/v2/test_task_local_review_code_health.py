@@ -227,6 +227,12 @@ def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
         == "Changed-file code-health artifact was present, but its summary was unreadable."
     )
     assert (
+        code_health_prompt_module._render_code_health_summary(
+            {"summary": {"compared_files": None, "flagged_files": "bad"}}
+        )
+        == "Changed-file code-health artifact was present, but its summary was unreadable."
+    )
+    assert (
         "No tracked Python files were included"
         in code_health_prompt_module._render_code_health_summary(
             {"summary": {"compared_files": 0, "flagged_files": 0}}

@@ -122,8 +122,10 @@ def _render_code_health_summary(payload: dict[str, Any]) -> str:
     summary = payload.get("summary")
     if not isinstance(summary, dict):
         return "Changed-file code-health artifact was present, but its summary was unreadable."
-    compared_files = int(summary.get("compared_files", 0))
-    flagged_files = int(summary.get("flagged_files", 0))
+    compared_files = _summary_count(summary, "compared_files")
+    flagged_files = _summary_count(summary, "flagged_files")
+    if compared_files is None or flagged_files is None:
+        return "Changed-file code-health artifact was present, but its summary was unreadable."
     lines = [
         f"Compared tracked Python files: {compared_files}; flagged regressions: {flagged_files}.",
     ]
@@ -169,6 +171,13 @@ def _signed_delta(value: Any) -> str:
     except (TypeError, ValueError):
         return "n/a"
     return f"+{number}" if number >= 0 else str(number)
+
+
+def _summary_count(summary: dict[str, Any], key: str) -> int | None:
+    try:
+        return int(summary.get(key, 0))
+    except (TypeError, ValueError):
+        return None
 
 
 def _code_health_review_instructions(

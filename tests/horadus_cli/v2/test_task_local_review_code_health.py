@@ -298,11 +298,16 @@ def test_code_health_prompt_helpers_cover_matching_and_edge_case_summaries(
         return None
 
     monkeypatch.setattr(code_health_prompt_module, "_load_json", flaky_load_json)
-    assert code_health_prompt_module.load_code_health_prompt_context(
+    artifact_path, summary = code_health_prompt_module.load_code_health_prompt_context(
         repo_root=tmp_path,
         resolved_base_ref="merge-base-sha",
         resolved_head_ref="head-sha",
-    ) == (None, None)
+    )
+    assert artifact_path == "ai/eval/results/code-health-20260413T100000Z-match.json"
+    assert (
+        summary == "Changed-file code-health artifact was present, but its summary was unreadable."
+    )
+    assert seen_match["count"] == 1
 
 
 def test_resolve_review_instructions_skips_code_health_lookup_when_git_refs_fail() -> None:

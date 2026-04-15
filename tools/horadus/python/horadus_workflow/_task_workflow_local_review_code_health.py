@@ -17,16 +17,14 @@ def load_code_health_prompt_context(
     resolved_base_ref: str,
     resolved_head_ref: str,
 ) -> tuple[str | None, str | None]:
-    artifact_path = _latest_matching_artifact(
+    artifact = _latest_matching_artifact(
         repo_root=repo_root,
         resolved_base_ref=resolved_base_ref,
         resolved_head_ref=resolved_head_ref,
     )
-    if artifact_path is None:
+    if artifact is None:
         return (None, None)
-    payload = _load_json(artifact_path)
-    if payload is None:
-        return (None, None)
+    artifact_path, payload = artifact
     return (
         str(artifact_path.relative_to(repo_root)),
         _render_code_health_summary(payload),
@@ -78,7 +76,7 @@ def _latest_matching_artifact(
     repo_root: Path,
     resolved_base_ref: str,
     resolved_head_ref: str,
-) -> Path | None:
+) -> tuple[Path, dict[str, Any]] | None:
     results_dir = repo_root / _CODE_HEALTH_RESULTS_DIR
     if not results_dir.is_dir():
         return None
@@ -90,7 +88,8 @@ def _latest_matching_artifact(
             resolved_base_ref=resolved_base_ref,
             resolved_head_ref=resolved_head_ref,
         ):
-            return path
+            assert payload is not None
+            return path, payload
     return None
 
 

@@ -141,7 +141,7 @@ def _class_issues(
     issues: list[DocstringIssue] = []
     if (
         policy.require_public_class_docstrings
-        and _is_public_name(node.name)
+        and _is_public_qualified_name(class_name)
         and not ast.get_docstring(node)
     ):
         issues.append(
@@ -164,7 +164,7 @@ def _class_issues(
                 target=target,
                 member_name=_member_name((*prefix, node.name), child.name),
                 node=child,
-                is_method=_is_public_name(node.name),
+                is_method=True,
             )
             if issue is not None:
                 issues.append(issue)
@@ -181,7 +181,7 @@ def _member_issue(
 ) -> DocstringIssue | None:
     reasons = _member_requirement_reasons(
         policy=policy,
-        member_name=node.name,
+        member_name=member_name,
         node=node,
         is_method=is_method,
     )
@@ -205,7 +205,7 @@ def _member_requirement_reasons(
     is_method: bool,
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    if _is_public_name(member_name):
+    if _is_public_qualified_name(member_name):
         if is_method and policy.require_public_method_docstrings:
             reasons.append("public-method")
         if not is_method and policy.require_public_function_docstrings:
@@ -240,6 +240,10 @@ def _member_name(prefix: tuple[str, ...], name: str) -> str:
 
 def _is_public_name(name: str) -> bool:
     return not name.startswith("_")
+
+
+def _is_public_qualified_name(name: str) -> bool:
+    return all(_is_public_name(part) for part in name.split("."))
 
 
 def _issue_sort_key(issue: DocstringIssue) -> tuple[str, str, str]:

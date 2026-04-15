@@ -226,3 +226,43 @@ reason = "Application surface"
     result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
 
     assert result.issues == ()
+
+
+def test_run_docstring_policy_check_ignores_private_class_members(tmp_path: Path) -> None:
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[policy]
+require_module_docstrings = true
+require_public_class_docstrings = true
+require_public_function_docstrings = true
+require_public_method_docstrings = true
+complex_member_min_lines = 10
+
+[[targets]]
+path = "src/app.py"
+reason = "Application surface"
+""",
+    )
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                '"""Application surface."""',
+                "",
+                "class _Internal:",
+                "    def run(self) -> None:",
+                "        return None",
+                "",
+                "    class Nested:",
+                "        def call(self) -> None:",
+                "            return None",
+            ]
+        )
+        + "\n",
+    )
+
+    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
+
+    assert result.issues == ()

@@ -151,9 +151,9 @@ def test_main_tasks_list_active_text_omits_non_active_human_blockers(
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(
-    capsys: pytest.CaptureFixture[str],
+    synthetic_task_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    result = main(["tasks", "search", "health", "--limit", "1", "--format", "json"])
+    result = main(["tasks", "search", LIVE_TASK_ID, "--limit", "1", "--format", "json"])
 
     assert result == 0
     payload = json.loads(capsys.readouterr().out)

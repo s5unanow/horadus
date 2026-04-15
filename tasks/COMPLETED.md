@@ -380,3 +380,4 @@
 - TASK-368: Enforce Hotspot-Touch Debt Capture for Allowlisted Production Files ✅
 - TASK-374: Add /ship-it task completion workflow ✅
 - TASK-375: Bump pytest to 9.0.3 for dependency audit ✅
+- TASK-369: Make Local Pre-Push Review Slop-Aware for Changed Files ✅

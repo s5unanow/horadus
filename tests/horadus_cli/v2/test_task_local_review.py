@@ -30,6 +30,8 @@ def _fake_review_git(args: list[str], *, branch: str = "codex/task-286-local-rev
     mapping = {
         ("rev-parse", "--abbrev-ref", "HEAD"): _completed(["git", *args], stdout=f"{branch}\n"),
         ("rev-parse", "--verify", "main"): _completed(["git", *args], stdout="base-sha\n"),
+        ("rev-parse", "--verify", "HEAD"): _completed(["git", *args], stdout="head-sha\n"),
+        ("merge-base", "main", "HEAD"): _completed(["git", *args], stdout="merge-base-sha\n"),
         (
             "diff",
             "--no-ext-diff",
@@ -369,14 +371,12 @@ def test_local_review_helper_functions_cover_provider_config_and_prompt_shapes(
     )
     assert "Additional review instructions:" in contract
     prompt = task_commands_module._render_prompt_only_provider_prompt(
-        context=context,
-        instructions="Focus on docs regressions.",
+        context=context, instructions="Focus on docs regressions."
     )
     assert "Task id: unknown" in prompt
     assert "Changed files:\n- (none)" in prompt
     codex_prompt = task_commands_module._render_codex_review_prompt(
-        context=context,
-        instructions=None,
+        context=context, instructions=None
     )
     assert "Review the current repository changes against the provided base branch." in codex_prompt
 

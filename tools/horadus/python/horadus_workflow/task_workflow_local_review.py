@@ -46,6 +46,7 @@ from ._task_workflow_local_review_models import (
     LocalReviewParsedOutput,
     LocalReviewProviderRun,
 )
+from ._task_workflow_local_review_output import prepare_review_run
 from ._task_workflow_local_review_provider import (
     _execute_provider,
     _parse_provider_output,
@@ -135,7 +136,6 @@ def _review_context(
                 f"Base branch `{base_branch}` is not available locally.",
             ],
         )
-
     diff_result = _run_git(["diff", "--no-ext-diff", "--find-renames", f"{base_branch}...HEAD"])
     if diff_result.returncode != 0:
         return (
@@ -249,29 +249,6 @@ def _entry_payload(
             else None
         ),
     }
-
-
-def _configuration_lines(
-    *,
-    context: LocalReviewContext,
-    selected_provider: str,
-    selection_source: str,
-    provider_order: list[str],
-    instructions: str | None,
-    save_raw_output: bool,
-    usefulness: str,
-) -> list[str]:
-    return [
-        "Local review configuration:",
-        f"- provider: {selected_provider} (source={selection_source})",
-        f"- provider order: {', '.join(provider_order)}",
-        f"- base branch: {context.base_branch}",
-        f"- target: {context.review_target_value}",
-        f"- provider timeout: {DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS}s",
-        f"- instructions supplied: {'yes' if instructions and instructions.strip() else 'no'}",
-        f"- usefulness: {usefulness}",
-        f"- raw output: {'keep' if save_raw_output else 'discard on success'}",
-    ]
 
 
 def _dry_run_result(
@@ -498,19 +475,17 @@ def local_review_data(
             },
             lines,
         )
-    provider_order = _provider_attempt_order(
-        selected_provider,
-        selection_source=selection_source,
-        allow_provider_fallback=allow_provider_fallback,
-    )
-    lines = _configuration_lines(
+    provider_order, effective_instructions, lines = prepare_review_run(
         context=context,
         selected_provider=selected_provider,
         selection_source=selection_source,
-        provider_order=provider_order,
+        allow_provider_fallback=allow_provider_fallback,
+        provider_attempt_order=_provider_attempt_order,
         instructions=instructions,
         save_raw_output=save_raw_output,
         usefulness=usefulness,
+        repo_root=task_repo.repo_root(),
+        run_git=_run_git,
     )
     if dry_run:
         return _dry_run_result(
@@ -518,7 +493,7 @@ def local_review_data(
             selected_provider=selected_provider,
             selection_source=selection_source,
             provider_order=provider_order,
-            instructions=instructions,
+            instructions=effective_instructions,
             lines=lines,
         )
     if not provider_order:
@@ -537,7 +512,8 @@ def local_review_data(
         selected_provider=selected_provider,
         selection_source=selection_source,
         provider_order=provider_order,
-        instructions=instructions,
+        instructions=effective_instructions,
+        telemetry_instructions=instructions,
         allow_provider_fallback=allow_provider_fallback,
         save_raw_output=save_raw_output,
         usefulness=usefulness,
@@ -552,6 +528,7 @@ def _run_provider_review(
     selection_source: str,
     provider_order: list[str],
     instructions: str | None,
+    telemetry_instructions: str | None,
     allow_provider_fallback: bool,
     save_raw_output: bool,
     usefulness: str,
@@ -571,17 +548,13 @@ def _run_provider_review(
                 selection_source=selection_source,
                 provider_order=provider_order,
                 attempted_provider=attempted_provider,
-                instructions=instructions,
+                instructions=telemetry_instructions,
                 usefulness=usefulness,
                 lines=lines,
                 missing_provider=provider_name,
                 duration_seconds=time.monotonic() - started,
             )
-        provider_run = _execute_provider(
-            provider_name,
-            context=context,
-            instructions=instructions,
-        )
+        provider_run = _execute_provider(provider_name, context=context, instructions=instructions)
         lines.append(
             f"Ran `{provider_name}` local review ({provider_run.interface_kind} adapter, "
             f"{provider_run.duration_seconds:.2f}s)."
@@ -595,7 +568,7 @@ def _run_provider_review(
                 provider_order=provider_order,
                 attempted_provider=attempted_provider,
                 executed_provider=provider_name,
-                instructions=instructions,
+                instructions=telemetry_instructions,
                 usefulness=usefulness,
                 save_raw_output=save_raw_output,
                 started=started,
@@ -621,7 +594,7 @@ def _run_provider_review(
             provider_order=provider_order,
             attempted_provider=attempted_provider,
             executed_provider=provider_name,
-            instructions=instructions,
+            instructions=telemetry_instructions,
             usefulness=usefulness,
             started=started,
             provider_run=provider_run,

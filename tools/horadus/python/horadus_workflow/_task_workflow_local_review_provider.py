@@ -45,7 +45,7 @@ def _render_prompt_contract(*, instructions: str | None) -> str:
         "After the marker line:",
         "- If there are findings, report concise bullets ordered by severity and include file paths when possible.",
         "- If there are no findings, write one short sentence only.",
-        "Prioritize bugs, regressions, behavior changes, missing tests, and contract drift.",
+        "Prioritize bugs, regressions, behavior changes, missing tests, contract drift, hotspot expansion, multi-concern growth inside touched modules, and verbosity or duplication regressions.",
     ]
     if instructions is not None and instructions.strip():
         lines.extend(["Additional review instructions:", instructions.strip()])

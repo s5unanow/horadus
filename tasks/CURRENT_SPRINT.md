@@ -9,15 +9,19 @@
 
 ## Active Tasks
 
+- `TASK-376` Align local-review telemetry with prompt enrichment
+- `TASK-377` Close docstring-policy gap in make check
+- `TASK-378` Accept completed hotspot follow-up task references
 - `TASK-334` Align Gemini local-review approval-mode flags with installed CLI
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 
 ## Selection Notes
 
-- Sprint 9 opens immediately after Sprint 8 and seeds a nine-task queue from the live backlog based on the next relevant autonomous work plus one carried-forward human blocker.
+- Sprint 9 opened immediately after Sprint 8 with a nine-task queue from the live backlog plus one carried-forward human blocker.
+- `TASK-376`, `TASK-377`, and `TASK-378` were promoted from current-head review follow-ups on `TASK-369`, `TASK-255`, and `TASK-368`; keep them in Sprint 9 so those repo-workflow fixes stay adjacent to the work that surfaced them.
 - The selected queue focuses first on behavior evals and deterministic code-health guardrails, then on review/authoring workflow polish.
 - `TASK-373` is an in-sprint blocker-clear task added after the sprint reset because the repo-wide dependency audit now fails on an upstream-fixed `cryptography` CVE and prevents strict local-gate completion for active work.
-- `TASK-366` should land before `TASK-367`, and `TASK-369` should reuse the changed-file/code-health output once it exists.
+- `TASK-366` should land before `TASK-367`, `TASK-369` should reuse the changed-file/code-health output once it exists, and `TASK-376` should ship after `TASK-369` because it reports that enriched-review behavior accurately.
 - `TASK-288` is carried into Sprint 9 as a tracked hold item only; it remains human-gated and is not part of the autonomous implementation lane unless the human explicitly reactivates it.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
 
@@ -31,8 +35,11 @@
 6. `TASK-368` Enforce hotspot-touch debt capture for allowlisted production files.
 7. `TASK-369` Make local pre-push review slop-aware for changed files.
 8. `TASK-255` Add a targeted docstring quality gate for high-value surfaces.
-9. `TASK-334` Align Gemini local-review approval-mode flags with installed CLI.
-10. `TASK-288` Keep as a carried human-blocked planning item; do not start autonomously.
+9. `TASK-377` Close docstring-policy gap in make check.
+10. `TASK-378` Accept completed hotspot follow-up task references.
+11. `TASK-376` Align local-review telemetry with prompt enrichment.
+12. `TASK-334` Align Gemini local-review approval-mode flags with installed CLI.
+13. `TASK-288` Keep as a carried human-blocked planning item; do not start autonomously.
 
 ## Human Blocker Metadata
 
@@ -59,3 +66,4 @@
 - `TASK-375` Bump pytest to 9.0.3 for dependency audit ✅
 - `TASK-369` Make Local Pre-Push Review Slop-Aware for Changed Files ✅
 - `TASK-255` Add a Targeted Docstring Quality Gate for High-Value Surfaces ✅
+- `TASK-379` Sync newly created review follow-up tasks into Sprint 9 ✅

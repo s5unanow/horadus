@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-376`.
+- Next available task IDs start at `TASK-380`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -98,6 +98,54 @@ minimal and phase-appropriate.
 - [ ] Cover at least one minimal-context case so retrieval quality is not judged only by recall
 - [ ] Eval artifacts state retrieval mode/phase and authoritative-source basis
 - [ ] Workflow docs explain when retrieval behavior suites must run for context-pack or retrieval changes
+
+---
+
+### TASK-376: Align local-review telemetry with prompt enrichment
+**Priority**: P3
+**Estimate**: <1h
+
+Promote the TASK-369 review follow-up that fixes misleading local-review
+configuration output after automatic code-health prompt enrichment.
+
+**Files**: `tools/horadus/python/horadus_workflow/_task_workflow_local_review_output.py`, `tests/horadus_cli/v2/test_task_local_review_output.py`
+
+**Acceptance Criteria**:
+- [ ] Local review output clearly reports when effective provider instructions were auto-enriched by changed-file code-health context.
+- [ ] The operator-visible output keeps the distinction between user-supplied instructions and generated context if both need to be shown.
+- [ ] Regression coverage proves the rendered configuration lines match the actual prompt-enrichment behavior.
+
+---
+
+### TASK-377: Close docstring-policy gap in make check
+**Priority**: P2
+**Estimate**: <1h
+
+Promote the TASK-255 review follow-up that closes the gap between the new
+scoped docstring-policy gate and the general local code-quality entrypoint.
+
+**Files**: `Makefile`, `README.md`, `tests/horadus_cli/v2/test_task_workflow.py`
+
+**Acceptance Criteria**:
+- [ ] The canonical local 'make check' quality entrypoint includes the scoped docstring-policy gate, or the repo’s documented code-quality entrypoint is updated so contributors do not get a false local green.
+- [ ] README and any repo-owned workflow documentation stay aligned with the actual code-quality command behavior.
+- [ ] Regression coverage proves the workflow/config surfaces reflect the intended docstring-policy wiring.
+
+---
+
+### TASK-378: Accept completed hotspot follow-up task references
+**Priority**: P2
+**Estimate**: 1-2 hours
+
+Promote the TASK-368 review follow-up that keeps hotspot planning history valid
+after the referenced cleanup task has already been completed.
+
+**Files**: `tools/horadus/python/horadus_workflow/_docs_freshness_planning_hotspots.py`, `tools/horadus/python/horadus_workflow/_docs_freshness_planning_artifacts.py`, `tests/workflow/test_docs_freshness_planning_hotspots.py`
+
+**Acceptance Criteria**:
+- [ ] Hotspot follow-up validation accepts distinct follow-up TASK ids that are either still open or already completed/archived.
+- [ ] Unknown-task and same-task follow-up protections remain enforced.
+- [ ] Regression coverage proves historical planning artifacts stay valid after the referenced cleanup task leaves the live backlog.
 
 ---
 

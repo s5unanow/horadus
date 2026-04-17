@@ -55,7 +55,11 @@ def test_local_review_data_keeps_generated_context_out_of_custom_instruction_tel
         lambda **_kwargs: (
             ["claude"],
             "Use the changed-file code-health summary below.",
-            ["Local review configuration:", "- instructions supplied: no"],
+            [
+                "Local review configuration:",
+                "- instructions supplied: no",
+                "- effective provider instructions: auto-enriched changed-file code-health context only",
+            ],
         ),
     )
     monkeypatch.setattr(
@@ -89,3 +93,7 @@ def test_local_review_data_keeps_generated_context_out_of_custom_instruction_tel
     assert exit_code == task_commands_module.ExitCode.OK
     assert data["custom_instructions_supplied"] is False
     assert "- instructions supplied: no" in lines
+    assert (
+        "- effective provider instructions: auto-enriched changed-file code-health context only"
+        in lines
+    )

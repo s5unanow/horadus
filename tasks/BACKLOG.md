@@ -101,22 +101,6 @@ minimal and phase-appropriate.
 
 ---
 
-### TASK-376: Align local-review telemetry with prompt enrichment
-**Priority**: P3
-**Estimate**: <1h
-
-Promote the TASK-369 review follow-up that fixes misleading local-review
-configuration output after automatic code-health prompt enrichment.
-
-**Files**: `tools/horadus/python/horadus_workflow/_task_workflow_local_review_output.py`, `tests/horadus_cli/v2/test_task_local_review_output.py`
-
-**Acceptance Criteria**:
-- [ ] Local review output clearly reports when effective provider instructions were auto-enriched by changed-file code-health context.
-- [ ] The operator-visible output keeps the distinction between user-supplied instructions and generated context if both need to be shown.
-- [ ] Regression coverage proves the rendered configuration lines match the actual prompt-enrichment behavior.
-
----
-
 ### TASK-377: Close docstring-policy gap in make check
 **Priority**: P2
 **Estimate**: <1h

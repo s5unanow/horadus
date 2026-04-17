@@ -49,6 +49,7 @@ def test_build_configuration_lines_renders_stable_output_contract() -> None:
         "- provider timeout: 180s",
         "- changed-file code-health: ai/eval/results/code-health.json",
         "- instructions supplied: yes",
+        "- effective provider instructions: custom + auto-enriched changed-file code-health context",
         "- usefulness: pending",
         "- raw output: keep",
     ]
@@ -107,6 +108,26 @@ def test_prepare_review_run_returns_provider_order_instructions_and_lines(
         "- provider timeout: 180s",
         "- changed-file code-health: ai/eval/results/code-health.json",
         "- instructions supplied: yes",
+        "- effective provider instructions: custom + auto-enriched changed-file code-health context",
         "- usefulness: useful",
         "- raw output: discard on success",
     ]
+
+
+def test_build_configuration_lines_reports_generated_context_without_custom_instructions() -> None:
+    lines = local_review_output_module.build_configuration_lines(
+        context=_review_context(),
+        selected_provider="claude",
+        selection_source="default",
+        provider_order=["claude"],
+        instructions=None,
+        save_raw_output=False,
+        usefulness="pending",
+        code_health_artifact_path="ai/eval/results/code-health.json",
+    )
+
+    assert "- instructions supplied: no" in lines
+    assert (
+        "- effective provider instructions: auto-enriched changed-file code-health context only"
+        in lines
+    )

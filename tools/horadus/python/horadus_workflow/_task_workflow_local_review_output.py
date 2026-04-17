@@ -13,6 +13,22 @@ if TYPE_CHECKING:
     from ._task_workflow_local_review_models import LocalReviewContext
 
 
+def _effective_instruction_mode(
+    *,
+    instructions: str | None,
+    code_health_artifact_path: str | None,
+) -> str:
+    custom_instructions_supplied = bool(instructions and instructions.strip())
+    code_health_enriched = code_health_artifact_path is not None
+    if custom_instructions_supplied and code_health_enriched:
+        return "custom + auto-enriched changed-file code-health context"
+    if custom_instructions_supplied:
+        return "custom only"
+    if code_health_enriched:
+        return "auto-enriched changed-file code-health context only"
+    return "none"
+
+
 def build_configuration_lines(
     *,
     context: LocalReviewContext,
@@ -33,6 +49,11 @@ def build_configuration_lines(
         f"- provider timeout: {DEFAULT_LOCAL_REVIEW_PROVIDER_TIMEOUT_SECONDS}s",
         f"- changed-file code-health: {code_health_artifact_path or 'not available'}",
         f"- instructions supplied: {'yes' if instructions and instructions.strip() else 'no'}",
+        "- effective provider instructions: "
+        + _effective_instruction_mode(
+            instructions=instructions,
+            code_health_artifact_path=code_health_artifact_path,
+        ),
         f"- usefulness: {usefulness}",
         f"- raw output: {'keep' if save_raw_output else 'discard on success'}",
     ]

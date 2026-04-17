@@ -330,6 +330,9 @@ Artifacts and scope:
   `ai/eval/results/`, Horadus includes a bounded structural summary in the
   local-review prompt so providers can focus on the existing deterministic
   signal instead of rediscovering it from the diff alone.
+- The local-review configuration block reports `instructions supplied`
+  separately from `effective provider instructions` so operators can see when
+  changed-file code-health context auto-enriched the prompt.
 - Use this command for advisory local branch-diff review before push; keep
   remote PR review and `horadus tasks finish` as the merge gate.
 - If `horadus tasks context-pack TASK-XXX` recommends pre-push local review,

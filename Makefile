@@ -92,7 +92,7 @@ lint: deps-dev ## Run linter (ruff)
 typecheck: deps-dev ## Run type checker (mypy)
 	$(UV_RUN) mypy src/ tools/horadus/python scripts
 
-check: format lint typecheck ## Run all code quality checks
+check: format lint typecheck docstring-policy ## Run all code quality checks
 	@echo "$(GREEN)All checks passed!$(RESET)"
 
 agent-check: deps-dev ## Fast local gate for agent iteration (lint, docstrings, typecheck, changed-file ratchets, unit tests)

@@ -384,3 +384,4 @@
 - TASK-255: Add a Targeted Docstring Quality Gate for High-Value Surfaces ✅
 - TASK-379: Sync newly created review follow-up tasks into Sprint 9 ✅
 - TASK-376: Align local-review telemetry with prompt enrichment ✅
+- TASK-377: Close docstring-policy gap in make check ✅

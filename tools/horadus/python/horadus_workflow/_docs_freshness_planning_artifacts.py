@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ._docs_freshness_models import DocsFreshnessIssue
 
+from ._docs_freshness_planning_followups import (
+    known_followup_task_ids as _known_followup_task_ids,
+)
 from ._docs_freshness_planning_hotspots import (
     backlog_planning_issues as _backlog_planning_issues,
 )
@@ -42,9 +45,6 @@ _PLANNING_GATES_LINE_PATTERN = re.compile(
 _EXEC_PLAN_LINE_PATTERN = re.compile(r"^\*\*Exec Plan\*\*:\s*(?P<value>.+)$", re.MULTILINE)
 _TASK_ID_FROM_SPEC_PATH = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
 _TASK_ID_FROM_EXEC_PLAN_PATH = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
-_BACKLOG_TASK_HEADER_PATTERN = re.compile(r"^### (?P<task_id>TASK-\d{3}): .+$", re.MULTILINE)
-# Keep this strict to avoid accidentally treating prose references as completed tasks.
-_COMPLETED_TASK_LINE_PATTERN = re.compile(r"^-\s+(?P<task_id>TASK-\d{3}):", re.MULTILINE)
 _PLANNING_CHANGED_DEFAULT_BASE_REF = "main"
 
 
@@ -109,46 +109,6 @@ def _archived_task_block(repo_root: Path, task_id: str) -> str | None:
         if task_block is not None:
             return task_block
     return None
-
-
-def _backlog_task_ids(content: str) -> set[str]:
-    return {match.group("task_id") for match in _BACKLOG_TASK_HEADER_PATTERN.finditer(content)}
-
-
-def _completed_task_ids(repo_root: Path) -> set[str]:
-    completed_path = repo_root / "tasks" / "COMPLETED.md"
-    if not completed_path.exists():
-        return set()
-    return {
-        match.group("task_id")
-        for match in _COMPLETED_TASK_LINE_PATTERN.finditer(
-            completed_path.read_text(encoding="utf-8")
-        )
-    }
-
-
-def _closed_archive_task_ids(repo_root: Path) -> set[str]:
-    archive_root = repo_root / "archive" / "closed_tasks"
-    if not archive_root.exists():
-        return set()
-
-    archived_task_ids: set[str] = set()
-    for archive_path in archive_root.glob("*.md"):
-        archived_task_ids.update(
-            match.group("task_id")
-            for match in _BACKLOG_TASK_HEADER_PATTERN.finditer(
-                archive_path.read_text(encoding="utf-8")
-            )
-        )
-    return archived_task_ids
-
-
-def _known_followup_task_ids(repo_root: Path, backlog_text: str) -> set[str]:
-    return {
-        *_backlog_task_ids(backlog_text),
-        *_completed_task_ids(repo_root),
-        *_closed_archive_task_ids(repo_root),
-    }
 
 
 def _task_hotspot_paths(

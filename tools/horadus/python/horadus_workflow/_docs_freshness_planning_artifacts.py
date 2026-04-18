@@ -43,6 +43,7 @@ _EXEC_PLAN_LINE_PATTERN = re.compile(r"^\*\*Exec Plan\*\*:\s*(?P<value>.+)$", re
 _TASK_ID_FROM_SPEC_PATH = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
 _TASK_ID_FROM_EXEC_PLAN_PATH = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
 _BACKLOG_TASK_HEADER_PATTERN = re.compile(r"^### (?P<task_id>TASK-\d{3}): .+$", re.MULTILINE)
+# Keep this strict to avoid accidentally treating prose references as completed tasks.
 _COMPLETED_TASK_LINE_PATTERN = re.compile(r"^-\s+(?P<task_id>TASK-\d{3}):", re.MULTILINE)
 _PLANNING_CHANGED_DEFAULT_BASE_REF = "main"
 
@@ -339,6 +340,7 @@ def _validate_planning_artifact(
     )
     if not bool(planning_state["required"]):
         return ()
+    known_followup_task_ids = _known_followup_task_ids(repo_root, backlog_text)
 
     if relative_path.startswith("tasks/specs/"):
         return (
@@ -354,7 +356,7 @@ def _validate_planning_artifact(
                 relative_path=relative_path,
                 content=content,
                 planning_state=planning_state,
-                known_task_ids=_known_followup_task_ids(repo_root, backlog_text),
+                known_task_ids=known_followup_task_ids,
                 current_task_id=artifact_task_id,
             ),
         )
@@ -373,7 +375,7 @@ def _validate_planning_artifact(
                 relative_path=relative_path,
                 content=content,
                 planning_state=planning_state,
-                known_task_ids=_known_followup_task_ids(repo_root, backlog_text),
+                known_task_ids=known_followup_task_ids,
                 current_task_id=artifact_task_id,
             ),
         )

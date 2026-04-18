@@ -13,6 +13,7 @@ pytestmark = pytest.mark.unit
 
 def test_known_followup_task_ids_handles_missing_history_ledgers(tmp_path: Path) -> None:
     backlog_text, _ = _seed_hotspot_exec_plan_fixture(tmp_path)
+    (tmp_path / "tasks" / "COMPLETED.md").unlink()
 
     assert followups_module.known_followup_task_ids(tmp_path, backlog_text) == {
         "TASK-320",

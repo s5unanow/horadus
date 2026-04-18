@@ -10,6 +10,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from ._docs_freshness_models import DocsFreshnessIssue
 
+from ._docs_freshness_planning_followups import (
+    known_followup_task_ids as _known_followup_task_ids,
+)
 from ._docs_freshness_planning_hotspots import (
     backlog_planning_issues as _backlog_planning_issues,
 )
@@ -42,7 +45,6 @@ _PLANNING_GATES_LINE_PATTERN = re.compile(
 _EXEC_PLAN_LINE_PATTERN = re.compile(r"^\*\*Exec Plan\*\*:\s*(?P<value>.+)$", re.MULTILINE)
 _TASK_ID_FROM_SPEC_PATH = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
 _TASK_ID_FROM_EXEC_PLAN_PATH = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
-_BACKLOG_TASK_HEADER_PATTERN = re.compile(r"^### (?P<task_id>TASK-\d{3}): .+$", re.MULTILINE)
 _PLANNING_CHANGED_DEFAULT_BASE_REF = "main"
 
 
@@ -107,10 +109,6 @@ def _archived_task_block(repo_root: Path, task_id: str) -> str | None:
         if task_block is not None:
             return task_block
     return None
-
-
-def _backlog_task_ids(content: str) -> set[str]:
-    return {match.group("task_id") for match in _BACKLOG_TASK_HEADER_PATTERN.finditer(content)}
 
 
 def _task_hotspot_paths(
@@ -272,7 +270,6 @@ def _validate_planning_artifact(
     path = repo_root / relative_path
     if not path.exists():
         return ()
-
     content = path.read_text(encoding="utf-8")
     template_issues = _template_planning_issues(
         relative_path=relative_path,
@@ -302,6 +299,7 @@ def _validate_planning_artifact(
     )
     if not bool(planning_state["required"]):
         return ()
+    known_followup_task_ids = _known_followup_task_ids(repo_root, backlog_text)
 
     if relative_path.startswith("tasks/specs/"):
         return (
@@ -317,7 +315,7 @@ def _validate_planning_artifact(
                 relative_path=relative_path,
                 content=content,
                 planning_state=planning_state,
-                known_task_ids=_backlog_task_ids(backlog_text),
+                known_task_ids=known_followup_task_ids,
                 current_task_id=artifact_task_id,
             ),
         )
@@ -336,7 +334,7 @@ def _validate_planning_artifact(
                 relative_path=relative_path,
                 content=content,
                 planning_state=planning_state,
-                known_task_ids=_backlog_task_ids(backlog_text),
+                known_task_ids=known_followup_task_ids,
                 current_task_id=artifact_task_id,
             ),
         )

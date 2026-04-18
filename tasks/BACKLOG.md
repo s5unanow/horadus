@@ -101,22 +101,6 @@ minimal and phase-appropriate.
 
 ---
 
-### TASK-378: Accept completed hotspot follow-up task references
-**Priority**: P2
-**Estimate**: 1-2 hours
-
-Promote the TASK-368 review follow-up that keeps hotspot planning history valid
-after the referenced cleanup task has already been completed.
-
-**Files**: `tools/horadus/python/horadus_workflow/_docs_freshness_planning_hotspots.py`, `tools/horadus/python/horadus_workflow/_docs_freshness_planning_artifacts.py`, `tests/workflow/test_docs_freshness_planning_hotspots.py`
-
-**Acceptance Criteria**:
-- [ ] Hotspot follow-up validation accepts distinct follow-up TASK ids that are either still open or already completed/archived.
-- [ ] Unknown-task and same-task follow-up protections remain enforced.
-- [ ] Regression coverage proves historical planning artifacts stay valid after the referenced cleanup task leaves the live backlog.
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

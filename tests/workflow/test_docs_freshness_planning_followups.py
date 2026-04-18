@@ -4,10 +4,20 @@ from pathlib import Path
 
 import pytest
 
+import tools.horadus.python.horadus_workflow._docs_freshness_planning_followups as followups_module
 import tools.horadus.python.horadus_workflow.docs_freshness as docs_freshness_module
 from tests.workflow.test_docs_freshness_planning_hotspots import _seed_hotspot_exec_plan_fixture
 
 pytestmark = pytest.mark.unit
+
+
+def test_known_followup_task_ids_handles_missing_history_ledgers(tmp_path: Path) -> None:
+    backlog_text, _ = _seed_hotspot_exec_plan_fixture(tmp_path)
+
+    assert followups_module.known_followup_task_ids(tmp_path, backlog_text) == {
+        "TASK-320",
+        "TASK-321",
+    }
 
 
 def test_validate_planning_artifact_accepts_completed_followup_tasks(tmp_path: Path) -> None:

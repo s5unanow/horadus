@@ -426,7 +426,7 @@ def _followup_task_issues(
             _warning_issue(
                 rule_id="planning_hotspot_followup_unknown_task",
                 message=(
-                    f"{relative_path} should reference an existing distinct backlog task when the "
+                    f"{relative_path} should reference an existing distinct task when the "
                     "Hotspot Outcome is follow-up-task-created."
                 ),
                 path=relative_path,

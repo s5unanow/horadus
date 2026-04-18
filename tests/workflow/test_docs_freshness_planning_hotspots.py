@@ -199,6 +199,67 @@ def test_validate_planning_artifact_requires_distinct_existing_followup_tasks(
     )
 
 
+def test_validate_planning_artifact_accepts_completed_followup_tasks(tmp_path: Path) -> None:
+    backlog_text, base_exec_plan = _seed_hotspot_exec_plan_fixture(tmp_path)
+    (tmp_path / "tasks" / "COMPLETED.md").write_text(
+        "\n".join(
+            [
+                "# Completed Tasks",
+                "",
+                "- TASK-330: Cleanup hotspot follow-up ✅",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-330 cleanup later\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/exec_plans/TASK-320.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+
+def test_validate_planning_artifact_accepts_archived_followup_tasks(tmp_path: Path) -> None:
+    backlog_text, base_exec_plan = _seed_hotspot_exec_plan_fixture(tmp_path)
+    archive_root = tmp_path / "archive" / "closed_tasks"
+    archive_root.mkdir(parents=True, exist_ok=True)
+    (archive_root / "2026-Q2.md").write_text(
+        "\n".join(
+            [
+                "# Closed Tasks",
+                "",
+                "### TASK-330: Archived cleanup follow-up",
+                "**Priority**: P2",
+                "",
+                "---",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "tasks" / "exec_plans" / "TASK-320.md").write_text(
+        base_exec_plan + "- Hotspot Outcome: follow-up-task-created — TASK-330 cleanup later\n",
+        encoding="utf-8",
+    )
+
+    assert (
+        docs_freshness_module._validate_planning_artifact(
+            repo_root=tmp_path,
+            relative_path="tasks/exec_plans/TASK-320.md",
+            backlog_text=backlog_text,
+        )
+        == ()
+    )
+
+
 def _seed_hotspot_exec_plan_fixture(tmp_path: Path) -> tuple[str, str]:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)

@@ -101,22 +101,6 @@ minimal and phase-appropriate.
 
 ---
 
-### TASK-377: Close docstring-policy gap in make check
-**Priority**: P2
-**Estimate**: <1h
-
-Promote the TASK-255 review follow-up that closes the gap between the new
-scoped docstring-policy gate and the general local code-quality entrypoint.
-
-**Files**: `Makefile`, `README.md`, `tests/horadus_cli/v2/test_task_workflow.py`
-
-**Acceptance Criteria**:
-- [ ] The canonical local 'make check' quality entrypoint includes the scoped docstring-policy gate, or the repo’s documented code-quality entrypoint is updated so contributors do not get a false local green.
-- [ ] README and any repo-owned workflow documentation stay aligned with the actual code-quality command behavior.
-- [ ] Regression coverage proves the workflow/config surfaces reflect the intended docstring-policy wiring.
-
----
-
 ### TASK-378: Accept completed hotspot follow-up task references
 **Priority**: P2
 **Estimate**: 1-2 hours

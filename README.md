@@ -312,7 +312,7 @@ make test-cov
 ### Code Quality
 
 ```bash
-# Run formatter, linter, and type checker
+# Run formatter, linter, type checker, and scoped docstring policy
 make check
 ```
 

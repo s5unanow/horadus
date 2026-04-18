@@ -72,6 +72,7 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     precommit = (repo_root / ".pre-commit-config.yaml").read_text(encoding="utf-8")
     ci_workflow = (repo_root / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
     makefile = (repo_root / "Makefile").read_text(encoding="utf-8")
+    readme = (repo_root / "README.md").read_text(encoding="utf-8")
     pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")
 
     assert "./scripts/run_unit_coverage_gate.sh" in precommit
@@ -83,6 +84,9 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     assert "python scripts/check_docstring_policy.py" in ci_workflow
     assert "--cov-fail-under=100" in ci_workflow
     assert "--cov=scripts" in makefile
+    assert (
+        "check: format lint typecheck docstring-policy ## Run all code quality checks" in makefile
+    )
     assert "--cov-config=pyproject.toml" in makefile
     assert "code-shape: deps-dev" in makefile
     assert "docstring-policy: deps-dev" in makefile
@@ -91,6 +95,8 @@ def test_repo_workflow_configs_enforce_hard_unit_coverage_threshold() -> None:
     assert "horadus eval code-health --output-dir ai/eval/results" in makefile
     assert "test-unit-cov: deps-dev" in makefile
     assert "./scripts/run_unit_coverage_gate.sh" in makefile
+    assert "# Run formatter, linter, type checker, and scoped docstring policy" in readme
+    assert "make check" in readme
     assert 'source = ["src", "tools", "scripts"]' in pyproject
     assert 'patch = ["subprocess"]' in pyproject
 

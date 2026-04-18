@@ -270,7 +270,6 @@ def _validate_planning_artifact(
     path = repo_root / relative_path
     if not path.exists():
         return ()
-
     content = path.read_text(encoding="utf-8")
     template_issues = _template_planning_issues(
         relative_path=relative_path,

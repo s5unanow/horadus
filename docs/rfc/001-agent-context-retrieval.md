@@ -1,7 +1,8 @@
 # RFC-001: Markdown-First Context Retrieval for Agent Workflow
 
-**Status**: Proposed  
-**Date**: 2026-03-09  
+**Status**: Approved for Phase 1 implementation queue
+**Date**: 2026-03-09
+**Approval**: 2026-04-19, amended Option A
 **Authors**: Codex + repo operator
 
 ## Why This Is an RFC
@@ -10,6 +11,13 @@ This document is an RFC rather than an ADR because it captures an active design
 investigation with multiple viable implementation paths and no final decision
 yet. If Horadus adopts a concrete retrieval architecture, that accepted choice
 should later be recorded in an ADR.
+
+On 2026-04-19 the repo operator approved the conservative Phase 1 queue, with
+amendments for the current workflow state: keep the existing Horadus CLI as the
+first surface, add `context-pack --mode implement`, adopt task-spec front matter
+before policy-doc front matter, expose explicit autonomous eligibility, reuse
+behavior-eval conventions, and require caller audit plus planning/hotspot gates
+before switching autonomous workflows.
 
 ## Problem
 

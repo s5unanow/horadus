@@ -11,6 +11,14 @@ decomposition and sequencing need explicit human review.
 This task should produce the implementation-task breakdown from the RFC and stop
 for human approval before those follow-up tasks are finalized or started.
 
+Human approval was provided in-thread on 2026-04-19 for amended Option A:
+keep RFC-001 Phase 1 CLI-first, add `context-pack --mode implement`, adopt
+task-spec front matter before policy-doc front matter, include compact
+`CURRENT_SPRINT.md` extraction plus an orientation payload, expose
+`autonomous_eligible` / human-gated state, reuse behavior-eval conventions for
+`TASK-365`, and require caller audit plus planning/hotspot gates before
+implementation tasks start.
+
 ## Inputs
 
 - `docs/rfc/001-agent-context-retrieval.md`
@@ -25,6 +33,28 @@ for human approval before those follow-up tasks are finalized or started.
 - Human-reviewed sequencing and scope boundaries for those tasks
 - Any agreed backlog/sprint updates captured only after explicit human approval
 
+## Approved Implementation Queue
+
+1. `TASK-380` Add Implement-Mode Context-Pack Contract
+2. `TASK-381` Add Retrieval Metadata and Canonical Spec Resolution
+3. `TASK-382` Add Task-Scoped Sprint Orientation and Test Candidates
+4. `TASK-365` Add Retrieval Behavior Evals for RFC-001 Context Surfaces
+5. `TASK-383` Switch Agent Workflow Surfaces to Implement Context-Pack Mode
+
+## Human Decisions Captured
+
+- Approve conservative Phase 1 / Option A before local indexing or hosted
+  retrieval.
+- Keep the existing Horadus CLI as the first implementation surface.
+- Add task-spec front matter first; defer broad policy-doc front matter.
+- Include both compact `CURRENT_SPRINT.md` task extraction and a small
+  orientation payload.
+- Make human-gated/autonomous eligibility explicit in implement-mode JSON.
+- Reuse existing behavior-eval artifact and provenance conventions for
+  retrieval evals.
+- Require a caller audit and current planning/hotspot gates before switching
+  autonomous workflows to the new implement-mode context pack.
+
 ## Non-Goals
 
 - Implementing the RFC itself
@@ -33,9 +63,9 @@ for human approval before those follow-up tasks are finalized or started.
 
 ## Acceptance Criteria
 
-- [ ] RFC-001 is decomposed into concrete implementation-task candidates with clear scope boundaries
-- [ ] The proposed breakdown identifies any human decisions needed for sequencing or scope cuts
-- [ ] The task stops for human review/approval before finalizing the follow-up execution queue
+- [x] RFC-001 is decomposed into concrete implementation-task candidates with clear scope boundaries
+- [x] The proposed breakdown identifies any human decisions needed for sequencing or scope cuts
+- [x] The task stops for human review/approval before finalizing the follow-up execution queue
 
 ## Validation
 

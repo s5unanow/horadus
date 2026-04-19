@@ -9,7 +9,11 @@
 
 ## Active Tasks
 
-- `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
+- `TASK-380` Add Implement-Mode Context-Pack Contract
+- `TASK-381` Add Retrieval Metadata and Canonical Spec Resolution
+- `TASK-382` Add Task-Scoped Sprint Orientation and Test Candidates
+- `TASK-365` Add Retrieval Behavior Evals for RFC-001 Context Surfaces
+- `TASK-383` Switch Agent Workflow Surfaces to Implement Context-Pack Mode
 
 ## Selection Notes
 
@@ -18,7 +22,8 @@
 - The selected queue focuses first on behavior evals and deterministic code-health guardrails, then on review/authoring workflow polish.
 - `TASK-373` is an in-sprint blocker-clear task added after the sprint reset because the repo-wide dependency audit now fails on an upstream-fixed `cryptography` CVE and prevents strict local-gate completion for active work.
 - `TASK-366` should land before `TASK-367`, `TASK-369` should reuse the changed-file/code-health output once it exists, and `TASK-376` should ship after `TASK-369` because it reports that enriched-review behavior accurately.
-- `TASK-288` is carried into Sprint 9 as a tracked hold item only; it remains human-gated and is not part of the autonomous implementation lane unless the human explicitly reactivates it.
+- `TASK-288` received in-thread human approval on 2026-04-19 for amended RFC-001 Option A; the resulting Phase 1 queue is now the autonomous implementation lane.
+- RFC-001 Phase 1 remains CLI-first: implement mode lands before metadata extraction, evals land before workflow callers switch, and policy-doc front matter remains deferred.
 - Open tasks not listed here remain in `tasks/BACKLOG.md` and are not considered closed or descoped by this sprint reset.
 
 ## Suggested Sequence
@@ -35,11 +40,15 @@
 10. `TASK-378` Accept completed hotspot follow-up task references.
 11. `TASK-376` Align local-review telemetry with prompt enrichment.
 12. `TASK-334` Align Gemini local-review approval-mode flags with installed CLI.
-13. `TASK-288` Keep as a carried human-blocked planning item; do not start autonomously.
+13. `TASK-288` Finalize the amended RFC-001 Option A implementation queue.
+14. `TASK-380` Add implement-mode context-pack contract while preserving broad default output.
+15. `TASK-381` Add task-spec retrieval metadata and deterministic canonical spec resolution.
+16. `TASK-382` Add task-scoped sprint orientation, autonomous eligibility, and derived test candidates.
+17. `TASK-365` Add retrieval behavior evals for the implement-mode context surfaces.
+18. `TASK-383` Switch canonical agent workflow callers to implement-mode context-pack after caller audit and eval coverage.
 
 ## Human Blocker Metadata
 
-- TASK-288 | owner=human-operator | last_touched=2026-04-06 | next_action=2026-05-05 | escalate_after_days=28
 - TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7
 
 ## Telegram Launch Scope
@@ -67,3 +76,4 @@
 - `TASK-377` Close docstring-policy gap in make check ✅
 - `TASK-378` Accept completed hotspot follow-up task references ✅
 - `TASK-334` Align Gemini local-review approval-mode flags with installed CLI ✅
+- `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN] ✅

@@ -320,7 +320,10 @@ Artifacts and scope:
   `artifacts/agent/local-review/runs/`.
 - Provider subprocess runs are bounded to 180 seconds; a hung provider returns
   a repo-owned failure with timeout diagnostics instead of hanging indefinitely.
-- Claude and Gemini run against the repo-owned prompt contract directly;
+- Claude and Gemini run against the repo-owned prompt contract directly:
+  Claude keeps its permission-mode flag, while Gemini uses headless prompt mode
+  without an explicit approval-mode flag so the wrapper stays aligned with the
+  installed CLI contract.
   Codex uses its native `review --base` flow and Horadus normalizes the review
   result into the same local-review surface.
 - The repo-owned prompt contract now asks reviewers to flag hotspot expansion,

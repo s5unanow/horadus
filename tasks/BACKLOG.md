@@ -38,25 +38,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Open Task Ledger
 
-### TASK-334: Align Gemini local-review approval-mode flags with installed CLI
-**Priority**: P3 (Low)
-**Estimate**: <1h
-
-The current Gemini local-review wrapper passes `--approval-mode plan`, but the
-installed Gemini CLI warns that this mode requires an experimental flag and
-falls back to the default approval mode. Normalize the wrapper to the installed
-CLI contract so local-review avoids unnecessary compatibility noise.
-
-**Planning Gates**: Not Required — narrow local-review compatibility follow-up
-**Files**: `tools/horadus/python/horadus_workflow/_task_workflow_local_review_provider.py`, `tests/horadus_cli/v2/test_task_local_review.py`
-
-**Acceptance Criteria**:
-- [ ] Reproduce the current Gemini approval-mode warning against the installed CLI
-- [ ] Update the Gemini local-review wrapper to avoid unsupported approval-mode flags on the installed CLI
-- [ ] Keep Claude and Codex local-review provider behavior unchanged
-
----
-
 ### TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 **Priority**: P1 (High)
 **Estimate**: 1-2 hours

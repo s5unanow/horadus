@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-334` Align Gemini local-review approval-mode flags with installed CLI
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN]
 
 ## Selection Notes
@@ -67,3 +66,4 @@
 - `TASK-376` Align local-review telemetry with prompt enrichment ✅
 - `TASK-377` Close docstring-policy gap in make check ✅
 - `TASK-378` Accept completed hotspot follow-up task references ✅
+- `TASK-334` Align Gemini local-review approval-mode flags with installed CLI ✅

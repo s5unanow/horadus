@@ -122,8 +122,6 @@ def _provider_command(
                 "gemini",
                 "--prompt",
                 "Review the full stdin payload and follow its contract exactly.",
-                "--approval-mode",
-                "plan",
                 "--output-format",
                 "text",
             ],

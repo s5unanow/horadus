@@ -390,7 +390,7 @@ def test_local_review_helper_functions_cover_provider_config_and_prompt_shapes(
         "codex", context=context, instructions=None
     )
     assert claude_command[:3] == ["claude", "--print", "--output-format"]
-    assert gemini_command[:2] == ["gemini", "--prompt"]
+    assert {"--approval-mode", "plan"}.isdisjoint(gemini_command)
     assert codex_command == ["codex", "exec", "review", "--base", "main"]
 
 
@@ -631,8 +631,6 @@ def test_execute_provider_and_local_review_dry_run_cover_remaining_success_paths
         "gemini",
         "--prompt",
         "Review the full stdin payload and follow its contract exactly.",
-        "--approval-mode",
-        "plan",
         "--output-format",
         "text",
     ]

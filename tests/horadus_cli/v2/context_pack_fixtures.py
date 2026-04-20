@@ -127,5 +127,10 @@ def seed_context_pack_archive_fixture(repo_root: Path) -> None:
     )
 
 
+def seed_context_pack_repo_support_files(repo_root: Path) -> None:
+    seed_context_pack_orientation_files(repo_root)
+    seed_context_pack_archive_fixture(repo_root)
+
+
 def patch_context_pack_workflow_repo_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
     monkeypatch.setattr(workflow_task_repo_module, "repo_root", lambda: repo_root)

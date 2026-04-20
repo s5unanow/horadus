@@ -8,8 +8,7 @@ import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 from tests.horadus_cli.v2.context_pack_fixtures import (
     patch_context_pack_workflow_repo_root,
-    seed_context_pack_archive_fixture,
-    seed_context_pack_orientation_files,
+    seed_context_pack_repo_support_files,
 )
 
 LIVE_TASK_ID = "TASK-901"
@@ -165,7 +164,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         "# Completed Tasks\n\n## Sprint 4\n- TASK-902: Stable archived fixture ✅\n",
         encoding="utf-8",
     )
-    seed_context_pack_orientation_files(repo_root)
+    seed_context_pack_repo_support_files(repo_root)
     (tasks_dir / "specs" / "901-stable-live-fixture.md").write_text(
         "\n".join(
             [
@@ -245,7 +244,6 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
-    seed_context_pack_archive_fixture(repo_root)
     return repo_root
 
 

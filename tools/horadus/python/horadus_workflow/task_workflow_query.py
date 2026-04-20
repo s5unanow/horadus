@@ -4,18 +4,14 @@ from dataclasses import asdict
 from typing import Any, TypedDict, cast
 
 from tools.horadus.python.horadus_workflow import task_repo
+from tools.horadus.python.horadus_workflow import (
+    task_workflow_context_pack_implement as context_pack_implement_module,
+)
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_completion_contract import (
     CompletionContract,
     build_completion_contract,
-)
-from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement import (
-    CONTEXT_PACK_IMPLEMENT_MODE,
-    context_pack_mode_result,
-    implement_mode_context_pack_result,
-    implement_mode_workflow_commands,
-    normalized_declared_paths,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_context_pack_text import (
     default_context_pack_result,
@@ -338,7 +334,7 @@ def _planning_context(task_id: str, record: Any) -> dict[str, object]:
 
 
 def _normalized_task_paths(record: Any) -> list[str]:
-    return normalized_declared_paths(record.files or [])
+    return context_pack_implement_module.normalized_declared_paths(record.files or [])
 
 
 def _matches_any_prefix(paths: list[str], prefixes: tuple[str, ...]) -> bool:
@@ -465,7 +461,7 @@ def _suggested_validation_commands(
 
 
 def handle_context_pack(args: Any) -> CommandResult:
-    mode_result = context_pack_mode_result(args)
+    mode_result = context_pack_implement_module.context_pack_mode_result(args)
     if isinstance(mode_result, CommandResult):
         return mode_result
     mode = mode_result
@@ -505,15 +501,15 @@ def handle_context_pack(args: Any) -> CommandResult:
     workflow_commands = _workflow_commands_for_context_pack(
         task_id, include_archive=include_archive, archived=record.archived
     )
-    if mode == CONTEXT_PACK_IMPLEMENT_MODE:
-        return implement_mode_context_pack_result(
+    if mode == context_pack_implement_module.CONTEXT_PACK_IMPLEMENT_MODE:
+        return context_pack_implement_module.implement_mode_context_pack_result(
             task_payload=_task_record_payload(record, include_raw=False),
             declared_paths=_normalized_task_paths(record),
             sprint_lines=record.sprint_lines,
             spec_paths=record.spec_paths,
             spec_resolution=cast("dict[str, object]", record.spec_resolution),
             planning=planning,
-            workflow_commands=implement_mode_workflow_commands(
+            workflow_commands=context_pack_implement_module.implement_mode_workflow_commands(
                 task_id=task_id,
                 workflow_commands=workflow_commands,
                 include_archive=include_archive,

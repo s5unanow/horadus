@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo_module
+
 
 def seed_human_gated_task_repo(repo_root: Path) -> Path:
     tasks_dir = repo_root / "tasks"
@@ -76,3 +80,19 @@ def seed_human_gated_task_repo(repo_root: Path) -> Path:
         encoding="utf-8",
     )
     return repo_root
+
+
+def seed_context_pack_orientation_files(repo_root: Path) -> None:
+    docs_dir = repo_root / "docs"
+    cli_tests_dir = repo_root / "tests" / "horadus_cli" / "v2"
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    cli_tests_dir.mkdir(parents=True, exist_ok=True)
+    (docs_dir / "ARCHITECTURE.md").write_text("# Architecture\n", encoding="utf-8")
+    (docs_dir / "DATA_MODEL.md").write_text("# Data Model\n", encoding="utf-8")
+    (cli_tests_dir / "test_cli.py").write_text(
+        "def test_fixture() -> None:\n    pass\n", encoding="utf-8"
+    )
+
+
+def patch_context_pack_workflow_repo_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
+    monkeypatch.setattr(workflow_task_repo_module, "repo_root", lambda: repo_root)

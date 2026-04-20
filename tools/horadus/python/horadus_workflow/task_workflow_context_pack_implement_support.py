@@ -160,6 +160,65 @@ def derive_test_candidates(*, declared_paths: Sequence[str]) -> list[dict[str, o
     return [asdict(candidate) for candidate in candidates]
 
 
+def build_implement_context_pack_payload(
+    *,
+    task_payload: Mapping[str, object],
+    declared_paths: list[str],
+    sprint_lines: list[str],
+    spec_paths: list[str],
+    spec_resolution: Mapping[str, object],
+    planning: Mapping[str, object],
+    workflow_commands: list[str],
+    suggested_validation_commands: list[str],
+    completion_contract: object,
+    validation_packs: Sequence[Mapping[str, object]],
+    pre_push_review: Mapping[str, object],
+    policy_payload: Mapping[str, object],
+    excluded_sources: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    autonomous_eligible = task_autonomous_eligible(
+        title=task_payload.get("title"),
+        sprint_lines=sprint_lines,
+    )
+    return {
+        "mode_metadata": {
+            "mode": "implement",
+            "schema_version": "context_pack_implement_v1",
+            "format": "json",
+            "default_mode_preserved": True,
+        },
+        "task_metadata": _implement_task_metadata(
+            task_payload,
+            declared_paths,
+            autonomous_eligible=autonomous_eligible,
+        ),
+        "orientation": {
+            "documents": [asdict(document) for document in implement_mode_orientation_documents()],
+            "current_sprint": current_sprint_extract(str(task_payload.get("task_id") or "")),
+        },
+        "derived_test_candidates": derive_test_candidates(declared_paths=declared_paths),
+        "retrieval_sources": {
+            "included": included_sources_for_implement_mode(
+                task_payload=task_payload,
+                sprint_lines=sprint_lines,
+                spec_paths=spec_paths,
+                planning=planning,
+            ),
+            "excluded": list(excluded_sources),
+            "task_spec_resolution": dict(spec_resolution),
+        },
+        "planning_gates": dict(planning),
+        "workflow": {
+            "commands": workflow_commands,
+            "suggested_validation_commands": suggested_validation_commands,
+            "completion_contract": completion_contract,
+            "caller_aware_validation_packs": list(validation_packs),
+            "pre_push_review_guidance": dict(pre_push_review),
+        },
+        "policy": dict(policy_payload),
+    }
+
+
 def derived_task_status(task_payload: Mapping[str, object]) -> str | None:
     status = task_payload.get("status")
     if status is None:
@@ -217,6 +276,30 @@ def included_sources_for_implement_mode(
     return deduped_sources
 
 
+def _implement_task_metadata(
+    task_payload: Mapping[str, object],
+    declared_paths: list[str],
+    *,
+    autonomous_eligible: bool,
+) -> dict[str, object]:
+    return {
+        "task_id": task_payload.get("task_id"),
+        "title": task_payload.get("title"),
+        "status": task_payload.get("status"),
+        "task_status": derived_task_status(task_payload),
+        "autonomous_eligible": autonomous_eligible,
+        "archived": task_payload.get("archived", False),
+        "priority": task_payload.get("priority"),
+        "estimate": task_payload.get("estimate"),
+        "source_path": task_payload.get("source_path"),
+        "backlog_path": task_payload.get("backlog_path"),
+        "current_sprint_path": task_payload.get("current_sprint_path"),
+        "description": task_payload.get("description", []),
+        "acceptance_criteria": task_payload.get("acceptance_criteria", []),
+        "declared_paths": declared_paths,
+    }
+
+
 def _current_sprint_constraints(sprint_text: str) -> list[dict[str, object]]:
     constraints: list[dict[str, object]] = []
     for heading, match_reason in (("Telegram Launch Scope", "repo_launch_scope"),):
@@ -272,6 +355,7 @@ def _section_lines(content: str, heading: str) -> list[str]:
 
 __all__ = [
     "OrientationDoc",
+    "build_implement_context_pack_payload",
     "current_sprint_extract",
     "derive_test_candidates",
     "derived_task_status",

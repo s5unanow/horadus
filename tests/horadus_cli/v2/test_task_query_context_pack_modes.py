@@ -8,33 +8,16 @@ import pytest
 
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 import tools.horadus.python.horadus_workflow.task_workflow_context_pack_text as context_pack_text_module
+from tests.horadus_cli.v2.context_pack_assertions import (
+    document_paths,
+    excluded_sources,
+    included_orientation_paths,
+    registry_paths,
+)
 from tests.horadus_cli.v2.helpers import ARCHIVED_TASK_ID, LIVE_TASK_ID
 from tools.horadus.python.horadus_cli.app import main
 
 pytestmark = pytest.mark.unit
-
-
-def _document_paths(documents: list[dict[str, object]]) -> set[str]:
-    return {str(document["path"]) for document in documents}
-
-
-def _included_orientation_paths(data: dict[str, object]) -> set[str]:
-    included = data["retrieval_sources"]["included"]
-    return {
-        str(source["path"])
-        for source in included
-        if source.get("reason") == "compact orientation metadata"
-    }
-
-
-def _registry_paths(data: dict[str, object]) -> set[str]:
-    entries = data["policy"]["legacy_policy_registry"]["entries"]
-    return {str(entry["path"]) for entry in entries}
-
-
-def _excluded_sources(data: dict[str, object]) -> set[str]:
-    excluded = data["retrieval_sources"]["excluded"]
-    return {str(source["source"]) for source in excluded}
 
 
 def test_main_tasks_context_pack_explicit_default_preserves_broad_json_output(
@@ -78,7 +61,7 @@ def test_main_tasks_context_pack_implement_json_output(
     assert data["orientation"]["current_sprint"]["active_task_lines"] == [
         "- `TASK-901` Stable live fixture"
     ]
-    assert "docs/ARCHITECTURE.md" in _document_paths(data["orientation"]["documents"])
+    assert "docs/ARCHITECTURE.md" in document_paths(data["orientation"]["documents"])
     assert data["derived_test_candidates"] == [
         {
             "match_reason": "declared_test_path",
@@ -87,11 +70,11 @@ def test_main_tasks_context_pack_implement_json_output(
         }
     ]
     assert data["retrieval_sources"]["included"]
-    assert "policy-document front matter" in _excluded_sources(data)
-    assert "docs/DATA_MODEL.md" in _included_orientation_paths(data)
+    assert "policy-document front matter" in excluded_sources(data)
+    assert "docs/DATA_MODEL.md" in included_orientation_paths(data)
     registry = data["policy"]["legacy_policy_registry"]
     assert registry["front_matter_required"] is False
-    assert "AGENTS.md" in _registry_paths(data)
+    assert "AGENTS.md" in registry_paths(data)
     assert data["policy"]["code_backed_policy"]["workflow_commands"]
     assert (
         f"uv run --no-sync horadus tasks context-pack {LIVE_TASK_ID} --mode implement --format json"

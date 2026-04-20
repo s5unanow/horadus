@@ -7,12 +7,9 @@ from typing import TYPE_CHECKING, Any
 from tools.horadus.python.horadus_workflow import task_workflow_context_pack_spec
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement_support import (
-    current_sprint_extract,
-    derive_test_candidates,
-    derived_task_status,
-    implement_mode_orientation_documents,
+    build_implement_context_pack_payload,
     included_sources_for_implement_mode,
-    task_autonomous_eligible,
+    normalized_declared_paths,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     dependency_aware_guidance_statements,
@@ -100,7 +97,7 @@ def implement_mode_context_pack_result(
     return task_workflow_context_pack_spec.ambiguous_spec_resolution_result(
         spec_resolution
     ) or CommandResult(
-        data=_implement_context_pack_payload(
+        data=build_implement_context_pack_payload(
             task_payload=task_payload,
             declared_paths=declared_paths,
             sprint_lines=sprint_lines,
@@ -135,103 +132,6 @@ def implement_mode_workflow_commands(
     ]
 
 
-def _implement_context_pack_payload(
-    *,
-    task_payload: dict[str, object],
-    declared_paths: list[str],
-    sprint_lines: list[str],
-    spec_paths: list[str],
-    spec_resolution: Mapping[str, object],
-    planning: dict[str, object],
-    workflow_commands: list[str],
-    suggested_validation_commands: list[str],
-    completion_contract: CompletionContract,
-    validation_packs: Sequence[Mapping[str, object]],
-    pre_push_review: Mapping[str, object],
-    policy_payload: Mapping[str, object],
-    excluded_sources: Sequence[Mapping[str, object]],
-) -> dict[str, object]:
-    autonomous_eligible = task_autonomous_eligible(
-        title=task_payload.get("title"),
-        sprint_lines=sprint_lines,
-    )
-    return {
-        "mode_metadata": {
-            "mode": "implement",
-            "schema_version": "context_pack_implement_v1",
-            "format": "json",
-            "default_mode_preserved": True,
-        },
-        "task_metadata": _implement_task_metadata(
-            task_payload,
-            declared_paths,
-            autonomous_eligible=autonomous_eligible,
-        ),
-        "orientation": {
-            "documents": [asdict(document) for document in implement_mode_orientation_documents()],
-            "current_sprint": current_sprint_extract(str(task_payload.get("task_id") or "")),
-        },
-        "derived_test_candidates": derive_test_candidates(declared_paths=declared_paths),
-        "retrieval_sources": {
-            "included": _included_sources(
-                task_payload,
-                sprint_lines,
-                spec_paths,
-                planning,
-            ),
-            "excluded": list(excluded_sources),
-            "task_spec_resolution": dict(spec_resolution),
-        },
-        "planning_gates": planning,
-        "workflow": {
-            "commands": workflow_commands,
-            "suggested_validation_commands": suggested_validation_commands,
-            "completion_contract": completion_contract,
-            "caller_aware_validation_packs": list(validation_packs),
-            "pre_push_review_guidance": dict(pre_push_review),
-        },
-        "policy": policy_payload,
-    }
-
-
-def _implement_task_metadata(
-    task_payload: Mapping[str, object],
-    declared_paths: list[str],
-    *,
-    autonomous_eligible: bool,
-) -> dict[str, object]:
-    return {
-        "task_id": task_payload.get("task_id"),
-        "title": task_payload.get("title"),
-        "status": task_payload.get("status"),
-        "task_status": derived_task_status(task_payload),
-        "autonomous_eligible": autonomous_eligible,
-        "archived": task_payload.get("archived", False),
-        "priority": task_payload.get("priority"),
-        "estimate": task_payload.get("estimate"),
-        "source_path": task_payload.get("source_path"),
-        "backlog_path": task_payload.get("backlog_path"),
-        "current_sprint_path": task_payload.get("current_sprint_path"),
-        "description": task_payload.get("description", []),
-        "acceptance_criteria": task_payload.get("acceptance_criteria", []),
-        "declared_paths": declared_paths,
-    }
-
-
-def _included_sources(
-    task_payload: Mapping[str, object],
-    sprint_lines: Sequence[str],
-    spec_paths: Sequence[str],
-    planning: Mapping[str, object],
-) -> list[dict[str, object]]:
-    return included_sources_for_implement_mode(
-        task_payload=task_payload,
-        sprint_lines=sprint_lines,
-        spec_paths=spec_paths,
-        planning=planning,
-    )
-
-
 def _implement_mode_policy_payload(
     *,
     workflow_commands: list[str],
@@ -262,6 +162,20 @@ def _implement_mode_policy_payload(
     }
 
 
+def _included_sources(
+    task_payload: Mapping[str, object],
+    sprint_lines: Sequence[str],
+    spec_paths: Sequence[str],
+    planning: Mapping[str, object],
+) -> list[dict[str, object]]:
+    return included_sources_for_implement_mode(
+        task_payload=task_payload,
+        sprint_lines=sprint_lines,
+        spec_paths=spec_paths,
+        planning=planning,
+    )
+
+
 __all__ = [
     "CONTEXT_PACK_DEFAULT_MODE",
     "CONTEXT_PACK_IMPLEMENT_MODE",
@@ -272,4 +186,5 @@ __all__ = [
     "implement_mode_context_pack_result",
     "implement_mode_legacy_policy_registry",
     "implement_mode_workflow_commands",
+    "normalized_declared_paths",
 ]

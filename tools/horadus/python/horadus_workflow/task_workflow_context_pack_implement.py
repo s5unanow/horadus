@@ -8,7 +8,6 @@ from tools.horadus.python.horadus_workflow import task_workflow_context_pack_spe
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement_support import (
     build_implement_context_pack_payload,
-    included_sources_for_implement_mode,
     normalized_declared_paths,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
@@ -160,20 +159,6 @@ def _implement_mode_policy_payload(
             "workflow_policy_guardrails": list(workflow_policy_guardrail_statements()),
         },
     }
-
-
-def _included_sources(
-    task_payload: Mapping[str, object],
-    sprint_lines: Sequence[str],
-    spec_paths: Sequence[str],
-    planning: Mapping[str, object],
-) -> list[dict[str, object]]:
-    return included_sources_for_implement_mode(
-        task_payload=task_payload,
-        sprint_lines=sprint_lines,
-        spec_paths=spec_paths,
-        planning=planning,
-    )
 
 
 __all__ = [

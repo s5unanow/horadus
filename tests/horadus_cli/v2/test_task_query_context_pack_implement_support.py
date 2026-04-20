@@ -81,3 +81,7 @@ def test_derive_test_candidates_covers_cli_runtime_and_transformed_module_stems(
             "match_reason": "module_stem_match",
         },
     ]
+
+
+def test_derived_task_status_returns_none_when_status_is_missing() -> None:
+    assert support_module.derived_task_status({}) is None

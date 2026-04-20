@@ -7,7 +7,7 @@ import pytest
 
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 import tools.horadus.python.horadus_workflow.task_repo as workflow_task_repo_module
-import tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement as context_pack_implement_module
+import tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement_support as support_module
 from tests.horadus_cli.v2.context_pack_fixtures import seed_human_gated_task_repo
 from tools.horadus.python.horadus_cli.app import main
 
@@ -55,15 +55,15 @@ def test_context_pack_implement_mode_marks_human_gated_task_ineligible(
 
 
 def test_included_sources_dedupe_current_sprint_orientation_path() -> None:
-    sources = context_pack_implement_module._included_sources(
-        {
+    sources = support_module.included_sources_for_implement_mode(
+        task_payload={
             "source_path": "tasks/BACKLOG.md",
             "backlog_path": "tasks/BACKLOG.md",
             "current_sprint_path": "tasks/CURRENT_SPRINT.md",
         },
-        ["- `TASK-901` Stable live fixture"],
-        [],
-        {},
+        sprint_lines=["- `TASK-901` Stable live fixture"],
+        spec_paths=[],
+        planning={},
     )
 
     assert [source["path"] for source in sources].count("tasks/CURRENT_SPRINT.md") == 1

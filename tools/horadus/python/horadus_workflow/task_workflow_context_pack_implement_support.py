@@ -4,6 +4,7 @@ import re
 from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import cast
 
 from tools.horadus.python.horadus_workflow import task_repo
 
@@ -177,9 +178,10 @@ def build_implement_context_pack_payload(
     excluded_sources: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
     current_sprint = current_sprint_extract(str(task_payload.get("task_id") or ""))
+    active_task_lines = cast("list[str]", current_sprint["active_task_lines"])
     autonomous_eligible = task_autonomous_eligible(
         title=task_payload.get("title"),
-        active_task_lines=current_sprint["active_task_lines"],
+        active_task_lines=active_task_lines,
     )
     return {
         "mode_metadata": {

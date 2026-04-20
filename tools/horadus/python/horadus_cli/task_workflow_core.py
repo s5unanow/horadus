@@ -52,6 +52,7 @@ _MODULE_EXPORTS: dict[object, list[str]] = {
         "task_id_from_spec_path",
         "task_planning_gates_value",
         "task_record",
+        "task_spec_resolution_for_task",
         "task_requires_exec_plan",
     ],
     shared_module: list(shared_module.__all__),

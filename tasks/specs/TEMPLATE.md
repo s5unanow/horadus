@@ -1,7 +1,37 @@
+---
+task_id: TASK-XXX
+retrieval:
+  kind: task-spec
+  status: active
+  canonical: true
+  supersedes: []
+  superseded_by: null
+---
+
 # TASK-XXX: Short Title
 
 Use this template for new implementation specs. Keep it lightweight for small
 tasks, but make the execution contract explicit.
+
+## Retrieval Metadata
+
+New task specs should keep the front matter above so implement-mode retrieval
+can identify the canonical spec deterministically.
+
+- `task_id`: the owning `TASK-XXX`
+- `retrieval.kind`: `task-spec`
+- `retrieval.status`: `active` for the canonical spec, `superseded` for an
+  older spec retained for history
+- `retrieval.canonical`: `true` only for the active canonical task spec
+- `retrieval.supersedes`: older task-spec paths this spec replaces
+- `retrieval.superseded_by`: replacement task-spec path when this spec is
+  superseded, otherwise `null`
+
+Legacy task specs without front matter remain supported. If multiple legacy
+spec candidates exist, add a structured `**Spec**:` line to the backlog task or
+metadata to the specs so implement-mode context retrieval can fail closed
+instead of guessing. This Phase 1 contract applies only to task specs; policy
+document front matter remains deferred.
 
 ## Problem Statement
 

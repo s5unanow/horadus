@@ -474,8 +474,16 @@ selection contract should be:
   the primary legacy-spec selector when present
 - if no structured spec reference exists, accept legacy fallback only when
   exactly one matching spec file exists
+- for retrieval-ready task specs, use `retrieval.canonical`,
+  `retrieval.status`, `retrieval.supersedes`, and `retrieval.superseded_by` to
+  select the active canonical spec and retire older candidates
 - if multiple legacy candidates remain after those checks, fail closed as an
   ambiguous canonical-spec condition rather than picking by filename order
+
+This task-spec metadata contract is intentionally narrower than a general
+policy-doc metadata migration. During Phase 1, policy-document front matter
+remains deferred and implement mode continues to rely on the curated legacy
+policy registry.
 
 Likewise, the curated legacy policy allowlist should be an explicit repo-owned
 registry of paths used during migration. It should not rely on implicit globbing

@@ -487,6 +487,18 @@ def handle_context_pack(args: Any) -> CommandResult:
             data={"task_id": task_id},
         )
 
+    task_spec_resolution_for_task = shared._compat_attr("task_spec_resolution_for_task", task_repo)
+    spec_resolution = task_spec_resolution_for_task(task_id, record.raw_block)
+    if mode == CONTEXT_PACK_IMPLEMENT_MODE and spec_resolution["ambiguous"]:
+        return CommandResult(
+            exit_code=ExitCode.VALIDATION_ERROR,
+            error_lines=[
+                f"{task_id} has ambiguous canonical task spec candidates: "
+                f"{spec_resolution['ambiguity_reason']}"
+            ],
+            data={"task_id": task_id, "spec_resolution": spec_resolution},
+        )
+
     planning = _planning_context(task_id, record)
     validation_packs = _caller_aware_validation_pack_matches(record)
     completion_contract = build_completion_contract(
@@ -512,6 +524,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             declared_paths=_normalized_task_paths(record),
             sprint_lines=record.sprint_lines,
             spec_paths=record.spec_paths,
+            spec_resolution=spec_resolution,
             planning=planning,
             workflow_commands=implement_mode_workflow_commands(
                 task_id=task_id,

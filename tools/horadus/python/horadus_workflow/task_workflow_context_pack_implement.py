@@ -79,6 +79,7 @@ def implement_mode_context_pack_result(
     declared_paths: list[str],
     sprint_lines: list[str],
     spec_paths: list[str],
+    spec_resolution: Mapping[str, object],
     planning: dict[str, object],
     workflow_commands: list[str],
     suggested_validation_commands: list[str],
@@ -93,6 +94,7 @@ def implement_mode_context_pack_result(
             declared_paths=declared_paths,
             sprint_lines=sprint_lines,
             spec_paths=spec_paths,
+            spec_resolution=spec_resolution,
             planning=planning,
             workflow_commands=workflow_commands,
             suggested_validation_commands=suggested_validation_commands,
@@ -128,6 +130,7 @@ def _implement_context_pack_payload(
     declared_paths: list[str],
     sprint_lines: list[str],
     spec_paths: list[str],
+    spec_resolution: Mapping[str, object],
     planning: dict[str, object],
     workflow_commands: list[str],
     suggested_validation_commands: list[str],
@@ -148,6 +151,7 @@ def _implement_context_pack_payload(
         "retrieval_sources": {
             "included": _included_sources(task_payload, sprint_lines, spec_paths, planning),
             "excluded": list(excluded_sources),
+            "task_spec_resolution": dict(spec_resolution),
         },
         "planning_gates": planning,
         "workflow": {

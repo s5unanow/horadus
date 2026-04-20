@@ -94,5 +94,38 @@ def seed_context_pack_orientation_files(repo_root: Path) -> None:
     )
 
 
+def seed_context_pack_archive_fixture(repo_root: Path) -> None:
+    (repo_root / "archive" / "closed_tasks" / "2026-Q1.md").write_text(
+        "\n".join(
+            [
+                "# Closed Task Archive",
+                "",
+                "**Status**: Archived closed-task ledger (non-authoritative)",
+                "**Quarter**: 2026-Q1",
+                "",
+                workflow_task_repo_module.CLOSED_TASK_ARCHIVE_GUIDANCE,
+                "",
+                "---",
+                "",
+                "### TASK-902: Stable archived fixture",
+                "**Priority**: P1",
+                "**Estimate**: 2h",
+                "",
+                "Exercise archive-gated task lookups without depending on repo history.",
+                "",
+                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] archived task lookup works",
+                "",
+                "---",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def patch_context_pack_workflow_repo_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
     monkeypatch.setattr(workflow_task_repo_module, "repo_root", lambda: repo_root)

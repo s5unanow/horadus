@@ -8,9 +8,9 @@ import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
 from tests.horadus_cli.v2.context_pack_fixtures import (
     patch_context_pack_workflow_repo_root,
+    seed_context_pack_archive_fixture,
     seed_context_pack_orientation_files,
 )
-from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo_module
 
 LIVE_TASK_ID = "TASK-901"
 ARCHIVED_TASK_ID = "TASK-902"
@@ -245,36 +245,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
-    (repo_root / "archive" / "closed_tasks" / "2026-Q1.md").write_text(
-        "\n".join(
-            [
-                "# Closed Task Archive",
-                "",
-                "**Status**: Archived closed-task ledger (non-authoritative)",
-                "**Quarter**: 2026-Q1",
-                "",
-                workflow_task_repo_module.CLOSED_TASK_ARCHIVE_GUIDANCE,
-                "",
-                "---",
-                "",
-                "### TASK-902: Stable archived fixture",
-                "**Priority**: P1",
-                "**Estimate**: 2h",
-                "",
-                "Exercise archive-gated task lookups without depending on repo history.",
-                "",
-                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
-                "",
-                "**Acceptance Criteria**:",
-                "- [ ] archived task lookup works",
-                "",
-                "---",
-                "",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    seed_context_pack_archive_fixture(repo_root)
     return repo_root
 
 

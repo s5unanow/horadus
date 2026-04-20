@@ -390,3 +390,4 @@
 - TASK-288: Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN] ✅
 - TASK-380: Add Implement-Mode Context-Pack Contract ✅
 - TASK-381: Add Retrieval Metadata and Canonical Spec Resolution ✅
+- TASK-382: Add Task-Scoped Sprint Orientation and Test Candidates ✅

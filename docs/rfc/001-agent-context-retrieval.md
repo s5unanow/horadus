@@ -449,8 +449,9 @@ Initial Phase 1 implementation status:
   legacy policy registry.
 - `TASK-381` owns task-spec retrieval metadata and deterministic canonical spec
   resolution.
-- `TASK-382` owns compact `CURRENT_SPRINT.md` orientation, architecture/data
-  model orientation, autonomous eligibility, and derived test candidates.
+- `TASK-382` now covers compact `CURRENT_SPRINT.md` orientation, architecture/data
+  model orientation, derived `task_status` and `autonomous_eligible`, and
+  deterministic derived test candidates.
 
 In phase 1, `derived test candidates` should be a concrete, deterministic
 fallback rather than a free-form guess. Because the current task record does not

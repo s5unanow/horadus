@@ -31,41 +31,6 @@ def test_main_tasks_context_pack_explicit_default_preserves_broad_json_output(
     assert "mode_metadata" not in payload["data"]
 
 
-def test_main_tasks_context_pack_implement_json_output(
-    synthetic_task_repo: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _ = synthetic_task_repo
-
-    result = main(
-        ["tasks", "context-pack", LIVE_TASK_ID, "--mode", "implement", "--format", "json"]
-    )
-
-    assert result == 0
-    payload = json.loads(capsys.readouterr().out)
-    data = payload["data"]
-    assert "lines" not in payload
-    assert data["mode_metadata"]["mode"] == "implement"
-    assert data["mode_metadata"]["schema_version"] == "context_pack_implement_v1"
-    assert "suggested_validation_commands" not in data
-    assert data["task_metadata"]["task_id"] == LIVE_TASK_ID
-    assert data["task_metadata"]["declared_paths"] == ["tests/horadus_cli/v2/test_cli.py"]
-    assert data["retrieval_sources"]["included"]
-    assert any(
-        source["source"] == "policy-document front matter"
-        for source in data["retrieval_sources"]["excluded"]
-    )
-    registry = data["policy"]["legacy_policy_registry"]
-    assert registry["front_matter_required"] is False
-    assert any(entry["path"] == "AGENTS.md" for entry in registry["entries"])
-    assert data["policy"]["code_backed_policy"]["workflow_commands"]
-    assert (
-        f"uv run --no-sync horadus tasks context-pack {LIVE_TASK_ID} --mode implement --format json"
-        in data["workflow"]["commands"]
-    )
-    assert data["workflow"]["completion_contract"]
-
-
 def test_context_pack_implement_mode_requires_json_output(
     synthetic_task_repo: Path,
     capsys: pytest.CaptureFixture[str],

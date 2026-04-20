@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-382` Add Task-Scoped Sprint Orientation and Test Candidates
 - `TASK-365` Add Retrieval Behavior Evals for RFC-001 Context Surfaces
 - `TASK-383` Switch Agent Workflow Surfaces to Implement Context-Pack Mode
 
@@ -41,9 +40,8 @@
 13. `TASK-288` Finalize the amended RFC-001 Option A implementation queue.
 14. `TASK-380` Add implement-mode context-pack contract while preserving broad default output.
 15. `TASK-381` Add task-spec retrieval metadata and deterministic canonical spec resolution.
-16. `TASK-382` Add task-scoped sprint orientation, autonomous eligibility, and derived test candidates.
-17. `TASK-365` Add retrieval behavior evals for the implement-mode context surfaces.
-18. `TASK-383` Switch canonical agent workflow callers to implement-mode context-pack after caller audit and eval coverage.
+16. `TASK-365` Add retrieval behavior evals for the implement-mode context surfaces.
+17. `TASK-383` Switch canonical agent workflow callers to implement-mode context-pack after caller audit and eval coverage.
 
 ## Human Blocker Metadata
 
@@ -77,3 +75,4 @@
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN] ✅
 - `TASK-380` Add Implement-Mode Context-Pack Contract ✅
 - `TASK-381` Add Retrieval Metadata and Canonical Spec Resolution ✅
+- `TASK-382` Add Task-Scoped Sprint Orientation and Test Candidates ✅

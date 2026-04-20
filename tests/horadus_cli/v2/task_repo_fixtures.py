@@ -6,7 +6,11 @@ import pytest
 
 import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
-from tools.horadus.python.horadus_workflow import task_repo as workflow_task_repo_module
+from tests.horadus_cli.v2.context_pack_fixtures import (
+    patch_context_pack_workflow_repo_root,
+    seed_context_pack_exec_plan_fixtures,
+    seed_context_pack_repo_support_files,
+)
 
 LIVE_TASK_ID = "TASK-901"
 ARCHIVED_TASK_ID = "TASK-902"
@@ -161,6 +165,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         "# Completed Tasks\n\n## Sprint 4\n- TASK-902: Stable archived fixture ✅\n",
         encoding="utf-8",
     )
+    seed_context_pack_repo_support_files(repo_root)
     (tasks_dir / "specs" / "901-stable-live-fixture.md").write_text(
         "\n".join(
             [
@@ -184,98 +189,14 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
         + "\n",
         encoding="utf-8",
     )
-    (tasks_dir / "exec_plans").mkdir(parents=True, exist_ok=True)
-    (tasks_dir / "exec_plans" / "TASK-905.md").write_text(
-        "\n".join(
-            [
-                "# TASK-905: Exec-plan fixture",
-                "",
-                "## Status",
-                "",
-                "- Owner: Fixture",
-                "- Started: 2026-03-11",
-                "- Current state: In progress",
-                "- Planning Gates: Required — exec-plan-backed fixture",
-                "",
-                "## Goal (1-3 lines)",
-                "",
-                "Exercise exec-plan-backed planning surfacing.",
-                "",
-                "## Gate Outcomes / Waivers",
-                "",
-                "- Accepted design / smallest safe shape: use one exec plan file.",
-                "- Rejected simpler alternative: omit the planning section entirely.",
-                "- First integration proof: context-pack output for TASK-905.",
-                "- Waivers: none.",
-                "",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (tasks_dir / "exec_plans" / "TASK-906.md").write_text(
-        "\n".join(
-            [
-                "# TASK-906: Exec-plan fallback fixture",
-                "",
-                "## Status",
-                "",
-                "- Owner: Fixture",
-                "- Started: 2026-03-11",
-                "- Current state: In progress",
-                "",
-                "## Goal (1-3 lines)",
-                "",
-                "Exercise required planning surfacing without an explicit marker.",
-                "",
-                "## Gate Outcomes / Waivers",
-                "",
-                "- Accepted design / smallest safe shape: rely on exec-plan-required fallback.",
-                "- Rejected simpler alternative: adding a redundant planning marker line.",
-                "- First integration proof: context-pack output for TASK-906.",
-                "- Waivers: none.",
-                "",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
-    (repo_root / "archive" / "closed_tasks" / "2026-Q1.md").write_text(
-        "\n".join(
-            [
-                "# Closed Task Archive",
-                "",
-                "**Status**: Archived closed-task ledger (non-authoritative)",
-                "**Quarter**: 2026-Q1",
-                "",
-                workflow_task_repo_module.CLOSED_TASK_ARCHIVE_GUIDANCE,
-                "",
-                "---",
-                "",
-                "### TASK-902: Stable archived fixture",
-                "**Priority**: P1",
-                "**Estimate**: 2h",
-                "",
-                "Exercise archive-gated task lookups without depending on repo history.",
-                "",
-                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
-                "",
-                "**Acceptance Criteria**:",
-                "- [ ] archived task lookup works",
-                "",
-                "---",
-                "",
-            ]
-        )
-        + "\n",
-        encoding="utf-8",
-    )
+    seed_context_pack_exec_plan_fixtures(tasks_dir)
     return repo_root
 
 
 def patch_task_repo_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
     monkeypatch.setattr(task_repo_module, "repo_root", lambda: repo_root)
     monkeypatch.setattr(task_commands_module, "repo_root", lambda: repo_root)
+    patch_context_pack_workflow_repo_root(monkeypatch, repo_root)
 
 
 @pytest.fixture

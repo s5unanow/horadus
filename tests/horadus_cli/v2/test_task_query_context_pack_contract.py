@@ -67,3 +67,71 @@ def test_included_sources_dedupe_current_sprint_orientation_path() -> None:
     )
 
     assert [source["path"] for source in sources].count("tasks/CURRENT_SPRINT.md") == 1
+
+
+def test_context_pack_implement_mode_ignores_requires_human_dependency_notes_for_autonomy(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tasks_dir = tmp_path / "tasks"
+    docs_dir = tmp_path / "docs"
+    tests_dir = tmp_path / "tests" / "horadus_cli" / "v2"
+    tasks_dir.mkdir(parents=True)
+    docs_dir.mkdir(parents=True)
+    tests_dir.mkdir(parents=True)
+    (tasks_dir / "BACKLOG.md").write_text(
+        "\n".join(
+            [
+                "# Backlog",
+                "",
+                "## Open Task Ledger",
+                "",
+                "### TASK-190: Dependency-note fixture",
+                "**Priority**: P1",
+                "**Estimate**: 1h",
+                "",
+                "Exercise autonomy derivation from the active-task marker only.",
+                "",
+                "**Files**: `tests/horadus_cli/v2/test_cli.py`",
+                "",
+                "**Acceptance Criteria**:",
+                "- [ ] dependency notes do not mark the task human-gated",
+                "",
+                "---",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tasks_dir / "CURRENT_SPRINT.md").write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-190` Dependency-note fixture",
+                "",
+                "## Selection Notes",
+                "- `TASK-190` depends on `TASK-080` [REQUIRES_HUMAN] for a later follow-on.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tasks_dir / "COMPLETED.md").write_text("# Completed Tasks\n", encoding="utf-8")
+    (docs_dir / "ARCHITECTURE.md").write_text("# Architecture\n", encoding="utf-8")
+    (docs_dir / "DATA_MODEL.md").write_text("# Data Model\n", encoding="utf-8")
+    (tests_dir / "test_cli.py").write_text(
+        "def test_fixture() -> None:\n    pass\n", encoding="utf-8"
+    )
+    monkeypatch.setattr(task_commands_module, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(workflow_task_repo_module, "repo_root", lambda: tmp_path)
+
+    result = main(["tasks", "context-pack", "TASK-190", "--mode", "implement", "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["data"]["task_metadata"]["autonomous_eligible"] is True

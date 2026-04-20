@@ -73,10 +73,10 @@ def normalized_declared_paths(raw_paths: Sequence[str]) -> list[str]:
     return normalized_paths
 
 
-def task_autonomous_eligible(*, title: object, sprint_lines: Sequence[str]) -> bool:
+def task_autonomous_eligible(*, title: object, active_task_lines: Sequence[str]) -> bool:
     title_text = str(title or "")
     return "[REQUIRES_HUMAN]" not in title_text and all(
-        "[REQUIRES_HUMAN]" not in line for line in sprint_lines
+        "[REQUIRES_HUMAN]" not in line for line in active_task_lines
     )
 
 
@@ -176,9 +176,10 @@ def build_implement_context_pack_payload(
     policy_payload: Mapping[str, object],
     excluded_sources: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
+    current_sprint = current_sprint_extract(str(task_payload.get("task_id") or ""))
     autonomous_eligible = task_autonomous_eligible(
         title=task_payload.get("title"),
-        sprint_lines=sprint_lines,
+        active_task_lines=current_sprint["active_task_lines"],
     )
     return {
         "mode_metadata": {
@@ -194,7 +195,7 @@ def build_implement_context_pack_payload(
         ),
         "orientation": {
             "documents": [asdict(document) for document in implement_mode_orientation_documents()],
-            "current_sprint": current_sprint_extract(str(task_payload.get("task_id") or "")),
+            "current_sprint": current_sprint,
         },
         "derived_test_candidates": derive_test_candidates(declared_paths=declared_paths),
         "retrieval_sources": {

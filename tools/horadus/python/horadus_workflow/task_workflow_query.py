@@ -10,9 +10,14 @@ from tools.horadus.python.horadus_workflow.task_workflow_completion_contract imp
     CompletionContract,
     build_completion_contract,
 )
-from tools.horadus.python.horadus_workflow.task_workflow_context_pack_support import (
-    append_planning_context_lines,
-    context_pack_payload,
+from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement import (
+    CONTEXT_PACK_IMPLEMENT_MODE,
+    context_pack_mode_result,
+    implement_mode_context_pack_result,
+    implement_mode_workflow_commands,
+)
+from tools.horadus.python.horadus_workflow.task_workflow_context_pack_text import (
+    default_context_pack_result,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_planning_context import (
     build_planning_context,
@@ -458,53 +463,12 @@ def _suggested_validation_commands(
     return commands
 
 
-def _append_completion_contract_lines(lines: list[str], contract: CompletionContract) -> None:
-    lines.extend(["", "## Completion Contract", "Already enforced by tooling:"])
-    for requirement in contract["enforced_requirements"]:
-        lines.append(f"- {requirement['summary']}")
-        lines.append(f"  Reason: {requirement['reason']}")
-        if requirement["commands"]:
-            lines.append(f"  Commands: {', '.join(requirement['commands'])}")
-        lines.append(f"  Note: {requirement['note']}")
-    lines.append("")
-    lines.append("Still documented / operator-owned expectations:")
-    for requirement in contract["documented_requirements"]:
-        lines.append(f"- [{requirement['status']}] {requirement['summary']}")
-        lines.append(f"  Reason: {requirement['reason']}")
-        if requirement["commands"]:
-            lines.append(f"  Commands: {', '.join(requirement['commands'])}")
-        lines.append(f"  Note: {requirement['note']}")
-
-
-def _append_caller_aware_validation_pack_lines(
-    lines: list[str], validation_packs: list[CallerAwareValidationPackMatch]
-) -> None:
-    if not validation_packs:
-        return
-    lines.extend(["", "## Caller-Aware Validation Packs", "Applicability: recommended"])
-    for pack in validation_packs:
-        lines.append(f"- {pack['pack_id']}: {pack['rationale']}")
-        lines.append(f"  Matched paths: {', '.join(pack['matched_paths'])}")
-        lines.append("  Commands:")
-        lines.extend(f"  {command}" for command in pack["commands"])
-
-
-def _append_pre_push_review_guidance_lines(
-    lines: list[str], guidance: PrePushReviewGuidance
-) -> None:
-    if not guidance["recommended"]:
-        return
-    lines.extend(["", "## Pre-Push Review Guidance", "Applicability: recommended"])
-    lines.extend(f"- {reason}" for reason in guidance["risk_reasons"])
-    lines.extend(["", "Suggested commands:"])
-    lines.extend(guidance["commands"])
-    lines.extend(["", "Fallback guidance:"])
-    lines.extend(f"- {note}" for note in guidance["fallback_notes"])
-    lines.extend(["", "Re-review discipline:"])
-    lines.extend(f"- {note}" for note in guidance["batching_notes"])
-
-
 def handle_context_pack(args: Any) -> CommandResult:
+    mode_result = context_pack_mode_result(args)
+    if isinstance(mode_result, CommandResult):
+        return mode_result
+    mode = mode_result
+
     try:
         task_id = task_repo.normalize_task_id(args.task_id)
     except ValueError as exc:
@@ -537,58 +501,48 @@ def handle_context_pack(args: Any) -> CommandResult:
         validation_packs, completion_contract
     )
     pre_push_review = _pre_push_review_guidance(record)
-    lines = [
-        f"# Context Pack: {task_id}",
-        "",
-        "## Backlog Entry",
-        record.raw_block,
-        "",
-        "## Sprint Status",
-    ]
-    lines.extend(record.sprint_lines or ["(not listed in current sprint)"])
-    lines.extend(["", "## Matching Spec"])
-    lines.extend(record.spec_paths or ["(none)"])
-    lines.extend(
-        [
-            "",
-            "## Spec Contract Template",
-            "tasks/specs/TEMPLATE.md",
-            _CANONICAL_PLANNING_EXAMPLE_PATH,
-        ]
-    )
-    append_planning_context_lines(lines, planning)
-    lines.extend(["", "## Likely Code Areas"])
-    lines.extend(record.files or ["(not specified in backlog entry)"])
-    lines.extend(["", "## Suggested Workflow Commands"])
     workflow_commands = _workflow_commands_for_context_pack(
         task_id,
         include_archive=include_archive,
         archived=record.archived,
     )
-    lines.extend(workflow_commands)
-    lines.extend(["", "## Suggested Validation Commands", *suggested_validation_commands])
-    _append_completion_contract_lines(lines, completion_contract)
-    _append_caller_aware_validation_pack_lines(lines, validation_packs)
-    _append_pre_push_review_guidance_lines(lines, pre_push_review)
-    return CommandResult(
-        lines=lines,
-        data=context_pack_payload(
-            task_payload=_task_record_payload(record),
+    if mode == CONTEXT_PACK_IMPLEMENT_MODE:
+        return implement_mode_context_pack_result(
+            task_payload=_task_record_payload(record, include_raw=False),
+            declared_paths=_normalized_task_paths(record),
             sprint_lines=record.sprint_lines,
             spec_paths=record.spec_paths,
             planning=planning,
-            workflow_commands=workflow_commands,
+            workflow_commands=implement_mode_workflow_commands(
+                task_id=task_id,
+                workflow_commands=workflow_commands,
+                include_archive=include_archive,
+                archived=record.archived,
+            ),
             suggested_validation_commands=suggested_validation_commands,
             completion_contract=completion_contract,
             validation_packs=validation_packs,
             pre_push_review=pre_push_review,
-            canonical_spec_example_path=_CANONICAL_PLANNING_EXAMPLE_PATH,
-        ),
+            include_archive=include_archive,
+        )
+    return default_context_pack_result(
+        task_id=task_id,
+        task_payload=_task_record_payload(record),
+        raw_block=record.raw_block,
+        sprint_lines=record.sprint_lines,
+        spec_paths=record.spec_paths,
+        planning=planning,
+        likely_code_areas=record.files,
+        workflow_commands=workflow_commands,
+        suggested_validation_commands=suggested_validation_commands,
+        completion_contract=completion_contract,
+        validation_packs=validation_packs,
+        pre_push_review=pre_push_review,
+        canonical_spec_example_path=_CANONICAL_PLANNING_EXAMPLE_PATH,
     )
 
 
 __all__ = [
-    "_append_pre_push_review_guidance_lines",
     "_archived_task_blocked_result",
     "_planning_context",
     "_planning_marker_from_relative_path",

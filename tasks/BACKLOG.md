@@ -64,28 +64,6 @@ minimal and phase-appropriate.
 
 ---
 
-### TASK-380: Add Implement-Mode Context-Pack Contract
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-Add `horadus tasks context-pack TASK-XXX --mode implement --format json` as the
-Phase 1 RFC-001 retrieval surface while preserving the current unflagged broad
-context-pack output for compatibility. The first slice should extend existing
-Horadus CLI/workflow helpers, not introduce a local index or external retrieval
-service.
-
-**Planning Gates**: Required — shared workflow/context-pack contract and caller-visible CLI behavior
-**Files**: `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `tests/horadus_cli/v2/`, `docs/AGENT_RUNBOOK.md`, `docs/rfc/001-agent-context-retrieval.md`
-
-**Acceptance Criteria**:
-- [ ] Add a mode-aware context-pack CLI contract with `default` and `implement` modes
-- [ ] Preserve the current unflagged text/JSON context-pack behavior
-- [ ] Implement-mode JSON includes mode metadata, task metadata, excluded-source notes, and a compact code-backed policy payload
-- [ ] Define the explicit curated legacy policy registry used by implement mode without requiring policy-doc front matter
-- [ ] Add regression coverage for the new mode and for unchanged default behavior
-
----
-
 ### TASK-381: Add Retrieval Metadata and Canonical Spec Resolution
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours

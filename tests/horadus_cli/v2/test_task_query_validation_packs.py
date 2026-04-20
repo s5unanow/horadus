@@ -220,30 +220,6 @@ def test_completion_contract_keeps_missing_file_scope_conditional() -> None:
     assert "Inspect the task scope" in documented["targeted-tests"]["note"]
 
 
-def test_append_completion_contract_lines_skips_commands_line_when_requirement_has_none() -> None:
-    lines: list[str] = []
-
-    workflow_query_module._append_completion_contract_lines(
-        lines,
-        {
-            "enforced_requirements": [
-                {
-                    "requirement_id": "fixture",
-                    "status": "required",
-                    "summary": "Fixture enforced requirement.",
-                    "reason": "Exercise the no-command branch.",
-                    "commands": [],
-                    "note": "Still render the note.",
-                }
-            ],
-            "documented_requirements": [],
-        },
-    )
-
-    assert "  Commands:" not in "\n".join(lines)
-    assert "  Note: Still render the note." in lines
-
-
 def test_handle_show_remains_unchanged_by_caller_aware_validation_packs(
     synthetic_task_repo: Path,
 ) -> None:

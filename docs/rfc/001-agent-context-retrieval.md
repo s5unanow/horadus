@@ -417,6 +417,11 @@ Add a narrower CLI surface:
 
 Here, `--mode implement` is the new surface. `--format json` already exists and
 should remain the structured output form for agent consumption.
+The unflagged command and `--mode default` remain the broad compatibility
+surface. The first implemented slice uses a code-backed curated legacy policy
+registry in
+`tools/horadus/python/horadus_workflow/task_workflow_context_pack_implement.py`;
+policy-doc front matter is not required for implement mode during Phase 1.
 
 Recommended `implement` payload:
 
@@ -436,6 +441,16 @@ Recommended `implement` payload:
   policy chunks from retrieval-ready policy docs or an explicit curated policy
   allowlist during migration
 - excluded sources
+
+Initial Phase 1 implementation status:
+
+- `TASK-380` covers mode metadata, compact task metadata, included/excluded
+  source notes, planning state, workflow/validation guidance, and the curated
+  legacy policy registry.
+- `TASK-381` owns task-spec retrieval metadata and deterministic canonical spec
+  resolution.
+- `TASK-382` owns compact `CURRENT_SPRINT.md` orientation, architecture/data
+  model orientation, autonomous eligibility, and derived test candidates.
 
 In phase 1, `derived test candidates` should be a concrete, deterministic
 fallback rather than a free-form guess. Because the current task record does not

@@ -47,6 +47,15 @@ Compatibility wrapper:
 
 3. `uv run --no-sync horadus tasks context-pack TASK-XXX`
 When: collect backlog/spec/sprint context for an implementation task.
+The unflagged command and `--mode default` preserve the broad text/JSON context
+pack for compatibility. Use
+`uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
+when a caller needs the Phase 1 RFC-001 implementation payload: mode metadata,
+compact task metadata, included/excluded source notes, planning state,
+workflow/validation guidance, and the curated legacy policy registry. The
+implement-mode policy registry is code-backed in
+`tools/horadus/python/horadus_workflow/task_workflow_context_pack_implement.py`
+and does not require policy-document front matter.
 Use `tasks/specs/TEMPLATE.md` when a task needs a new or refreshed spec; keep
 the contract explicit around problem statement, inputs, outputs, non-goals, and
 acceptance criteria.

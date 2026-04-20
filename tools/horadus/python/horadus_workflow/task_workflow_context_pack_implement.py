@@ -6,6 +6,12 @@ from typing import TYPE_CHECKING, Any
 
 from tools.horadus.python.horadus_workflow import task_workflow_context_pack_spec
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
+from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement_support import (
+    current_sprint_extract,
+    derive_test_candidates,
+    implement_mode_orientation_documents,
+    task_autonomous_eligible,
+)
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     dependency_aware_guidance_statements,
     fallback_guidance_statements,
@@ -143,6 +149,10 @@ def _implement_context_pack_payload(
     policy_payload: Mapping[str, object],
     excluded_sources: Sequence[Mapping[str, object]],
 ) -> dict[str, object]:
+    autonomous_eligible = task_autonomous_eligible(
+        title=task_payload.get("title"),
+        sprint_lines=sprint_lines,
+    )
     return {
         "mode_metadata": {
             "mode": "implement",
@@ -150,9 +160,23 @@ def _implement_context_pack_payload(
             "format": "json",
             "default_mode_preserved": True,
         },
-        "task_metadata": _implement_task_metadata(task_payload, declared_paths),
+        "task_metadata": _implement_task_metadata(
+            task_payload,
+            declared_paths,
+            autonomous_eligible=autonomous_eligible,
+        ),
+        "orientation": {
+            "documents": [asdict(document) for document in implement_mode_orientation_documents()],
+            "current_sprint": current_sprint_extract(str(task_payload.get("task_id") or "")),
+        },
+        "derived_test_candidates": derive_test_candidates(declared_paths=declared_paths),
         "retrieval_sources": {
-            "included": _included_sources(task_payload, sprint_lines, spec_paths, planning),
+            "included": _included_sources(
+                task_payload,
+                sprint_lines,
+                spec_paths,
+                planning,
+            ),
             "excluded": list(excluded_sources),
             "task_spec_resolution": dict(spec_resolution),
         },
@@ -169,12 +193,17 @@ def _implement_context_pack_payload(
 
 
 def _implement_task_metadata(
-    task_payload: Mapping[str, object], declared_paths: list[str]
+    task_payload: Mapping[str, object],
+    declared_paths: list[str],
+    *,
+    autonomous_eligible: bool,
 ) -> dict[str, object]:
     return {
         "task_id": task_payload.get("task_id"),
         "title": task_payload.get("title"),
         "status": task_payload.get("status"),
+        "task_status": task_payload.get("status"),
+        "autonomous_eligible": autonomous_eligible,
         "archived": task_payload.get("archived", False),
         "priority": task_payload.get("priority"),
         "estimate": task_payload.get("estimate"),
@@ -213,6 +242,15 @@ def _included_sources(
             {
                 "path": authoritative_artifact,
                 "reason": "authoritative planning artifact",
+            }
+        )
+    for document in implement_mode_orientation_documents():
+        if document.path == task_payload.get("current_sprint_path"):
+            continue
+        sources.append(
+            {
+                "path": document.path,
+                "reason": "compact orientation metadata",
             }
         )
     return [source for source in sources if source["path"] is not None]

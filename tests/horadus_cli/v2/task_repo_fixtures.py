@@ -151,15 +151,24 @@ def _current_sprint_fixture_text() -> str:
 
 def seed_task_repo_layout(repo_root: Path) -> Path:
     tasks_dir = repo_root / "tasks"
+    docs_dir = repo_root / "docs"
+    cli_tests_dir = repo_root / "tests" / "horadus_cli" / "v2"
     tasks_dir.mkdir(parents=True, exist_ok=True)
     (tasks_dir / "specs").mkdir(parents=True, exist_ok=True)
     (repo_root / "archive" / "closed_tasks").mkdir(parents=True, exist_ok=True)
+    docs_dir.mkdir(parents=True, exist_ok=True)
+    cli_tests_dir.mkdir(parents=True, exist_ok=True)
 
     (tasks_dir / "BACKLOG.md").write_text(_backlog_fixture_text(), encoding="utf-8")
     (tasks_dir / "CURRENT_SPRINT.md").write_text(_current_sprint_fixture_text(), encoding="utf-8")
     (tasks_dir / "COMPLETED.md").write_text(
         "# Completed Tasks\n\n## Sprint 4\n- TASK-902: Stable archived fixture ✅\n",
         encoding="utf-8",
+    )
+    (docs_dir / "ARCHITECTURE.md").write_text("# Architecture\n", encoding="utf-8")
+    (docs_dir / "DATA_MODEL.md").write_text("# Data Model\n", encoding="utf-8")
+    (cli_tests_dir / "test_cli.py").write_text(
+        "def test_fixture() -> None:\n    pass\n", encoding="utf-8"
     )
     (tasks_dir / "specs" / "901-stable-live-fixture.md").write_text(
         "\n".join(
@@ -276,6 +285,7 @@ def seed_task_repo_layout(repo_root: Path) -> Path:
 def patch_task_repo_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
     monkeypatch.setattr(task_repo_module, "repo_root", lambda: repo_root)
     monkeypatch.setattr(task_commands_module, "repo_root", lambda: repo_root)
+    monkeypatch.setattr(workflow_task_repo_module, "repo_root", lambda: repo_root)
 
 
 @pytest.fixture

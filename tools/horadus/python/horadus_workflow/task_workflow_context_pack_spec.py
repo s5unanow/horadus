@@ -47,10 +47,6 @@ def implement_mode_excluded_sources(include_archive: bool) -> list[dict[str, obj
             "source": "local or hosted retrieval index",
             "reason": "Out of scope for the Phase 1 CLI-first implementation slice.",
         },
-        {
-            "source": "compact orientation and derived test candidates",
-            "reason": "Deferred to TASK-382.",
-        },
     ]
 
 

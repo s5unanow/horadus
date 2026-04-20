@@ -51,8 +51,11 @@ The unflagged command and `--mode default` preserve the broad text/JSON context
 pack for compatibility. Use
 `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
 when a caller needs the Phase 1 RFC-001 implementation payload: mode metadata,
-compact task metadata, included/excluded source notes, planning state,
-workflow/validation guidance, and the curated legacy policy registry. The
+compact task metadata, derived `task_status` plus `autonomous_eligible`,
+task-scoped `CURRENT_SPRINT.md` extraction, compact orientation metadata for
+`tasks/CURRENT_SPRINT.md`, `docs/ARCHITECTURE.md`, and `docs/DATA_MODEL.md`,
+deterministic derived test candidates, included/excluded source notes,
+planning state, workflow/validation guidance, and the curated legacy policy registry. The
 implement-mode policy registry is code-backed in
 `tools/horadus/python/horadus_workflow/task_workflow_context_pack_implement.py`
 and does not require policy-document front matter.

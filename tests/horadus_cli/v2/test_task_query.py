@@ -3,12 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 import tools.horadus.python.horadus_cli.result as result_module
 import tools.horadus.python.horadus_cli.task_repo as task_repo_module
 import tools.horadus.python.horadus_cli.task_workflow_core as task_commands_module
+import tools.horadus.python.horadus_workflow.task_workflow_query as workflow_query_module
 from tests.horadus_cli.v2.helpers import (
     ARCHIVED_TASK_ID,
     BACKLOG_ONLY_TASK_ID,
@@ -312,6 +314,21 @@ def test_handle_search_reports_no_matches(monkeypatch: pytest.MonkeyPatch) -> No
     assert "(no matches)" in result.lines
     assert result.data is not None
     assert result.data["matches"] == []
+
+
+def test_normalized_task_paths_skips_empty_entries_after_cleanup() -> None:
+    record = SimpleNamespace(
+        files=[
+            "`tests/horadus_cli/v2/test_cli.py`",
+            "``",
+            "tools/horadus/python/horadus_workflow/ (shared helper)",
+        ]
+    )
+
+    assert workflow_query_module._normalized_task_paths(record) == [
+        "tests/horadus_cli/v2/test_cli.py",
+        "tools/horadus/python/horadus_workflow/",
+    ]
 
 
 def test_handle_context_pack_rejects_invalid_task_id() -> None:

@@ -9,7 +9,9 @@ from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement_support import (
     current_sprint_extract,
     derive_test_candidates,
+    derived_task_status,
     implement_mode_orientation_documents,
+    included_sources_for_implement_mode,
     task_autonomous_eligible,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
@@ -202,7 +204,7 @@ def _implement_task_metadata(
         "task_id": task_payload.get("task_id"),
         "title": task_payload.get("title"),
         "status": task_payload.get("status"),
-        "task_status": task_payload.get("status"),
+        "task_status": derived_task_status(task_payload),
         "autonomous_eligible": autonomous_eligible,
         "archived": task_payload.get("archived", False),
         "priority": task_payload.get("priority"),
@@ -222,38 +224,12 @@ def _included_sources(
     spec_paths: Sequence[str],
     planning: Mapping[str, object],
 ) -> list[dict[str, object]]:
-    sources: list[dict[str, object]] = [
-        {
-            "path": task_payload.get("source_path") or task_payload.get("backlog_path"),
-            "reason": "primary task definition",
-        },
-        {
-            "path": task_payload.get("current_sprint_path"),
-            "reason": "task-scoped sprint membership lines",
-            "lines": list(sprint_lines),
-        },
-    ]
-    sources.extend(
-        {"path": spec_path, "reason": "matching task spec candidate"} for spec_path in spec_paths
+    return included_sources_for_implement_mode(
+        task_payload=task_payload,
+        sprint_lines=sprint_lines,
+        spec_paths=spec_paths,
+        planning=planning,
     )
-    authoritative_artifact = planning.get("authoritative_artifact_path")
-    if authoritative_artifact is not None:
-        sources.append(
-            {
-                "path": authoritative_artifact,
-                "reason": "authoritative planning artifact",
-            }
-        )
-    for document in implement_mode_orientation_documents():
-        if document.path == task_payload.get("current_sprint_path"):
-            continue
-        sources.append(
-            {
-                "path": document.path,
-                "reason": "compact orientation metadata",
-            }
-        )
-    return [source for source in sources if source["path"] is not None]
 
 
 def _implement_mode_policy_payload(

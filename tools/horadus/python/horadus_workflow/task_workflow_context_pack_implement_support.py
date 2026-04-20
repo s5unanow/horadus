@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
@@ -62,6 +62,15 @@ def normalize_declared_path(raw_path: str) -> str:
     normalized = raw_path.strip().replace("`", "").strip()
     normalized = _TRAILING_QUALIFIER_PATTERN.sub("", normalized)
     return normalized.rstrip(".,;: ")
+
+
+def normalized_declared_paths(raw_paths: Sequence[str]) -> list[str]:
+    normalized_paths: list[str] = []
+    for raw_path in raw_paths:
+        normalized = normalize_declared_path(raw_path)
+        if normalized:
+            normalized_paths.append(normalized)
+    return normalized_paths
 
 
 def task_autonomous_eligible(*, title: object, sprint_lines: Sequence[str]) -> bool:
@@ -151,6 +160,63 @@ def derive_test_candidates(*, declared_paths: Sequence[str]) -> list[dict[str, o
     return [asdict(candidate) for candidate in candidates]
 
 
+def derived_task_status(task_payload: Mapping[str, object]) -> str | None:
+    status = task_payload.get("status")
+    if status is None:
+        return None
+    return str(status)
+
+
+def included_sources_for_implement_mode(
+    *,
+    task_payload: Mapping[str, object],
+    sprint_lines: Sequence[str],
+    spec_paths: Sequence[str],
+    planning: Mapping[str, object],
+) -> list[dict[str, object]]:
+    sources: list[dict[str, object]] = [
+        {
+            "path": task_payload.get("source_path") or task_payload.get("backlog_path"),
+            "reason": "primary task definition",
+        },
+        {
+            "path": task_payload.get("current_sprint_path"),
+            "reason": "task-scoped sprint membership lines",
+            "lines": list(sprint_lines),
+        },
+    ]
+    sources.extend(
+        {"path": spec_path, "reason": "matching task spec candidate"} for spec_path in spec_paths
+    )
+    authoritative_artifact = planning.get("authoritative_artifact_path")
+    if authoritative_artifact is not None:
+        sources.append(
+            {
+                "path": authoritative_artifact,
+                "reason": "authoritative planning artifact",
+            }
+        )
+    for document in implement_mode_orientation_documents():
+        if document.path == task_payload.get("current_sprint_path"):
+            continue
+        sources.append(
+            {
+                "path": document.path,
+                "reason": "compact orientation metadata",
+            }
+        )
+    deduped_sources: list[dict[str, object]] = []
+    seen_paths: set[str] = set()
+    for source in sources:
+        path = source.get("path")
+        normalized_path = None if path is None else str(path)
+        if normalized_path is None or normalized_path in seen_paths:
+            continue
+        seen_paths.add(normalized_path)
+        deduped_sources.append(source)
+    return deduped_sources
+
+
 def _current_sprint_constraints(sprint_text: str) -> list[dict[str, object]]:
     constraints: list[dict[str, object]] = []
     for heading, match_reason in (("Telegram Launch Scope", "repo_launch_scope"),):
@@ -208,7 +274,10 @@ __all__ = [
     "OrientationDoc",
     "current_sprint_extract",
     "derive_test_candidates",
+    "derived_task_status",
     "implement_mode_orientation_documents",
+    "included_sources_for_implement_mode",
     "normalize_declared_path",
+    "normalized_declared_paths",
     "task_autonomous_eligible",
 ]

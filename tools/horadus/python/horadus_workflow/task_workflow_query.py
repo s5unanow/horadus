@@ -17,7 +17,7 @@ from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement 
     implement_mode_workflow_commands,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_context_pack_implement_support import (
-    normalize_declared_path,
+    normalized_declared_paths,
 )
 from tools.horadus.python.horadus_workflow.task_workflow_context_pack_text import (
     default_context_pack_result,
@@ -340,12 +340,7 @@ def _planning_context(task_id: str, record: Any) -> dict[str, object]:
 
 
 def _normalized_task_paths(record: Any) -> list[str]:
-    normalized_paths: list[str] = []
-    for raw_path in record.files or []:
-        normalized = normalize_declared_path(raw_path)
-        if normalized:
-            normalized_paths.append(normalized)
-    return normalized_paths
+    return normalized_declared_paths(record.files or [])
 
 
 def _matches_any_prefix(paths: list[str], prefixes: tuple[str, ...]) -> bool:

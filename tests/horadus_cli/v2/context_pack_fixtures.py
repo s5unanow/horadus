@@ -132,5 +132,65 @@ def seed_context_pack_repo_support_files(repo_root: Path) -> None:
     seed_context_pack_archive_fixture(repo_root)
 
 
+def seed_context_pack_exec_plan_fixtures(tasks_dir: Path) -> None:
+    exec_plans_dir = tasks_dir / "exec_plans"
+    exec_plans_dir.mkdir(parents=True, exist_ok=True)
+    (exec_plans_dir / "TASK-905.md").write_text(
+        "\n".join(
+            [
+                "# TASK-905: Exec-plan fixture",
+                "",
+                "## Status",
+                "",
+                "- Owner: Fixture",
+                "- Started: 2026-03-11",
+                "- Current state: In progress",
+                "- Planning Gates: Required — exec-plan-backed fixture",
+                "",
+                "## Goal (1-3 lines)",
+                "",
+                "Exercise exec-plan-backed planning surfacing.",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: use one exec plan file.",
+                "- Rejected simpler alternative: omit the planning section entirely.",
+                "- First integration proof: context-pack output for TASK-905.",
+                "- Waivers: none.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (exec_plans_dir / "TASK-906.md").write_text(
+        "\n".join(
+            [
+                "# TASK-906: Exec-plan fallback fixture",
+                "",
+                "## Status",
+                "",
+                "- Owner: Fixture",
+                "- Started: 2026-03-11",
+                "- Current state: In progress",
+                "",
+                "## Goal (1-3 lines)",
+                "",
+                "Exercise required planning surfacing without an explicit marker.",
+                "",
+                "## Gate Outcomes / Waivers",
+                "",
+                "- Accepted design / smallest safe shape: rely on exec-plan-required fallback.",
+                "- Rejected simpler alternative: adding a redundant planning marker line.",
+                "- First integration proof: context-pack output for TASK-906.",
+                "- Waivers: none.",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+
 def patch_context_pack_workflow_repo_root(monkeypatch: pytest.MonkeyPatch, repo_root: Path) -> None:
     monkeypatch.setattr(workflow_task_repo_module, "repo_root", lambda: repo_root)

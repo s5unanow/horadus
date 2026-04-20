@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict
-from typing import Any, TypedDict
+from typing import Any, TypedDict, cast
 
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
@@ -502,9 +502,7 @@ def handle_context_pack(args: Any) -> CommandResult:
     )
     pre_push_review = _pre_push_review_guidance(record)
     workflow_commands = _workflow_commands_for_context_pack(
-        task_id,
-        include_archive=include_archive,
-        archived=record.archived,
+        task_id, include_archive=include_archive, archived=record.archived
     )
     if mode == CONTEXT_PACK_IMPLEMENT_MODE:
         return implement_mode_context_pack_result(
@@ -512,6 +510,7 @@ def handle_context_pack(args: Any) -> CommandResult:
             declared_paths=_normalized_task_paths(record),
             sprint_lines=record.sprint_lines,
             spec_paths=record.spec_paths,
+            spec_resolution=cast("dict[str, object]", record.spec_resolution),
             planning=planning,
             workflow_commands=implement_mode_workflow_commands(
                 task_id=task_id,

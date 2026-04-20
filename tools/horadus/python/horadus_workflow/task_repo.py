@@ -6,6 +6,8 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
+from tools.horadus.python.horadus_workflow.task_spec_resolution import resolve_task_spec_paths
+
 TASK_ID_PATTERN = re.compile(r"^TASK-(\d{3})$")
 SPEC_TASK_ID_PATTERN = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
 EXEC_PLAN_TASK_ID_PATTERN = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
@@ -85,6 +87,7 @@ class TaskRecord:
     spec_paths: list[str]
     source_path: str = ""
     archived: bool = False
+    spec_resolution: dict[str, object] | None = None
 
 
 @dataclass(slots=True)
@@ -486,11 +489,7 @@ def sprint_lines_for_task(task_id: str, path: Path | None = None) -> list[str]:
 
 
 def spec_paths_for_task(task_id: str) -> list[str]:
-    spec_glob = f"{task_id[5:]}-*"
-    return sorted(
-        str(path.relative_to(repo_root()))
-        for path in (repo_root() / "tasks" / "specs").glob(spec_glob)
-    )
+    return resolve_task_spec_paths(repo_root(), task_id).paths_for_context()
 
 
 def exec_plan_paths_for_task(task_id: str) -> list[str]:
@@ -599,19 +598,18 @@ def task_closure_state(task_id: str) -> TaskClosureState:
 
 
 def _enrich_task_record(record: TaskRecord) -> TaskRecord:
+    spec_resolution = resolve_task_spec_paths(repo_root(), record.task_id, record.raw_block)
     enriched = replace(
         record,
         description=list(record.description),
         files=list(record.files),
         acceptance_criteria=list(record.acceptance_criteria),
         assessment_refs=list(record.assessment_refs),
-        sprint_lines=[],
-        spec_paths=[],
+        sprint_lines=sprint_lines_for_task(record.task_id),
+        spec_paths=spec_resolution.paths_for_context(),
+        spec_resolution=spec_resolution.to_payload(),
     )
-    normalized = enriched.task_id
-    enriched.sprint_lines = sprint_lines_for_task(normalized)
-    enriched.spec_paths = spec_paths_for_task(normalized)
-    if is_task_completed(normalized):
+    if is_task_completed(enriched.task_id):
         enriched.status = "completed"
     elif enriched.sprint_lines:
         enriched.status = "active"

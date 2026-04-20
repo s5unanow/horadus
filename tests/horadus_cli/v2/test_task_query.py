@@ -145,7 +145,7 @@ def test_main_tasks_list_active_text_omits_non_active_human_blockers(
     assert result == 0
     output = capsys.readouterr().out
     assert "TASK-080" not in output
-    assert "TASK-381" in output
+    assert "TASK-382" in output
     assert "human_blockers=" not in output
     assert "overdue_human_blockers=" not in output
 

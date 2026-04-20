@@ -56,6 +56,14 @@ workflow/validation guidance, and the curated legacy policy registry. The
 implement-mode policy registry is code-backed in
 `tools/horadus/python/horadus_workflow/task_workflow_context_pack_implement.py`
 and does not require policy-document front matter.
+Implement mode also returns task-spec resolution metadata. A backlog
+`**Spec**:` line is the primary legacy selector; otherwise retrieval-ready
+task-spec front matter can mark the active canonical spec and superseded specs.
+Filename fallback considers only Markdown files matching
+`tasks/specs/{NNN}-*.md`. If multiple canonical task-spec candidates remain,
+implement mode fails closed instead of picking by filename order. Other
+task-query payloads surface the same resolver result as `spec_resolution` so
+callers can distinguish a plain `spec_paths` list from unresolved ambiguity.
 Use `tasks/specs/TEMPLATE.md` when a task needs a new or refreshed spec; keep
 the contract explicit around problem statement, inputs, outputs, non-goals, and
 acceptance criteria.

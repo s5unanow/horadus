@@ -64,26 +64,6 @@ minimal and phase-appropriate.
 
 ---
 
-### TASK-381: Add Retrieval Metadata and Canonical Spec Resolution
-**Priority**: P1 (High)
-**Estimate**: 2-4 hours
-
-Adopt the RFC-001 task-spec metadata slice without expanding the migration to
-all policy docs. New or touched task specs should be able to declare retrieval
-metadata, while legacy specs continue through deterministic fallback rules.
-
-**Planning Gates**: Required — shared task/spec retrieval contract and docs validation behavior
-**Files**: `tasks/specs/TEMPLATE.md`, `tools/horadus/python/horadus_workflow/`, `tests/horadus_cli/v2/`, `tests/workflow/`, `docs/rfc/001-agent-context-retrieval.md`
-
-**Acceptance Criteria**:
-- [ ] Update the task spec template with task-spec front matter fields and retrieval-ready guidance
-- [ ] Parse structured backlog `**Spec**:` references as the primary legacy spec selector
-- [ ] Fail closed in implement mode when multiple canonical spec candidates remain ambiguous
-- [ ] Add supersession metadata rules for retrieval-ready specs
-- [ ] Keep policy-doc front matter out of Phase 1 enforcement
-
----
-
 ### TASK-382: Add Task-Scoped Sprint Orientation and Test Candidates
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours

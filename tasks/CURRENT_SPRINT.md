@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-380` Add Implement-Mode Context-Pack Contract
 - `TASK-381` Add Retrieval Metadata and Canonical Spec Resolution
 - `TASK-382` Add Task-Scoped Sprint Orientation and Test Candidates
 - `TASK-365` Add Retrieval Behavior Evals for RFC-001 Context Surfaces
@@ -77,3 +76,4 @@
 - `TASK-378` Accept completed hotspot follow-up task references ✅
 - `TASK-334` Align Gemini local-review approval-mode flags with installed CLI ✅
 - `TASK-288` Convert RFC-001 Context Retrieval Plan Into Approved Implementation Queue [REQUIRES_HUMAN] ✅
+- `TASK-380` Add Implement-Mode Context-Pack Contract ✅

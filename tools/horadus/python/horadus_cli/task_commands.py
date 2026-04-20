@@ -8,6 +8,9 @@ from tools.horadus.python.horadus_cli.task_automation_lock import (
     handle_automation_lock_lock,
     handle_automation_lock_unlock,
 )
+from tools.horadus.python.horadus_cli.task_context_pack_parser import (
+    register_context_pack_parser,
+)
 from tools.horadus.python.horadus_cli.task_finish import handle_finish
 from tools.horadus.python.horadus_cli.task_friction import (
     handle_record_friction,
@@ -27,7 +30,6 @@ from tools.horadus.python.horadus_cli.task_preflight import (
     handle_start,
 )
 from tools.horadus.python.horadus_cli.task_query import (
-    handle_context_pack,
     handle_list_active,
     handle_search,
     handle_show,
@@ -345,18 +347,7 @@ def register_task_commands(subparsers: Any) -> None:
     )
     search_parser.set_defaults(handler=handle_search)
 
-    context_pack_parser = tasks_subparsers.add_parser(
-        "context-pack",
-        help="Show the task backlog/spec/sprint context pack.",
-    )
-    add_leaf_cli_options(context_pack_parser)
-    context_pack_parser.add_argument("task_id", help="Task id (TASK-XXX or XXX).")
-    context_pack_parser.add_argument(
-        "--include-archive",
-        action="store_true",
-        help="Allow archived backlog lookup when the task is no longer live.",
-    )
-    context_pack_parser.set_defaults(handler=handle_context_pack)
+    register_context_pack_parser(tasks_subparsers, add_leaf_cli_options)
 
     preflight_parser = tasks_subparsers.add_parser(
         "preflight",

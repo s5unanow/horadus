@@ -342,7 +342,14 @@ def _marker_value(content: str, label: str) -> str | None:
 
 
 def _matching_section_lines(content: str, heading: str, task_id: str) -> list[str]:
-    return [line for line in _section_lines(content, heading) if task_id in line]
+    return [
+        line for line in _section_lines(content, heading) if _line_mentions_task_id(line, task_id)
+    ]
+
+
+def _line_mentions_task_id(line: str, task_id: str) -> bool:
+    pattern = re.compile(rf"^\s*(?:[-*]|\d+\.)\s+`?{re.escape(task_id)}`?(?=\s|$)")
+    return pattern.search(line) is not None
 
 
 def _section_lines(content: str, heading: str) -> list[str]:

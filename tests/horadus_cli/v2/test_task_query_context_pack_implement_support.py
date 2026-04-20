@@ -85,3 +85,36 @@ def test_derive_test_candidates_covers_cli_runtime_and_transformed_module_stems(
 
 def test_derived_task_status_returns_none_when_status_is_missing() -> None:
     assert support_module.derived_task_status({}) is None
+
+
+def test_current_sprint_extract_matches_exact_task_id_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _no_blockers(*, task_ids: set[str]) -> list[object]:
+        _ = task_ids
+        return []
+
+    sprint_path = tmp_path / "tasks" / "CURRENT_SPRINT.md"
+    sprint_path.parent.mkdir(parents=True)
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-190` Dependency-note fixture blocked by `TASK-189` [REQUIRES_HUMAN]",
+                "- `TASK-189` Human-gated fixture [REQUIRES_HUMAN]",
+                "",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(support_module.task_repo, "current_sprint_path", lambda: sprint_path)
+    monkeypatch.setattr(support_module.task_repo, "repo_root", lambda: tmp_path)
+    monkeypatch.setattr(support_module.task_repo, "parse_human_blockers", _no_blockers)
+
+    payload = support_module.current_sprint_extract("TASK-189")
+
+    assert payload["active_task_lines"] == ["- `TASK-189` Human-gated fixture [REQUIRES_HUMAN]"]

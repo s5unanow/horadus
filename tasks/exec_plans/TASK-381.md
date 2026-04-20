@@ -78,6 +78,9 @@ callers.
   enforce policy-document front matter early.
 - 2026-04-20: Treat explicit backlog `**Spec**:` references as the primary
   legacy selector before filename-glob fallback.
+- 2026-04-20: Limit filename fallback to Markdown files matching
+  `tasks/specs/{NNN}-*.md`; surface full resolver metadata so non-implement
+  callers can detect ambiguity while preserving compatible `spec_paths`.
 
 ## Risks / Foot-guns
 

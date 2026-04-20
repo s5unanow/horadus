@@ -4,6 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING, Any
 
+from tools.horadus.python.horadus_workflow import task_workflow_context_pack_spec
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 from tools.horadus.python.horadus_workflow.task_workflow_policy import (
     dependency_aware_guidance_statements,
@@ -88,7 +89,9 @@ def implement_mode_context_pack_result(
     pre_push_review: Mapping[str, object],
     include_archive: bool,
 ) -> CommandResult:
-    return CommandResult(
+    return task_workflow_context_pack_spec.ambiguous_spec_resolution_result(
+        spec_resolution
+    ) or CommandResult(
         data=_implement_context_pack_payload(
             task_payload=task_payload,
             declared_paths=declared_paths,
@@ -101,10 +104,10 @@ def implement_mode_context_pack_result(
             completion_contract=completion_contract,
             validation_packs=validation_packs,
             pre_push_review=pre_push_review,
-            policy_payload=_implement_mode_policy_payload(
-                workflow_commands=workflow_commands,
+            policy_payload=_implement_mode_policy_payload(workflow_commands=workflow_commands),
+            excluded_sources=task_workflow_context_pack_spec.implement_mode_excluded_sources(
+                include_archive
             ),
-            excluded_sources=_implement_mode_excluded_sources(include_archive),
         ),
     )
 
@@ -243,49 +246,6 @@ def _implement_mode_policy_payload(
             "workflow_policy_guardrails": list(workflow_policy_guardrail_statements()),
         },
     }
-
-
-def _implement_mode_excluded_sources(include_archive: bool) -> list[dict[str, object]]:
-    excluded_sources: list[dict[str, object]] = []
-    if not include_archive:
-        excluded_sources.append(
-            {
-                "source": "archive/",
-                "reason": "Archived task history is available only through explicit archive lookup.",
-            }
-        )
-    else:
-        excluded_sources.append(
-            {
-                "source": "archive/closed_tasks/* except requested task",
-                "reason": "Archive inclusion is scoped to the explicitly requested task.",
-            }
-        )
-    excluded_sources.extend(
-        [
-            {
-                "source": "README.md",
-                "reason": "Pointer/setup surface excluded from the Phase 1 implementation policy payload.",
-            },
-            {
-                "source": "ops/skills/",
-                "reason": "Caller-surface migration is deferred to TASK-383.",
-            },
-            {
-                "source": "policy-document front matter",
-                "reason": "Policy front matter migration is deferred; the curated registry is used instead.",
-            },
-            {
-                "source": "local or hosted retrieval index",
-                "reason": "Out of scope for the Phase 1 CLI-first implementation slice.",
-            },
-            {
-                "source": "compact orientation and derived test candidates",
-                "reason": "Deferred to TASK-382.",
-            },
-        ]
-    )
-    return excluded_sources
 
 
 __all__ = [

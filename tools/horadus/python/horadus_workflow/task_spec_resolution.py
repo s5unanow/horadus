@@ -5,6 +5,8 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
+
 SPEC_REFERENCE_PATTERN = re.compile(r"^\*\*Spec\*\*:\s*(?P<value>.+)$", re.MULTILINE)
 BACKTICK_PATTERN = re.compile(r"`([^`]+)`")
 
@@ -80,21 +82,23 @@ def spec_reference_paths_from_text(content: str) -> list[str]:
     value = match.group("value").strip()
     if not value or value.lower() in {"none", "n/a", "not applicable"}:
         return []
-    raw_values = BACKTICK_PATTERN.findall(value)
-    if not raw_values:
-        raw_values = [item.strip() for item in value.split(",")]
+    raw_values = [
+        *BACKTICK_PATTERN.findall(value),
+        *[item.strip() for item in BACKTICK_PATTERN.sub("", value).split(",")],
+    ]
     return _dedupe_paths(_normalize_spec_reference(item) for item in raw_values)
 
 
 def filename_spec_paths_for_task(repo_root: Path, task_id: str) -> list[str]:
-    spec_glob = f"{task_id[5:]}-*"
+    spec_glob = f"{task_id[5:]}-*.md"
     return sorted(
-        str(path.relative_to(repo_root)) for path in (repo_root / "tasks" / "specs").glob(spec_glob)
+        str(path.relative_to(repo_root))
+        for path in (repo_root / "tasks" / "specs").glob(spec_glob)
+        if path.is_file()
     )
 
 
 def resolve_task_spec_paths(
-    *,
     repo_root: Path,
     task_id: str,
     raw_block: str | None = None,
@@ -142,7 +146,8 @@ def _active_canonical_candidates(
 
 def _candidate_from_path(repo_root: Path, task_id: str, relative_path: str) -> TaskSpecCandidate:
     path = repo_root / relative_path
-    metadata = _front_matter(path.read_text(encoding="utf-8")) if path.exists() else {}
+    should_read_metadata = path.is_file() and path.suffix == ".md"
+    metadata = _front_matter(path.read_text(encoding="utf-8")) if should_read_metadata else {}
     retrieval = metadata.get("retrieval")
     retrieval_metadata = retrieval if isinstance(retrieval, Mapping) else {}
     metadata_task_id = _optional_str(metadata.get("task_id"))
@@ -172,67 +177,13 @@ def _front_matter(content: str) -> dict[str, object]:
     )
     if closing_index is None:
         return {}
-    return _parse_front_matter_lines(lines[1:closing_index])
-
-
-def _parse_front_matter_lines(lines: Sequence[str]) -> dict[str, object]:
-    metadata: dict[str, object] = {}
-    retrieval: dict[str, object] | None = None
-    list_key: str | None = None
-    for raw_line in lines:
-        stripped = raw_line.strip()
-        if not stripped or stripped.startswith("#"):
-            continue
-        indent = len(raw_line) - len(raw_line.lstrip(" "))
-        if indent == 0:
-            retrieval = None
-            list_key = None
-            key, value = _split_key_value(stripped)
-            if key == "retrieval" and value == "":
-                retrieval = {}
-                metadata[key] = retrieval
-            elif key:
-                metadata[key] = _scalar_value(value)
-            continue
-        if retrieval is None:
-            continue
-        if stripped.startswith("- ") and list_key is not None:
-            list_value = retrieval.setdefault(list_key, [])
-            assert isinstance(list_value, list)
-            list_value.append(_scalar_value(stripped[2:].strip()))
-            continue
-        key, value = _split_key_value(stripped)
-        if not key:
-            continue
-        if value == "":
-            retrieval[key] = []
-            list_key = key
-        else:
-            retrieval[key] = _scalar_value(value)
-            list_key = None
-    return metadata
-
-
-def _split_key_value(value: str) -> tuple[str, str]:
-    if ":" not in value:
-        return "", ""
-    key, raw_value = value.split(":", 1)
-    return key.strip(), raw_value.strip()
-
-
-def _scalar_value(value: str) -> object:
-    if value in {"", "null", "None", "~"}:
-        return None
-    if value in {"[]", "[ ]"}:
-        return []
-    if value.lower() == "true":
-        return True
-    if value.lower() == "false":
-        return False
-    if value.startswith("[") and value.endswith("]"):
-        items = [item.strip().strip("'\"") for item in value[1:-1].split(",")]
-        return [item for item in items if item]
-    return value.strip("'\"")
+    try:
+        parsed = yaml.safe_load("\n".join(lines[1:closing_index]))
+    except yaml.YAMLError:
+        return {}
+    if not isinstance(parsed, dict):
+        return {}
+    return {key: value for key, value in parsed.items() if isinstance(key, str)}
 
 
 def _optional_str(value: object) -> str | None:

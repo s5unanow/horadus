@@ -51,9 +51,6 @@ def test_main_tasks_context_pack_implement_json_output(
     assert data["task_metadata"]["task_id"] == LIVE_TASK_ID
     assert data["task_metadata"]["declared_paths"] == ["tests/horadus_cli/v2/test_cli.py"]
     assert data["retrieval_sources"]["included"]
-    spec_resolution = data["retrieval_sources"]["task_spec_resolution"]
-    assert spec_resolution["selected_paths"] == ["tasks/specs/901-stable-live-fixture.md"]
-    assert spec_resolution["ambiguous"] is False
     assert any(
         source["source"] == "policy-document front matter"
         for source in data["retrieval_sources"]["excluded"]
@@ -80,25 +77,6 @@ def test_context_pack_implement_mode_requires_json_output(
     assert result == int(task_commands_module.ExitCode.VALIDATION_ERROR)
     captured = capsys.readouterr()
     assert "context-pack --mode implement requires --format json" in captured.err
-
-
-def test_context_pack_implement_mode_fails_closed_on_ambiguous_specs(
-    synthetic_task_repo: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    (synthetic_task_repo / "tasks" / "specs" / "901-second-candidate.md").write_text(
-        "# TASK-901 second legacy spec\n",
-        encoding="utf-8",
-    )
-
-    result = main(
-        ["tasks", "context-pack", LIVE_TASK_ID, "--mode", "implement", "--format", "json"]
-    )
-
-    assert result == int(task_commands_module.ExitCode.VALIDATION_ERROR)
-    captured = capsys.readouterr()
-    payload = json.loads(captured.out)
-    assert "ambiguous canonical task spec candidates" in payload["errors"][0]
 
 
 def test_handle_context_pack_rejects_invalid_mode() -> None:

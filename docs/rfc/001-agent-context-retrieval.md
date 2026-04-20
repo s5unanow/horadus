@@ -473,12 +473,18 @@ selection contract should be:
 - parse the backlog `**Spec**:` line as structured task metadata and treat it as
   the primary legacy-spec selector when present
 - if no structured spec reference exists, accept legacy fallback only when
-  exactly one matching spec file exists
+  exactly one matching Markdown spec file exists under
+  `tasks/specs/{NNN}-*.md`; non-Markdown files and directories are not spec
+  candidates
 - for retrieval-ready task specs, use `retrieval.canonical`,
   `retrieval.status`, `retrieval.supersedes`, and `retrieval.superseded_by` to
   select the active canonical spec and retire older candidates
 - if multiple legacy candidates remain after those checks, fail closed as an
   ambiguous canonical-spec condition rather than picking by filename order
+
+Default context-pack and task-query callers keep receiving compatible
+`spec_paths`, but the structured payload also includes resolver metadata so
+callers can see the selected paths, candidate paths, and ambiguity state.
 
 This task-spec metadata contract is intentionally narrower than a general
 policy-doc metadata migration. During Phase 1, policy-document front matter

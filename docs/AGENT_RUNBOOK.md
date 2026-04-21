@@ -254,6 +254,11 @@ behavior/workflow/operator-facing contracts changed, and record any N/A or
 waived proof in the task's authoritative planning artifact when one exists.
 For completion policy, review-timeout semantics, fresh re-review ownership,
 thread handling, and completion-claim rules, see `AGENTS.md`.
+Worktree cleanup note:
+- `finish` and `lifecycle --strict` prove task completion, but they do not claim ownership of deleting arbitrary local git worktrees.
+- If the auxiliary worktree is still checked out on the task branch after merge, switch it away from that branch or remove the worktree once it is clean or intentionally disposable. Do not wait for local branch deletion first in that case, because Git will refuse to delete a branch that is still attached to a worktree.
+- After that cleanup, the repo still owes the normal completion signals: the local task branch must be deleted and `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` must report `local-main-synced`, usually from the canonical long-lived checkout.
+- Do not delete the canonical long-lived checkout as part of routine task cleanup.
 
 Compatibility wrapper:
 - `make task-finish`

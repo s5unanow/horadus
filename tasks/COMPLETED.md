@@ -393,3 +393,4 @@
 - TASK-382: Add Task-Scoped Sprint Orientation and Test Candidates ✅
 - TASK-365: Add Retrieval Behavior Evals for RFC-001 Context Surfaces ✅
 - TASK-383: Switch Agent Workflow Surfaces to Implement Context-Pack Mode ✅
+- TASK-384: Define worktree cleanup ownership and lifecycle ✅

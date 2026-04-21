@@ -58,6 +58,9 @@ Workflow/setup helpers:
 - Use `docs/AGENT_RUNBOOK.md` for the current command index.
 - Copy `.env.example` to `.env`; LLM provider selection lives in `docs/adr/002-llm-provider.md`.
 - Typical local values include `DATABASE_URL`, `REDIS_URL`, and `OPENAI_API_KEY`.
+- For implementation tasks, prefer
+  `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`;
+  keep plain `context-pack TASK-XXX` for broad human context.
 
 ### Start Workers
 

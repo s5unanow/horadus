@@ -33,7 +33,10 @@ CANONICAL_TASK_WORKFLOW_COMMANDS: tuple[WorkflowCommand, ...] = (
     ),
     WorkflowCommand(
         label="Context pack",
-        template=f"uv run --no-sync horadus tasks context-pack {TASK_ID_PLACEHOLDER}",
+        template=(
+            "uv run --no-sync horadus tasks context-pack "
+            f"{TASK_ID_PLACEHOLDER} --mode implement --format json"
+        ),
     ),
     WorkflowCommand(
         label="Fast iteration gate",

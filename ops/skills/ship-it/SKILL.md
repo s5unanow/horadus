@@ -51,7 +51,7 @@ If eligibility fails, stop and report the CLI blocker.
 
 Run the task through this sequence:
 
-1. `uv run --no-sync horadus tasks context-pack TASK-XXX`
+1. `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
 2. If planning gates are required and the authoritative artifact is missing,
    create the missing spec or exec plan before implementation.
 3. If not already on the correct task branch, start with

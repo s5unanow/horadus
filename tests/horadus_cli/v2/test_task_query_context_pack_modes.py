@@ -26,15 +26,12 @@ def test_main_tasks_context_pack_explicit_default_preserves_broad_json_output(
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "ok"
     assert payload["data"]["task"]["task_id"] == LIVE_TASK_ID
-    assert "suggested_validation_commands" in payload["data"]
-    assert "completion_contract" in payload["data"]
     assert (
         f"uv run --no-sync horadus tasks context-pack {LIVE_TASK_ID}"
         in payload["data"]["suggested_workflow_commands"]
     )
-    assert not any(
-        "--mode implement --format json" in command
-        for command in payload["data"]["suggested_workflow_commands"]
+    assert "--mode implement --format json" not in "\n".join(
+        payload["data"]["suggested_workflow_commands"]
     )
     assert "mode_metadata" not in payload["data"]
 

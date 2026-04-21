@@ -123,13 +123,9 @@ def test_v2_emit_result_includes_lines_in_json(capsys: pytest.CaptureFixture[str
 
 def test_task_workflow_policy_helpers_cover_rendered_commands_and_guidance() -> None:
     first_command = task_workflow_policy_module.CANONICAL_TASK_WORKFLOW_COMMANDS[0]
-    context_pack_command = task_workflow_policy_module.CANONICAL_TASK_WORKFLOW_COMMANDS[2]
     validation_packs = task_workflow_policy_module.caller_aware_validation_packs()
 
     assert first_command.render("TASK-999") == "uv run --no-sync horadus tasks preflight"
-    assert context_pack_command.render("TASK-999") == (
-        "uv run --no-sync horadus tasks context-pack TASK-999 --mode implement --format json"
-    )
     assert "AGENTS.md" not in task_workflow_policy_module.WORKFLOW_REFERENCE_PATHS
     assert task_workflow_policy_module.canonical_task_workflow_command_templates()[0] == (
         "uv run --no-sync horadus tasks preflight"

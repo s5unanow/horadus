@@ -48,7 +48,8 @@ Compatibility wrapper:
 3. `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
 When: collect the Phase 1 implementation payload for active engineering work.
 The unflagged command and `--mode default` preserve the broad text/JSON context
-pack for compatibility and human broad-context usage. The implement-mode payload returns: mode metadata,
+pack for compatibility and human broad-context usage.
+The implement-mode payload returns mode metadata,
 compact task metadata, derived `task_status` plus `autonomous_eligible`,
 task-scoped `CURRENT_SPRINT.md` extraction, compact orientation metadata for
 `tasks/CURRENT_SPRINT.md`, `docs/ARCHITECTURE.md`, and `docs/DATA_MODEL.md`,
@@ -106,6 +107,9 @@ runtime signals, instead of on every ordinary task.
 and shared math tasks. When a pack appears, run its dependent suites in
 addition to the baseline gates; shared Python helpers and shared math both
 require explicit full-repo type checking via `make typecheck`.
+When a task changes implement-mode command surfaces, retrieval source notes,
+canonical spec resolution, or the code-backed implement-mode policy payload,
+also run `uv run --no-sync horadus eval behavior --suite context-retrieval`.
 If planning gates are required but the backlog entry is still the only artifact,
 create the missing spec or exec plan before implementation and use
 `tasks/specs/275-finish-review-gate-timeout.md` as the canonical example.

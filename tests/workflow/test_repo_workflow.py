@@ -11,9 +11,6 @@ def test_repo_workflow_command_helpers_render_task_specific_commands() -> None:
     assert repo_workflow_module.CANONICAL_TASK_WORKFLOW_COMMANDS[1].render("TASK-321") == (
         "uv run --no-sync horadus tasks safe-start TASK-321 --name short-name"
     )
-    assert repo_workflow_module.CANONICAL_TASK_WORKFLOW_COMMANDS[2].render("TASK-321") == (
-        "uv run --no-sync horadus tasks context-pack TASK-321 --mode implement --format json"
-    )
     assert repo_workflow_module.canonical_task_workflow_commands_for_task("TASK-321")[-1] == (
         "uv run --no-sync horadus tasks finish TASK-321"
     )

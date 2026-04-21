@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from tools.horadus.python.horadus_workflow.task_spec_resolution import resolve_task_spec_paths
 
@@ -566,8 +566,7 @@ def archived_task_records() -> dict[str, TaskRecord]:
 
 
 def archived_task_record(task_id: str) -> TaskRecord | None:
-    normalized = normalize_task_id(task_id)
-    return archived_task_records().get(normalized)
+    return archived_task_records().get(normalize_task_id(task_id))
 
 
 def closed_task_archive_record(task_id: str) -> TaskRecord | None:
@@ -607,9 +606,10 @@ def _enrich_task_record(record: TaskRecord) -> TaskRecord:
         spec_paths=spec_resolution.paths_for_context(),
         spec_resolution=spec_resolution.to_payload(),
     )
-    if record.source_path.startswith("archive/closed_tasks/") or is_task_completed(
-        enriched.task_id
-    ):
+    if PurePosixPath(record.source_path.replace("\\", "/")).parts[:2] == (
+        "archive",
+        "closed_tasks",
+    ) or is_task_completed(enriched.task_id):
         enriched.status = "completed"
     elif enriched.sprint_lines:
         enriched.status = "active"

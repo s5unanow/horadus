@@ -178,3 +178,38 @@ def test_search_task_records_prefers_closed_archive_record_for_duplicate_task_id
     assert [record.task_id for record in matches] == ["TASK-080"]
     assert matches[0].source_path == "archive/closed_tasks/2026-Q1.md"
     assert matches[0].status == "completed"
+
+
+def test_task_record_marks_windows_style_closed_archive_paths_completed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    archived_record = task_repo_module.TaskRecord(
+        task_id="TASK-294",
+        title="Archive closure",
+        priority="P1",
+        estimate="1d",
+        description=[],
+        files=[],
+        acceptance_criteria=[],
+        assessment_refs=[],
+        raw_block="raw",
+        status="backlog",
+        sprint_lines=[],
+        spec_paths=[],
+        source_path=r"archive\closed_tasks\2026-Q1.md",
+        archived=True,
+    )
+    monkeypatch.setattr(task_repo_module, "backlog_task_records", dict)
+    monkeypatch.setattr(
+        task_repo_module,
+        "archived_task_record",
+        lambda task_id: archived_record if task_id == "TASK-294" else None,
+    )
+    monkeypatch.setattr(task_repo_module, "sprint_lines_for_task", lambda _task_id: [])
+    monkeypatch.setattr(task_repo_module, "spec_paths_for_task", lambda _task_id: [])
+    monkeypatch.setattr(task_repo_module, "is_task_completed", lambda _task_id: False)
+
+    archived = task_repo_module.task_record("TASK-294", include_archive=True)
+
+    assert archived is not None
+    assert archived.status == "completed"

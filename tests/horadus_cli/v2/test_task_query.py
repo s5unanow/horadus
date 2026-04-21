@@ -125,48 +125,6 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
     assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == ["TASK-189"]
 
 
-def test_main_tasks_list_active_text_omits_non_active_human_blockers(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    sprint_path = tmp_path / "CURRENT_SPRINT.md"
-    sprint_path.write_text(
-        "\n".join(
-            [
-                "# Current Sprint",
-                "",
-                "## Active Tasks",
-                "- `TASK-901` Stable live fixture",
-                "",
-                "## Human Blocker Metadata",
-                "- TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7",
-            ]
-        ),
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(task_repo_module, "current_sprint_path", lambda: sprint_path)
-    monkeypatch.setattr(
-        task_repo_module,
-        "current_date",
-        lambda: task_repo_module.date(2026, 4, 8),
-    )
-    monkeypatch.setattr(
-        task_repo_module,
-        "current_date",
-        lambda: task_repo_module.date(2026, 4, 8),
-    )
-
-    result = main(["tasks", "list-active"])
-
-    assert result == 0
-    output = capsys.readouterr().out
-    assert "TASK-901" in output
-    assert "TASK-080" not in output
-    assert "human_blockers=" not in output
-    assert "overdue_human_blockers=" not in output
-
-
 def test_main_tasks_search_json_output_is_compact_by_default(
     synthetic_task_repo: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

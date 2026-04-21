@@ -9,8 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-383` Switch Agent Workflow Surfaces to Implement Context-Pack Mode
-
 ## Selection Notes
 
 - Sprint 9 opened immediately after Sprint 8 with a nine-task queue from the live backlog plus one carried-forward human blocker.
@@ -76,3 +74,4 @@
 - `TASK-381` Add Retrieval Metadata and Canonical Spec Resolution ✅
 - `TASK-382` Add Task-Scoped Sprint Orientation and Test Candidates ✅
 - `TASK-365` Add Retrieval Behavior Evals for RFC-001 Context Surfaces ✅
+- `TASK-383` Switch Agent Workflow Surfaces to Implement Context-Pack Mode ✅

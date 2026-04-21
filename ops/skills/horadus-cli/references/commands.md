@@ -20,8 +20,10 @@ Implementation note:
   - Canonical autonomous task-start command.
   - Reuses eligibility checks and then creates the canonical
     `codex/task-XXX-short-name` branch.
-- `uv run --no-sync horadus tasks context-pack TASK-XXX`
-  - Returns backlog block, sprint lines, matching specs, likely code areas, and the canonical workflow/validation commands for the task.
+- `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
+  - Returns the Phase 1 implementation payload plus the canonical workflow/validation commands for the task.
+  - Use plain `context-pack TASK-XXX` only when you explicitly want the broad human context surface.
+  - Plain mode keeps the backlog block, sprint lines, matching specs, likely code areas, and suggested workflow/validation commands.
 - `make agent-check`
   - Fast inner-loop validation gate for lint, type-checking, and unit tests.
 - `uv run --no-sync horadus tasks local-review --format json`

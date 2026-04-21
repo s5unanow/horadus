@@ -33,7 +33,8 @@ Implementation note:
 
 - Start preflight: `uv run --no-sync horadus tasks preflight`
 - Canonical autonomous start: `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
-- Context pack: `uv run --no-sync horadus tasks context-pack TASK-XXX`
+- Context pack:
+  `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
 - Fast iteration gate: `make agent-check`
 - Pre-push local review:
   `uv run --no-sync horadus tasks local-review --format json`

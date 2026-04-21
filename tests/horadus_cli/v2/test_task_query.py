@@ -110,12 +110,6 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
         "current_date",
         lambda: task_repo_module.date(2026, 3, 6),
     )
-    monkeypatch.setattr(task_repo_module, "current_sprint_path", lambda: sprint_path)
-    monkeypatch.setattr(
-        task_repo_module,
-        "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
-    )
 
     result = main(["tasks", "list-active", "--format", "json"])
 
@@ -123,31 +117,12 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
     payload = json.loads(capsys.readouterr().out)
     assert [item["task_id"] for item in payload["data"]["human_blockers"]] == ["TASK-189"]
     assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == ["TASK-189"]
-
-
-def test_main_tasks_list_active_text_omits_non_active_human_blockers(
-    capsys: pytest.CaptureFixture[str],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(
-        task_repo_module,
-        "current_date",
-        lambda: task_repo_module.date(2026, 4, 8),
-    )
-    monkeypatch.setattr(
-        task_repo_module,
-        "current_date",
-        lambda: task_repo_module.date(2026, 4, 8),
-    )
-
-    result = main(["tasks", "list-active"])
-
-    assert result == 0
+    assert main(["tasks", "list-active"]) == 0
     output = capsys.readouterr().out
-    assert "TASK-080" not in output
-    assert "TASK-383" in output
-    assert "human_blockers=" not in output
-    assert "overdue_human_blockers=" not in output
+    assert "TASK-189" in output
+    assert "TASK-999" not in output
+    assert "\n- human_blockers=" not in output
+    assert "- overdue_human_blockers=1 (TASK-189)" in output
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(

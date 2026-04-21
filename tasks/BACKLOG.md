@@ -38,32 +38,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ## Open Task Ledger
 
-### TASK-365: Add Retrieval Behavior Evals for RFC-001 Context Surfaces
-**Priority**: P2 (Medium)
-**Estimate**: 2-4 hours
-
-**Dependency Note**:
-- Sequence after `TASK-380`, `TASK-381`, and `TASK-382` expose the first
-  implement-mode context surfaces, but before `TASK-383` switches canonical
-  autonomous workflow callers to that mode.
-
-As the repo adds markdown-first retrieval/context-pack behavior, measure
-retrieval correctness the same way prompt/model work is measured: include the
-active task/spec/policy context that should be retrieved, exclude
-archived/non-authoritative docs by default, and keep the returned context set
-minimal and phase-appropriate.
-
-**Planning Gates**: Required — shared workflow/context-retrieval contract and policy surface
-**Files**: `docs/rfc/001-agent-context-retrieval.md`, `tools/horadus/python/horadus_cli/`, `tools/horadus/python/horadus_workflow/`, `tests/`, `docs/AGENT_RUNBOOK.md`
-
-**Acceptance Criteria**:
-- [ ] Add behavior evals for include/exclude retrieval rules over live vs archived task documents
-- [ ] Cover at least one minimal-context case so retrieval quality is not judged only by recall
-- [ ] Eval artifacts state retrieval mode/phase and authoritative-source basis
-- [ ] Workflow docs explain when retrieval behavior suites must run for context-pack or retrieval changes
-
----
-
 ### TASK-383: Switch Agent Workflow Surfaces to Implement Context-Pack Mode
 **Priority**: P1 (High)
 **Estimate**: 2-4 hours

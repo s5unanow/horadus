@@ -10,7 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from src.eval import artifact_provenance as provenance
-from src.eval.behavior_cases import behavior_case_definitions
+from src.eval.behavior_case_registry import behavior_case_definitions
 from src.eval.behavior_types import (
     BehaviorEvalCaseDefinition,
     BehaviorEvalCaseResult,

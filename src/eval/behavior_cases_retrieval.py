@@ -225,14 +225,18 @@ def _patched_repo_root(
 ) -> Iterator[None]:
     original_cli_repo_root = cli_task_repo_module.repo_root
     original_workflow_repo_root = workflow_task_repo_module.repo_root
+    missing = object()
     try:
         original_task_commands_repo_root = task_commands_module.repo_root
     except AttributeError:
-        original_task_commands_repo_root = None
+        original_task_commands_repo_root = missing
 
     def repo_root_factory() -> Path:
         return repo_root
 
+    # These evals execute serially and patch the shared CLI repo-root lookup in
+    # place so the in-process context-pack entrypoint reads from the fixture
+    # repository instead of the live checkout.
     cli_task_repo_module.repo_root = repo_root_factory
     task_commands_module.repo_root = repo_root_factory
     workflow_task_repo_module.repo_root = repo_root_factory
@@ -240,7 +244,9 @@ def _patched_repo_root(
         yield
     finally:
         cli_task_repo_module.repo_root = original_cli_repo_root
-        if original_task_commands_repo_root is not None:
+        if original_task_commands_repo_root is missing:
+            delattr(task_commands_module, "repo_root")
+        else:
             task_commands_module.repo_root = original_task_commands_repo_root
         workflow_task_repo_module.repo_root = original_workflow_repo_root
 

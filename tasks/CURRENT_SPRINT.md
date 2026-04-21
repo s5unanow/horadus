@@ -30,19 +30,23 @@
 
 ## Suggested Sequence
 
-1. `TASK-386` Fix task intake id allocation under concurrent writes.
-2. `TASK-387` Fail closed on spec files missing Planning Gates.
-3. `TASK-388` Remove Any erasure from trend-write mutations.
-4. `TASK-389` Align Numeric ORM typing with Decimal semantics.
-5. `TASK-390` Add dirty-main watchdog for agent sessions.
-6. `TASK-391` Close nested-helper docstring policy gap.
-7. `TASK-392` Fix root horadus help and runbook freshness drift.
-8. `TASK-393` Sync API docs with runtime contracts.
-9. `TASK-394` Design worktree isolation for Codex App task sessions.
+1. `TASK-396` Upgrade python-dotenv to 1.2.2 for dependency audit parity.
+2. `TASK-386` Fix task intake id allocation under concurrent writes.
+3. `TASK-387` Fail closed on spec files missing Planning Gates.
+4. `TASK-388` Remove Any erasure from trend-write mutations.
+5. `TASK-389` Align Numeric ORM typing with Decimal semantics.
+6. `TASK-390` Add dirty-main watchdog for agent sessions.
+7. `TASK-391` Close nested-helper docstring policy gap.
+8. `TASK-392` Fix root horadus help and runbook freshness drift.
+9. `TASK-393` Sync API docs with runtime contracts.
+10. `TASK-394` Design worktree isolation for Codex App task sessions.
 
 ## Human Blocker Metadata
+
+
 
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
 - `TASK-385` Reconcile task ledger lifecycle drift ✅
+- `TASK-396` Upgrade python-dotenv to 1.2.2 for dependency audit parity ✅

@@ -140,12 +140,19 @@ def test_main_tasks_list_active_text_omits_non_active_human_blockers(
         lambda: task_repo_module.date(2026, 4, 8),
     )
 
+    result = main(["tasks", "list-active", "--format", "json"])
+
+    assert result == 0
+    payload = json.loads(capsys.readouterr().out)
+    active_task_ids = [item["task_id"] for item in payload["data"]["tasks"]]
+    assert active_task_ids
+
     result = main(["tasks", "list-active"])
 
     assert result == 0
     output = capsys.readouterr().out
     assert "TASK-080" not in output
-    assert "TASK-" in output
+    assert any(task_id in output for task_id in active_task_ids)
     assert "human_blockers=" not in output
     assert "overdue_human_blockers=" not in output
 

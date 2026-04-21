@@ -20,7 +20,6 @@ from src.storage.event_extraction import (
 from src.storage.models import Event
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_DEGRADED_HOLD_FIXTURE = tuple[Event, CanonicalExtractionSnapshot, dict[str, Any], dict[str, Any], datetime]  # fmt: skip
 
 
 def behavior_case_definitions() -> tuple[BehaviorEvalCaseDefinition, ...]:
@@ -290,13 +289,19 @@ def _eval_semantic_cache_basis_changes_invalidate_keys() -> dict[str, Any]:
 
 
 def _weekly_report_prompt() -> tuple[Path, str]:
-    return (
-        (prompt_path := _REPO_ROOT / "ai/prompts/weekly_report.md"),
-        prompt_path.read_text(encoding="utf-8"),
-    )
+    prompt_path = _REPO_ROOT / "ai/prompts/weekly_report.md"
+    return (prompt_path, prompt_path.read_text(encoding="utf-8"))
 
 
-def _degraded_hold_fixture() -> _DEGRADED_HOLD_FIXTURE:
+def _degraded_hold_fixture() -> (
+    tuple[
+        Event,
+        CanonicalExtractionSnapshot,
+        dict[str, Any],
+        dict[str, Any],
+        datetime,
+    ]
+):
     canonical_when = datetime(2026, 1, 5, 9, 30, tzinfo=UTC)
     degraded_when = datetime(2026, 1, 6, 14, 45, tzinfo=UTC)
     canonical_claims = {"trend_impacts": [{"trend_id": "nato-russia", "signal_type": "deploy"}]}

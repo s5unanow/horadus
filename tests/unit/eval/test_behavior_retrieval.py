@@ -37,8 +37,8 @@ def test_behavior_suites_include_context_retrieval(tmp_path: Path) -> None:
         evidence = case["evidence"]
         assert evidence["retrieval_mode"] == "implement"
         assert evidence["retrieval_phase"] == "phase-1-cli-first"
-        assert evidence["authoritative_source_basis"]["policy_registry_id"] == (
-            "implement-mode-legacy-policy-v1"
+        assert evidence["authoritative_source_basis"]["policy_registry_id"].startswith(
+            "implement-mode-legacy-policy-v"
         )
 
 

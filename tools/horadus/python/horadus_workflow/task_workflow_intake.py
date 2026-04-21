@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from tools.horadus.python.horadus_workflow import _task_intake_backlog as backlog_support
+from tools.horadus.python.horadus_workflow import _task_intake_mutations as mutation_support
 from tools.horadus.python.horadus_workflow import _task_intake_promote as promote_support
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
@@ -129,12 +130,6 @@ def _promote_success_result(
 
 
 @dataclass(slots=True)
-class _PreparedGroomUpdate:
-    notes: list[str]
-    updated_entries: list[TaskIntakeEntry]
-
-
-@dataclass(slots=True)
 class _PreparedPromotion:
     backlog_path: Path
     promoted_task_id: str
@@ -169,111 +164,6 @@ def _task_intake_environment_error(
         },
         [failure_prefix, str(exc)],
     )
-
-
-def _build_pending_entry_from_entries(
-    *,
-    entries: list[TaskIntakeEntry],
-    title: str,
-    note: str,
-    refs: list[str],
-    source_task_id: str | None,
-) -> TaskIntakeEntry:
-    return TaskIntakeEntry(
-        intake_id=_next_intake_id(entries),
-        recorded_at=_utc_timestamp(),
-        title=title,
-        note=note,
-        refs=refs,
-        source_task_id=source_task_id,
-        status="pending",
-        groom_notes=[],
-        promoted_task_id=None,
-    )
-
-
-def _build_pending_entry(
-    *,
-    log_path: Path,
-    title: str,
-    note: str,
-    refs: list[str],
-    source_task_id: str | None,
-) -> TaskIntakeEntry:
-    return _build_pending_entry_from_entries(
-        entries=_load_task_intake_entries(log_path),
-        title=title,
-        note=note,
-        refs=refs,
-        source_task_id=source_task_id,
-    )
-
-
-def _persist_pending_entry(
-    *,
-    log_path: Path,
-    title: str,
-    note: str,
-    refs: list[str],
-    source_task_id: str | None,
-) -> TaskIntakeEntry:
-    with _task_intake_mutation_lock(log_path):
-        entries = _load_task_intake_entries(log_path)
-        entry = _build_pending_entry_from_entries(
-            entries=entries,
-            title=title,
-            note=note,
-            refs=refs,
-            source_task_id=source_task_id,
-        )
-        _write_task_intake_entries(log_path, [*entries, entry])
-    return entry
-
-
-def _prepare_groom_update(
-    *,
-    entries: list[TaskIntakeEntry],
-    normalized_ids: list[str],
-    action: str,
-    notes: list[str],
-) -> _PreparedGroomUpdate | tuple[int, dict[str, object], list[str]]:
-    missing_ids = [item for item in normalized_ids if _find_entry(entries, item) is None]
-    if missing_ids:
-        return (
-            ExitCode.NOT_FOUND,
-            {"missing_intake_ids": missing_ids},
-            ["Task intake grooming failed.", f"Unknown intake ids: {', '.join(missing_ids)}"],
-        )
-
-    updated_entries: list[TaskIntakeEntry] = []
-    for entry in entries:
-        if entry.intake_id not in normalized_ids:
-            updated_entries.append(entry)
-            continue
-        if entry.status == "promoted":
-            return (
-                ExitCode.VALIDATION_ERROR,
-                {"intake_id": entry.intake_id, "status": entry.status},
-                [
-                    "Task intake grooming failed.",
-                    f"{entry.intake_id} is already promoted and cannot be {action}ed.",
-                ],
-            )
-        updated_entries.append(
-            TaskIntakeEntry(
-                intake_id=entry.intake_id,
-                recorded_at=entry.recorded_at,
-                title=entry.title,
-                note=entry.note,
-                refs=list(entry.refs),
-                source_task_id=entry.source_task_id,
-                status="dismissed" if action == "dismiss" else "pending",
-                groom_notes=[*entry.groom_notes, *notes],
-                promoted_task_id=entry.promoted_task_id,
-            )
-        )
-
-    return _PreparedGroomUpdate(notes=notes, updated_entries=updated_entries)
 
 
 def _prepare_promotion(
@@ -375,20 +265,23 @@ def task_intake_add_data(
 
     try:
         entry = (
-            _build_pending_entry(
+            mutation_support.build_pending_entry(
                 log_path=log_path,
                 title=title_text,
                 note=note_text,
                 refs=normalized_refs,
                 source_task_id=source_task_id,
+                recorded_at=_utc_timestamp(),
             )
             if dry_run
-            else _persist_pending_entry(
+            else mutation_support.persist_pending_entry(
                 log_path=log_path,
                 title=title_text,
                 note=note_text,
                 refs=normalized_refs,
                 source_task_id=source_task_id,
+                recorded_at=_utc_timestamp(),
+                mutation_lock=_task_intake_mutation_lock,
             )
         )
     except ValueError as exc:
@@ -512,7 +405,7 @@ def task_intake_groom_data(
     try:
         notes = _normalize_text_list(append_notes)
         if dry_run:
-            prepared = _prepare_groom_update(
+            prepared = mutation_support.prepare_groom_update(
                 entries=_load_task_intake_entries(log_path),
                 normalized_ids=normalized_ids,
                 action=action,
@@ -520,7 +413,7 @@ def task_intake_groom_data(
             )
         else:
             with _task_intake_mutation_lock(log_path):
-                prepared = _prepare_groom_update(
+                prepared = mutation_support.prepare_groom_update(
                     entries=_load_task_intake_entries(log_path),
                     normalized_ids=normalized_ids,
                     action=action,

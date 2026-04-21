@@ -171,6 +171,10 @@ def _run_context_pack(
     task_id: str,
     include_archive: bool = False,
 ) -> dict[str, Any]:
+    # Keep this path on the in-process CLI entry point so behavior evals stay
+    # deterministic and fast while still exercising the real context-pack
+    # contract. The argument names and repo_root patching intentionally mirror
+    # `handle_context_pack` / `task_repo.repo_root` today.
     cli_task_repo_module = importlib.import_module("tools.horadus.python.horadus_cli.task_repo")
     task_commands_module = importlib.import_module(
         "tools.horadus.python.horadus_cli.task_workflow_core"

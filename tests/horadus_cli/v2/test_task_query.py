@@ -123,6 +123,10 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
     payload = json.loads(capsys.readouterr().out)
     assert [item["task_id"] for item in payload["data"]["human_blockers"]] == ["TASK-189"]
     assert [item["task_id"] for item in payload["data"]["overdue_human_blockers"]] == ["TASK-189"]
+    assert main(["tasks", "list-active"]) == 0
+    output = capsys.readouterr().out
+    assert "TASK-189" in output
+    assert "TASK-999" not in output
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(

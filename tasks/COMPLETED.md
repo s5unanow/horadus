@@ -394,3 +394,5 @@
 - TASK-365: Add Retrieval Behavior Evals for RFC-001 Context Surfaces ✅
 - TASK-383: Switch Agent Workflow Surfaces to Implement Context-Pack Mode ✅
 - TASK-384: Define worktree cleanup ownership and lifecycle ✅
+## Sprint 10
+- TASK-395: Close Sprint 9 and seed Sprint 10 from vetted intake ✅

@@ -192,23 +192,6 @@ Horadus task lifecycle.
 
 ---
 
-### TASK-396: Upgrade python-dotenv to 1.2.2 for dependency audit parity
-**Priority**: P1
-**Estimate**: 0.5-1h
-
-TASK-386 local-gate blocks at dependency-audit because origin/main and this
-branch both lock python-dotenv 1.2.1, while the audit now requires 1.2.2 for
-CVE-2026-28684 remediation. Handle as a separate dependency update task/branch
-so TASK-386 stays scope-pure.
-
-**Files**: `pyproject.toml`, `uv.lock`
-
-**Acceptance Criteria**:
-- [ ] Dependency audit passes without a python-dotenv vulnerability finding.
-- [ ] Lockfile and dependency metadata resolve python-dotenv to 1.2.2 or newer without introducing new audit failures.
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

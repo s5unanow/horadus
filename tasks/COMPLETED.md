@@ -393,3 +393,4 @@
 ## Sprint 10
 - TASK-395: Close Sprint 9 and seed Sprint 10 from vetted intake ✅
 - TASK-385: Reconcile task ledger lifecycle drift ✅
+- TASK-396: Upgrade python-dotenv to 1.2.2 for dependency audit parity ✅

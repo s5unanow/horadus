@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-import json
-import os
-import subprocess  # nosec B404
+import importlib
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 from typing import Any, cast
 
 from src.eval.behavior_types import BehaviorEvalCaseDefinition
@@ -16,7 +17,6 @@ _ARCHIVED_TASK_ID = "TASK-952"
 _ARCHIVE_PATH = "archive/closed_tasks/2026-Q2.md"
 _RETRIEVAL_MODE = "implement"
 _RETRIEVAL_PHASE = "phase-1-cli-first"
-_WORKSPACE_ROOT = Path(__file__).resolve().parents[2]
 
 
 def retrieval_behavior_case_definitions() -> tuple[BehaviorEvalCaseDefinition, ...]:
@@ -44,8 +44,13 @@ def _eval_live_vs_archived_context_sources() -> dict[str, Any]:
     live_excluded_sources = _excluded_sources(live_payload)
     archived_excluded_sources = _excluded_sources(archived_payload)
     archived_commands = cast("list[str]", archived_payload["workflow"]["commands"])
+    expected_live_excluded_sources = _expected_excluded_sources(include_archive=False)
+    expected_archived_excluded_sources = _expected_excluded_sources(include_archive=True)
 
-    _require("archive/" in live_excluded_sources, "Live implement mode did not exclude archive/")
+    _require(
+        live_excluded_sources == expected_live_excluded_sources,
+        "Live implement mode excluded an unexpected source set",
+    )
     _require(
         all(not path.startswith("archive/") for path in live_included_paths),
         "Live implement mode included archived task history by default",
@@ -55,14 +60,14 @@ def _eval_live_vs_archived_context_sources() -> dict[str, Any]:
         "Archived implement mode did not use the requested archive task body as its primary source",
     )
     _require(
-        "archive/closed_tasks/* except requested task" in archived_excluded_sources,
+        archived_excluded_sources == expected_archived_excluded_sources,
         "Archived implement mode did not scope archive access to the requested task",
     )
     _require(
         any(
-            command.endswith(
-                f"{_ARCHIVED_TASK_ID} --include-archive --mode implement --format json"
-            )
+            command.startswith(f"uv run --no-sync horadus tasks context-pack {_ARCHIVED_TASK_ID}")
+            and "--include-archive" in command
+            and "--mode implement --format json" in command
             for command in archived_commands
         ),
         "Archived implement mode did not propagate the archive-scoped workflow command",
@@ -98,6 +103,7 @@ def _eval_minimal_context_basis() -> dict[str, Any]:
         "list[str]",
         payload["retrieval_sources"]["task_spec_resolution"]["selected_paths"],
     )
+    expected_excluded_sources = _expected_excluded_sources(include_archive=False)
 
     _require(
         included_paths == expected_paths,
@@ -111,10 +117,9 @@ def _eval_minimal_context_basis() -> dict[str, Any]:
         payload["planning_gates"]["authoritative_artifact_path"] == "tasks/exec_plans/TASK-951.md",
         "Implement mode did not surface the authoritative exec plan",
     )
-    _require("README.md" in excluded_sources, "Implement mode did not exclude README.md")
     _require(
-        "policy-document front matter" in excluded_sources,
-        "Implement mode did not record the legacy policy-registry basis",
+        excluded_sources == expected_excluded_sources,
+        "Implement mode excluded an unexpected source set",
     )
 
     return {
@@ -166,37 +171,74 @@ def _run_context_pack(
     task_id: str,
     include_archive: bool = False,
 ) -> dict[str, Any]:
-    args = [
-        "uv",
-        "run",
-        "--no-sync",
-        "horadus",
-        "tasks",
-        "context-pack",
-        task_id,
-        "--mode",
-        _RETRIEVAL_MODE,
-        "--format",
-        "json",
-    ]
-    if include_archive:
-        args.append("--include-archive")
-    completed = subprocess.run(  # nosec B603
-        args,
-        cwd=str(_WORKSPACE_ROOT),
-        env={**os.environ, "HORADUS_REPO_ROOT": str(repo_root)},
-        capture_output=True,
-        text=True,
-        check=False,
+    cli_task_repo_module = importlib.import_module("tools.horadus.python.horadus_cli.task_repo")
+    task_commands_module = importlib.import_module(
+        "tools.horadus.python.horadus_cli.task_workflow_core"
     )
+    workflow_task_repo_module = importlib.import_module(
+        "tools.horadus.python.horadus_workflow.task_repo"
+    )
+    with _patched_repo_root(
+        repo_root=repo_root,
+        cli_task_repo_module=cli_task_repo_module,
+        task_commands_module=task_commands_module,
+        workflow_task_repo_module=workflow_task_repo_module,
+    ):
+        result = task_commands_module.handle_context_pack(
+            SimpleNamespace(
+                task_id=task_id,
+                mode=_RETRIEVAL_MODE,
+                output_format="json",
+                include_archive=include_archive,
+            )
+        )
     _require(
-        completed.returncode == 0,
-        f"context-pack failed for {task_id}: {completed.stderr.strip() or completed.stdout.strip()}",
+        result.exit_code == task_commands_module.ExitCode.OK,
+        f"context-pack failed for {task_id}: {result.error_lines}",
     )
-    payload = json.loads(completed.stdout)
-    data = payload.get("data")
+    data = result.data
     _require(isinstance(data, dict), f"context-pack returned no payload for {task_id}")
     return cast("dict[str, Any]", data)
+
+
+def _expected_excluded_sources(*, include_archive: bool) -> set[str]:
+    spec_module = importlib.import_module(
+        "tools.horadus.python.horadus_workflow.task_workflow_context_pack_spec"
+    )
+    return {
+        str(source["source"])
+        for source in spec_module.implement_mode_excluded_sources(include_archive)
+    }
+
+
+@contextmanager
+def _patched_repo_root(
+    *,
+    repo_root: Path,
+    cli_task_repo_module: Any,
+    task_commands_module: Any,
+    workflow_task_repo_module: Any,
+) -> Iterator[None]:
+    original_cli_repo_root = cli_task_repo_module.repo_root
+    original_workflow_repo_root = workflow_task_repo_module.repo_root
+    try:
+        original_task_commands_repo_root = task_commands_module.repo_root
+    except AttributeError:
+        original_task_commands_repo_root = None
+
+    def repo_root_factory() -> Path:
+        return repo_root
+
+    cli_task_repo_module.repo_root = repo_root_factory
+    task_commands_module.repo_root = repo_root_factory
+    workflow_task_repo_module.repo_root = repo_root_factory
+    try:
+        yield
+    finally:
+        cli_task_repo_module.repo_root = original_cli_repo_root
+        if original_task_commands_repo_root is not None:
+            task_commands_module.repo_root = original_task_commands_repo_root
+        workflow_task_repo_module.repo_root = original_workflow_repo_root
 
 
 def _seed_retrieval_repo(repo_root: Path) -> Path:
@@ -211,6 +253,15 @@ def _seed_retrieval_repo(repo_root: Path) -> Path:
     for path in (specs_dir, exec_plans_dir, archived_dir, docs_dir, tests_dir, rfc_dir):
         path.mkdir(parents=True, exist_ok=True)
 
+    _seed_retrieval_task_ledgers(tasks_dir)
+    _seed_retrieval_support_files(repo_root=repo_root, docs_dir=docs_dir, rfc_dir=rfc_dir)
+    _seed_retrieval_spec_and_plan_files(specs_dir=specs_dir, exec_plans_dir=exec_plans_dir)
+    _seed_retrieval_archive_fixture(archived_dir=archived_dir)
+    _write(tests_dir / "test_cli.py", ["def test_fixture() -> None:", "    pass"])
+    return repo_root
+
+
+def _seed_retrieval_task_ledgers(tasks_dir: Path) -> None:
     _write(
         tasks_dir / "BACKLOG.md",
         [
@@ -258,6 +309,9 @@ def _seed_retrieval_repo(repo_root: Path) -> Path:
         tasks_dir / "COMPLETED.md",
         ["# Completed Tasks", "", "- TASK-952: Retrieval archived fixture ✅"],
     )
+
+
+def _seed_retrieval_support_files(*, repo_root: Path, docs_dir: Path, rfc_dir: Path) -> None:
     _write(repo_root / "README.md", ["# README", "", "Pointer surface only."])
     _write(repo_root / "AGENTS.md", ["# AGENTS", "", "Canonical workflow policy fixture."])
     _write(docs_dir / "AGENT_RUNBOOK.md", ["# Agent Runbook", "", "Operator runbook fixture."])
@@ -267,6 +321,9 @@ def _seed_retrieval_repo(repo_root: Path) -> Path:
         rfc_dir / "001-agent-context-retrieval.md",
         ["# RFC-001", "", "Phase 1 CLI-first retrieval contract fixture."],
     )
+
+
+def _seed_retrieval_spec_and_plan_files(*, specs_dir: Path, exec_plans_dir: Path) -> None:
     _write(
         specs_dir / "TEMPLATE.md",
         [
@@ -350,6 +407,9 @@ def _seed_retrieval_repo(repo_root: Path) -> Path:
             "- Waivers: none.",
         ],
     )
+
+
+def _seed_retrieval_archive_fixture(*, archived_dir: Path) -> None:
     _write(
         archived_dir / "2026-Q2.md",
         [
@@ -375,8 +435,6 @@ def _seed_retrieval_repo(repo_root: Path) -> Path:
             "",
         ],
     )
-    _write(tests_dir / "test_cli.py", ["def test_fixture() -> None:", "    pass"])
-    return repo_root
 
 
 def _write(path: Path, lines: list[str]) -> None:

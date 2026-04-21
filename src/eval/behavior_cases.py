@@ -9,7 +9,6 @@ from typing import Any, cast
 from uuid import uuid4
 
 from src.core.report_runtime import build_fallback_narrative_result
-from src.eval.behavior_cases_retrieval import retrieval_behavior_case_definitions
 from src.eval.behavior_types import BehaviorEvalCaseDefinition
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.trend_impact_mapping import map_event_trend_impacts
@@ -21,6 +20,13 @@ from src.storage.event_extraction import (
 from src.storage.models import Event
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_DEGRADED_HOLD_FIXTURE = tuple[
+    Event,
+    CanonicalExtractionSnapshot,
+    dict[str, Any],
+    dict[str, Any],
+    datetime,
+]
 
 
 def behavior_case_definitions() -> tuple[BehaviorEvalCaseDefinition, ...]:
@@ -294,15 +300,7 @@ def _weekly_report_prompt() -> tuple[Path, str]:
     return (prompt_path, prompt_path.read_text(encoding="utf-8"))
 
 
-def _degraded_hold_fixture() -> (
-    tuple[
-        Event,
-        CanonicalExtractionSnapshot,
-        dict[str, Any],
-        dict[str, Any],
-        datetime,
-    ]
-):
+def _degraded_hold_fixture() -> _DEGRADED_HOLD_FIXTURE:
     canonical_when = datetime(2026, 1, 5, 9, 30, tzinfo=UTC)
     degraded_when = datetime(2026, 1, 6, 14, 45, tzinfo=UTC)
     canonical_claims = {"trend_impacts": [{"trend_id": "nato-russia", "signal_type": "deploy"}]}
@@ -556,5 +554,4 @@ _BEHAVIOR_CASE_DEFINITIONS = (
         surface_paths=("src/processing/semantic_cache.py",),
         runner=_eval_semantic_cache_basis_changes_invalidate_keys,
     ),
-    *retrieval_behavior_case_definitions(),
 )

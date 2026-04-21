@@ -12,14 +12,33 @@ from tests.horadus_cli.v2.helpers import _seed_close_ledgers_repo
 pytestmark = pytest.mark.unit
 
 
-def test_parse_human_blockers_derives_urgency(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_parse_human_blockers_derives_urgency(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sprint_path = tmp_path / "CURRENT_SPRINT.md"
+    sprint_path.write_text(
+        "\n".join(
+            [
+                "# Current Sprint",
+                "",
+                "## Active Tasks",
+                "- `TASK-080` Telegram Collector Task Wiring [REQUIRES_HUMAN]",
+                "",
+                "## Human Blocker Metadata",
+                "- TASK-080 | owner=human-operator | last_touched=2026-03-03 | next_action=2026-03-05 | escalate_after_days=7",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     monkeypatch.setattr(
         task_repo_module,
         "current_date",
         lambda: task_repo_module.date(2026, 3, 6),
     )
 
-    blockers = task_repo_module.parse_human_blockers()
+    blockers = task_repo_module.parse_human_blockers(sprint_path)
 
     assert blockers
     blocker = next(item for item in blockers if item.task_id == "TASK-080")

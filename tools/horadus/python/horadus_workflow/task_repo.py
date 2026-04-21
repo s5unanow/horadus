@@ -4,7 +4,7 @@ import os
 import re
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from tools.horadus.python.horadus_workflow.task_spec_resolution import resolve_task_spec_paths
 
@@ -12,7 +12,7 @@ TASK_ID_PATTERN = re.compile(r"^TASK-(\d{3})$")
 SPEC_TASK_ID_PATTERN = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
 EXEC_PLAN_TASK_ID_PATTERN = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
 TASK_HEADER_PATTERN = re.compile(
-    r"^### (?P<task_id>TASK-\d{3}): (?P<title>.+?)\n(?P<body>.*?)(?=^---\n|\Z)",
+    r"^### (?P<task_id>TASK-\d{3}): (?P<title>.+?)\n(?P<body>.*?)(?=^(?:### TASK-\d{3}: |---$)|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 TASK_REF_PATTERN = re.compile(r"TASK-\d{3}")
@@ -123,7 +123,7 @@ def clear_repo_root_override() -> None:
 
 
 def _looks_like_repo_root(path: Path) -> bool:
-    return (path / "pyproject.toml").exists() and (path / "tasks").exists()
+    return all(((path / "pyproject.toml").exists(), (path / "tasks").exists()))
 
 
 def _discover_repo_root() -> Path:
@@ -185,9 +185,7 @@ def closed_tasks_archive_paths() -> list[Path]:
 
 
 def archived_task_paths() -> list[Path]:
-    snapshot_paths = archive_backlog_paths()
-    closed_task_paths = closed_tasks_archive_paths()
-    return [*closed_task_paths, *snapshot_paths]
+    return [*closed_tasks_archive_paths(), *archive_backlog_paths()]
 
 
 def archive_backlog_paths() -> list[Path]:
@@ -568,8 +566,7 @@ def archived_task_records() -> dict[str, TaskRecord]:
 
 
 def archived_task_record(task_id: str) -> TaskRecord | None:
-    normalized = normalize_task_id(task_id)
-    return archived_task_records().get(normalized)
+    return archived_task_records().get(normalize_task_id(task_id))
 
 
 def closed_task_archive_record(task_id: str) -> TaskRecord | None:
@@ -609,7 +606,10 @@ def _enrich_task_record(record: TaskRecord) -> TaskRecord:
         spec_paths=spec_resolution.paths_for_context(),
         spec_resolution=spec_resolution.to_payload(),
     )
-    if is_task_completed(enriched.task_id):
+    if PurePosixPath(record.source_path.replace("\\", "/")).parts[:2] == (
+        "archive",
+        "closed_tasks",
+    ) or is_task_completed(enriched.task_id):
         enriched.status = "completed"
     elif enriched.sprint_lines:
         enriched.status = "active"

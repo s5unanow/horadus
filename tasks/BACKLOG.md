@@ -40,22 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-385: Reconcile task ledger lifecycle drift
-**Priority**: P1
-**Estimate**: 4-6h
-
-TASK-080 behaves as both archived and active across repo surfaces, completed
-index contains duplicates, and AGENTS.md describes conflicting completion flows
-
-**Files**: `tasks/CURRENT_SPRINT.md`, `tasks/COMPLETED.md`, `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `tools/horadus/python/horadus_workflow/task_repo.py`, `tools/horadus/python/horadus_workflow/task_workflow_query.py`
-
-**Acceptance Criteria**:
-- [ ] Resolve TASK-080 and any similar task-id status drift so live, completed, and archived ledger/query surfaces agree on canonical task state.
-- [ ] Remove duplicated completed-task entries and add regression coverage for the reconciled lifecycle/query behavior.
-- [ ] Align AGENTS/runbook lifecycle wording with the corrected ledger truth where the task changes operator-facing behavior.
-
----
-
 ### TASK-386: Fix task intake id allocation under concurrent writes
 **Priority**: P1
 **Estimate**: 1-2h

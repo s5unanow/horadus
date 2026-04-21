@@ -110,12 +110,6 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
         "current_date",
         lambda: task_repo_module.date(2026, 3, 6),
     )
-    monkeypatch.setattr(task_repo_module, "current_sprint_path", lambda: sprint_path)
-    monkeypatch.setattr(
-        task_repo_module,
-        "current_date",
-        lambda: task_repo_module.date(2026, 3, 6),
-    )
 
     result = main(["tasks", "list-active", "--format", "json"])
 

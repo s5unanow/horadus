@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,17 @@ from tools.horadus.python.horadus_workflow import task_repo as workflow_task_rep
 from tools.horadus.python.horadus_workflow import task_workflow_intake as intake_workflow_module
 
 pytestmark = pytest.mark.unit
+
+
+class _FailingLock:
+    def __init__(self, message: str) -> None:
+        self._message = message
+
+    def __enter__(self) -> None:
+        raise intake_workflow_module.TaskIntakeMutationLockError(self._message)
+
+    def __exit__(self, *_args: object) -> bool:
+        return False
 
 
 def _seed_intake_repo(repo_root: Path) -> Path:
@@ -132,17 +144,99 @@ def test_task_intake_groom_data_dry_run_returns_not_found_without_writing(
     assert lines[-1] == "Unknown intake ids: INTAKE-0001"
 
 
+def test_task_intake_add_data_serializes_concurrent_writers(
+    synthetic_intake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = synthetic_intake_repo
+    monkeypatch.setattr(task_commands_module, "_detect_current_task_id", lambda: "TASK-370")
+
+    original_load = intake_workflow_module._load_task_intake_entries
+
+    def slow_load(path: Path) -> list[intake_workflow_module.TaskIntakeEntry]:
+        entries = original_load(path)
+        time.sleep(0.05)
+        return entries
+
+    monkeypatch.setattr(intake_workflow_module, "_load_task_intake_entries", slow_load)
+
+    start = threading.Event()
+    results: list[tuple[int, dict[str, object], list[str]]] = []
+
+    def worker(index: int) -> None:
+        assert start.wait(timeout=2)
+        results.append(
+            task_commands_module.task_intake_add_data(
+                title=f"Concurrent capture {index}",
+                note=f"Need to persist concurrent write {index}.",
+                refs=None,
+                source_task=None,
+                dry_run=False,
+            )
+        )
+
+    threads = [threading.Thread(target=worker, args=(index,)) for index in range(1, 5)]
+    for thread in threads:
+        thread.start()
+    start.set()
+    for thread in threads:
+        thread.join(timeout=2)
+
+    assert all(not thread.is_alive() for thread in threads)
+    assert len(results) == 4
+    assert all(result[0] == task_commands_module.ExitCode.OK for result in results)
+
+    log_path = synthetic_intake_repo / "artifacts" / "agent" / "task-intake" / "entries.jsonl"
+    entries = task_commands_module._load_task_intake_entries(log_path)
+    assert [entry.intake_id for entry in entries] == [
+        "INTAKE-0001",
+        "INTAKE-0002",
+        "INTAKE-0003",
+        "INTAKE-0004",
+    ]
+    assert sorted(entry.title for entry in entries) == [
+        "Concurrent capture 1",
+        "Concurrent capture 2",
+        "Concurrent capture 3",
+        "Concurrent capture 4",
+    ]
+
+
+def test_task_intake_add_data_fails_clearly_when_locking_is_unavailable(
+    synthetic_intake_repo: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _ = synthetic_intake_repo
+    monkeypatch.setattr(
+        intake_workflow_module,
+        "_task_intake_mutation_lock",
+        lambda _log_path: _FailingLock("Unable to safely serialize task intake mutations in test."),
+    )
+
+    exit_code, data, lines = task_commands_module.task_intake_add_data(
+        title="Lock failure",
+        note="Surface lock failures clearly.",
+        refs=None,
+        source_task="TASK-370",
+        dry_run=False,
+    )
+
+    assert exit_code == task_commands_module.ExitCode.ENVIRONMENT_ERROR
+    assert data["log_path"] == "artifacts/agent/task-intake/entries.jsonl"
+    assert data["error"] == "Unable to safely serialize task intake mutations in test."
+    assert lines == [
+        "Task intake failed.",
+        "Unable to safely serialize task intake mutations in test.",
+    ]
+
+
 def test_task_intake_groom_data_reports_lock_failures(
     synthetic_intake_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = synthetic_intake_repo
-
-    @contextmanager
-    def fail_lock(_log_path: Path) -> object:
-        raise intake_workflow_module.TaskIntakeMutationLockError("groom lock failed")
-        yield
-
-    monkeypatch.setattr(intake_workflow_module, "_task_intake_mutation_lock", fail_lock)
+    monkeypatch.setattr(
+        intake_workflow_module,
+        "_task_intake_mutation_lock",
+        lambda _log_path: _FailingLock("groom lock failed"),
+    )
 
     exit_code, data, lines = task_commands_module.task_intake_groom_data(
         intake_ids=["INTAKE-0001"],
@@ -181,13 +275,11 @@ def test_task_intake_promote_data_reports_lock_failures(
     synthetic_intake_repo: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _ = synthetic_intake_repo
-
-    @contextmanager
-    def fail_lock(_log_path: Path) -> object:
-        raise intake_workflow_module.TaskIntakeMutationLockError("promote lock failed")
-        yield
-
-    monkeypatch.setattr(intake_workflow_module, "_task_intake_mutation_lock", fail_lock)
+    monkeypatch.setattr(
+        intake_workflow_module,
+        "_task_intake_mutation_lock",
+        lambda _log_path: _FailingLock("promote lock failed"),
+    )
 
     exit_code, data, lines = task_commands_module.task_intake_promote_data(
         intake_id="INTAKE-0001",

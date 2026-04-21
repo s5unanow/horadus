@@ -143,6 +143,20 @@ class _PreparedPromotion:
     updated_entries: list[TaskIntakeEntry]
 
 
+def _task_intake_validation_error(
+    *, failure_prefix: str, log_path: Path, dry_run: bool, exc: ValueError
+) -> tuple[int, dict[str, object], list[str]]:
+    return (
+        ExitCode.VALIDATION_ERROR,
+        {
+            "dry_run": dry_run,
+            "error": str(exc),
+            "log_path": _relative_display_path(log_path),
+        },
+        [failure_prefix, str(exc)],
+    )
+
+
 def _task_intake_environment_error(
     *, failure_prefix: str, log_path: Path, dry_run: bool, exc: TaskIntakeMutationLockError
 ) -> tuple[int, dict[str, object], list[str]]:
@@ -155,6 +169,65 @@ def _task_intake_environment_error(
         },
         [failure_prefix, str(exc)],
     )
+
+
+def _build_pending_entry_from_entries(
+    *,
+    entries: list[TaskIntakeEntry],
+    title: str,
+    note: str,
+    refs: list[str],
+    source_task_id: str | None,
+) -> TaskIntakeEntry:
+    return TaskIntakeEntry(
+        intake_id=_next_intake_id(entries),
+        recorded_at=_utc_timestamp(),
+        title=title,
+        note=note,
+        refs=refs,
+        source_task_id=source_task_id,
+        status="pending",
+        groom_notes=[],
+        promoted_task_id=None,
+    )
+
+
+def _build_pending_entry(
+    *,
+    log_path: Path,
+    title: str,
+    note: str,
+    refs: list[str],
+    source_task_id: str | None,
+) -> TaskIntakeEntry:
+    return _build_pending_entry_from_entries(
+        entries=_load_task_intake_entries(log_path),
+        title=title,
+        note=note,
+        refs=refs,
+        source_task_id=source_task_id,
+    )
+
+
+def _persist_pending_entry(
+    *,
+    log_path: Path,
+    title: str,
+    note: str,
+    refs: list[str],
+    source_task_id: str | None,
+) -> TaskIntakeEntry:
+    with _task_intake_mutation_lock(log_path):
+        entries = _load_task_intake_entries(log_path)
+        entry = _build_pending_entry_from_entries(
+            entries=entries,
+            title=title,
+            note=note,
+            refs=refs,
+            source_task_id=source_task_id,
+        )
+        _write_task_intake_entries(log_path, [*entries, entry])
+    return entry
 
 
 def _prepare_groom_update(
@@ -266,73 +339,71 @@ def task_intake_add_data(
     source_task: str | None,
     dry_run: bool,
 ) -> tuple[int, dict[str, object], list[str]]:
+    failure_prefix = "Task intake failed."
     title_text = title.strip()
     note_text = note.strip()
     if not title_text:
         return (
             ExitCode.VALIDATION_ERROR,
             {},
-            ["Task intake failed.", "--title must not be empty."],
+            [failure_prefix, "--title must not be empty."],
         )
     if "\n" in title_text or "\r" in title_text:
         return (
             ExitCode.VALIDATION_ERROR,
             {},
-            ["Task intake failed.", "--title must be a single line."],
+            [failure_prefix, "--title must be a single line."],
         )
     if not note_text:
-        return (ExitCode.VALIDATION_ERROR, {}, ["Task intake failed.", "--note must not be empty."])
+        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, "--note must not be empty."])
 
+    log_path = _task_intake_log_path()
     try:
+        normalized_refs = _normalize_text_list(refs)
         source_task_id = (
             _normalize_optional_task_id(source_task)
             if source_task is not None
             else _detect_current_task_id()
         )
     except ValueError as exc:
-        return (ExitCode.VALIDATION_ERROR, {}, ["Task intake failed.", str(exc)])
+        return _task_intake_validation_error(
+            failure_prefix=failure_prefix,
+            log_path=log_path,
+            dry_run=dry_run,
+            exc=exc,
+        )
 
-    log_path = _task_intake_log_path()
     try:
-        if dry_run:
-            entries = _load_task_intake_entries(log_path)
-            entry = TaskIntakeEntry(
-                intake_id=_next_intake_id(entries),
-                recorded_at=_utc_timestamp(),
+        entry = (
+            _build_pending_entry(
+                log_path=log_path,
                 title=title_text,
                 note=note_text,
-                refs=_normalize_text_list(refs),
+                refs=normalized_refs,
                 source_task_id=source_task_id,
-                status="pending",
-                groom_notes=[],
-                promoted_task_id=None,
             )
-        else:
-            with _task_intake_mutation_lock(log_path):
-                entries = _load_task_intake_entries(log_path)
-                entry = TaskIntakeEntry(
-                    intake_id=_next_intake_id(entries),
-                    recorded_at=_utc_timestamp(),
-                    title=title_text,
-                    note=note_text,
-                    refs=_normalize_text_list(refs),
-                    source_task_id=source_task_id,
-                    status="pending",
-                    groom_notes=[],
-                    promoted_task_id=None,
-                )
-                _write_task_intake_entries(log_path, [*entries, entry])
+            if dry_run
+            else _persist_pending_entry(
+                log_path=log_path,
+                title=title_text,
+                note=note_text,
+                refs=normalized_refs,
+                source_task_id=source_task_id,
+            )
+        )
     except ValueError as exc:
-        return (ExitCode.VALIDATION_ERROR, {}, ["Task intake failed.", str(exc)])
+        return _task_intake_validation_error(
+            failure_prefix=failure_prefix,
+            log_path=log_path,
+            dry_run=dry_run,
+            exc=exc,
+        )
     except TaskIntakeMutationLockError as exc:
-        return (
-            ExitCode.ENVIRONMENT_ERROR,
-            {
-                "dry_run": dry_run,
-                "error": str(exc),
-                "log_path": _relative_display_path(log_path),
-            },
-            ["Task intake failed.", str(exc)],
+        return _task_intake_environment_error(
+            failure_prefix=failure_prefix,
+            log_path=log_path,
+            dry_run=dry_run,
+            exc=exc,
         )
 
     lines = [

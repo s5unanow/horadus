@@ -20,8 +20,7 @@ from src.storage.event_extraction import (
 from src.storage.models import Event
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_JSON_DICT = dict[str, Any]
-_DEGRADED_HOLD_FIXTURE = tuple[Event, CanonicalExtractionSnapshot, _JSON_DICT, _JSON_DICT, datetime]
+_DEGRADED_HOLD_FIXTURE = tuple[Event, CanonicalExtractionSnapshot, dict[str, Any], dict[str, Any], datetime]  # fmt: skip
 
 
 def behavior_case_definitions() -> tuple[BehaviorEvalCaseDefinition, ...]:

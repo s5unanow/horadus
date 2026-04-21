@@ -185,9 +185,7 @@ def closed_tasks_archive_paths() -> list[Path]:
 
 
 def archived_task_paths() -> list[Path]:
-    snapshot_paths = archive_backlog_paths()
-    closed_task_paths = closed_tasks_archive_paths()
-    return [*closed_task_paths, *snapshot_paths]
+    return [*closed_tasks_archive_paths(), *archive_backlog_paths()]
 
 
 def archive_backlog_paths() -> list[Path]:
@@ -609,8 +607,8 @@ def _enrich_task_record(record: TaskRecord) -> TaskRecord:
         spec_paths=spec_resolution.paths_for_context(),
         spec_resolution=spec_resolution.to_payload(),
     )
-    if enriched.source_path.startswith("archive/closed_tasks/") or is_task_completed(
-        enriched.task_id
+    if any(
+        (record.source_path[:21] == "archive/closed_tasks/", is_task_completed(enriched.task_id))
     ):
         enriched.status = "completed"
     elif enriched.sprint_lines:

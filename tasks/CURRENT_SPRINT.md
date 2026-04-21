@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-385` Reconcile task ledger lifecycle drift
 - `TASK-386` Fix task intake id allocation under concurrent writes
 - `TASK-387` Fail closed on spec files missing Planning Gates
 - `TASK-388` Remove Any erasure from trend-write mutations
@@ -46,6 +45,9 @@
 
 
 
+
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
+- `TASK-385` Reconcile task ledger lifecycle drift ✅

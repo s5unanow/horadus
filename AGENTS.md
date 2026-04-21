@@ -87,7 +87,7 @@ Execution context policy (keep it small):
 - Before changing review, comment, or reaction handling in merge policy logic, define the current-head and current-window semantics for each signal and regression-test both the intended pass path and at least one stale or non-applicable signal path.
 
 After completing work:
-- Update `tasks/CURRENT_SPRINT.md` (mark DONE) and move finished tasks to `tasks/COMPLETED.md`.
+- Record the task-close state in-branch before merge: remove the task from live `tasks/BACKLOG.md` and `tasks/CURRENT_SPRINT.md`, add the compact completion entry to `tasks/COMPLETED.md`, and preserve the full task body in `archive/closed_tasks/YYYY-QN.md` (normally via `uv run --no-sync horadus tasks close-ledgers TASK-XXX`).
 - Keep `PROJECT_STATUS.md` as a non-authoritative stub that points to the active ledgers and archive; do not rebuild it into a live status ledger.
 - Preserve full closed-task bodies in `archive/closed_tasks/YYYY-QN.md`; keep that archive opt-in only and out of normal implementation context.
 - Add/adjust ADRs under `docs/adr/` for major decisions.

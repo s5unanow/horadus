@@ -239,10 +239,6 @@
 - TASK-223: Add status filters and compact output to `horadus tasks search` ✅
 - TASK-224: Surface human-blocker urgency in task and triage outputs ✅
 - TASK-240: Keep `docs-freshness` from dropping dev dependencies ✅
-- TASK-242: Unblock Gold-Set Benchmark and Capture Quality Blockers ✅
-- TASK-243: Stabilize Tier-1 Routing Quality Under Eval and Runtime Load ✅
-- TASK-244: Persist Per-Item Benchmark Failure Diagnostics ✅
-- TASK-245: Add Explicit Tier-1 Scoring Rubric and Calibration Examples ✅
 - TASK-275: Enforce Finish-Command Review-Gate Timeouts Without Agent Bypass ✅
 - TASK-276: Allow Finish Merge After Silent Review Timeout ✅
 - TASK-277: Make Agent Workflow Completeness and Verification Explicit ✅
@@ -396,3 +392,4 @@
 - TASK-384: Define worktree cleanup ownership and lifecycle ✅
 ## Sprint 10
 - TASK-395: Close Sprint 9 and seed Sprint 10 from vetted intake ✅
+- TASK-385: Reconcile task ledger lifecycle drift ✅

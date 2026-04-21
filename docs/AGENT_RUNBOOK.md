@@ -118,8 +118,8 @@ explicitly needs archived history.
 
 4. `uv run --no-sync horadus tasks close-ledgers TASK-XXX`
 When: move a completed task out of the live ledgers, append its full task block
-to `archive/closed_tasks/YYYY-QN.md`, and update `tasks/CURRENT_SPRINT.md` plus
-`tasks/COMPLETED.md` before merge.
+to `archive/closed_tasks/YYYY-QN.md`, remove it from the live sprint/backlog
+surfaces, and update the compact `tasks/COMPLETED.md` index before merge.
 
 5. `make agent-check`
 When: fast local quality gate (lint + scoped docstring policy + typecheck +

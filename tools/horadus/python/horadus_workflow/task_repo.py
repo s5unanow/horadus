@@ -12,7 +12,8 @@ TASK_ID_PATTERN = re.compile(r"^TASK-(\d{3})$")
 SPEC_TASK_ID_PATTERN = re.compile(r"^(?P<task_num>\d{3})-[^.]+\.md$")
 EXEC_PLAN_TASK_ID_PATTERN = re.compile(r"^(?P<task_id>TASK-\d{3})\.md$")
 TASK_HEADER_PATTERN = re.compile(
-    r"^### (?P<task_id>TASK-\d{3}): (?P<title>.+?)\n(?P<body>.*?)(?=^---\n|\Z)",
+    r"^### (?P<task_id>TASK-\d{3}): (?P<title>.+?)\n"
+    r"(?P<body>.*?)(?=^(?:### TASK-\d{3}: |---\s*$)|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 TASK_REF_PATTERN = re.compile(r"TASK-\d{3}")
@@ -581,6 +582,10 @@ def closed_task_archive_record(task_id: str) -> TaskRecord | None:
     return None
 
 
+def _is_closed_task_archive_record(record: TaskRecord) -> bool:
+    return record.archived and record.source_path.startswith("archive/closed_tasks/")
+
+
 def task_closure_state(task_id: str) -> TaskClosureState:
     normalized = normalize_task_id(task_id)
     active_lines = [task.raw_line for task in parse_active_tasks() if task.task_id == normalized]
@@ -609,7 +614,7 @@ def _enrich_task_record(record: TaskRecord) -> TaskRecord:
         spec_paths=spec_resolution.paths_for_context(),
         spec_resolution=spec_resolution.to_payload(),
     )
-    if is_task_completed(enriched.task_id):
+    if _is_closed_task_archive_record(enriched) or is_task_completed(enriched.task_id):
         enriched.status = "completed"
     elif enriched.sprint_lines:
         enriched.status = "active"

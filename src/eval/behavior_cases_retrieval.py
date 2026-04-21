@@ -17,6 +17,20 @@ _ARCHIVED_TASK_ID = "TASK-952"
 _ARCHIVE_PATH = "archive/closed_tasks/2026-Q2.md"
 _RETRIEVAL_MODE = "implement"
 _RETRIEVAL_PHASE = "phase-1-cli-first"
+_LIVE_EXCLUDED_SOURCES = {
+    "README.md",
+    "archive/",
+    "local or hosted retrieval index",
+    "ops/skills/",
+    "policy-document front matter",
+}
+_ARCHIVED_EXCLUDED_SOURCES = {
+    "README.md",
+    "archive/closed_tasks/* except requested task",
+    "local or hosted retrieval index",
+    "ops/skills/",
+    "policy-document front matter",
+}
 
 
 def retrieval_behavior_case_definitions() -> tuple[BehaviorEvalCaseDefinition, ...]:
@@ -44,11 +58,8 @@ def _eval_live_vs_archived_context_sources() -> dict[str, Any]:
     live_excluded_sources = _excluded_sources(live_payload)
     archived_excluded_sources = _excluded_sources(archived_payload)
     archived_commands = cast("list[str]", archived_payload["workflow"]["commands"])
-    expected_live_excluded_sources = _expected_excluded_sources(include_archive=False)
-    expected_archived_excluded_sources = _expected_excluded_sources(include_archive=True)
-
     _require(
-        live_excluded_sources == expected_live_excluded_sources,
+        live_excluded_sources == _LIVE_EXCLUDED_SOURCES,
         "Live implement mode excluded an unexpected source set",
     )
     _require(
@@ -60,7 +71,7 @@ def _eval_live_vs_archived_context_sources() -> dict[str, Any]:
         "Archived implement mode did not use the requested archive task body as its primary source",
     )
     _require(
-        archived_excluded_sources == expected_archived_excluded_sources,
+        archived_excluded_sources == _ARCHIVED_EXCLUDED_SOURCES,
         "Archived implement mode did not scope archive access to the requested task",
     )
     _require(
@@ -103,8 +114,6 @@ def _eval_minimal_context_basis() -> dict[str, Any]:
         "list[str]",
         payload["retrieval_sources"]["task_spec_resolution"]["selected_paths"],
     )
-    expected_excluded_sources = _expected_excluded_sources(include_archive=False)
-
     _require(
         included_paths == expected_paths,
         "Implement mode included sources outside the minimal authoritative retrieval set",
@@ -118,7 +127,7 @@ def _eval_minimal_context_basis() -> dict[str, Any]:
         "Implement mode did not surface the authoritative exec plan",
     )
     _require(
-        excluded_sources == expected_excluded_sources,
+        excluded_sources == _LIVE_EXCLUDED_SOURCES,
         "Implement mode excluded an unexpected source set",
     )
 
@@ -203,16 +212,6 @@ def _run_context_pack(
     data = result.data
     _require(isinstance(data, dict), f"context-pack returned no payload for {task_id}")
     return cast("dict[str, Any]", data)
-
-
-def _expected_excluded_sources(*, include_archive: bool) -> set[str]:
-    spec_module = importlib.import_module(
-        "tools.horadus.python.horadus_workflow.task_workflow_context_pack_spec"
-    )
-    return {
-        str(source["source"])
-        for source in spec_module.implement_mode_excluded_sources(include_archive)
-    }
 
 
 @contextmanager

@@ -123,7 +123,7 @@ def clear_repo_root_override() -> None:
 
 
 def _looks_like_repo_root(path: Path) -> bool:
-    return (path / "pyproject.toml").exists() and (path / "tasks").exists()
+    return all(((path / "pyproject.toml").exists(), (path / "tasks").exists()))
 
 
 def _discover_repo_root() -> Path:
@@ -607,8 +607,8 @@ def _enrich_task_record(record: TaskRecord) -> TaskRecord:
         spec_paths=spec_resolution.paths_for_context(),
         spec_resolution=spec_resolution.to_payload(),
     )
-    if any(
-        (record.source_path[:21] == "archive/closed_tasks/", is_task_completed(enriched.task_id))
+    if record.source_path.startswith("archive/closed_tasks/") or is_task_completed(
+        enriched.task_id
     ):
         enriched.status = "completed"
     elif enriched.sprint_lines:

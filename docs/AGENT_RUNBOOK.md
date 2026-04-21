@@ -387,7 +387,14 @@ sync transitions without changing merge policy or timeout policy.
 
 - `uv run --no-sync horadus eval behavior`
 When: run the full deterministic behavior-eval pack for high-risk prompt/runtime
-work that touches multiple safety surfaces.
+work that touches multiple safety surfaces, including implement-mode retrieval
+contracts.
+
+- `uv run --no-sync horadus eval behavior --suite context-retrieval`
+When: changes touch `horadus tasks context-pack --mode implement`, retrieval
+source selection/include-exclude rules, canonical task-spec resolution, or the
+code-backed implement-mode policy registry and you need the RFC-001 Phase 1
+retrieval checks without the whole pack.
 
 - `uv run --no-sync horadus eval behavior --suite taxonomy-safety`
 When: changes touch deterministic mapping, taxonomy, or indicator-selection

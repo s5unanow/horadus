@@ -8,6 +8,7 @@ import pytest
 
 import src.eval.behavior as behavior_module
 import src.eval.behavior_cases as behavior_cases_module
+import src.eval.behavior_cases_retrieval as behavior_cases_retrieval_module
 
 pytestmark = pytest.mark.unit
 
@@ -22,6 +23,7 @@ def test_run_behavior_evals_writes_contract_labeled_artifact(tmp_path: Path) -> 
         "taxonomy-safety",
         "degraded-mode-safety",
         "report-grounding",
+        "context-retrieval",
     }.issubset(set(behavior_module.available_behavior_suites()))
 
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
@@ -43,6 +45,35 @@ def test_run_behavior_evals_can_filter_by_suite_and_tag(tmp_path: Path) -> None:
     assert result.selected_cases == 2
     assert all(case.suite == "taxonomy-safety" for case in result.case_results)
     assert all("taxonomy" in case.tags for case in result.case_results)
+
+
+def test_context_retrieval_behavior_suite_records_phase_and_basis(tmp_path: Path) -> None:
+    result = behavior_module.run_behavior_evals(
+        output_dir=tmp_path,
+        suites=["context-retrieval"],
+    )
+
+    assert result.passes_validation is True
+    assert result.selected_suites == ("context-retrieval",)
+    assert result.selected_cases == 2
+
+    payload = json.loads(result.output_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["suites"] == [
+        {
+            "failed_cases": 0,
+            "selected_cases": 2,
+            "suite": "context-retrieval",
+        }
+    ]
+
+    for case in payload["cases"]:
+        assert case["suite"] == "context-retrieval"
+        evidence = case["evidence"]
+        assert evidence["retrieval_mode"] == "implement"
+        assert evidence["retrieval_phase"] == "phase-1-cli-first"
+        assert evidence["authoritative_source_basis"]["policy_registry_id"] == (
+            "implement-mode-legacy-policy-v1"
+        )
 
 
 def test_run_case_and_suite_summary_record_failures() -> None:
@@ -74,6 +105,11 @@ def test_run_case_and_suite_summary_record_failures() -> None:
 def test_behavior_cases_require_raises_on_false_condition() -> None:
     with pytest.raises(ValueError, match="boom"):
         behavior_cases_module._require(False, "boom")
+
+
+def test_retrieval_behavior_cases_require_raises_on_false_condition() -> None:
+    with pytest.raises(ValueError, match="boom"):
+        behavior_cases_retrieval_module._require(False, "boom")
 
 
 def test_degraded_behavior_case_checks_full_restore_contract() -> None:

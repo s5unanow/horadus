@@ -121,6 +121,8 @@ def test_main_tasks_list_active_ignores_stale_metadata_rows(
     output = capsys.readouterr().out
     assert "TASK-189" in output
     assert "TASK-999" not in output
+    assert "\n- human_blockers=" not in output
+    assert "- overdue_human_blockers=1 (TASK-189)" in output
 
 
 def test_main_tasks_search_json_output_is_compact_by_default(

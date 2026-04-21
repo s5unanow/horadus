@@ -9,8 +9,6 @@
 
 ## Active Tasks
 
-
-
 ## Selection Notes
 
 - Sprint 9 opened immediately after Sprint 8 with a nine-task queue from the live backlog plus one carried-forward human blocker.

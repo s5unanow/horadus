@@ -146,6 +146,8 @@ After completing work:
 - Task start sequence is mandatory: `git switch main` → `git pull --ff-only` → create/switch task branch.
 - Task completion sequence is mandatory: merge PR → delete branch → `git switch main` → `git pull --ff-only` and verify the merge commit exists locally.
 - Mechanical completion for a task is defined by `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`; success requires the verifier to report `local-main-synced`.
+- Local task worktree cleanup is a separate operator-owned step, not part of automatic completion. Do not assume Codex App or `horadus tasks finish` will remove an auxiliary worktree for you.
+- Delete an auxiliary task worktree only after all of these are true: the task PR is merged, the task branch is deleted, `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict` reports `local-main-synced`, and the worktree has no local changes or untracked files you still need. Never delete the canonical long-lived checkout just because a task finished.
 - Default autonomous completion for engineering tasks is full delivery lifecycle (implement → commit → push → PR → green checks → merge → local main sync), not just local code changes.
 - Do not skip prerequisite workflow steps such as preflight, guarded task start, or context collection just because the likely end state looks obvious.
 - Prefer Horadus workflow commands over raw `git` / `gh` when the CLI covers the step because the CLI encodes sequencing, policy, and verification dependencies rather than just style.

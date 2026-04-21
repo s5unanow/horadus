@@ -254,6 +254,10 @@ behavior/workflow/operator-facing contracts changed, and record any N/A or
 waived proof in the task's authoritative planning artifact when one exists.
 For completion policy, review-timeout semantics, fresh re-review ownership,
 thread handling, and completion-claim rules, see `AGENTS.md`.
+Worktree cleanup note:
+- `finish` and `lifecycle --strict` prove task completion, but they do not claim ownership of deleting arbitrary local git worktrees.
+- The owner of the local auxiliary task worktree is responsible for cleanup after the task reaches `local-main-synced`, the PR is merged, the task branch is deleted, and the worktree is clean or intentionally disposable.
+- Do not delete the canonical long-lived checkout as part of routine task cleanup.
 
 Compatibility wrapper:
 - `make task-finish`

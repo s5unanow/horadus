@@ -129,6 +129,31 @@ def _promote_success_result(
     )
 
 
+def _task_intake_recorded_result(
+    *, entry: TaskIntakeEntry, log_path: Path, dry_run: bool
+) -> tuple[int, dict[str, object], list[str]]:
+    lines = [
+        "Task intake recorded.",
+        f"Intake id: {entry.intake_id}",
+        f"Status: {entry.status}",
+        f"Stored in: {_relative_display_path(log_path)}",
+    ]
+    if entry.source_task_id is not None:
+        lines.append(f"Source task: {entry.source_task_id}")
+    if entry.refs:
+        lines.append(f"Refs: {', '.join(entry.refs)}")
+
+    return (
+        ExitCode.OK,
+        {
+            "entry": asdict(entry),
+            "log_path": _relative_display_path(log_path),
+            "dry_run": dry_run,
+        },
+        lines,
+    )
+
+
 @dataclass(slots=True)
 class _PreparedPromotion:
     backlog_path: Path
@@ -298,26 +323,10 @@ def task_intake_add_data(
             dry_run=dry_run,
             exc=exc,
         )
-
-    lines = [
-        "Task intake recorded.",
-        f"Intake id: {entry.intake_id}",
-        f"Status: {entry.status}",
-        f"Stored in: {_relative_display_path(log_path)}",
-    ]
-    if entry.source_task_id is not None:
-        lines.append(f"Source task: {entry.source_task_id}")
-    if entry.refs:
-        lines.append(f"Refs: {', '.join(entry.refs)}")
-
-    return (
-        ExitCode.OK,
-        {
-            "entry": asdict(entry),
-            "log_path": _relative_display_path(log_path),
-            "dry_run": dry_run,
-        },
-        lines,
+    return _task_intake_recorded_result(
+        entry=entry,
+        log_path=log_path,
+        dry_run=dry_run,
     )
 
 

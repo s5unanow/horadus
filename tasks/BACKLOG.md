@@ -40,26 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-386: Fix task intake id allocation under concurrent writes
-**Priority**: P1
-**Estimate**: 1-2h
-
-Observed on 2026-04-12 while adding multiple discussion follow-ups in parallel:
-several concurrent 'horadus tasks intake add' invocations all reported success
-with the same intake id (INTAKE-0004), but only one entry actually persisted.
-Investigate id allocation and append/write semantics so concurrent intake
-capture is either serialized safely or fails clearly instead of reporting
-duplicate success.
-
-**Files**: `tools/horadus/python/horadus_workflow/task_workflow_intake.py`, `tests`
-
-**Acceptance Criteria**:
-- [ ] Concurrent task-intake writes must not allocate the same intake id or silently drop entries.
-- [ ] If safe serialization cannot proceed, the command must fail clearly instead of reporting duplicate success.
-- [ ] Add focused regression coverage for concurrent intake id allocation and persistence behavior.
-
----
-
 ### TASK-387: Fail closed on spec files missing Planning Gates
 **Priority**: P1
 **Estimate**: 2-4h

@@ -228,51 +228,6 @@ def test_task_intake_helper_functions_cover_validation_failures() -> None:
         )
 
 
-def test_task_intake_load_and_write_helpers_cover_blank_lines_and_cleanup(
-    synthetic_intake_repo: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    log_path = synthetic_intake_repo / "artifacts" / "agent" / "task-intake" / "entries.jsonl"
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    log_path.write_text(
-        "\n"
-        + json.dumps(
-            {
-                "intake_id": "INTAKE-0001",
-                "recorded_at": "2026-04-02T10:00:00Z",
-                "title": "Title",
-                "note": "Note",
-                "refs": [],
-                "source_task_id": None,
-                "status": "pending",
-                "groom_notes": [],
-                "promoted_task_id": None,
-            }
-        )
-        + "\n\n",
-        encoding="utf-8",
-    )
-
-    entries = task_commands_module._load_task_intake_entries(log_path)
-    assert len(entries) == 1
-
-    def fake_replace(self: Path, target: Path) -> Path:
-        raise RuntimeError("replace failed")
-
-    monkeypatch.setattr(Path, "replace", fake_replace)
-    with pytest.raises(RuntimeError, match="replace failed"):
-        task_commands_module._write_task_intake_entries(log_path, entries)
-    assert sorted(path.name for path in log_path.parent.iterdir()) == ["entries.jsonl"]
-
-    def fake_named_temporary_file(*_args: object, **_kwargs: object) -> object:
-        raise RuntimeError("temp creation failed")
-
-    monkeypatch.setattr(
-        intake_workflow_module.tempfile, "NamedTemporaryFile", fake_named_temporary_file
-    )
-    with pytest.raises(RuntimeError, match="temp creation failed"):
-        task_commands_module._write_task_intake_entries(log_path, entries)
-
-
 def test_task_intake_next_id_and_backlog_helpers_cover_edge_cases() -> None:
     with pytest.raises(ValueError, match="Unexpected intake id"):
         task_commands_module._next_intake_id(

@@ -1,24 +1,33 @@
 from __future__ import annotations
 
-import json
-import re
-import tempfile
 from collections.abc import Callable
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
 from tools.horadus.python.horadus_workflow import _task_intake_backlog as backlog_support
-from tools.horadus.python.horadus_workflow import _task_intake_entry_validation as entry_validation
 from tools.horadus.python.horadus_workflow import _task_intake_promote as promote_support
 from tools.horadus.python.horadus_workflow import task_repo
 from tools.horadus.python.horadus_workflow import task_workflow_shared as shared
+from tools.horadus.python.horadus_workflow._task_intake_store import (
+    _VALID_INTAKE_STATUSES,
+    TaskIntakeMutationLockError,
+    _find_entry,
+    _load_task_intake_entries,
+    _next_intake_id,
+    _normalize_intake_id,
+    _normalize_optional_task_id,
+    _normalize_text_list,
+    _parse_timestamp,
+    _validate_intake_entry,
+    _write_task_intake_entries,
+)
+from tools.horadus.python.horadus_workflow._task_intake_store import (
+    task_intake_mutation_lock as _task_intake_mutation_lock,
+)
 from tools.horadus.python.horadus_workflow.result import CommandResult, ExitCode
 
-_INTAKE_ID_PATTERN = re.compile(r"^INTAKE-(?P<number>\d{4,})$")
-_TASK_ID_PATTERN = re.compile(r"^(?:TASK-)?(?P<number>\d{3,})$")
-_VALID_INTAKE_STATUSES = ("pending", "promoted", "dismissed")
 TaskIntakeEntry = shared.TaskIntakeEntry
 
 
@@ -37,186 +46,6 @@ def _relative_display_path(path: Path) -> str:
 
 def _utc_timestamp() -> str:
     return datetime.now(tz=UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _parse_timestamp(value: str) -> str:
-    normalized = value.strip()
-    if not normalized:
-        raise ValueError("recorded_at must not be empty.")
-    if normalized.endswith("Z"):
-        normalized = normalized[:-1] + "+00:00"
-    parsed = datetime.fromisoformat(normalized)
-    if parsed.tzinfo is None:
-        raise ValueError("recorded_at must include timezone information.")
-    return parsed.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def _normalize_intake_id(value: str) -> str:
-    normalized = value.strip().upper()
-    match = _INTAKE_ID_PATTERN.match(normalized)
-    if match is None:
-        raise ValueError(f"Invalid intake id {value!r}. Expected INTAKE-XXXX.")
-    return normalized
-
-
-def _normalize_optional_task_id(value: str | None) -> str | None:
-    if value is None:
-        return None
-    stripped = value.strip()
-    if not stripped:
-        return None
-    match = _TASK_ID_PATTERN.match(stripped.upper())
-    if match is None:
-        raise ValueError(f"Invalid task id {value!r}. Expected TASK-XXX.")
-    return f"TASK-{match.group('number')}"
-
-
-def _normalize_text_list(values: list[str] | None) -> list[str]:
-    if not values:
-        return []
-    normalized: list[str] = []
-    for value in values:
-        stripped = value.strip()
-        if stripped:
-            normalized.append(stripped)
-    return normalized
-
-
-def _validate_intake_entry(payload: object, *, line_number: int) -> TaskIntakeEntry:
-    if not isinstance(payload, dict):
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: expected a JSON object."
-        )
-
-    required_fields = {
-        "intake_id",
-        "recorded_at",
-        "title",
-        "note",
-        "refs",
-        "source_task_id",
-        "status",
-        "groom_notes",
-        "promoted_task_id",
-    }
-    missing_fields = sorted(required_fields - payload.keys())
-    if missing_fields:
-        raise ValueError(
-            "Invalid task intake entry at line "
-            f"{line_number}: missing fields {', '.join(missing_fields)}."
-        )
-
-    refs_raw = payload["refs"]
-    if not isinstance(refs_raw, list) or any(not isinstance(item, str) for item in refs_raw):
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: refs must be a list of strings."
-        )
-    groom_notes_raw = payload["groom_notes"]
-    if not isinstance(groom_notes_raw, list) or any(
-        not isinstance(item, str) for item in groom_notes_raw
-    ):
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: groom_notes must be a list of strings."
-        )
-
-    intake_id = _normalize_intake_id(str(payload["intake_id"]))
-    recorded_at = _parse_timestamp(str(payload["recorded_at"]))
-    title = str(payload["title"]).strip()
-    note = str(payload["note"]).strip()
-    entry_validation.validate_entry_title_note(title, note, line_number=line_number)
-
-    source_task_id_raw = payload["source_task_id"]
-    if source_task_id_raw is not None and not isinstance(source_task_id_raw, str):
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: source_task_id must be a string or null."
-        )
-    source_task_id = _normalize_optional_task_id(source_task_id_raw)
-
-    status = str(payload["status"]).strip().lower()
-    if status not in _VALID_INTAKE_STATUSES:
-        raise ValueError(
-            "Invalid task intake entry at line "
-            f"{line_number}: unsupported status {status!r}; expected one of "
-            f"{', '.join(_VALID_INTAKE_STATUSES)}."
-        )
-
-    promoted_task_id_raw = payload["promoted_task_id"]
-    if promoted_task_id_raw is not None and not isinstance(promoted_task_id_raw, str):
-        raise ValueError(
-            f"Invalid task intake entry at line {line_number}: promoted_task_id must be a string or null."
-        )
-    promoted_task_id = _normalize_optional_task_id(promoted_task_id_raw)
-    entry_validation.validate_entry_promotion_fields(
-        status=status,
-        promoted_task_id=promoted_task_id,
-        line_number=line_number,
-    )
-
-    return TaskIntakeEntry(
-        intake_id=intake_id,
-        recorded_at=recorded_at,
-        title=title,
-        note=note,
-        refs=_normalize_text_list(cast("list[str]", refs_raw)),
-        source_task_id=source_task_id,
-        status=status,
-        groom_notes=_normalize_text_list(cast("list[str]", groom_notes_raw)),
-        promoted_task_id=promoted_task_id,
-    )
-
-
-def _load_task_intake_entries(path: Path) -> list[TaskIntakeEntry]:
-    if not path.exists():
-        return []
-
-    entries: list[TaskIntakeEntry] = []
-    for line_number, raw_line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
-        line = raw_line.strip()
-        if not line:
-            continue
-        try:
-            payload = json.loads(line)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid task intake JSON at line {line_number}: {exc.msg}.") from exc
-        entries.append(_validate_intake_entry(payload, line_number=line_number))
-    return entries
-
-
-def _write_task_intake_entries(path: Path, entries: list[TaskIntakeEntry]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path: Path | None = None
-    try:
-        with tempfile.NamedTemporaryFile(
-            "w",
-            encoding="utf-8",
-            dir=path.parent,
-            delete=False,
-        ) as handle:
-            temp_path = Path(handle.name)
-            for entry in entries:
-                handle.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
-        temp_path.replace(path)
-    except Exception:
-        if temp_path is not None and temp_path.exists():
-            temp_path.unlink()
-        raise
-
-
-def _next_intake_id(entries: list[TaskIntakeEntry]) -> str:
-    max_number = 0
-    for entry in entries:
-        match = _INTAKE_ID_PATTERN.match(entry.intake_id)
-        if match is None:
-            raise ValueError(f"Unexpected intake id in local intake log: {entry.intake_id}")
-        max_number = max(max_number, int(match.group("number")))
-    return f"INTAKE-{max_number + 1:04d}"
-
-
-def _find_entry(entries: list[TaskIntakeEntry], intake_id: str) -> TaskIntakeEntry | None:
-    for entry in entries:
-        if entry.intake_id == intake_id:
-            return entry
-    return None
 
 
 def _detect_current_task_id() -> str | None:
@@ -299,6 +128,136 @@ def _promote_success_result(
     )
 
 
+@dataclass(slots=True)
+class _PreparedGroomUpdate:
+    notes: list[str]
+    updated_entries: list[TaskIntakeEntry]
+
+
+@dataclass(slots=True)
+class _PreparedPromotion:
+    backlog_path: Path
+    promoted_task_id: str
+    task_block: str
+    updated_backlog: str
+    updated_entries: list[TaskIntakeEntry]
+
+
+def _task_intake_environment_error(
+    *, failure_prefix: str, log_path: Path, dry_run: bool, exc: TaskIntakeMutationLockError
+) -> tuple[int, dict[str, object], list[str]]:
+    return (
+        ExitCode.ENVIRONMENT_ERROR,
+        {
+            "dry_run": dry_run,
+            "error": str(exc),
+            "log_path": _relative_display_path(log_path),
+        },
+        [failure_prefix, str(exc)],
+    )
+
+
+def _prepare_groom_update(
+    *,
+    entries: list[TaskIntakeEntry],
+    normalized_ids: list[str],
+    action: str,
+    notes: list[str],
+) -> _PreparedGroomUpdate | tuple[int, dict[str, object], list[str]]:
+    missing_ids = [item for item in normalized_ids if _find_entry(entries, item) is None]
+    if missing_ids:
+        return (
+            ExitCode.NOT_FOUND,
+            {"missing_intake_ids": missing_ids},
+            ["Task intake grooming failed.", f"Unknown intake ids: {', '.join(missing_ids)}"],
+        )
+
+    updated_entries: list[TaskIntakeEntry] = []
+    for entry in entries:
+        if entry.intake_id not in normalized_ids:
+            updated_entries.append(entry)
+            continue
+        if entry.status == "promoted":
+            return (
+                ExitCode.VALIDATION_ERROR,
+                {"intake_id": entry.intake_id, "status": entry.status},
+                [
+                    "Task intake grooming failed.",
+                    f"{entry.intake_id} is already promoted and cannot be {action}ed.",
+                ],
+            )
+        updated_entries.append(
+            TaskIntakeEntry(
+                intake_id=entry.intake_id,
+                recorded_at=entry.recorded_at,
+                title=entry.title,
+                note=entry.note,
+                refs=list(entry.refs),
+                source_task_id=entry.source_task_id,
+                status="dismissed" if action == "dismiss" else "pending",
+                groom_notes=[*entry.groom_notes, *notes],
+                promoted_task_id=entry.promoted_task_id,
+            )
+        )
+
+    return _PreparedGroomUpdate(notes=notes, updated_entries=updated_entries)
+
+
+def _prepare_promotion(
+    *,
+    entries: list[TaskIntakeEntry],
+    intake_id: str,
+    priority: str,
+    estimate: str,
+    acceptance_items: list[str],
+    files: list[str] | None,
+    description: list[str] | None,
+    assessment_refs: list[str] | None,
+    failure_prefix: str,
+) -> _PreparedPromotion | tuple[int, dict[str, object], list[str]]:
+    target_entry = _find_entry(entries, intake_id)
+    if target_entry is None:
+        return (
+            ExitCode.NOT_FOUND,
+            {"intake_id": intake_id},
+            [failure_prefix, f"{intake_id} was not found."],
+        )
+    if target_entry.status != "pending":
+        return (
+            ExitCode.VALIDATION_ERROR,
+            {"intake_id": intake_id, "status": target_entry.status},
+            [
+                failure_prefix,
+                f"{intake_id} is {target_entry.status}; only pending entries can be promoted.",
+            ],
+        )
+
+    backlog_path = task_repo.backlog_path()
+    backlog_text = task_repo.read_text(backlog_path)
+    promoted_task_id, backlog_with_incremented_id = _allocate_backlog_task_id(backlog_text)
+    task_block = _render_backlog_task_block(
+        task_id=promoted_task_id,
+        title=target_entry.title,
+        priority=priority,
+        estimate=estimate,
+        description=backlog_support._render_description_lines(description, target_entry.note),
+        files=_normalize_text_list(files),
+        acceptance_criteria=acceptance_items,
+        assessment_refs=_normalize_text_list(assessment_refs),
+    )
+    return _PreparedPromotion(
+        backlog_path=backlog_path,
+        promoted_task_id=promoted_task_id,
+        task_block=task_block,
+        updated_backlog=_insert_backlog_task_block(backlog_with_incremented_id, task_block),
+        updated_entries=promote_support.build_promoted_entries(
+            entries,
+            intake_id=intake_id,
+            promoted_task_id=promoted_task_id,
+        ),
+    )
+
+
 def task_intake_add_data(
     *,
     title: str,
@@ -335,23 +294,46 @@ def task_intake_add_data(
 
     log_path = _task_intake_log_path()
     try:
-        entries = _load_task_intake_entries(log_path)
+        if dry_run:
+            entries = _load_task_intake_entries(log_path)
+            entry = TaskIntakeEntry(
+                intake_id=_next_intake_id(entries),
+                recorded_at=_utc_timestamp(),
+                title=title_text,
+                note=note_text,
+                refs=_normalize_text_list(refs),
+                source_task_id=source_task_id,
+                status="pending",
+                groom_notes=[],
+                promoted_task_id=None,
+            )
+        else:
+            with _task_intake_mutation_lock(log_path):
+                entries = _load_task_intake_entries(log_path)
+                entry = TaskIntakeEntry(
+                    intake_id=_next_intake_id(entries),
+                    recorded_at=_utc_timestamp(),
+                    title=title_text,
+                    note=note_text,
+                    refs=_normalize_text_list(refs),
+                    source_task_id=source_task_id,
+                    status="pending",
+                    groom_notes=[],
+                    promoted_task_id=None,
+                )
+                _write_task_intake_entries(log_path, [*entries, entry])
     except ValueError as exc:
         return (ExitCode.VALIDATION_ERROR, {}, ["Task intake failed.", str(exc)])
-
-    entry = TaskIntakeEntry(
-        intake_id=_next_intake_id(entries),
-        recorded_at=_utc_timestamp(),
-        title=title_text,
-        note=note_text,
-        refs=_normalize_text_list(refs),
-        source_task_id=source_task_id,
-        status="pending",
-        groom_notes=[],
-        promoted_task_id=None,
-    )
-    if not dry_run:
-        _write_task_intake_entries(log_path, [*entries, entry])
+    except TaskIntakeMutationLockError as exc:
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {
+                "dry_run": dry_run,
+                "error": str(exc),
+                "log_path": _relative_display_path(log_path),
+            },
+            ["Task intake failed.", str(exc)],
+        )
 
     lines = [
         "Task intake recorded.",
@@ -457,49 +439,36 @@ def task_intake_groom_data(
 
     log_path = _task_intake_log_path()
     try:
-        entries = _load_task_intake_entries(log_path)
+        notes = _normalize_text_list(append_notes)
+        if dry_run:
+            prepared = _prepare_groom_update(
+                entries=_load_task_intake_entries(log_path),
+                normalized_ids=normalized_ids,
+                action=action,
+                notes=notes,
+            )
+        else:
+            with _task_intake_mutation_lock(log_path):
+                prepared = _prepare_groom_update(
+                    entries=_load_task_intake_entries(log_path),
+                    normalized_ids=normalized_ids,
+                    action=action,
+                    notes=notes,
+                )
+                if isinstance(prepared, tuple):
+                    return prepared
+                _write_task_intake_entries(log_path, prepared.updated_entries)
     except ValueError as exc:
         return (ExitCode.VALIDATION_ERROR, {}, ["Task intake grooming failed.", str(exc)])
-
-    missing_ids = [item for item in normalized_ids if _find_entry(entries, item) is None]
-    if missing_ids:
-        return (
-            ExitCode.NOT_FOUND,
-            {"missing_intake_ids": missing_ids},
-            ["Task intake grooming failed.", f"Unknown intake ids: {', '.join(missing_ids)}"],
+    except TaskIntakeMutationLockError as exc:
+        return _task_intake_environment_error(
+            failure_prefix="Task intake grooming failed.",
+            log_path=log_path,
+            dry_run=dry_run,
+            exc=exc,
         )
-
-    notes = _normalize_text_list(append_notes)
-    updated_entries: list[TaskIntakeEntry] = []
-    for entry in entries:
-        if entry.intake_id not in normalized_ids:
-            updated_entries.append(entry)
-            continue
-        if entry.status == "promoted":
-            return (
-                ExitCode.VALIDATION_ERROR,
-                {"intake_id": entry.intake_id, "status": entry.status},
-                [
-                    "Task intake grooming failed.",
-                    f"{entry.intake_id} is already promoted and cannot be {action}ed.",
-                ],
-            )
-        updated_entries.append(
-            TaskIntakeEntry(
-                intake_id=entry.intake_id,
-                recorded_at=entry.recorded_at,
-                title=entry.title,
-                note=entry.note,
-                refs=list(entry.refs),
-                source_task_id=entry.source_task_id,
-                status="dismissed" if action == "dismiss" else "pending",
-                groom_notes=[*entry.groom_notes, *notes],
-                promoted_task_id=entry.promoted_task_id,
-            )
-        )
-
-    if not dry_run:
-        _write_task_intake_entries(log_path, updated_entries)
+    if isinstance(prepared, tuple):
+        return prepared
 
     updated_status = "dismissed" if action == "dismiss" else "pending"
     lines = [
@@ -558,67 +527,59 @@ def task_intake_promote_data(
 
     log_path = _task_intake_log_path()
     try:
-        entries = _load_task_intake_entries(log_path)
+        if dry_run:
+            prepared = _prepare_promotion(
+                entries=_load_task_intake_entries(log_path),
+                intake_id=normalized_intake_id,
+                priority=priority_text,
+                estimate=estimate_text,
+                acceptance_items=acceptance_items,
+                files=files,
+                description=description,
+                assessment_refs=assessment_refs,
+                failure_prefix=failure_prefix,
+            )
+        else:
+            with _task_intake_mutation_lock(log_path):
+                prepared = _prepare_promotion(
+                    entries=_load_task_intake_entries(log_path),
+                    intake_id=normalized_intake_id,
+                    priority=priority_text,
+                    estimate=estimate_text,
+                    acceptance_items=acceptance_items,
+                    files=files,
+                    description=description,
+                    assessment_refs=assessment_refs,
+                    failure_prefix=failure_prefix,
+                )
+                if isinstance(prepared, tuple):
+                    return prepared
+                promote_support.persist_promoted_intake(
+                    backlog_path=prepared.backlog_path,
+                    updated_backlog=prepared.updated_backlog,
+                    log_path=log_path,
+                    updated_entries=prepared.updated_entries,
+                    write_entries=_write_task_intake_entries,
+                )
     except ValueError as exc:
         return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, str(exc)])
-
-    target_entry = _find_entry(entries, normalized_intake_id)
-    if target_entry is None:
-        return (
-            ExitCode.NOT_FOUND,
-            {"intake_id": normalized_intake_id},
-            [failure_prefix, f"{normalized_intake_id} was not found."],
-        )
-    if target_entry.status != "pending":
-        return (
-            ExitCode.VALIDATION_ERROR,
-            {"intake_id": normalized_intake_id, "status": target_entry.status},
-            [
-                failure_prefix,
-                f"{normalized_intake_id} is {target_entry.status}; only pending entries can be promoted.",
-            ],
-        )
-
-    backlog_path = task_repo.backlog_path()
-    backlog_text = task_repo.read_text(backlog_path)
-    try:
-        promoted_task_id, backlog_with_incremented_id = _allocate_backlog_task_id(backlog_text)
-        task_block = _render_backlog_task_block(
-            task_id=promoted_task_id,
-            title=target_entry.title,
-            priority=priority_text,
-            estimate=estimate_text,
-            description=backlog_support._render_description_lines(description, target_entry.note),
-            files=_normalize_text_list(files),
-            acceptance_criteria=acceptance_items,
-            assessment_refs=_normalize_text_list(assessment_refs),
-        )
-        updated_backlog = _insert_backlog_task_block(backlog_with_incremented_id, task_block)
-    except ValueError as exc:
-        return (ExitCode.VALIDATION_ERROR, {}, [failure_prefix, str(exc)])
-
-    updated_entries = promote_support.build_promoted_entries(
-        entries,
-        intake_id=normalized_intake_id,
-        promoted_task_id=promoted_task_id,
-    )
-
-    if not dry_run:
-        promote_support.persist_promoted_intake(
-            backlog_path=backlog_path,
-            updated_backlog=updated_backlog,
+    except TaskIntakeMutationLockError as exc:
+        return _task_intake_environment_error(
+            failure_prefix=failure_prefix,
             log_path=log_path,
-            updated_entries=updated_entries,
-            write_entries=_write_task_intake_entries,
+            dry_run=dry_run,
+            exc=exc,
         )
+    if isinstance(prepared, tuple):
+        return prepared
 
     return _promote_success_result(
         intake_id=normalized_intake_id,
-        promoted_task_id=promoted_task_id,
-        backlog_path=backlog_path,
+        promoted_task_id=prepared.promoted_task_id,
+        backlog_path=prepared.backlog_path,
         log_path=log_path,
         dry_run=dry_run,
-        task_block=task_block,
+        task_block=prepared.task_block,
     )
 
 
@@ -675,8 +636,11 @@ __all__ = [
     "_load_task_intake_entries",
     "_next_intake_id",
     "_normalize_intake_id",
+    "_normalize_optional_task_id",
+    "_parse_timestamp",
     "_render_backlog_task_block",
     "_task_intake_log_path",
+    "_validate_intake_entry",
     "_write_task_intake_entries",
     "handle_task_intake_add",
     "handle_task_intake_groom",

@@ -274,6 +274,9 @@ A missing PR alone is no longer a manual-recovery signal for `finish`.
 When: capture a non-authoritative follow-up locally without editing tracked ledgers.
 The intake log lives under the gitignored `artifacts/agent/task-intake/entries.jsonl`
 path, so normal capture does not create tracked task-ledger diffs.
+Intake mutations serialize through a repo-owned lock file in the same artifact
+directory so concurrent `intake add` / `groom` / `promote` commands either
+persist safely or fail clearly instead of reporting duplicate success.
 Use `uv run --no-sync horadus tasks intake list` to review pending intake items,
 `uv run --no-sync horadus tasks intake groom --intake-id INTAKE-XXXX --dismiss`
 or `--restore` to batch-triage them, and

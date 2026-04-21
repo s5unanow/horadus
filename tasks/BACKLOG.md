@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-396`.
+- Next available task IDs start at `TASK-397`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -189,6 +189,23 @@ Horadus task lifecycle.
 **Acceptance Criteria**:
 - [ ] Produce a concrete repo-owned design/spec for worktree-isolated Codex chat sessions that fits the existing Horadus task lifecycle.
 - [ ] Cover containment goals, lifecycle integration points, cleanup/ownership implications, and a staged rollout recommendation.
+
+---
+
+### TASK-396: Upgrade python-dotenv to 1.2.2 for dependency audit parity
+**Priority**: P1
+**Estimate**: 0.5-1h
+
+TASK-386 local-gate blocks at dependency-audit because origin/main and this
+branch both lock python-dotenv 1.2.1, while the audit now requires 1.2.2 for
+CVE-2026-28684 remediation. Handle as a separate dependency update task/branch
+so TASK-386 stays scope-pure.
+
+**Files**: `pyproject.toml`, `uv.lock`
+
+**Acceptance Criteria**:
+- [ ] Dependency audit passes without a python-dotenv vulnerability finding.
+- [ ] Lockfile and dependency metadata resolve python-dotenv to 1.2.2 or newer without introducing new audit failures.
 
 ---
 

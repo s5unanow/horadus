@@ -60,7 +60,7 @@ dependencies = [
     "opentelemetry-instrumentation-sqlalchemy>=0.54b1",
 
     # Utilities
-    "python-dotenv>=1.0.0",
+    "python-dotenv>=1.2.2",
     "structlog>=24.1.0",
     "pyyaml>=6.0.1",
     "prometheus-client>=0.20.0",

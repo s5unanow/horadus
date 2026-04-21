@@ -296,8 +296,10 @@ def _eval_semantic_cache_basis_changes_invalidate_keys() -> dict[str, Any]:
 
 
 def _weekly_report_prompt() -> tuple[Path, str]:
-    prompt_path = _REPO_ROOT / "ai/prompts/weekly_report.md"
-    return (prompt_path, prompt_path.read_text(encoding="utf-8"))
+    return (
+        (prompt_path := _REPO_ROOT / "ai/prompts/weekly_report.md"),
+        prompt_path.read_text(encoding="utf-8"),
+    )
 
 
 def _degraded_hold_fixture() -> _DEGRADED_HOLD_FIXTURE:

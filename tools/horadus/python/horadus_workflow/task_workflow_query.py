@@ -284,15 +284,11 @@ def _workflow_commands_for_context_pack(
 ) -> list[str]:
     commands = list(canonical_task_workflow_commands_for_task(task_id))
     default_context_pack = f"uv run --no-sync horadus tasks context-pack {task_id}"
-    archived_context_pack = (
-        f"{default_context_pack} --include-archive"
-        if include_archive and archived
-        else default_context_pack
-    )
+    implement_context_pack = f"{default_context_pack} --mode implement --format json"
+    if include_archive and archived:
+        default_context_pack = f"{default_context_pack} --include-archive"
     return [
-        archived_context_pack
-        if command == f"{default_context_pack} --mode implement --format json"
-        else command
+        default_context_pack if command == implement_context_pack else command
         for command in commands
     ]
 

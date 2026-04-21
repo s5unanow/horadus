@@ -19,20 +19,14 @@ def test_main_tasks_context_pack_explicit_default_preserves_broad_json_output(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _ = synthetic_task_repo
-
     result = main(["tasks", "context-pack", LIVE_TASK_ID, "--mode", "default", "--format", "json"])
-
     assert result == 0
     payload = json.loads(capsys.readouterr().out)
+    commands = "\n".join(payload["data"]["suggested_workflow_commands"])
     assert payload["status"] == "ok"
     assert payload["data"]["task"]["task_id"] == LIVE_TASK_ID
-    assert (
-        f"uv run --no-sync horadus tasks context-pack {LIVE_TASK_ID}"
-        in payload["data"]["suggested_workflow_commands"]
-    )
-    assert "--mode implement --format json" not in "\n".join(
-        payload["data"]["suggested_workflow_commands"]
-    )
+    assert f"uv run --no-sync horadus tasks context-pack {LIVE_TASK_ID}" in commands
+    assert "--mode implement --format json" not in commands
     assert "mode_metadata" not in payload["data"]
 
 
@@ -41,9 +35,7 @@ def test_context_pack_implement_mode_requires_json_output(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _ = synthetic_task_repo
-
     result = main(["tasks", "context-pack", LIVE_TASK_ID, "--mode", "implement"])
-
     assert result == int(task_commands_module.ExitCode.VALIDATION_ERROR)
     captured = capsys.readouterr()
     assert "context-pack --mode implement requires --format json" in captured.err
@@ -86,7 +78,6 @@ def test_context_pack_implement_mode_scopes_archived_lookup_when_explicit(
     synthetic_task_repo: Path,
 ) -> None:
     _ = synthetic_task_repo
-
     result = task_commands_module.handle_context_pack(
         argparse.Namespace(
             task_id=ARCHIVED_TASK_ID,

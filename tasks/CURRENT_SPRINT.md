@@ -50,8 +50,6 @@
 
 
 
-
-
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅

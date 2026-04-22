@@ -5,17 +5,14 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import Any, Literal, cast
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.decimal_utils import to_decimal
 from src.core.runtime_provenance import current_trend_scoring_contract
+from src.storage.models import Trend, to_decimal
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
-
-if TYPE_CHECKING:
-    from src.storage.models import Trend
 
 TrendActivationKind = Literal["create", "rebase", "replay", "new_line"]
 

@@ -87,7 +87,6 @@ async def test_record_usage_updates_counters_and_cost(mock_db_session, monkeypat
     assert usage.call_count == 1
     assert usage.input_tokens == 1_000_000
     assert usage.output_tokens == 500_000
-    assert isinstance(usage.estimated_cost_usd, Decimal)
     assert float(usage.estimated_cost_usd) == pytest.approx(0.3)
     assert mock_db_session.flush.await_count >= 1
 

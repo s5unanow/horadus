@@ -20,14 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telethon import TelegramClient
 
 from src.core.config import settings
-from src.core.decimal_utils import to_decimal
 from src.ingestion.source_identity import (
     normalize_telegram_channel_handle,
     telegram_provider_source_key,
 )
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
-from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
+from src.storage.models import ProcessingStatus, RawItem, Source, SourceType, to_decimal
 
 logger = structlog.get_logger(__name__)
 

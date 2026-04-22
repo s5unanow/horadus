@@ -15,9 +15,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import resolve_llm_token_pricing, settings
-from src.core.decimal_utils import to_decimal
 from src.core.observability import record_budget_denial
-from src.storage.models import ApiUsage
+from src.storage.models import ApiUsage, to_decimal
 
 logger = structlog.get_logger(__name__)
 

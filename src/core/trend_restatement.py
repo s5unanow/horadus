@@ -12,11 +12,10 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.decimal_utils import to_decimal
 from src.core.runtime_provenance import current_trend_scoring_contract
 from src.core.trend_engine import DEFAULT_DECAY_HALF_LIFE_DAYS, TrendEngine
 from src.core.trend_state import resolve_active_scoring_contract
-from src.storage.models import Trend, TrendEvidence
+from src.storage.models import Trend, TrendEvidence, to_decimal
 from src.storage.restatement_models import TrendRestatement
 from src.storage.trend_state_models import TrendStateVersion
 

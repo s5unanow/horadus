@@ -26,35 +26,48 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import (
+    ARRAY,
+    JSONB,
+)
+from sqlalchemy.dialects.postgresql import (
+    UUID as PGUUID,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
-from src.storage.coverage_models import CoverageSnapshot
-from src.storage.entity_models import CanonicalEntity, CanonicalEntityAlias, EventEntity
-from src.storage.event_lineage_models import EventLineage
+from src.storage.coverage_models import CoverageSnapshot  # noqa: F401
+from src.storage.entity_models import (  # noqa: F401
+    CanonicalEntity,
+    CanonicalEntityAlias,
+    EventEntity,
+)
+from src.storage.event_lineage_models import EventLineage  # noqa: F401
 from src.storage.event_state import (
     EVENT_ACTIVITY_STATE_SQL_VALUES,
     EVENT_EPISTEMIC_STATE_SQL_VALUES,
     EventActivityState,
     EventEpistemicState,
 )
-from src.storage.novelty_models import NoveltyCandidate
-from src.storage.restatement_models import (
+from src.storage.novelty_models import NoveltyCandidate  # noqa: F401
+from src.storage.restatement_models import (  # noqa: F401
     EventAdjudication,
     HumanFeedback,
     PrivilegedWriteAudit,
     TrendRestatement,
 )
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
-from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
+from src.storage.trend_state_models import (  # noqa: TC001
+    TrendDefinitionVersion,
+    TrendStateVersion,
+)
 
-# fmt: off
-_ = (CanonicalEntity, CanonicalEntityAlias, CoverageSnapshot, EventAdjudication, EventEntity,
-     EventLineage, HumanFeedback, NoveltyCandidate, PrivilegedWriteAudit, TrendRestatement,
-     TrendStateVersion)
-# fmt: on
+
+def to_decimal(value: Decimal | float | int | str) -> Decimal:
+    """Normalize common numeric inputs to Decimal without losing scale."""
+    if isinstance(value, Decimal):
+        return value
+    return Decimal(str(value))
 
 
 class SourceType(enum.StrEnum):

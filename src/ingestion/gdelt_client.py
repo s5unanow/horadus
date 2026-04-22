@@ -16,12 +16,11 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
-from src.core.decimal_utils import to_decimal
 from src.ingestion.rate_limiter import DomainRateLimiter
 from src.ingestion.source_identity import gdelt_provider_source_key_from_mapping
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
-from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
+from src.storage.models import ProcessingStatus, RawItem, Source, SourceType, to_decimal
 
 logger = structlog.get_logger(__name__)
 

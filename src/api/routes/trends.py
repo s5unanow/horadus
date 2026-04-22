@@ -67,7 +67,6 @@ from src.api.routes.trend_route_auth import (
     AUTHORIZE_TREND_UPDATE,
 )
 from src.core.calibration import CalibrationService
-from src.core.decimal_utils import to_decimal
 from src.core.retrospective_analyzer import RetrospectiveAnalyzer
 from src.core.risk import (
     calculate_probability_band,
@@ -101,6 +100,7 @@ from src.storage.models import (
     TrendEvidence,
     TrendOutcome,
     TrendSnapshot,
+    to_decimal,
 )
 from src.storage.trend_state_models import TrendDefinitionVersion
 

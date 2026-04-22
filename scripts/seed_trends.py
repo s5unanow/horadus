@@ -20,14 +20,13 @@ from typing import Any, cast
 import yaml
 from sqlalchemy import select
 
-from src.core.decimal_utils import to_decimal
 from src.core.trend_config import resolve_runtime_trend_id
 from src.core.trend_engine import (
     DEFAULT_DECAY_HALF_LIFE_DAYS,
     prob_to_logodds,
 )
 from src.storage.database import async_session_maker
-from src.storage.models import Trend
+from src.storage.models import Trend, to_decimal
 
 DEFAULT_BASELINE_PROBABILITY = 0.10
 

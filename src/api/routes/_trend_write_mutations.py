@@ -26,11 +26,10 @@ from src.api.routes._trend_write_persistence import (
     is_unique_integrity_error,
     raise_payload_validation_error,
 )
-from src.core.decimal_utils import to_decimal
 from src.core.trend_config import TrendConfig, normalize_definition_payload
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.core.trend_state import activate_trend_state, ensure_definition_version
-from src.storage.models import Trend
+from src.storage.models import Trend, to_decimal
 from src.storage.trend_state_models import TrendDefinitionVersion
 
 if TYPE_CHECKING:

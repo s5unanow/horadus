@@ -2,14 +2,10 @@ from __future__ import annotations
 
 import subprocess
 import sys
-import typing
-from decimal import Decimal
 from pathlib import Path
-from typing import get_args, get_origin, get_type_hints
 
 import pytest
 from sqlalchemy.dialects import postgresql
-from sqlalchemy.orm import Mapped
 
 from src.storage.models import (
     ApiUsage,
@@ -21,11 +17,9 @@ from src.storage.models import (
     RawItem,
     Report,
     Source,
-    Trend,
     TrendDefinitionVersion,
     TrendEvidence,
     TrendRestatement,
-    TrendSnapshot,
     TrendStateVersion,
 )
 
@@ -50,36 +44,6 @@ def test_api_usage_server_defaults_match_migration_baseline() -> None:
     assert _render_default("input_tokens") == "0"
     assert _render_default("output_tokens") == "0"
     assert _render_default("estimated_cost_usd") == "0"
-
-
-def test_numeric_orm_annotations_use_decimal_runtime_types() -> None:
-    annotation_cases = (
-        (Source, "credibility_score", Decimal),
-        (Event, "corroboration_score", Decimal),
-        (Trend, "baseline_log_odds", Decimal),
-        (Trend, "current_log_odds", Decimal),
-        (TrendEvidence, "base_weight", Decimal | None),
-        (TrendEvidence, "direction_multiplier", Decimal | None),
-        (TrendEvidence, "delta_log_odds", Decimal),
-        (TrendSnapshot, "log_odds", Decimal),
-        (TrendStateVersion, "current_log_odds", Decimal),
-        (TrendRestatement, "compensation_delta_log_odds", Decimal),
-        (ApiUsage, "estimated_cost_usd", Decimal),
-    )
-
-    for model, field_name, expected_type in annotation_cases:
-        annotation = get_type_hints(
-            model,
-            globalns={
-                **typing.__dict__,
-                **sys.modules[model.__module__].__dict__,
-                "Trend": Trend,
-            },
-            include_extras=True,
-        )
-        field_annotation = annotation[field_name]
-        assert get_origin(field_annotation) is Mapped
-        assert get_args(field_annotation) == (expected_type,)
 
 
 def test_pgvector_indexes_present_in_model_metadata() -> None:

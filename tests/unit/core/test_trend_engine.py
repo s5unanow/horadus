@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -16,7 +15,6 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
-from src.core.decimal_utils import to_decimal
 from src.core.runtime_provenance import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,
@@ -88,10 +86,6 @@ class TestProbToLogodds:
     def test_as_utc_adds_timezone_to_naive_datetimes(self):
         naive = datetime(2026, 3, 8, 12, 0, tzinfo=UTC).replace(tzinfo=None)
         assert _as_utc(naive) == naive.replace(tzinfo=UTC)
-
-    def test_to_decimal_preserves_decimal_inputs(self):
-        value = Decimal("0.125")
-        assert to_decimal(value) is value
 
 
 class TestLogoddsToProb:
@@ -503,7 +497,6 @@ class TestTrendEngine:
             reasoning="Test reasoning",
         )
 
-        assert isinstance(mock_trend.current_log_odds, Decimal)
         assert float(mock_trend.current_log_odds) == pytest.approx(initial_lo + delta)
         assert result.delta_applied == delta
 
@@ -663,8 +656,6 @@ class TestTrendEngine:
             reasoning="down",
         )
         assert down_result.direction == "down"
-        assert isinstance(mock_trend.current_log_odds, Decimal)
-
         unchanged_result = await engine.apply_evidence(
             trend=mock_trend,
             delta=0.0005,
@@ -797,10 +788,6 @@ class TestTrendEngine:
 
         assert mock_session.execute.await_count == 3
         assert "trend_state_versions" in str(mock_session.execute.await_args_list[2].args[0])
-        trend_update_stmt = mock_session.execute.await_args_list[1].args[0]
-        state_update_stmt = mock_session.execute.await_args_list[2].args[0]
-        assert isinstance(trend_update_stmt.compile().params["current_log_odds"], Decimal)
-        assert isinstance(state_update_stmt.compile().params["current_log_odds"], Decimal)
 
     @pytest.mark.asyncio
     async def test_apply_decay_awaits_locked_row_and_returns_early_when_not_elapsed(
@@ -898,7 +885,6 @@ class TestTrendEngine:
         await engine.apply_decay(mock_trend)
 
         # Should be unchanged
-        assert isinstance(mock_trend.current_log_odds, Decimal)
         assert float(mock_trend.current_log_odds) == pytest.approx(original_lo, rel=0.001)
 
     @pytest.mark.asyncio

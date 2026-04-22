@@ -16,7 +16,6 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.core.decimal_utils import to_decimal
 from src.core.source_credibility import DEFAULT_SOURCE_CREDIBILITY
 from src.core.trend_engine import TrendEngine
 from src.processing.corroboration_refresh_support import (
@@ -33,7 +32,7 @@ from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.trend_impact_reconciliation import reconcile_event_trend_impacts
 from src.storage.event_state import resolved_corroboration_score
 from src.storage.event_summary import refresh_event_summary_from_canonical
-from src.storage.models import Event, EventItem, RawItem, Source, Trend
+from src.storage.models import Event, EventItem, RawItem, Source, Trend, to_decimal
 
 PROVENANCE_AWARE_MODE = "provenance_aware"
 FALLBACK_MODE = "fallback"

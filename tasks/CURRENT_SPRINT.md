@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-387` Fail closed on spec files missing Planning Gates
 - `TASK-388` Remove Any erasure from trend-write mutations
 - `TASK-389` Align Numeric ORM typing with Decimal semantics
 - `TASK-390` Add dirty-main watchdog for agent sessions
@@ -48,6 +47,8 @@
 
 
 
+
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -55,3 +56,4 @@
 - `TASK-396` Upgrade python-dotenv to 1.2.2 for dependency audit parity ✅
 - `TASK-386` Fix task intake id allocation under concurrent writes ✅
 - `TASK-397` Clear local-gate blockers surfaced by TASK-387 ✅
+- `TASK-387` Fail closed on spec files missing Planning Gates ✅

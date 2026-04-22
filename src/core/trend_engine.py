@@ -7,9 +7,19 @@ probability updates and time-based decay.
 
 Key Principle: LLMs extract structured signals. This code computes deltas.
 
-Example:
-    `apply_evidence()` stores Decimal-backed ORM values while the public math
-    helpers continue to work with float probabilities and log-odds.
+Example Usage:
+    >>> from src.core.trend_engine import TrendEngine, calculate_evidence_delta
+    >>>
+    >>> engine = TrendEngine(db_session)
+    >>> delta, factors = calculate_evidence_delta(
+    ...     signal_type="military_movement",
+    ...     indicator_weight=0.04,
+    ...     source_credibility=0.95,
+    ...     corroboration_count=5,
+    ...     novelty_score=1.0,
+    ...     direction="escalatory",
+    ... )
+    >>> new_prob = await engine.apply_evidence(trend, delta, event_id, ...)
 """
 
 from __future__ import annotations
@@ -637,7 +647,6 @@ class TrendEngine:
 
         Uses exponential decay with configurable half-life:
             new_lo = baseline_lo + (current_lo - baseline_lo) * decay_factor
-
         Where decay_factor = 0.5^(days_elapsed / half_life)
 
         This means after one half-life, the deviation from baseline
@@ -697,7 +706,8 @@ class TrendEngine:
             return logodds_to_prob(current_lo)
 
         decay_factor = math.pow(0.5, days_elapsed / half_life)
-        new_lo = baseline_lo + ((current_lo - baseline_lo) * decay_factor)
+        deviation = current_lo - baseline_lo
+        new_lo = baseline_lo + (deviation * decay_factor)
 
         if has_locked_state:
             new_lo_decimal = to_decimal(new_lo)

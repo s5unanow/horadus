@@ -88,9 +88,9 @@ class GDELTClient:
         self.settings = GDELTSettings()
         self._queries: list[GDELTQueryConfig] = []
         self._config_mtime: float | None = None
-
         self.total_timeout_seconds = settings.GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS
-        self.max_retries, self.dedup_window_days = 3, 7
+        self.max_retries = 3
+        self.dedup_window_days = 7
         self.deduplication_service = DeduplicationService(session=session)
 
     @property

@@ -181,6 +181,29 @@ async def test_update_trend_mutation_ignores_rounded_probability_fields(
 
 
 @pytest.mark.asyncio
+async def test_update_trend_mutation_allows_forecast_contract_only_refresh(
+    mock_db_session,
+) -> None:
+    trend = _build_trend(trend_id=uuid4())
+    mock_db_session.scalar.return_value = None
+    updated_contract = sample_binary_forecast_contract(question="Will the outlook change?")
+
+    result = await trend_write_mutations_module.update_trend_mutation(
+        session=mock_db_session,
+        trend_id=trend.id,
+        trend=trend,
+        payload=trends_module.TrendUpdate(
+            forecast_contract=updated_contract,
+        ),
+    )
+
+    assert trend.definition["forecast_contract"]["question"] == "Will the outlook change?"
+    assert float(trend.baseline_log_odds) == pytest.approx(prob_to_logodds(0.1), rel=0.001)
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2), rel=0.001)
+    assert result.runtime_trend_id == "trend-a"
+
+
+@pytest.mark.asyncio
 async def test_update_trend_mutation_ignores_echoed_probability_field_on_replay_activation(
     mock_db_session,
 ) -> None:

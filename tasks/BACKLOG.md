@@ -40,22 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-388: Remove Any erasure from trend-write mutations
-**Priority**: P1
-**Estimate**: 2-4h
-
-_trend_write_mutations.py discards ValidatedTrendWritePayload and related
-concrete types with Any at privileged write boundaries, leaving the path
-effectively unchecked
-
-**Files**: `src/api/routes/_trend_write_contract.py`, `src/api/routes/_trend_write_mutations.py`, `tests`
-
-**Acceptance Criteria**:
-- [ ] Replace Any-erased privileged trend-write mutation payloads with concrete validated types through the mutation helpers.
-- [ ] Keep the existing runtime validation path intact while improving static type safety and targeted regression coverage.
-
----
-
 ### TASK-389: Align Numeric ORM typing with Decimal semantics
 **Priority**: P1
 **Estimate**: 1-2d

@@ -397,3 +397,4 @@
 - TASK-386: Fix task intake id allocation under concurrent writes ✅
 - TASK-397: Clear local-gate blockers surfaced by TASK-387 ✅
 - TASK-387: Fail closed on spec files missing Planning Gates ✅
+- TASK-388: Remove Any erasure from trend-write mutations ✅

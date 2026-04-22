@@ -14,9 +14,9 @@ from src.core.trend_forecast_contract import (
 
 def merge_forecast_contract_into_definition(
     *,
-    definition: Mapping[str, Any] | None,
-    forecast_contract: TrendForecastContract | dict[str, Any] | None,
-) -> dict[str, Any]:
+    definition: Mapping[str, object] | None,
+    forecast_contract: TrendForecastContract | Mapping[str, object] | None,
+) -> dict[str, object]:
     """Merge an explicit API forecast contract into the persisted definition payload."""
 
     normalized_definition = normalize_definition_payload(definition)

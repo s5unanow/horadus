@@ -6,20 +6,27 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 from uuid import UUID, uuid4
 
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.api.routes._trend_write_contract import build_validated_trend_write_payload
+from src.api.routes._trend_write_contract import (
+    TrendDefinitionInput,
+    TrendDefinitionPayload,
+    TrendForecastContractInput,
+    TrendIndicatorsInput,
+    ValidatedTrendWritePayload,
+    build_validated_trend_write_payload,
+)
 from src.api.routes._trend_write_persistence import (
     enforce_trend_uniqueness,
     is_unique_integrity_error,
     raise_payload_validation_error,
 )
-from src.core.trend_config import normalize_definition_payload
+from src.core.trend_config import TrendConfig, normalize_definition_payload
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.core.trend_state import activate_trend_state, ensure_definition_version
 from src.storage.models import Trend
@@ -36,6 +43,20 @@ _DIRECT_PROBABILITY_OVERRIDE_DETAIL = (
 _CURRENT_PROBABILITY_NOOP_ABS_TOL = 1e-6
 
 
+class TrendUpdateFields(TypedDict, total=False):
+    """Validated update-model fields relevant to privileged trend writes."""
+
+    name: str
+    description: str | None
+    definition: TrendDefinitionInput
+    forecast_contract: TrendForecastContractInput
+    baseline_probability: float
+    current_probability: float | None
+    indicators: TrendIndicatorsInput
+    decay_half_life_days: int
+    is_active: bool
+
+
 @dataclass(slots=True)
 class TrendMutationResult:
     """Useful linkage ids returned after a trend mutation succeeds."""
@@ -50,24 +71,24 @@ class TrendMutationResult:
 class TrendUpdatePlan:
     """Resolved candidate state for a trend update mutation."""
 
-    previous_definition: dict[str, Any]
-    updates: dict[str, Any]
-    activation_mode: str | None
+    previous_definition: TrendDefinitionPayload
+    updates: TrendUpdateFields
+    activation_mode: TrendActivationKind | None
     activation_notes: str | None
     definition_updated: bool
     candidate_name: str
     candidate_description: str | None
-    candidate_definition: dict[str, Any] | Any
-    candidate_forecast_contract: Any
+    candidate_definition: TrendDefinitionInput
+    candidate_forecast_contract: TrendForecastContractInput
     candidate_baseline_probability: float
-    candidate_indicators: dict[str, Any] | Any
+    candidate_indicators: TrendIndicatorsInput
     candidate_decay_half_life_days: int
 
 
 TrendActivationKind = Literal["create", "rebase", "replay", "new_line"]
 
 
-def _hash_definition_payload(definition: dict[str, Any]) -> str:
+def _hash_definition_payload(definition: TrendDefinitionPayload) -> str:
     canonical = json.dumps(
         definition,
         ensure_ascii=True,
@@ -77,7 +98,7 @@ def _hash_definition_payload(definition: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
-def requires_state_activation(updates: dict[str, Any]) -> bool:
+def requires_state_activation(updates: TrendUpdateFields) -> bool:
     """Return whether the update touches state-versioned live fields."""
 
     return any(
@@ -91,13 +112,13 @@ def requires_state_activation(updates: dict[str, Any]) -> bool:
     )
 
 
-def _live_state_definition_basis(definition: Any) -> dict[str, Any]:
-    normalized = normalize_definition_payload(definition if isinstance(definition, dict) else None)
+def _live_state_definition_basis(definition: TrendDefinitionInput) -> TrendDefinitionPayload:
+    normalized = normalize_definition_payload(definition)
     normalized.pop("forecast_contract", None)
-    return normalized
+    return cast("TrendDefinitionPayload", normalized)
 
 
-def _definition_update_requested(updates: dict[str, Any]) -> bool:
+def _definition_update_requested(updates: TrendUpdateFields) -> bool:
     return any(
         key in updates for key in ("definition", "forecast_contract", "baseline_probability")
     )
@@ -106,8 +127,8 @@ def _definition_update_requested(updates: dict[str, Any]) -> bool:
 def _normalize_noop_current_probability(
     *,
     trend: Trend,
-    updates: dict[str, Any],
-    activation_mode: str | None,
+    updates: TrendUpdateFields,
+    activation_mode: TrendActivationKind | None,
     candidate_baseline_probability: float,
     state_activation_required: bool,
 ) -> None:
@@ -153,13 +174,17 @@ def _normalize_noop_current_probability(
 def _resolved_candidate_definition(
     *,
     trend: Trend,
-    updates: dict[str, Any],
+    updates: TrendUpdateFields,
     definition_updated: bool,
-) -> dict[str, Any] | Any:
-    candidate_definition = updates.get("definition", trend.definition)
+) -> TrendDefinitionInput:
+    candidate_definition = (
+        updates["definition"]
+        if "definition" in updates
+        else cast("TrendDefinitionInput", trend.definition)
+    )
     if ("forecast_contract" in updates and "definition" not in updates) or not definition_updated:
         candidate_definition = normalize_definition_payload(
-            trend.definition if isinstance(trend.definition, dict) else None
+            cast("TrendDefinitionInput", trend.definition)
         )
         candidate_definition.pop("forecast_contract", None)
     return candidate_definition
@@ -169,7 +194,7 @@ async def record_definition_version_if_material_change(
     session: AsyncSession,
     *,
     trend: Trend,
-    previous_definition: dict[str, Any] | None,
+    previous_definition: TrendDefinitionPayload | None,
     actor: str | None,
     context: str | None,
     force: bool = False,
@@ -295,12 +320,14 @@ async def create_trend_mutation(
 
 
 def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdatePlan:
-    previous_definition = normalize_definition_payload(
-        trend.definition if isinstance(trend.definition, dict) else None
+    previous_definition = cast(
+        "TrendDefinitionPayload",
+        normalize_definition_payload(cast("TrendDefinitionInput", trend.definition)),
     )
-    updates = payload.model_dump(exclude_unset=True)
-    activation_mode = updates.pop("activation_mode", None)
-    activation_notes = updates.pop("activation_notes", None)
+    raw_updates = payload.model_dump(exclude_unset=True)
+    activation_mode = cast("TrendActivationKind | None", raw_updates.pop("activation_mode", None))
+    activation_notes = cast("str | None", raw_updates.pop("activation_notes", None))
+    updates = cast("TrendUpdateFields", raw_updates)
     definition_updated = _definition_update_requested(updates)
     candidate_definition = _resolved_candidate_definition(
         trend=trend,
@@ -312,7 +339,11 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
         if "baseline_probability" in updates
         else logodds_to_prob(float(trend.baseline_log_odds))
     )
-    candidate_indicators = updates.get("indicators", trend.indicators)
+    candidate_indicators = (
+        updates["indicators"]
+        if "indicators" in updates
+        else cast("TrendIndicatorsInput", trend.indicators)
+    )
     candidate_decay_half_life_days = updates.get(
         "decay_half_life_days",
         trend.decay_half_life_days,
@@ -351,12 +382,12 @@ def _build_trend_update_plan(trend: Trend, payload: TrendUpdate) -> TrendUpdateP
 
 def _state_contract_changed(
     *,
-    updates: dict[str, Any],
+    updates: TrendUpdateFields,
     trend: Trend,
-    candidate_definition: dict[str, Any] | Any,
-    previous_definition: dict[str, Any],
+    candidate_definition: TrendDefinitionInput,
+    previous_definition: TrendDefinitionPayload,
     candidate_baseline_probability: float,
-    candidate_indicators: dict[str, Any] | Any,
+    candidate_indicators: TrendIndicatorsInput,
     candidate_decay_half_life_days: int,
 ) -> bool:
     if not requires_state_activation(updates):
@@ -407,8 +438,8 @@ def _apply_trend_updates(
     *,
     trend: Trend,
     plan: TrendUpdatePlan,
-    write_payload: Any,
-    validated_config: Any,
+    write_payload: ValidatedTrendWritePayload,
+    validated_config: TrendConfig,
 ) -> None:
     updates = plan.updates
     if "name" in updates:
@@ -464,7 +495,7 @@ async def _activate_trend_state_if_needed(
     await activate_trend_state(
         session=session,
         trend=trend,
-        activation_kind=cast("TrendActivationKind", plan.activation_mode),
+        activation_kind=plan.activation_mode,
         actor="api",
         context="update_trend",
         definition_version=definition_version,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date
 from typing import Any, Literal
 
@@ -97,7 +98,7 @@ class TrendForecastContract(BaseModel):
 
 
 def normalize_forecast_contract_payload(
-    forecast_contract: TrendForecastContract | dict[str, Any] | None,
+    forecast_contract: TrendForecastContract | Mapping[str, object] | None,
 ) -> dict[str, Any] | None:
     """Return a normalized JSON-safe forecast-contract payload."""
 
@@ -106,8 +107,8 @@ def normalize_forecast_contract_payload(
 
     if isinstance(forecast_contract, TrendForecastContract):
         normalized = forecast_contract
-    elif isinstance(forecast_contract, dict):
-        normalized = TrendForecastContract.model_validate(forecast_contract)
+    elif isinstance(forecast_contract, Mapping):
+        normalized = TrendForecastContract.model_validate(dict(forecast_contract))
     else:
         msg = "forecast_contract must be a mapping"
         raise ValueError(msg)

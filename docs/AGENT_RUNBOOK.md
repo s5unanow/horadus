@@ -35,7 +35,10 @@ task-specific guarded start flow instead of forcing guesswork.
 When: before continuing chat/agent work on `main`.
 Fails closed only when tracked diffs already exist on `main`, reports the
 violating tracked paths, and points you back to the canonical task-branch flow.
-It skips task branches so normal in-branch development stays unaffected.
+It skips whenever the current branch is not `main`, so normal in-branch
+development stays unaffected. Detached `HEAD` is also treated as non-`main`,
+so do not mistake it for hard enforcement outside the canonical task-branch
+flow.
 
 3. `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
 When: canonical autonomous task-start command; enforces sprint eligibility and

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from sqlalchemy import select
@@ -156,6 +157,6 @@ async def activate_trend_state(
     trend.active_scoring_math_version = contract["math_version"]
     trend.active_scoring_parameter_set = contract["parameter_set"]
     trend.active_state_version_id = state_version.id
-    trend.current_log_odds = starting_log_odds
+    trend.current_log_odds = Decimal(str(starting_log_odds))
     trend.updated_at = activated
     return state_version

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
@@ -27,6 +28,7 @@ from src.core.trend_engine import (
     TrendEngine,
     TrendUpdate,
     _as_utc,
+    _to_decimal,
     calculate_evidence_delta,
     calculate_recency_novelty,
     format_direction,
@@ -86,6 +88,10 @@ class TestProbToLogodds:
     def test_as_utc_adds_timezone_to_naive_datetimes(self):
         naive = datetime(2026, 3, 8, 12, 0, tzinfo=UTC).replace(tzinfo=None)
         assert _as_utc(naive) == naive.replace(tzinfo=UTC)
+
+    def test_to_decimal_preserves_decimal_inputs(self):
+        value = Decimal("0.125")
+        assert _to_decimal(value) is value
 
 
 class TestLogoddsToProb:
@@ -497,7 +503,8 @@ class TestTrendEngine:
             reasoning="Test reasoning",
         )
 
-        assert mock_trend.current_log_odds == initial_lo + delta
+        assert isinstance(mock_trend.current_log_odds, Decimal)
+        assert float(mock_trend.current_log_odds) == pytest.approx(initial_lo + delta)
         assert result.delta_applied == delta
 
     @pytest.mark.asyncio
@@ -542,8 +549,8 @@ class TestTrendEngine:
         mock_session.add.assert_called_once()
         evidence_record = mock_session.add.call_args.args[0]
         expected_definition_hash = engine._definition_hash(mock_trend.definition)
-        assert evidence_record.base_weight == pytest.approx(sample_factors.base_weight)
-        assert evidence_record.direction_multiplier == pytest.approx(
+        assert float(evidence_record.base_weight) == pytest.approx(sample_factors.base_weight)
+        assert float(evidence_record.direction_multiplier) == pytest.approx(
             sample_factors.direction_multiplier
         )
         assert evidence_record.trend_definition_hash == expected_definition_hash
@@ -656,6 +663,7 @@ class TestTrendEngine:
             reasoning="down",
         )
         assert down_result.direction == "down"
+        assert isinstance(mock_trend.current_log_odds, Decimal)
 
         unchanged_result = await engine.apply_evidence(
             trend=mock_trend,
@@ -886,7 +894,8 @@ class TestTrendEngine:
         await engine.apply_decay(mock_trend)
 
         # Should be unchanged
-        assert mock_trend.current_log_odds == pytest.approx(original_lo, rel=0.001)
+        assert isinstance(mock_trend.current_log_odds, Decimal)
+        assert float(mock_trend.current_log_odds) == pytest.approx(original_lo, rel=0.001)
 
     @pytest.mark.asyncio
     async def test_get_probability_at_direction_change_and_top_evidence(

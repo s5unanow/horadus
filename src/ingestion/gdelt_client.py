@@ -5,6 +5,7 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -95,7 +96,6 @@ class GDELTClient:
 
     @property
     def queries(self) -> list[GDELTQueryConfig]:
-        """Returns the currently loaded query configs."""
         return list(self._queries)
 
     async def load_config(self, force: bool = False) -> None:
@@ -385,7 +385,7 @@ class GDELTClient:
         source.provider_source_key = provider_source_key
         source.name = query.name
         source.url = self.api_url
-        source.credibility_score = query.credibility
+        source.credibility_score = Decimal(str(query.credibility))
         source.source_tier = query.source_tier
         source.reporting_type = query.reporting_type
         source.config = config_payload

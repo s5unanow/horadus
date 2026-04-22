@@ -8,6 +8,7 @@ from collections import Counter
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
+from decimal import Decimal
 from inspect import isawaitable
 from typing import Any
 from urllib.parse import urlparse
@@ -343,7 +344,7 @@ async def refresh_event_provenance(
             unique_source_count=event.unique_source_count,
         )
     event.independent_evidence_count = summary.independent_evidence_count
-    event.corroboration_score = summary.weighted_corroboration_score
+    event.corroboration_score = Decimal(str(summary.weighted_corroboration_score))
     event.corroboration_mode = summary.method
     event.provenance_summary = summary.as_dict()
     if isinstance(prior_cluster_health, dict):

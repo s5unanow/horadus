@@ -10,6 +10,7 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from pathlib import Path
 from time import struct_time
 from typing import Any
@@ -385,7 +386,7 @@ class RSSCollector:
         source_tier_changed = source.source_tier != feed.source_tier
         reporting_type_changed = source.reporting_type != feed.reporting_type
         source.name = feed.name
-        source.credibility_score = feed.credibility
+        source.credibility_score = Decimal(str(feed.credibility))
         source.source_tier = feed.source_tier
         source.reporting_type = feed.reporting_type
         source.config = {

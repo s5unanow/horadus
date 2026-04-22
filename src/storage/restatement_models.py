@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -218,8 +219,8 @@ class TrendRestatement(Base):
     )
     restatement_kind: Mapped[str] = mapped_column(String(50), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
-    original_evidence_delta_log_odds: Mapped[float | None] = mapped_column(Numeric(10, 6))
-    compensation_delta_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    original_evidence_delta_log_odds: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    compensation_delta_log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     scoring_math_version: Mapped[str] = mapped_column(
         String(64),
         default=TREND_SCORING_MATH_VERSION,

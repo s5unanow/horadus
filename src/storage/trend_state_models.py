@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -107,9 +108,9 @@ class TrendStateVersion(Base):
         server_default=text(f"'{TREND_SCORING_PARAMETER_SET}'"),
         nullable=False,
     )
-    baseline_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
-    starting_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
-    current_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    baseline_log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
+    starting_log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
+    current_log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     decay_half_life_days: Mapped[int] = mapped_column(Integer, nullable=False)
     actor: Mapped[str | None] = mapped_column(String(255))
     context: Mapped[str | None] = mapped_column(String(255))

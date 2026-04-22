@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from decimal import Decimal
 from inspect import isawaitable
 from math import pow
 from typing import Any
@@ -179,7 +180,7 @@ async def apply_compensating_restatement(
             fallback_current_log_odds=prior_log_odds,
         )
         if previous_lo != new_lo:
-            trend.current_log_odds = new_lo
+            trend.current_log_odds = Decimal(str(new_lo))
             trend.updated_at = applied_at
 
     return restatement

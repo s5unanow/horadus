@@ -156,4 +156,4 @@ indicators:
     assert existing.definition["id"] == "signal-watch"
     assert existing.description == "Updated description"
     assert existing.decay_half_life_days == 45
-    assert existing.baseline_log_odds == pytest.approx(prob_to_logodds(0.30))
+    assert float(existing.baseline_log_odds) == pytest.approx(prob_to_logodds(0.30))

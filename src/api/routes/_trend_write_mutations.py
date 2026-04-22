@@ -6,6 +6,7 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, TypedDict, cast
 from uuid import UUID, uuid4
 
@@ -450,7 +451,7 @@ def _apply_trend_updates(
         trend.runtime_trend_id = write_payload.runtime_trend_id
         trend.definition = write_payload.definition
     if "baseline_probability" in updates:
-        trend.baseline_log_odds = write_payload.baseline_log_odds
+        trend.baseline_log_odds = Decimal(str(write_payload.baseline_log_odds))
     if "indicators" in updates:
         trend.indicators = write_payload.indicators
     if "decay_half_life_days" in updates:

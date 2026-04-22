@@ -46,6 +46,20 @@ def test_api_usage_server_defaults_match_migration_baseline() -> None:
     assert _render_default("estimated_cost_usd") == "0"
 
 
+def test_numeric_orm_annotations_use_decimal_runtime_types() -> None:
+    annotation_cases = (
+        (Source, "credibility_score"),
+        (TrendEvidence, "delta_log_odds"),
+        (TrendStateVersion, "current_log_odds"),
+        (TrendRestatement, "compensation_delta_log_odds"),
+        (ApiUsage, "estimated_cost_usd"),
+    )
+
+    for model, field_name in annotation_cases:
+        annotation = model.__annotations__[field_name]
+        assert annotation == "Mapped[Decimal]"
+
+
 def test_pgvector_indexes_present_in_model_metadata() -> None:
     raw_item_indexes = {index.name for index in RawItem.__table__.indexes}
     event_indexes = {index.name for index in Event.__table__.indexes}

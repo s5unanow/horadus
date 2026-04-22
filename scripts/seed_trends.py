@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
@@ -164,7 +165,7 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
                     trend.definition = normalized_definition
                     trend.indicators = indicators
                     trend.decay_half_life_days = decay_half_life_days
-                    trend.baseline_log_odds = baseline_log_odds
+                    trend.baseline_log_odds = Decimal(str(baseline_log_odds))
                     # Do not overwrite current probability when reseeding.
 
         if not dry_run:

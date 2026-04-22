@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
@@ -410,7 +411,7 @@ async def _close_empty_merged_event(event: Event, *, replay_pending: bool = True
     event.source_count = 0
     event.unique_source_count = 0
     event.independent_evidence_count = 0
-    event.corroboration_score = 0.0
+    event.corroboration_score = Decimal("0")
     event.corroboration_mode = "fallback"
     event.embedding = None
     event.embedding_model = None

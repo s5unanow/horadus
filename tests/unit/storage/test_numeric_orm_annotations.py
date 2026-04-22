@@ -36,6 +36,7 @@ def test_numeric_orm_annotations_use_decimal_runtime_types() -> None:
             globalns={
                 **typing.__dict__,
                 **sys.modules[model.__module__].__dict__,
+                "Decimal": Decimal,
                 "Trend": Trend,
             },
             include_extras=True,

@@ -30,31 +30,32 @@ from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
-from src.storage.coverage_models import CoverageSnapshot
-from src.storage.decimal_utils import Decimal, to_decimal
-from src.storage.entity_models import CanonicalEntity, CanonicalEntityAlias, EventEntity
-from src.storage.event_lineage_models import EventLineage
+from src.storage.coverage_models import CoverageSnapshot  # noqa: F401
+from src.storage.decimal_utils import Decimal, to_decimal  # noqa: F401
+from src.storage.entity_models import (  # noqa: F401
+    CanonicalEntity,
+    CanonicalEntityAlias,
+    EventEntity,
+)
+from src.storage.event_lineage_models import EventLineage  # noqa: F401
 from src.storage.event_state import (
     EVENT_ACTIVITY_STATE_SQL_VALUES,
     EVENT_EPISTEMIC_STATE_SQL_VALUES,
     EventActivityState,
     EventEpistemicState,
 )
-from src.storage.novelty_models import NoveltyCandidate
-from src.storage.restatement_models import (
+from src.storage.novelty_models import NoveltyCandidate  # noqa: F401
+from src.storage.restatement_models import (  # noqa: F401
     EventAdjudication,
     HumanFeedback,
     PrivilegedWriteAudit,
     TrendRestatement,
 )
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
-from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
-
-# fmt: off
-_ = (CanonicalEntity, CanonicalEntityAlias, CoverageSnapshot, EventAdjudication, EventEntity,
-     EventLineage, HumanFeedback, NoveltyCandidate, PrivilegedWriteAudit, TrendRestatement,
-     TrendStateVersion, to_decimal)
-# fmt: on
+from src.storage.trend_state_models import (  # noqa: TC001
+    TrendDefinitionVersion,
+    TrendStateVersion,
+)
 
 
 class SourceType(enum.StrEnum):
@@ -364,9 +365,9 @@ class Event(Base):
     source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unique_source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     independent_evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    corroboration_score: Mapped[Decimal] = mapped_column(
-        Numeric(5, 2), default=Decimal("1.0"), nullable=False
-    )
+    # fmt: off
+    corroboration_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("1.0"), nullable=False)
+    # fmt: on
     corroboration_mode: Mapped[str] = mapped_column(String(20), default="fallback", nullable=False)
     provenance_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     extraction_provenance: Mapped[dict[str, Any]] = mapped_column(

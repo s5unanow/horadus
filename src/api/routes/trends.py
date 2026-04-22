@@ -29,9 +29,7 @@ from src.api.routes._privileged_write_contract import (
     trend_revision_token,
 )
 from src.api.routes._trend_forecast_contract import forecast_contract_from_definition
-from src.api.routes._trend_write_contract import (
-    build_validated_trend_write_payload,
-)
+from src.api.routes._trend_write_contract import build_validated_trend_write_payload
 from src.api.routes._trend_write_mutations import (
     create_trend_mutation,
     update_trend_mutation,

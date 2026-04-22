@@ -16,6 +16,10 @@ Implementation note:
 
 - `uv run --no-sync horadus tasks preflight`
   - Enforces clean/synced `main`, required hooks, GitHub CLI availability, and no open task PRs unless explicitly bypassed.
+- `uv run --no-sync horadus tasks assert-safe-worktree`
+  - Fails closed only when tracked diffs already exist on `main` during chat/agent work.
+  - Skips task branches so normal in-branch development does not trip the watchdog.
+  - Points the operator back to `horadus tasks safe-start` when tracked edits started on `main`.
 - `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
   - Canonical autonomous task-start command.
   - Reuses eligibility checks and then creates the canonical

@@ -19,6 +19,7 @@ pytestmark = pytest.mark.unit
 
 EXPECTED_TASK_SUBCOMMANDS = sorted(
     [
+        "assert-safe-worktree",
         "automation-lock",
         "close-ledgers",
         "context-pack",

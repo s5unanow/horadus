@@ -69,6 +69,7 @@ Status precedence:
 ## Workflow (How To Work In This Repo)
 
 Before starting work:
+- If you are on `main` during a chat/agent session, run `uv run --no-sync horadus tasks assert-safe-worktree` before continuing tracked edits.
 - Read `tasks/CURRENT_SPRINT.md` and any relevant `tasks/specs/*.md`.
 - Skim `docs/ARCHITECTURE.md` and `docs/DATA_MODEL.md` for context.
 - Run tests relevant to your change (at minimum unit tests).
@@ -131,6 +132,7 @@ After completing work:
 - Every engineering task must run on its own dedicated git branch created from `main`.
 - Branch scope must be single-task only (no mixed `TASK-XXX` implementation in one branch).
 - Before creating a task branch, run sequencing preflight: `uv run --no-sync horadus tasks preflight`.
+- During chat/agent work on `main`, use `uv run --no-sync horadus tasks assert-safe-worktree` to fail closed on tracked diffs before work drifts outside the task-branch flow.
 - Start task branches via lower-level guarded command: `uv run --no-sync horadus tasks start TASK-XXX --name short-name`.
 - Canonical agent start command is `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name` (enforces sprint eligibility + sequencing guard, and can carry forward eligible planning-intake edits for the target task).
 - `make task-preflight`, `make task-start`, and `make agent-safe-start` remain compatibility wrappers when a Make target is more convenient.

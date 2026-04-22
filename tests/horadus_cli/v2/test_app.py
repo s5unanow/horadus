@@ -138,6 +138,15 @@ def test_build_parser_accepts_task_safe_start_command() -> None:
     assert args.dry_run is True
 
 
+def test_build_parser_accepts_assert_safe_worktree_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["tasks", "assert-safe-worktree", "--format", "json"])
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "assert-safe-worktree"
+    assert args.output_format == "json"
+
+
 def test_build_parser_accepts_task_intake_add_command() -> None:
     parser = _build_parser()
     args = parser.parse_args(

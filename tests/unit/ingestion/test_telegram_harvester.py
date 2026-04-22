@@ -711,7 +711,7 @@ async def test_get_or_create_source_creates_and_updates_records(
 
     assert updated is existing
     assert existing.url == "https://t.me/intel_feed"
-    assert existing.credibility_score == 0.9
+    assert float(existing.credibility_score) == pytest.approx(0.9)
     assert existing.source_tier == "tier1"
     assert existing.reporting_type == "primary"
     assert existing.config["categories"] == ["conflict"]
@@ -796,7 +796,7 @@ async def test_get_or_create_source_refreshes_provenance_when_credibility_change
 
     await harvester._get_or_create_source(channel)
 
-    assert existing.credibility_score == pytest.approx(0.9)
+    assert float(existing.credibility_score) == pytest.approx(0.9)
     refresh_mock.assert_awaited_once_with(session=mock_db_session, source_id=existing.id)
 
 

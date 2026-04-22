@@ -32,7 +32,7 @@ from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.trend_impact_reconciliation import reconcile_event_trend_impacts
 from src.storage.event_state import resolved_corroboration_score
 from src.storage.event_summary import refresh_event_summary_from_canonical
-from src.storage.models import Event, EventItem, RawItem, Source, Trend
+from src.storage.models import Event, EventItem, RawItem, Source, Trend, to_decimal
 
 PROVENANCE_AWARE_MODE = "provenance_aware"
 FALLBACK_MODE = "fallback"
@@ -343,7 +343,7 @@ async def refresh_event_provenance(
             unique_source_count=event.unique_source_count,
         )
     event.independent_evidence_count = summary.independent_evidence_count
-    event.corroboration_score = summary.weighted_corroboration_score
+    event.corroboration_score = to_decimal(summary.weighted_corroboration_score)
     event.corroboration_mode = summary.method
     event.provenance_summary = summary.as_dict()
     if isinstance(prior_cluster_health, dict):

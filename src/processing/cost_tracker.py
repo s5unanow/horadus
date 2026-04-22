@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import resolve_llm_token_pricing, settings
 from src.core.observability import record_budget_denial
-from src.storage.models import ApiUsage
+from src.storage.models import ApiUsage, to_decimal
 
 logger = structlog.get_logger(__name__)
 
@@ -168,7 +168,7 @@ class CostTracker:
         usage.call_count = projected_calls
         usage.input_tokens += safe_input_tokens
         usage.output_tokens += safe_output_tokens
-        usage.estimated_cost_usd = float(Decimal(str(usage.estimated_cost_usd)) + estimated_cost)
+        usage.estimated_cost_usd = to_decimal(usage.estimated_cost_usd) + estimated_cost
         usage.updated_at = datetime.now(tz=UTC)
         await self.session.flush()
 
@@ -285,7 +285,7 @@ class CostTracker:
                     call_count=0,
                     input_tokens=0,
                     output_tokens=0,
-                    estimated_cost_usd=0,
+                    estimated_cost_usd=Decimal("0"),
                 )
                 self.session.add(usage)
                 await self.session.flush()

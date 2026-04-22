@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+# ruff: noqa: F401, TC001
 import enum
 from datetime import date, datetime
 from typing import Any
@@ -31,6 +32,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
 from src.storage.coverage_models import CoverageSnapshot
+from src.storage.decimal_utils import Decimal
+from src.storage.decimal_utils import to_decimal as to_decimal
 from src.storage.entity_models import CanonicalEntity, CanonicalEntityAlias, EventEntity
 from src.storage.event_lineage_models import EventLineage
 from src.storage.event_state import (
@@ -48,12 +51,6 @@ from src.storage.restatement_models import (
 )
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
-
-# fmt: off
-_ = (CanonicalEntity, CanonicalEntityAlias, CoverageSnapshot, EventAdjudication, EventEntity,
-     EventLineage, HumanFeedback, NoveltyCandidate, PrivilegedWriteAudit, TrendRestatement,
-     TrendStateVersion)
-# fmt: on
 
 
 class SourceType(enum.StrEnum):
@@ -167,15 +164,10 @@ def sql_string_literals(values: tuple[str, ...]) -> str:
     return ", ".join(f"'{value}'" for value in values)
 
 
-SOURCE_TIER_VALUES = tuple(enum_values(SourceTier))
-REPORTING_TYPE_VALUES = tuple(enum_values(ReportingType))
-EVENT_LIFECYCLE_VALUES = tuple(enum_values(EventLifecycle))
-EVENT_CLAIM_TYPE_VALUES = tuple(enum_values(EventClaimType))
-
-SOURCE_TIER_SQL_VALUES = sql_string_literals(SOURCE_TIER_VALUES)
-REPORTING_TYPE_SQL_VALUES = sql_string_literals(REPORTING_TYPE_VALUES)
-EVENT_LIFECYCLE_SQL_VALUES = sql_string_literals(EVENT_LIFECYCLE_VALUES)
-EVENT_CLAIM_TYPE_SQL_VALUES = sql_string_literals(EVENT_CLAIM_TYPE_VALUES)
+SOURCE_TIER_SQL_VALUES = sql_string_literals(tuple(enum_values(SourceTier)))
+REPORTING_TYPE_SQL_VALUES = sql_string_literals(tuple(enum_values(ReportingType)))
+EVENT_LIFECYCLE_SQL_VALUES = sql_string_literals(tuple(enum_values(EventLifecycle)))
+EVENT_CLAIM_TYPE_SQL_VALUES = sql_string_literals(tuple(enum_values(EventClaimType)))
 
 
 class Source(Base):
@@ -195,9 +187,9 @@ class Source(Base):
     provider_source_key: Mapped[str | None] = mapped_column(String(255))
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     url: Mapped[str | None] = mapped_column(Text)
-    credibility_score: Mapped[float] = mapped_column(
+    credibility_score: Mapped[Decimal] = mapped_column(
         Numeric(3, 2),
-        default=0.50,
+        default=Decimal("0.50"),
         nullable=False,
     )
     source_tier: Mapped[str] = mapped_column(
@@ -363,7 +355,9 @@ class Event(Base):
     source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unique_source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     independent_evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    corroboration_score: Mapped[float] = mapped_column(Numeric(5, 2), default=1.0, nullable=False)
+    # fmt: off
+    corroboration_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("1.0"), nullable=False)
+    # fmt: on
     corroboration_mode: Mapped[str] = mapped_column(String(20), default="fallback", nullable=False)
     provenance_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     extraction_provenance: Mapped[dict[str, Any]] = mapped_column(
@@ -623,11 +617,11 @@ class Trend(Base):
     )
 
     # Probability as log-odds
-    baseline_log_odds: Mapped[float] = mapped_column(
+    baseline_log_odds: Mapped[Decimal] = mapped_column(
         Numeric(10, 6),
         nullable=False,
     )
-    current_log_odds: Mapped[float] = mapped_column(
+    current_log_odds: Mapped[Decimal] = mapped_column(
         Numeric(10, 6),
         nullable=False,
     )
@@ -705,8 +699,8 @@ class TrendEvidence(Base):
 
     # Signal classification
     signal_type: Mapped[str] = mapped_column(String(100), nullable=False)
-    base_weight: Mapped[float | None] = mapped_column(Numeric(10, 6))
-    direction_multiplier: Mapped[float | None] = mapped_column(Numeric(3, 1))
+    base_weight: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    direction_multiplier: Mapped[Decimal | None] = mapped_column(Numeric(3, 1))
     trend_definition_hash: Mapped[str | None] = mapped_column(String(64))
     scoring_math_version: Mapped[str] = mapped_column(
         String(64),
@@ -722,16 +716,16 @@ class TrendEvidence(Base):
     )
 
     # Scoring factors
-    credibility_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
-    corroboration_factor: Mapped[float | None] = mapped_column(Numeric(5, 2))
-    novelty_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
-    evidence_age_days: Mapped[float | None] = mapped_column(Numeric(6, 2))
-    temporal_decay_factor: Mapped[float | None] = mapped_column(Numeric(5, 4))
-    severity_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
-    confidence_score: Mapped[float | None] = mapped_column(Numeric(3, 2))
+    credibility_score: Mapped[Decimal | None] = mapped_column(Numeric(3, 2))
+    corroboration_factor: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    novelty_score: Mapped[Decimal | None] = mapped_column(Numeric(3, 2))
+    evidence_age_days: Mapped[Decimal | None] = mapped_column(Numeric(6, 2))
+    temporal_decay_factor: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
+    severity_score: Mapped[Decimal | None] = mapped_column(Numeric(3, 2))
+    confidence_score: Mapped[Decimal | None] = mapped_column(Numeric(3, 2))
 
     # Result
-    delta_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    delta_log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     reasoning: Mapped[str | None] = mapped_column(Text)
 
     created_at: Mapped[datetime] = mapped_column(
@@ -945,7 +939,7 @@ class TrendSnapshot(Base):
         PGUUID(as_uuid=True),
         ForeignKey("trend_state_versions.id", ondelete="SET NULL"),
     )
-    log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     event_count_24h: Mapped[int | None] = mapped_column(Integer)
 
     # Relationships
@@ -1060,9 +1054,9 @@ class ApiUsage(Base):
         server_default=text("0"),
         nullable=False,
     )
-    estimated_cost_usd: Mapped[float] = mapped_column(
+    estimated_cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(10, 4),
-        default=0,
+        default=Decimal("0"),
         server_default=text("0"),
         nullable=False,
     )
@@ -1115,7 +1109,7 @@ class TrendOutcome(Base):
         DateTime(timezone=True),
         nullable=False,
     )
-    predicted_probability: Mapped[float] = mapped_column(
+    predicted_probability: Mapped[Decimal] = mapped_column(
         Numeric(5, 4),
         nullable=False,
     )
@@ -1123,11 +1117,11 @@ class TrendOutcome(Base):
         String(20),
         nullable=False,
     )
-    probability_band_low: Mapped[float] = mapped_column(
+    probability_band_low: Mapped[Decimal] = mapped_column(
         Numeric(5, 4),
         nullable=False,
     )
-    probability_band_high: Mapped[float] = mapped_column(
+    probability_band_high: Mapped[Decimal] = mapped_column(
         Numeric(5, 4),
         nullable=False,
     )
@@ -1139,7 +1133,7 @@ class TrendOutcome(Base):
     outcome_evidence: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     # Scoring
-    brier_score: Mapped[float | None] = mapped_column(Numeric(10, 6))
+    brier_score: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
 
     # Metadata
     recorded_by: Mapped[str | None] = mapped_column(String(100))

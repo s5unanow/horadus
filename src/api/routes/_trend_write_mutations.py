@@ -29,7 +29,7 @@ from src.api.routes._trend_write_persistence import (
 from src.core.trend_config import TrendConfig, normalize_definition_payload
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.core.trend_state import activate_trend_state, ensure_definition_version
-from src.storage.models import Trend
+from src.storage.models import Trend, to_decimal
 from src.storage.trend_state_models import TrendDefinitionVersion
 
 if TYPE_CHECKING:
@@ -450,7 +450,7 @@ def _apply_trend_updates(
         trend.runtime_trend_id = write_payload.runtime_trend_id
         trend.definition = write_payload.definition
     if "baseline_probability" in updates:
-        trend.baseline_log_odds = write_payload.baseline_log_odds
+        trend.baseline_log_odds = to_decimal(write_payload.baseline_log_odds)
     if "indicators" in updates:
         trend.indicators = write_payload.indicators
     if "decay_half_life_days" in updates:

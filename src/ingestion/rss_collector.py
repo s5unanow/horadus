@@ -27,7 +27,7 @@ from src.ingestion.content_extractor import ContentExtractor
 from src.ingestion.rate_limiter import DomainRateLimiter
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
-from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
+from src.storage.models import ProcessingStatus, RawItem, Source, SourceType, to_decimal
 
 logger = structlog.get_logger(__name__)
 
@@ -385,7 +385,7 @@ class RSSCollector:
         source_tier_changed = source.source_tier != feed.source_tier
         reporting_type_changed = source.reporting_type != feed.reporting_type
         source.name = feed.name
-        source.credibility_score = feed.credibility
+        source.credibility_score = to_decimal(feed.credibility)
         source.source_tier = feed.source_tier
         source.reporting_type = feed.reporting_type
         source.config = {

@@ -398,3 +398,4 @@
 - TASK-397: Clear local-gate blockers surfaced by TASK-387 ✅
 - TASK-387: Fail closed on spec files missing Planning Gates ✅
 - TASK-388: Remove Any erasure from trend-write mutations ✅
+- TASK-389: Align Numeric ORM typing with Decimal semantics ✅

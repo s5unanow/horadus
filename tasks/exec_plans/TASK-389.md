@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-04-22
-- Current state: Not started
+- Current state: Local validation complete; preparing finish workflow
 - Planning Gates: Required — Numeric ORM semantics span shared storage and domain hotspots.
 
 ## Goal (1-3 lines)
@@ -37,6 +37,7 @@ probability, evidence, restatement, and cost paths stay type-safe and explicit.
 - Accepted design / smallest safe shape: tighten annotations and conversions only where Numeric-backed values already behave as Decimal at runtime.
 - Rejected simpler alternative: leave float annotations in place and rely on informal caller discipline.
 - First integration proof: run the targeted Decimal typing/tests plus the canonical local gate after the affected storage/domain surfaces are updated.
+- Docs updates: N/A — Decimal ORM typing alignment does not change published API or operator-facing workflow contracts.
 - Hotspot Outcome: keep-flat-with-rationale — the task must touch existing shared hotspots to align live Numeric semantics; defer extraction unless the implementation expands beyond the declared Decimal boundary.
 - Waivers: none.
 

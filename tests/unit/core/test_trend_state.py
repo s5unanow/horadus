@@ -192,7 +192,7 @@ async def test_activate_trend_state_rebase_uses_current_log_odds(mock_db_session
     assert state_version.scoring_parameter_set == contract["parameter_set"]
     assert trend.active_definition_version_id == definition_version.id
     assert trend.active_state_version_id == state_version.id
-    assert trend.current_log_odds == pytest.approx(prob_to_logodds(0.35))
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.35))
     assert trend.updated_at == activated_at
 
 
@@ -221,7 +221,7 @@ async def test_activate_trend_state_replay_resets_to_baseline(mock_db_session) -
         "isolation_strategy": "cutoff_freeze",
         "replay_required": True,
     }
-    assert trend.current_log_odds == pytest.approx(prob_to_logodds(0.2))
+    assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.2))
 
 
 @pytest.mark.asyncio

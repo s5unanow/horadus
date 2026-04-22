@@ -497,7 +497,7 @@ class TestTrendEngine:
             reasoning="Test reasoning",
         )
 
-        assert mock_trend.current_log_odds == initial_lo + delta
+        assert float(mock_trend.current_log_odds) == pytest.approx(initial_lo + delta)
         assert result.delta_applied == delta
 
     @pytest.mark.asyncio
@@ -542,8 +542,8 @@ class TestTrendEngine:
         mock_session.add.assert_called_once()
         evidence_record = mock_session.add.call_args.args[0]
         expected_definition_hash = engine._definition_hash(mock_trend.definition)
-        assert evidence_record.base_weight == pytest.approx(sample_factors.base_weight)
-        assert evidence_record.direction_multiplier == pytest.approx(
+        assert float(evidence_record.base_weight) == pytest.approx(sample_factors.base_weight)
+        assert float(evidence_record.direction_multiplier) == pytest.approx(
             sample_factors.direction_multiplier
         )
         assert evidence_record.trend_definition_hash == expected_definition_hash
@@ -656,7 +656,6 @@ class TestTrendEngine:
             reasoning="down",
         )
         assert down_result.direction == "down"
-
         unchanged_result = await engine.apply_evidence(
             trend=mock_trend,
             delta=0.0005,
@@ -886,7 +885,7 @@ class TestTrendEngine:
         await engine.apply_decay(mock_trend)
 
         # Should be unchanged
-        assert mock_trend.current_log_odds == pytest.approx(original_lo, rel=0.001)
+        assert float(mock_trend.current_log_odds) == pytest.approx(original_lo, rel=0.001)
 
     @pytest.mark.asyncio
     async def test_get_probability_at_direction_change_and_top_evidence(

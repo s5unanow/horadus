@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.runtime_provenance import current_trend_scoring_contract
 from src.core.trend_engine import DEFAULT_DECAY_HALF_LIFE_DAYS, TrendEngine
 from src.core.trend_state import resolve_active_scoring_contract
-from src.storage.models import Trend, TrendEvidence
+from src.storage.models import Trend, TrendEvidence, to_decimal
 from src.storage.restatement_models import TrendRestatement
 from src.storage.trend_state_models import TrendStateVersion
 
@@ -179,7 +179,7 @@ async def apply_compensating_restatement(
             fallback_current_log_odds=prior_log_odds,
         )
         if previous_lo != new_lo:
-            trend.current_log_odds = new_lo
+            trend.current_log_odds = to_decimal(new_lo)
             trend.updated_at = applied_at
 
     return restatement

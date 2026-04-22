@@ -1,7 +1,6 @@
 """Feedback and restatement ledger models extracted from the main model module."""
 
-from __future__ import annotations
-
+from __future__ import annotations  # noqa: I001
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -18,11 +17,11 @@ from sqlalchemy import (
     func,
     text,
 )
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.storage.base import Base
+from src.storage.decimal_utils import Decimal  # noqa: TC001
 from src.storage.scoring_contract import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,
@@ -218,8 +217,8 @@ class TrendRestatement(Base):
     )
     restatement_kind: Mapped[str] = mapped_column(String(50), nullable=False)
     source: Mapped[str] = mapped_column(String(50), nullable=False)
-    original_evidence_delta_log_odds: Mapped[float | None] = mapped_column(Numeric(10, 6))
-    compensation_delta_log_odds: Mapped[float] = mapped_column(Numeric(10, 6), nullable=False)
+    original_evidence_delta_log_odds: Mapped[Decimal | None] = mapped_column(Numeric(10, 6))
+    compensation_delta_log_odds: Mapped[Decimal] = mapped_column(Numeric(10, 6), nullable=False)
     scoring_math_version: Mapped[str] = mapped_column(
         String(64),
         default=TREND_SCORING_MATH_VERSION,

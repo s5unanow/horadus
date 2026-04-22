@@ -26,7 +26,7 @@ from src.ingestion.source_identity import (
 )
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
-from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
+from src.storage.models import ProcessingStatus, RawItem, Source, SourceType, to_decimal
 
 logger = structlog.get_logger(__name__)
 
@@ -439,7 +439,7 @@ class TelegramHarvester:
         source.provider_source_key = provider_source_key
         source.name = channel.name
         source.url = channel_url
-        source.credibility_score = channel.credibility
+        source.credibility_score = to_decimal(channel.credibility)
         source.source_tier = channel.source_tier
         source.reporting_type = channel.reporting_type
         source.config = config_payload

@@ -26,7 +26,7 @@ from src.core.trend_engine import (
     prob_to_logodds,
 )
 from src.storage.database import async_session_maker
-from src.storage.models import Trend
+from src.storage.models import Trend, to_decimal
 
 DEFAULT_BASELINE_PROBABILITY = 0.10
 
@@ -164,7 +164,7 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
                     trend.definition = normalized_definition
                     trend.indicators = indicators
                     trend.decay_half_life_days = decay_half_life_days
-                    trend.baseline_log_odds = baseline_log_odds
+                    trend.baseline_log_odds = to_decimal(baseline_log_odds)
                     # Do not overwrite current probability when reseeding.
 
         if not dry_run:

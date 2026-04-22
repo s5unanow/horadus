@@ -29,9 +29,7 @@ from src.api.routes._privileged_write_contract import (
     trend_revision_token,
 )
 from src.api.routes._trend_forecast_contract import forecast_contract_from_definition
-from src.api.routes._trend_write_contract import (
-    build_validated_trend_write_payload,
-)
+from src.api.routes._trend_write_contract import build_validated_trend_write_payload
 from src.api.routes._trend_write_mutations import (
     create_trend_mutation,
     update_trend_mutation,
@@ -100,6 +98,7 @@ from src.storage.models import (
     TrendEvidence,
     TrendOutcome,
     TrendSnapshot,
+    to_decimal,
 )
 from src.storage.trend_state_models import TrendDefinitionVersion
 
@@ -621,7 +620,7 @@ async def load_trends_from_config(
             existing.description = validated_config.description
             existing.runtime_trend_id = runtime_trend_id
             existing.definition = write_payload.definition
-            existing.baseline_log_odds = write_payload.baseline_log_odds
+            existing.baseline_log_odds = to_decimal(write_payload.baseline_log_odds)
             existing.indicators = write_payload.indicators
             existing.decay_half_life_days = validated_config.decay_half_life_days
             await _record_definition_version_if_material_change(

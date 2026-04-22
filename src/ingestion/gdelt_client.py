@@ -20,7 +20,7 @@ from src.ingestion.rate_limiter import DomainRateLimiter
 from src.ingestion.source_identity import gdelt_provider_source_key_from_mapping
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
-from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
+from src.storage.models import ProcessingStatus, RawItem, Source, SourceType, to_decimal
 
 logger = structlog.get_logger(__name__)
 
@@ -87,7 +87,6 @@ class GDELTClient:
         self.settings = GDELTSettings()
         self._queries: list[GDELTQueryConfig] = []
         self._config_mtime: float | None = None
-
         self.total_timeout_seconds = settings.GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS
         self.max_retries = 3
         self.dedup_window_days = 7
@@ -385,7 +384,7 @@ class GDELTClient:
         source.provider_source_key = provider_source_key
         source.name = query.name
         source.url = self.api_url
-        source.credibility_score = query.credibility
+        source.credibility_score = to_decimal(query.credibility)
         source.source_tier = query.source_tier
         source.reporting_type = query.reporting_type
         source.config = config_payload

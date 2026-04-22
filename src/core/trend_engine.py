@@ -36,19 +36,17 @@ from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import structlog
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
 from src.core.trend_state import resolve_active_definition_hash, resolve_active_scoring_contract
+from src.storage.models import Trend, TrendEvidence, TrendSnapshot
+from src.storage.trend_state_models import TrendStateVersion
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-    from src.storage.models import Trend, TrendEvidence
-
 logger = structlog.get_logger(__name__)
-
-
 # =============================================================================
 # Constants
 # =============================================================================
@@ -65,7 +63,6 @@ MAX_DELTA_PER_EVENT: float = 0.5
 DEFAULT_DECAY_HALF_LIFE_DAYS: int = 30
 DEFAULT_NOVELTY_MIN_SCORE: float = 0.30
 DEFAULT_NOVELTY_RECOVERY_HALF_LIFE_DAYS: float = 7.0
-
 
 # =============================================================================
 # Time Helpers
@@ -448,9 +445,6 @@ class TrendEngine:
         fallback_current_log_odds: float | None = None,
     ) -> tuple[float, float]:
         """Apply a log-odds delta atomically and return (previous_lo, new_lo)."""
-        from src.storage.models import Trend
-        from src.storage.trend_state_models import TrendStateVersion
-
         delta_value = Decimal(str(delta))
         applied_at = _as_utc(updated_at) if updated_at is not None else datetime.now(UTC)
         stmt = (
@@ -520,8 +514,6 @@ class TrendEngine:
         reasoning: str,
     ) -> TrendUpdate:
         """Apply one evidence delta and persist the claim-aware audit row."""
-        from src.storage.models import TrendEvidence
-
         prior_log_odds = float(trend.current_log_odds)
         previous_prob = logodds_to_prob(prior_log_odds)
 
@@ -561,19 +553,19 @@ class TrendEngine:
             event_claim_id=event_claim_id,
             state_version_id=active_state_version_id,
             signal_type=signal_type,
-            base_weight=factors.base_weight,
-            direction_multiplier=factors.direction_multiplier,
+            base_weight=Decimal(str(factors.base_weight)),
+            direction_multiplier=Decimal(str(factors.direction_multiplier)),
             trend_definition_hash=resolve_active_definition_hash(trend),
             scoring_math_version=scoring_contract["math_version"],
             scoring_parameter_set=scoring_contract["parameter_set"],
-            credibility_score=factors.credibility,
-            corroboration_factor=factors.corroboration,
-            novelty_score=factors.novelty,
-            evidence_age_days=factors.evidence_age_days,
-            temporal_decay_factor=factors.temporal_decay_multiplier,
-            severity_score=factors.severity,
-            confidence_score=factors.confidence,
-            delta_log_odds=delta,
+            credibility_score=Decimal(str(factors.credibility)),
+            corroboration_factor=Decimal(str(factors.corroboration)),
+            novelty_score=Decimal(str(factors.novelty)),
+            evidence_age_days=Decimal(str(factors.evidence_age_days)),
+            temporal_decay_factor=Decimal(str(factors.temporal_decay_multiplier)),
+            severity_score=Decimal(str(factors.severity)),
+            confidence_score=Decimal(str(factors.confidence)),
+            delta_log_odds=Decimal(str(delta)),
             reasoning=reasoning,
         )
         try:
@@ -607,7 +599,7 @@ class TrendEngine:
             updated_at=applied_at,
             fallback_current_log_odds=prior_log_odds,
         )
-        trend.current_log_odds = new_lo
+        trend.current_log_odds = Decimal(str(new_lo))
         trend.updated_at = applied_at
 
         previous_prob = logodds_to_prob(previous_lo)
@@ -649,7 +641,6 @@ class TrendEngine:
 
         Uses exponential decay with configurable half-life:
             new_lo = baseline_lo + (current_lo - baseline_lo) * decay_factor
-
         Where decay_factor = 0.5^(days_elapsed / half_life)
 
         This means after one half-life, the deviation from baseline
@@ -664,17 +655,14 @@ class TrendEngine:
         """
         as_of = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
 
-        from src.storage.models import Trend as TrendModel
-        from src.storage.trend_state_models import TrendStateVersion
-
         locked_row_result = await self.session.execute(
             select(
-                TrendModel.current_log_odds.label("current_log_odds"),
-                TrendModel.baseline_log_odds.label("baseline_log_odds"),
-                TrendModel.updated_at.label("updated_at"),
-                TrendModel.decay_half_life_days.label("decay_half_life_days"),
+                Trend.current_log_odds.label("current_log_odds"),
+                Trend.baseline_log_odds.label("baseline_log_odds"),
+                Trend.updated_at.label("updated_at"),
+                Trend.decay_half_life_days.label("decay_half_life_days"),
             )
-            .where(TrendModel.id == trend.id)
+            .where(Trend.id == trend.id)
             .with_for_update()
         )
         raw_locked_row: Any = locked_row_result.one_or_none()
@@ -704,7 +692,7 @@ class TrendEngine:
 
         days_elapsed = (as_of - last_updated_at).total_seconds() / 86400.0
         if days_elapsed <= 0:
-            trend.current_log_odds = current_lo
+            trend.current_log_odds = Decimal(str(current_lo))
             trend.updated_at = last_updated_at
             return logodds_to_prob(current_lo)
 
@@ -714,19 +702,19 @@ class TrendEngine:
 
         if has_locked_state:
             await self.session.execute(
-                update(TrendModel)
-                .where(TrendModel.id == trend.id)
-                .values(current_log_odds=new_lo, updated_at=as_of)
+                update(Trend)
+                .where(Trend.id == trend.id)
+                .values(current_log_odds=Decimal(str(new_lo)), updated_at=as_of)
                 .execution_options(synchronize_session=False)
             )
             if isinstance(trend.active_state_version_id, UUID):
                 await self.session.execute(
                     update(TrendStateVersion)
                     .where(TrendStateVersion.id == trend.active_state_version_id)
-                    .values(current_log_odds=new_lo)
+                    .values(current_log_odds=Decimal(str(new_lo)))
                     .execution_options(synchronize_session=False)
                 )
-        trend.current_log_odds = new_lo
+        trend.current_log_odds = Decimal(str(new_lo))
         trend.updated_at = as_of
 
         new_prob = logodds_to_prob(new_lo)
@@ -775,10 +763,6 @@ class TrendEngine:
         Returns:
             Probability at that time, or None if no snapshot exists
         """
-        from sqlalchemy import select
-
-        from src.storage.models import TrendSnapshot
-
         at = _as_utc(at)
         result = await self.session.execute(
             select(TrendSnapshot.log_odds)
@@ -878,10 +862,6 @@ class TrendEngine:
         Returns:
             List of TrendEvidence records
         """
-        from sqlalchemy import func, select
-
-        from src.storage.models import TrendEvidence
-
         cutoff = datetime.now(UTC) - timedelta(days=days)
 
         result = await self.session.execute(

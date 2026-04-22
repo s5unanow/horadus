@@ -1,6 +1,7 @@
 """Event split/merge repair helpers with lineage and replay safety."""
 
 from __future__ import annotations
+# ruff: noqa: I001
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -27,11 +28,7 @@ from src.processing.event_cluster_health import (
 from src.processing.event_lifecycle import ARCHIVE_DAYS, FADING_HOURS, EventLifecycleManager
 from src.processing.event_lineage_replay import (
     clear_stale_event_extractions as _clear_stale_event_extractions,
-)
-from src.processing.event_lineage_replay import (
     delete_event_replay_queue_items as _delete_event_replay_queue_items,
-)
-from src.processing.event_lineage_replay import (
     enqueue_event_replay as _enqueue_event_replay,
 )
 from src.storage.event_extraction import clear_all_extraction_state

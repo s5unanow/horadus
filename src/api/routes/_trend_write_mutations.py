@@ -6,7 +6,6 @@ import hashlib
 import json
 import math
 from dataclasses import dataclass
-from decimal import Decimal
 from typing import TYPE_CHECKING, Literal, TypedDict, cast
 from uuid import UUID, uuid4
 
@@ -27,6 +26,7 @@ from src.api.routes._trend_write_persistence import (
     is_unique_integrity_error,
     raise_payload_validation_error,
 )
+from src.core.decimal_utils import to_decimal
 from src.core.trend_config import TrendConfig, normalize_definition_payload
 from src.core.trend_engine import logodds_to_prob, prob_to_logodds
 from src.core.trend_state import activate_trend_state, ensure_definition_version
@@ -451,7 +451,7 @@ def _apply_trend_updates(
         trend.runtime_trend_id = write_payload.runtime_trend_id
         trend.definition = write_payload.definition
     if "baseline_probability" in updates:
-        trend.baseline_log_odds = Decimal(str(write_payload.baseline_log_odds))
+        trend.baseline_log_odds = to_decimal(write_payload.baseline_log_odds)
     if "indicators" in updates:
         trend.indicators = write_payload.indicators
     if "decay_half_life_days" in updates:

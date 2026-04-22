@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
+from typing import get_args, get_origin
 
 import pytest
 from sqlalchemy.dialects import postgresql
+from sqlalchemy.orm import Mapped
 
 from src.storage.models import (
     ApiUsage,
@@ -56,8 +59,12 @@ def test_numeric_orm_annotations_use_decimal_runtime_types() -> None:
     )
 
     for model, field_name in annotation_cases:
-        annotation = model.__annotations__[field_name]
-        assert annotation == "Mapped[Decimal]"
+        annotation = eval(
+            model.__annotations__[field_name],
+            {**sys.modules[model.__module__].__dict__, model.__name__: model},
+        )
+        assert get_origin(annotation) is Mapped
+        assert get_args(annotation) == (Decimal,)
 
 
 def test_pgvector_indexes_present_in_model_metadata() -> None:

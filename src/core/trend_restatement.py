@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from decimal import Decimal
 from inspect import isawaitable
 from math import pow
 from typing import Any
@@ -13,6 +12,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.core.decimal_utils import to_decimal
 from src.core.runtime_provenance import current_trend_scoring_contract
 from src.core.trend_engine import DEFAULT_DECAY_HALF_LIFE_DAYS, TrendEngine
 from src.core.trend_state import resolve_active_scoring_contract
@@ -180,7 +180,7 @@ async def apply_compensating_restatement(
             fallback_current_log_odds=prior_log_odds,
         )
         if previous_lo != new_lo:
-            trend.current_log_odds = Decimal(str(new_lo))
+            trend.current_log_odds = to_decimal(new_lo)
             trend.updated_at = applied_at
 
     return restatement

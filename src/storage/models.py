@@ -198,7 +198,7 @@ class Source(Base):
     url: Mapped[str | None] = mapped_column(Text)
     credibility_score: Mapped[Decimal] = mapped_column(
         Numeric(3, 2),
-        default=0.50,
+        default=Decimal("0.50"),
         nullable=False,
     )
     source_tier: Mapped[str] = mapped_column(
@@ -364,7 +364,9 @@ class Event(Base):
     source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     unique_source_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     independent_evidence_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
-    corroboration_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=1.0, nullable=False)
+    corroboration_score: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("1.0"), nullable=False
+    )
     corroboration_mode: Mapped[str] = mapped_column(String(20), default="fallback", nullable=False)
     provenance_summary: Mapped[dict[str, Any]] = mapped_column(JSONB, default=dict, nullable=False)
     extraction_provenance: Mapped[dict[str, Any]] = mapped_column(
@@ -1063,7 +1065,7 @@ class ApiUsage(Base):
     )
     estimated_cost_usd: Mapped[Decimal] = mapped_column(
         Numeric(10, 4),
-        default=0,
+        default=Decimal("0"),
         server_default=text("0"),
         nullable=False,
     )

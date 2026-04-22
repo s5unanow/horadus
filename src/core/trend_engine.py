@@ -6,6 +6,10 @@ geopolitical trends. It uses log-odds for mathematically sound
 probability updates and time-based decay.
 
 Key Principle: LLMs extract structured signals. This code computes deltas.
+
+Example:
+    `apply_evidence()` stores Decimal-backed ORM values while the public math
+    helpers continue to work with float probabilities and log-odds.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ import structlog
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 
+from src.core.decimal_utils import to_decimal
 from src.core.trend_state import resolve_active_definition_hash, resolve_active_scoring_contract
 
 if TYPE_CHECKING:
@@ -53,12 +58,6 @@ DEFAULT_NOVELTY_RECOVERY_HALF_LIFE_DAYS: float = 7.0
 # =============================================================================
 # Time Helpers
 # =============================================================================
-
-
-def _to_decimal(value: float | int | Decimal) -> Decimal:
-    if isinstance(value, Decimal):
-        return value
-    return Decimal(str(value))
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -550,19 +549,19 @@ class TrendEngine:
             event_claim_id=event_claim_id,
             state_version_id=active_state_version_id,
             signal_type=signal_type,
-            base_weight=_to_decimal(factors.base_weight),
-            direction_multiplier=_to_decimal(factors.direction_multiplier),
+            base_weight=to_decimal(factors.base_weight),
+            direction_multiplier=to_decimal(factors.direction_multiplier),
             trend_definition_hash=resolve_active_definition_hash(trend),
             scoring_math_version=scoring_contract["math_version"],
             scoring_parameter_set=scoring_contract["parameter_set"],
-            credibility_score=_to_decimal(factors.credibility),
-            corroboration_factor=_to_decimal(factors.corroboration),
-            novelty_score=_to_decimal(factors.novelty),
-            evidence_age_days=_to_decimal(factors.evidence_age_days),
-            temporal_decay_factor=_to_decimal(factors.temporal_decay_multiplier),
-            severity_score=_to_decimal(factors.severity),
-            confidence_score=_to_decimal(factors.confidence),
-            delta_log_odds=_to_decimal(delta),
+            credibility_score=to_decimal(factors.credibility),
+            corroboration_factor=to_decimal(factors.corroboration),
+            novelty_score=to_decimal(factors.novelty),
+            evidence_age_days=to_decimal(factors.evidence_age_days),
+            temporal_decay_factor=to_decimal(factors.temporal_decay_multiplier),
+            severity_score=to_decimal(factors.severity),
+            confidence_score=to_decimal(factors.confidence),
+            delta_log_odds=to_decimal(delta),
             reasoning=reasoning,
         )
         try:
@@ -596,7 +595,7 @@ class TrendEngine:
             updated_at=applied_at,
             fallback_current_log_odds=prior_log_odds,
         )
-        trend.current_log_odds = _to_decimal(new_lo)
+        trend.current_log_odds = to_decimal(new_lo)
         trend.updated_at = applied_at
 
         previous_prob = logodds_to_prob(previous_lo)
@@ -693,7 +692,7 @@ class TrendEngine:
 
         days_elapsed = (as_of - last_updated_at).total_seconds() / 86400.0
         if days_elapsed <= 0:
-            trend.current_log_odds = _to_decimal(current_lo)
+            trend.current_log_odds = to_decimal(current_lo)
             trend.updated_at = last_updated_at
             return logodds_to_prob(current_lo)
 
@@ -701,7 +700,7 @@ class TrendEngine:
         new_lo = baseline_lo + ((current_lo - baseline_lo) * decay_factor)
 
         if has_locked_state:
-            new_lo_decimal = _to_decimal(new_lo)
+            new_lo_decimal = to_decimal(new_lo)
             await self.session.execute(
                 update(TrendModel)
                 .where(TrendModel.id == trend.id)
@@ -715,7 +714,7 @@ class TrendEngine:
                     .values(current_log_odds=new_lo_decimal)
                     .execution_options(synchronize_session=False)
                 )
-        trend.current_log_odds = _to_decimal(new_lo)
+        trend.current_log_odds = to_decimal(new_lo)
         trend.updated_at = as_of
 
         new_prob = logodds_to_prob(new_lo)

@@ -16,6 +16,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from src.core.decimal_utils import to_decimal
 from src.core.runtime_provenance import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,
@@ -28,7 +29,6 @@ from src.core.trend_engine import (
     TrendEngine,
     TrendUpdate,
     _as_utc,
-    _to_decimal,
     calculate_evidence_delta,
     calculate_recency_novelty,
     format_direction,
@@ -91,7 +91,7 @@ class TestProbToLogodds:
 
     def test_to_decimal_preserves_decimal_inputs(self):
         value = Decimal("0.125")
-        assert _to_decimal(value) is value
+        assert to_decimal(value) is value
 
 
 class TestLogoddsToProb:
@@ -797,6 +797,10 @@ class TestTrendEngine:
 
         assert mock_session.execute.await_count == 3
         assert "trend_state_versions" in str(mock_session.execute.await_args_list[2].args[0])
+        trend_update_stmt = mock_session.execute.await_args_list[1].args[0]
+        state_update_stmt = mock_session.execute.await_args_list[2].args[0]
+        assert isinstance(trend_update_stmt.compile().params["current_log_odds"], Decimal)
+        assert isinstance(state_update_stmt.compile().params["current_log_odds"], Decimal)
 
     @pytest.mark.asyncio
     async def test_apply_decay_awaits_locked_row_and_returns_early_when_not_elapsed(

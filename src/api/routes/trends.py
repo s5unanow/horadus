@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
@@ -68,6 +67,7 @@ from src.api.routes.trend_route_auth import (
     AUTHORIZE_TREND_UPDATE,
 )
 from src.core.calibration import CalibrationService
+from src.core.decimal_utils import to_decimal
 from src.core.retrospective_analyzer import RetrospectiveAnalyzer
 from src.core.risk import (
     calculate_probability_band,
@@ -622,7 +622,7 @@ async def load_trends_from_config(
             existing.description = validated_config.description
             existing.runtime_trend_id = runtime_trend_id
             existing.definition = write_payload.definition
-            existing.baseline_log_odds = Decimal(str(write_payload.baseline_log_odds))
+            existing.baseline_log_odds = to_decimal(write_payload.baseline_log_odds)
             existing.indicators = write_payload.indicators
             existing.decay_half_life_days = validated_config.decay_half_life_days
             await _record_definition_version_if_material_change(

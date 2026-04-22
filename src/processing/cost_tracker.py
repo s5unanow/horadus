@@ -15,6 +15,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import resolve_llm_token_pricing, settings
+from src.core.decimal_utils import to_decimal
 from src.core.observability import record_budget_denial
 from src.storage.models import ApiUsage
 
@@ -168,7 +169,7 @@ class CostTracker:
         usage.call_count = projected_calls
         usage.input_tokens += safe_input_tokens
         usage.output_tokens += safe_output_tokens
-        usage.estimated_cost_usd = Decimal(str(usage.estimated_cost_usd)) + estimated_cost
+        usage.estimated_cost_usd = to_decimal(usage.estimated_cost_usd) + estimated_cost
         usage.updated_at = datetime.now(tz=UTC)
         await self.session.flush()
 

@@ -9,7 +9,6 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from telethon import TelegramClient
 
 from src.core.config import settings
+from src.core.decimal_utils import to_decimal
 from src.ingestion.source_identity import (
     normalize_telegram_channel_handle,
     telegram_provider_source_key,
@@ -440,7 +440,7 @@ class TelegramHarvester:
         source.provider_source_key = provider_source_key
         source.name = channel.name
         source.url = channel_url
-        source.credibility_score = Decimal(str(channel.credibility))
+        source.credibility_score = to_decimal(channel.credibility)
         source.source_tier = channel.source_tier
         source.reporting_type = channel.reporting_type
         source.config = config_payload

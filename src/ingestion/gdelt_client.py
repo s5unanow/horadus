@@ -5,7 +5,6 @@ import hashlib
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +16,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.decimal_utils import to_decimal
 from src.ingestion.rate_limiter import DomainRateLimiter
 from src.ingestion.source_identity import gdelt_provider_source_key_from_mapping
 from src.processing.corroboration_provenance import refresh_events_for_source
@@ -90,12 +90,12 @@ class GDELTClient:
         self._config_mtime: float | None = None
 
         self.total_timeout_seconds = settings.GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS
-        self.max_retries = 3
-        self.dedup_window_days = 7
+        self.max_retries, self.dedup_window_days = 3, 7
         self.deduplication_service = DeduplicationService(session=session)
 
     @property
     def queries(self) -> list[GDELTQueryConfig]:
+        """Returns the currently loaded query configs."""
         return list(self._queries)
 
     async def load_config(self, force: bool = False) -> None:
@@ -385,7 +385,7 @@ class GDELTClient:
         source.provider_source_key = provider_source_key
         source.name = query.name
         source.url = self.api_url
-        source.credibility_score = Decimal(str(query.credibility))
+        source.credibility_score = to_decimal(query.credibility)
         source.source_tier = query.source_tier
         source.reporting_type = query.reporting_type
         source.config = config_payload

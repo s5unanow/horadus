@@ -135,6 +135,33 @@ def test_assert_safe_worktree_data_skips_task_branch_changes(
     ]
 
 
+def test_assert_safe_worktree_data_skips_detached_head(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    responses = iter(
+        [
+            _completed(["git", "rev-parse"], stdout="HEAD\n"),
+            _completed(["git", "status"], stdout=" M AGENTS.md\n"),
+        ]
+    )
+
+    def fake_run_command(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        return next(responses)
+
+    monkeypatch.setattr(task_commands_module, "_run_command", fake_run_command)
+
+    exit_code, data, lines = task_commands_module.assert_safe_worktree_data()
+
+    assert exit_code == task_commands_module.ExitCode.OK
+    assert data == {
+        "current_branch": "HEAD",
+        "tracked_dirty_paths": ["AGENTS.md"],
+        "watchdog_applicable": False,
+        "working_tree_clean": False,
+    }
+    assert lines == ["Dirty-main watchdog skipped: current branch is HEAD."]
+
+
 def test_handle_assert_safe_worktree_returns_wrapped_result(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -43,6 +43,7 @@ dependencies = [
 
     # Data Collection
     "feedparser>=6.0.10",
+    "lxml>=6.1.0",
     "trafilatura>=1.6.0",
     "telethon>=1.34.0",
 

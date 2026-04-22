@@ -395,3 +395,4 @@
 - TASK-385: Reconcile task ledger lifecycle drift ✅
 - TASK-396: Upgrade python-dotenv to 1.2.2 for dependency audit parity ✅
 - TASK-386: Fix task intake id allocation under concurrent writes ✅
+- TASK-397: Clear local-gate blockers surfaced by TASK-387 ✅

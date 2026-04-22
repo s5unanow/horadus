@@ -78,6 +78,8 @@ Marker precedence is deterministic:
 - otherwise backlog-entry marker
 - if no explicit marker exists, `Exec Plan: Required` means planning gates are
   required by default
+- if no explicit marker exists but a task-owned spec already exists, planning
+  still becomes applicable and validation should flag the missing marker
 Shared workflow/policy changes should opt into the same marker scheme rather
 than relying on narrative-only guidance.
 When a task’s declared files match an allowlisted production hotspot from

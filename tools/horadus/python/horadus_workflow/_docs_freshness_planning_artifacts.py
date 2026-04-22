@@ -136,9 +136,7 @@ def _task_spec_paths(repo_root: Path, task_id: str) -> tuple[str, ...]:
 
 def _task_exec_plan_paths(repo_root: Path, task_id: str) -> tuple[str, ...]:
     candidate = repo_root / "tasks" / "exec_plans" / f"{task_id}.md"
-    if not candidate.exists():
-        return ()
-    return (str(candidate.relative_to(repo_root)),)
+    return (str(candidate.relative_to(repo_root)),) if candidate.exists() else ()
 
 
 def _planning_state_for_task(
@@ -172,7 +170,9 @@ def _planning_state_for_task(
 
     required = _planning_required_from_value(explicit_value)
     if required is None:
-        required = _exec_plan_required_from_backlog(backlog_block) or bool(exec_plan_paths)
+        required = any(
+            (_exec_plan_required_from_backlog(backlog_block), exec_plan_paths, spec_paths)
+        )
     if hotspot_paths:
         required = True
 

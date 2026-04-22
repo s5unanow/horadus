@@ -40,24 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-387: Fail closed on spec files missing Planning Gates
-**Priority**: P1
-**Estimate**: 2-4h
-
-Follow-up to TASK-368 review: planning validation currently skips task-owned
-spec files that omit the Planning Gates marker unless another signal already
-makes the task applicable. Make spec presence fail closed with a missing-marker
-issue and add regression coverage for the reproduced tasks/specs/900-missing-
-marker.md case.
-
-**Files**: `tools/horadus/python/horadus_workflow/_docs_freshness_planning_artifacts.py`, `tests`
-
-**Acceptance Criteria**:
-- [ ] When a task-owned spec exists without a Planning Gates marker, planning validation must fail closed with a missing-marker issue.
-- [ ] Add regression coverage for the reproduced missing-marker spec case and keep valid spec/backlog combinations green.
-
----
-
 ### TASK-388: Remove Any erasure from trend-write mutations
 **Priority**: P1
 **Estimate**: 2-4h

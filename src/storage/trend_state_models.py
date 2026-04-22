@@ -1,8 +1,6 @@
 """Versioned live-state models for trend activation lineage."""
 
-from __future__ import annotations
-
-# ruff: noqa: I001, TC001
+from __future__ import annotations  # noqa: I001
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
@@ -22,7 +20,7 @@ from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.storage.base import Base
-from src.storage.decimal_utils import Decimal
+from src.storage.decimal_utils import Decimal  # noqa: TC001
 from src.storage.scoring_contract import (
     TREND_SCORING_MATH_VERSION,
     TREND_SCORING_PARAMETER_SET,

@@ -40,23 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-390: Add dirty-main watchdog for agent sessions
-**Priority**: P2
-**Estimate**: 1-3h
-
-Add a lightweight safeguard that detects tracked diffs on main during
-agent/chat sessions and surfaces a clear workflow violation. Candidate surface
-could be a Horadus assert-safe-worktree check, automation, or app-integrated
-watchdog.
-
-**Files**: `tools/horadus/python/horadus_workflow`, `docs/AGENT_RUNBOOK.md`, `AGENTS.md`, `tests`
-
-**Acceptance Criteria**:
-- [ ] Add a repo-owned guardrail that detects tracked diffs on main for chat/agent work and reports a clear workflow violation.
-- [ ] Document the intended surface and add focused regression coverage for the guardrail behavior.
-
----
-
 ### TASK-391: Close nested-helper docstring policy gap
 **Priority**: P2
 **Estimate**: 1-2h

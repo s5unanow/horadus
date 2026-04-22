@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-03-14
+**Last Verified**: 2026-04-22
 
 Short command index for day-to-day agent/operator work.
 
@@ -31,7 +31,16 @@ This stays conservative: it still fails on dirty working trees, but when the
 only dirty files are task-ledger candidates it should point you back to the
 task-specific guarded start flow instead of forcing guesswork.
 
-2. `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
+2. `uv run --no-sync horadus tasks assert-safe-worktree`
+When: before continuing chat/agent work on `main`.
+Fails closed only when tracked diffs already exist on `main`, reports the
+violating tracked paths, and points you back to the canonical task-branch flow.
+It skips whenever the current branch is not `main`, so normal in-branch
+development stays unaffected. Detached `HEAD` is also treated as non-`main`,
+so do not mistake it for hard enforcement outside the canonical task-branch
+flow.
+
+3. `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
 When: canonical autonomous task-start command; enforces sprint eligibility and
 sequencing checks before creating the task branch.
 If the only dirty files are eligible planning-intake edits for the target
@@ -45,7 +54,7 @@ Compatibility wrapper:
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks safe-start` flow.
 
-3. `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
+4. `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
 When: collect the Phase 1 implementation payload for active engineering work.
 The unflagged command and `--mode default` preserve the broad text/JSON context
 pack for compatibility and human broad-context usage.
@@ -118,12 +127,12 @@ create the missing spec or exec plan before implementation and use
 Use `--include-archive` only when the task is no longer live and the user
 explicitly needs archived history.
 
-4. `uv run --no-sync horadus tasks close-ledgers TASK-XXX`
+5. `uv run --no-sync horadus tasks close-ledgers TASK-XXX`
 When: move a completed task out of the live ledgers, append its full task block
 to `archive/closed_tasks/YYYY-QN.md`, remove it from the live sprint/backlog
 surfaces, and update the compact `tasks/COMPLETED.md` index before merge.
 
-5. `make agent-check`
+6. `make agent-check`
 When: fast local quality gate (lint + scoped docstring policy + typecheck +
 code-shape + changed-file code-health ratchet + unit tests).
 This covers tracked Python under `src/`, `tools/`, and `scripts/`.
@@ -146,7 +155,7 @@ local branch or ordering note inside an otherwise documented function, and use
 no extra prose for trivial private helpers whose names and types already make
 the behavior obvious.
 
-6. `uv run --no-sync horadus tasks local-gate --full`
+7. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity
 local validation sequence without replacing the fast iteration gate.
 The full gate also runs the repo-owned code-shape checker, which enforces the
@@ -194,13 +203,13 @@ Compatibility wrapper:
   - Use the `term-missing` output to inspect the missing files/lines/branches
     before re-running the full gate
 
-7. `make agent-smoke-run`
+8. `make agent-smoke-run`
 When: one-shot API serve + smoke + exit without orphan processes.
 
-8. `make doctor`
+9. `make doctor`
 When: diagnose local config/DB/Redis readiness quickly.
 
-9. `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
+10. `uv run --no-sync horadus triage collect --lookback-days 14 --format json`
 When: collect current sprint/backlog/completed/assessment inputs for backlog triage.
 Keyword/path/proposal matches now default to deduplicated task-aware records
 with `task_id`, title, status, matched fields, and concise context excerpts.
@@ -209,15 +218,15 @@ artifact metadata; use `--assessment-path-limit N` for a bounded path preview
 or `--include-assessment-paths` for the full path list. Use `--include-raw`
 only when line-level hit details are explicitly needed.
 
-10. `uv run horadus pipeline dry-run --fixture-path ai/eval/fixtures/pipeline_dry_run_items.jsonl`
+11. `uv run horadus pipeline dry-run --fixture-path ai/eval/fixtures/pipeline_dry_run_items.jsonl`
 When: deterministic no-network/no-LLM regression exercise.
 
-11. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
+12. `make release-gate RELEASE_GATE_DATABASE_URL=<db-url>`
 When: full pre-release checks before promotion.
 This now reuses the canonical `horadus tasks local-gate --full` contract and
 then adds the release-only migration-drift gate for the target database.
 
-12. `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
+13. `uv run --no-sync horadus tasks lifecycle TASK-XXX --strict`
 When: inspect machine-checkable task lifecycle state.
 Use the strict form to verify repo-policy completion; success requires state
 `local-main-synced`.
@@ -225,7 +234,7 @@ When running from detached `HEAD` (for example in CI or a throwaway worktree),
 pass the task id explicitly; branch inference is only supported on canonical
 task branches.
 
-13. `uv run --no-sync horadus tasks finish TASK-XXX`
+14. `uv run --no-sync horadus tasks finish TASK-XXX`
 When: canonical task-completion command; finishes the current task PR lifecycle
 (branch/task verification -> missing-branch push / missing-PR bootstrap when
 needed -> pushed branch/PR checks -> current-head review gate

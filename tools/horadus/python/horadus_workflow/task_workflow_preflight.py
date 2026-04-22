@@ -39,6 +39,10 @@ def handle_preflight(_args: Any) -> CommandResult:
     return guard_module._preflight_result()
 
 
+def handle_assert_safe_worktree(_args: Any) -> CommandResult:
+    return guard_module._assert_safe_worktree_result()
+
+
 def handle_eligibility(args: Any) -> CommandResult:
     try:
         task_id = task_repo.normalize_task_id(args.task_id)
@@ -77,6 +81,7 @@ if not isinstance(_module, _CompatModule):  # pragma: no branch
 __all__ = sorted(
     [
         *_EXPORT_SOURCES,
+        "handle_assert_safe_worktree",
         "handle_eligibility",
         "handle_preflight",
         "handle_safe_start",

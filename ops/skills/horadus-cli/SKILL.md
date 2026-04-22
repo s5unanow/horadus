@@ -32,6 +32,7 @@ Implementation note:
 ## Canonical commands
 
 - Start preflight: `uv run --no-sync horadus tasks preflight`
+- Dirty-main watchdog: `uv run --no-sync horadus tasks assert-safe-worktree`
 - Canonical autonomous start: `uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name`
 - Context pack:
   `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`

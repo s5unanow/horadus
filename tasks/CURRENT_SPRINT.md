@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-390` Add dirty-main watchdog for agent sessions
 - `TASK-391` Close nested-helper docstring policy gap
 - `TASK-392` Fix root horadus help and runbook freshness drift
 - `TASK-393` Sync API docs with runtime contracts
@@ -61,3 +60,4 @@
 - `TASK-387` Fail closed on spec files missing Planning Gates ✅
 - `TASK-388` Remove Any erasure from trend-write mutations ✅
 - `TASK-389` Align Numeric ORM typing with Decimal semantics ✅
+- `TASK-390` Add dirty-main watchdog for agent sessions ✅

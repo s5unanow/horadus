@@ -4,7 +4,9 @@ from pathlib import Path
 
 import pytest
 
+import tools.horadus.python.horadus_cli.task_commands as task_cli_module
 from tools.horadus.python.horadus_cli.app import _build_parser, main
+from tools.horadus.python.horadus_cli.result import CommandResult
 
 pytestmark = pytest.mark.unit
 
@@ -136,6 +138,31 @@ def test_build_parser_accepts_task_safe_start_command() -> None:
     assert args.task_id == "TASK-117"
     assert args.name == "short-name"
     assert args.dry_run is True
+
+
+def test_build_parser_accepts_assert_safe_worktree_command() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["tasks", "assert-safe-worktree", "--format", "json"])
+
+    assert args.command == "tasks"
+    assert args.tasks_command == "assert-safe-worktree"
+    assert args.output_format == "json"
+
+
+def test_main_dispatches_assert_safe_worktree_command(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        task_cli_module,
+        "handle_assert_safe_worktree",
+        lambda _args: CommandResult(lines=["watchdog ok"]),
+    )
+
+    result = main(["tasks", "assert-safe-worktree"])
+
+    assert result == 0
+    assert capsys.readouterr().out == "watchdog ok\n"
 
 
 def test_build_parser_accepts_task_intake_add_command() -> None:

@@ -9,6 +9,67 @@ from . import _task_preflight_checks as checks_module
 from . import _task_preflight_intake as intake_module
 
 
+def assert_safe_worktree_data() -> tuple[int, dict[str, object], list[str]]:
+    branch_result = shared._run_command(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    if branch_result.returncode != 0:
+        message = (
+            branch_result.stderr.strip()
+            or branch_result.stdout.strip()
+            or "Unable to determine the current git branch."
+        )
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"branch_error": message},
+            ["Dirty-main watchdog failed.", message],
+        )
+
+    current_branch = branch_result.stdout.strip()
+    status_result = shared._run_command(["git", "status", "--porcelain", "--untracked-files=no"])
+    if status_result.returncode != 0:
+        message = (
+            status_result.stderr.strip()
+            or status_result.stdout.strip()
+            or "Unable to inspect tracked git status."
+        )
+        return (
+            ExitCode.ENVIRONMENT_ERROR,
+            {"current_branch": current_branch, "status_error": message},
+            ["Dirty-main watchdog failed.", message],
+        )
+
+    tracked_dirty_paths = intake_module._git_status_dirty_paths(status_result.stdout)
+    result_data: dict[str, object] = {
+        "current_branch": current_branch,
+        "tracked_dirty_paths": tracked_dirty_paths,
+        "watchdog_applicable": current_branch == "main",
+        "working_tree_clean": not tracked_dirty_paths,
+    }
+    if current_branch != "main":
+        return (
+            ExitCode.OK,
+            result_data,
+            [f"Dirty-main watchdog skipped: current branch is {current_branch}."],
+        )
+    if not tracked_dirty_paths:
+        return (
+            ExitCode.OK,
+            result_data,
+            ["Dirty-main watchdog passed: no tracked diffs on 'main'."],
+        )
+    return (
+        ExitCode.VALIDATION_ERROR,
+        result_data,
+        [
+            "Dirty-main watchdog failed.",
+            "Tracked diffs on 'main' are not allowed for chat/agent sessions.",
+            f"Tracked dirty paths: {', '.join(tracked_dirty_paths)}",
+            "Create or switch to a task branch with "
+            "`uv run --no-sync horadus tasks safe-start TASK-XXX --name short-name` "
+            "before continuing tracked edits.",
+        ],
+    )
+
+
 def task_preflight_data(
     *,
     task_id: str | None = None,
@@ -154,7 +215,14 @@ def _preflight_result() -> CommandResult:
     return CommandResult(exit_code=exit_code, lines=lines, data=data)
 
 
+def _assert_safe_worktree_result() -> CommandResult:
+    exit_code, data, lines = assert_safe_worktree_data()
+    return CommandResult(exit_code=exit_code, lines=lines, data=data)
+
+
 __all__ = [
+    "_assert_safe_worktree_result",
     "_preflight_result",
+    "assert_safe_worktree_data",
     "task_preflight_data",
 ]

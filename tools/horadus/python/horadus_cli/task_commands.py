@@ -25,6 +25,7 @@ from tools.horadus.python.horadus_cli.task_intake import (
 from tools.horadus.python.horadus_cli.task_ledgers import handle_close_ledgers
 from tools.horadus.python.horadus_cli.task_lifecycle import handle_lifecycle
 from tools.horadus.python.horadus_cli.task_preflight import (
+    handle_assert_safe_worktree,
     handle_eligibility,
     handle_preflight,
     handle_start,
@@ -355,6 +356,13 @@ def register_task_commands(subparsers: Any) -> None:
     )
     add_leaf_cli_options(preflight_parser)
     preflight_parser.set_defaults(handler=handle_preflight)
+
+    assert_safe_worktree_parser = tasks_subparsers.add_parser(
+        "assert-safe-worktree",
+        help="Fail closed when tracked diffs exist on main during chat or agent work.",
+    )
+    add_leaf_cli_options(assert_safe_worktree_parser)
+    assert_safe_worktree_parser.set_defaults(handler=handle_assert_safe_worktree)
 
     eligibility_parser = tasks_subparsers.add_parser(
         "eligibility",

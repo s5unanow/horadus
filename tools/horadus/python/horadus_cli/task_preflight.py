@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from tools.horadus.python.horadus_cli.task_workflow_core import (
     TaskLedgerIntakeState,
+    _assert_safe_worktree_result,
     _backlog_task_id_for_line,
     _changed_line_numbers,
     _diff_texts_for_path,
@@ -14,8 +15,10 @@ from tools.horadus.python.horadus_cli.task_workflow_core import (
     _preflight_result,
     _task_ledger_intake_state,
     _working_tree_text_for_path,
+    assert_safe_worktree_data,
     eligibility_data,
     getenv,
+    handle_assert_safe_worktree,
     handle_eligibility,
     handle_preflight,
     handle_start,
@@ -25,6 +28,7 @@ from tools.horadus.python.horadus_cli.task_workflow_core import (
 
 __all__ = [
     "TaskLedgerIntakeState",
+    "_assert_safe_worktree_result",
     "_backlog_task_id_for_line",
     "_changed_line_numbers",
     "_diff_texts_for_path",
@@ -37,8 +41,10 @@ __all__ = [
     "_preflight_result",
     "_task_ledger_intake_state",
     "_working_tree_text_for_path",
+    "assert_safe_worktree_data",
     "eligibility_data",
     "getenv",
+    "handle_assert_safe_worktree",
     "handle_eligibility",
     "handle_preflight",
     "handle_start",

@@ -51,6 +51,8 @@ from src.storage.restatement_models import (
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
 
+__all__ = ["to_decimal"]
+
 
 class SourceType(enum.StrEnum):
     """Types of data sources."""

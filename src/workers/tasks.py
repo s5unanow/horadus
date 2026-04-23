@@ -432,6 +432,7 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
     """Run processing pipeline for pending raw items."""
 
     def _runner() -> dict[str, Any]:
+        """Run one heartbeat-wrapped processing batch and always release in-flight state."""
         configured_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
         run_limit = max(1, limit or configured_limit)
         in_flight = _increment_processing_in_flight()
@@ -523,6 +524,7 @@ def run_data_retention_cleanup(dry_run: bool | None = None) -> dict[str, Any]:
     """Run retention cleanup for high-churn operational tables."""
 
     def _runner() -> dict[str, Any]:
+        """Apply retention cutoffs, emit per-table metrics, and report the run outcome."""
         cutoffs = _build_retention_cutoffs(dry_run=dry_run)
         logger.info(
             "Starting data retention cleanup task",
@@ -706,6 +708,7 @@ def collect_rss() -> dict[str, Any]:
     """Collect RSS sources and store new raw items."""
 
     def _runner() -> dict[str, Any]:
+        """Execute one RSS collection pass, including retry escalation and dispatch."""
         if not settings.ENABLE_RSS_INGESTION:
             return {"status": "disabled", "collector": "rss"}
 
@@ -771,6 +774,7 @@ def collect_gdelt() -> dict[str, Any]:
     """Collect GDELT sources and store new raw items."""
 
     def _runner() -> dict[str, Any]:
+        """Execute one GDELT collection pass, including retry escalation and dispatch."""
         if not settings.ENABLE_GDELT_INGESTION:
             return {"status": "disabled", "collector": "gdelt"}
 

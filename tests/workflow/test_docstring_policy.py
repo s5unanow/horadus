@@ -154,6 +154,104 @@ reason = "Application surface"
     assert render_docstring_policy_issues(result) == []
 
 
+def test_run_docstring_policy_check_reports_missing_nested_complex_helpers(
+    tmp_path: Path,
+) -> None:
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[policy]
+require_module_docstrings = true
+require_public_class_docstrings = true
+require_public_function_docstrings = true
+require_public_method_docstrings = true
+complex_member_min_lines = 5
+
+[[targets]]
+path = "src/app.py"
+reason = "Application surface"
+""",
+    )
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                '"""Application surface."""',
+                "",
+                "def orchestrate(flag: bool, other: bool) -> int:",
+                '    """Coordinate a nested helper."""',
+                "",
+                "    def _combine() -> int:",
+                "        value = 0",
+                "        if flag:",
+                "            value += 1",
+                "        if other:",
+                "            value += 1",
+                "        return value",
+                "",
+                "    return _combine()",
+            ]
+        )
+        + "\n",
+    )
+
+    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
+
+    assert render_docstring_policy_issues(result) == [
+        "ERROR [member-docstring] src/app.py: orchestrate._combine is missing a docstring (complex member >= 5 lines)",
+    ]
+
+
+def test_run_docstring_policy_check_accepts_documented_nested_helpers(tmp_path: Path) -> None:
+    policy_path = _write_policy(
+        tmp_path,
+        """
+[policy]
+require_module_docstrings = true
+require_public_class_docstrings = true
+require_public_function_docstrings = true
+require_public_method_docstrings = true
+complex_member_min_lines = 5
+
+[[targets]]
+path = "src/app.py"
+reason = "Application surface"
+""",
+    )
+    _write_file(
+        tmp_path,
+        "src/app.py",
+        "\n".join(
+            [
+                '"""Application surface."""',
+                "",
+                "class Service:",
+                '    """Expose a guarded owner surface."""',
+                "",
+                "    def run(self, flag: bool, other: bool) -> int:",
+                '        """Run a documented nested helper."""',
+                "",
+                "        def _combine() -> int:",
+                '            """Merge the method inputs."""',
+                "            value = 0",
+                "            if flag:",
+                "                value += 1",
+                "            if other:",
+                "                value += 1",
+                "            return value",
+                "",
+                "        return _combine()",
+            ]
+        )
+        + "\n",
+    )
+
+    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
+
+    assert result.issues == ()
+
+
 def test_run_docstring_policy_check_reports_missing_targets_and_parse_errors(
     tmp_path: Path,
 ) -> None:

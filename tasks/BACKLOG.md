@@ -40,23 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-391: Close nested-helper docstring policy gap
-**Priority**: P2
-**Estimate**: 1-2h
-
-Follow-up to TASK-255 review: the scoped docstring-policy checker skips nested
-functions entirely, so complex inner helpers on guarded paths do not require
-docstrings. Extend the AST walk and regression coverage so complex nested
-helpers cannot bypass the policy.
-
-**Files**: `tools/horadus/python/horadus_workflow/docstring_policy.py`, `tests/workflow/test_docstring_policy.py`
-
-**Acceptance Criteria**:
-- [ ] Scoped docstring policy must cover nested helper functions on guarded surfaces, not only top-level functions and class members.
-- [ ] Add regression coverage for both failing and compliant nested-helper cases.
-
----
-
 ### TASK-392: Fix root horadus help and runbook freshness drift
 **Priority**: P2
 **Estimate**: 1-3h

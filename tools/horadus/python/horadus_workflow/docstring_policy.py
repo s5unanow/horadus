@@ -127,6 +127,14 @@ def _issues_for_target(
             )
             if issue is not None:
                 issues.append(issue)
+            issues.extend(
+                _nested_function_issues(
+                    policy=policy,
+                    target=target,
+                    node=node,
+                    prefix=(node.name,),
+                )
+            )
     return issues
 
 
@@ -168,6 +176,45 @@ def _class_issues(
             )
             if issue is not None:
                 issues.append(issue)
+            issues.extend(
+                _nested_function_issues(
+                    policy=policy,
+                    target=target,
+                    node=child,
+                    prefix=(*prefix, node.name, child.name),
+                )
+            )
+    return issues
+
+
+def _nested_function_issues(
+    *,
+    policy: DocstringPolicy,
+    target: DocstringPolicyTarget,
+    node: ast.FunctionDef | ast.AsyncFunctionDef,
+    prefix: tuple[str, ...],
+) -> list[DocstringIssue]:
+    issues: list[DocstringIssue] = []
+    for child in node.body:
+        if not isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        issue = _member_issue(
+            policy=policy,
+            target=target,
+            member_name=_member_name(prefix, child.name),
+            node=child,
+            is_method=False,
+        )
+        if issue is not None:
+            issues.append(issue)
+        issues.extend(
+            _nested_function_issues(
+                policy=policy,
+                target=target,
+                node=child,
+                prefix=(*prefix, child.name),
+            )
+        )
     return issues
 
 

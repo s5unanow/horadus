@@ -112,12 +112,12 @@ from tools.horadus.python.horadus_workflow.repo_workflow import (
 )
 
 _REQUIRED_MARKERS: tuple[_MarkerRequirement, ...] = (
+    _MarkerRequirement(path="docs/AGENT_RUNBOOK.md", label="Last Verified"),
     _MarkerRequirement(path="docs/ARCHITECTURE.md", label="Last Verified"),
     _MarkerRequirement(path="docs/DEPLOYMENT.md", label="Last Verified"),
     _MarkerRequirement(path="docs/ENVIRONMENT.md", label="Last Verified"),
     _MarkerRequirement(path="docs/RELEASING.md", label="Last Verified"),
 )
-
 _CONFLICT_RULES: tuple[_ConflictRule, ...] = (
     _ConflictRule(
         rule_id="stale_auth_unenforced_claim",

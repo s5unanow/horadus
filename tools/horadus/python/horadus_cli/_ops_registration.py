@@ -200,7 +200,7 @@ def register_ops_commands(
     benchmark_config_choices: tuple[str, ...],
     replay_config_choices: tuple[str, ...],
 ) -> None:
-    trends_parser = subparsers.add_parser("trends")
+    trends_parser = subparsers.add_parser("trends", help="Inspect trend probabilities.")
     trends_subparsers = trends_parser.add_subparsers(dest="trends_command")
     trends_status_parser = trends_subparsers.add_parser(
         "status",
@@ -212,7 +212,7 @@ def register_ops_commands(
     )
     trends_status_parser.set_defaults(handler=lambda args: runtime_result("trends-status", args))
 
-    dashboard_parser = subparsers.add_parser("dashboard")
+    dashboard_parser = subparsers.add_parser("dashboard", help="Export dashboard artifacts.")
     dashboard_subparsers = dashboard_parser.add_subparsers(dest="dashboard_command")
     dashboard_export_parser = dashboard_subparsers.add_parser(
         "export",
@@ -234,7 +234,7 @@ def register_ops_commands(
         handler=lambda args: runtime_result("dashboard-export", args)
     )
 
-    eval_parser = subparsers.add_parser("eval")
+    eval_parser = subparsers.add_parser("eval", help="Run offline evals and validation checks.")
     eval_subparsers = eval_parser.add_subparsers(dest="eval_command")
 
     eval_benchmark_parser = eval_subparsers.add_parser(
@@ -422,7 +422,7 @@ def register_ops_commands(
         handler=lambda args: runtime_result("eval-source-freshness", args)
     )
 
-    pipeline_parser = subparsers.add_parser("pipeline")
+    pipeline_parser = subparsers.add_parser("pipeline", help="Run pipeline fixture exercises.")
     pipeline_subparsers = pipeline_parser.add_subparsers(dest="pipeline_command")
     pipeline_dry_run_parser = pipeline_subparsers.add_parser(
         "dry-run",
@@ -448,7 +448,7 @@ def register_ops_commands(
         handler=lambda args: runtime_result("pipeline-dry-run", args)
     )
 
-    agent_parser = subparsers.add_parser("agent")
+    agent_parser = subparsers.add_parser("agent", help="Run local agent smoke checks.")
     agent_subparsers = agent_parser.add_subparsers(dest="agent_command")
     agent_smoke_parser = agent_subparsers.add_parser(
         "smoke",

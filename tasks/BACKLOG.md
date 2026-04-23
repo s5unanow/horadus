@@ -40,22 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-392: Fix root horadus help and runbook freshness drift
-**Priority**: P2
-**Estimate**: 1-3h
-
-root CLI help advertises subcommands it does not describe, and
-docs/AGENT_RUNBOOK.md carries a stale Last Verified marker without freshness
-enforcement
-
-**Files**: `docs/AGENT_RUNBOOK.md`, `tools/horadus/python/horadus_workflow/docs_freshness.py`, `tools/horadus/python/horadus_cli`
-
-**Acceptance Criteria**:
-- [ ] Root horadus help output and the runbook command index must agree on the advertised command surface.
-- [ ] Add or extend freshness enforcement so docs/AGENT_RUNBOOK.md cannot keep a stale Last Verified marker unnoticed.
-
----
-
 ### TASK-393: Sync API docs with runtime contracts
 **Priority**: P2
 **Estimate**: 2-4h

@@ -25,6 +25,17 @@ circulating a proposal for implementation planning.
 
 ## Canonical Commands
 
+Root `horadus` command groups advertised by `horadus --help`:
+
+- `uv run --no-sync horadus trends status` — inspect trend probabilities.
+- `uv run --no-sync horadus dashboard export` — export dashboard artifacts.
+- `uv run --no-sync horadus eval benchmark` — run offline evals and validation checks.
+- `uv run --no-sync horadus pipeline dry-run` — run pipeline fixture exercises.
+- `uv run --no-sync horadus agent smoke` — run local agent smoke checks.
+- `uv run --no-sync horadus doctor` — run local runtime diagnostics (hooks, config, DB, Redis, migration parity).
+- `uv run --no-sync horadus tasks list-active` — repo task and sprint workflow helpers.
+- `uv run --no-sync horadus triage collect` — structured triage input collection.
+
 1. `uv run --no-sync horadus tasks preflight`
 When: before creating a task branch from `main`.
 This stays conservative: it still fails on dirty working trees, but when the

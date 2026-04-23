@@ -401,3 +401,4 @@
 - TASK-389: Align Numeric ORM typing with Decimal semantics ✅
 - TASK-390: Add dirty-main watchdog for agent sessions ✅
 - TASK-391: Close nested-helper docstring policy gap ✅
+- TASK-392: Fix root horadus help and runbook freshness drift ✅

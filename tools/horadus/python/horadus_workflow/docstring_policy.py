@@ -105,7 +105,14 @@ def _issues_for_target(
             )
         )
     issues.extend(
-        _body_issues(policy=policy, target=target, statements=tree.body, prefix=(), in_class=False)
+        _body_issues(
+            policy=policy,
+            target=target,
+            statements=tree.body,
+            prefix=(),
+            in_class=False,
+            check_classes=True,
+        )
     )
     return issues
 
@@ -117,11 +124,14 @@ def _body_issues(
     statements: list[ast.stmt],
     prefix: tuple[str, ...],
     in_class: bool,
+    check_classes: bool,
 ) -> list[DocstringIssue]:
     issues: list[DocstringIssue] = []
     for statement in statements:
         if isinstance(statement, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
             if isinstance(statement, ast.ClassDef):
+                if not check_classes:
+                    continue
                 class_name = _member_name(prefix, statement.name)
                 if (
                     policy.require_public_class_docstrings
@@ -150,6 +160,7 @@ def _body_issues(
                     statements=statement.body,
                     prefix=(*prefix, statement.name),
                     in_class=isinstance(statement, ast.ClassDef),
+                    check_classes=isinstance(statement, ast.ClassDef),
                 )
             )
             continue
@@ -161,6 +172,7 @@ def _body_issues(
                     statements=nested_statements,
                     prefix=prefix,
                     in_class=in_class,
+                    check_classes=check_classes,
                 )
             )
     return issues

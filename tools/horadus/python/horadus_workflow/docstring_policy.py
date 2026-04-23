@@ -210,12 +210,13 @@ def _member_requirement_reasons(
     is_method: bool,
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    public_reason = {
-        True: "public-method" if policy.require_public_method_docstrings else None,
-        False: "public-function" if policy.require_public_function_docstrings else None,
-    }[is_method]
-    if _is_public_qualified_name(member_name) and public_reason is not None:
-        reasons.append(public_reason)
+    public_reasons = ("public-function", "public-method")
+    public_flags = (
+        policy.require_public_function_docstrings,
+        policy.require_public_method_docstrings,
+    )
+    if _is_public_qualified_name(member_name) and public_flags[is_method]:
+        reasons.append(public_reasons[is_method])
     if _member_line_count(node) >= policy.complex_member_min_lines:
         reasons.append("complex-member")
     return tuple(reasons)

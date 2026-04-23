@@ -167,11 +167,15 @@ def _body_issues(
 
 
 def _nested_statement_lists(node: ast.AST) -> tuple[list[ast.stmt], ...]:
-    return tuple(
-        value
-        for _, value in ast.iter_fields(node)
-        if isinstance(value, list) and value and all(isinstance(item, ast.stmt) for item in value)
-    )
+    nested: list[list[ast.stmt]] = []
+    for _, value in ast.iter_fields(node):
+        if not isinstance(value, list) or not value:
+            continue
+        if all(isinstance(item, ast.stmt) for item in value):
+            nested.append(value)
+        elif all(isinstance(item, ast.ExceptHandler | ast.match_case) for item in value):
+            nested.extend(item.body for item in value if item.body)
+    return tuple(nested)
 
 
 def _member_issue(

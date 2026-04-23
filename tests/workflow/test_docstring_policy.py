@@ -104,10 +104,9 @@ def test_run_docstring_policy_check_reports_missing_required_docstrings(tmp_path
     )
 
     result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-    rendered = render_docstring_policy_issues(result)
 
     assert result.errors == result.issues
-    assert rendered == [
+    assert render_docstring_policy_issues(result) == [
         "ERROR [class-docstring] src/app.py: Service is missing a docstring (public class)",
         "ERROR [member-docstring] src/app.py: Service.run is missing a docstring (public method on selected high-value path)",
         "ERROR [member-docstring] src/app.py: _complex_helper is missing a docstring (complex member >= 5 lines)",
@@ -155,10 +154,7 @@ def test_run_docstring_policy_check_ignores_trivial_private_helpers(tmp_path: Pa
         + "\n",
     )
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert result.issues == ()
-    assert render_docstring_policy_issues(result) == []
+    assert run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path).issues == ()
 
 
 def test_run_docstring_policy_check_reports_missing_targets_and_parse_errors(
@@ -185,9 +181,9 @@ reason = "Broken syntax"
     )
     _write_file(tmp_path, "src/broken.py", "def broken(:\n    pass\n")
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert render_docstring_policy_issues(result) == [
+    assert render_docstring_policy_issues(
+        run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
+    ) == [
         "ERROR [parse-error] src/broken.py: unable to parse Python source: invalid syntax",
         "ERROR [target-missing] src/missing.py: configured docstring-policy target does not exist",
     ]
@@ -219,9 +215,7 @@ def test_run_docstring_policy_check_handles_nested_public_classes(tmp_path: Path
         + "\n",
     )
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert result.issues == ()
+    assert run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path).issues == ()
 
 
 def test_run_docstring_policy_check_ignores_private_class_members(tmp_path: Path) -> None:
@@ -248,6 +242,4 @@ def test_run_docstring_policy_check_ignores_private_class_members(tmp_path: Path
         + "\n",
     )
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert result.issues == ()
+    assert run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path).issues == ()

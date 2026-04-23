@@ -121,16 +121,17 @@ def _body_issues(
     issues: list[DocstringIssue] = []
     for statement in statements:
         if isinstance(statement, ast.ClassDef):
+            class_name = _member_name(prefix, statement.name)
             if (
                 policy.require_public_class_docstrings
-                and _is_public_qualified_name(_member_name(prefix, statement.name))
+                and _is_public_qualified_name(class_name)
                 and not ast.get_docstring(statement)
             ):
                 issues.append(
                     DocstringIssue(
-                        kind="class-docstring",
-                        path=target.path,
-                        message=f"{_member_name(prefix, statement.name)} is missing a docstring (public class)",
+                        "class-docstring",
+                        target.path,
+                        f"{class_name} is missing a docstring (public class)",
                     )
                 )
             issues.extend(
@@ -228,16 +229,14 @@ def _member_requirement_reasons(
 
 
 def _describe_requirement_reasons(reasons: tuple[str, ...], complex_member_min_lines: int) -> str:
-    labels: list[str] = []
-    for reason in reasons:
-        if reason == "public-function":
-            labels.append("public function on selected high-value path")
-            continue
-        if reason == "public-method":
-            labels.append("public method on selected high-value path")
-            continue
-        labels.append(f"complex member >= {complex_member_min_lines} lines")
-    return ", ".join(labels)
+    reason_labels = {
+        "public-function": "public function on selected high-value path",
+        "public-method": "public method on selected high-value path",
+    }
+    return ", ".join(
+        reason_labels.get(reason, f"complex member >= {complex_member_min_lines} lines")
+        for reason in reasons
+    )
 
 
 def _member_line_count(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:

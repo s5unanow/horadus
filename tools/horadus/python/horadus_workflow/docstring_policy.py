@@ -67,7 +67,9 @@ def run_docstring_policy_check(*, repo_root: Path, policy_path: Path) -> Docstri
     issues: list[DocstringIssue] = []
     for target in policy.targets:
         issues.extend(_issues_for_target(repo_root=repo_root, policy=policy, target=target))
-    return DocstringPolicyResult(issues=tuple(sorted(issues, key=_issue_sort_key)))
+    return DocstringPolicyResult(
+        issues=tuple(sorted(issues, key=lambda issue: (issue.path, issue.kind, issue.message)))
+    )
 
 
 def render_docstring_policy_issues(result: DocstringPolicyResult) -> list[str]:
@@ -123,10 +125,9 @@ def _body_issues(
                 if not check_classes:
                     continue
                 class_name = _member_name(prefix, statement.name)
-                requires_class_docstring = (
-                    policy.require_public_class_docstrings and _is_public_qualified_name(class_name)
-                )
-                if requires_class_docstring and not ast.get_docstring(statement):
+                if _requires_public_class_docstring(policy, class_name) and not ast.get_docstring(
+                    statement
+                ):
                     issues.append(
                         DocstringIssue(
                             "class-docstring",
@@ -226,12 +227,12 @@ def _member_name(prefix: tuple[str, ...], name: str) -> str:
     return ".".join((*prefix, name)) if prefix else name
 
 
+def _requires_public_class_docstring(policy: DocstringPolicy, class_name: str) -> bool:
+    return policy.require_public_class_docstrings and _is_public_qualified_name(class_name)
+
+
 def _is_public_qualified_name(name: str) -> bool:
     return all(not part.startswith("_") for part in name.split("."))
-
-
-def _issue_sort_key(issue: DocstringIssue) -> tuple[str, str, str]:
-    return (issue.path, issue.kind, issue.message)
 
 
 __all__ = [

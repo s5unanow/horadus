@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-04-22
-- Current state: Not started
+- Current state: Local validation passed; finish lifecycle pending
 - Planning Gates: Required — the task changes shared CLI/operator surfaces and docs freshness enforcement.
 
 ## Goal (1-3 lines)
@@ -42,14 +42,15 @@ runbook freshness drift cannot hide behind missing enforcement.
 
 ## Plan (Keep Updated)
 
-1. Preflight (branch, tests, context)
-2. Implement
-3. Validate
-4. Ship (PR, checks, merge, main sync)
+1. Preflight (branch, tests, context) - done
+2. Implement - done
+3. Validate - done
+4. Ship (PR, checks, merge, main sync) - in progress
 
 ## Decisions (Timestamped)
 
 - 2026-04-22: Seed an exec plan before implementation because the task touches shared CLI/help and workflow-freshness enforcement paths. (reason: hotspot-backed workflow work needs a documented safe shape before edits)
+- 2026-04-23: Keep the root help surface as the source for command-group descriptions and add tests that require the runbook to mention every advertised root command. (reason: this catches the observed operator-facing drift without introducing a generated-doc pipeline)
 
 ## Risks / Foot-guns
 
@@ -58,8 +59,12 @@ runbook freshness drift cannot hide behind missing enforcement.
 
 ## Validation Commands
 
+- `uv run --no-sync pytest tests/horadus_cli/v2/test_app.py tests/workflow/test_docs_freshness.py -v -m unit`
 - `make typecheck`
 - `uv run --no-sync pytest tests/horadus_cli/ tests/workflow/ -v -m unit`
+- `make agent-check`
+- `make test-integration-docker`
+- `uv run --no-sync horadus tasks local-review --format json`
 - `uv run --no-sync horadus tasks local-gate --full`
 
 ## Notes / Links

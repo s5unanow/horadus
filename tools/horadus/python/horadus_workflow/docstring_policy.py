@@ -120,32 +120,23 @@ def _body_issues(
 ) -> list[DocstringIssue]:
     issues: list[DocstringIssue] = []
     for statement in statements:
-        if isinstance(statement, ast.ClassDef):
-            class_name = _member_name(prefix, statement.name)
-            if (
-                policy.require_public_class_docstrings
-                and _is_public_qualified_name(class_name)
-                and not ast.get_docstring(statement)
-            ):
-                issues.append(
-                    DocstringIssue(
-                        "class-docstring",
-                        target.path,
-                        f"{class_name} is missing a docstring (public class)",
+        if isinstance(statement, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            next_prefix = (*prefix, statement.name)
+            if isinstance(statement, ast.ClassDef):
+                class_name = _member_name(prefix, statement.name)
+                if (
+                    policy.require_public_class_docstrings
+                    and _is_public_qualified_name(class_name)
+                    and not ast.get_docstring(statement)
+                ):
+                    issues.append(
+                        DocstringIssue(
+                            "class-docstring",
+                            target.path,
+                            f"{class_name} is missing a docstring (public class)",
+                        )
                     )
-                )
-            issues.extend(
-                _body_issues(
-                    policy=policy,
-                    target=target,
-                    statements=statement.body,
-                    prefix=(*prefix, statement.name),
-                    in_class=True,
-                )
-            )
-            continue
-        if isinstance(statement, ast.FunctionDef | ast.AsyncFunctionDef):
-            if issue := _member_issue(
+            elif issue := _member_issue(
                 policy=policy,
                 target=target,
                 member_name=_member_name(prefix, statement.name),
@@ -158,8 +149,8 @@ def _body_issues(
                     policy=policy,
                     target=target,
                     statements=statement.body,
-                    prefix=(*prefix, statement.name),
-                    in_class=False,
+                    prefix=next_prefix,
+                    in_class=isinstance(statement, ast.ClassDef),
                 )
             )
             continue

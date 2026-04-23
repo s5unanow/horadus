@@ -188,10 +188,7 @@ def _member_issue(
     is_method: bool,
 ) -> DocstringIssue | None:
     reasons = _member_requirement_reasons(
-        policy=policy,
-        member_name=member_name,
-        node=node,
-        is_method=is_method,
+        policy=policy, member_name=member_name, node=node, is_method=is_method
     )
     if reasons and not ast.get_docstring(node):
         return DocstringIssue(
@@ -213,11 +210,12 @@ def _member_requirement_reasons(
     is_method: bool,
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    if _is_public_qualified_name(member_name):
-        if is_method and policy.require_public_method_docstrings:
-            reasons.append("public-method")
-        if not is_method and policy.require_public_function_docstrings:
-            reasons.append("public-function")
+    public_reason = {
+        True: "public-method" if policy.require_public_method_docstrings else None,
+        False: "public-function" if policy.require_public_function_docstrings else None,
+    }[is_method]
+    if _is_public_qualified_name(member_name) and public_reason is not None:
+        reasons.append(public_reason)
     if _member_line_count(node) >= policy.complex_member_min_lines:
         reasons.append("complex-member")
     return tuple(reasons)

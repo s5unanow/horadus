@@ -171,9 +171,10 @@ def _nested_statement_lists(node: ast.AST) -> tuple[list[ast.stmt], ...]:
     for _, value in ast.iter_fields(node):
         if not isinstance(value, list) or not value:
             continue
-        if all(isinstance(item, ast.stmt) for item in value):
+        first_item = value[0]
+        if isinstance(first_item, ast.stmt):
             nested.append(value)
-        elif all(isinstance(item, ast.ExceptHandler | ast.match_case) for item in value):
+        elif isinstance(first_item, ast.ExceptHandler | ast.match_case):
             nested.extend(item.body for item in value if item.body)
     return tuple(nested)
 

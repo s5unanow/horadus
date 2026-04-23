@@ -105,9 +105,7 @@ def test_run_docstring_policy_check_reports_missing_required_docstrings(tmp_path
         )
         + "\n",
     )
-
     result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
     assert result.errors == result.issues
     assert render_docstring_policy_issues(result) == [
         "ERROR [class-docstring] src/app.py: Service is missing a docstring (public class)",

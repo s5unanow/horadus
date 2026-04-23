@@ -121,7 +121,6 @@ def _body_issues(
     issues: list[DocstringIssue] = []
     for statement in statements:
         if isinstance(statement, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
-            next_prefix = (*prefix, statement.name)
             if isinstance(statement, ast.ClassDef):
                 class_name = _member_name(prefix, statement.name)
                 if (
@@ -149,7 +148,7 @@ def _body_issues(
                     policy=policy,
                     target=target,
                     statements=statement.body,
-                    prefix=next_prefix,
+                    prefix=(*prefix, statement.name),
                     in_class=isinstance(statement, ast.ClassDef),
                 )
             )

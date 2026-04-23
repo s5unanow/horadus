@@ -12,6 +12,27 @@ from tools.horadus.python.horadus_workflow.docstring_policy import (
 
 pytestmark = pytest.mark.unit
 
+_STANDARD_POLICY = """
+[policy]
+require_module_docstrings = true
+require_public_class_docstrings = true
+require_public_function_docstrings = true
+require_public_method_docstrings = true
+complex_member_min_lines = {min_lines}
+
+[[targets]]
+path = "src/app.py"
+reason = "Application surface"
+"""
+
+_LOAD_POLICY = _STANDARD_POLICY.format(min_lines=12).replace(
+    "require_public_function_docstrings = true",
+    "require_public_function_docstrings = false",
+)
+
+_STANDARD_POLICY_5 = _STANDARD_POLICY.format(min_lines=5)
+_STANDARD_POLICY_10 = _STANDARD_POLICY.format(min_lines=10)
+
 
 def _write_file(repo_root: Path, relative_path: str, text: str) -> None:
     path = repo_root / relative_path
@@ -29,18 +50,7 @@ def _write_policy(repo_root: Path, body: str) -> Path:
 def test_load_docstring_policy_reads_targets_and_thresholds(tmp_path: Path) -> None:
     policy_path = _write_policy(
         tmp_path,
-        """
-[policy]
-require_module_docstrings = true
-require_public_class_docstrings = true
-require_public_function_docstrings = false
-require_public_method_docstrings = true
-complex_member_min_lines = 12
-
-[[targets]]
-path = "src/app.py"
-reason = "Application surface"
-""",
+        _LOAD_POLICY,
     )
 
     policy = load_docstring_policy(policy_path)
@@ -57,18 +67,7 @@ reason = "Application surface"
 def test_run_docstring_policy_check_reports_missing_required_docstrings(tmp_path: Path) -> None:
     policy_path = _write_policy(
         tmp_path,
-        """
-[policy]
-require_module_docstrings = true
-require_public_class_docstrings = true
-require_public_function_docstrings = true
-require_public_method_docstrings = true
-complex_member_min_lines = 5
-
-[[targets]]
-path = "src/app.py"
-reason = "Application surface"
-""",
+        _STANDARD_POLICY_5,
     )
     _write_file(
         tmp_path,
@@ -80,29 +79,40 @@ reason = "Application surface"
                 "        return None",
                 "",
                 "def public_api() -> None:",
+                "    if True:",
+                "        def _nested_helper(flag: bool, other: bool) -> int:",
+                "            value = 0",
+                "            if flag:",
+                "                value += 1",
+                "            if other:",
+                "                value += 1",
+                "            return value",
+                "",
+                "        _nested_helper(False, False)",
+                "    try:",
+                '        raise ValueError("boom")',
+                "    except ValueError:",
+                "        def _except_helper() -> int:",
+                "            value = 0",
+                "            value += 1",
+                "            value += 1",
+                "            return value",
+                "",
+                "        _except_helper()",
                 "    return None",
                 "",
-                "def _complex_helper(flag: bool, other: bool) -> int:",
-                "    value = 0",
-                "    if flag:",
-                "        value += 1",
-                "    if other:",
-                "        value += 1",
-                "    return value",
             ]
         )
         + "\n",
     )
-
     result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-    rendered = render_docstring_policy_issues(result)
-
     assert result.errors == result.issues
-    assert rendered == [
+    assert render_docstring_policy_issues(result) == [
         "ERROR [class-docstring] src/app.py: Service is missing a docstring (public class)",
         "ERROR [member-docstring] src/app.py: Service.run is missing a docstring (public method on selected high-value path)",
-        "ERROR [member-docstring] src/app.py: _complex_helper is missing a docstring (complex member >= 5 lines)",
-        "ERROR [member-docstring] src/app.py: public_api is missing a docstring (public function on selected high-value path)",
+        "ERROR [member-docstring] src/app.py: public_api is missing a docstring (public function on selected high-value path, complex member >= 5 lines)",
+        "ERROR [member-docstring] src/app.py: public_api._except_helper is missing a docstring (complex member >= 5 lines)",
+        "ERROR [member-docstring] src/app.py: public_api._nested_helper is missing a docstring (complex member >= 5 lines)",
         "ERROR [module-docstring] src/app.py: module docstring required for selected high-value path (Application surface)",
     ]
 
@@ -110,18 +120,7 @@ reason = "Application surface"
 def test_run_docstring_policy_check_ignores_trivial_private_helpers(tmp_path: Path) -> None:
     policy_path = _write_policy(
         tmp_path,
-        """
-[policy]
-require_module_docstrings = true
-require_public_class_docstrings = true
-require_public_function_docstrings = true
-require_public_method_docstrings = true
-complex_member_min_lines = 10
-
-[[targets]]
-path = "src/app.py"
-reason = "Application surface"
-""",
+        _STANDARD_POLICY_5,
     )
     _write_file(
         tmp_path,
@@ -135,6 +134,18 @@ reason = "Application surface"
                 "",
                 "    def run(self) -> None:",
                 '        """Run the service."""',
+                "        if True:",
+                "            def _nested_helper() -> int:",
+                '                """Compute an internal status."""',
+                "                value = 0",
+                "                value += 1",
+                "                return value",
+                "",
+                "            _nested_helper()",
+                "",
+                "        class Local:",
+                "            def call(self) -> None:",
+                "                return None",
                 "        return None",
                 "",
                 "    def _helper(self) -> None:",
@@ -148,10 +159,7 @@ reason = "Application surface"
         + "\n",
     )
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert result.issues == ()
-    assert render_docstring_policy_issues(result) == []
+    assert run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path).issues == ()
 
 
 def test_run_docstring_policy_check_reports_missing_targets_and_parse_errors(
@@ -178,9 +186,9 @@ reason = "Broken syntax"
     )
     _write_file(tmp_path, "src/broken.py", "def broken(:\n    pass\n")
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert render_docstring_policy_issues(result) == [
+    assert render_docstring_policy_issues(
+        run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
+    ) == [
         "ERROR [parse-error] src/broken.py: unable to parse Python source: invalid syntax",
         "ERROR [target-missing] src/missing.py: configured docstring-policy target does not exist",
     ]
@@ -189,18 +197,7 @@ reason = "Broken syntax"
 def test_run_docstring_policy_check_handles_nested_public_classes(tmp_path: Path) -> None:
     policy_path = _write_policy(
         tmp_path,
-        """
-[policy]
-require_module_docstrings = true
-require_public_class_docstrings = true
-require_public_function_docstrings = true
-require_public_method_docstrings = true
-complex_member_min_lines = 10
-
-[[targets]]
-path = "src/app.py"
-reason = "Application surface"
-""",
+        _STANDARD_POLICY_10,
     )
     _write_file(
         tmp_path,
@@ -223,26 +220,13 @@ reason = "Application surface"
         + "\n",
     )
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert result.issues == ()
+    assert run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path).issues == ()
 
 
 def test_run_docstring_policy_check_ignores_private_class_members(tmp_path: Path) -> None:
     policy_path = _write_policy(
         tmp_path,
-        """
-[policy]
-require_module_docstrings = true
-require_public_class_docstrings = true
-require_public_function_docstrings = true
-require_public_method_docstrings = true
-complex_member_min_lines = 10
-
-[[targets]]
-path = "src/app.py"
-reason = "Application surface"
-""",
+        _STANDARD_POLICY_10,
     )
     _write_file(
         tmp_path,
@@ -263,6 +247,4 @@ reason = "Application surface"
         + "\n",
     )
 
-    result = run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path)
-
-    assert result.issues == ()
+    assert run_docstring_policy_check(repo_root=tmp_path, policy_path=policy_path).issues == ()

@@ -150,10 +150,11 @@ The scoped docstring policy currently applies to selected owner modules:
 - `src/processing/pipeline_orchestrator.py`
 - `src/workers/tasks.py`
 Use docstrings for module purpose, public entrypoints, and large helper bodies
-that hide orchestration or invariant logic. Prefer short inline comments for a
-local branch or ordering note inside an otherwise documented function, and use
-no extra prose for trivial private helpers whose names and types already make
-the behavior obvious.
+that hide orchestration or invariant logic, including complex nested helpers on
+guarded surfaces. Prefer short inline comments for a local branch or ordering
+note inside an otherwise documented function, and use no extra prose for
+trivial private helpers whose names and types already make the behavior
+obvious.
 
 7. `uv run --no-sync horadus tasks local-gate --full`
 When: canonical post-task local gate before push/PR; runs the full CI-parity

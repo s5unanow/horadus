@@ -67,7 +67,9 @@ def run_docstring_policy_check(*, repo_root: Path, policy_path: Path) -> Docstri
     issues: list[DocstringIssue] = []
     for target in policy.targets:
         issues.extend(_issues_for_target(repo_root=repo_root, policy=policy, target=target))
-    return DocstringPolicyResult(issues=tuple(sorted(issues, key=_issue_sort_key)))
+    return DocstringPolicyResult(
+        issues=tuple(sorted(issues, key=lambda issue: (issue.path, issue.kind, issue.message)))
+    )
 
 
 def render_docstring_policy_issues(result: DocstringPolicyResult) -> list[str]:
@@ -84,9 +86,7 @@ def _issues_for_target(
     if not path.exists():
         return [
             DocstringIssue(
-                kind="target-missing",
-                path=target.path,
-                message="configured docstring-policy target does not exist",
+                "target-missing", target.path, "configured docstring-policy target does not exist"
             )
         ]
 
@@ -94,138 +94,127 @@ def _issues_for_target(
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=target.path)
     except SyntaxError as exc:
         return [
-            DocstringIssue(
-                kind="parse-error",
-                path=target.path,
-                message=f"unable to parse Python source: {exc.msg}",
-            )
+            DocstringIssue("parse-error", target.path, f"unable to parse Python source: {exc.msg}")
         ]
 
     issues: list[DocstringIssue] = []
     if policy.require_module_docstrings and not ast.get_docstring(tree):
         issues.append(
             DocstringIssue(
-                kind="module-docstring",
-                path=target.path,
-                message=(
-                    f"module docstring required for selected high-value path ({target.reason})"
-                ),
+                "module-docstring",
+                target.path,
+                f"module docstring required for selected high-value path ({target.reason})",
             )
         )
-
-    for node in tree.body:
-        if isinstance(node, ast.ClassDef):
-            issues.extend(_class_issues(policy=policy, target=target, node=node, prefix=()))
-            continue
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            issue = _member_issue(
-                policy=policy,
-                target=target,
-                member_name=node.name,
-                node=node,
-                is_method=False,
-            )
-            if issue is not None:
-                issues.append(issue)
+    issues.extend(_body_issues(policy, target, tree.body, (), False, True))
     return issues
 
 
-def _class_issues(
-    *,
+def _body_issues(
     policy: DocstringPolicy,
     target: DocstringPolicyTarget,
-    node: ast.ClassDef,
+    statements: list[ast.stmt],
     prefix: tuple[str, ...],
+    in_class: bool,
+    check_classes: bool,
 ) -> list[DocstringIssue]:
-    class_name = _member_name(prefix, node.name)
     issues: list[DocstringIssue] = []
-    if (
-        policy.require_public_class_docstrings
-        and _is_public_qualified_name(class_name)
-        and not ast.get_docstring(node)
-    ):
-        issues.append(
-            DocstringIssue(
-                kind="class-docstring",
-                path=target.path,
-                message=f"{class_name} is missing a docstring (public class)",
-            )
-        )
-
-    for child in node.body:
-        if isinstance(child, ast.ClassDef):
+    for statement in statements:
+        if isinstance(statement, ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef):
+            if isinstance(statement, ast.ClassDef):
+                if not check_classes:
+                    continue
+                class_name = _member_name(prefix, statement.name)
+                if _requires_public_class_docstring(policy, class_name) and not ast.get_docstring(
+                    statement
+                ):
+                    issues.append(
+                        DocstringIssue(
+                            "class-docstring",
+                            target.path,
+                            f"{class_name} is missing a docstring (public class)",
+                        )
+                    )
+            elif issue := _member_issue(
+                policy, target, _member_name(prefix, statement.name), statement, in_class
+            ):
+                issues.append(issue)
+            child_in_class = isinstance(statement, ast.ClassDef)
             issues.extend(
-                _class_issues(policy=policy, target=target, node=child, prefix=(*prefix, node.name))
+                _body_issues(
+                    policy,
+                    target,
+                    statement.body,
+                    (*prefix, statement.name),
+                    child_in_class,
+                    child_in_class,
+                )
             )
             continue
-        if isinstance(child, ast.FunctionDef | ast.AsyncFunctionDef):
-            issue = _member_issue(
-                policy=policy,
-                target=target,
-                member_name=_member_name((*prefix, node.name), child.name),
-                node=child,
-                is_method=True,
+        for nested_statements in _nested_statement_lists(statement):
+            issues.extend(
+                _body_issues(policy, target, nested_statements, prefix, in_class, check_classes)
             )
-            if issue is not None:
-                issues.append(issue)
     return issues
+
+
+def _nested_statement_lists(node: ast.AST) -> tuple[list[ast.stmt], ...]:
+    nested: list[list[ast.stmt]] = []
+    for _, value in ast.iter_fields(node):
+        if not isinstance(value, list) or not value:
+            continue
+        if isinstance(first_item := value[0], ast.stmt):
+            nested.append(value)
+        elif isinstance(first_item, ast.ExceptHandler | ast.match_case):
+            nested.extend(item.body for item in value if item.body)
+    return tuple(nested)
 
 
 def _member_issue(
-    *,
     policy: DocstringPolicy,
     target: DocstringPolicyTarget,
     member_name: str,
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     is_method: bool,
 ) -> DocstringIssue | None:
-    reasons = _member_requirement_reasons(
-        policy=policy,
-        member_name=member_name,
-        node=node,
-        is_method=is_method,
-    )
+    reasons = _member_requirement_reasons(policy, member_name, node, is_method)
     if not reasons or ast.get_docstring(node):
         return None
     return DocstringIssue(
-        kind="member-docstring",
-        path=target.path,
-        message=(
-            f"{member_name} is missing a docstring "
-            f"({_describe_requirement_reasons(reasons, policy.complex_member_min_lines)})"
-        ),
+        "member-docstring",
+        target.path,
+        f"{member_name} is missing a docstring "
+        f"({_describe_requirement_reasons(reasons, policy.complex_member_min_lines)})",
     )
 
 
 def _member_requirement_reasons(
-    *,
     policy: DocstringPolicy,
     member_name: str,
     node: ast.FunctionDef | ast.AsyncFunctionDef,
     is_method: bool,
 ) -> tuple[str, ...]:
     reasons: list[str] = []
-    if _is_public_qualified_name(member_name):
-        if is_method and policy.require_public_method_docstrings:
-            reasons.append("public-method")
-        if not is_method and policy.require_public_function_docstrings:
-            reasons.append("public-function")
+    public_flags = (
+        policy.require_public_function_docstrings,
+        policy.require_public_method_docstrings,
+    )
+    if _is_public_qualified_name(member_name) and public_flags[is_method]:
+        reasons.append(("public-function", "public-method")[is_method])
     if _member_line_count(node) >= policy.complex_member_min_lines:
         reasons.append("complex-member")
     return tuple(reasons)
 
 
 def _describe_requirement_reasons(reasons: tuple[str, ...], complex_member_min_lines: int) -> str:
-    labels: list[str] = []
-    for reason in reasons:
-        if reason == "public-function":
-            labels.append("public function on selected high-value path")
-            continue
-        if reason == "public-method":
-            labels.append("public method on selected high-value path")
-            continue
-        labels.append(f"complex member >= {complex_member_min_lines} lines")
-    return ", ".join(labels)
+    reason_labels = {
+        "public-function": "public function on selected high-value path",
+        "public-method": "public method on selected high-value path",
+    }
+    return ", ".join(
+        reason_labels.get(reason, f"complex member >= {complex_member_min_lines} lines")
+        for reason in reasons
+    )
 
 
 def _member_line_count(node: ast.FunctionDef | ast.AsyncFunctionDef) -> int:
@@ -238,16 +227,12 @@ def _member_name(prefix: tuple[str, ...], name: str) -> str:
     return ".".join((*prefix, name)) if prefix else name
 
 
-def _is_public_name(name: str) -> bool:
-    return not name.startswith("_")
+def _requires_public_class_docstring(policy: DocstringPolicy, class_name: str) -> bool:
+    return policy.require_public_class_docstrings and _is_public_qualified_name(class_name)
 
 
 def _is_public_qualified_name(name: str) -> bool:
-    return all(_is_public_name(part) for part in name.split("."))
-
-
-def _issue_sort_key(issue: DocstringIssue) -> tuple[str, str, str]:
-    return (issue.path, issue.kind, issue.message)
+    return all(not part.startswith("_") for part in name.split("."))
 
 
 __all__ = [

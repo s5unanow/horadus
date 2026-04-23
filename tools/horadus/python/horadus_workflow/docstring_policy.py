@@ -123,11 +123,10 @@ def _body_issues(
                 if not check_classes:
                     continue
                 class_name = _member_name(prefix, statement.name)
-                if (
-                    policy.require_public_class_docstrings
-                    and _is_public_qualified_name(class_name)
-                    and not ast.get_docstring(statement)
-                ):
+                requires_class_docstring = (
+                    policy.require_public_class_docstrings and _is_public_qualified_name(class_name)
+                )
+                if requires_class_docstring and not ast.get_docstring(statement):
                     issues.append(
                         DocstringIssue(
                             "class-docstring",

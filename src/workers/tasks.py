@@ -436,7 +436,6 @@ def process_pending_items(limit: int | None = None) -> dict[str, Any]:
         configured_limit = max(1, settings.PROCESSING_PIPELINE_BATCH_SIZE)
         run_limit = max(1, limit or configured_limit)
         in_flight = _increment_processing_in_flight()
-
         logger.info("Starting processing pipeline task", limit=run_limit, in_flight=in_flight)
         try:
             result = _run_async(_process_pending_async(limit=run_limit))
@@ -536,11 +535,9 @@ def run_data_retention_cleanup(dry_run: bool | None = None) -> dict[str, Any]:
             trend_evidence_days=settings.RETENTION_TREND_EVIDENCE_DAYS,
         )
         result = _run_async(_run_data_retention_cleanup_async(dry_run=dry_run))
-
         eligible_counts = result["eligible"]
         deleted_counts = result["deleted"]
         effective_dry_run = bool(result["dry_run"])
-
         for table_name, eligible_value in (
             ("raw_items", eligible_counts["raw_items_total"]),
             ("trend_evidence", eligible_counts["trend_evidence"]),
@@ -711,7 +708,6 @@ def collect_rss() -> dict[str, Any]:
         """Execute one RSS collection pass, including retry escalation and dispatch."""
         if not settings.ENABLE_RSS_INGESTION:
             return {"status": "disabled", "collector": "rss"}
-
         logger.info("Starting RSS collection task")
         result = _run_async(_collect_rss_async())
         record_collector_metrics(
@@ -777,7 +773,6 @@ def collect_gdelt() -> dict[str, Any]:
         """Execute one GDELT collection pass, including retry escalation and dispatch."""
         if not settings.ENABLE_GDELT_INGESTION:
             return {"status": "disabled", "collector": "gdelt"}
-
         logger.info("Starting GDELT collection task")
         result = _run_async(_collect_gdelt_async())
         record_collector_metrics(

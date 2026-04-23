@@ -211,11 +211,8 @@ def _member_requirement_reasons(
 ) -> tuple[str, ...]:
     reasons: list[str] = []
     public_reasons = ("public-function", "public-method")
-    public_flags = (
-        policy.require_public_function_docstrings,
-        policy.require_public_method_docstrings,
-    )
-    if _is_public_qualified_name(member_name) and public_flags[is_method]:
+    flags = (policy.require_public_function_docstrings, policy.require_public_method_docstrings)
+    if _is_public_qualified_name(member_name) and flags[is_method]:
         reasons.append(public_reasons[is_method])
     if _member_line_count(node) >= policy.complex_member_min_lines:
         reasons.append("complex-member")

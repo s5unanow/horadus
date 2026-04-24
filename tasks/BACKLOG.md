@@ -40,23 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-394: Design worktree isolation for Codex App task sessions
-**Priority**: P2
-**Estimate**: 1-2d
-
-Design a chat-friendly worktree strategy for Codex App so each agent/task runs
-in an isolated disposable worktree rather than the canonical main checkout.
-Emphasis: containment of accidental edits and compatibility with the existing
-Horadus task lifecycle.
-
-**Files**: `AGENTS.md`, `docs/AGENT_RUNBOOK.md`, `ops/automations/specs`, `tasks/specs`
-
-**Acceptance Criteria**:
-- [ ] Produce a concrete repo-owned design/spec for worktree-isolated Codex chat sessions that fits the existing Horadus task lifecycle.
-- [ ] Cover containment goals, lifecycle integration points, cleanup/ownership implications, and a staged rollout recommendation.
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

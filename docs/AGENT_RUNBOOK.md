@@ -65,6 +65,20 @@ Compatibility wrapper:
 - Use only when a Make target is more convenient; it must delegate to the same
   `horadus tasks safe-start` flow.
 
+Worktree-isolated Codex sessions:
+- `tasks/specs/394-worktree-isolation-codex-sessions.md` is the current design
+  contract for moving Codex chat/task execution into disposable sibling
+  worktrees.
+- Until a repo-owned `horadus tasks worktree-start ...` wrapper exists,
+  `safe-start`, `finish`, and `lifecycle --strict` remain the authoritative
+  task lifecycle. Do not treat Codex App `execution_environment = "worktree"`
+  alone as a complete Horadus task-isolation contract.
+- The staged target is to keep the canonical checkout on synced `main`, create
+  task worktrees under a sibling root such as
+  `/Users/s5una/projects/horadus-worktrees/TASK-XXX-short-name`, run
+  implementation and validation there, and return to the canonical checkout for
+  final lifecycle verification and main sync checks.
+
 4. `uv run --no-sync horadus tasks context-pack TASK-XXX --mode implement --format json`
 When: collect the Phase 1 implementation payload for active engineering work.
 The unflagged command and `--mode default` preserve the broad text/JSON context

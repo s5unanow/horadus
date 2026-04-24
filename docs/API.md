@@ -14,11 +14,15 @@ Interactive documentation:
 API key auth and rate limiting are controlled by environment config.
 
 - Header: `X-API-Key: <key>`
-- Admin header for key management: `X-Admin-API-Key: <admin-key>`
+- Admin header for privileged operations: `X-Admin-API-Key: <admin-key>`
 - Set `API_AUTH_ENABLED=true` to enforce auth globally
 - Configure keys via `API_KEY` and/or `API_KEYS`
-- Privileged mutation/control routes require a configured `X-Admin-API-Key` in addition to a valid `X-API-Key`; authenticated non-admin API keys are not an admin fallback
-- Privileged routes include API key management, source create/update/delete, trend create/update/delete/sync/outcome recording, and feedback/override/taxonomy-gap mutation endpoints
+- Privileged mutation/control routes require a configured `X-Admin-API-Key`
+  in addition to a valid `X-API-Key`; authenticated non-admin API keys are not
+  an admin fallback
+- Privileged routes include API key management, source create/update/delete,
+  trend create/update/delete/sync/outcome recording, event lineage repair, and
+  feedback/override/taxonomy-gap mutation endpoints
 - Per-key default rate limit is controlled by `API_RATE_LIMIT_PER_MINUTE`
 - Rate-limit algorithm is configured via `API_RATE_LIMIT_STRATEGY` (`fixed_window` default, `sliding_window` optional)
 - On throttling, API returns `429` with `Retry-After` seconds
@@ -26,15 +30,21 @@ API key auth and rate limiting are controlled by environment config.
 ## Privileged Write Contract
 
 The current operator/admin write contract is enforced for API key management
-and the privileged trend/feedback mutation routes documented below.
+and the privileged trend/feedback mutation routes documented below. Source
+mutations and event lineage repair are admin-authenticated privileged routes,
+but they do not currently participate in the idempotency/revision audit
+contract.
 
 Headers:
 - `X-Idempotency-Key: <opaque-key>` is required on every covered privileged write
-- `If-Match: <revision_token>` is additionally required on revision-sensitive writes
+- `If-Match: <revision_token>` is additionally required on revision-sensitive
+  writes
 
 Semantics:
+- idempotency keys are scoped to the authenticated actor and route action
 - reusing the same idempotency key for a prior successful or in-flight write returns `409`
 - reusing an idempotency key with a different request intent also returns `409`
+- missing `X-Idempotency-Key` on a covered write returns `400`
 - missing `If-Match` on a revision-sensitive write returns `428`
 - stale revision tokens return `412`
 - durable privileged-write audit rows capture actor metadata, target, request intent, outcome, revision basis, and resulting linkage ids where applicable
@@ -42,6 +52,10 @@ Semantics:
 Current route matrix:
 - Idempotency only: `POST /api/v1/auth/keys`, `POST /api/v1/auth/keys/{key_id}/rotate`, `DELETE /api/v1/auth/keys/{key_id}`, `POST /api/v1/trends`, `POST /api/v1/trends/sync-config`, `POST /api/v1/trends/{trend_id}/outcomes`
 - Idempotency + revision token: `PATCH /api/v1/trends/{trend_id}`, `DELETE /api/v1/trends/{trend_id}`, `PATCH /api/v1/taxonomy-gaps/{gap_id}`, `POST /api/v1/events/{event_id}/feedback`, `POST /api/v1/events/{event_id}/adjudications`, `POST /api/v1/trends/{trend_id}/override`
+
+Admin-authenticated privileged routes outside the write contract:
+- `POST /api/v1/sources`, `PATCH /api/v1/sources/{source_id}`, `DELETE /api/v1/sources/{source_id}`
+- `POST /api/v1/events/{event_id}/merge`, `POST /api/v1/events/{event_id}/split`
 
 Revision tokens are surfaced on the resource payloads used for read-before-write
 flows:
@@ -139,6 +153,9 @@ Freshness response includes:
 - `GET /api/v1/trends/{trend_id}/calibration`
 
 Privileged trend mutations require both `X-API-Key` and `X-Admin-API-Key`.
+Covered trend writes also require `X-Idempotency-Key`; `PATCH` and `DELETE`
+trend writes additionally require `If-Match` with the latest trend
+`revision_token`.
 Config sync is only available through `POST /api/v1/trends/sync-config`.
 `GET /api/v1/trends?sync_from_config=true` is rejected with `400`.
 `POST /api/v1/trends/sync-config` accepts only repo-owned directories under
@@ -199,6 +216,7 @@ Record an outcome for calibration:
 curl -X POST "http://localhost:8000/api/v1/trends/<trend-id>/outcomes" \
   -H "X-API-Key: dev-key" \
   -H "X-Admin-API-Key: admin-secret" \
+  -H "X-Idempotency-Key: outcome-2026-02-07-<trend-id>" \
   -H "Content-Type: application/json" \
   -d '{
     "outcome": "occurred",
@@ -238,9 +256,25 @@ chain subsequent writes against the new resource revision.
 Supported event filters:
 - `category` (string)
 - `trend_id` (UUID)
-- `lifecycle` (`emerging`, `confirmed`, `fading`, `archived`)
+- `epistemic` (`emerging`, `confirmed`, `contested`, `retracted`)
+- `activity` (`active`, `dormant`, `closed`)
+- `lifecycle` (`emerging`, `confirmed`, `fading`, `archived`) for legacy
+  compatibility only; prefer `epistemic` + `activity` for new clients
 - `contradicted` (`true`/`false`)
 - `days` (1..30), `limit` (1..200)
+
+Event list/detail responses include the split state fields:
+- `epistemic_state`: evidence/support axis
+  (`emerging`, `confirmed`, `contested`, `retracted`)
+- `activity_state`: recency/activity axis (`active`, `dormant`, `closed`)
+- `lifecycle_status`: deprecated compatibility projection derived from the
+  split axes
+
+Split-state filter example:
+
+```bash
+curl "http://localhost:8000/api/v1/events?epistemic=contested&activity=active&days=7"
+```
 
 `GET /api/v1/events/{event_id}` now also includes `entities`, a typed list of
 event mentions with:
@@ -327,6 +361,9 @@ Privileged auth writes require:
 - `X-API-Key`
 - `X-Admin-API-Key`
 - `X-Idempotency-Key`
+
+Covered writes:
+- `POST /api/v1/auth/keys`
 - `DELETE /api/v1/auth/keys/{key_id}`
 - `POST /api/v1/auth/keys/{key_id}/rotate`
 
@@ -335,7 +372,9 @@ Create key example:
 ```bash
 curl -X POST http://localhost:8000/api/v1/auth/keys \
   -H "Content-Type: application/json" \
-  -H "X-Admin-API-Key: $API_ADMIN_KEY" \
+  -H "X-API-Key: dev-key" \
+  -H "X-Admin-API-Key: admin-secret" \
+  -H "X-Idempotency-Key: create-key-analytics-dashboard" \
   -d '{"name":"analytics-dashboard","rate_limit_per_minute":90}'
 ```
 
@@ -353,6 +392,10 @@ Invalidate example:
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/events/<event-id>/feedback" \
+  -H "X-API-Key: dev-key" \
+  -H "X-Admin-API-Key: admin-secret" \
+  -H "X-Idempotency-Key: event-feedback-<event-id>-invalidate" \
+  -H "If-Match: <event-revision-token>" \
   -H "Content-Type: application/json" \
   -d '{"action":"invalidate","notes":"Analyst invalidation after contradiction review"}'
 ```

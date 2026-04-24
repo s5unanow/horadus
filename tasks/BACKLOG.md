@@ -40,22 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-393: Sync API docs with runtime contracts
-**Priority**: P2
-**Estimate**: 2-4h
-
-docs/API.md and README.md drift from live privileged-write and split event-
-state contracts; examples omit required headers and docs still present legacy
-lifecycle as primary
-
-**Files**: `docs/API.md`, `README.md`, `src/api/routes/_privileged_write_contract.py`, `src/api/routes/events.py`
-
-**Acceptance Criteria**:
-- [ ] docs/API.md and README.md must match live privileged-write header requirements and split event-state/runtime filter contracts.
-- [ ] Update the affected examples and operator-facing docs so the documented API surface no longer points to legacy lifecycle semantics as primary.
-
----
-
 ### TASK-394: Design worktree isolation for Codex App task sessions
 **Priority**: P2
 **Estimate**: 1-2d

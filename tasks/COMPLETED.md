@@ -402,3 +402,4 @@
 - TASK-390: Add dirty-main watchdog for agent sessions ✅
 - TASK-391: Close nested-helper docstring policy gap ✅
 - TASK-392: Fix root horadus help and runbook freshness drift ✅
+- TASK-393: Sync API docs with runtime contracts ✅

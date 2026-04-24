@@ -17,6 +17,18 @@ so prompts/schedules are reviewable and stable over time.
 Volatile local fields like `created_at` / `updated_at` are intentionally **not**
 tracked to avoid git churn.
 
+## Worktree Execution
+
+`tasks/specs/394-worktree-isolation-codex-sessions.md` defines the repo design
+for future worktree-isolated Codex task sessions. For now, task-mutating
+automations should keep the canonical checkout in `cwds` for lock acquisition,
+idle-repo checks, eligibility, and Horadus lifecycle commands.
+
+Do not treat an automation `execution_environment = "worktree"` field as a full
+Horadus task-isolation contract by itself. The repo still needs a cleanup-aware
+`horadus tasks worktree-start ...` wrapper before mutating automations should be
+switched to task-owned disposable worktrees.
+
 ## Sync Workflow
 
 - Export local Codex automations into repo specs:

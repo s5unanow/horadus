@@ -9,7 +9,6 @@
 
 ## Active Tasks
 
-- `TASK-393` Sync API docs with runtime contracts
 - `TASK-394` Design worktree isolation for Codex App task sessions
 
 ## Selection Notes
@@ -52,6 +51,8 @@
 
 
 
+
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -65,3 +66,4 @@
 - `TASK-390` Add dirty-main watchdog for agent sessions ✅
 - `TASK-391` Close nested-helper docstring policy gap ✅
 - `TASK-392` Fix root horadus help and runbook freshness drift ✅
+- `TASK-393` Sync API docs with runtime contracts ✅

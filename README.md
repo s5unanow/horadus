@@ -15,7 +15,8 @@ A headless backend for collecting, classifying, and analyzing news to track geop
 - **Multi-source ingestion**: RSS feeds, GDELT, Telegram channels
 - **Smart filtering**: Two-tier LLM classification (cheap filter → expensive analysis)
 - **Event clustering**: Groups duplicate news into single events
-- **Event lifecycle tracking**: Emerging → confirmed → fading → archived
+- **Event state tracking**: Split epistemic state (emerging/confirmed/contested/retracted)
+  from activity state (active/dormant/closed), with legacy lifecycle compatibility
 - **Trend tracking**: Bayesian-inspired probability updates using log-odds
 - **Risk presentation**: Risk levels + probability bands + confidence ratings
 - **Calibration visibility**: Reliability curve + Brier score dashboard
@@ -96,11 +97,14 @@ make run-beat
 
 ## API Documentation
 
-Interactive OpenAPI docs are hosted by FastAPI:
+Interactive OpenAPI docs are hosted by FastAPI in development:
 
 - Swagger UI: `/docs`
 - ReDoc: `/redoc`
 - OpenAPI JSON: `/openapi.json`
+
+In staging and production, interactive docs/schema routes are disabled. Use the
+checked-in `docs/API.md` reference plus authenticated API calls for verification.
 
 Detailed endpoint reference and curl examples:
 - `docs/API.md`
@@ -125,8 +129,11 @@ make release-gate RELEASE_GATE_DATABASE_URL="<staging-db-url>"
 
 Authentication header:
 - `X-API-Key: <key>`
-- Key-management admin header:
+- Privileged-operation admin header:
   - `X-Admin-API-Key: <key>`
+- Covered privileged writes also require `X-Idempotency-Key`.
+- Revision-sensitive privileged writes also require `If-Match: <revision_token>`
+  from the latest read payload.
 
 ## API Endpoints
 
@@ -142,7 +149,7 @@ Authentication header:
 | GET | `/api/v1/trends/{id}/retrospective` | Retrospective analysis |
 | POST | `/api/v1/trends/{id}/outcomes` | Record resolved outcome for calibration |
 | GET | `/api/v1/trends/{id}/calibration` | Get trend calibration report |
-| GET | `/api/v1/events` | List recent events |
+| GET | `/api/v1/events` | List recent events with `epistemic`, `activity`, and legacy `lifecycle` filters |
 | GET | `/api/v1/events/{id}` | Get event details |
 | GET | `/api/v1/reports` | List generated reports |
 | GET | `/api/v1/reports/coverage` | Get recent source coverage health |

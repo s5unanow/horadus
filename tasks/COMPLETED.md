@@ -404,3 +404,4 @@
 - TASK-392: Fix root horadus help and runbook freshness drift ✅
 - TASK-393: Sync API docs with runtime contracts ✅
 - TASK-394: Design worktree isolation for Codex App task sessions ✅
+- TASK-398: Fix eval benchmark noop session contract ✅

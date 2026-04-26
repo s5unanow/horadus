@@ -19,6 +19,8 @@ from openai import AsyncOpenAI
 from src.core.config import settings
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 from src.eval import artifact_provenance as provenance
+from src.eval.benchmark_stubs import NoopCostTracker as _NoopCostTracker
+from src.eval.benchmark_stubs import NoopSession as _NoopSession
 from src.processing.llm_policy import apply_latest_active_route_metadata
 from src.processing.semantic_cache import LLMSemanticCache
 from src.processing.tier1_classifier import Tier1Classifier, Tier1ItemResult, Tier1Usage
@@ -184,37 +186,6 @@ class _Tier2Metrics:
             "severity_mae": round(self.severity_abs_error_sum / denominator, 6),
             "confidence_mae": round(self.confidence_abs_error_sum / denominator, 6),
         }
-
-
-@dataclass(slots=True)
-class _NoopSession:
-    async def flush(self) -> None:
-        return None
-
-
-@dataclass(slots=True)
-class _NoopCostTracker:
-    async def ensure_within_budget(
-        self,
-        _tier: str,
-        *,
-        provider: str | None = None,
-        model: str | None = None,
-    ) -> None:
-        _ = (provider, model)
-        return
-
-    async def record_usage(
-        self,
-        *,
-        tier: str,
-        input_tokens: int,
-        output_tokens: int,
-        provider: str | None = None,
-        model: str | None = None,
-    ) -> None:
-        _ = (tier, input_tokens, output_tokens, provider, model)
-        return
 
 
 @dataclass(slots=True)
@@ -738,9 +709,7 @@ async def run_gold_set_benchmark(
     dispatch_mode: str = DISPATCH_MODE_REALTIME,
     request_priority: str = REQUEST_PRIORITY_REALTIME,
 ) -> Path:
-    """
-    Run Tier-1/Tier-2 benchmark over a gold set and persist JSON results.
-    """
+    """Run Tier-1/Tier-2 benchmark over a gold set and persist JSON results."""
     gold_items = load_gold_set(
         Path(gold_set_path),
         max_items=max(1, max_items),

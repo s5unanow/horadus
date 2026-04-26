@@ -4,6 +4,7 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from tools.horadus.python.horadus_cli._ops_runtime_output import runtime_json_stdout_line
 from tools.horadus.python.horadus_cli.result import CommandResult
 
 
@@ -44,7 +45,7 @@ def runtime_result(
     environment_error_exit_code: int,
 ) -> CommandResult:
     completed = run_bridge(action, payload_factory(args))
-    stdout = completed.stdout.strip()
+    stdout = runtime_json_stdout_line(completed.stdout)
     if not stdout:
         return CommandResult(
             exit_code=environment_error_exit_code,
@@ -53,7 +54,6 @@ def runtime_result(
                 completed.stderr.strip() or "bridge stderr was empty",
             ],
         )
-
     try:
         payload = json.loads(stdout)
     except json.JSONDecodeError as exc:
@@ -72,7 +72,6 @@ def runtime_result(
         )
 
     exit_code = int(payload.get("exit_code", completed.returncode or environment_error_exit_code))
-    data = payload.get("data")
     lines = payload.get("lines")
     error_lines = payload.get("error_lines")
     if lines is not None and not isinstance(lines, list):
@@ -81,7 +80,7 @@ def runtime_result(
         error_lines = [str(error_lines)]
     return CommandResult(
         exit_code=exit_code,
-        data=data if isinstance(data, dict) else None,
+        data=payload.get("data") if isinstance(payload.get("data"), dict) else None,
         lines=[str(line) for line in lines] if isinstance(lines, list) else None,
         error_lines=[str(line) for line in error_lines] if isinstance(error_lines, list) else None,
     )

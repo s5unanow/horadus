@@ -10,7 +10,6 @@
 ## Active Tasks
 
 
-
 ## Selection Notes
 
 - Sprint 10 opens immediately after Sprint 9 drained, using a fresh review of the local intake queue instead of carrying forward already-completed work.
@@ -35,6 +34,7 @@
 
 ## Human Blocker Metadata
 
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -51,3 +51,4 @@
 - `TASK-393` Sync API docs with runtime contracts ✅
 - `TASK-394` Design worktree isolation for Codex App task sessions ✅
 - `TASK-398` Fix eval benchmark noop session contract ✅
+- `TASK-399` Prevent integration Docker volume leaks ✅

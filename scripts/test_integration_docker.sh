@@ -39,7 +39,7 @@ require_cmd docker
 require_cmd "${UV_BIN}"
 
 cleanup() {
-  docker rm -f "${POSTGRES_CONTAINER}" "${REDIS_CONTAINER}" >/dev/null 2>&1 || true
+  docker rm -f -v "${POSTGRES_CONTAINER}" "${REDIS_CONTAINER}" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 

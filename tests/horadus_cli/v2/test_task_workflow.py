@@ -158,6 +158,10 @@ def test_release_gate_reuses_canonical_full_local_gate() -> None:
         'export MIGRATION_GATE_VALIDATE_AUTOGEN="${INTEGRATION_MIGRATION_GATE_VALIDATE_AUTOGEN:-${MIGRATION_GATE_VALIDATE_AUTOGEN:-true}}"'
         in integration_script
     )
+    assert (
+        'docker rm -f -v "${POSTGRES_CONTAINER}" "${REDIS_CONTAINER}" >/dev/null 2>&1 || true'
+        in integration_script
+    )
     assert 'UV_BIN="${UV_BIN:-uv}"' in integration_script
     assert (
         '"${UV_BIN}" run --no-sync pytest tests/integration/ -v -m integration'

@@ -33,9 +33,6 @@
 
 ## Human Blocker Metadata
 
-
-
-
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -53,4 +50,5 @@
 - `TASK-394` Design worktree isolation for Codex App task sessions ✅
 - `TASK-398` Fix eval benchmark noop session contract ✅
 - `TASK-399` Prevent integration Docker volume leaks ✅
+- `TASK-400` Correct golden-set factual and taxonomy drift ✅
 - `TASK-401` Resolve pip dependency-audit CVE blocker ✅

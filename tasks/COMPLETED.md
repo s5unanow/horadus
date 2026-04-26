@@ -406,3 +406,4 @@
 - TASK-394: Design worktree isolation for Codex App task sessions ✅
 - TASK-398: Fix eval benchmark noop session contract ✅
 - TASK-399: Prevent integration Docker volume leaks ✅
+- TASK-400: Correct golden-set factual and taxonomy drift ✅

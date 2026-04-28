@@ -40,7 +40,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["alternative protein market share", "plant-based meat sales", "cultivated meat adoption", "precision fermentation", "mycoprotein growth", "insect protein adoption"]
+    keywords: ["alternative protein market share", "plant-based meat sales", "plant-based sales", "alternative meat sales", "cultivated meat adoption", "cultivated salmon", "precision fermentation", "mycoprotein growth", "insect protein adoption"]
 
   production_cost_price_parity:
     weight: 0.05
@@ -64,13 +64,13 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["cultivated meat approval", "cell-based meat regulation", "novel food authorization"]
+    keywords: ["cultivated meat approval", "cell-based meat regulation", "novel food authorization", "FDA clearance", "seafood category approval"]
 
   consumer_reversion_to_meat:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["meat demand rebound", "alternative protein slowdown", "plant-based sales decline"]
+    keywords: ["meat demand rebound", "alternative protein slowdown", "plant-based sales decline", "Beyond Meat", "Chapter 11 bankruptcy", "regenerative agriculture"]
 
   affordability_gap_widens:
     weight: 0.04

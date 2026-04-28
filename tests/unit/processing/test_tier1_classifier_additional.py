@@ -204,25 +204,8 @@ def test_parse_output_and_alignment_validation_guard_invalid_responses(mock_db_s
         }
     )
     item = _build_item()
-    trend = _build_trend()
     with pytest.raises(ValueError, match="item ids do not match"):
-        classifier._validate_output_alignment(output, items=[item], trends=[trend])
-
-    output = tier1_module._Tier1Output.model_validate(
-        {
-            "items": [
-                {
-                    "item_id": str(item.id),
-                    "trend_scores": [
-                        {"trend_id": "eu-russia", "relevance_score": 4, "rationale": "a"},
-                        {"trend_id": "eu-russia", "relevance_score": 3, "rationale": "b"},
-                    ],
-                }
-            ]
-        }
-    )
-    with pytest.raises(ValueError, match="duplicate trend id"):
-        classifier._validate_output_alignment(output, items=[item], trends=[trend])
+        classifier._validate_output_alignment(output, items=[item])
 
 
 def test_to_item_results_and_parse_json_success(mock_db_session) -> None:
@@ -244,7 +227,11 @@ def test_to_item_results_and_parse_json_success(mock_db_session) -> None:
         )
     )
 
-    results = classifier._to_item_results(output)
+    results = classifier._to_item_results(
+        output,
+        items=[_build_item(item_id=item_id)],
+        trends=[_build_trend()],
+    )
 
     assert len(results) == 1
     assert results[0].item_id == item_id

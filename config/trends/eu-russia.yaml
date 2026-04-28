@@ -44,7 +44,7 @@ indicators:
     direction: escalatory
     type: leading
     description: "Force repositioning, reinforcement, or readiness changes near NATO or contested borders without confirmed hostile contact."
-    keywords: ["troop buildup", "deployment", "reinforcement", "forward posture"]
+    keywords: ["troop buildup", "deployment", "reinforcement", "forward posture", "hypersonic missile", "Oreshnik", "Belarus"]
 
   military_incident:
     weight: 0.06
@@ -58,14 +58,14 @@ indicators:
     direction: escalatory
     type: leading
     description: "Delivery or approval of weapons systems, munitions, or long-range strike capabilities to actors in the theater."
-    keywords: ["long-range systems", "arms package", "munition transfer"]
+    keywords: ["long-range systems", "arms package", "munition transfer", "ATACMS", "ERAM missiles", "range restrictions", "weapons delivered"]
 
   nuclear_rhetoric:
     weight: 0.04
     direction: escalatory
     type: leading
     description: "Official statements or posture changes invoking nuclear readiness, deterrence, or strategic forces."
-    keywords: ["nuclear posture", "strategic deterrence", "nuclear readiness"]
+    keywords: ["nuclear posture", "strategic deterrence", "nuclear readiness", "nuclear doctrine", "lowers threshold"]
 
   cyber_infrastructure_attack:
     weight: 0.03

@@ -40,19 +40,19 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["sharia court", "clan mediation", "informal arbitration", "parallel justice", "unofficial court"]
+    keywords: ["sharia court", "clan mediation", "clan crime", "suspected criminal clans", "informal arbitration", "parallel justice", "unofficial court"]
 
   state_authority_challenged:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["parallel policing", "state authority challenged", "governance-deficit zone", "police access restricted", "vulnerable area"]
+    keywords: ["parallel policing", "state authority challenged", "governance-deficit zone", "police access restricted", "vulnerable area", "Ghetto Package", "safety zones law"]
 
   radicalization_case_growth:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["radicalization cases", "extremist recruitment", "violent extremism"]
+    keywords: ["radicalization cases", "extremist recruitment", "violent extremism", "deradicalization program"]
 
   institutional_trust_collapse:
     weight: 0.04
@@ -76,7 +76,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["integration outcomes improved", "community policing success", "language integration gains"]
+    keywords: ["integration outcomes improved", "mandatory integration programme", "community policing success", "language integration gains", "Nahel Merzouk"]
 
   education_integration_metrics:
     weight: 0.03

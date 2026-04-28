@@ -49,7 +49,7 @@ indicators:
     direction: escalatory
     type: leading
     description: "Concrete air or maritime encounter with collision, firing, or casualties involving US, Chinese, or allied forces."
-    keywords: ["collision", "fired upon", "close encounter", "casualties"]
+    keywords: ["collision", "fired upon", "close encounter", "casualties", "water cannon", "Philippine vessels", "Scarborough Shoal", "Second Thomas Shoal"]
 
   pla_exercise_escalation:
     weight: 0.05
@@ -63,14 +63,14 @@ indicators:
     direction: escalatory
     type: leading
     description: "Operational increase in allied deployments, missions, or deterrence posture in the theater."
-    keywords: ["force posture", "forward deployment", "deterrence mission"]
+    keywords: ["force posture", "forward deployment", "deterrence mission", "coast guard vessel", "Sabina Shoal", "Philippine EEZ", "AUKUS", "submarine technology"]
 
   export_control_spiral:
     weight: 0.03
     direction: escalatory
     type: lagging
     description: "Escalating trade or technology restrictions such as chip controls, rare earth limits, or related retaliatory measures."
-    keywords: ["chip restrictions", "export control expansion", "rare earth controls"]
+    keywords: ["chip restrictions", "export control expansion", "rare earth controls", "rare earth export controls", "US chip restrictions"]
 
   high_level_military_talks:
     weight: 0.04
@@ -84,7 +84,7 @@ indicators:
     direction: de_escalatory
     type: lagging
     description: "Formal protocols or agreements that lower the risk of incidents at sea or in the air."
-    keywords: ["rules of engagement", "incident prevention at sea"]
+    keywords: ["rules of engagement", "incident prevention at sea", "provisional resupply arrangement", "resupply arrangement"]
 
 regions:
   - Taiwan Strait

@@ -43,37 +43,37 @@ indicators:
     weight: 0.06
     direction: escalatory
     type: leading
-    keywords: ["politically motivated attack", "armed standoff", "extremist violence"]
+    keywords: ["politically motivated attack", "armed standoff", "extremist violence", "threats against U.S. federal judges"]
 
   militia_mobilization:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["armed group mobilization", "militia activity", "paramilitary organizing"]
+    keywords: ["armed group mobilization", "militia activity", "paramilitary organizing", "AP3 militia", "militia expansion", "militia presence", "militia threat assessment", "far-right militia"]
 
   state_federal_confrontation:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["state defiance of federal", "national guard standoff", "nullification", "secession"]
+    keywords: ["state defiance of federal", "national guard standoff", "nullification", "secession", "Texas National Guard", "Border Patrol", "Eagle Pass"]
 
   election_legitimacy_crisis:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["election legitimacy disputed", "constitutional crisis", "contested results"]
+    keywords: ["election legitimacy disputed", "constitutional crisis", "contested results", "election discrepancy", "election-related lawsuits", "alternate electors", "pardons alternate electors"]
 
   bipartisan_deescalation_framework:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["bipartisan accord", "de-escalation pact", "joint institutional statement"]
+    keywords: ["bipartisan accord", "de-escalation pact", "joint institutional statement", "Bipartisan Safer Communities Act"]
 
   political_violence_conviction_wave:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["extremist prosecutions", "disruption of armed cells"]
+    keywords: ["extremist prosecutions", "disruption of armed cells", "Proud Boys", "Oath Keepers", "seditious conspiracy", "Enrique Tarrio"]
 
 regions:
   - United States

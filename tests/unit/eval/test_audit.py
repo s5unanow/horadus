@@ -183,3 +183,33 @@ def test_run_gold_set_audit_marks_full_dataset_scope_when_unbounded(tmp_path: Pa
     payload = json.loads(result.output_path.read_text(encoding="utf-8"))
     assert payload["dataset_scope"] == {"max_items": None, "full_dataset": True}
     assert payload["items_evaluated"] == 3
+
+
+def test_run_gold_set_audit_surfaces_high_relevance_rows_without_tier2(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(audit_module.settings, "TIER1_RELEVANCE_THRESHOLD", 5)
+    dataset_path = tmp_path / "gold_set.jsonl"
+    output_dir = tmp_path / "results"
+    _write_dataset(dataset_path, human_verified=0, llm_seeded=1, duplicate=False)
+    row = json.loads(dataset_path.read_text(encoding="utf-8").splitlines()[0])
+    row["expected"]["tier1"]["max_relevance"] = 6
+    row["expected"]["tier1"]["trend_scores"]["eu-russia"] = 6
+    dataset_path.write_text(json.dumps(row) + "\n", encoding="utf-8")
+
+    result = audit_module.run_gold_set_audit(
+        gold_set_path=str(dataset_path),
+        output_dir=str(output_dir),
+        max_items=None,
+    )
+
+    payload = json.loads(result.output_path.read_text(encoding="utf-8"))
+    assert payload["summary"]["high_relevance_without_tier2_count"] == 1
+    assert payload["summary"]["high_relevance_without_tier2_item_ids"] == ["llm-0"]
+    assert payload["review_items"]["high_relevance_without_tier2"] == {
+        "threshold": 5,
+        "count": 1,
+        "item_ids": ["llm-0"],
+        "sample": "sample=llm-0",
+    }

@@ -73,6 +73,7 @@ class Tier2GoldLabel:
     direction: str
     severity: float
     confidence: float
+    direction_exception_reason: str | None = None
 
 
 @dataclass(slots=True)
@@ -435,6 +436,9 @@ def _parse_gold_item(payload: dict[str, Any], *, line_number: int) -> GoldSetIte
                 direction=str(tier2_raw["direction"]).strip(),
                 severity=float(tier2_raw["severity"]),
                 confidence=float(tier2_raw["confidence"]),
+                direction_exception_reason=_optional_str(
+                    tier2_raw.get("direction_exception_reason")
+                ),
             )
         except (KeyError, TypeError, ValueError) as exc:
             msg = f"Invalid tier2 labels at line {line_number}"
@@ -466,6 +470,13 @@ def _resolve_configs(config_names: list[str] | None) -> list[EvalConfig]:
             raise ValueError(msg)
         selected.append(config)
     return selected
+
+
+def _optional_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
 
 
 def _format_group_summary(grouped_items: dict[str, list[str]], *, limit: int = 8) -> str:
@@ -632,13 +643,16 @@ def _serialize_tier1_prediction(predicted: Tier1ItemResult) -> dict[str, Any]:
 
 
 def _serialize_tier2_prediction(predicted: Tier2GoldLabel) -> dict[str, Any]:
-    return {
+    payload: dict[str, Any] = {
         "trend_id": predicted.trend_id,
         "signal_type": predicted.signal_type,
         "direction": predicted.direction,
         "severity": predicted.severity,
         "confidence": predicted.confidence,
     }
+    if predicted.direction_exception_reason is not None:
+        payload["direction_exception_reason"] = predicted.direction_exception_reason
+    return payload
 
 
 def _extract_stage_raw_output(*, recorder: _BenchmarkResponseRecorder, subject: Any) -> str | None:

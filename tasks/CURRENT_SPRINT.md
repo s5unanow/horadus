@@ -9,6 +9,8 @@
 
 ## Active Tasks
 
+
+
 ## Selection Notes
 
 - Sprint 10 opens immediately after Sprint 9 drained, using a fresh review of the local intake queue instead of carrying forward already-completed work.
@@ -30,8 +32,11 @@
 8. `TASK-392` Fix root horadus help and runbook freshness drift.
 9. `TASK-393` Sync API docs with runtime contracts.
 10. `TASK-394` Design worktree isolation for Codex App task sessions.
+11. `TASK-403` Harden eval audit for gold-label consistency.
 
 ## Human Blocker Metadata
+
+
 
 ## Completed This Sprint
 
@@ -53,3 +58,4 @@
 - `TASK-400` Correct golden-set factual and taxonomy drift ✅
 - `TASK-401` Resolve pip dependency-audit CVE blocker ✅
 - `TASK-402` Widen golden-set coverage for weak trends ✅
+- `TASK-403` Harden eval audit for gold-label consistency ✅

@@ -319,6 +319,87 @@ def test_run_trend_taxonomy_validation_handles_unknown_signal_types_in_warn_mode
     )
 
 
+def test_run_trend_taxonomy_validation_fails_tier2_direction_mismatch(
+    tmp_path: Path,
+) -> None:
+    trend_dir = tmp_path / "trends"
+    trend_dir.mkdir()
+    _write_trend_config(
+        trend_dir / "eu-russia.yaml",
+        trend_id="eu-russia",
+        trend_name="EU-Russia",
+        indicators={"military_movement": "escalatory"},
+    )
+
+    gold_path = tmp_path / "gold_set.jsonl"
+    _write_gold_set(
+        gold_path,
+        [
+            _gold_row(
+                item_id="eval-1",
+                tier1_scores={"eu-russia": 9},
+                tier2={
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "de_escalatory",
+                    "severity": 0.7,
+                    "confidence": 0.9,
+                },
+            )
+        ],
+    )
+
+    result = taxonomy_module.run_trend_taxonomy_validation(
+        trend_config_dir=str(trend_dir),
+        gold_set_path=str(gold_path),
+        output_dir=str(tmp_path / "results"),
+        tier1_trend_mode="subset",
+    )
+
+    assert any("direction values that disagree" in message for message in result.errors)
+
+
+def test_run_trend_taxonomy_validation_accepts_explicit_direction_exception(
+    tmp_path: Path,
+) -> None:
+    trend_dir = tmp_path / "trends"
+    trend_dir.mkdir()
+    _write_trend_config(
+        trend_dir / "eu-russia.yaml",
+        trend_id="eu-russia",
+        trend_name="EU-Russia",
+        indicators={"military_movement": "escalatory"},
+    )
+
+    gold_path = tmp_path / "gold_set.jsonl"
+    _write_gold_set(
+        gold_path,
+        [
+            _gold_row(
+                item_id="eval-1",
+                tier1_scores={"eu-russia": 9},
+                tier2={
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "de_escalatory",
+                    "severity": 0.7,
+                    "confidence": 0.9,
+                    "direction_exception_reason": "Row tests classifier wording inversion.",
+                },
+            )
+        ],
+    )
+
+    result = taxonomy_module.run_trend_taxonomy_validation(
+        trend_config_dir=str(trend_dir),
+        gold_set_path=str(gold_path),
+        output_dir=str(tmp_path / "results"),
+        tier1_trend_mode="subset",
+    )
+
+    assert result.errors == []
+
+
 def test_run_trend_taxonomy_validation_handles_gold_set_load_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -424,7 +505,7 @@ def test_validate_gold_set_alignment_records_unknown_tier1_keys_in_warn_mode() -
 
     taxonomy_module._validate_gold_set_alignment(
         items=[item],
-        indicators_by_trend={"eu-russia": {"military_movement"}},
+        indicators_by_trend={"eu-russia": {"military_movement": "escalatory"}},
         tier1_trend_mode="subset",
         signal_type_mode="strict",
         unknown_trend_mode="warn",

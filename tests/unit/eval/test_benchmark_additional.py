@@ -130,10 +130,11 @@ def test_benchmark_helper_functions_cover_normalization_and_serialization() -> N
         direction="escalatory",
         severity=0.8,
         confidence=0.9,
+        direction_exception_reason="Intentional counter-direction label.",
     )
-    assert benchmark_module._serialize_tier2_prediction(tier2_pred)["confidence"] == pytest.approx(
-        0.9
-    )
+    serialized_tier2 = benchmark_module._serialize_tier2_prediction(tier2_pred)
+    assert serialized_tier2["confidence"] == pytest.approx(0.9)
+    assert serialized_tier2["direction_exception_reason"] == "Intentional counter-direction label."
 
 
 def test_benchmark_helper_functions_cover_wrappers_and_output_fallbacks() -> None:

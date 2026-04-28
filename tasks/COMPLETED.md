@@ -409,3 +409,4 @@
 - TASK-400: Correct golden-set factual and taxonomy drift ✅
 - TASK-401: Resolve pip dependency-audit CVE blocker ✅
 - TASK-402: Widen golden-set coverage for weak trends ✅
+- TASK-403: Harden eval audit for gold-label consistency ✅

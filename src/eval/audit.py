@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
+from src.core.config import settings
 from src.eval import artifact_provenance as provenance
 from src.eval.benchmark import HUMAN_VERIFIED_LABEL, GoldSetItem, load_gold_set
 
@@ -52,6 +53,7 @@ def _build_audit_payload(
     label_counts = Counter(item.label_verification for item in items)
     content_counts = Counter(_normalize_text(item.content) for item in items)
     tier2_items = [item for item in items if item.tier2 is not None]
+    high_relevance_without_tier2 = _high_relevance_without_tier2(items)
     max_relevance_counts = Counter(item.tier1.max_relevance for item in items)
 
     total_items = len(items)
@@ -95,6 +97,16 @@ def _build_audit_payload(
         "gold_set_item_ids_sha256": provenance.gold_set_item_ids_fingerprint(items),
         "passes_quality_gate": len(warnings) == 0,
         "warnings": warnings,
+        "review_items": {
+            "high_relevance_without_tier2": {
+                "threshold": settings.TIER1_RELEVANCE_THRESHOLD,
+                "count": len(high_relevance_without_tier2),
+                "item_ids": high_relevance_without_tier2[:20],
+                "sample": _format_item_samples(high_relevance_without_tier2)
+                if high_relevance_without_tier2
+                else "",
+            }
+        },
         "summary": {
             "label_verification_counts": dict(sorted(label_counts.items())),
             "human_verified_ratio": round(human_verified_count / total_items, 6)
@@ -102,6 +114,8 @@ def _build_audit_payload(
             else 0.0,
             "tier2_labeled_items": len(tier2_items),
             "tier2_coverage_ratio": round(tier2_coverage, 6),
+            "high_relevance_without_tier2_count": len(high_relevance_without_tier2),
+            "high_relevance_without_tier2_item_ids": high_relevance_without_tier2[:20],
             "max_relevance_distribution": dict(sorted(max_relevance_counts.items())),
             "content": {
                 "unique_count": unique_content_count,
@@ -120,6 +134,21 @@ def _normalize_text(value: str) -> str:
 def _duplicate_groups(counts: Counter[str]) -> list[dict[str, Any]]:
     groups = [{"count": count, "sample": key[:120]} for key, count in counts.items() if count > 1]
     return sorted(groups, key=lambda row: int(row["count"]), reverse=True)
+
+
+def _high_relevance_without_tier2(items: list[GoldSetItem]) -> list[str]:
+    threshold = settings.TIER1_RELEVANCE_THRESHOLD
+    return sorted(
+        item.item_id
+        for item in items
+        if item.tier2 is None and item.tier1.max_relevance >= threshold
+    )
+
+
+def _format_item_samples(item_ids: list[str], *, limit: int = 5) -> str:
+    samples = item_ids[:limit]
+    suffix = f", +{len(item_ids) - limit} more" if len(item_ids) > limit else ""
+    return f"sample={', '.join(samples)}{suffix}"
 
 
 def _write_audit_result(*, output_dir: Path, payload: dict[str, Any]) -> Path:

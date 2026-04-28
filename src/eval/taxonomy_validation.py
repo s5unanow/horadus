@@ -19,6 +19,7 @@ from src.eval.benchmark import GoldSetItem, load_gold_set
 
 TrendMode = Literal["strict", "warn"]
 Tier1TrendMode = Literal["strict", "subset"]
+IndicatorDirectionsByTrend = dict[str, dict[str, str]]
 
 
 @dataclass(slots=True)
@@ -93,9 +94,9 @@ def run_trend_taxonomy_validation(
     return TaxonomyValidationRunResult(output_path=output_path, errors=errors, warnings=warnings)
 
 
-def _load_trend_taxonomy(*, config_dir: Path) -> tuple[dict[str, set[str]], list[str]]:
+def _load_trend_taxonomy(*, config_dir: Path) -> tuple[IndicatorDirectionsByTrend, list[str]]:
     errors: list[str] = []
-    indicators_by_trend: dict[str, set[str]] = {}
+    indicators_by_trend: IndicatorDirectionsByTrend = {}
     trend_sources: dict[str, str] = {}
 
     if not config_dir.exists() or not config_dir.is_dir():
@@ -135,7 +136,10 @@ def _load_trend_taxonomy(*, config_dir: Path) -> tuple[dict[str, set[str]], list
             continue
 
         trend_sources[trend_id] = file_path.name
-        indicators_by_trend[trend_id] = set(parsed_config.indicators.keys())
+        indicators_by_trend[trend_id] = {
+            signal_type: indicator.direction
+            for signal_type, indicator in parsed_config.indicators.items()
+        }
 
     return indicators_by_trend, errors
 
@@ -143,7 +147,7 @@ def _load_trend_taxonomy(*, config_dir: Path) -> tuple[dict[str, set[str]], list
 def _validate_gold_set_alignment(
     *,
     items: list[GoldSetItem],
-    indicators_by_trend: dict[str, set[str]],
+    indicators_by_trend: IndicatorDirectionsByTrend,
     tier1_trend_mode: Tier1TrendMode,
     signal_type_mode: TrendMode,
     unknown_trend_mode: TrendMode,
@@ -157,6 +161,7 @@ def _validate_gold_set_alignment(
     tier1_strict_mismatch_items: list[str] = []
     tier2_unknown_trend_ids: dict[str, list[str]] = {}
     tier2_unknown_signal_types: dict[str, list[str]] = {}
+    tier2_direction_mismatches: dict[str, list[str]] = {}
 
     for item in items:
         row_trend_keys = set(item.tier1.trend_scores.keys())
@@ -171,19 +176,14 @@ def _validate_gold_set_alignment(
             for key in sorted(missing_tier1_keys):
                 tier1_missing_keys.setdefault(key, []).append(item.item_id)
 
-        if item.tier2 is None:
-            continue
-
-        trend_id = item.tier2.trend_id
-        if trend_id not in configured_ids:
-            tier2_unknown_trend_ids.setdefault(trend_id, []).append(item.item_id)
-            continue
-
-        signal_type = item.tier2.signal_type
-        allowed_signal_types = indicators_by_trend.get(trend_id, set())
-        if signal_type not in allowed_signal_types:
-            mismatch_key = f"{trend_id}:{signal_type}"
-            tier2_unknown_signal_types.setdefault(mismatch_key, []).append(item.item_id)
+        _collect_tier2_alignment_findings(
+            item=item,
+            indicators_by_trend=indicators_by_trend,
+            configured_ids=configured_ids,
+            tier2_unknown_trend_ids=tier2_unknown_trend_ids,
+            tier2_unknown_signal_types=tier2_unknown_signal_types,
+            tier2_direction_mismatches=tier2_direction_mismatches,
+        )
 
     if tier1_unknown_keys:
         _record_finding(
@@ -230,6 +230,48 @@ def _validate_gold_set_alignment(
             errors=errors,
             warnings=warnings,
         )
+
+    if tier2_direction_mismatches:
+        errors.append(
+            "Tier-2 labels contain direction values that disagree with configured "
+            f"indicator directions: {_format_group_summary(tier2_direction_mismatches)}."
+        )
+
+
+def _collect_tier2_alignment_findings(
+    *,
+    item: GoldSetItem,
+    indicators_by_trend: IndicatorDirectionsByTrend,
+    configured_ids: set[str],
+    tier2_unknown_trend_ids: dict[str, list[str]],
+    tier2_unknown_signal_types: dict[str, list[str]],
+    tier2_direction_mismatches: dict[str, list[str]],
+) -> None:
+    if item.tier2 is None:
+        return
+
+    trend_id = item.tier2.trend_id
+    if trend_id not in configured_ids:
+        tier2_unknown_trend_ids.setdefault(trend_id, []).append(item.item_id)
+        return
+
+    signal_type = item.tier2.signal_type
+    allowed_signal_types = indicators_by_trend.get(trend_id, {})
+    expected_direction = allowed_signal_types.get(signal_type)
+    if expected_direction is None:
+        mismatch_key = f"{trend_id}:{signal_type}"
+        tier2_unknown_signal_types.setdefault(mismatch_key, []).append(item.item_id)
+        return
+
+    if item.tier2.direction == expected_direction:
+        return
+    if item.tier2.direction_exception_reason is not None:
+        return
+
+    mismatch_key = (
+        f"{trend_id}:{signal_type} expected={expected_direction} got={item.tier2.direction}"
+    )
+    tier2_direction_mismatches.setdefault(mismatch_key, []).append(item.item_id)
 
 
 def _record_finding(

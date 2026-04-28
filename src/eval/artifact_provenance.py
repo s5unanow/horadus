@@ -117,13 +117,17 @@ def gold_set_fingerprint(items: list[Any]) -> str:
             "tier2": None,
         }
         if item.tier2 is not None:
-            row["tier2"] = {
+            tier2_row = {
                 "trend_id": item.tier2.trend_id,
                 "signal_type": item.tier2.signal_type,
                 "direction": item.tier2.direction,
                 "severity": item.tier2.severity,
                 "confidence": item.tier2.confidence,
             }
+            direction_exception_reason = getattr(item.tier2, "direction_exception_reason", None)
+            if direction_exception_reason is not None:
+                tier2_row["direction_exception_reason"] = direction_exception_reason
+            row["tier2"] = tier2_row
         canonical_rows.append(row)
 
     payload = json.dumps(canonical_rows, ensure_ascii=True, sort_keys=True, separators=(",", ":"))

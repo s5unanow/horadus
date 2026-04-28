@@ -134,6 +134,7 @@ def test_normalize_request_overrides_and_gold_set_fingerprints() -> None:
             direction="escalatory",
             severity=0.8,
             confidence=0.9,
+            direction_exception_reason="Intentional counter-direction label.",
         ),
     )
 

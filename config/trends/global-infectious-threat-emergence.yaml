@@ -47,13 +47,13 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["novel virus", "uncharacterized pathogen", "unknown pneumonia", "new variant of concern"]
+    keywords: ["novel virus", "uncharacterized pathogen", "unknown pneumonia", "respiratory-illness data", "new variant of concern"]
 
   sustained_cross_continent_transmission:
     weight: 0.06
     direction: escalatory
     type: leading
-    keywords: ["community transmission", "multi-country spread", "cross-continent"]
+    keywords: ["community transmission", "multi-country spread", "cross-continent", "poultry workers with conjunctivitis"]
 
   unusual_pathogen_characteristics:
     weight: 0.05
@@ -65,7 +65,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["hospital surge", "icu occupancy", "health system strain"]
+    keywords: ["hospital surge", "pediatric hospital pressure", "icu occupancy", "health system strain"]
 
   who_pheic_declaration:
     weight: 0.05
@@ -77,7 +77,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["lab leak", "containment breach", "BSL incident", "research accident", "lab exposure"]
+    keywords: ["lab leak", "containment breach", "BSL incident", "research accident", "lab exposure", "anthrax lab incident", "biosafety-control failure"]
 
   anomalous_mortality_cluster:
     weight: 0.04
@@ -95,10 +95,10 @@ indicators:
     weight: 0.05
     direction: de_escalatory
     type: lagging
-    keywords: ["R_t below one", "declining case curve", "outbreak controlled"]
+    keywords: ["R_t below one", "declining case curve", "outbreak controlled", "declares end to Marburg outbreak"]
 
   vaccine_or_therapeutic_breakthrough:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["effective vaccine", "high-efficacy therapeutic", "rapid deployment"]
+    keywords: ["effective vaccine", "high-efficacy therapeutic", "mRNA H5N1 vaccine", "rapid deployment"]

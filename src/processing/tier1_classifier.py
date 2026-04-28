@@ -6,14 +6,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, ClassVar
 from uuid import UUID
 
 from openai import AsyncOpenAI
-from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,78 +30,35 @@ from src.processing.llm_input_safety import (
 )
 from src.processing.llm_policy import (
     apply_latest_active_route_metadata,
-    build_safe_payload_content,
     invoke_with_policy,
 )
 from src.processing.llm_runtime_cache import build_semantic_cache_kwargs
 from src.processing.semantic_cache import LLMSemanticCache
+from src.processing.tier1_batch_runner import classify_batch_with_context
+from src.processing.tier1_contract import normalize_output_payload
+from src.processing.tier1_result_builder import (
+    to_item_results,
+    trend_payload,
+    validate_output_alignment,
+)
+from src.processing.tier1_types import (
+    Tier1ItemResult,
+    Tier1RunResult,
+    Tier1Usage,
+    TrendRelevanceScore,
+)
+from src.processing.tier1_types import (
+    Tier1Output as _Tier1Output,
+)
 from src.storage.models import ProcessingStatus, RawItem, Trend
 
-
-@dataclass(slots=True)
-class TrendRelevanceScore:
-    """Per-trend relevance score for one item."""
-
-    trend_id: str
-    relevance_score: int
-    rationale: str | None = None
-
-
-@dataclass(slots=True)
-class Tier1ItemResult:
-    """Tier 1 classification decision for one raw item."""
-
-    item_id: UUID
-    max_relevance: int
-    should_queue_tier2: bool
-    trend_scores: list[TrendRelevanceScore] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class Tier1Usage:
-    """Usage and cost metrics for one classifier run."""
-
-    prompt_tokens: int = 0
-    completion_tokens: int = 0
-    api_calls: int = 0
-    estimated_cost_usd: float = 0.0
-    active_provider: str | None = None
-    active_model: str | None = None
-    active_reasoning_effort: str | None = None
-    used_secondary_route: bool = False
-
-
-@dataclass(slots=True)
-class Tier1RunResult:
-    """Summary of classifying pending items."""
-
-    scanned: int = 0
-    noise_count: int = 0
-    queued_count: int = 0
-    queued_item_ids: list[UUID] = field(default_factory=list)
-    results: list[Tier1ItemResult] = field(default_factory=list)
-    usage: Tier1Usage = field(default_factory=Tier1Usage)
-
-
-class _TrendScoreOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    trend_id: str = Field(min_length=1)
-    relevance_score: int = Field(ge=0, le=10)
-    rationale: str | None = None
-
-
-class _ItemOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    item_id: str = Field(min_length=1)
-    trend_scores: list[_TrendScoreOutput] = Field(min_length=1)
-
-
-class _Tier1Output(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    items: list[_ItemOutput] = Field(min_length=1)
+__all__ = [
+    "Tier1Classifier",
+    "Tier1ItemResult",
+    "Tier1RunResult",
+    "Tier1Usage",
+    "TrendRelevanceScore",
+]
 
 
 class Tier1Classifier:
@@ -281,78 +236,7 @@ class Tier1Classifier:
         items: list[RawItem],
         trends: list[Trend],
     ) -> tuple[list[Tier1ItemResult], Tier1Usage]:
-        payload = self._build_payload(items=items, trends=trends)
-        cached_content: str | None = None
-        for provider, model, reasoning_effort in self._semantic_cache_read_routes():
-            cache_kwargs = build_semantic_cache_kwargs(
-                stage=TIER1,
-                provider=provider,
-                model=model,
-                reasoning_effort=reasoning_effort,
-                prompt_path=self.prompt_path,
-                prompt_template=self.prompt_template,
-                schema_name="tier1_classification",
-                schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
-                request_overrides=self.request_overrides,
-            )
-            candidate = await asyncio.to_thread(
-                self.semantic_cache.get,
-                **cache_kwargs,
-                payload=payload,
-            )
-            if isinstance(candidate, str) and candidate.strip():
-                cached_content = candidate
-                break
-        if cached_content is not None:
-            try:
-                output = _Tier1Output.model_validate(json.loads(cached_content))
-                self._validate_output_alignment(output, items=items, trends=trends)
-                return (self._to_item_results(output), Tier1Usage())
-            except (ValueError, json.JSONDecodeError):
-                pass
-
-        if (
-            self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS
-            and len(items) > 1
-        ):
-            midpoint = max(1, len(items) // 2)
-            left_results, left_usage = await self._classify_batch(items[:midpoint], trends)
-            right_results, right_usage = await self._classify_batch(items[midpoint:], trends)
-            return (
-                [*left_results, *right_results],
-                self._merge_usage(left_usage=left_usage, right_usage=right_usage),
-            )
-
-        payload_content = build_safe_payload_content(
-            payload,
-            tag="UNTRUSTED_TIER1_PAYLOAD",
-            max_tokens=self._MAX_REQUEST_INPUT_TOKENS,
-            chars_per_token=self._CHARS_PER_TOKEN,
-            truncation_marker=self._TRUNCATION_MARKER,
-            warning_message="Tier 1 payload exceeded token budget; truncating",
-            warning_context={"stage": TIER1, "model": self.model},
-        )
-        messages = [
-            {"role": "system", "content": self.prompt_template},
-            {"role": "user", "content": payload_content},
-        ]
-        invocation = await self._invoke_batch_model(messages=messages)
-        output = self._parse_output(invocation.response)
-        self._validate_output_alignment(output, items=items, trends=trends)
-        results = self._to_item_results(output)
-        await self._cache_batch_response(invocation=invocation, payload=payload)
-
-        usage = Tier1Usage(
-            prompt_tokens=invocation.prompt_tokens,
-            completion_tokens=invocation.completion_tokens,
-            api_calls=1,
-            estimated_cost_usd=invocation.estimated_cost_usd,
-            active_provider=invocation.active_provider,
-            active_model=invocation.active_model,
-            active_reasoning_effort=invocation.active_reasoning_effort,
-            used_secondary_route=invocation.used_secondary_route,
-        )
-        return (results, usage)
+        return await classify_batch_with_context(self, items=items, trends=trends)
 
     def _semantic_cache_read_routes(self) -> list[tuple[str | None, str, str | None]]:
         routes: list[tuple[str | None, str, str | None]] = [
@@ -383,6 +267,7 @@ class Tier1Classifier:
         self,
         *,
         messages: list[dict[str, str]],
+        response_format: dict[str, Any],
     ) -> Any:
         return await invoke_with_policy(
             stage=TIER1,
@@ -396,7 +281,7 @@ class Tier1Classifier:
             ),
             secondary_route=self._secondary_route(),
             temperature=0,
-            strict_response_format=self._STRICT_RESPONSE_FORMAT,
+            strict_response_format=response_format,
             fallback_response_format=self._JSON_OBJECT_RESPONSE_FORMAT,
             cost_tracker=self.cost_tracker,
             budget_tier=TIER1,
@@ -407,6 +292,7 @@ class Tier1Classifier:
         *,
         invocation: Any,
         payload: dict[str, Any],
+        response_format: dict[str, Any],
     ) -> None:
         response_choices = getattr(invocation.response, "choices", None)
         if not isinstance(response_choices, list) or not response_choices:
@@ -423,7 +309,7 @@ class Tier1Classifier:
             prompt_path=self.prompt_path,
             prompt_template=self.prompt_template,
             schema_name="tier1_classification",
-            schema_payload=self._STRICT_RESPONSE_FORMAT["json_schema"]["schema"],
+            schema_payload=response_format["json_schema"]["schema"],
             request_overrides=self.request_overrides,
         )
         await asyncio.to_thread(
@@ -465,8 +351,8 @@ class Tier1Classifier:
         item_payloads = [self._item_payload(item) for item in items]
         return {
             "threshold": settings.TIER1_RELEVANCE_THRESHOLD,
-            "trends": trend_payloads,
             "items": item_payloads,
+            "trends": trend_payloads,
         }
 
     @staticmethod
@@ -505,26 +391,7 @@ class Tier1Classifier:
 
     @staticmethod
     def _trend_payload(trend: Trend) -> dict[str, Any]:
-        trend_id = Tier1Classifier._trend_identifier(trend)
-        indicators = trend.indicators if isinstance(trend.indicators, dict) else {}
-        keywords: list[str] = []
-        for indicator in indicators.values():
-            if not isinstance(indicator, dict):
-                continue
-            raw_keywords = indicator.get("keywords", [])
-            if not isinstance(raw_keywords, list):
-                continue
-            for keyword in raw_keywords:
-                if isinstance(keyword, str):
-                    normalized = keyword.strip()
-                    if normalized and normalized not in keywords:
-                        keywords.append(normalized)
-
-        return {
-            "trend_id": trend_id,
-            "name": trend.name,
-            "keywords": keywords,
-        }
+        return trend_payload(trend, trend_identifier=Tier1Classifier._trend_identifier)
 
     @staticmethod
     def _trend_identifier(trend: Trend) -> str:
@@ -547,6 +414,7 @@ class Tier1Classifier:
         except json.JSONDecodeError as exc:
             msg = "Tier 1 response is not valid JSON"
             raise ValueError(msg) from exc
+        parsed = normalize_output_payload(parsed)
         return _Tier1Output.model_validate(parsed)
 
     @staticmethod
@@ -554,46 +422,20 @@ class Tier1Classifier:
         output: _Tier1Output,
         *,
         items: list[RawItem],
-        trends: list[Trend],
     ) -> None:
-        expected_item_ids = {str(item.id) for item in items}
-        actual_item_ids = {row.item_id for row in output.items}
-        if expected_item_ids != actual_item_ids:
-            msg = "Tier 1 response item ids do not match input batch"
-            raise ValueError(msg)
-
-        expected_trend_ids = {Tier1Classifier._trend_identifier(trend) for trend in trends}
-        for row in output.items:
-            seen_trend_ids: set[str] = set()
-            for score in row.trend_scores:
-                if score.trend_id in seen_trend_ids:
-                    msg = f"Tier 1 response has duplicate trend id {score.trend_id}"
-                    raise ValueError(msg)
-                seen_trend_ids.add(score.trend_id)
-
-            if seen_trend_ids != expected_trend_ids:
-                msg = f"Tier 1 response trend ids mismatch for item {row.item_id}"
-                raise ValueError(msg)
+        validate_output_alignment(output, items=items)
 
     @staticmethod
-    def _to_item_results(output: _Tier1Output) -> list[Tier1ItemResult]:
-        results: list[Tier1ItemResult] = []
-        for row in output.items:
-            trend_scores = [
-                TrendRelevanceScore(
-                    trend_id=score.trend_id,
-                    relevance_score=score.relevance_score,
-                    rationale=score.rationale,
-                )
-                for score in row.trend_scores
-            ]
-            max_relevance = max(score.relevance_score for score in row.trend_scores)
-            results.append(
-                Tier1ItemResult(
-                    item_id=UUID(row.item_id),
-                    max_relevance=max_relevance,
-                    should_queue_tier2=max_relevance >= settings.TIER1_RELEVANCE_THRESHOLD,
-                    trend_scores=trend_scores,
-                )
-            )
-        return results
+    def _to_item_results(
+        output: _Tier1Output,
+        *,
+        items: list[RawItem],
+        trends: list[Trend],
+    ) -> list[Tier1ItemResult]:
+        return to_item_results(
+            output,
+            items=items,
+            trends=trends,
+            trend_identifier=Tier1Classifier._trend_identifier,
+            threshold=settings.TIER1_RELEVANCE_THRESHOLD,
+        )

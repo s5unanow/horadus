@@ -45,13 +45,13 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["export volume growth", "cagr", "record harvest exports", "record soybean harvest", "cerrado expansion"]
+    keywords: ["export volume growth", "cagr", "record harvest exports", "record soybean harvest", "record soy crop", "cerrado expansion"]
 
   logistics_capacity_expansion:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["port capacity", "freight corridor", "river logistics", "Ferrograo", "Arco Norte", "BR-163", "Miritituba"]
+    keywords: ["port capacity", "freight corridor", "river logistics", "Paraguay River", "Ferrograo", "Arco Norte", "BR-163", "Miritituba"]
 
   china_demand_signal:
     weight: 0.04

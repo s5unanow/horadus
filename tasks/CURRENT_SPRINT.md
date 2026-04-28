@@ -38,6 +38,8 @@
 
 
 
+
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -59,3 +61,4 @@
 - `TASK-401` Resolve pip dependency-audit CVE blocker ✅
 - `TASK-402` Widen golden-set coverage for weak trends ✅
 - `TASK-403` Harden eval audit for gold-label consistency ✅
+- `TASK-404` Fix Tier 1 eval quality to 95 percent queue accuracy ✅

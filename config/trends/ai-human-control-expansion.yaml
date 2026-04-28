@@ -58,13 +58,13 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["automated denial", "algorithmic suspension", "access restricted by model"]
+    keywords: ["automated denial", "algorithmic suspension", "access restricted by model", "SNAP work requirements"]
 
   llm_gatekeeping_deployment:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["AI content moderation", "automated content removal", "LLM-based eligibility", "AI-generated compliance"]
+    keywords: ["AI content moderation", "automated content removal", "automated systems used to detect", "LLM-based eligibility", "AI-generated compliance"]
 
   financial_algorithmic_control:
     weight: 0.04

@@ -51,7 +51,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: lagging
-    keywords: ["north-south corridor", "energy interconnector", "strategic rail"]
+    keywords: ["north-south corridor", "energy interconnector", "strategic rail", "Via Carpathia", "completed projects", "projects pipeline"]
 
   us_strategic_investment:
     weight: 0.04

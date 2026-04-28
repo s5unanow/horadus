@@ -483,7 +483,7 @@ async def test_classify_pending_items_updates_status(mock_db_session) -> None:
 
 
 @pytest.mark.asyncio
-async def test_classify_batch_rejects_mismatched_trend_ids(mock_db_session) -> None:
+async def test_classify_batch_fills_missing_trend_scores(mock_db_session) -> None:
     classifier, _chat, _cost_tracker = _build_classifier(mock_db_session, batch_size=10)
     item = _build_item("eu-russia escalation")
     trends = [_build_trend("eu-russia", "EU-Russia"), _build_trend("us-china", "US-China")]
@@ -512,8 +512,8 @@ async def test_classify_batch_rejects_mismatched_trend_ids(mock_db_session) -> N
 
     classifier.client = SimpleNamespace(chat=SimpleNamespace(completions=BadCompletions()))
 
-    with pytest.raises(ValueError, match="trend ids mismatch"):
-        await classifier.classify_items([item], trends)
+    results, _usage = await classifier.classify_items([item], trends)
+    assert results[0].should_queue_tier2 is True
 
 
 @pytest.mark.asyncio

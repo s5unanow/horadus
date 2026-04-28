@@ -45,13 +45,13 @@ indicators:
     weight: 0.06
     direction: escalatory
     type: leading
-    keywords: ["total fertility rate fell", "fertility decline", "below replacement", "record low TFR"]
+    keywords: ["total fertility rate fell", "fertility decline", "below replacement", "record low TFR", "40-year lows", "population national crisis"]
 
   births_yoy_decline:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["births down year over year", "birth count fell", "record low births"]
+    keywords: ["births down year over year", "birth count fell", "record low births", "births by parents' country of birth"]
 
   marriage_partnership_decline:
     weight: 0.04
@@ -75,7 +75,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["childcare price decline", "public childcare capacity"]
+    keywords: ["childcare price decline", "public childcare capacity", "childcare quality expansion", "child care programs"]
 
   immigration_fertility_offset:
     weight: 0.03

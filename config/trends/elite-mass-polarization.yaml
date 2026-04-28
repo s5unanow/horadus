@@ -44,25 +44,25 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["wealth concentration", "top percentile gains", "asset concentration", "billionaire wealth surge"]
+    keywords: ["wealth concentration", "top percentile gains", "asset concentration", "billionaire wealth surge", "five trillionaires", "wealth gap accelerates"]
 
   social_mobility_decline:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["social mobility decline", "intergenerational mobility drop", "class rigidity"]
+    keywords: ["social mobility decline", "social mobility flatlining", "intergenerational mobility drop", "class rigidity"]
 
   governance_capture_signals:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["regulatory capture", "policy capture", "elite influence", "lobbying dominance", "lobbying spending record", "corporate political donations", "PAC expenditure", "regulatory revolving door appointment"]
+    keywords: ["regulatory capture", "policy capture", "elite influence", "lobbying dominance", "federal lobbying", "lobbying spending record", "corporate political donations", "PAC expenditure", "regulatory revolving door appointment"]
 
   media_ownership_concentration:
     weight: 0.03
     direction: escalatory
     type: leading
-    keywords: ["media consolidation", "media acquisition", "press ownership concentration", "media monopoly"]
+    keywords: ["media consolidation", "media concentration", "media acquisition", "press ownership concentration", "media monopoly", "companies control 90%"]
 
   redistributive_reform:
     weight: 0.04
@@ -74,7 +74,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["voter participation rise", "institutional trust rebound", "civic engagement increase"]
+    keywords: ["voter participation rise", "voter turnout hits", "institutional trust rebound", "civic engagement increase"]
 
 regions:
   - North America

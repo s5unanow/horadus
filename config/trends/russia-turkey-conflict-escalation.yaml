@@ -71,7 +71,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["hotline restored", "military talks resumed"]
+    keywords: ["hotline restored", "military talks resumed", "Astana-format", "Astana Format", "Syria transition", "Hayat Tahrir al-Sham", "Tartus naval base", "Hmeimim air base"]
 
   bilateral_security_agreement:
     weight: 0.03

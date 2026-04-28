@@ -1,6 +1,6 @@
 # Architecture Overview
 
-**Last Verified**: 2026-03-12
+**Last Verified**: 2026-04-28
 
 Operational tracing setup and validation steps are documented in `docs/TRACING.md`.
 

@@ -52,3 +52,4 @@
 - `TASK-399` Prevent integration Docker volume leaks ✅
 - `TASK-400` Correct golden-set factual and taxonomy drift ✅
 - `TASK-401` Resolve pip dependency-audit CVE blocker ✅
+- `TASK-402` Widen golden-set coverage for weak trends ✅

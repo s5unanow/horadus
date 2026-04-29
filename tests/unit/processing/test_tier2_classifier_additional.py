@@ -137,7 +137,8 @@ def test_secondary_client_falls_back_to_tier2_key(
     mock_db_session,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    classifier = _build_classifier(mock_db_session, secondary_model="secondary")
+    classifier = _build_classifier(mock_db_session, secondary_model=None)
+    classifier.secondary_model = "secondary"
     monkeypatch.setattr(tier2_module.settings, "LLM_SECONDARY_API_KEY", "")
     monkeypatch.setattr(tier2_module.settings, "LLM_TIER2_API_KEY", "tier2-key")
     monkeypatch.setattr(tier2_module.settings, "OPENAI_API_KEY", "fallback-key")

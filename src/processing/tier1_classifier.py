@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
+from src.core.llm_api_keys import resolve_secondary_api_key, resolve_tier_api_key
 from src.core.trend_config import trend_runtime_id_for_record
 from src.processing.cost_tracker import TIER1, CostTracker
 from src.processing.llm_failover import (
@@ -119,7 +120,7 @@ class Tier1Classifier:
         self.prompt_path = prompt_path
         self.prompt_template = Path(prompt_path).read_text(encoding="utf-8")
         self.client = client or self._create_client(
-            api_key=settings.OPENAI_API_KEY,
+            api_key=resolve_tier_api_key("tier1"),
             base_url=self.primary_base_url,
         )
         self.secondary_client = self._build_secondary_client(secondary_client=secondary_client)
@@ -145,7 +146,7 @@ class Tier1Classifier:
         if secondary_client is not None:
             return secondary_client
 
-        secondary_api_key = settings.LLM_SECONDARY_API_KEY or settings.OPENAI_API_KEY
+        secondary_api_key = resolve_secondary_api_key("tier1")
         if not secondary_api_key.strip():
             msg = "LLM secondary failover configured without API key"
             raise ValueError(msg)

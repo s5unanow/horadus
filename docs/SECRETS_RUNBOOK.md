@@ -44,6 +44,8 @@ Recommended structure:
       api_keys
       api_admin_key
       openai_api_key
+      llm_tier1_api_key
+      llm_tier2_api_key
       llm_secondary_api_key
   current -> /srv/horadus/secrets/releases/20260215T090000Z
 ```
@@ -64,6 +66,8 @@ Keep each rotation in a timestamped `releases/<stamp>/` directory and move the
 | `api_keys` | `API_KEYS_FILE` |
 | `api_admin_key` | `API_ADMIN_KEY_FILE` |
 | `openai_api_key` | `OPENAI_API_KEY_FILE` |
+| `llm_tier1_api_key` | `LLM_TIER1_API_KEY_FILE` |
+| `llm_tier2_api_key` | `LLM_TIER2_API_KEY_FILE` |
 | `llm_secondary_api_key` | `LLM_SECONDARY_API_KEY_FILE` |
 
 `api_keys` may contain newline-separated and/or comma-separated values.
@@ -83,6 +87,8 @@ sudo install -d -m 0750 "$SECRET_ROOT/releases" "$SECRET_RELEASE"
 
 ```bash
 sudo install -m 0640 /dev/null "$SECRET_RELEASE/openai_api_key"
+sudo install -m 0640 /dev/null "$SECRET_RELEASE/llm_tier1_api_key"
+sudo install -m 0640 /dev/null "$SECRET_RELEASE/llm_tier2_api_key"
 sudo install -m 0640 /dev/null "$SECRET_RELEASE/api_admin_key"
 sudo install -m 0640 /dev/null "$SECRET_RELEASE/api_keys"
 ```
@@ -116,6 +122,8 @@ services:
       API_KEYS_FILE: /run/secrets/horadus/api_keys
       API_ADMIN_KEY_FILE: /run/secrets/horadus/api_admin_key
       OPENAI_API_KEY_FILE: /run/secrets/horadus/openai_api_key
+      LLM_TIER1_API_KEY_FILE: /run/secrets/horadus/llm_tier1_api_key
+      LLM_TIER2_API_KEY_FILE: /run/secrets/horadus/llm_tier2_api_key
       LLM_SECONDARY_API_KEY_FILE: /run/secrets/horadus/llm_secondary_api_key
 ```
 

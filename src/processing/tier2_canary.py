@@ -20,6 +20,7 @@ import structlog
 from openai import AsyncOpenAI
 
 from src.core.config import settings
+from src.core.llm_api_keys import resolve_tier_api_key
 from src.core.trend_config_loader import load_trends_from_config_dir
 from src.eval.benchmark import HUMAN_VERIFIED_LABEL, GoldSetItem, Tier2GoldLabel, load_gold_set
 from src.processing.cost_tracker import TIER2
@@ -150,7 +151,7 @@ async def run_tier2_canary(
     max_items: int | None = None,
     request_overrides: dict[str, Any] | None = None,
 ) -> Tier2CanaryResult:
-    resolved_key = (api_key or settings.OPENAI_API_KEY or "").strip()
+    resolved_key = (api_key or resolve_tier_api_key("tier2")).strip()
     if not resolved_key:
         metrics = Tier2CanaryMetrics(
             items_total=0,

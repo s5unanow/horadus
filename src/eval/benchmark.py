@@ -17,6 +17,7 @@ from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 from openai import AsyncOpenAI
 
 from src.core.config import settings
+from src.core.llm_api_keys import LLMTier, resolve_secondary_api_key, resolve_tier_api_key
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 from src.eval import artifact_provenance as provenance
 from src.eval.benchmark_stubs import NoopCostTracker as _NoopCostTracker
@@ -235,15 +236,15 @@ def _wrap_client_with_recorder(
 
 def _build_benchmark_secondary_client(
     *,
-    primary_api_key: str,
+    tier: LLMTier,
+    fallback_api_key: str,
     secondary_model: str | None,
     recorder: _BenchmarkResponseRecorder,
 ) -> Any | None:
     if secondary_model is None:
         return None
-    secondary_api_key = settings.LLM_SECONDARY_API_KEY or primary_api_key
     secondary_client = _build_openai_client(
-        api_key=secondary_api_key,
+        api_key=resolve_secondary_api_key(tier, fallback_api_key=fallback_api_key),
         base_url=settings.LLM_SECONDARY_BASE_URL or None,
     )
     return _wrap_client_with_recorder(client=secondary_client, recorder=recorder)
@@ -607,6 +608,19 @@ def _build_openai_client(*, api_key: str, base_url: str | None) -> AsyncOpenAI:
     return AsyncOpenAI(api_key=api_key)
 
 
+def _build_primary_clients(fallback_api_key: str, base_url: str | None) -> tuple[Any, Any]:
+    return (
+        _build_openai_client(
+            api_key=resolve_tier_api_key("tier1", fallback_api_key=fallback_api_key),
+            base_url=base_url,
+        ),
+        _build_openai_client(
+            api_key=resolve_tier_api_key("tier2", fallback_api_key=fallback_api_key),
+            base_url=base_url,
+        ),
+    )
+
+
 def _usage_to_dict(
     *, tier1_usage: Tier1Usage, tier2_usage: Tier2Usage, items_total: int
 ) -> dict[str, Any]:
@@ -778,7 +792,7 @@ async def run_gold_set_benchmark(
 
     for config in configs:
         config_started_at = perf_counter()
-        client = _build_openai_client(api_key=api_key, base_url=config.base_url)
+        tier1_client, tier2_client = _build_primary_clients(api_key, config.base_url)
         noop_session = _NoopSession()
         noop_cost_tracker = _NoopCostTracker()
         disabled_semantic_cache = LLMSemanticCache(enabled=False)
@@ -793,18 +807,20 @@ async def run_gold_set_benchmark(
             config.tier2_request_overrides,
         )
         tier1_secondary_client = _build_benchmark_secondary_client(
-            primary_api_key=api_key,
+            tier="tier1",
+            fallback_api_key=api_key,
             secondary_model=settings.LLM_TIER1_SECONDARY_MODEL,
             recorder=tier1_recorder,
         )
         tier2_secondary_client = _build_benchmark_secondary_client(
-            primary_api_key=api_key,
+            tier="tier2",
+            fallback_api_key=api_key,
             secondary_model=settings.LLM_TIER2_SECONDARY_MODEL,
             recorder=tier2_recorder,
         )
         tier1 = Tier1Classifier(
             session=cast("Any", noop_session),
-            client=_wrap_client_with_recorder(client=client, recorder=tier1_recorder),
+            client=_wrap_client_with_recorder(client=tier1_client, recorder=tier1_recorder),
             model=config.tier1_model,
             batch_size=tier1_batch_size,
             prompt_path=_TIER1_PROMPT_PATH,
@@ -816,7 +832,7 @@ async def run_gold_set_benchmark(
         )
         tier2 = Tier2Classifier(
             session=cast("Any", noop_session),
-            client=_wrap_client_with_recorder(client=client, recorder=tier2_recorder),
+            client=_wrap_client_with_recorder(client=tier2_client, recorder=tier2_recorder),
             model=config.tier2_model,
             prompt_path=_TIER2_PROMPT_PATH,
             cost_tracker=cast("Any", noop_cost_tracker),

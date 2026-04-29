@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
+from src.core.llm_api_keys import resolve_tier_api_key
+
 
 @dataclass(slots=True)
 class ProcessingDispatchPlan:
@@ -267,7 +269,7 @@ async def process_pending_async(*, deps: Any, limit: int) -> dict[str, Any]:
             try:
                 primary_canary = await deps.run_tier2_canary(
                     model=deps.settings.LLM_TIER2_MODEL,
-                    api_key=deps.settings.OPENAI_API_KEY,
+                    api_key=resolve_tier_api_key("tier2", settings_obj=deps.settings),
                     base_url=deps.settings.LLM_PRIMARY_BASE_URL,
                     max_items=deps.settings.LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS,
                 )
@@ -286,7 +288,7 @@ async def process_pending_async(*, deps: Any, limit: int) -> dict[str, Any]:
                     try:
                         emergency_canary = await deps.run_tier2_canary(
                             model=emergency_model.strip(),
-                            api_key=deps.settings.OPENAI_API_KEY,
+                            api_key=resolve_tier_api_key("tier2", settings_obj=deps.settings),
                             base_url=deps.settings.LLM_PRIMARY_BASE_URL,
                             max_items=deps.settings.LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS,
                         )

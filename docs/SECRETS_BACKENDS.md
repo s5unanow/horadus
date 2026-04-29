@@ -19,6 +19,8 @@ See `docs/SECRETS_RUNBOOK.md` for Docker Compose provisioning/rotation/rollback 
 Example mappings:
 
 - `OPENAI_API_KEY_FILE=/run/secrets/openai_api_key`
+- `LLM_TIER1_API_KEY_FILE=/run/secrets/llm_tier1_api_key`
+- `LLM_TIER2_API_KEY_FILE=/run/secrets/llm_tier2_api_key`
 - `DATABASE_URL_FILE=/run/secrets/database_url`
 - `API_ADMIN_KEY_FILE=/run/secrets/api_admin_key`
 - `CELERY_BROKER_URL_FILE=/run/secrets/celery_broker_url`

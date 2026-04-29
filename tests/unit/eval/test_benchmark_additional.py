@@ -339,12 +339,14 @@ def test_benchmark_taxonomy_alignment_and_secondary_client_helpers(
         ),
     )
     monkeypatch.setattr(benchmark_module.settings, "LLM_SECONDARY_API_KEY", None)
+    monkeypatch.setattr(benchmark_module.settings, "LLM_TIER1_API_KEY", "")
     monkeypatch.setattr(benchmark_module.settings, "LLM_SECONDARY_BASE_URL", "https://secondary")
     primary_api_key = "benchmark-test-key"  # pragma: allowlist secret
 
     assert (
         benchmark_module._build_benchmark_secondary_client(
-            primary_api_key=primary_api_key,
+            tier="tier1",
+            fallback_api_key=primary_api_key,
             secondary_model=None,
             recorder=benchmark_module._BenchmarkResponseRecorder(),
         )
@@ -352,7 +354,8 @@ def test_benchmark_taxonomy_alignment_and_secondary_client_helpers(
     )
 
     client = benchmark_module._build_benchmark_secondary_client(
-        primary_api_key=primary_api_key,
+        tier="tier1",
+        fallback_api_key=primary_api_key,
         secondary_model="gpt-4o-mini",
         recorder=benchmark_module._BenchmarkResponseRecorder(),
     )
@@ -500,3 +503,48 @@ async def test_noop_classes_recording_wrapper_and_missing_prediction_path(
     assert (
         payload["configs"][0]["item_results"][0]["tier1"]["error_category"] == "MissingPrediction"
     )
+
+
+@pytest.mark.asyncio
+async def test_benchmark_uses_tier_specific_primary_keys(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+    captured: dict[str, object] = {}
+
+    class FakeTierClassifier:
+        def __init__(self, **kwargs) -> None:
+            captured[kwargs["model"]] = kwargs["client"].api_key
+
+        async def classify_items(self, items, trends):
+            return ([], Tier1Usage(api_calls=1))
+
+        async def classify_event(self, *, event, trends, context_chunks):
+            return (SimpleNamespace(event_id=event.id), Tier2Usage(api_calls=1))
+
+    monkeypatch.setattr(benchmark_module.settings, "LLM_TIER1_API_KEY", "tier1-key")
+    monkeypatch.setattr(benchmark_module.settings, "LLM_TIER2_API_KEY", "tier2-key")
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", FakeTierClassifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", FakeTierClassifier)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: SimpleNamespace(api_key=api_key, base_url=base_url),
+    )
+
+    await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="fallback-key",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=1,
+        config_names=["baseline"],
+    )
+
+    assert captured[benchmark_module.settings.LLM_TIER1_MODEL] == "tier1-key"
+    assert captured[benchmark_module.settings.LLM_TIER2_MODEL] == "tier2-key"

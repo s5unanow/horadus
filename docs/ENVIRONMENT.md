@@ -1,6 +1,6 @@
 # Environment Variables
 
-**Last Verified**: 2026-04-22
+**Last Verified**: 2026-04-29
 
 This document lists environment variables used by the Horadus backend.
 
@@ -11,7 +11,9 @@ This document lists environment variables used by the Horadus backend.
 | `DATABASE_URL` | Async PostgreSQL URL for app runtime. | `postgresql+asyncpg://geoint:password@postgres:5432/geoint` |
 | `CELERY_BROKER_URL` | Redis URL for Celery broker. | `redis://redis:6379/1` |
 | `CELERY_RESULT_BACKEND` | Redis URL for Celery result backend. | `redis://redis:6379/2` |
-| `OPENAI_API_KEY` | OpenAI key used for embeddings/classification/reporting. | `sk-...` |
+| `OPENAI_API_KEY` | Default OpenAI key used for embeddings/classification/reporting. Tier-specific LLM keys fall back to this value. | `sk-...` |
+| `LLM_TIER1_API_KEY` | Optional OpenAI key override for Tier 1 classification, useful for project-level cost attribution. | `sk-proj-...` |
+| `LLM_TIER2_API_KEY` | Optional OpenAI key override for Tier 2 classification and Tier 2 eval/canary calls. | `sk-proj-...` |
 
 ## API and Security
 
@@ -355,6 +357,8 @@ Supported file-backed variables:
 | `API_KEYS` | `API_KEYS_FILE` |
 | `API_ADMIN_KEY` | `API_ADMIN_KEY_FILE` |
 | `OPENAI_API_KEY` | `OPENAI_API_KEY_FILE` |
+| `LLM_TIER1_API_KEY` | `LLM_TIER1_API_KEY_FILE` |
+| `LLM_TIER2_API_KEY` | `LLM_TIER2_API_KEY_FILE` |
 | `LLM_SECONDARY_API_KEY` | `LLM_SECONDARY_API_KEY_FILE` |
 | `CELERY_BROKER_URL` | `CELERY_BROKER_URL_FILE` |
 | `CELERY_RESULT_BACKEND` | `CELERY_RESULT_BACKEND_FILE` |

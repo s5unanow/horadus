@@ -174,6 +174,7 @@ async def test_run_tier2_canary_returns_missing_api_key_without_calling_dependen
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(canary_module.settings, "OPENAI_API_KEY", "")
+    monkeypatch.setattr(canary_module.settings, "LLM_TIER2_API_KEY", "")
 
     result = await canary_module.run_tier2_canary(model="gpt-test")
 
@@ -255,6 +256,7 @@ async def test_run_tier2_canary_evaluates_predictions_and_logs_metrics(
 
     monkeypatch.setattr(canary_module, "logger", logger)
     monkeypatch.setattr(canary_module.settings, "OPENAI_API_KEY", "x")
+    monkeypatch.setattr(canary_module.settings, "LLM_TIER2_API_KEY", "")
     monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_GOLD_SET_PATH", "gold.jsonl")
     monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS", 5)
     monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_FAILURE_RATE", 0.5)
@@ -321,6 +323,7 @@ async def test_run_tier2_canary_uses_default_client_without_base_url(
             }
 
     monkeypatch.setattr(canary_module.settings, "OPENAI_API_KEY", "x")
+    monkeypatch.setattr(canary_module.settings, "LLM_TIER2_API_KEY", "")
     monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_GOLD_SET_PATH", "gold.jsonl")
     monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_TIER2_ITEMS", 1)
     monkeypatch.setattr(canary_module.settings, "LLM_DEGRADED_CANARY_MAX_FAILURE_RATE", 1.0)

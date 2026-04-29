@@ -32,6 +32,20 @@ def test_settings_loads_openai_key_from_file(tmp_path: Path) -> None:
     assert settings.OPENAI_API_KEY == "openai-token-from-file"  # pragma: allowlist secret
 
 
+def test_settings_loads_tier_openai_keys_from_files(tmp_path: Path) -> None:
+    tier1_path = _write_secret(tmp_path / "tier1_key.txt", "tier1-file-key\n")
+    tier2_path = _write_secret(tmp_path / "tier2_key.txt", "tier2-file-key\n")
+
+    settings = Settings(
+        _env_file=None,
+        LLM_TIER1_API_KEY_FILE=tier1_path,
+        LLM_TIER2_API_KEY_FILE=tier2_path,
+    )
+
+    assert settings.LLM_TIER1_API_KEY == "tier1-file-key"  # pragma: allowlist secret
+    assert settings.LLM_TIER2_API_KEY == "tier2-file-key"  # pragma: allowlist secret
+
+
 def test_settings_loads_api_keys_from_file(tmp_path: Path) -> None:
     keys_path = _write_secret(tmp_path / "api_keys.txt", "alpha, beta\ngamma\n")
 

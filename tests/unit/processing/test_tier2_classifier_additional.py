@@ -82,6 +82,28 @@ def test_create_client_validates_key_and_base_url(monkeypatch: pytest.MonkeyPatc
     assert without_base_url == {"api_key": "stub"}  # pragma: allowlist secret
 
 
+def test_init_uses_tier2_api_key_for_primary_client(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client_factory = MagicMock(side_effect=lambda **kwargs: kwargs)
+    monkeypatch.setattr(tier2_module, "AsyncOpenAI", client_factory)
+    monkeypatch.setattr(tier2_module.settings, "LLM_TIER2_API_KEY", "tier2-key")
+    monkeypatch.setattr(tier2_module.settings, "OPENAI_API_KEY", "fallback-key")
+
+    classifier = _build_classifier(
+        mock_db_session,
+        client=None,
+        secondary_model=None,
+        primary_base_url="https://primary.example",
+    )
+
+    assert classifier.client == {
+        "api_key": "tier2-key",  # pragma: allowlist secret
+        "base_url": "https://primary.example",
+    }
+
+
 def test_build_secondary_client_covers_all_paths(
     mock_db_session,
     monkeypatch: pytest.MonkeyPatch,
@@ -94,6 +116,7 @@ def test_build_secondary_client_covers_all_paths(
     assert classifier._build_secondary_client(secondary_client=supplied) is supplied
 
     monkeypatch.setattr(tier2_module.settings, "LLM_SECONDARY_API_KEY", "")
+    monkeypatch.setattr(tier2_module.settings, "LLM_TIER2_API_KEY", "")
     monkeypatch.setattr(tier2_module.settings, "OPENAI_API_KEY", "")
     with pytest.raises(ValueError, match="without API key"):
         classifier._build_secondary_client(secondary_client=None)
@@ -107,6 +130,24 @@ def test_build_secondary_client_covers_all_paths(
     classifier._create_client.assert_called_once_with(
         api_key="secondary",  # pragma: allowlist secret
         base_url="https://secondary.example",
+    )
+
+
+def test_secondary_client_falls_back_to_tier2_key(
+    mock_db_session,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    classifier = _build_classifier(mock_db_session, secondary_model=None)
+    classifier.secondary_model = "secondary"
+    monkeypatch.setattr(tier2_module.settings, "LLM_SECONDARY_API_KEY", "")
+    monkeypatch.setattr(tier2_module.settings, "LLM_TIER2_API_KEY", "tier2-key")
+    monkeypatch.setattr(tier2_module.settings, "OPENAI_API_KEY", "fallback-key")
+    classifier._create_client = MagicMock(return_value="secondary-client")
+
+    assert classifier._build_secondary_client(secondary_client=None) == "secondary-client"
+    classifier._create_client.assert_called_once_with(
+        api_key="tier2-key",  # pragma: allowlist secret
+        base_url=None,
     )
 
 

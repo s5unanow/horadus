@@ -14,6 +14,7 @@ from ._docs_freshness_content_rules import (
     check_runtime_docs_sync,
 )
 from ._docs_freshness_current_sprint import check_current_sprint
+from ._docs_freshness_horadus_cli_skill import check_horadus_cli_skill_references
 from ._docs_freshness_models import DocsFreshnessIssue, DocsFreshnessResult
 from ._docs_freshness_parsing import _load_overrides
 from ._docs_freshness_project_status import check_project_status
@@ -61,10 +62,8 @@ def run_docs_freshness_check_impl(
     if project_status_path.exists():
         docs_files = (*docs_files, project_status_path)
 
-    backlog_text = ""
     backlog_file = repo_root / "tasks" / "BACKLOG.md"
-    if backlog_file.exists():
-        backlog_text = backlog_file.read_text(encoding="utf-8")
+    backlog_text = backlog_file.read_text(encoding="utf-8") if backlog_file.exists() else ""
 
     check_conflict_rules(
         repo_root=repo_root,
@@ -78,6 +77,7 @@ def run_docs_freshness_check_impl(
     check_workflow_references(repo_root=repo_root, config=config, errors=errors)
     check_safe_start_references(repo_root=repo_root, config=config, errors=errors)
     check_guidance_references(repo_root=repo_root, config=config, errors=errors)
+    check_horadus_cli_skill_references(repo_root=repo_root, errors=errors)
     check_project_status(
         repo_root=repo_root,
         config=config,

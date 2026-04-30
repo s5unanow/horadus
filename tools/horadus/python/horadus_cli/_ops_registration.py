@@ -288,9 +288,9 @@ def register_ops_commands(
     )
     eval_benchmark_parser.add_argument(
         "--tier-scope",
-        choices=["full", "tier2"],
+        choices=["full", "tier1", "tier2"],
         default="full",
-        help="Benchmark tier scope. Use tier2 to skip Tier-1 calls.",
+        help="Benchmark tier scope. Use tier1 to skip Tier-2 calls or tier2 to skip Tier-1 calls.",
     )
     eval_benchmark_parser.set_defaults(handler=lambda args: runtime_result("eval-benchmark", args))
 

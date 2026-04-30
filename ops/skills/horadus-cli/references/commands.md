@@ -105,6 +105,9 @@ recovery step is required.
 
 - `uv run --no-sync horadus eval benchmark`
   - Run default benchmark configs, currently `baseline` and `alternative`.
+- `uv run --no-sync horadus eval benchmark --tier-scope tier1`
+  - Run Tier 1-only gold-set diagnostics while skipping Tier 2 calls and still
+    preserving benchmark result artifacts.
 - `uv run --no-sync horadus eval benchmark --tier-scope tier2`
   - Run Tier 2-only gold-set diagnostics while skipping Tier 1 calls and still
     preserving benchmark result artifacts.

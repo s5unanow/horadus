@@ -6,7 +6,7 @@ from typing import Any
 
 BENCHMARK_TIER_SCOPE_FULL = "full"
 BENCHMARK_TIER_SCOPE_TIER2 = "tier2"
-BENCHMARK_TIER_SCOPES = (BENCHMARK_TIER_SCOPE_FULL, BENCHMARK_TIER_SCOPE_TIER2)
+BENCHMARK_TIER_SCOPES = (BENCHMARK_TIER_SCOPE_FULL, "tier1", BENCHMARK_TIER_SCOPE_TIER2)
 DISPATCH_MODE_REALTIME = "realtime"
 DISPATCH_MODE_BATCH = "batch"
 REQUEST_PRIORITY_REALTIME = "realtime"
@@ -71,7 +71,7 @@ def _select_items_for_tier_scope[T](
     max_items: int,
 ) -> list[T]:
     bounded_max_items = max(1, max_items)
-    if tier_scope == BENCHMARK_TIER_SCOPE_FULL:
+    if tier_scope != BENCHMARK_TIER_SCOPE_TIER2:
         return items[:bounded_max_items]
     selected = [item for item in items if getattr(item, "tier2", None) is not None]
     return selected[:bounded_max_items]

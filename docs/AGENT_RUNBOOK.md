@@ -429,6 +429,8 @@ sync transitions without changing merge policy or timeout policy.
   configs: `baseline` and `alternative`.
 - GPT-5 benchmark candidates stay available for targeted comparisons, but must
   be requested explicitly with repeated `--config` flags.
+- Add `--tier-scope tier1` for Tier 1-only gold-set diagnostics that skip
+  Tier 2 calls while preserving benchmark result artifacts.
 - Add `--tier-scope tier2` for Tier 2-only gold-set diagnostics that skip
   Tier 1 calls while preserving benchmark result artifacts.
 

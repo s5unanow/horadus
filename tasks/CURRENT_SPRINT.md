@@ -48,6 +48,8 @@
 
 
 
+
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -73,3 +75,4 @@
 - `TASK-405` Support separate OpenAI project keys by LLM tier ✅
 - `TASK-406` Add Tier-scoped eval benchmark mode ✅
 - `TASK-407` Refresh Horadus CLI skill and add freshness gate ✅
+- `TASK-408` Add Tier 1-only eval benchmark scope ✅

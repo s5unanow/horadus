@@ -286,6 +286,12 @@ def register_ops_commands(
         default="realtime",
         help="Provider priority hint.",
     )
+    eval_benchmark_parser.add_argument(
+        "--tier-scope",
+        choices=["full", "tier2"],
+        default="full",
+        help="Benchmark tier scope. Use tier2 to skip Tier-1 calls.",
+    )
     eval_benchmark_parser.set_defaults(handler=lambda args: runtime_result("eval-benchmark", args))
 
     eval_audit_parser = eval_subparsers.add_parser(

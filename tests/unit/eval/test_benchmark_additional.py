@@ -61,6 +61,54 @@ def _write_gold_set(path: Path) -> None:
     )
 
 
+def _write_mixed_tier_gold_set(path: Path) -> None:
+    rows = [
+        {
+            "item_id": "eval-0001",
+            "title": "EU-Russia troop movement update",
+            "content": "Troop deployment near border expanded with artillery support.",
+            "label_verification": "human_verified",
+            "expected": {
+                "tier1": {"trend_scores": {"eu-russia": 9}, "max_relevance": 9},
+                "tier2": {
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.82,
+                    "confidence": 0.91,
+                },
+            },
+        },
+        {
+            "item_id": "eval-0002",
+            "title": "Market recap",
+            "content": "General market and weather bulletin.",
+            "label_verification": "human_verified",
+            "expected": {
+                "tier1": {"trend_scores": {"eu-russia": 1}, "max_relevance": 1},
+                "tier2": None,
+            },
+        },
+        {
+            "item_id": "eval-0003",
+            "title": "EU-Russia posture update",
+            "content": "Additional force posture changes near the border.",
+            "label_verification": "human_verified",
+            "expected": {
+                "tier1": {"trend_scores": {"eu-russia": 8}, "max_relevance": 8},
+                "tier2": {
+                    "trend_id": "eu-russia",
+                    "signal_type": "military_movement",
+                    "direction": "escalatory",
+                    "severity": 0.7,
+                    "confidence": 0.85,
+                },
+            },
+        },
+    ]
+    path.write_text("\n".join(json.dumps(row) for row in rows) + "\n", encoding="utf-8")
+
+
 def _write_trend_configs(config_dir: Path) -> None:
     config_dir.mkdir(parents=True, exist_ok=True)
     (config_dir / "eu-russia.yaml").write_text(
@@ -78,6 +126,7 @@ def _write_trend_configs(config_dir: Path) -> None:
 
 
 def test_benchmark_helper_functions_cover_normalization_and_serialization() -> None:
+    assert benchmark_module._normalize_tier_scope(" TIER2 ") == "tier2"
     assert benchmark_module._normalize_dispatch_mode(" Realtime ") == "realtime"
     assert benchmark_module._normalize_request_priority(" FLEX ") == "flex"
     assert benchmark_module._request_overrides_for_priority("realtime") is None
@@ -284,6 +333,8 @@ def test_benchmark_load_gold_set_and_config_helpers_cover_error_paths(tmp_path: 
         benchmark_module._resolve_configs(["unknown"])
     with pytest.raises(ValueError, match="Unsupported request priority"):
         benchmark_module._normalize_request_priority("urgent")
+    with pytest.raises(ValueError, match="Unsupported tier scope"):
+        benchmark_module._normalize_tier_scope("tier3")
 
     assert "alpha(4; sample=1, 2, 3, +1 more)" in benchmark_module._format_group_summary(
         {"alpha": ["1", "2", "3", "4"]}
@@ -548,3 +599,116 @@ async def test_benchmark_uses_tier_specific_primary_keys(
 
     assert captured[benchmark_module.settings.LLM_TIER1_MODEL] == "tier1-key"
     assert captured[benchmark_module.settings.LLM_TIER2_MODEL] == "tier2-key"
+
+
+@pytest.mark.asyncio
+async def test_benchmark_tier2_scope_skips_tier1_and_caps_after_filter(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    gold_set_path = tmp_path / "gold.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    _write_mixed_tier_gold_set(gold_set_path)
+    _write_trend_configs(trend_config_dir)
+    built_clients: list[str] = []
+
+    class FailingTier1Classifier:
+        def __init__(self, **kwargs) -> None:
+            _ = kwargs
+            raise AssertionError("Tier 1 should not be constructed for tier2 scope")
+
+    class FakeTier2Classifier:
+        def __init__(self, **kwargs) -> None:
+            self.model = kwargs["model"]
+
+        async def classify_event(self, *, event, trends, context_chunks):
+            _ = (context_chunks, self.model)
+            event.extracted_claims = {
+                "trend_impacts": [
+                    {
+                        "trend_id": trends[0].definition["id"],
+                        "signal_type": "military_movement",
+                        "direction": "escalatory",
+                        "severity": 0.82,
+                        "confidence": 0.91,
+                    }
+                ]
+            }
+            return (SimpleNamespace(event_id=event.id), Tier2Usage(api_calls=1))
+
+    monkeypatch.setattr(benchmark_module, "Tier1Classifier", FailingTier1Classifier)
+    monkeypatch.setattr(benchmark_module, "Tier2Classifier", FakeTier2Classifier)
+    monkeypatch.setattr(benchmark_module.settings, "LLM_TIER2_SECONDARY_MODEL", None)
+    monkeypatch.setattr(
+        benchmark_module,
+        "_build_openai_client",
+        lambda *, api_key, base_url: (
+            built_clients.append(api_key) or SimpleNamespace(api_key=api_key, base_url=base_url)
+        ),
+    )
+
+    result_path = await benchmark_module.run_gold_set_benchmark(
+        gold_set_path=str(gold_set_path),
+        output_dir=str(output_dir),
+        api_key="fallback-key",  # pragma: allowlist secret
+        trend_config_dir=str(trend_config_dir),
+        max_items=2,
+        config_names=["baseline"],
+        tier_scope="tier2",
+    )
+
+    payload = json.loads(result_path.read_text(encoding="utf-8"))
+    config_payload = payload["configs"][0]
+    assert payload["tier_scope"] == "tier2"
+    assert payload["items_evaluated"] == 2
+    assert payload["dataset_scope"]["tier2_label_mode"] == "required"
+    assert payload["execution_mode"]["tier1_batch_size"] == 0
+    assert config_payload["tier1_api_mode"] == "skipped"
+    assert config_payload["tier1_metrics"]["items_total"] == 0
+    assert config_payload["usage"]["tier1_api_calls"] == 0
+    assert config_payload["usage"]["tier2_api_calls"] == 2
+    assert [row["item_id"] for row in config_payload["item_results"]] == [
+        "eval-0001",
+        "eval-0003",
+    ]
+    assert all(
+        row["tier1"] == {"status": "skipped", "reason": "tier_scope_tier2"}
+        for row in config_payload["item_results"]
+    )
+    assert len(built_clients) == 1
+
+
+@pytest.mark.asyncio
+async def test_benchmark_tier2_scope_requires_matching_rows(tmp_path: Path) -> None:
+    gold_set_path = tmp_path / "gold.jsonl"
+    output_dir = tmp_path / "results"
+    trend_config_dir = tmp_path / "trends"
+    gold_set_path.write_text(
+        json.dumps(
+            {
+                "item_id": "eval-0001",
+                "title": "Market recap",
+                "content": "General market and weather bulletin.",
+                "label_verification": "human_verified",
+                "expected": {
+                    "tier1": {"trend_scores": {"eu-russia": 1}, "max_relevance": 1},
+                    "tier2": None,
+                },
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    _write_trend_configs(trend_config_dir)
+
+    with pytest.raises(ValueError, match="tier_scope='tier2'"):
+        await benchmark_module.run_gold_set_benchmark(
+            gold_set_path=str(gold_set_path),
+            output_dir=str(output_dir),
+            api_key="fallback-key",  # pragma: allowlist secret
+            trend_config_dir=str(trend_config_dir),
+            max_items=2,
+            config_names=["baseline"],
+            tier_scope="tier2",
+        )

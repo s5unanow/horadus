@@ -147,6 +147,7 @@ async def _collect_eval_benchmark(args: Any) -> tuple[dict[str, Any], list[str],
         require_human_verified=args.require_human_verified,
         dispatch_mode=args.dispatch_mode,
         request_priority=args.request_priority,
+        tier_scope=getattr(args, "tier_scope", "full"),
     )
     return ({"output_path": str(output_path)}, [f"Benchmark output: {output_path}"], ExitCode.OK)
 

@@ -1,6 +1,6 @@
 # Agent Runbook
 
-**Last Verified**: 2026-04-22
+**Last Verified**: 2026-04-30
 
 Short command index for day-to-day agent/operator work.
 
@@ -429,6 +429,8 @@ sync transitions without changing merge policy or timeout policy.
   configs: `baseline` and `alternative`.
 - GPT-5 benchmark candidates stay available for targeted comparisons, but must
   be requested explicitly with repeated `--config` flags.
+- Add `--tier-scope tier2` for Tier 2-only gold-set diagnostics that skip
+  Tier 1 calls while preserving benchmark result artifacts.
 
 ## Behavior Eval Commands
 

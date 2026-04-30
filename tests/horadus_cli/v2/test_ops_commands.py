@@ -186,6 +186,7 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
         require_human_verified=True,
         dispatch_mode="batch",
         request_priority="flex",
+        tier_scope="tier2",
     )
     replay_args = SimpleNamespace(
         output_dir=str(tmp_path),
@@ -212,6 +213,7 @@ async def test_collect_eval_wrappers_pass_normalized_arguments(
     _, _, vector_exit = await runtime_module._collect_eval_vector_benchmark(vector_args)
 
     assert benchmark_calls["max_items"] == 1
+    assert benchmark_calls["tier_scope"] == "tier2"
     assert replay_calls["trend_id"].hex == "550e8400e29b41d4a716446655440000"
     assert replay_calls["start_date"] == datetime(2026, 3, 1, 0, 0, tzinfo=UTC)
     assert replay_calls["days"] == 1

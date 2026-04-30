@@ -9,9 +9,24 @@ from tests.workflow.test_docs_freshness import _seed_repo_layout
 from tools.horadus.python.horadus_workflow._docs_freshness_horadus_cli_skill import (
     _REQUIRED_TOKENS,
 )
-from tools.horadus.python.horadus_workflow.docs_freshness import run_docs_freshness_check
+from tools.horadus.python.horadus_workflow.docs_freshness import (
+    DocsFreshnessIssue,
+    DocsFreshnessResult,
+    run_docs_freshness_check,
+)
 
 pytestmark = pytest.mark.unit
+
+
+def test_docs_freshness_result_is_ok_tracks_error_presence() -> None:
+    assert DocsFreshnessResult(errors=(), warnings=()).is_ok is True
+    assert (
+        DocsFreshnessResult(
+            errors=(DocsFreshnessIssue(level="error", rule_id="x", message="y"),),
+            warnings=(),
+        ).is_ok
+        is False
+    )
 
 
 def _activate_horadus_cli_skill(repo_root: Path) -> None:
@@ -98,7 +113,7 @@ def test_horadus_cli_skill_freshness_flags_missing_top_level_skill(
     )
 
 
-def test_horadus_cli_skill_freshness_skips_generic_fixtures(tmp_path: Path) -> None:
+def test_horadus_cli_skill_freshness_accepts_seeded_fixture(tmp_path: Path) -> None:
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
 

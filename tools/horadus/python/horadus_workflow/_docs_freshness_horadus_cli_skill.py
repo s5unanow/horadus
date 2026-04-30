@@ -5,7 +5,6 @@ from pathlib import Path
 from ._docs_freshness_models import DocsFreshnessIssue
 from ._docs_freshness_parsing import _normalize_whitespace
 
-_SKILL_MARKER = "# Horadus CLI"
 _REFERENCE_PATHS: tuple[str, ...] = (
     "ops/skills/horadus-cli/SKILL.md",
     "ops/skills/horadus-cli/references/commands.md",
@@ -45,14 +44,8 @@ def check_horadus_cli_skill_references(
         else:
             missing_paths.append(reference_path)
 
-    normalized_content = _normalize_whitespace("\n".join(content_parts))
-    if _REFERENCE_PATHS[0] in missing_paths:
-        _record_missing_reference_errors(errors=errors, missing_paths=missing_paths)
-        return
-    if _SKILL_MARKER not in normalized_content:
-        return
-
     _record_missing_reference_errors(errors=errors, missing_paths=missing_paths)
+    normalized_content = _normalize_whitespace("\n".join(content_parts))
     errors.extend(
         DocsFreshnessIssue(
             level="error",

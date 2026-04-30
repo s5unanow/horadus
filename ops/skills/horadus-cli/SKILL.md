@@ -72,6 +72,8 @@ Common follow-up and operations commands:
 
 Eval command reminders:
 
+- Tier 1-only benchmark diagnostics:
+  `uv run --no-sync horadus eval benchmark --tier-scope tier1`
 - Tier 2-only benchmark diagnostics:
   `uv run --no-sync horadus eval benchmark --tier-scope tier2`
 - Behavior evals: `uv run --no-sync horadus eval behavior`

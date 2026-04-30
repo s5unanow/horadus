@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from time import perf_counter
-from types import SimpleNamespace
 from typing import Any, cast
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
@@ -20,6 +19,13 @@ from src.core.config import settings
 from src.core.llm_api_keys import LLMTier, resolve_secondary_api_key, resolve_tier_api_key
 from src.core.trend_config_loader import discover_trend_config_files, load_trends_from_config_dir
 from src.eval import artifact_provenance as provenance
+from src.eval.benchmark_optional_stages import run_optional_tier2_benchmark_stage
+from src.eval.benchmark_recording import (
+    BenchmarkResponseRecorder,
+    RecordingChatCompletions,
+    extract_stage_raw_output,
+    wrap_client_with_recorder,
+)
 from src.eval.benchmark_scope import (
     BENCHMARK_TIER_SCOPE_FULL,
     BENCHMARK_TIER_SCOPE_TIER2,
@@ -34,7 +40,7 @@ from src.eval.benchmark_scope import (
     _select_items_for_tier_scope,
     _tier1_batch_settings_for_dispatch,
 )
-from src.eval.benchmark_stages import run_tier1_benchmark_stage, run_tier2_benchmark_stage
+from src.eval.benchmark_stages import run_tier1_benchmark_stage
 from src.eval.benchmark_stubs import NoopCostTracker as _NoopCostTracker
 from src.eval.benchmark_stubs import NoopSession as _NoopSession
 from src.processing.semantic_cache import LLMSemanticCache
@@ -46,6 +52,10 @@ HUMAN_VERIFIED_LABEL = "human_verified"
 _TIER1_PROMPT_PATH = "ai/prompts/tier1_filter.md"
 _TIER2_PROMPT_PATH = "ai/prompts/tier2_classify.md"
 _DEFAULT_BENCHMARK_CONFIG_NAMES = ("baseline", "alternative")
+_BenchmarkResponseRecorder = BenchmarkResponseRecorder
+_RecordingChatCompletions = RecordingChatCompletions
+_extract_stage_raw_output = extract_stage_raw_output
+_wrap_client_with_recorder = wrap_client_with_recorder
 
 
 @dataclass(slots=True)
@@ -196,64 +206,51 @@ class _Tier2Metrics:
         }
 
 
-@dataclass(slots=True)
-class _BenchmarkResponseRecorder:
-    last_raw_output: str | None = None
-
-    def reset(self) -> None:
-        self.last_raw_output = None
-
-    def capture_response(self, response: Any) -> None:
-        choices = getattr(response, "choices", None)
-        if not isinstance(choices, list) or not choices:
-            return
-        message = getattr(choices[0], "message", None)
-        raw_content = getattr(message, "content", None)
-        if isinstance(raw_content, str) and raw_content.strip():
-            self.last_raw_output = raw_content
-
-
-class _RecordingChatCompletions:
-    def __init__(self, *, wrapped: Any, recorder: _BenchmarkResponseRecorder) -> None:
-        self._wrapped = wrapped
-        self._recorder = recorder
-
-    async def create(self, **kwargs: Any) -> Any:
-        response = await self._wrapped.create(**kwargs)
-        self._recorder.capture_response(response)
-        return response
-
-
-def _wrap_client_with_recorder(
-    *,
-    client: Any,
-    recorder: _BenchmarkResponseRecorder,
-) -> Any:
-    chat = getattr(client, "chat", None)
-    completions = getattr(chat, "completions", None)
-    if completions is None or not hasattr(completions, "create"):
-        return client
-    return SimpleNamespace(
-        chat=SimpleNamespace(
-            completions=_RecordingChatCompletions(wrapped=completions, recorder=recorder)
-        )
-    )
-
-
 def _build_benchmark_secondary_client(
     *,
     tier: LLMTier,
+    should_run: bool = True,
     fallback_api_key: str,
     secondary_model: str | None,
-    recorder: _BenchmarkResponseRecorder,
+    recorder: BenchmarkResponseRecorder,
 ) -> Any | None:
-    if secondary_model is None:
+    if not should_run or secondary_model is None:
         return None
     secondary_client = _build_openai_client(
         api_key=resolve_secondary_api_key(tier, fallback_api_key=fallback_api_key),
         base_url=settings.LLM_SECONDARY_BASE_URL or None,
     )
-    return _wrap_client_with_recorder(client=secondary_client, recorder=recorder)
+    return wrap_client_with_recorder(client=secondary_client, recorder=recorder)
+
+
+def _should_run_tiers(tier_scope: str) -> tuple[bool, bool]:
+    return (
+        tier_scope != BENCHMARK_TIER_SCOPE_TIER2,
+        tier_scope != "tier1",
+    )
+
+
+def _tier2_label_mode_for_scope(tier_scope: str) -> str:
+    if tier_scope == "tier1":
+        return "skipped"
+    if tier_scope == BENCHMARK_TIER_SCOPE_TIER2:
+        return "required"
+    return "optional"
+
+
+def _build_tier_client(
+    *,
+    tier: LLMTier,
+    should_run: bool,
+    fallback_api_key: str,
+    base_url: str | None,
+) -> Any | None:
+    if not should_run:
+        return None
+    return _build_openai_client(
+        api_key=resolve_tier_api_key(tier, fallback_api_key=fallback_api_key),
+        base_url=base_url,
+    )
 
 
 def available_configs() -> dict[str, EvalConfig]:
@@ -576,19 +573,6 @@ def _build_openai_client(*, api_key: str, base_url: str | None) -> AsyncOpenAI:
     return AsyncOpenAI(api_key=api_key)
 
 
-def _build_primary_clients(fallback_api_key: str, base_url: str | None) -> tuple[Any, Any]:
-    return (
-        _build_openai_client(
-            api_key=resolve_tier_api_key("tier1", fallback_api_key=fallback_api_key),
-            base_url=base_url,
-        ),
-        _build_openai_client(
-            api_key=resolve_tier_api_key("tier2", fallback_api_key=fallback_api_key),
-            base_url=base_url,
-        ),
-    )
-
-
 def _usage_to_dict(
     *, tier1_usage: Tier1Usage, tier2_usage: Tier2Usage, items_total: int
 ) -> dict[str, Any]:
@@ -637,15 +621,11 @@ def _serialize_tier2_prediction(predicted: Tier2GoldLabel) -> dict[str, Any]:
     return payload
 
 
-def _extract_stage_raw_output(*, recorder: _BenchmarkResponseRecorder, subject: Any) -> str | None:
-    if recorder.last_raw_output:
-        return recorder.last_raw_output
-    raw_output = getattr(subject, "_benchmark_last_raw_output", None)
-    return raw_output if isinstance(raw_output, str) and raw_output.strip() else None
-
-
 def _build_item_result(
-    item: GoldSetItem, *, tier1_skipped_reason: str | None = None
+    item: GoldSetItem,
+    *,
+    tier1_skipped_reason: str | None = None,
+    tier2_skipped_reason: str | None = None,
 ) -> dict[str, Any]:
     return {
         "item_id": item.item_id,
@@ -664,9 +644,34 @@ def _build_item_result(
             else None
         ),
         "tier2": (
-            {"status": "skipped", "reason": "no_tier2_gold_label"} if item.tier2 is None else None
+            {"status": "skipped", "reason": tier2_skipped_reason}
+            if tier2_skipped_reason is not None
+            else (
+                {"status": "skipped", "reason": "no_tier2_gold_label"}
+                if item.tier2 is None
+                else None
+            )
         ),
     }
+
+
+def _load_scoped_gold_items(
+    *,
+    gold_set_path: Path,
+    max_items: int,
+    require_human_verified: bool,
+    tier_scope: str,
+) -> list[GoldSetItem]:
+    items = load_gold_set(
+        gold_set_path,
+        max_items=None if tier_scope == BENCHMARK_TIER_SCOPE_TIER2 else max_items,
+        require_human_verified=require_human_verified,
+    )
+    items = _select_items_for_tier_scope(items, tier_scope=tier_scope, max_items=max_items)
+    if not items:
+        msg = f"Gold set has no items matching tier_scope='{tier_scope}'."
+        raise ValueError(msg)
+    return items
 
 
 def _stage_failure(
@@ -715,21 +720,12 @@ async def run_gold_set_benchmark(
     """Run Tier-1/Tier-2 benchmark over a gold set and persist JSON results."""
     bounded_max_items = max(1, max_items)
     normalized_tier_scope = _normalize_tier_scope(tier_scope)
-    gold_items = load_gold_set(
-        Path(gold_set_path),
-        max_items=None
-        if normalized_tier_scope == BENCHMARK_TIER_SCOPE_TIER2
-        else bounded_max_items,
-        require_human_verified=require_human_verified,
-    )
-    gold_items = _select_items_for_tier_scope(
-        gold_items,
-        tier_scope=normalized_tier_scope,
+    gold_items = _load_scoped_gold_items(
+        gold_set_path=Path(gold_set_path),
         max_items=bounded_max_items,
+        require_human_verified=require_human_verified,
+        tier_scope=normalized_tier_scope,
     )
-    if not gold_items:
-        msg = f"Gold set has no items matching tier_scope='{normalized_tier_scope}'."
-        raise ValueError(msg)
     normalized_dispatch_mode = _normalize_dispatch_mode(dispatch_mode)
     normalized_request_priority = _normalize_request_priority(request_priority)
     priority_request_overrides = _request_overrides_for_priority(normalized_request_priority)
@@ -739,7 +735,7 @@ async def run_gold_set_benchmark(
     configs = _resolve_configs(config_names)
     trends = _load_trends_from_config(config_dir=Path(trend_config_dir))
     _assert_gold_set_taxonomy_alignment(items=gold_items, trends=trends)
-    should_run_tier1 = normalized_tier_scope != BENCHMARK_TIER_SCOPE_TIER2
+    should_run_tier1, should_run_tier2 = _should_run_tiers(normalized_tier_scope)
     raw_items = [_build_raw_item(item) for item in gold_items] if should_run_tier1 else []
     label_verification_counts = _count_label_verification(gold_items)
     trend_config_files = discover_trend_config_files(config_dir=Path(trend_config_dir))
@@ -758,7 +754,7 @@ async def run_gold_set_benchmark(
             "max_items": bounded_max_items,
             "require_human_verified": require_human_verified,
             "tier1_label_mode": "sparse_allowed",
-            "tier2_label_mode": "required" if not should_run_tier1 else "optional",
+            "tier2_label_mode": _tier2_label_mode_for_scope(normalized_tier_scope),
             "tier_scope": normalized_tier_scope,
         },
         "execution_mode": {
@@ -784,22 +780,23 @@ async def run_gold_set_benchmark(
 
     for config in configs:
         config_started_at = perf_counter()
-        tier1_client, tier2_client = (
-            _build_primary_clients(api_key, config.base_url)
-            if should_run_tier1
-            else (
-                None,
-                _build_openai_client(
-                    api_key=resolve_tier_api_key("tier2", fallback_api_key=api_key),
-                    base_url=config.base_url,
-                ),
-            )
+        tier1_client = _build_tier_client(
+            tier="tier1",
+            should_run=should_run_tier1,
+            fallback_api_key=api_key,
+            base_url=config.base_url,
+        )
+        tier2_client = _build_tier_client(
+            tier="tier2",
+            should_run=should_run_tier2,
+            fallback_api_key=api_key,
+            base_url=config.base_url,
         )
         noop_session = _NoopSession()
         noop_cost_tracker = _NoopCostTracker()
         disabled_semantic_cache = LLMSemanticCache(enabled=False)
-        tier1_recorder = _BenchmarkResponseRecorder()
-        tier2_recorder = _BenchmarkResponseRecorder()
+        tier1_recorder = BenchmarkResponseRecorder()
+        tier2_recorder = BenchmarkResponseRecorder()
         tier1_request_overrides = _merge_request_overrides(
             priority_request_overrides,
             config.tier1_request_overrides,
@@ -808,18 +805,16 @@ async def run_gold_set_benchmark(
             priority_request_overrides,
             config.tier2_request_overrides,
         )
-        tier1_secondary_client = (
-            _build_benchmark_secondary_client(
-                tier="tier1",
-                fallback_api_key=api_key,
-                secondary_model=settings.LLM_TIER1_SECONDARY_MODEL,
-                recorder=tier1_recorder,
-            )
-            if should_run_tier1
-            else None
+        tier1_secondary_client = _build_benchmark_secondary_client(
+            tier="tier1",
+            should_run=should_run_tier1,
+            fallback_api_key=api_key,
+            secondary_model=settings.LLM_TIER1_SECONDARY_MODEL,
+            recorder=tier1_recorder,
         )
         tier2_secondary_client = _build_benchmark_secondary_client(
             tier="tier2",
+            should_run=should_run_tier2,
             fallback_api_key=api_key,
             secondary_model=settings.LLM_TIER2_SECONDARY_MODEL,
             recorder=tier2_recorder,
@@ -827,7 +822,7 @@ async def run_gold_set_benchmark(
         tier1 = (
             Tier1Classifier(
                 session=cast("Any", noop_session),
-                client=_wrap_client_with_recorder(client=tier1_client, recorder=tier1_recorder),
+                client=wrap_client_with_recorder(client=tier1_client, recorder=tier1_recorder),
                 model=config.tier1_model,
                 batch_size=tier1_batch_size,
                 prompt_path=_TIER1_PROMPT_PATH,
@@ -840,16 +835,20 @@ async def run_gold_set_benchmark(
             if should_run_tier1
             else None
         )
-        tier2 = Tier2Classifier(
-            session=cast("Any", noop_session),
-            client=_wrap_client_with_recorder(client=tier2_client, recorder=tier2_recorder),
-            model=config.tier2_model,
-            prompt_path=_TIER2_PROMPT_PATH,
-            cost_tracker=cast("Any", noop_cost_tracker),
-            reasoning_effort=config.tier2_reasoning_effort,
-            request_overrides=tier2_request_overrides,
-            secondary_client=tier2_secondary_client,
-            semantic_cache=disabled_semantic_cache,
+        tier2 = (
+            Tier2Classifier(
+                session=cast("Any", noop_session),
+                client=wrap_client_with_recorder(client=tier2_client, recorder=tier2_recorder),
+                model=config.tier2_model,
+                prompt_path=_TIER2_PROMPT_PATH,
+                cost_tracker=cast("Any", noop_cost_tracker),
+                reasoning_effort=config.tier2_reasoning_effort,
+                request_overrides=tier2_request_overrides,
+                secondary_client=tier2_secondary_client,
+                semantic_cache=disabled_semantic_cache,
+            )
+            if should_run_tier2
+            else None
         )
 
         tier1_metrics = _Tier1Metrics(queue_threshold=settings.TIER1_RELEVANCE_THRESHOLD)
@@ -858,6 +857,7 @@ async def run_gold_set_benchmark(
             item.item_id: _build_item_result(
                 item,
                 tier1_skipped_reason=("tier_scope_tier2" if not should_run_tier1 else None),
+                tier2_skipped_reason=("tier_scope_tier1" if not should_run_tier2 else None),
             )
             for item in gold_items
         }
@@ -872,7 +872,7 @@ async def run_gold_set_benchmark(
             tier1_usage=tier1_usage,
             item_results_by_id=item_results_by_id,
             item_uuid=_item_uuid,
-            extract_stage_raw_output=_extract_stage_raw_output,
+            extract_stage_raw_output=extract_stage_raw_output,
             serialize_tier1_prediction=_serialize_tier1_prediction,
             stage_failure=_stage_failure,
             stage_success=_stage_success,
@@ -880,7 +880,7 @@ async def run_gold_set_benchmark(
 
         tier2_metrics = _Tier2Metrics()
         tier2_usage = Tier2Usage()
-        await run_tier2_benchmark_stage(
+        await run_optional_tier2_benchmark_stage(
             tier2=tier2,
             tier2_recorder=tier2_recorder,
             gold_items=gold_items,
@@ -890,7 +890,7 @@ async def run_gold_set_benchmark(
             item_results_by_id=item_results_by_id,
             build_event=_build_event,
             extract_first_impact=_extract_first_impact,
-            extract_stage_raw_output=_extract_stage_raw_output,
+            extract_stage_raw_output=extract_stage_raw_output,
             serialize_tier2_prediction=_serialize_tier2_prediction,
             stage_failure=_stage_failure,
             stage_success=_stage_success,
@@ -904,7 +904,7 @@ async def run_gold_set_benchmark(
                 "tier1_model": config.tier1_model,
                 "tier2_model": config.tier2_model,
                 "tier1_api_mode": "chat_completions" if should_run_tier1 else "skipped",
-                "tier2_api_mode": "chat_completions",
+                "tier2_api_mode": "chat_completions" if should_run_tier2 else "skipped",
                 "tier1_reasoning_effort": config.tier1_reasoning_effort,
                 "tier2_reasoning_effort": config.tier2_reasoning_effort,
                 "tier1_request_overrides": provenance.normalize_request_overrides(

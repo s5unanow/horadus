@@ -34,8 +34,11 @@
 10. `TASK-394` Design worktree isolation for Codex App task sessions.
 11. `TASK-403` Harden eval audit for gold-label consistency.
 12. `TASK-406` Add Tier-scoped eval benchmark mode.
+13. `TASK-407` Refresh Horadus CLI skill and add freshness gate.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -69,3 +72,4 @@
 - `TASK-404` Fix Tier 1 eval quality to 95 percent queue accuracy ✅
 - `TASK-405` Support separate OpenAI project keys by LLM tier ✅
 - `TASK-406` Add Tier-scoped eval benchmark mode ✅
+- `TASK-407` Refresh Horadus CLI skill and add freshness gate ✅

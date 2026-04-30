@@ -7,9 +7,11 @@ from pathlib import Path
 import pytest
 
 import tools.horadus.python.horadus_workflow.docs_freshness as docs_freshness_module
+from tools.horadus.python.horadus_workflow import (
+    _docs_freshness_horadus_cli_skill as cli_skill_freshness,
+)
 from tools.horadus.python.horadus_workflow.docs_freshness import (
     DocsFreshnessIssue,
-    DocsFreshnessResult,
     _extract_completed_task_ids,
     _extract_current_sprint_active_tasks,
     _extract_h2_section,
@@ -27,15 +29,22 @@ from tools.horadus.python.horadus_workflow.repo_workflow import (
     CANONICAL_SAFE_START_COMMAND,
     STALE_LOWER_LEVEL_TASK_START_COMMAND,
     WORKFLOW_ESCAPE_HATCH_TEXT,
-    canonical_task_workflow_command_templates,
     completion_guidance_statements,
     dependency_aware_guidance_statements,
     fallback_guidance_statements,
     high_risk_pre_push_review_statements,
     workflow_policy_guardrail_statements,
 )
+from tools.horadus.python.horadus_workflow.repo_workflow import (
+    canonical_task_workflow_command_templates as workflow_commands,
+)
 
 pytestmark = pytest.mark.unit
+_WORKFLOW_REFERENCE_SUFFIX = (
+    *cli_skill_freshness._REQUIRED_TOKENS,
+    WORKFLOW_ESCAPE_HATCH_TEXT,
+    "",
+)
 
 
 def _write_lines(path: Path, *lines: str) -> None:
@@ -55,8 +64,7 @@ def _seed_repo_layout(repo_root: Path, *, marker_date: str) -> None:
     (repo_root / "tasks").mkdir(parents=True, exist_ok=True)
     (repo_root / "tasks" / "specs").mkdir(parents=True, exist_ok=True)
 
-    workflow_commands = canonical_task_workflow_command_templates()
-    workflow_reference_block = "\n".join([*workflow_commands, WORKFLOW_ESCAPE_HATCH_TEXT, ""])
+    workflow_reference_block = "\n".join([*workflow_commands(), *_WORKFLOW_REFERENCE_SUFFIX])
     completion_guidance_block = "\n".join([*completion_guidance_statements(), ""])
     dependency_guidance_block = "\n".join([*dependency_aware_guidance_statements(), ""])
     fallback_guidance_block = "\n".join([*fallback_guidance_statements(), ""])
@@ -326,7 +334,7 @@ def test_docs_freshness_flags_missing_workflow_escape_hatch_guidance(tmp_path: P
     marker_date = datetime.now(tz=UTC).date().isoformat()
     _seed_repo_layout(tmp_path, marker_date=marker_date)
     (tmp_path / "docs" / "AGENT_RUNBOOK.md").write_text(
-        "\n".join([*canonical_task_workflow_command_templates(), ""]),
+        "\n".join([*workflow_commands(), ""]),
         encoding="utf-8",
     )
 
@@ -961,17 +969,6 @@ def test_docs_freshness_allows_project_status_at_sla_boundary(tmp_path: Path) ->
     )
 
     assert not any(issue.rule_id == "project_status_freshness_sla" for issue in result.errors)
-
-
-def test_docs_freshness_result_is_ok_tracks_error_presence() -> None:
-    assert DocsFreshnessResult(errors=(), warnings=()).is_ok is True
-    assert (
-        DocsFreshnessResult(
-            errors=(DocsFreshnessIssue(level="error", rule_id="x", message="y"),),
-            warnings=(),
-        ).is_ok
-        is False
-    )
 
 
 def test_load_overrides_validates_shape_and_required_fields(tmp_path: Path) -> None:

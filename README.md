@@ -199,6 +199,9 @@ uv run --no-sync horadus eval benchmark \
   --config tier2-gpt5-mini-low
 ```
 
+For Tier 2-only diagnostics, add `--tier-scope tier2` to evaluate only
+Tier-2-labeled gold rows and skip Tier 1 model calls.
+
 ## Configuration
 
 ### Defining Trends

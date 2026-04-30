@@ -62,6 +62,7 @@ Required handling:
 - Benchmark accepts sparse Tier-1 `trend_scores` labels, but still fails fast on unknown trend IDs or unknown Tier-2 signal mappings.
 - Accepted safe benchmark mode is realtime dispatch, which forces Tier-1 `batch_size=1` and records `tier1_batch_policy=safe_single_item_default`.
 - `--dispatch-mode batch` is diagnostic-only while Tier-1 multi-item scoring remains unstable on the current baseline models. Those artifacts record `tier1_batch_policy=diagnostic_multi_item_batch`.
+- For Tier 2 prompt/mapper diagnostics that should avoid Tier 1 API calls, add `--tier-scope tier2`; those artifacts evaluate only Tier-2-labeled gold rows, record `tier1_api_mode=skipped`, and keep Tier 2 metrics, per-item diagnostics, cost, and provenance.
 - Do not re-enable multi-item Tier-1 runtime batching by default until a same-slice human-verified benchmark shows no worse failure rate and no worse queue accuracy than realtime dispatch.
 - Benchmark artifacts now include per-item stage diagnostics under each config’s `item_results`, including failure category/message, raw model output when available, and compact predicted summaries for successful rows.
 - Benchmark artifacts also include reproducibility provenance: source-control state (`git` commit SHA + dirty/clean flag when available), prompt file paths/content hashes, trend-config fingerprint, and per-config invocation provenance (`api_mode`, `reasoning_effort`, normalized request overrides).

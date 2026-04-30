@@ -297,6 +297,8 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
             "batch",
             "--request-priority",
             "flex",
+            "--tier-scope",
+            "tier2",
         ]
     )
 
@@ -310,6 +312,7 @@ def test_build_parser_accepts_eval_benchmark_command() -> None:
     assert args.require_human_verified is True
     assert args.dispatch_mode == "batch"
     assert args.request_priority == "flex"
+    assert args.tier_scope == "tier2"
 
 
 def test_build_parser_accepts_eval_audit_command() -> None:

@@ -492,6 +492,8 @@ async def test_run_gold_set_benchmark_writes_results(
         "max_items": 2,
         "require_human_verified": False,
         "tier1_label_mode": "sparse_allowed",
+        "tier2_label_mode": "optional",
+        "tier_scope": "full",
     }
     assert payload["execution_mode"] == {
         "dispatch_mode": "realtime",
@@ -651,6 +653,8 @@ async def test_run_gold_set_benchmark_filters_human_verified(
         "max_items": 10,
         "require_human_verified": True,
         "tier1_label_mode": "sparse_allowed",
+        "tier2_label_mode": "optional",
+        "tier_scope": "full",
     }
 
 

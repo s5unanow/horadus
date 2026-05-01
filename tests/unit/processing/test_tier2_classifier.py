@@ -461,7 +461,7 @@ async def test_classify_events_resets_reasoning_metadata_when_later_event_has_no
     assert result.usage.active_reasoning_effort is None
 
 
-def test_build_payload_omits_trend_taxonomy_context(mock_db_session) -> None:
+def test_build_payload_includes_compact_trend_signal_catalog(mock_db_session) -> None:
     classifier, _, _ = _build_classifier(mock_db_session)
     event = Event(id=uuid4(), canonical_summary="Initial summary")
     trend = SimpleNamespace(
@@ -488,9 +488,10 @@ def test_build_payload_omits_trend_taxonomy_context(mock_db_session) -> None:
     )
 
     assert payload["event_id"] == str(event.id)
-    assert payload["summary"] == "Initial summary"
     assert "trends" not in payload
-    assert len(payload["context_chunks"]) == 1
+    catalog = payload["trend_signal_catalog"]
+    assert catalog[0]["trend_id"] == "eu-russia"
+    assert catalog[0]["signals"][0]["signal_type"] == "military_movement"
 
 
 @pytest.mark.asyncio

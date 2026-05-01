@@ -61,7 +61,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["election legitimacy disputed", "constitutional crisis", "contested results", "election discrepancy", "election-related lawsuits", "alternate electors", "pardons alternate electors"]
+    keywords: ["election legitimacy disputed", "constitutional crisis", "contested results", "election discrepancy", "election-related lawsuits", "alternate electors", "pardons alternate electors", "January 6", "January 6 Capitol attack", "full pardons", "mass pardons", "mass clemency", "Jan 6 defendants"]
 
   bipartisan_deescalation_framework:
     weight: 0.04

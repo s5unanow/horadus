@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import UTC, datetime
 from typing import Any
 
@@ -11,21 +12,39 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from src.processing.entity_registry import sync_event_entities
 from src.storage.event_extraction import promote_canonical_extraction
 
+_PARTIAL_YEAR_RE = re.compile(r"^\d{4}$")
+_PARTIAL_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+_MARKETING_YEAR_RE = re.compile(r"^(?P<start>\d{4})/(?P<end>\d{2}|\d{4})$")
+_MONTH_SLASH_RANGE_RE = re.compile(r"^(?P<start>\d{4}-\d{2})/\d{4}-\d{2}$")
+_DATE_SLASH_RANGE_RE = re.compile(r"^(?P<start>\d{4}-\d{2}-\d{2})/\d{4}-\d{2}-\d{2}$")
+_YEAR_RANGE_RE = re.compile(r"^(?P<start>\d{4})-(?P<end>\d{4})$")
+_QUALIFIED_YEAR_RE = re.compile(r"^(?P<qualifier>early|mid|late)[\s-]+(?P<year>\d{4})$")
+_DATE_RANGE_SEPARATORS = (" to ", " through ", " until ", " - ", " \u2013 ", " \u2014 ")
+_QUALIFIER_MONTHS = {"early": 1, "mid": 6, "late": 10}
+
 
 class Tier2Entity(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1)
-    entity_type: str = Field(pattern="^(person|organization|location)$")
+    entity_type: str = Field(pattern="^(person|organization|location|event)$")
     role: str = Field(pattern="^(actor|location)$")
 
     @model_validator(mode="after")
     def _validate_role(self) -> Tier2Entity:
+        if self.role == "location" and self.entity_type == "event":
+            self.entity_type = "location"
+        if self.role == "location" and self.entity_type == "organization":
+            self.entity_type = "location"
         if self.role == "location" and self.entity_type != "location":
             msg = "Location-role entities must use entity_type='location'"
             raise ValueError(msg)
-        if self.role == "actor" and self.entity_type not in {"person", "organization"}:
-            msg = "Actor-role entities must use entity_type='person' or 'organization'"
+        if self.role == "actor" and self.entity_type not in {
+            "person",
+            "organization",
+            "location",
+        }:
+            msg = "Actor-role entities must use entity_type='person', 'organization', or 'location'"
             raise ValueError(msg)
         return self
 
@@ -91,11 +110,66 @@ def parse_tier2_output(
 def parse_tier2_datetime(raw_value: str | None) -> datetime | None:
     if raw_value is None or not raw_value.strip():
         return None
-    normalized = raw_value.strip().replace("Z", "+00:00")
+    normalized = _normalize_tier2_datetime_value(raw_value)
+    partial = _parse_partial_tier2_datetime(normalized)
+    if partial is not None:
+        return partial
     parsed = datetime.fromisoformat(normalized)
     if parsed.tzinfo is None:
         return parsed.replace(tzinfo=UTC)
     return parsed.astimezone(UTC)
+
+
+def _normalize_tier2_datetime_value(raw_value: str) -> str:
+    normalized = raw_value.strip().strip(".,;").replace("Z", "+00:00")
+    lowered = normalized.lower()
+    for prefix in ("since ", "as of ", "by "):
+        if lowered.startswith(prefix):
+            normalized = normalized[len(prefix) :].strip().strip(".,;")
+            lowered = normalized.lower()
+            break
+    for separator in _DATE_RANGE_SEPARATORS:
+        if separator in lowered:
+            index = lowered.index(separator)
+            return normalized[:index].strip().strip(".,;")
+    return normalized
+
+
+def _parse_partial_tier2_datetime(normalized: str) -> datetime | None:
+    lowered = normalized.lower()
+    if _PARTIAL_YEAR_RE.fullmatch(lowered):
+        return datetime(int(lowered), 1, 1, tzinfo=UTC)
+    if _PARTIAL_MONTH_RE.fullmatch(lowered):
+        year, month = lowered.split("-")
+        return datetime(int(year), int(month), 1, tzinfo=UTC)
+
+    marketing_year = _MARKETING_YEAR_RE.fullmatch(lowered)
+    if marketing_year is not None:
+        return datetime(int(marketing_year.group("start")), 1, 1, tzinfo=UTC)
+
+    month_slash_range = _MONTH_SLASH_RANGE_RE.fullmatch(lowered)
+    if month_slash_range is not None:
+        year, month = month_slash_range.group("start").split("-")
+        return datetime(int(year), int(month), 1, tzinfo=UTC)
+
+    date_slash_range = _DATE_SLASH_RANGE_RE.fullmatch(lowered)
+    if date_slash_range is not None:
+        return datetime.fromisoformat(date_slash_range.group("start")).replace(tzinfo=UTC)
+
+    year_range = _YEAR_RANGE_RE.fullmatch(lowered)
+    if year_range is not None:
+        return datetime(int(year_range.group("start")), 1, 1, tzinfo=UTC)
+
+    qualified_year = _QUALIFIED_YEAR_RE.fullmatch(lowered)
+    if qualified_year is not None:
+        qualifier = qualified_year.group("qualifier")
+        return datetime(
+            int(qualified_year.group("year")),
+            _QUALIFIER_MONTHS[qualifier],
+            1,
+            tzinfo=UTC,
+        )
+    return None
 
 
 async def persist_tier2_output(

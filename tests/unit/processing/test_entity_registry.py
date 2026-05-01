@@ -240,15 +240,51 @@ def test_tier2_output_rejects_location_role_with_non_location_type() -> None:
     with pytest.raises(ValueError, match="Location-role entities"):
         _tier2_output(
             entities=[
-                {"name": "Kyiv", "entity_type": "organization", "role": "location"},
+                {"name": "Kyiv", "entity_type": "person", "role": "location"},
             ]
         )
 
 
-def test_tier2_output_rejects_actor_role_with_location_type() -> None:
+def test_tier2_output_accepts_state_actor_with_location_type() -> None:
+    output = _tier2_output(
+        entities=[
+            {"name": "Ukraine", "entity_type": "location", "role": "actor"},
+        ]
+    )
+
+    assert output.entities[0].name == "Ukraine"
+    assert output.entities[0].entity_type == "location"
+    assert output.entities[0].role == "actor"
+
+
+def test_tier2_output_rejects_actor_role_with_event_type() -> None:
     with pytest.raises(ValueError, match="Actor-role entities"):
         _tier2_output(
             entities=[
-                {"name": "Kyiv", "entity_type": "location", "role": "actor"},
+                {"name": "G7 summit", "entity_type": "event", "role": "actor"},
             ]
         )
+
+
+def test_tier2_output_coerces_event_typed_location_mentions() -> None:
+    output = _tier2_output(
+        entities=[
+            {"name": "G7 summit", "entity_type": "event", "role": "location"},
+        ]
+    )
+
+    assert output.entities[0].name == "G7 summit"
+    assert output.entities[0].entity_type == "location"
+    assert output.entities[0].role == "location"
+
+
+def test_tier2_output_coerces_organization_typed_location_mentions() -> None:
+    output = _tier2_output(
+        entities=[
+            {"name": "Jaguar oil tanker", "entity_type": "organization", "role": "location"},
+        ]
+    )
+
+    assert output.entities[0].name == "Jaguar oil tanker"
+    assert output.entities[0].entity_type == "location"
+    assert output.entities[0].role == "location"

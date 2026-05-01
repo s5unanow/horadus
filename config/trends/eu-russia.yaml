@@ -93,7 +93,7 @@ indicators:
     direction: de_escalatory
     type: leading
     description: "Active negotiation, summit, hotline, or deconfliction talks aimed at reducing confrontation."
-    keywords: ["peace talks", "summit", "negotiation", "deconfliction"]
+    keywords: ["peace talks", "summit", "negotiation", "deconfliction", "20-point peace plan", "peace-plan framework", "consensus"]
 
 regions:
   - Eastern Europe

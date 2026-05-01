@@ -40,13 +40,13 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["alternative protein market share", "plant-based meat sales", "plant-based sales", "alternative meat sales", "cultivated meat adoption", "cultivated salmon", "precision fermentation", "mycoprotein growth", "insect protein adoption"]
+    keywords: ["alternative protein market share", "plant-based meat sales", "plant-based sales", "alternative meat sales", "cultivated meat adoption", "cultivated salmon", "insect novel food", "insect novel food ingredients", "mealworm powder", "insect protein adoption", "mycoprotein growth"]
 
   production_cost_price_parity:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve"]
+    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve", "precision fermentation-based", "animal-free dairy proteins", "60-90% less land and water"]
 
   livestock_regulation_tightening:
     weight: 0.04
@@ -82,7 +82,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["livestock methane reduction", "sustainable meat", "meat industry decarbonization"]
+    keywords: ["livestock methane reduction", "sustainable meat", "meat industry decarbonization", "regenerative agriculture"]
 
 regions:
   - Europe

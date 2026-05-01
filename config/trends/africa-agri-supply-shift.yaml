@@ -44,7 +44,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["african food exports", "AfCFTA agricultural", "african grain exports", "export share increased", "market share gain"]
+    keywords: ["african food exports", "AfCFTA agricultural", "AfCFTA Secretariat", "Agri-Food Trade Action Plan", "agri-food value chains", "african grain exports", "export share increased", "market share gain"]
 
   agri_infrastructure_investment:
     weight: 0.04
@@ -68,7 +68,7 @@ indicators:
     weight: 0.03
     direction: escalatory
     type: leading
-    keywords: ["seed system", "fertilizer subsidy", "input access", "seed certification", "improved varieties"]
+    keywords: ["seed system", "fertilizer subsidy", "fertilizer production", "fertilizer complex", "fertilizer plant", "granulated urea", "urea output", "urea production", "input access", "seed certification", "improved varieties"]
 
   climate_shock_losses:
     weight: 0.04

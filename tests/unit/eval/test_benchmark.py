@@ -838,6 +838,9 @@ async def test_run_gold_set_benchmark_records_tier2_failures(
     usage = payload["configs"][0]["usage"]
     assert tier2_metrics["items_total"] == 1
     assert tier2_metrics["failures"] == 1
+    assert tier2_metrics["schema_runtime_failures"] == 0
+    assert tier2_metrics["extraction_validity_failures"] == 1
+    assert tier2_metrics["deterministic_mapper_failures"] == 0
     assert usage["tier2_api_calls"] == 0
     item_results = payload["configs"][0]["item_results"]
     failed_row = next(row for row in item_results if row["item_id"] == "eval-0001")
@@ -879,6 +882,10 @@ async def test_run_gold_set_benchmark_records_missing_tier2_prediction_diagnosti
     failed_row = next(
         row for row in payload["configs"][0]["item_results"] if row["item_id"] == "eval-0001"
     )
+    tier2_metrics = payload["configs"][0]["tier2_metrics"]
+    assert tier2_metrics["deterministic_mapper_failures"] == 1
+    assert tier2_metrics["schema_runtime_failures"] == 0
+    assert tier2_metrics["extraction_validity_failures"] == 0
     assert failed_row["tier2"]["status"] == "failure"
     assert failed_row["tier2"]["error_category"] == "MissingPrediction"
     assert "no trend impact prediction" in failed_row["tier2"]["error_message"]

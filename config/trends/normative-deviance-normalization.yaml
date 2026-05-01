@@ -49,25 +49,25 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["age of consent reduction", "decriminalize minor attraction", "MAP rights", "minor attracted persons", "B4U-ACT", "legalize cannibalism", "normalize political violence", "waivers of informed consent"]
+    keywords: ["age of consent reduction", "decriminalize minor attraction", "MAP rights", "minor attracted persons", "B4U-ACT", "legalize cannibalism", "normalize political violence", "waivers of informed consent", "waive informed consent", "minimal risk", "Cures Act"]
 
   platform_policy_relaxation:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["content policy relaxed", "moderation rollback for extreme content", "minor attraction content allowed", "fact-checking program", "enforcement reduced"]
+    keywords: ["content policy relaxed", "moderation rollback for extreme content", "moderation team", "content moderation team", "monitored languages", "policies on crisis misinformation", "minor attraction content allowed", "fact-checking program", "enforcement reduced"]
 
   mainstream_positive_framing:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["cannibalism positive framing", "cannibalism is so fashionable", "Bones and All", "minor attraction destigmatize", "MAP destigmatization", "eating human flesh benefits", "pedophilia reframed", "political violence justified", "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"]
+    keywords: ["cannibalism positive framing", "cannibalism is so fashionable", "rethinking the taboo", "eating human flesh", "Newsweek", "mainstream media", "minor attraction destigmatize", "MAP destigmatization", "eating human flesh benefits", "pedophilia reframed", "political violence justified", "broadsheet editorial", "network news segment", "podcast mainstream", "prime-time documentary"]
 
   academic_legitimation:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["peer reviewed normalization", "academic defense of taboo", "scientific case for cannibalism", "research reframing minor attraction"]
+    keywords: ["peer reviewed normalization", "academic defense of taboo", "scientific case for cannibalism", "research reframing minor attraction", "B4U-ACT", "therapy access", "survey data", "mental health services"]
 
   commercial_normalization:
     weight: 0.04
@@ -79,19 +79,19 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["criminal prosecution", "enforcement operation", "ban enacted", "child protection law strengthened", "Online Safety Act", "child pornography charges"]
+    keywords: ["criminal prosecution", "enforcement operation", "ban enacted", "child protection law strengthened", "Online Safety Act", "age assurance", "Ofcom", "child pornography charges"]
 
   coordinated_public_backlash:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["mass petition", "public backlash", "consumer boycott", "boycott campaign", "policy reversal demand", "advertiser withdrawal"]
+    keywords: ["mass petition", "public backlash", "consumer boycott", "boycott campaign", "policy reversal demand", "advertiser withdrawal", "backfire", "increased negative attitudes", "broadly ineffective"]
 
   institutional_safeguard_strengthening:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["child safeguarding expanded", "ethics review tightened", "content classification strengthened", "non-consensual pesticide experiments"]
+    keywords: ["child safeguarding expanded", "duty of care", "Kids Online Safety", "protective settings", "targeted advertising to children", "collection of personal information", "ethics review tightened", "content classification strengthened", "non-consensual pesticide experiments"]
 
 regions:
   - North America

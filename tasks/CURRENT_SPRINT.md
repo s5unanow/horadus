@@ -35,8 +35,11 @@
 11. `TASK-403` Harden eval audit for gold-label consistency.
 12. `TASK-406` Add Tier-scoped eval benchmark mode.
 13. `TASK-407` Refresh Horadus CLI skill and add freshness gate.
+14. `TASK-409` Improve Tier 2 eval accuracy to 90 percent.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -76,3 +79,4 @@
 - `TASK-406` Add Tier-scoped eval benchmark mode ✅
 - `TASK-407` Refresh Horadus CLI skill and add freshness gate ✅
 - `TASK-408` Add Tier 1-only eval benchmark scope ✅
+- `TASK-409` Improve Tier 2 eval accuracy to 90 percent ✅

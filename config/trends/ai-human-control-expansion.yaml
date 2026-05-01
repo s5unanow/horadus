@@ -40,7 +40,7 @@ indicators:
     weight: 0.06
     direction: escalatory
     type: leading
-    keywords: ["mandatory digital id", "identity gateway", "service-linked identity"]
+    keywords: ["mandatory digital id", "identity gateway", "service-linked identity", "Aadhaar-linked", "Aadhaar-linked user accounts", "UIDAI", "digital identity"]
 
   social_scoring_deployment:
     weight: 0.06
@@ -58,7 +58,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["automated denial", "algorithmic suspension", "access restricted by model", "SNAP work requirements"]
+    keywords: ["automated denial", "algorithmic suspension", "automated claims-processing", "undervalued homeowner claims", "mass automated deactivation", "access restricted by model", "SNAP work requirements"]
 
   llm_gatekeeping_deployment:
     weight: 0.04
@@ -88,13 +88,13 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["human review right", "appeal right", "manual override"]
+    keywords: ["human review right", "appeal right", "manual override", "Robodebt", "Royal Commission", "individual evidence", "criminal prosecution"]
 
   judicial_algorithmic_review:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["algorithmic impact assessment", "judicial review of AI", "AI audit order", "algorithmic accountability ruling"]
+    keywords: ["algorithmic impact assessment", "judicial review of AI", "AI audit order", "algorithmic accountability ruling", "warrants before using facial recognition", "obtain warrants", "notice to defendants", "facial recognition evidence"]
 
 regions:
   - China

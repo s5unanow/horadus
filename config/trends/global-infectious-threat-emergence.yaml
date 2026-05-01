@@ -59,7 +59,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["furin cleavage site", "unusual adaptation", "gain of function markers", "atypical genome", "enhanced transmissibility"]
+    keywords: ["furin cleavage site", "unusual adaptation", "host jump", "bovine-to-human", "dairy cattle", "dairy cow exposure", "unprecedented host jump", "first documented instance", "atypical genome", "enhanced transmissibility"]
 
   hospitalization_surge:
     weight: 0.05
@@ -83,7 +83,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["unexplained deaths", "excess mortality cluster", "unusual death pattern", "pneumonia of unknown origin"]
+    keywords: ["unexplained deaths", "excess mortality cluster", "unusual death pattern", "case fatality rate", "healthcare workers", "first-ever Marburg", "pneumonia of unknown origin"]
 
   international_travel_restriction:
     weight: 0.03

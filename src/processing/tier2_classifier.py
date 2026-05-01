@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
@@ -32,9 +31,6 @@ from src.processing.llm_failover import LLMChatRoute
 from src.processing.llm_input_safety import (
     DEFAULT_CHARS_PER_TOKEN,
     DEFAULT_TRUNCATION_MARKER,
-    estimate_tokens,
-    truncate_to_token_limit,
-    wrap_untrusted_text,
 )
 from src.processing.llm_policy import (
     apply_latest_active_route_metadata,
@@ -47,6 +43,11 @@ from src.processing.llm_runtime_cache import (
     with_cache_hit_derivation,
 )
 from src.processing.semantic_cache import LLMSemanticCache
+from src.processing.tier2_payload import (
+    build_tier2_payload,
+    enforce_tier2_payload_budget,
+    estimate_tier2_payload_tokens,
+)
 from src.processing.tier2_runtime import (
     Tier2Output,
     mapped_impacts_count,
@@ -67,7 +68,6 @@ from src.storage.event_state import (
     resolved_event_epistemic_state,
     resolved_independent_evidence_count,
 )
-from src.storage.event_summary import resolved_event_summary
 from src.storage.models import Event, EventItem, RawItem, Trend
 
 
@@ -588,75 +588,31 @@ class Tier2Classifier:
         trends: list[Trend],
         context_chunks: list[str],
     ) -> dict[str, Any]:
-        _ = trends
-        sanitized_chunks = [
-            truncate_to_token_limit(
-                text=chunk,
-                max_tokens=self._MAX_CONTEXT_CHUNK_TOKENS,
-                marker=self._TRUNCATION_MARKER,
-                chars_per_token=self._CHARS_PER_TOKEN,
-            )
-            for chunk in context_chunks
-            if chunk.strip()
-        ]
-
-        if not sanitized_chunks:
-            sanitized_chunks = [self._TRUNCATION_MARKER]
-
-        extraction_provenance = (
-            event.extraction_provenance if isinstance(event.extraction_provenance, dict) else {}
+        return build_tier2_payload(
+            event=event,
+            trends=trends,
+            context_chunks=context_chunks,
+            max_context_chunk_tokens=self._MAX_CONTEXT_CHUNK_TOKENS,
+            min_context_chunk_tokens=self._MIN_CONTEXT_CHUNK_TOKENS,
+            max_request_input_tokens=self._MAX_REQUEST_INPUT_TOKENS,
+            payload_headroom_tokens=self._PAYLOAD_HEADROOM_TOKENS,
+            chars_per_token=self._CHARS_PER_TOKEN,
+            truncation_marker=self._TRUNCATION_MARKER,
         )
-        summary_seed = (
-            event.canonical_summary
-            if extraction_provenance.get("status") == "replay_pending"
-            else resolved_event_summary(event)
-        )
-        payload = {
-            "event_id": str(event.id),
-            "summary": summary_seed,
-            "context_chunks": sanitized_chunks,
-        }
-        self._enforce_payload_budget(payload)
-        payload["context_chunks"] = [
-            wrap_untrusted_text(text=str(chunk), tag="UNTRUSTED_EVENT_CONTEXT")
-            for chunk in payload["context_chunks"]
-        ]
-        if self._estimate_payload_tokens(payload) > self._MAX_REQUEST_INPUT_TOKENS:
-            msg = "Tier 2 payload exceeds safe input budget after deterministic reductions"
-            raise ValueError(msg)
-        return payload
 
     def _enforce_payload_budget(self, payload: dict[str, Any]) -> None:
-        budget_limit = self._payload_budget_limit()
-        if self._estimate_payload_tokens(payload) <= budget_limit:
-            return
-
-        context_chunks = payload.get("context_chunks")
-        if not isinstance(context_chunks, list):
-            return
-
-        while len(context_chunks) > 1 and self._estimate_payload_tokens(payload) > budget_limit:
-            context_chunks.pop()
-
-        if self._estimate_payload_tokens(payload) <= budget_limit:
-            return
-
-        context_chunks[0] = truncate_to_token_limit(
-            text=str(context_chunks[0]),
-            max_tokens=self._MIN_CONTEXT_CHUNK_TOKENS,
-            marker=self._TRUNCATION_MARKER,
+        enforce_tier2_payload_budget(
+            payload,
+            min_context_chunk_tokens=self._MIN_CONTEXT_CHUNK_TOKENS,
+            max_request_input_tokens=self._MAX_REQUEST_INPUT_TOKENS,
+            payload_headroom_tokens=self._PAYLOAD_HEADROOM_TOKENS,
             chars_per_token=self._CHARS_PER_TOKEN,
+            truncation_marker=self._TRUNCATION_MARKER,
+            estimate_tokens_fn=self._estimate_payload_tokens,
         )
-        if self._estimate_payload_tokens(payload) > budget_limit:
-            msg = "Tier 2 payload exceeds safe input budget after deterministic reductions"
-            raise ValueError(msg)
 
     def _estimate_payload_tokens(self, payload: dict[str, Any]) -> int:
-        serialized = json.dumps(payload, ensure_ascii=True)
-        return estimate_tokens(text=serialized, chars_per_token=self._CHARS_PER_TOKEN)
-
-    def _payload_budget_limit(self) -> int:
-        return max(1, self._MAX_REQUEST_INPUT_TOKENS - self._PAYLOAD_HEADROOM_TOKENS)
+        return estimate_tier2_payload_tokens(payload, chars_per_token=self._CHARS_PER_TOKEN)
 
     def _apply_output(self, *, event: Event, output: _Tier2Output, trends: list[Trend]) -> None:
         existing_claims = event.extracted_claims if isinstance(event.extracted_claims, dict) else {}

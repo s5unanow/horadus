@@ -81,6 +81,49 @@ def test_map_event_trend_impacts_maps_keywords_deterministically() -> None:
     assert result.impacts[0]["event_claim_key"] == "troop deployment increased near the border"
 
 
+def test_map_event_trend_impacts_prefers_exact_primary_taxonomy_category() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Diplomatic summit announced troop deployment.",
+        extracted_who=["NATO", "Russia"],
+        extracted_where="Baltic region",
+        extracted_what="A summit announced a troop deployment near the border.",
+        categories=[
+            "eu-russia:military_movement:escalatory",
+            42,
+            "eu-russia:military_movement:escalatory",
+            "eu-russia:diplomatic_talks:de_escalatory",
+        ],
+        extracted_claims={
+            "claims": [
+                "Leaders held a summit.",
+                "Troop deployment increased near the border.",
+            ],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(
+        event=event,
+        trends=[
+            _trend(),
+            _trend(
+                indicators={
+                    "diplomatic_talks": {
+                        "direction": "de_escalatory",
+                        "description": "Summit or diplomatic talks.",
+                        "keywords": ["summit"],
+                    }
+                }
+            ),
+        ],
+    )
+
+    assert result.impacts[0]["trend_id"] == "eu-russia"
+    assert result.impacts[0]["signal_type"] == "military_movement"
+    assert result.impacts[0]["direction"] == "escalatory"
+
+
 def test_map_event_trend_impacts_records_ambiguous_and_no_match_paths() -> None:
     ambiguous_event = Event(
         id=uuid4(),
@@ -517,6 +560,7 @@ def test_build_impact_skips_runner_up_bonus_when_gap_is_below_ten() -> None:
         trend_id="eu-russia",
         trend_name="EU-Russia",
         signal_type="military_movement",
+        signal_phrase="military movement",
         direction="escalatory",
         description="Force repositioning",
         keywords=("deployment",),
@@ -530,6 +574,8 @@ def test_build_impact_skips_runner_up_bonus_when_gap_is_below_ten() -> None:
         score=100,
         matched_keywords=("deployment",),
         description_overlap=("force",),
+        category_matches=(),
+        trend_category_matches=(),
         actor_matches=(),
         region_matches=(),
     )
@@ -539,6 +585,8 @@ def test_build_impact_skips_runner_up_bonus_when_gap_is_below_ten() -> None:
         score=94,
         matched_keywords=("deployment",),
         description_overlap=("force",),
+        category_matches=(),
+        trend_category_matches=(),
         actor_matches=(),
         region_matches=(),
     )

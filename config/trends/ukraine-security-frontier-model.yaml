@@ -43,7 +43,7 @@ indicators:
     weight: 0.06
     direction: escalatory
     type: leading
-    keywords: ["long-term security guarantee", "10-year defense agreement", "bilateral security pact"]
+    keywords: ["long-term security guarantee", "security agreements", "10-year defense agreement", "bilateral security pact", "military hubs", "deploy military forces", "protected facilities", "urgent-consultation clauses"]
 
   nato_integration_pathway:
     weight: 0.06
@@ -67,7 +67,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: lagging
-    keywords: ["line of control formalized", "frozen conflict", "contact line stabilization", "de facto partition"]
+    keywords: ["line of control formalized", "frozen conflict", "contact line stabilization", "de facto partition", "multi-tiered ceasefire framework", "violations would trigger", "coordinated military response", "territorial control", "eastern Donbas", "Zaporizhzhia nuclear plant", "peace agreement"]
 
   broad_demilitarization_path:
     weight: 0.05

@@ -51,19 +51,19 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["port capacity", "freight corridor", "river logistics", "Paraguay River", "Ferrograo", "Arco Norte", "BR-163", "Miritituba"]
+    keywords: ["port capacity", "freight corridor", "river logistics", "Paraguay River", "Ferrograo", "Arco Norte", "Arco Norte ports", "port of Itaqui", "Barcarena", "BR-163", "Miritituba"]
 
   china_demand_signal:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["china soy imports", "chinese feed demand", "brazil-china agricultural trade", "china protein imports"]
+    keywords: ["china soy imports", "Chinese soybean purchases", "China absorbed", "Chinese sourcing", "US-China tariffs", "US tariffs", "redirected demand", "brazil-china agricultural trade", "china protein imports"]
 
   trade_agreement_expansion:
     weight: 0.03
     direction: escalatory
     type: leading
-    keywords: ["trade agreement", "market access", "tariff reduction", "EU-Mercosur"]
+    keywords: ["trade agreement", "market access", "tariff reduction", "soybean export tax", "export tax reduction", "tax exemption", "full tax exemption", "export duties", "retenciones", "EU-Mercosur"]
 
   deforestation_regulation_risk:
     weight: 0.04

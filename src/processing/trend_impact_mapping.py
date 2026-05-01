@@ -20,26 +20,17 @@ _MAPPING_VERSION = 1
 _UNMAPPED_TREND_ID = "__unmapped__"
 _UNMAPPED_SIGNAL_TYPE = "__no_matching_indicator__"
 _AMBIGUOUS_VALUE = "__ambiguous__"
-_DESCRIPTION_STOP_WORDS = {
-    "a",
-    "an",
-    "and",
-    "as",
-    "at",
-    "by",
-    "for",
-    "from",
-    "in",
-    "into",
-    "is",
-    "of",
-    "on",
-    "or",
-    "the",
-    "to",
-    "with",
-    "without",
-}
+_DESCRIPTION_STOP_WORDS = frozenset(
+    (
+        *("a", "an", "and", "as", "at", "by", "for", "from", "in"),
+        *("into", "is", "of", "on", "or", "the", "to", "with", "without"),
+    )
+)
+_CATEGORY_PAIR_SCORE = 140
+_PRIMARY_CATEGORY_PAIR_SCORE = 60
+_CATEGORY_SIGNAL_SCORE = 100
+_CATEGORY_OVERLAP_SCORE = 45
+_CATEGORY_TREND_SCORE = 90
 
 
 @dataclass(frozen=True)
@@ -55,6 +46,7 @@ class _IndicatorContext:
     trend_id: str
     trend_name: str
     signal_type: str
+    signal_phrase: str
     direction: str
     description: str
     keywords: tuple[str, ...]
@@ -70,6 +62,8 @@ class _Candidate:
     score: int
     matched_keywords: tuple[str, ...]
     description_overlap: tuple[str, ...]
+    category_matches: tuple[str, ...]
+    trend_category_matches: tuple[str, ...]
     actor_matches: tuple[str, ...]
     region_matches: tuple[str, ...]
 
@@ -80,6 +74,11 @@ class _IndicatorMatchSignals:
     canonical_keyword_matches: tuple[str, ...]
     claim_overlap: tuple[str, ...]
     canonical_overlap: tuple[str, ...]
+    category_pair_matches: tuple[str, ...]
+    primary_category_pair_matches: tuple[str, ...]
+    category_signal_matches: tuple[str, ...]
+    category_overlap: tuple[str, ...]
+    trend_category_matches: tuple[str, ...]
 
     @property
     def matched_keywords(self) -> tuple[str, ...]:
@@ -87,12 +86,20 @@ class _IndicatorMatchSignals:
 
     @property
     def description_overlap(self) -> tuple[str, ...]:
-        return self.claim_overlap + self.canonical_overlap
+        return self.claim_overlap + self.canonical_overlap + self.category_overlap
 
     def is_match(self) -> bool:
+        if (
+            self.primary_category_pair_matches
+            or self.category_pair_matches
+            or self.category_signal_matches
+        ):
+            return True
         if self.claim_keyword_matches or len(self.claim_overlap) >= 2:
             return True
-        return bool(self.canonical_keyword_matches or len(self.canonical_overlap) >= 2)
+        if self.canonical_keyword_matches or len(self.canonical_overlap) >= 2:
+            return True
+        return len(self.category_overlap) >= 2
 
 
 @dataclass(frozen=True)
@@ -108,6 +115,7 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
 
     claim_specs = _claim_specs_for_mapping(event)
     event_context = _event_context_text(event)
+    event_categories = _event_category_phrases(event)
     indicators = _indicator_contexts(trends)
 
     selected_impacts: dict[tuple[str, str], _SelectedImpact] = {}
@@ -121,6 +129,7 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
         candidates = _rank_candidates(
             claim=claim,
             event_context=event_context,
+            event_categories=event_categories,
             indicators=indicators,
         )
         if not candidates:
@@ -173,6 +182,7 @@ def map_event_trend_impacts(*, event: Event, trends: list[Trend]) -> TrendImpact
         for selection in sorted(
             selected_impacts.values(),
             key=lambda selection: (
+                -selection.score,
                 selection.claim_order,
                 str(selection.impact["trend_id"]),
                 str(selection.impact["signal_type"]),
@@ -239,6 +249,19 @@ def _event_context_text(event: Event) -> str:
     return normalize_claim_text(" ".join(parts))
 
 
+def _event_category_phrases(event: Event) -> tuple[str, ...]:
+    if not isinstance(event.categories, list):
+        return ()
+    categories: list[str] = []
+    for value in event.categories:
+        if not isinstance(value, str):
+            continue
+        normalized = normalize_claim_text(value)
+        if normalized and normalized not in categories:
+            categories.append(normalized)
+    return tuple(categories)
+
+
 def _indicator_contexts(trends: list[Trend]) -> list[_IndicatorContext]:
     contexts: list[_IndicatorContext] = []
     for trend in trends:
@@ -261,6 +284,7 @@ def _indicator_contexts(trends: list[Trend]) -> list[_IndicatorContext]:
                     trend_id=trend_id,
                     trend_name=str(getattr(trend, "name", "") or trend_id),
                     signal_type=signal_type,
+                    signal_phrase=normalize_claim_text(signal_type.replace("_", " ")),
                     direction=direction,
                     description=description,
                     keywords=_normalized_phrases(raw_config.get("keywords")),
@@ -306,6 +330,7 @@ def _rank_candidates(
     *,
     claim: EventClaimSpec,
     event_context: str,
+    event_categories: tuple[str, ...],
     indicators: list[_IndicatorContext],
 ) -> list[_Candidate]:
     claim_text = normalize_claim_text(claim.claim_text)
@@ -323,6 +348,7 @@ def _rank_candidates(
             claim_terms=claim_terms,
             canonical_context=canonical_context,
             canonical_terms=canonical_terms,
+            event_categories=event_categories,
         )
         if not match_signals.is_match():
             continue
@@ -346,6 +372,12 @@ def _rank_candidates(
                 score=score,
                 matched_keywords=match_signals.matched_keywords,
                 description_overlap=match_signals.description_overlap,
+                category_matches=(
+                    match_signals.category_pair_matches
+                    + match_signals.category_signal_matches
+                    + match_signals.category_overlap
+                ),
+                trend_category_matches=match_signals.trend_category_matches,
                 actor_matches=actor_matches,
                 region_matches=region_matches,
             )
@@ -367,6 +399,7 @@ def _match_indicator(
     claim_terms: set[str],
     canonical_context: str,
     canonical_terms: set[str],
+    event_categories: tuple[str, ...],
 ) -> _IndicatorMatchSignals:
     claim_keyword_matches = tuple(
         keyword for keyword in indicator.keywords if keyword and keyword in claim_text
@@ -391,11 +424,73 @@ def _match_indicator(
             if term in indicator.description_terms and term not in claim_overlap
         )
     )
+    category_signals = _match_indicator_categories(
+        indicator=indicator,
+        event_categories=event_categories,
+        claim_overlap=claim_overlap,
+    )
     return _IndicatorMatchSignals(
         claim_keyword_matches=claim_keyword_matches,
         canonical_keyword_matches=canonical_keyword_matches,
         claim_overlap=claim_overlap,
         canonical_overlap=canonical_overlap,
+        category_pair_matches=category_signals.category_pair_matches,
+        primary_category_pair_matches=category_signals.primary_category_pair_matches,
+        category_signal_matches=category_signals.category_signal_matches,
+        category_overlap=category_signals.category_overlap,
+        trend_category_matches=category_signals.trend_category_matches,
+    )
+
+
+def _match_indicator_categories(
+    *,
+    indicator: _IndicatorContext,
+    event_categories: tuple[str, ...],
+    claim_overlap: tuple[str, ...],
+) -> _IndicatorMatchSignals:
+    category_pair_matches = tuple(
+        category
+        for category in event_categories
+        if _category_matches_pair(category=category, indicator=indicator)
+    )
+    primary_category = event_categories[0] if event_categories else ""
+    primary_category_pair_matches = (
+        (primary_category,)
+        if primary_category
+        and _category_matches_pair(category=primary_category, indicator=indicator)
+        else ()
+    )
+    category_signal_matches = tuple(
+        category
+        for category in event_categories
+        if (
+            category not in category_pair_matches
+            and _category_matches_signal(category=category, indicator=indicator)
+        )
+    )
+    category_terms = set(" ".join(event_categories).split())
+    category_overlap = tuple(
+        sorted(
+            term
+            for term in category_terms
+            if term in indicator.description_terms and term not in claim_overlap
+        )
+    )
+    trend_category_matches = tuple(
+        category
+        for category in event_categories
+        if _category_matches_trend(category=category, indicator=indicator)
+    )
+    return _IndicatorMatchSignals(
+        claim_keyword_matches=(),
+        canonical_keyword_matches=(),
+        claim_overlap=(),
+        canonical_overlap=(),
+        category_pair_matches=category_pair_matches,
+        primary_category_pair_matches=primary_category_pair_matches,
+        category_signal_matches=category_signal_matches,
+        category_overlap=category_overlap,
+        trend_category_matches=trend_category_matches,
     )
 
 
@@ -408,13 +503,34 @@ def _candidate_score(
     event_terms: set[str],
 ) -> int:
     return (
-        len(match_signals.claim_keyword_matches) * 100
-        + len(match_signals.canonical_keyword_matches) * 60
+        len(match_signals.primary_category_pair_matches) * _PRIMARY_CATEGORY_PAIR_SCORE
+        + len(match_signals.category_pair_matches) * _CATEGORY_PAIR_SCORE
+        + len(match_signals.category_signal_matches) * _CATEGORY_SIGNAL_SCORE
+        + len(match_signals.category_overlap) * _CATEGORY_OVERLAP_SCORE
+        + len(match_signals.trend_category_matches) * _CATEGORY_TREND_SCORE
+        + len(match_signals.claim_keyword_matches) * 130
+        + len(match_signals.canonical_keyword_matches) * 80
         + len(match_signals.claim_overlap) * 10
         + len(match_signals.canonical_overlap) * 4
-        + len(actor_matches) * 4
-        + len(region_matches) * 3
+        + len(actor_matches) * 20
+        + len(region_matches) * 12
         + len(event_terms.intersection(set(indicator.description_terms[:3])))
+    )
+
+
+def _category_matches_pair(*, category: str, indicator: _IndicatorContext) -> bool:
+    expected = f"{normalize_claim_text(indicator.trend_id)} {indicator.signal_phrase}"
+    return category == expected or category.startswith(f"{expected} ")
+
+
+def _category_matches_signal(*, category: str, indicator: _IndicatorContext) -> bool:
+    return category == indicator.signal_phrase
+
+
+def _category_matches_trend(*, category: str, indicator: _IndicatorContext) -> bool:
+    return category in (
+        normalize_claim_text(indicator.trend_id),
+        normalize_claim_text(indicator.trend_name),
     )
 
 

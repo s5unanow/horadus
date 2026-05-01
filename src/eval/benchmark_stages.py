@@ -93,6 +93,7 @@ async def run_tier2_benchmark_stage(
     extract_first_impact: Callable[[Any], Any | None],
     extract_stage_raw_output: Callable[..., str | None],
     serialize_tier2_prediction: Callable[[Any], dict[str, Any]],
+    tier2_failure_stage: Callable[..., str],
     stage_failure: Callable[..., dict[str, Any]],
     stage_success: Callable[..., dict[str, Any]],
 ) -> None:
@@ -109,10 +110,19 @@ async def run_tier2_benchmark_stage(
                 context_chunks=[f"{item.title}\n\n{item.content}"],
             )
         except ValueError as exc:
-            tier2_metrics.record(expected=item.tier2, predicted=None)
+            error_category = type(exc).__name__
+            error_message = str(exc)
+            tier2_metrics.record(
+                expected=item.tier2,
+                predicted=None,
+                failure_stage=tier2_failure_stage(
+                    error_category=error_category,
+                    error_message=error_message,
+                ),
+            )
             item_results_by_id[item.item_id]["tier2"] = stage_failure(
-                error_category=type(exc).__name__,
-                error_message=str(exc),
+                error_category=error_category,
+                error_message=error_message,
                 raw_model_output=extract_stage_raw_output(recorder=tier2_recorder, subject=tier2),
             )
             continue
@@ -127,7 +137,18 @@ async def run_tier2_benchmark_stage(
         )
 
         tier2_prediction = extract_first_impact(event)
-        tier2_metrics.record(expected=item.tier2, predicted=tier2_prediction)
+        tier2_metrics.record(
+            expected=item.tier2,
+            predicted=tier2_prediction,
+            failure_stage=(
+                tier2_failure_stage(
+                    error_category="MissingPrediction",
+                    error_message="Tier 2 benchmark received no trend impact prediction",
+                )
+                if tier2_prediction is None
+                else None
+            ),
+        )
         if tier2_prediction is None:
             item_results_by_id[item.item_id]["tier2"] = stage_failure(
                 error_category="MissingPrediction",

@@ -10,6 +10,7 @@ import pytest
 
 import src.processing.event_clusterer as event_clusterer_module
 import src.processing.tier2_classifier as tier2_module
+import src.processing.tier2_payload as tier2_payload_module
 from src.core.trend_config_loader import load_trends_from_config_dir
 from src.processing.event_clusterer import EventClusterer
 from src.processing.tier2_classifier import Tier2Classifier
@@ -255,11 +256,11 @@ async def test_load_event_context_skips_empty_and_truncates_long_chunks(mock_db_
     assert len(chunks) == 2
 
 
-def test_build_payload_budget_behaviour_without_taxonomy_context(
+def test_build_payload_budget_behaviour_with_taxonomy_context(
     mock_db_session, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     classifier = _build_classifier(mock_db_session)
-    classifier._MAX_REQUEST_INPUT_TOKENS = 220
+    classifier._MAX_REQUEST_INPUT_TOKENS = 1000
     classifier._PAYLOAD_HEADROOM_TOKENS = 0
     classifier._MIN_CONTEXT_CHUNK_TOKENS = 1
     event = Event(id=uuid4(), canonical_summary="summary")
@@ -276,7 +277,7 @@ def test_build_payload_budget_behaviour_without_taxonomy_context(
     assert payload["context_chunks"][0].startswith("<UNTRUSTED_EVENT_CONTEXT>")
     assert original_estimate(payload) <= classifier._MAX_REQUEST_INPUT_TOKENS
 
-    classifier._MAX_REQUEST_INPUT_TOKENS = 80
+    classifier._MAX_REQUEST_INPUT_TOKENS = 1000
     payload = classifier._build_payload(
         event=event, trends=[_build_trend()], context_chunks=["   "]
     )
@@ -287,6 +288,7 @@ def test_build_payload_budget_behaviour_without_taxonomy_context(
     assert payload == {"context_chunks": "bad"}
 
     payload = {"context_chunks": ["one", "two"]}
+    classifier._MAX_REQUEST_INPUT_TOKENS = 1
 
     estimates = iter([999, 999, 999, 1])
     monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
@@ -295,13 +297,13 @@ def test_build_payload_budget_behaviour_without_taxonomy_context(
 
 
 def test_build_payload_raises_when_wrapped_context_pushes_payload_over_budget(
-    mock_db_session, monkeypatch: pytest.MonkeyPatch
+    mock_db_session,
 ) -> None:
     classifier = _build_classifier(mock_db_session)
+    classifier._MAX_REQUEST_INPUT_TOKENS = 10
+    classifier._PAYLOAD_HEADROOM_TOKENS = 0
     event = Event(id=uuid4(), canonical_summary="summary")
     trend = _build_trend()
-    estimates = iter([1, classifier._MAX_REQUEST_INPUT_TOKENS + 1])
-    monkeypatch.setattr(classifier, "_estimate_payload_tokens", lambda _payload: next(estimates))
 
     with pytest.raises(ValueError, match="exceeds safe input budget"):
         classifier._build_payload(
@@ -309,6 +311,48 @@ def test_build_payload_raises_when_wrapped_context_pushes_payload_over_budget(
             trends=[trend],
             context_chunks=["context"],
         )
+
+
+def test_build_payload_raises_when_wrapping_exceeds_budget(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    event = Event(id=uuid4(), canonical_summary="summary")
+    estimates = iter([1, 999])
+    monkeypatch.setattr(
+        tier2_payload_module,
+        "estimate_tier2_payload_tokens",
+        lambda _payload, **_kwargs: next(estimates),
+    )
+
+    with pytest.raises(ValueError, match="exceeds safe input budget"):
+        tier2_payload_module.build_tier2_payload(
+            event=event,
+            trends=[],
+            context_chunks=["context"],
+            max_context_chunk_tokens=100,
+            min_context_chunk_tokens=1,
+            max_request_input_tokens=10,
+            payload_headroom_tokens=0,
+            chars_per_token=4,
+            truncation_marker="[truncated]",
+        )
+
+
+def test_enforce_payload_budget_returns_after_dropping_chunks() -> None:
+    payload = {"context_chunks": ["one", "two"]}
+    estimates = iter([999, 999, 1])
+
+    tier2_payload_module.enforce_tier2_payload_budget(
+        payload,
+        min_context_chunk_tokens=1,
+        max_request_input_tokens=10,
+        payload_headroom_tokens=0,
+        chars_per_token=4,
+        truncation_marker="[truncated]",
+        estimate_tokens_fn=lambda _payload: next(estimates),
+    )
+
+    assert payload == {"context_chunks": ["one"]}
 
 
 def test_enforce_payload_budget_raises_when_truncation_still_cannot_fit(

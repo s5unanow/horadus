@@ -165,6 +165,9 @@ class _Tier1Metrics:
 class _Tier2Metrics:
     items_total: int = 0
     failures: int = 0
+    extraction_validity_failures: int = 0
+    schema_runtime_failures: int = 0
+    deterministic_mapper_failures: int = 0
     trend_match_correct: int = 0
     signal_type_correct: int = 0
     direction_correct: int = 0
@@ -176,10 +179,12 @@ class _Tier2Metrics:
         *,
         expected: Tier2GoldLabel,
         predicted: Tier2GoldLabel | None,
+        failure_stage: str | None = None,
     ) -> None:
         self.items_total += 1
         if predicted is None:
             self.failures += 1
+            self._record_failure_stage(failure_stage)
             self.severity_abs_error_sum += abs(0.0 - expected.severity)
             self.confidence_abs_error_sum += abs(0.0 - expected.confidence)
             return
@@ -193,11 +198,23 @@ class _Tier2Metrics:
         self.severity_abs_error_sum += abs(predicted.severity - expected.severity)
         self.confidence_abs_error_sum += abs(predicted.confidence - expected.confidence)
 
+    def _record_failure_stage(self, failure_stage: str | None) -> None:
+        if failure_stage == "schema_runtime":
+            self.schema_runtime_failures += 1
+            return
+        if failure_stage == "deterministic_mapper":
+            self.deterministic_mapper_failures += 1
+            return
+        self.extraction_validity_failures += 1
+
     def to_dict(self) -> dict[str, float | int]:
         denominator = self.items_total if self.items_total > 0 else 1
         return {
             "items_total": self.items_total,
             "failures": self.failures,
+            "extraction_validity_failures": self.extraction_validity_failures,
+            "schema_runtime_failures": self.schema_runtime_failures,
+            "deterministic_mapper_failures": self.deterministic_mapper_failures,
             "trend_match_accuracy": round(self.trend_match_correct / denominator, 6),
             "signal_type_accuracy": round(self.signal_type_correct / denominator, 6),
             "direction_accuracy": round(self.direction_correct / denominator, 6),
@@ -704,6 +721,19 @@ def _stage_success(
     return payload
 
 
+def _tier2_failure_stage(*, error_category: str, error_message: str) -> str:
+    if error_category == "MissingPrediction":
+        return "deterministic_mapper"
+    if error_category in {"ValidationError", "TypeError"}:
+        return "schema_runtime"
+    if error_category == "ValueError" and (
+        "Invalid isoformat string" in error_message
+        or "validation error for Tier2Output" in error_message
+    ):
+        return "schema_runtime"
+    return "extraction_validity"
+
+
 async def run_gold_set_benchmark(
     *,
     gold_set_path: str,
@@ -892,6 +922,7 @@ async def run_gold_set_benchmark(
             extract_first_impact=_extract_first_impact,
             extract_stage_raw_output=extract_stage_raw_output,
             serialize_tier2_prediction=_serialize_tier2_prediction,
+            tier2_failure_stage=_tier2_failure_stage,
             stage_failure=_stage_failure,
             stage_success=_stage_success,
         )

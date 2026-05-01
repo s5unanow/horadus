@@ -69,7 +69,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["child benefit expansion", "parental leave reform", "family subsidy"]
+    keywords: ["child benefit expansion", "parental leave reform", "family subsidy", "Ministry for Population Strategy", "expanded childcare infrastructure", "housing subsidies", "workplace reform"]
 
   childcare_affordability_gain:
     weight: 0.03

@@ -42,7 +42,7 @@ indicators:
     direction: escalatory
     type: leading
     description: "Quarantine, inspection, blockade, or shipping restrictions around Taiwan that constrain normal access."
-    keywords: ["blockade", "inspection zone", "shipping disruption around taiwan", "quarantine"]
+    keywords: ["blockade", "blockade or invasion", "inspection zone", "shipping disruption around taiwan", "quarantine", "First Island Chain", "foreign intervention", "largest maritime force", "simulating Taiwan blockade", "Justice Mission"]
 
   military_incident:
     weight: 0.06
@@ -84,7 +84,7 @@ indicators:
     direction: de_escalatory
     type: lagging
     description: "Formal protocols or agreements that lower the risk of incidents at sea or in the air."
-    keywords: ["rules of engagement", "incident prevention at sea", "provisional resupply arrangement", "resupply arrangement"]
+    keywords: ["rules of engagement", "incident prevention at sea", "provisional resupply arrangement", "provisional arrangement", "resupply arrangement", "without violent confrontation"]
 
 regions:
   - Taiwan Strait

@@ -45,7 +45,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["joint procurement", "shared defense acquisition"]
+    keywords: ["joint procurement", "shared defense acquisition", "SAFE loan facility", "joint defense investments", "joint defense investments and procurement", "EU member states applied"]
 
   corridor_infrastructure_buildout:
     weight: 0.04
@@ -57,13 +57,13 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["Three Seas Fund", "US investment Three Seas", "DFC Three Seas"]
+    keywords: ["Three Seas Fund", "US investment Three Seas", "DFC Three Seas", "Japan joined", "partner country", "Business Forum", "regional security"]
 
   energy_security_driver:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["energy independence", "LNG terminal", "energy diversification Three Seas"]
+    keywords: ["energy independence", "LNG terminal", "energy diversification Three Seas", "GIPL", "gas interconnector", "Baltic Pipe", "reduced the Baltic states"]
 
   coalition_veto_gridlock:
     weight: 0.04

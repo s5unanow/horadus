@@ -39,19 +39,19 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["local currency settlement", "bilateral settlement", "dedollarization"]
+    keywords: ["local currency settlement", "bilateral settlement", "dedollarization", "local currencies", "currency swap"]
 
   reserve_reallocation:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["reserve diversification", "reduced dollar reserves", "gold accumulation", "central bank gold purchases", "gold reserves increase"]
+    keywords: ["reserve diversification", "reduced dollar reserves", "gold accumulation", "central bank gold purchases", "gold reserves increase", "reserve reallocation"]
 
   commodity_pricing_currency_shift:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["oil priced in yuan", "non-dollar commodity contract", "gold settlement", "petroyuan", "LNG non-dollar"]
+    keywords: ["oil priced in yuan", "non-dollar commodity contract", "gold settlement", "petroyuan", "LNG non-dollar", "yuan-riyal settlement", "oil exports", "commodity"]
 
   alternative_payment_rail_adoption:
     weight: 0.05

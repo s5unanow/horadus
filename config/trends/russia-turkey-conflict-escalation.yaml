@@ -41,7 +41,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["naval incident", "black sea intercept", "warship encounter"]
+    keywords: ["naval incident", "black sea intercept", "warship encounter", "attacks on commercial vessels", "stop attacks on commercial vessels", "commercial vessels", "commercial shipping", "shipping safety", "Black Sea shipping", "safe corridors", "notification procedures"]
 
   syria_proxy_clash:
     weight: 0.05
@@ -53,7 +53,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["caucasus escalation", "border fighting", "security corridor clash"]
+    keywords: ["caucasus escalation", "border fighting", "security corridor clash", "Armenia", "Azerbaijan", "Russia-Azerbaijan", "South Caucasus", "Turkey's influence", "Russia was excluded", "marginalized Russian influence"]
 
   straits_restriction:
     weight: 0.03
@@ -65,13 +65,13 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["TurkStream disruption", "energy trade weaponized", "Akkuyu dispute", "energy leverage"]
+    keywords: ["TurkStream disruption", "TurkStream", "energy terrorism", "gas pipeline", "energy trade weaponized", "Akkuyu dispute", "energy leverage"]
 
   hotline_restoration:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["hotline restored", "military talks resumed", "Astana-format", "Astana Format", "Syria transition", "Hayat Tahrir al-Sham", "Tartus naval base", "Hmeimim air base"]
+    keywords: ["hotline restored", "phone call", "working group", "exchange information", "Erdogan Putin", "military talks resumed", "Astana-format", "Astana Format", "Syria transition", "Hayat Tahrir al-Sham", "Tartus naval base", "Hmeimim air base"]
 
   bilateral_security_agreement:
     weight: 0.03

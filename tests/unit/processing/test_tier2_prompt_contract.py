@@ -16,7 +16,7 @@ def _load_prompt() -> str:
 def test_tier2_prompt_requires_extraction_only_contract() -> None:
     prompt = _load_prompt()
 
-    assert "Make each claim specific enough that deterministic code can later map it" in prompt
+    assert "phrase at least one claim with the relevant factual trigger terms" in prompt
     assert '"entities"' in prompt
     assert "canonical-mention list for durable registry linking" in prompt
     assert "Keep `summary`, `extracted_who`, `extracted_what`, and `extracted_where`" in prompt
@@ -24,9 +24,10 @@ def test_tier2_prompt_requires_extraction_only_contract() -> None:
     assert '"trend_impacts"' not in prompt
 
 
-def test_tier2_prompt_excludes_taxonomy_payload_shape() -> None:
+def test_tier2_prompt_includes_taxonomy_context_without_trend_impacts() -> None:
     prompt = _load_prompt().lower()
 
+    assert "trend_signal_catalog" in prompt
     assert "context_chunks" in prompt
     assert "claims" in prompt
     assert "categories" in prompt

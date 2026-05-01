@@ -10,6 +10,7 @@ from src.processing.trend_impact_mapping import (
     TREND_IMPACT_MAPPING_KEY,
     _build_impact,
     _Candidate,
+    _category_matches_pair,
     _IndicatorContext,
     iter_unresolved_mapping_gaps,
     map_event_trend_impacts,
@@ -594,3 +595,27 @@ def test_build_impact_skips_runner_up_bonus_when_gap_is_below_ten() -> None:
     impact = _build_impact(best=best, runner_up=runner_up)
 
     assert impact["confidence"] == pytest.approx(0.8)
+
+
+def test_category_pair_matching_requires_direction_segment() -> None:
+    indicator = _IndicatorContext(
+        trend_id="eu-russia",
+        trend_name="EU-Russia",
+        signal_type="military_movement",
+        signal_phrase="military movement",
+        direction="escalatory",
+        description="Force repositioning",
+        keywords=("deployment",),
+        description_terms=("force", "repositioning"),
+        actor_phrases=(),
+        region_phrases=(),
+    )
+
+    assert _category_matches_pair(
+        category="eu russia military movement escalatory",
+        indicator=indicator,
+    )
+    assert not _category_matches_pair(
+        category="eu russia military movement de escalatory",
+        indicator=indicator,
+    )

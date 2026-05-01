@@ -33,7 +33,7 @@ def test_tier2_failure_stage_classifies_schema_runtime_errors() -> None:
     assert (
         benchmark_module._tier2_failure_stage(
             error_category="ValueError",
-            error_message="Invalid isoformat string: '2025-ish'",
+            error_message="month must be in 1..12",
         )
         == "schema_runtime"
     )

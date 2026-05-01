@@ -519,7 +519,10 @@ def _candidate_score(
 
 
 def _category_matches_pair(*, category: str, indicator: _IndicatorContext) -> bool:
-    expected = f"{normalize_claim_text(indicator.trend_id)} {indicator.signal_phrase}"
+    direction_phrase = normalize_claim_text(indicator.direction)
+    expected = (
+        f"{normalize_claim_text(indicator.trend_id)} {indicator.signal_phrase} {direction_phrase}"
+    )
     return category == expected or category.startswith(f"{expected} ")
 
 

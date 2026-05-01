@@ -56,6 +56,15 @@ _BenchmarkResponseRecorder = BenchmarkResponseRecorder
 _RecordingChatCompletions = RecordingChatCompletions
 _extract_stage_raw_output = extract_stage_raw_output
 _wrap_client_with_recorder = wrap_client_with_recorder
+_SCHEMA_RUNTIME_VALUE_ERROR_MARKERS = (
+    "Invalid isoformat string",
+    "validation error for Tier2Output",
+    "month must be in",
+    "day is out of range",
+    "hour must be in",
+    "minute must be in",
+    "second must be in",
+)
 
 
 @dataclass(slots=True)
@@ -726,9 +735,8 @@ def _tier2_failure_stage(*, error_category: str, error_message: str) -> str:
         return "deterministic_mapper"
     if error_category in {"ValidationError", "TypeError"}:
         return "schema_runtime"
-    if error_category == "ValueError" and (
-        "Invalid isoformat string" in error_message
-        or "validation error for Tier2Output" in error_message
+    if error_category == "ValueError" and any(
+        marker in error_message for marker in _SCHEMA_RUNTIME_VALUE_ERROR_MARKERS
     ):
         return "schema_runtime"
     return "extraction_validity"

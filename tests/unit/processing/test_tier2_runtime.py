@@ -15,6 +15,7 @@ pytestmark = pytest.mark.unit
         ("2024", datetime(2024, 1, 1, tzinfo=UTC)),
         ("2024-07", datetime(2024, 7, 1, tzinfo=UTC)),
         ("2024-03 to early 2025", datetime(2024, 3, 1, tzinfo=UTC)),
+        ("as of 2024-03 to early 2025", datetime(2024, 3, 1, tzinfo=UTC)),
         ("2025/26", datetime(2025, 1, 1, tzinfo=UTC)),
         ("2025-04-01/2025-04-02", datetime(2025, 4, 1, tzinfo=UTC)),
         ("2024-02/2024-07", datetime(2024, 2, 1, tzinfo=UTC)),

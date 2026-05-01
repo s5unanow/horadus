@@ -125,7 +125,9 @@ def _normalize_tier2_datetime_value(raw_value: str) -> str:
     lowered = normalized.lower()
     for prefix in ("since ", "as of ", "by "):
         if lowered.startswith(prefix):
-            return normalized[len(prefix) :].strip().strip(".,;")
+            normalized = normalized[len(prefix) :].strip().strip(".,;")
+            lowered = normalized.lower()
+            break
     for separator in _DATE_RANGE_SEPARATORS:
         if separator in lowered:
             index = lowered.index(separator)

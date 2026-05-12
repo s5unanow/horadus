@@ -60,7 +60,7 @@ indicators:
     type: lagging
     keywords: ["automated denial", "algorithmic suspension", "automated claims-processing", "undervalued homeowner claims", "mass automated deactivation", "access restricted by model", "SNAP work requirements"]
 
-  llm_gatekeeping_deployment:
+  ai_gatekeeping_deployment:
     weight: 0.04
     direction: escalatory
     type: leading

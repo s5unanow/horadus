@@ -59,7 +59,7 @@ indicators:
     type: leading
     keywords: ["china soy imports", "Chinese soybean purchases", "China absorbed", "Chinese sourcing", "US-China tariffs", "US tariffs", "redirected demand", "brazil-china agricultural trade", "china protein imports"]
 
-  trade_agreement_expansion:
+  market_access_or_trade_barrier_easing:
     weight: 0.03
     direction: escalatory
     type: leading

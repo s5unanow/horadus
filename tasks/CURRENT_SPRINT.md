@@ -11,6 +11,8 @@
 
 
 
+
+
 ## Selection Notes
 
 - Sprint 10 opens immediately after Sprint 9 drained, using a fresh review of the local intake queue instead of carrying forward already-completed work.
@@ -38,6 +40,8 @@
 14. `TASK-409` Improve Tier 2 eval accuracy to 90 percent.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -83,3 +87,4 @@
 - `TASK-408` Add Tier 1-only eval benchmark scope ✅
 - `TASK-409` Improve Tier 2 eval accuracy to 90 percent ✅
 - `TASK-410` Update urllib3 and Mako for dependency audit CVEs ✅
+- `TASK-411` Rename eval signal labels from Deep Research findings ✅

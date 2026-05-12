@@ -53,6 +53,8 @@
 
 
 
+
+
 ## Completed This Sprint
 
 - `TASK-395` Close Sprint 9 and seed Sprint 10 from vetted intake ✅
@@ -80,3 +82,4 @@
 - `TASK-407` Refresh Horadus CLI skill and add freshness gate ✅
 - `TASK-408` Add Tier 1-only eval benchmark scope ✅
 - `TASK-409` Improve Tier 2 eval accuracy to 90 percent ✅
+- `TASK-410` Update urllib3 and Mako for dependency audit CVEs ✅

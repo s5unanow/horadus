@@ -46,7 +46,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve", "precision fermentation-based", "animal-free dairy proteins", "60-90% less land and water"]
+    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve", "precision fermentation-based", "animal-free dairy proteins", "animal-free dairy protein", "whey isolate", "60-90% less land and water", "production cycles", "conventional dairy farming"]
 
   livestock_regulation_tightening:
     weight: 0.04
@@ -64,7 +64,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["cultivated meat approval", "cell-based meat regulation", "novel food authorization", "FDA clearance", "seafood category approval"]
+    keywords: ["cultivated meat approval", "cultivated meat", "cultivated meat production", "cultivated meat ban", "cell-based meat regulation", "novel food authorization", "FDA clearance", "seafood category approval", "procedural rules", "EU Directive", "TRIS review", "mutual recognition"]
 
   consumer_reversion_to_meat:
     weight: 0.04
@@ -76,7 +76,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["alternative proteins expensive", "price premium expansion", "cost gap widens"]
+    keywords: ["alternative proteins expensive", "price premium expansion", "price premium widened", "price premium", "widened to 82%", "widened to", "4% more expensive", "cost gap widens"]
 
   conventional_meat_adaptation:
     weight: 0.03

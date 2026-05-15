@@ -9,7 +9,7 @@
 
 ## Active Tasks
 
-
+- `TASK-412` Improve Tier 2 signal quality before go-live
 
 
 
@@ -20,6 +20,7 @@
 - `INTAKE-0006` remains pending as an umbrella concern because `TASK-390` and `TASK-394` capture the concrete mitigation and design work first.
 - `INTAKE-0007` remains pending because Codex hook enforcement is still speculative and not yet backed by a stable repo-owned contract.
 - `INTAKE-0022` remains pending as second-order regression hardening behind the reproduced workflow drift already scheduled here.
+- `TASK-412` was promoted from `INTAKE-0038` as the current go-live quality blocker for Tier 2 signal extraction/mapping.
 - The sequence front-loads repo-truth and fail-closed workflow fixes, then narrower typing and guardrail tasks, then operator/docs alignment, and leaves the worktree-isolation design task last so it can reuse what the earlier guardrail work clarifies.
 
 ## Suggested Sequence
@@ -38,6 +39,7 @@
 12. `TASK-406` Add Tier-scoped eval benchmark mode.
 13. `TASK-407` Refresh Horadus CLI skill and add freshness gate.
 14. `TASK-409` Improve Tier 2 eval accuracy to 90 percent.
+15. `TASK-412` Improve Tier 2 signal quality before go-live.
 
 ## Human Blocker Metadata
 

@@ -63,7 +63,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["housing affordability", "childcare cost", "family budget pressure"]
+    keywords: ["housing affordability", "housing costs", "housing crisis", "house prices", "rising house prices", "family-friendly housing", "access to family-friendly housing", "stagnant real wages", "stagnant wages", "delaying family formation", "childcare cost", "family budget pressure"]
 
   pro_family_policy_expansion:
     weight: 0.04

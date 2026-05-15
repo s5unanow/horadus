@@ -51,19 +51,19 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["port capacity", "freight corridor", "river logistics", "Paraguay River", "Ferrograo", "Arco Norte", "Arco Norte ports", "port of Itaqui", "Barcarena", "BR-163", "Miritituba"]
+    keywords: ["port capacity", "freight corridor", "river logistics expansion", "Paraguay River dredging", "Paraguay River capacity", "Ferrograo", "Arco Norte", "Arco Norte ports", "port of Itaqui", "Barcarena", "BR-163", "Miritituba"]
 
   china_demand_signal:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["china soy imports", "Chinese soybean purchases", "China absorbed", "Chinese sourcing", "US-China tariffs", "US tariffs", "redirected demand", "brazil-china agricultural trade", "china protein imports"]
+    keywords: ["china soy imports", "Chinese soybean purchases", "Chinese buying", "no significant Chinese purchases", "US soybean harvest", "soybean purchases as leverage", "promise of soybean purchases", "American farmers", "China absorbed", "Chinese sourcing", "US-China tariffs", "US tariffs", "tariff escalation", "redirected demand", "brazil-china agricultural trade", "china protein imports"]
 
   market_access_or_trade_barrier_easing:
     weight: 0.03
     direction: escalatory
     type: leading
-    keywords: ["trade agreement", "market access", "tariff reduction", "soybean export tax", "export tax reduction", "tax exemption", "full tax exemption", "export duties", "retenciones", "EU-Mercosur"]
+    keywords: ["trade agreement", "market access", "tariff reduction", "soybean export tax", "soybean export taxes", "export taxes", "export tax reduction", "lowered export taxes", "permanently lowered", "tax exemption", "full tax exemption", "tax rollback", "tax changes", "export competitiveness", "export duties", "retenciones", "EU-Mercosur"]
 
   deforestation_regulation_risk:
     weight: 0.04
@@ -75,7 +75,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["climate losses", "drought", "extreme weather impact", "La Nina", "El Nino"]
+    keywords: ["climate losses", "drought", "extreme weather impact", "La Nina", "El Nino", "sediment buildup", "low water levels", "disrupted navigation", "reduced loads"]
 
   export_tax_or_quota_tightening:
     weight: 0.03

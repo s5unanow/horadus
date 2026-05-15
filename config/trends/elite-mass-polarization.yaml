@@ -68,7 +68,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["tax reform", "inclusive growth policy", "broad ownership program", "wealth tax enacted"]
+    keywords: ["tax reform", "minimum tax", "global minimum tax", "minimum income tax", "wealth tax", "tax proposals", "billionaires", "inclusive growth policy", "broad ownership program", "wealth tax enacted"]
 
   civic_participation_rebound:
     weight: 0.03

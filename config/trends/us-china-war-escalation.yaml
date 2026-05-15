@@ -63,7 +63,7 @@ indicators:
     direction: escalatory
     type: leading
     description: "Operational increase in allied deployments, missions, or deterrence posture in the theater."
-    keywords: ["force posture", "forward deployment", "deterrence mission", "coast guard vessel", "Sabina Shoal", "Philippine EEZ", "AUKUS", "submarine technology"]
+    keywords: ["force posture", "forward deployment", "deterrence mission", "joint maritime patrol", "trilateral patrol", "freedom of navigation", "coast guard vessel", "Sabina Shoal", "Philippine EEZ", "Philippine exclusive economic zone", "AUKUS", "submarine technology"]
 
   export_control_spiral:
     weight: 0.03
@@ -77,7 +77,7 @@ indicators:
     direction: de_escalatory
     type: leading
     description: "Senior military-to-military dialogue, hotlines, or confidence-building talks meant to stabilize tensions."
-    keywords: ["defense talks", "military hotline", "confidence building"]
+    keywords: ["defense talks", "defense policy coordination talks", "military hotline", "military-to-military channels", "crisis communication mechanisms", "confidence building", "sustained dialogue"]
 
   maritime_rules_of_engagement:
     weight: 0.03

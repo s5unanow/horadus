@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
 
+from src.core.trend_config_loader import load_trends_from_config_dir
 from src.processing.event_claims import EventClaimSpec
 from src.processing.trend_impact_mapping import (
     TREND_IMPACT_MAPPING_KEY,
@@ -24,6 +26,10 @@ _UKRAINIAN_MOVEMENT_CLAIM = (
     "\u0420\u0443\u0445 \u0441\u0438\u043b \u0431\u0456\u043b\u044f "
     "\u043a\u043e\u0440\u0434\u043e\u043d\u0443 \u043f\u043e\u0441\u0438\u043b\u0438\u0432\u0441\u044f."
 )
+
+
+def _configured_trends():
+    return load_trends_from_config_dir(config_dir=Path("config/trends"))
 
 
 def _trend(
@@ -123,6 +129,148 @@ def test_map_event_trend_impacts_prefers_exact_primary_taxonomy_category() -> No
     assert result.impacts[0]["trend_id"] == "eu-russia"
     assert result.impacts[0]["signal_type"] == "military_movement"
     assert result.impacts[0]["direction"] == "escalatory"
+
+
+@pytest.mark.parametrize(
+    ("event", "expected_trend_id", "expected_signal_type", "expected_direction"),
+    [
+        (
+            Event(
+                id=uuid4(),
+                canonical_summary="Trilateral patrol in the Philippine exclusive economic zone.",
+                extracted_who=["United States", "Japan", "Philippines", "China"],
+                extracted_where="Philippine exclusive economic zone",
+                extracted_what="The United States, Japan, and the Philippines conducted a joint maritime patrol.",
+                categories=["us-china:maritime_rules_of_engagement:escalatory"],
+                extracted_claims={
+                    "claims": [
+                        "The United States, Japan, and the Philippines conducted a joint maritime patrol inside the Philippines' exclusive economic zone.",
+                        "The patrol demonstrated a commitment to strengthen regional cooperation and uphold freedom of navigation.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "us-china",
+            "alliance_force_posture_upgrade",
+            "escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
+                canonical_summary="Turkey and Russia resumed Astana-format Syria talks.",
+                extracted_who=["Turkey", "Russia", "Iran"],
+                extracted_where="northeastern Syria",
+                extracted_what="Turkey and Russia agreed on continued dialogue and a joint incident prevention mechanism.",
+                categories=["russia-turkey:syria_proxy_clash:de_escalatory"],
+                extracted_claims={
+                    "claims": [
+                        "Turkey and Russia resumed Astana-format discussions on Syria's political transition.",
+                        "Both Turkey and Russia committed to continued dialogue and agreed on a joint mechanism to prevent incidents between their forces.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "russia-turkey",
+            "hotline_restoration",
+            "de_escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
+                canonical_summary="Argentina lowered agricultural export taxes.",
+                extracted_who=["Argentine government"],
+                extracted_where="Argentina",
+                extracted_what="Argentina lowered export taxes and temporarily suspended export duties.",
+                categories=["south-america-agri-supply-shift:export_volume_cagr_growth:escalatory"],
+                extracted_claims={
+                    "claims": [
+                        "The Argentine government permanently lowered soybean export taxes from 33% to 26%.",
+                        "Argentina temporarily suspended export duties on grains and oilseeds.",
+                        "The tax changes boosted Argentina's soybean export competitiveness.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "south-america-agri-supply-shift",
+            "market_access_or_trade_barrier_easing",
+            "escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
+                canonical_summary="Paraguay River disruption delayed soybean shipments.",
+                extracted_who=["Paraguay", "Argentina"],
+                extracted_where="Paraguay River, Rosario, Argentina",
+                extracted_what="Sediment buildup disrupted navigation and forced vessels to carry reduced loads.",
+                categories=[
+                    "south-america-agri-supply-shift:logistics_capacity_expansion:de_escalatory"
+                ],
+                extracted_claims={
+                    "claims": [
+                        "Sediment buildup in the Paraguay River disrupted navigation in early 2025.",
+                        "Low water levels forced vessels to carry reduced loads, increasing per-ton shipping costs.",
+                        "Paraguay's grain export volumes declined by 14% in Q1 2025.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "south-america-agri-supply-shift",
+            "climate_disruption_losses",
+            "de_escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
+                canonical_summary="China redirected soybean demand toward Brazil.",
+                extracted_who=["United States farmers", "China", "Brazilian soybean exporters"],
+                extracted_where="United States, Brazil",
+                extracted_what="China used potential soybean purchases as leverage while Brazil set export records.",
+                categories=["south-america-agri-supply-shift:export_volume_cagr_growth:escalatory"],
+                extracted_claims={
+                    "claims": [
+                        "Brazil set soybean export records earlier in 2025.",
+                        "American farmers feel betrayed as China uses the promise of soybean purchases as leverage in tariff escalation.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "south-america-agri-supply-shift",
+            "china_demand_signal",
+            "escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
+                canonical_summary="Housing costs and stagnant wages delayed family formation.",
+                extracted_who=["young families under 35 in OECD nations"],
+                extracted_where="OECD nations, specifically UK, Germany, and the US",
+                extracted_what="Rising housing prices and stagnant wages delayed family formation.",
+                extracted_claims={
+                    "claims": [
+                        "Rapidly rising house prices and stagnant real wages for under-35s across OECD nations are delaying family formation.",
+                        "Homeownership rates among under-35s in the UK, Germany, and the US have fallen to historic lows.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "fertility-decline",
+            "family_cost_pressure",
+            "escalatory",
+        ),
+    ],
+)
+def test_map_event_trend_impacts_handles_tier2_quality_regression_rows(
+    event: Event,
+    expected_trend_id: str,
+    expected_signal_type: str,
+    expected_direction: str,
+) -> None:
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.diagnostics["unresolved"] == []
+    assert result.impacts[0]["trend_id"] == expected_trend_id
+    assert result.impacts[0]["signal_type"] == expected_signal_type
+    assert result.impacts[0]["direction"] == expected_direction
 
 
 def test_map_event_trend_impacts_records_ambiguous_and_no_match_paths() -> None:

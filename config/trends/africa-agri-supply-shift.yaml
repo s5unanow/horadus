@@ -68,7 +68,7 @@ indicators:
     weight: 0.03
     direction: escalatory
     type: leading
-    keywords: ["seed system", "fertilizer subsidy", "fertilizer production", "fertilizer complex", "fertilizer plant", "granulated urea", "urea output", "urea production", "input access", "seed certification", "improved varieties"]
+    keywords: ["seed system", "fertilizer subsidy", "fertilizer production", "fertilizer complex", "fertilizer plant", "annual production capacity", "granulated urea", "urea output", "urea production", "agrochemical supply", "fertilizer capacity", "input access", "seed certification", "improved varieties"]
 
   climate_shock_losses:
     weight: 0.04

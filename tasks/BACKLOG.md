@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-412`.
+- Next available task IDs start at `TASK-413`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -37,6 +37,27 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 ---
 
 ## Open Task Ledger
+
+---
+
+### TASK-412: Improve Tier 2 signal quality before go-live
+**Priority**: P1
+**Estimate**: L
+
+Improve Tier 2 extraction and deterministic mapping quality against the human-
+verified benchmark without changing Tier 1 scope or materially increasing cost.
+
+**Assessment-Ref**:
+- benchmark=ai/eval/results/benchmark-20260502T080827Z-fa98b4e7.json
+- policy=docs/PROMPT_EVAL_POLICY.md
+
+**Files**: `ai/prompts/tier2_classify.md`, `src/processing/trend_impact_mapping.py`, `src/processing/tier2_classifier.py`, `config/trends`, `tests`
+
+**Acceptance Criteria**:
+- [ ] Full human-verified Tier 2 benchmark has zero hard Tier 2 failures.
+- [ ] Tier 2 signal accuracy is at least 0.95, direction accuracy at least 0.97, and trend accuracy at least 0.98.
+- [ ] Focused regression tests cover eval-0186 missing impact and representative baseline mismatch rows from the benchmark.
+- [ ] Tier 1 benchmark scope and behavior remain unchanged.
 
 ---
 

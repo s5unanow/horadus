@@ -46,7 +46,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve", "precision fermentation-based", "animal-free dairy proteins", "animal-free dairy protein", "whey isolate", "60-90% less land and water", "production cycles", "conventional dairy farming"]
+    keywords: ["price parity", "production cost reduction", "cost competitive alternative protein", "precision fermentation cost curve", "precision fermentation-based", "animal-free dairy proteins", "animal-free dairy protein", "whey isolate", "60-90% less land and water"]
 
   livestock_regulation_tightening:
     weight: 0.04

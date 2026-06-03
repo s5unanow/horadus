@@ -163,6 +163,26 @@ def _billionaire_wealth_surge_event() -> Event:
     )
 
 
+def test_map_event_trend_impacts_does_not_map_comparator_phrases_to_cost_parity() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Analysts compared production cycles in conventional dairy farming.",
+        extracted_who=["dairy analysts"],
+        extracted_where="Europe",
+        extracted_what="Analysts compared production cycles in conventional dairy farming.",
+        extracted_claims={
+            "claims": [
+                "Analysts compared production cycles in conventional dairy farming across regions.",
+            ],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert all(impact["signal_type"] != "production_cost_price_parity" for impact in result.impacts)
+
+
 @pytest.mark.parametrize(
     ("event", "expected_trend_id", "expected_signal_type", "expected_direction"),
     [

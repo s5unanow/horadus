@@ -259,6 +259,24 @@ def test_map_event_trend_impacts_prefers_exact_primary_taxonomy_category() -> No
         (
             Event(
                 id=uuid4(),
+                canonical_summary="Billionaires added record wealth while wages stagnated.",
+                extracted_who=["billionaires", "workers"],
+                extracted_where="major economies",
+                extracted_what="Billionaires added record wealth while workers' wages stagnated.",
+                extracted_claims={
+                    "claims": [
+                        "Billionaires added record wealth while workers' wages stagnated.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "elite-mass-polarization",
+            "wealth_concentration_increase",
+            "escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
                 canonical_summary="Housing costs and stagnant wages delayed family formation.",
                 extracted_who=["young families under 35 in OECD nations"],
                 extracted_where="OECD nations, specifically UK, Germany, and the US",

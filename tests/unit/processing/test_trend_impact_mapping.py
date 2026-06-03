@@ -183,6 +183,24 @@ def test_map_event_trend_impacts_does_not_map_comparator_phrases_to_cost_parity(
     assert all(impact["signal_type"] != "production_cost_price_parity" for impact in result.impacts)
 
 
+def test_map_event_trend_impacts_does_not_map_generic_widened_to_affordability() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="The monthly trade deficit widened to a new high.",
+        extracted_who=["trade ministry"],
+        extracted_where="United States",
+        extracted_what="The monthly trade deficit widened to a new high.",
+        extracted_claims={
+            "claims": ["The monthly trade deficit widened to a new high."],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert all(impact["signal_type"] != "affordability_gap_widens" for impact in result.impacts)
+
+
 @pytest.mark.parametrize(
     ("event", "expected_trend_id", "expected_signal_type", "expected_direction"),
     [

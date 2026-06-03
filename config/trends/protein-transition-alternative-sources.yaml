@@ -82,7 +82,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["alternative proteins expensive", "price premium expansion", "price premium widened", "price premium", "widened to 82%", "widened to", "4% more expensive", "cost gap widens"]
+    keywords: ["alternative proteins expensive", "price premium expansion", "price premium widened", "price premium", "alternative protein price premium widened to 82%", "4% more expensive", "cost gap widens"]
 
   conventional_meat_adaptation:
     weight: 0.03

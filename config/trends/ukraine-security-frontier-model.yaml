@@ -73,7 +73,7 @@ indicators:
     weight: 0.05
     direction: de_escalatory
     type: leading
-    keywords: ["demilitarization roadmap", "verified force reduction", "arms reduction framework"]
+    keywords: ["demilitarization roadmap", "demilitarized zone", "Donbas demilitarized zone", "heavy forces withdrawn", "withdrawn 5 to 40 kilometers", "force withdrawal", "verified force reduction", "arms reduction framework"]
 
   aid_reorientation_to_civilian:
     weight: 0.04

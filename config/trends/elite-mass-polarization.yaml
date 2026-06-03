@@ -44,7 +44,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: lagging
-    keywords: ["wealth concentration", "top percentile gains", "asset concentration", "billionaire wealth surge", "five trillionaires", "wealth gap accelerates"]
+    keywords: ["wealth concentration", "top percentile gains", "asset concentration", "billionaire wealth surge", "billionaires added record wealth", "billionaire wealth increased", "billionaire wealth jumped", "five trillionaires", "wealth gap accelerates"]
 
   social_mobility_decline:
     weight: 0.05
@@ -68,7 +68,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: leading
-    keywords: ["tax reform", "inclusive growth policy", "broad ownership program", "wealth tax enacted"]
+    keywords: ["tax reform", "minimum tax", "global minimum tax", "minimum income tax", "wealth tax", "tax proposals", "inclusive growth policy", "broad ownership program", "wealth tax enacted"]
 
   civic_participation_rebound:
     weight: 0.03

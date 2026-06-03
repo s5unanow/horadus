@@ -73,6 +73,8 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
                         mode="json",
                         exclude_none=True,
                     ),
+                    **_optional_definition_string_list(raw_config, "actors"),
+                    **_optional_definition_string_list(raw_config, "regions"),
                     **(
                         {
                             "horizon_variant": parsed.horizon_variant.model_dump(
@@ -101,3 +103,11 @@ def load_trends_from_config_dir(*, config_dir: Path) -> list[SimpleNamespace]:
 
     trends.sort(key=lambda trend: str(getattr(trend, "definition", {}).get("id", "")))
     return trends
+
+
+def _optional_definition_string_list(payload: dict[str, object], key: str) -> dict[str, list[str]]:
+    raw_values = payload.get(key)
+    if not isinstance(raw_values, list):
+        return {}
+    values = [value.strip() for value in raw_values if isinstance(value, str) and value.strip()]
+    return {key: values} if values else {}

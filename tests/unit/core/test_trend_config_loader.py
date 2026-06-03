@@ -45,6 +45,11 @@ indicators:
     direction: escalatory
     type: leading
     keywords: ["fired upon", "collision"]
+actors:
+  - " NATO "
+  - "Russia"
+regions:
+  - "Baltic region"
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -58,6 +63,8 @@ indicators:
         "Force repositioning without direct hostile contact."
     )
     assert indicators["military_incident"]["description"] is None
+    assert trends[0].definition["actors"] == ["NATO", "Russia"]
+    assert trends[0].definition["regions"] == ["Baltic region"]
 
 
 def test_load_trends_from_config_dir_preserves_horizon_variant_metadata(tmp_path: Path) -> None:

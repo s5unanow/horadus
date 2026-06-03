@@ -57,7 +57,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["china soy imports", "Chinese soybean purchases", "Chinese buying", "no significant Chinese purchases", "US soybean harvest", "soybean purchases as leverage", "promise of soybean purchases", "American farmers", "China absorbed", "Chinese sourcing", "US-China tariffs", "US tariffs", "tariff escalation", "redirected demand", "brazil-china agricultural trade", "china protein imports"]
+    keywords: ["china soy imports", "Chinese soybean purchases", "Chinese buying", "no significant Chinese purchases", "US soybean harvest", "soybean purchases as leverage", "promise of soybean purchases", "American farmers feel betrayed as China", "China absorbed", "Chinese sourcing", "US-China tariffs", "US tariffs", "tariff escalation", "redirected demand", "brazil-china agricultural trade", "china protein imports"]
 
   market_access_or_trade_barrier_easing:
     weight: 0.03

@@ -243,6 +243,24 @@ def test_map_event_trend_impacts_maps_price_premium_narrowing_to_parity() -> Non
     assert result.impacts[0]["direction"] == "escalatory"
 
 
+def test_map_event_trend_impacts_does_not_map_american_farmers_without_china_shift() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="American farmers complained about crop insurance costs.",
+        extracted_who=["American farmers"],
+        extracted_where="United States",
+        extracted_what="American farmers complained about crop insurance costs.",
+        extracted_claims={
+            "claims": ["American farmers complained about crop insurance costs."],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert all(impact["signal_type"] != "china_demand_signal" for impact in result.impacts)
+
+
 @pytest.mark.parametrize(
     ("event", "expected_trend_id", "expected_signal_type", "expected_direction"),
     [

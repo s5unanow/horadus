@@ -241,6 +241,24 @@ def test_map_event_trend_impacts_prefers_exact_primary_taxonomy_category() -> No
         (
             Event(
                 id=uuid4(),
+                canonical_summary="A legislature advanced a cultivated meat ban.",
+                extracted_who=["state legislature", "cultivated meat producers"],
+                extracted_where="United States",
+                extracted_what="Lawmakers advanced a cultivated meat ban.",
+                extracted_claims={
+                    "claims": [
+                        "The state legislature advanced a cultivated meat ban that would restrict sales of cell-based meat.",
+                    ],
+                    "claim_graph": {"nodes": [], "links": []},
+                },
+            ),
+            "protein-transition",
+            "alternative_protein_regulatory_restriction",
+            "de_escalatory",
+        ),
+        (
+            Event(
+                id=uuid4(),
                 canonical_summary="Housing costs and stagnant wages delayed family formation.",
                 extracted_who=["young families under 35 in OECD nations"],
                 extracted_where="OECD nations, specifically UK, Germany, and the US",

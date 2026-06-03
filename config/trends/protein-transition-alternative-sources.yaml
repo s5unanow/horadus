@@ -64,7 +64,13 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["cultivated meat approval", "cultivated meat", "cultivated meat production", "cultivated meat ban", "cell-based meat regulation", "novel food authorization", "FDA clearance", "seafood category approval", "procedural rules", "EU Directive", "TRIS review", "mutual recognition"]
+    keywords: ["cultivated meat approval", "cultivated meat production", "cell-based meat regulation", "novel food authorization", "FDA clearance", "seafood category approval", "procedural rules", "EU Directive", "TRIS review", "mutual recognition"]
+
+  alternative_protein_regulatory_restriction:
+    weight: 0.04
+    direction: de_escalatory
+    type: leading
+    keywords: ["cultivated meat ban", "alternative protein ban", "regulatory ban on alternative proteins", "cell-based meat ban"]
 
   consumer_reversion_to_meat:
     weight: 0.04

@@ -40,27 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-412: Improve Tier 2 signal quality before go-live
-**Priority**: P1
-**Estimate**: L
-
-Improve Tier 2 extraction and deterministic mapping quality against the human-
-verified benchmark without changing Tier 1 scope or materially increasing cost.
-
-**Assessment-Ref**:
-- benchmark=ai/eval/results/benchmark-20260502T080827Z-fa98b4e7.json
-- policy=docs/PROMPT_EVAL_POLICY.md
-
-**Files**: `ai/prompts/tier2_classify.md`, `src/processing/trend_impact_mapping.py`, `src/processing/tier2_classifier.py`, `config/trends`, `tests`
-
-**Acceptance Criteria**:
-- [ ] Full human-verified Tier 2 benchmark has zero hard Tier 2 failures.
-- [ ] Tier 2 signal accuracy is at least 0.95, direction accuracy at least 0.97, and trend accuracy at least 0.98.
-- [ ] Focused regression tests cover eval-0186 missing impact and representative baseline mismatch rows from the benchmark.
-- [ ] Tier 1 benchmark scope and behavior remain unchanged.
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

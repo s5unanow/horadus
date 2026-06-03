@@ -201,6 +201,48 @@ def test_map_event_trend_impacts_does_not_map_generic_widened_to_affordability()
     assert all(impact["signal_type"] != "affordability_gap_widens" for impact in result.impacts)
 
 
+def test_map_event_trend_impacts_does_not_map_generic_eu_rules_to_cultivated_meat() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="The EU directive updated vehicle procedural rules.",
+        extracted_who=["European Union"],
+        extracted_where="Europe",
+        extracted_what="The EU directive updated vehicle procedural rules and mutual recognition.",
+        extracted_claims={
+            "claims": [
+                "The EU Directive updated vehicle procedural rules and mutual recognition terms.",
+            ],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert all(
+        impact["signal_type"] != "cultivated_meat_regulatory_approval" for impact in result.impacts
+    )
+
+
+def test_map_event_trend_impacts_maps_price_premium_narrowing_to_parity() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Alternative protein price premium narrowed.",
+        extracted_who=["alternative protein producers"],
+        extracted_where="Europe",
+        extracted_what="Alternative protein price premium narrowed as production improved.",
+        extracted_claims={
+            "claims": ["Alternative protein price premium narrowed as production improved."],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.impacts[0]["trend_id"] == "protein-transition"
+    assert result.impacts[0]["signal_type"] == "production_cost_price_parity"
+    assert result.impacts[0]["direction"] == "escalatory"
+
+
 @pytest.mark.parametrize(
     ("event", "expected_trend_id", "expected_signal_type", "expected_direction"),
     [

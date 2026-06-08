@@ -85,6 +85,9 @@ deltas.
   export-tax tightening phrases without restoring a broad `export tax` keyword.
 - 2026-06-08: Addressed fifth PR review by adding scoped export-duty suspension
   easing phrases without restoring a broad `export duties` keyword.
+- 2026-06-08: Addressed sixth PR review by adding directional generic export-tax
+  cut/lowered agricultural export-tax easing phrases without restoring broad
+  `export taxes` coverage.
 
 ## Risks / Foot-guns
 

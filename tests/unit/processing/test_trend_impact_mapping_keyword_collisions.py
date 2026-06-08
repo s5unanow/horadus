@@ -85,6 +85,43 @@ def test_map_event_trend_impacts_maps_export_tax_reductions_to_market_access() -
     assert result.impacts[0]["direction"] == "escalatory"
 
 
+@pytest.mark.parametrize(
+    ("summary", "claim"),
+    [
+        (
+            "Argentina cut export taxes.",
+            "Argentina cut export taxes to improve crop competitiveness.",
+        ),
+        (
+            "Argentina lowered agricultural export taxes.",
+            "Argentina lowered agricultural export taxes under Milei.",
+        ),
+    ],
+)
+def test_map_event_trend_impacts_maps_generic_export_tax_cuts_to_market_access(
+    summary: str,
+    claim: str,
+) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary=summary,
+        extracted_who=["Argentine government"],
+        extracted_where="Argentina",
+        extracted_what=claim,
+        extracted_claims={
+            "claims": [claim],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.diagnostics["unresolved"] == []
+    assert result.impacts[0]["trend_id"] == "south-america-agri-supply-shift"
+    assert result.impacts[0]["signal_type"] == "market_access_or_trade_barrier_easing"
+    assert result.impacts[0]["direction"] == "escalatory"
+
+
 def test_map_event_trend_impacts_maps_suspended_export_duties_to_market_access() -> None:
     event = Event(
         id=uuid4(),

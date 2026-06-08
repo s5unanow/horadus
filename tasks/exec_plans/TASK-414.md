@@ -70,6 +70,11 @@ deltas.
   audit blocker and merged.
 - 2026-06-08: No docs update required because behavior change is limited to
   internal trend keyword mapping config and pinned tests.
+- 2026-06-08: Addressed PR review on export-tax easing by replacing the generic
+  de-escalatory `export tax` keyword with scoped tightening phrases and adding
+  explicit tax-reduction phrases/tests for market-access easing.
+- 2026-06-08: Moved new keyword-collision regression tests into a dedicated test
+  module to avoid growing the existing broad mapping test file.
 
 ## Risks / Foot-guns
 

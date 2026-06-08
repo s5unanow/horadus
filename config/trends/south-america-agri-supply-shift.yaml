@@ -63,7 +63,7 @@ indicators:
     weight: 0.03
     direction: escalatory
     type: leading
-    keywords: ["trade agreement", "market access", "tariff reduction", "export tax reduction", "lowered export taxes", "permanently lowered", "tax exemption", "full tax exemption", "tax rollback", "tax changes", "export competitiveness", "export duties", "EU-Mercosur"]
+    keywords: ["trade agreement", "market access", "tariff reduction", "export tax reduction", "export taxes reduced", "soybean export tax reduction", "soybean export taxes reduced", "lowered export taxes", "reduced soybean export taxes", "cut soybean export taxes", "permanently lowered", "tax exemption", "full tax exemption", "tax rollback", "tax changes", "export competitiveness", "export duties", "EU-Mercosur"]
 
   deforestation_regulation_risk:
     weight: 0.04
@@ -81,7 +81,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: leading
-    keywords: ["export tax", "export tax increase", "quota tightening", "shipment controls", "retenciones"]
+    keywords: ["export tax increase", "export tax hike", "export tax hikes", "quota tightening", "shipment controls", "retenciones"]
 
 regions:
   - Brazil

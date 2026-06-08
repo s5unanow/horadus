@@ -88,6 +88,9 @@ deltas.
 - 2026-06-08: Addressed sixth PR review by adding directional generic export-tax
   cut/lowered agricultural export-tax easing phrases without restoring broad
   `export taxes` coverage.
+- 2026-06-08: Addressed seventh PR review by adding scoped criminal/word-order
+  child-exploitation prosecution phrases without restoring generic prosecution
+  coverage.
 
 ## Risks / Foot-guns
 

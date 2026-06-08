@@ -255,15 +255,25 @@ def test_map_event_trend_impacts_does_not_map_peace_agreement_to_frozen_conflict
     )
 
 
-def test_map_event_trend_impacts_maps_scoped_child_exploitation_prosecution() -> None:
+@pytest.mark.parametrize(
+    "claim",
+    [
+        "Authorities announced prosecution for child exploitation.",
+        "Authorities announced criminal prosecution of child exploitation.",
+        "Authorities announced a child-exploitation prosecution.",
+    ],
+)
+def test_map_event_trend_impacts_maps_scoped_child_exploitation_prosecution(
+    claim: str,
+) -> None:
     event = Event(
         id=uuid4(),
-        canonical_summary="Authorities announced prosecution for child exploitation.",
+        canonical_summary=claim,
         extracted_who=["child protection authorities"],
         extracted_where="Europe",
-        extracted_what="Authorities announced prosecution for child exploitation.",
+        extracted_what=claim,
         extracted_claims={
-            "claims": ["Authorities announced prosecution for child exploitation."],
+            "claims": [claim],
             "claim_graph": {"nodes": [], "links": []},
         },
     )

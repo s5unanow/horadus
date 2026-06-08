@@ -79,7 +79,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["prosecution for child exploitation", "enforcement operation", "ban enacted", "child protection law strengthened", "Online Safety Act", "age assurance", "Ofcom", "child pornography charges"]
+    keywords: ["prosecution for child exploitation", "criminal prosecution of child exploitation", "child exploitation prosecution", "enforcement operation", "ban enacted", "child protection law strengthened", "Online Safety Act", "age assurance", "Ofcom", "child pornography charges"]
 
   coordinated_public_backlash:
     weight: 0.04

@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-06-08
-- Current state: Done - local validation passed; ready for ledger close and finish
+- Current state: In review - addressing current-head PR feedback
 - Planning Gates: Required - P0 trend-mapping quality task touching probability-driving trend config semantics.
 
 ## Goal
@@ -81,6 +81,8 @@ deltas.
 - 2026-06-08: Addressed third PR review by making `retenciones` directional:
   reduction phrases map to market-access easing and raised/increased phrases map
   to export-tax tightening.
+- 2026-06-08: Addressed fourth PR review by adding plural raised/increased
+  export-tax tightening phrases without restoring a broad `export tax` keyword.
 
 ## Risks / Foot-guns
 

@@ -81,7 +81,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: leading
-    keywords: ["export tax increase", "export tax hike", "export tax hikes", "export duty increase", "export duties increased", "raised export duties", "raised retenciones", "increased retenciones", "retenciones increase", "quota tightening", "shipment controls"]
+    keywords: ["export tax increase", "export tax hike", "export tax hikes", "export taxes increased", "raised export taxes", "increased export taxes", "export duty increase", "export duties increased", "raised export duties", "raised retenciones", "increased retenciones", "retenciones increase", "quota tightening", "shipment controls"]
 
 regions:
   - Brazil

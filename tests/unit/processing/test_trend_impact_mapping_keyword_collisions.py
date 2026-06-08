@@ -106,6 +106,27 @@ def test_map_event_trend_impacts_maps_raised_export_duties_to_tightening() -> No
     assert result.impacts[0]["direction"] == "de_escalatory"
 
 
+def test_map_event_trend_impacts_maps_raised_export_taxes_to_tightening() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Argentina raised export taxes on soybean exports.",
+        extracted_who=["Argentine government"],
+        extracted_where="Argentina",
+        extracted_what="Argentina increased export taxes on soybean exports.",
+        extracted_claims={
+            "claims": ["Argentina raised export taxes on soybean exports."],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.diagnostics["unresolved"] == []
+    assert result.impacts[0]["trend_id"] == "south-america-agri-supply-shift"
+    assert result.impacts[0]["signal_type"] == "export_tax_or_quota_tightening"
+    assert result.impacts[0]["direction"] == "de_escalatory"
+
+
 def test_map_event_trend_impacts_maps_deradicalization_program_to_counter_signal() -> None:
     event = Event(
         id=uuid4(),

@@ -39,6 +39,29 @@ def test_map_event_trend_impacts_maps_retenciones_to_export_tax_tightening() -> 
     assert result.impacts[0]["direction"] == "de_escalatory"
 
 
+def test_map_event_trend_impacts_maps_reduced_retenciones_to_market_access() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Argentina reduced retenciones to boost soybean exports.",
+        extracted_who=["Argentine government"],
+        extracted_where="Argentina",
+        extracted_what="Argentina reduced retenciones to boost soybean exports.",
+        extracted_claims={
+            "claims": [
+                "Argentina reduced retenciones to boost soybean export competitiveness.",
+            ],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.diagnostics["unresolved"] == []
+    assert result.impacts[0]["trend_id"] == "south-america-agri-supply-shift"
+    assert result.impacts[0]["signal_type"] == "market_access_or_trade_barrier_easing"
+    assert result.impacts[0]["direction"] == "escalatory"
+
+
 def test_map_event_trend_impacts_maps_export_tax_reductions_to_market_access() -> None:
     event = Event(
         id=uuid4(),

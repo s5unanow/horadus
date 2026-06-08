@@ -78,6 +78,9 @@ deltas.
 - 2026-06-08: Addressed second PR review by scoping export-duty easing/tightening
   phrases and adding a generic `reduced designated parallel society areas`
   integration-gains phrase with regression coverage.
+- 2026-06-08: Addressed third PR review by making `retenciones` directional:
+  reduction phrases map to market-access easing and raised/increased phrases map
+  to export-tax tightening.
 
 ## Risks / Foot-guns
 

@@ -67,7 +67,7 @@ indicators:
     weight: 0.04
     direction: escalatory
     type: lagging
-    keywords: ["line of control formalized", "frozen conflict", "contact line stabilization", "de facto partition", "multi-tiered ceasefire framework", "violations would trigger", "coordinated military response", "territorial control", "eastern Donbas", "Zaporizhzhia nuclear plant", "peace agreement"]
+    keywords: ["line of control formalized", "frozen conflict", "contact line stabilization", "de facto partition", "violations would trigger", "coordinated military response", "territorial control", "eastern Donbas", "Zaporizhzhia nuclear plant"]
 
   broad_demilitarization_path:
     weight: 0.05

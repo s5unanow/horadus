@@ -83,6 +83,8 @@ deltas.
   to export-tax tightening.
 - 2026-06-08: Addressed fourth PR review by adding plural raised/increased
   export-tax tightening phrases without restoring a broad `export tax` keyword.
+- 2026-06-08: Addressed fifth PR review by adding scoped export-duty suspension
+  easing phrases without restoring a broad `export duties` keyword.
 
 ## Risks / Foot-guns
 

@@ -76,7 +76,7 @@ indicators:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["integration outcomes improved", "mandatory integration programme", "community policing success", "language integration gains", "parallel society areas fell"]
+    keywords: ["integration outcomes improved", "mandatory integration programme", "community policing success", "language integration gains", "parallel society areas fell", "reduced designated parallel society areas"]
 
   education_integration_metrics:
     weight: 0.03

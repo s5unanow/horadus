@@ -75,6 +75,9 @@ deltas.
   explicit tax-reduction phrases/tests for market-access easing.
 - 2026-06-08: Moved new keyword-collision regression tests into a dedicated test
   module to avoid growing the existing broad mapping test file.
+- 2026-06-08: Addressed second PR review by scoping export-duty easing/tightening
+  phrases and adding a generic `reduced designated parallel society areas`
+  integration-gains phrase with regression coverage.
 
 ## Risks / Foot-guns
 

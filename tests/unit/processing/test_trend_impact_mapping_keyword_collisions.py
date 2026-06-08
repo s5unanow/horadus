@@ -62,6 +62,27 @@ def test_map_event_trend_impacts_maps_export_tax_reductions_to_market_access() -
     assert result.impacts[0]["direction"] == "escalatory"
 
 
+def test_map_event_trend_impacts_maps_raised_export_duties_to_tightening() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Argentina raised export duties on soybean exports.",
+        extracted_who=["Argentine government"],
+        extracted_where="Argentina",
+        extracted_what="Argentina raised export duties on soybean exports.",
+        extracted_claims={
+            "claims": ["Argentina raised export duties on soybean exports."],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.diagnostics["unresolved"] == []
+    assert result.impacts[0]["trend_id"] == "south-america-agri-supply-shift"
+    assert result.impacts[0]["signal_type"] == "export_tax_or_quota_tightening"
+    assert result.impacts[0]["direction"] == "de_escalatory"
+
+
 def test_map_event_trend_impacts_maps_deradicalization_program_to_counter_signal() -> None:
     event = Event(
         id=uuid4(),
@@ -82,6 +103,29 @@ def test_map_event_trend_impacts_maps_deradicalization_program_to_counter_signal
     assert result.diagnostics["unresolved"] == []
     assert result.impacts[0]["trend_id"] == "parallel-enclaves-europe"
     assert result.impacts[0]["signal_type"] == "counter_radicalization_success"
+    assert result.impacts[0]["direction"] == "de_escalatory"
+
+
+def test_map_event_trend_impacts_maps_reduced_parallel_society_areas_to_integration() -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Denmark reduced designated parallel society areas.",
+        extracted_who=["Denmark"],
+        extracted_where="Western Europe",
+        extracted_what="Denmark reduced designated parallel society areas from 12 to eight.",
+        extracted_claims={
+            "claims": [
+                "Denmark reduced designated parallel society areas from 12 to eight.",
+            ],
+            "claim_graph": {"nodes": [], "links": []},
+        },
+    )
+
+    result = map_event_trend_impacts(event=event, trends=_configured_trends())
+
+    assert result.diagnostics["unresolved"] == []
+    assert result.impacts[0]["trend_id"] == "parallel-enclaves-europe"
+    assert result.impacts[0]["signal_type"] == "integration_policy_gains"
     assert result.impacts[0]["direction"] == "de_escalatory"
 
 

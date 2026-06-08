@@ -46,13 +46,13 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["parallel policing", "state authority challenged", "governance-deficit zone", "police access restricted", "vulnerable area", "Ghetto Package", "safety zones law", "organized crime", "criminal networks", "minors active", "anti-mafia powers", "clan crime offenses", "government accelerated plans"]
+    keywords: ["parallel policing", "state authority challenged", "governance-deficit zone", "police access restricted", "vulnerable area", "Ghetto Package", "safety zones law", "organized crime", "criminal networks", "minors active", "anti-mafia powers", "government accelerated plans"]
 
   radicalization_case_growth:
     weight: 0.04
     direction: escalatory
     type: leading
-    keywords: ["radicalization cases", "extremist recruitment", "violent extremism", "deradicalization program"]
+    keywords: ["radicalization cases", "extremist recruitment", "violent extremism"]
 
   institutional_trust_collapse:
     weight: 0.04
@@ -70,13 +70,13 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["deradicalization outcomes", "disruption of extremist cells"]
+    keywords: ["deradicalization outcomes", "deradicalization program", "disruption of extremist cells"]
 
   integration_policy_gains:
     weight: 0.03
     direction: de_escalatory
     type: lagging
-    keywords: ["integration outcomes improved", "mandatory integration programme", "community policing success", "language integration gains", "parallel society areas fell", "European Court of Justice", "Nahel Merzouk"]
+    keywords: ["integration outcomes improved", "mandatory integration programme", "community policing success", "language integration gains", "parallel society areas fell", "reduced designated parallel society areas"]
 
   education_integration_metrics:
     weight: 0.03

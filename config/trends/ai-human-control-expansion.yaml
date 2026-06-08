@@ -88,7 +88,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["human review right", "appeal right", "manual override", "Robodebt", "Royal Commission", "individual evidence", "criminal prosecution"]
+    keywords: ["human review right", "appeal right", "manual override", "Robodebt", "Royal Commission", "individual evidence"]
 
   judicial_algorithmic_review:
     weight: 0.04

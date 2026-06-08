@@ -76,7 +76,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["meat demand rebound", "alternative protein slowdown", "plant-based sales decline", "Beyond Meat", "Chapter 11 bankruptcy", "regenerative agriculture"]
+    keywords: ["meat demand rebound", "alternative protein slowdown", "plant-based sales decline", "Beyond Meat", "Chapter 11 bankruptcy"]
 
   affordability_gap_widens:
     weight: 0.04

@@ -49,7 +49,7 @@ indicators:
     weight: 0.05
     direction: escalatory
     type: leading
-    keywords: ["age of consent reduction", "decriminalize minor attraction", "MAP rights", "minor attracted persons", "B4U-ACT", "legalize cannibalism", "normalize political violence", "waivers of informed consent", "waive informed consent", "minimal risk", "Cures Act"]
+    keywords: ["age of consent reduction", "decriminalize minor attraction", "MAP rights", "minor attracted persons", "legalize cannibalism", "normalize political violence", "waivers of informed consent", "waive informed consent", "minimal risk", "Cures Act"]
 
   platform_policy_relaxation:
     weight: 0.05
@@ -79,7 +79,7 @@ indicators:
     weight: 0.04
     direction: de_escalatory
     type: lagging
-    keywords: ["criminal prosecution", "enforcement operation", "ban enacted", "child protection law strengthened", "Online Safety Act", "age assurance", "Ofcom", "child pornography charges"]
+    keywords: ["prosecution for child exploitation", "criminal prosecution of child exploitation", "child exploitation prosecution", "enforcement operation", "ban enacted", "child protection law strengthened", "Online Safety Act", "age assurance", "Ofcom", "child pornography charges"]
 
   coordinated_public_backlash:
     weight: 0.04

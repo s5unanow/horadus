@@ -420,3 +420,4 @@
 - TASK-411: Rename eval signal labels from Deep Research findings ✅
 - TASK-412: Improve Tier 2 signal quality before go-live ✅
 - TASK-413: Bump pip to 26.1.2 for dependency audit ✅
+- TASK-414: Fix Tier-2 trend keyword collisions and wrong-direction indicators ✅

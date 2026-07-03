@@ -75,19 +75,12 @@ Boundary rules:
 
 ## Agent Documentation Lookup Convention
 
-The agent-facing CLI skill carries the current recommended Context7 library IDs
-for dependencies used by Horadus. The high-value set covers OpenAI, FastAPI,
-Pydantic, SQLAlchemy/Alembic, pgvector, Celery, Redis, HTTPX, OpenTelemetry,
-pytest, Ruff, and mypy. A secondary on-demand set covers package-specific
-surfaces such as uvicorn, asyncpg, feedparser, lxml, trafilatura, Telethon,
-structlog, prometheus-client, pre-commit, Bandit, detect-secrets, pip-audit,
-Hatch, Twine, PyYAML, and python-dotenv.
-
-Agents should use Context7 only when fresh third-party API documentation would
-materially improve implementation or review. They should not routinely seed
-lookups for low-value type stubs or package tooling such as `types-redis`,
-`types-pyyaml`, `pytest-socket`, `build`, `hatchling`, or `twine` unless that
-exact tool or packaging/release flow is in scope.
+The agent-facing CLI skill carries the current recommended Context7 library ID
+sets and usage boundaries for dependencies used by Horadus. Keep the concrete
+package list there so agents load one operational source, and keep this ADR at
+the decision level: Context7 is useful for fresh external API details, while
+Horadus-local contracts stay anchored in the repo and the structured task
+context pack.
 
 ## Alternatives Considered
 

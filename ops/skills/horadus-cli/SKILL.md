@@ -30,6 +30,60 @@ Implementation note:
 - Fall back to repo files or legacy scripts only when the CLI does not expose
   the needed surface.
 
+## Third-party docs lookup
+
+Context7 may be used on demand as an agent/developer aid for current
+third-party library and API documentation. It is not a Horadus runtime
+dependency and must not replace local repo truth. Use `src/`, `alembic/`,
+`tests/`, `docs/`, task specs, and `horadus tasks context-pack` as authoritative
+for Horadus workflow, task lifecycle, probability math, migrations, and domain
+contracts.
+
+Prefer these high-value Context7 library IDs when a task needs current external
+API details:
+
+- `/openai/openai-python`
+- `/fastapi/fastapi`
+- `/pydantic/pydantic`
+- `/pydantic/pydantic-settings`
+- `/websites/sqlalchemy_en_20`
+- `/websites/alembic_sqlalchemy`
+- `/pgvector/pgvector-python`
+- `/pgvector/pgvector`
+- `/websites/celeryq_dev_en_stable`
+- `/redis/redis-py`
+- `/websites/python-httpx`
+- `/open-telemetry/opentelemetry-python`
+- `/open-telemetry/opentelemetry-python-contrib`
+- `/websites/pytest_en_stable`
+- `/websites/pytest-asyncio_readthedocs_io_en_stable`
+- `/astral-sh/ruff`
+- `/python/mypy`
+
+Use these only when the task touches the relevant integration, release, or
+tooling surface:
+
+- `/encode/uvicorn`
+- `/websites/magicstack_github_io_asyncpg_current`
+- `/kurtmckee/feedparser`
+- `/websites/lxml_de` or `/lxml/lxml`
+- `/adbar/trafilatura` or `/websites/trafilatura_readthedocs_io_en`
+- `/websites/telethon_dev_en_stable`
+- `/websites/structlog_en_stable`
+- `/prometheus/client_python`
+- `/pre-commit/pre-commit.com`
+- `/pycqa/bandit`
+- `/ibm/detect-secrets`
+- `/pypa/pip-audit`
+- `/pypa/hatch`
+- `/pypa/twine`
+- `/yaml/pyyaml`
+- `/websites/saurabh-kumar_python-dotenv`
+
+Do not routinely seed Context7 lookups for `types-redis`, `types-pyyaml`,
+`pytest-socket`, `build`, `hatchling`, or `twine` unless packaging, release, or
+that exact tool is in scope.
+
 ## Command Surfaces
 
 Root `horadus` command groups to check before falling back:

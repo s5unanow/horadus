@@ -1,6 +1,6 @@
 # Environment Variables
 
-**Last Verified**: 2026-04-29
+**Last Verified**: 2026-07-03
 
 This document lists environment variables used by the Horadus backend.
 

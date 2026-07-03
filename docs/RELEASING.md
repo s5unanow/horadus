@@ -1,6 +1,6 @@
 # Release Process Runbook
 
-**Last Verified**: 2026-04-28
+**Last Verified**: 2026-07-03
 
 This runbook defines the standard release workflow for Horadus.
 

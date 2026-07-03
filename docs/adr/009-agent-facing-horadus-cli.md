@@ -52,6 +52,9 @@ Boundary rules:
 - Human and agent flows share one command contract instead of parallel logic.
 - Workflow docs can point to one canonical interface.
 - Existing wrapper scripts can shrink without losing backwards compatibility.
+- Agent-facing guidance can point to a curated Context7 package set for
+  third-party docs lookups without turning external documentation into Horadus
+  source of truth.
 
 ### Negative
 
@@ -65,6 +68,26 @@ Boundary rules:
   Docker orchestration, restore flows) remain valid and are not forced into the
   CLI in one pass.
 - This does not introduce MCP or a separate CLI product.
+- Context7 is an optional documentation lookup aid for current third-party
+  library/API details. Local runtime code, migrations, tests, docs, task specs,
+  and `horadus tasks context-pack` remain authoritative for Horadus workflow,
+  task lifecycle, probability math, migrations, and domain contracts.
+
+## Agent Documentation Lookup Convention
+
+The agent-facing CLI skill carries the current recommended Context7 library IDs
+for dependencies used by Horadus. The high-value set covers OpenAI, FastAPI,
+Pydantic, SQLAlchemy/Alembic, pgvector, Celery, Redis, HTTPX, OpenTelemetry,
+pytest, Ruff, and mypy. A secondary on-demand set covers package-specific
+surfaces such as uvicorn, asyncpg, feedparser, lxml, trafilatura, Telethon,
+structlog, prometheus-client, pre-commit, Bandit, detect-secrets, pip-audit,
+Hatch, Twine, PyYAML, and python-dotenv.
+
+Agents should use Context7 only when fresh third-party API documentation would
+materially improve implementation or review. They should not routinely seed
+lookups for low-value type stubs or package tooling such as `types-redis`,
+`types-pyyaml`, `pytest-socket`, `build`, `hatchling`, or `twine` unless that
+exact tool or packaging/release flow is in scope.
 
 ## Alternatives Considered
 

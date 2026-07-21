@@ -422,3 +422,4 @@
 - TASK-413: Bump pip to 26.1.2 for dependency audit ✅
 - TASK-414: Fix Tier-2 trend keyword collisions and wrong-direction indicators ✅
 - TASK-415: Adopt Context7 docs lookup package set ✅
+- TASK-417: Clear full local-gate blockers surfaced by TASK-416 ✅

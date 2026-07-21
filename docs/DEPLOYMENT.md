@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Verified**: 2026-06-03
+**Last Verified**: 2026-07-21
 
 This guide covers a single-host Docker Compose deployment using:
 
@@ -399,7 +399,8 @@ Recommended practice:
 
 ## Operational Notes
 
-- `api` serves FastAPI (`/health/live`, `/health`, `/metrics`, `/docs`).
+- `api` serves FastAPI health and metrics routes; interactive docs and schema
+  routes (`/docs`, `/redoc`, `/openapi.json`) are registered only in development.
 - Outside development, only `/health/live` stays unauthenticated; `/health`,
   `/health/ready`, and `/metrics` require both `X-API-Key` and
   `X-Admin-API-Key`.

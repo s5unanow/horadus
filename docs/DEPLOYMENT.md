@@ -1,6 +1,6 @@
 # Deployment Guide
 
-**Last Verified**: 2026-06-03
+**Last Verified**: 2026-07-21
 
 This guide covers a single-host Docker Compose deployment using:
 

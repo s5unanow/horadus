@@ -9,7 +9,7 @@
 
 ## Active Tasks
 
-
+- `TASK-417` Clear full local-gate blockers surfaced by TASK-416
 
 ## Selection Notes
 
@@ -19,6 +19,7 @@
 - `INTAKE-0007` remains pending because Codex hook enforcement is still speculative and not yet backed by a stable repo-owned contract.
 - `INTAKE-0022` remains pending as second-order regression hardening behind the reproduced workflow drift already scheduled here.
 - `TASK-412` was promoted from `INTAKE-0038` as the current go-live quality blocker for Tier 2 signal extraction/mapping.
+- `TASK-417` was promoted from refreshed `INTAKE-0073` and widened to clear both repo-wide blockers surfaced by the `TASK-416` full local gate.
 - The sequence front-loads repo-truth and fail-closed workflow fixes, then narrower typing and guardrail tasks, then operator/docs alignment, and leaves the worktree-isolation design task last so it can reuse what the earlier guardrail work clarifies.
 
 ## Suggested Sequence
@@ -38,6 +39,7 @@
 13. `TASK-407` Refresh Horadus CLI skill and add freshness gate.
 14. `TASK-409` Improve Tier 2 eval accuracy to 90 percent.
 15. `TASK-412` Improve Tier 2 signal quality before go-live.
+16. `TASK-417` Clear full local-gate blockers surfaced by TASK-416.
 
 ## Human Blocker Metadata
 

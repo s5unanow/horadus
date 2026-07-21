@@ -8,7 +8,7 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 - Task IDs are global and never reused.
 - Completed IDs are reserved permanently and tracked in `tasks/COMPLETED.md`.
-- Next available task IDs start at `TASK-416`.
+- Next available task IDs start at `TASK-418`.
 - Checklist boxes in this file are planning snapshots; canonical completion status lives in `tasks/CURRENT_SPRINT.md` and `tasks/COMPLETED.md`.
 
 ## Task Labels
@@ -37,6 +37,34 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 ---
 
 ## Open Task Ledger
+
+---
+
+### TASK-417: Clear full local-gate blockers surfaced by TASK-416
+**Priority**: P0
+**Estimate**: XS
+
+Clear the repository-wide blockers surfaced by the `TASK-416` full local gate:
+the stale deployment guide verification marker and the current dependency
+audit findings for `click` and `lxml-html-clean`.
+
+**Assessment-Ref**:
+- TASK-416 local-gate blocker 2026-07-21
+- INTAKE-0074 re-audit 2026-07-21
+
+**Files**: `docs/DEPLOYMENT.md`, `pyproject.toml`, `uv.lock`
+
+**Acceptance Criteria**:
+- [x] Review docs/DEPLOYMENT.md against current deployment configuration and update stale content as needed.
+- [x] Update the Last Verified marker only after verification.
+- [x] Resolve `click` to at least 8.3.3 and `lxml-html-clean` to at least 0.4.5 without vulnerability allowlist exceptions.
+- [x] The docs-freshness check and canonical full local gate pass.
+
+**Implementation Notes**:
+- Verified the documented compose services, images, profiles, networks, ingress headers, health endpoints, Make targets, environment variables, and referenced runbooks against current repo truth.
+- Targeted tests: N/A — dependency metadata and docs/ledger-only changes with no executable code change.
+- Integration proof: N/A — no integration-covered runtime path changed.
+- Canonical proof: all 17 full local-gate steps passed, including dependency audit and Docker-backed integration.
 
 ---
 

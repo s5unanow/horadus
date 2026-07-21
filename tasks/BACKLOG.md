@@ -40,6 +40,35 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
+### TASK-416: Update dependency audit CVE blockers
+**Priority**: P0
+**Estimate**: XS
+
+Refresh the frozen dependency set so the canonical security audit no longer
+blocks normal task delivery.
+Current reproduced findings: click 8.3.1 PYSEC-2026-2132 and lxml-html-clean
+0.4.4 PYSEC-2026-2614.
+
+**Assessment-Ref**:
+- INTAKE-0074 re-audit 2026-07-21
+
+**Files**: `pyproject.toml`, `uv.lock`, `scripts/run_dependency_audit.sh`
+
+**Acceptance Criteria**:
+- [x] The lockfile resolves click to at least 8.3.3 and lxml-html-clean to at least 0.4.5 without unrelated direct-dependency upgrades.
+- [x] ./scripts/run_dependency_audit.sh passes without adding vulnerability allowlist exceptions.
+- [x] make secret-scan security dependency-audit and the canonical full local gate pass.
+
+**Implementation Notes**:
+- Resolved `click` to 8.4.2 and `lxml-html-clean` to 0.4.5; the related `lxml` patch release moved to 6.1.1.
+- Integration proof: N/A — this task changes dependency metadata and the lockfile only, without an integration-covered runtime path.
+- Docs update: N/A — the dependency security floor does not change an operator-facing or runtime contract.
+- Targeted proof: `make secret-scan security dependency-audit`, the context-pack workflow suite (856 passed), and `make agent-check` passed.
+- Delivery note: the dependency metadata landed on `main` through blocker `TASK-417` / PR #387 to break the circular dependency between the stale-docs and dependency-audit full-gate failures; this branch verifies and closes the original promoted task.
+- Canonical proof: all 17 full local-gate steps passed on the post-`TASK-417` baseline.
+
+---
+
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

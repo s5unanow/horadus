@@ -40,12 +40,12 @@ async def _attempt_record_usage(
             await session.commit()
             return True
         except BudgetExceededError:
-            await session.rollback()
+            await session.commit()
             return False
 
 
 @pytest.mark.asyncio
-async def test_record_usage_blocks_call_limit_overshoot_under_concurrency(monkeypatch) -> None:
+async def test_record_usage_persists_call_limit_overshoot_under_concurrency(monkeypatch) -> None:
     monkeypatch.setattr(settings, "TIER1_MAX_DAILY_CALLS", 1)
     monkeypatch.setattr(settings, "DAILY_COST_LIMIT_USD", 100.0)
     await _clear_today_usage()
@@ -88,7 +88,7 @@ async def test_record_usage_blocks_call_limit_overshoot_under_concurrency(monkey
             .limit(1)
         )
     assert row is not None
-    assert row.call_count == 1
+    assert row.call_count == 2
 
     metric_after = LLM_BUDGET_DENIALS_TOTAL.labels(
         tier=TIER1,
@@ -98,15 +98,10 @@ async def test_record_usage_blocks_call_limit_overshoot_under_concurrency(monkey
 
 
 @pytest.mark.asyncio
-async def test_record_usage_blocks_cost_limit_overshoot_under_concurrency(monkeypatch) -> None:
+async def test_record_usage_persists_cost_limit_overshoot_under_concurrency(monkeypatch) -> None:
     monkeypatch.setattr(settings, "TIER1_MAX_DAILY_CALLS", 10)
     monkeypatch.setattr(settings, "DAILY_COST_LIMIT_USD", 0.00015)
     await _clear_today_usage()
-    metric_before = LLM_BUDGET_DENIALS_TOTAL.labels(
-        tier=TIER1,
-        reason="daily_cost_limit",
-    )._value.get()
-
     start_event = asyncio.Event()
     tasks = [
         asyncio.create_task(
@@ -140,12 +135,8 @@ async def test_record_usage_blocks_cost_limit_overshoot_under_concurrency(monkey
             .where(ApiUsage.tier == TIER1)
             .limit(1)
         )
+        allowed, reason = await CostTracker(session=session).check_budget(TIER1)
     assert row is not None
-    assert row.call_count == 1
-    assert float(row.estimated_cost_usd) == pytest.approx(0.0001, abs=1e-8)
-
-    metric_after = LLM_BUDGET_DENIALS_TOTAL.labels(
-        tier=TIER1,
-        reason="daily_cost_limit",
-    )._value.get()
-    assert metric_after == metric_before + 1
+    assert row.call_count == 2
+    assert float(row.estimated_cost_usd) == pytest.approx(0.0002, abs=1e-8)
+    assert (allowed, reason) == (False, "daily cost limit ($0.00015) exceeded")

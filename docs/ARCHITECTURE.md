@@ -207,6 +207,7 @@ Launch language policy:
 
 Retry semantics:
 - Budget exhaustion is treated as a defer path: items return to `pending` without consuming worker retries.
+- Provider calls that cross a budget after completion are still persisted in the usage ledger before the defer signal is raised, so the next pre-call check fails closed instead of repeating unrecorded spend.
 - Retryable provider/network/LLM failures are not converted into raw-item `error` rows. They bubble to the Celery task, which retries with backoff.
 - The processing task keeps one database transaction for the batch; when a retryable failure escapes, the session rollback restores item/event/trend writes so replay is safe and idempotent at current scale.
 

@@ -92,7 +92,7 @@ async def test_record_usage_updates_counters_and_cost(mock_db_session, monkeypat
 
 
 @pytest.mark.asyncio
-async def test_record_usage_denies_when_call_limit_reached(mock_db_session, monkeypatch) -> None:
+async def test_record_usage_persists_call_before_limit_error(mock_db_session, monkeypatch) -> None:
     monkeypatch.setattr(settings, "TIER1_MAX_DAILY_CALLS", 1)
     today = datetime.now(tz=UTC).date()
     usage = ApiUsage(
@@ -116,7 +116,7 @@ async def test_record_usage_denies_when_call_limit_reached(mock_db_session, monk
     with pytest.raises(BudgetExceededError, match="daily call limit"):
         await tracker.record_usage(tier=TIER1, input_tokens=1000, output_tokens=100)
 
-    assert usage.call_count == 1
+    assert usage.call_count == 2
     assert budget_denials == [(TIER1, "daily_call_limit")]
 
 
@@ -299,7 +299,7 @@ async def test_check_budget_allows_call_when_under_limits(mock_db_session, monke
 
 
 @pytest.mark.asyncio
-async def test_record_usage_denies_when_daily_cost_limit_would_be_exceeded(
+async def test_record_usage_records_cost_before_limit_error(
     mock_db_session,
     monkeypatch,
 ) -> None:
@@ -350,7 +350,7 @@ async def test_record_usage_denies_when_daily_cost_limit_would_be_exceeded(
     with pytest.raises(BudgetExceededError, match="daily cost limit"):
         await tracker.record_usage(tier=TIER1, input_tokens=1_000_000, output_tokens=0)
 
-    assert denials[0]["reason_code"] == "daily_cost_limit"
+    assert (usage.call_count, denials[0]["reason_code"]) == (1, "daily_cost_limit")
     assert denials[0]["projected_total_cost"] is not None
 
 

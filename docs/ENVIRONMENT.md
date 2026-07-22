@@ -295,7 +295,7 @@ Collector failure policy is transient-vs-terminal classified; transient all-sour
 outages requeue up to `COLLECTOR_TASK_MAX_RETRIES`.
 RSS and GDELT fetches accept only public HTTP(S) destinations. Each DNS result is
 validated and pinned for the connection, redirects are revalidated hop by hop, and
-response bodies fail closed at `COLLECTOR_HTTP_MAX_RESPONSE_BYTES`.
+identity-encoded response bodies fail closed at `COLLECTOR_HTTP_MAX_RESPONSE_BYTES`.
 
 ## Backup Operations
 

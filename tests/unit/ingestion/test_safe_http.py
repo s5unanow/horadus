@@ -70,6 +70,7 @@ async def test_safe_fetch_pins_public_ip_and_preserves_host_and_sni() -> None:
     assert seen[0].url.host == str(_PUBLIC_V4)
     assert seen[0].headers["Host"] == "example.com"
     assert seen[0].headers["Connection"] == "close"
+    assert seen[0].headers["Accept-Encoding"] == "identity"
     assert seen[0].headers["User-Agent"] == "test"
     assert seen[0].extensions["sni_hostname"] == "example.com"
     assert seen[0].extensions["timeout"]["connect"] == 10.0
@@ -105,6 +106,31 @@ async def test_safe_fetch_revalidates_and_repins_redirect_host() -> None:
         (str(_PUBLIC_V4), "first.example"),
         (str(_SECOND_PUBLIC_V4), "second.example"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_safe_fetch_falls_back_across_validated_public_addresses() -> None:
+    seen: list[str] = []
+
+    async def resolver(_host: str, _port: int):
+        return (_PUBLIC_V4, _SECOND_PUBLIC_V4)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.host)
+        if request.url.host == str(_PUBLIC_V4):
+            raise httpx.ConnectError("first address unavailable", request=request)
+        return httpx.Response(200, content=b"fallback", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        response = await SafeHTTPFetcher(
+            client=client,
+            max_response_bytes=100,
+            max_redirects=1,
+            resolver=resolver,
+        ).get("https://example.com/source", timeout=5)
+
+    assert response.content == b"fallback"
+    assert seen == [str(_PUBLIC_V4), str(_SECOND_PUBLIC_V4)]
 
 
 @pytest.mark.asyncio
@@ -224,6 +250,45 @@ async def test_safe_fetch_caps_declared_and_streamed_response_size(
         )
         with pytest.raises(ResponseTooLargeError, match="byte limit"):
             await fetcher.get("https://example.com/large", timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_safe_fetch_rejects_encoded_response_before_decoding() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            request=request,
+            headers={"Content-Encoding": "gzip"},
+            stream=_ChunkStream(b"compressed payload"),
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fetcher = SafeHTTPFetcher(
+            client=client,
+            max_response_bytes=100,
+            max_redirects=1,
+            resolver=_public_resolver,
+        )
+        with pytest.raises(SafeFetchError, match="content encoding must be identity"):
+            await fetcher.get("https://example.com/encoded", timeout=5)
+
+
+@pytest.mark.asyncio
+async def test_safe_fetch_bounds_dns_resolution_with_connect_timeout() -> None:
+    async def stalled_resolver(_host: str, _port: int):
+        await asyncio.Event().wait()
+        return (_PUBLIC_V4,)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(AsyncMock())) as client:
+        fetcher = SafeHTTPFetcher(
+            client=client,
+            max_response_bytes=100,
+            max_redirects=1,
+            connect_timeout_seconds=0.01,
+            resolver=stalled_resolver,
+        )
+        with pytest.raises(httpx.ConnectTimeout, match="Timed out resolving"):
+            await fetcher.get("https://example.com/stalled", timeout=5)
 
 
 @pytest.mark.asyncio

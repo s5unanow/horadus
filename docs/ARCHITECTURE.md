@@ -112,7 +112,7 @@ Operational tracing setup and validation steps are documented in `docs/TRACING.m
 Ingestion tracks per-source high-water coverage timestamps and applies overlap-aware
 next-window starts to avoid silent gaps on delayed runs/restarts.
 Checkpoint semantics:
-- RSS and GDELT HTTP clients disable ambient proxies and automatic redirects. Collector fetches require globally routable DNS answers, pin the validated numeric address while preserving the original Host/SNI, revalidate every redirect hop, and stream through a configured response-size cap.
+- RSS and GDELT HTTP clients disable ambient proxies and automatic redirects. Collector fetches require globally routable DNS answers, pin validated numeric addresses while preserving the original Host/SNI, revalidate every redirect hop, and require identity-encoded bodies before streaming through a configured response-size cap.
 - RSS persists `ingestion_window_end_at` from the latest successfully observed publish timestamp
   (or run window end fallback) after a successful run.
 - GDELT uses backward pagination cursors only for in-run paging; persisted

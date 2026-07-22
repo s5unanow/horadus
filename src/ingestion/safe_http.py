@@ -130,42 +130,55 @@ class SafeHTTPFetcher:
         )
 
         for redirect_count in range(self._max_redirects + 1):
-            pinned_url, request_headers, extensions = await self._pin_request(
+            pinned_requests = await self._pin_requests(
                 current_url,
                 base_headers,
             )
-            async with self._client.stream(
-                "GET",
-                pinned_url,
-                headers=request_headers,
-                timeout=request_timeout,
-                follow_redirects=False,
-                extensions=extensions,
-            ) as response:
-                location = response.headers.get("Location")
-                if response.status_code in _REDIRECT_STATUSES and location is not None:
-                    if redirect_count >= self._max_redirects:
-                        raise SafeFetchError("Collector redirect limit exceeded")
-                    current_url = current_url.join(location)
-                    continue
+            redirect_url: httpx.URL | None = None
+            for address_index, (pinned_url, request_headers, extensions) in enumerate(
+                pinned_requests
+            ):
+                try:
+                    async with self._client.stream(
+                        "GET",
+                        pinned_url,
+                        headers=request_headers,
+                        timeout=request_timeout,
+                        follow_redirects=False,
+                        extensions=extensions,
+                    ) as response:
+                        location = response.headers.get("Location")
+                        if response.status_code in _REDIRECT_STATUSES and location is not None:
+                            if redirect_count >= self._max_redirects:
+                                raise SafeFetchError("Collector redirect limit exceeded")
+                            redirect_url = current_url.join(location)
+                            break
 
-                response.raise_for_status()
-                content = await self._read_bounded_body(response)
-                return SafeFetchResponse(
-                    url=current_url,
-                    status_code=response.status_code,
-                    headers=httpx.Headers(response.headers),
-                    content=content,
-                    encoding=response.encoding or "utf-8",
-                )
+                        response.raise_for_status()
+                        content = await self._read_bounded_body(response)
+                        return SafeFetchResponse(
+                            url=current_url,
+                            status_code=response.status_code,
+                            headers=httpx.Headers(response.headers),
+                            content=content,
+                            encoding=response.encoding or "utf-8",
+                        )
+                except (httpx.TimeoutException, httpx.NetworkError):
+                    if address_index + 1 >= len(pinned_requests):
+                        raise
+
+            if redirect_url is not None:
+                current_url = redirect_url
+                continue
+            raise RuntimeError("unreachable address fallback state")
 
         raise RuntimeError("unreachable redirect loop state")
 
-    async def _pin_request(
+    async def _pin_requests(
         self,
         url: httpx.URL,
         base_headers: httpx.Headers,
-    ) -> tuple[httpx.URL, httpx.Headers, dict[str, str]]:
+    ) -> tuple[tuple[httpx.URL, httpx.Headers, dict[str, str]], ...]:
         scheme = url.scheme.lower()
         if scheme not in {"http", "https"}:
             raise UnsafeDestinationError("Collector URLs must use http or https")
@@ -175,7 +188,15 @@ class SafeHTTPFetcher:
             raise UnsafeDestinationError("Collector URLs must not include credentials")
 
         port = url.port or (443 if scheme == "https" else 80)
-        addresses = await self._resolver(url.host, port)
+        try:
+            addresses = await asyncio.wait_for(
+                self._resolver(url.host, port),
+                timeout=self._connect_timeout_seconds,
+            )
+        except TimeoutError as exc:
+            raise httpx.ConnectTimeout(
+                f"Timed out resolving collector destination: {url.host}"
+            ) from exc
         blocked = tuple(
             address for address in addresses if not address.is_global or address.is_multicast
         )
@@ -188,10 +209,20 @@ class SafeHTTPFetcher:
         request_headers = httpx.Headers(base_headers)
         request_headers["Host"] = url.netloc.decode("ascii")
         request_headers["Connection"] = "close"
-        pinned_url = url.copy_with(host=str(addresses[0]))
-        return (pinned_url, request_headers, {"sni_hostname": url.host})
+        request_headers["Accept-Encoding"] = "identity"
+        return tuple(
+            (
+                url.copy_with(host=str(address)),
+                httpx.Headers(request_headers),
+                {"sni_hostname": url.host},
+            )
+            for address in addresses
+        )
 
     async def _read_bounded_body(self, response: httpx.Response) -> bytes:
+        content_encoding = response.headers.get("Content-Encoding", "identity").lower().strip()
+        if content_encoding != "identity":
+            raise SafeFetchError("Collector response content encoding must be identity")
         raw_content_length = response.headers.get("Content-Length")
         if raw_content_length is not None:
             try:

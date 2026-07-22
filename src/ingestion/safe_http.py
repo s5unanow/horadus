@@ -159,13 +159,17 @@ class SafeHTTPFetcher:
             pool=self._connect_timeout_seconds,
         )
 
-        for redirect_count in range(self._max_redirects + 1):
+        redirect_count = 0
+        while True:
             pinned_requests = await self._pin_requests(
                 current_url,
                 base_headers,
             )
-            redirect_url: httpx.URL | None = None
-            for address_index, (pinned_url, request_headers, extensions) in enumerate(
+            for address_index, (
+                pinned_url,
+                request_headers,
+                extensions,
+            ) in enumerate(  # pragma: no branch
                 pinned_requests
             ):
                 try:
@@ -181,7 +185,8 @@ class SafeHTTPFetcher:
                         if response.status_code in _REDIRECT_STATUSES and location is not None:
                             if redirect_count >= self._max_redirects:
                                 raise SafeFetchError("Collector redirect limit exceeded")
-                            redirect_url = current_url.join(location)
+                            redirect_count += 1
+                            current_url = current_url.join(location)
                             break
 
                         response.raise_for_status()
@@ -196,13 +201,6 @@ class SafeHTTPFetcher:
                 except (httpx.TimeoutException, httpx.NetworkError):
                     if address_index + 1 >= len(pinned_requests):
                         raise
-
-            if redirect_url is not None:
-                current_url = redirect_url
-                continue
-            raise RuntimeError("unreachable address fallback state")
-
-        raise RuntimeError("unreachable redirect loop state")
 
     async def _pin_requests(
         self,

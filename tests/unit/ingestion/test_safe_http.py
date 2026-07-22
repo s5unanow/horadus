@@ -46,7 +46,9 @@ async def test_safe_fetch_pins_public_ip_and_preserves_host_and_sni() -> None:
     async def handler(request: httpx.Request) -> httpx.Response:
         seen.append(request)
         return httpx.Response(
-            200, headers={"Content-Type": "text/plain; charset=utf-8"}, content=b"ok"
+            200,
+            headers={"Content-Type": "application/json; charset=utf-8"},
+            content=b'{"ok": true}',
         )
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
@@ -64,7 +66,8 @@ async def test_safe_fetch_pins_public_ip_and_preserves_host_and_sni() -> None:
             timeout=5,
         )
 
-    assert response.text == "ok"
+    assert response.text == '{"ok": true}'
+    assert response.json() == {"ok": True}
     assert str(response.url) == "https://example.com/source?existing=1&added=2"
     assert len(seen) == 1
     assert seen[0].url.host == str(_PUBLIC_V4)
@@ -130,6 +133,30 @@ async def test_safe_fetch_falls_back_across_validated_public_addresses() -> None
         ).get("https://example.com/source", timeout=5)
 
     assert response.content == b"fallback"
+    assert seen == [str(_PUBLIC_V4), str(_SECOND_PUBLIC_V4)]
+
+
+@pytest.mark.asyncio
+async def test_safe_fetch_raises_after_all_validated_addresses_fail() -> None:
+    seen: list[str] = []
+
+    async def resolver(_host: str, _port: int):
+        return (_PUBLIC_V4, _SECOND_PUBLIC_V4)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.host)
+        raise httpx.ConnectError("address unavailable", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fetcher = SafeHTTPFetcher(
+            client=client,
+            max_response_bytes=100,
+            max_redirects=1,
+            resolver=resolver,
+        )
+        with pytest.raises(httpx.ConnectError, match="address unavailable"):
+            await fetcher.get("https://example.com/source", timeout=5)
+
     assert seen == [str(_PUBLIC_V4), str(_SECOND_PUBLIC_V4)]
 
 

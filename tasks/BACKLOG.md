@@ -40,25 +40,6 @@ Open task definitions only. Completed task history lives in `tasks/COMPLETED.md`
 
 ---
 
-### TASK-420: Add SSRF guard and resource caps to collector HTTP fetch path
-**Priority**: P0
-**Estimate**: L
-
-Harden collector HTTP fetches against feed-controlled SSRF, redirect abuse, and
-unbounded response bodies while preserving bounded retries and normal public-
-source collection.
-
-**Files**: `src/ingestion`, `src/workers/_task_collectors.py`, `src/core/config.py`, `tests/unit/ingestion`, `tests/unit/workers`, `docs/ENVIRONMENT.md`
-
-**Acceptance Criteria**:
-- [ ] Collector fetches reject non-HTTP(S) URLs and destinations resolving to private, loopback, link-local, multicast, reserved, or otherwise non-global addresses before connecting.
-- [ ] Every redirect hop is bounded and independently revalidated, and the actual connected destination cannot bypass the validated public address through DNS rebinding.
-- [ ] RSS article/feed and GDELT response bodies are streamed with configurable byte limits and fail closed on oversized Content-Length or streamed payloads.
-- [ ] Collector workers construct HTTP clients with explicit timeout and connection-pool limits from safe configuration defaults.
-- [ ] No-network unit tests cover allowed public destinations, blocked address classes, redirect handling, size caps, and unaffected collector behavior; the canonical full local gate passes.
-
----
-
 ## Future Ideas (Not Scheduled)
 
 - [ ] Archive `tasks/specs/` or `tasks/exec_plans/` only if Sprint 4 still shows measurable context pressure after the live-ledger reset.

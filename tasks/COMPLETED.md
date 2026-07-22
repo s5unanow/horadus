@@ -426,3 +426,4 @@
 - TASK-416: Update dependency audit CVE blockers ✅
 - TASK-419: Update pyasn1 for dependency audit advisories ✅
 - TASK-418: Fix unrecorded LLM spend when post-call budget check denies ✅
+- TASK-420: Add SSRF guard and resource caps to collector HTTP fetch path ✅

@@ -4,7 +4,7 @@
 
 - Owner: Codex
 - Started: 2026-07-22
-- Current state: Implementation complete; delivery verification in progress
+- Current state: Verified; ledger closure and delivery in progress
 - Planning Gates: Required — P0 security work crosses shared ingestion, worker, configuration, documentation, and test surfaces and materially touches allowlisted Python hotspots.
 
 ## Goal (1-3 lines)
@@ -91,3 +91,4 @@ redirect count, timeouts, and connection-pool use.
 - Post-commit local review completed through the configured Codex fallback after Claude timed out. Both P2 findings were accepted and fixed: DNS lookup failures retain transient network retry semantics, and the environment read timeout is a hard ceiling over source-specific values.
 - Fresh-head local review reported three more findings, all accepted and fixed: encoded bodies are rejected before iteration, all validated public addresses receive ordered network fallback, and DNS resolution is covered by the connect timeout. The expanded focused suite passes 138 tests with clean mypy and code-shape checks.
 - The canonical full gate then passed through code health and all 2,869 unit tests but identified four uncovered safe-fetch lines/branches. JSON decoding and all-address failure now have direct regressions, and unreachable loop guards were removed by expressing the redirect loop around its non-empty pinned-address invariant.
+- Final canonical `horadus tasks local-gate --full` passed all 17 stages: artifact/docs checks, code shape, docstrings, zero-regression code health, formatting/lint, mypy, taxonomy/eval validation, 100% unit coverage, secret scan, Bandit, dependency and lockfile audits, Docker integration, and package build.

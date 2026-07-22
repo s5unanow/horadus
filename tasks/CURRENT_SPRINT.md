@@ -20,6 +20,7 @@
 - `INTAKE-0022` remains pending as second-order regression hardening behind the reproduced workflow drift already scheduled here.
 - `TASK-412` was promoted from `INTAKE-0038` as the current go-live quality blocker for Tier 2 signal extraction/mapping.
 - `TASK-417` was promoted from refreshed `INTAKE-0073` and widened to clear both repo-wide blockers surfaced by the `TASK-416` full local gate.
+- `TASK-419` was promoted from `INTAKE-0078` to clear a repo-wide dependency-audit blocker before resuming the interrupted cost-control delivery.
 - `TASK-416` was promoted from refreshed `INTAKE-0074` because the canonical security audit currently blocks task delivery on two newly disclosed dependency vulnerabilities.
 - The sequence front-loads repo-truth and fail-closed workflow fixes, then narrower typing and guardrail tasks, then operator/docs alignment, and leaves the worktree-isolation design task last so it can reuse what the earlier guardrail work clarifies.
 
@@ -42,8 +43,11 @@
 15. `TASK-412` Improve Tier 2 signal quality before go-live.
 16. `TASK-417` Clear full local-gate blockers surfaced by TASK-416.
 17. `TASK-416` Update dependency audit CVE blockers.
+18. `TASK-419` Update pyasn1 for dependency audit advisories.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -108,3 +112,4 @@
 - `TASK-415` Adopt Context7 docs lookup package set ✅
 - `TASK-417` Clear full local-gate blockers surfaced by TASK-416 ✅
 - `TASK-416` Update dependency audit CVE blockers ✅
+- `TASK-419` Update pyasn1 for dependency audit advisories ✅

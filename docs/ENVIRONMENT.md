@@ -239,6 +239,12 @@ Reasoning-effort notes:
 | `SOURCE_FRESHNESS_MAX_CATCHUP_DISPATCHES` | `2` | Maximum bounded collector catch-up dispatches emitted per freshness check run. |
 | `RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS` | `300` | Total timeout budget per RSS feed collection run. |
 | `GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS` | `300` | Total timeout budget per GDELT query collection run. |
+| `COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS` | `10` | TCP/TLS connect, write, and pool-acquisition timeout for collector clients. |
+| `COLLECTOR_HTTP_READ_TIMEOUT_SECONDS` | `30` | Per-read timeout for RSS and GDELT HTTP responses. |
+| `COLLECTOR_HTTP_MAX_CONNECTIONS` | `20` | Maximum collector HTTP connections. |
+| `COLLECTOR_HTTP_MAX_KEEPALIVE_CONNECTIONS` | `10` | Maximum idle collector keepalive connections. |
+| `COLLECTOR_HTTP_MAX_RESPONSE_BYTES` | `10000000` | Maximum decoded RSS/GDELT response body size. |
+| `COLLECTOR_HTTP_MAX_REDIRECTS` | `5` | Maximum manually validated redirect hops per fetch. |
 | `COLLECTOR_TASK_MAX_RETRIES` | `3` | Bounded requeue attempts for transient collector outages. |
 | `COLLECTOR_RETRY_BACKOFF_MAX_SECONDS` | `300` | Maximum backoff delay between collector task retries. |
 | `TREND_SNAPSHOT_INTERVAL_MINUTES` | `60` | Snapshot cadence. |
@@ -287,6 +293,9 @@ Freshness status is available via `GET /api/v1/sources/freshness` and
 `uv run horadus eval source-freshness`.
 Collector failure policy is transient-vs-terminal classified; transient all-source
 outages requeue up to `COLLECTOR_TASK_MAX_RETRIES`.
+RSS and GDELT fetches accept only public HTTP(S) destinations. Each DNS result is
+validated and pinned for the connection, redirects are revalidated hop by hop, and
+response bodies fail closed at `COLLECTOR_HTTP_MAX_RESPONSE_BYTES`.
 
 ## Backup Operations
 

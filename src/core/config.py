@@ -1427,18 +1427,8 @@ class Settings(BaseSettings):
         default="artifacts/cluster_drift",
         description="Directory where cluster drift sentinel JSON artifacts are written",
     )
-    RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
-        default=300,
-        ge=30,
-        le=7200,
-        description="Total timeout budget in seconds for a single RSS feed collection run",
-    )
-    GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
-        default=300,
-        ge=30,
-        le=7200,
-        description="Total timeout budget in seconds for a single GDELT query collection run",
-    )
+    RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(default=300, ge=30, le=7200)
+    GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(default=300, ge=30, le=7200)
     COLLECTOR_TASK_MAX_RETRIES: int = Field(
         default=3,
         ge=0,
@@ -1451,6 +1441,12 @@ class Settings(BaseSettings):
         le=7200,
         description="Maximum retry backoff delay in seconds for collector task retries",
     )
+    COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS: float = Field(default=10.0, gt=0, le=120)
+    COLLECTOR_HTTP_READ_TIMEOUT_SECONDS: float = Field(default=30.0, gt=0, le=300)
+    COLLECTOR_HTTP_MAX_CONNECTIONS: int = Field(default=20, ge=1, le=200)
+    COLLECTOR_HTTP_MAX_KEEPALIVE_CONNECTIONS: int = Field(default=10, ge=0, le=100)
+    COLLECTOR_HTTP_MAX_RESPONSE_BYTES: int = Field(default=10_000_000, ge=1024, le=50_000_000)
+    COLLECTOR_HTTP_MAX_REDIRECTS: int = Field(default=5, ge=0, le=10)
     MAX_ITEMS_PER_COLLECTION: int = Field(default=100, ge=1)
     WEEKLY_REPORT_DAY_OF_WEEK: int = Field(
         default=1,

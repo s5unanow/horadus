@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -413,17 +413,15 @@ async def test_request_json_retries_transient_timeout_then_succeeds(
 ) -> None:
     client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
     client.max_retries = 2
-    response = MagicMock()
-    response.raise_for_status = MagicMock()
-    response.json = MagicMock(return_value={"articles": []})
-    mock_http_client.get = AsyncMock(side_effect=[httpx.ReadTimeout("timeout"), response])
+    response = SimpleNamespace(content=b'{"articles": []}')
+    client.safe_fetcher.get = AsyncMock(side_effect=[httpx.ReadTimeout("timeout"), response])
     monkeypatch.setattr(client.rate_limiter, "wait", AsyncMock(return_value=None))
     monkeypatch.setattr("src.ingestion.gdelt_client.asyncio.sleep", AsyncMock(return_value=None))
 
     payload = await client._request_json({"query": "test"})
 
     assert payload == {"articles": []}
-    assert mock_http_client.get.await_count == 2
+    assert client.safe_fetcher.get.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -434,7 +432,7 @@ async def test_request_json_stops_after_retry_budget(
 ) -> None:
     client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
     client.max_retries = 1
-    mock_http_client.get = AsyncMock(
+    client.safe_fetcher.get = AsyncMock(
         side_effect=[httpx.ReadTimeout("timeout"), httpx.ReadTimeout("timeout")]
     )
     monkeypatch.setattr(client.rate_limiter, "wait", AsyncMock(return_value=None))
@@ -443,7 +441,7 @@ async def test_request_json_stops_after_retry_budget(
     with pytest.raises(httpx.ReadTimeout):
         await client._request_json({"query": "test"})
 
-    assert mock_http_client.get.await_count == 2
+    assert client.safe_fetcher.get.await_count == 2
 
 
 @pytest.mark.asyncio

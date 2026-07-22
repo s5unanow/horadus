@@ -228,17 +228,15 @@ async def test_fetch_with_retries_recovers_after_timeout(
 ) -> None:
     collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
     collector.max_retries = 2
-    response = MagicMock()
-    response.raise_for_status = MagicMock()
-    response.text = "<rss></rss>"
-    mock_http_client.get = AsyncMock(side_effect=[httpx.ReadTimeout("timeout"), response])
+    response = SimpleNamespace(text="<rss></rss>")
+    collector.safe_fetcher.get = AsyncMock(side_effect=[httpx.ReadTimeout("timeout"), response])
     monkeypatch.setattr(collector.rate_limiter, "wait", AsyncMock(return_value=None))
     monkeypatch.setattr("src.ingestion.rss_collector.asyncio.sleep", AsyncMock(return_value=None))
 
     result = await collector._fetch_with_retries("https://example.com/rss", timeout_seconds=5)
 
     assert result == "<rss></rss>"
-    assert mock_http_client.get.await_count == 2
+    assert collector.safe_fetcher.get.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -249,7 +247,7 @@ async def test_fetch_with_retries_stops_after_retry_budget(
 ) -> None:
     collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
     collector.max_retries = 1
-    mock_http_client.get = AsyncMock(
+    collector.safe_fetcher.get = AsyncMock(
         side_effect=[httpx.ReadTimeout("timeout"), httpx.ReadTimeout("timeout")]
     )
     monkeypatch.setattr(collector.rate_limiter, "wait", AsyncMock(return_value=None))
@@ -258,7 +256,7 @@ async def test_fetch_with_retries_stops_after_retry_budget(
     with pytest.raises(httpx.ReadTimeout):
         await collector._fetch_with_retries("https://example.com/rss", timeout_seconds=5)
 
-    assert mock_http_client.get.await_count == 2
+    assert collector.safe_fetcher.get.await_count == 2
 
 
 def test_normalize_url_removes_tracking_parts() -> None:
@@ -665,12 +663,10 @@ async def test_fetch_with_retries_retries_http_status_with_retry_after(
     collector.max_retries = 1
     rate_wait = AsyncMock(return_value=None)
     sleep = AsyncMock(return_value=None)
-    response_ok = MagicMock()
-    response_ok.raise_for_status = MagicMock()
-    response_ok.text = "<rss>ok</rss>"
+    response_ok = SimpleNamespace(text="<rss>ok</rss>")
     retry_response = MagicMock(status_code=429, headers={"Retry-After": "1.5"})
     request = httpx.Request("GET", "https://example.com/rss")
-    mock_http_client.get = AsyncMock(
+    collector.safe_fetcher.get = AsyncMock(
         side_effect=[
             httpx.HTTPStatusError("rate limit", request=request, response=retry_response),
             response_ok,
@@ -694,7 +690,7 @@ async def test_fetch_with_retries_raises_for_non_retryable_http_status(
     collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
     request = httpx.Request("GET", "https://example.com/rss")
     response = MagicMock(status_code=404, headers={})
-    mock_http_client.get = AsyncMock(
+    collector.safe_fetcher.get = AsyncMock(
         side_effect=httpx.HTTPStatusError("not found", request=request, response=response)
     )
     monkeypatch.setattr(collector.rate_limiter, "wait", AsyncMock(return_value=None))
@@ -712,10 +708,8 @@ async def test_fetch_with_retries_recovers_after_network_error(
     collector = RSSCollector(session=mock_db_session, http_client=mock_http_client)
     collector.max_retries = 1
     request = httpx.Request("GET", "https://example.com/rss")
-    response_ok = MagicMock()
-    response_ok.raise_for_status = MagicMock()
-    response_ok.text = "<rss>ok</rss>"
-    mock_http_client.get = AsyncMock(
+    response_ok = SimpleNamespace(text="<rss>ok</rss>")
+    collector.safe_fetcher.get = AsyncMock(
         side_effect=[httpx.ConnectError("network", request=request), response_ok]
     )
     monkeypatch.setattr(collector.rate_limiter, "wait", AsyncMock(return_value=None))

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import ipaddress
 from uuid import uuid4
 
 import httpx
@@ -7,6 +8,7 @@ import pytest
 from sqlalchemy import select
 
 from src.ingestion.rss_collector import FeedConfig, RSSCollector
+from src.ingestion.safe_http import SafeHTTPFetcher
 from src.storage.database import async_session_maker
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
@@ -46,10 +48,9 @@ async def test_rss_collector_persists_and_deduplicates_items(
 """
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
-        if url == feed_url:
+        if request.url.path == httpx.URL(feed_url).path:
             return httpx.Response(200, text=feed_xml, request=request)
-        if url == article_url:
+        if request.url.path == httpx.URL(article_url).path:
             return httpx.Response(200, text=article_html, request=request)
         return httpx.Response(404, text="Not found", request=request)
 
@@ -66,6 +67,12 @@ async def test_rss_collector_persists_and_deduplicates_items(
             session=session,
             http_client=http_client,
             requests_per_second=1000.0,
+        )
+        collector.safe_fetcher = SafeHTTPFetcher(
+            client=http_client,
+            max_response_bytes=10_000,
+            max_redirects=2,
+            resolver=lambda _host, _port: _public_address_result(),
         )
         feed = FeedConfig(
             name=source_name,
@@ -116,3 +123,7 @@ async def test_rss_collector_persists_and_deduplicates_items(
         assert raw_items[0].processing_status == ProcessingStatus.PENDING
         assert source.error_count == 0
         assert source.last_error is None
+
+
+async def _public_address_result() -> tuple[ipaddress.IPv4Address]:
+    return (ipaddress.IPv4Address("93.184.216.34"),)

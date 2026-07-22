@@ -1427,18 +1427,8 @@ class Settings(BaseSettings):
         default="artifacts/cluster_drift",
         description="Directory where cluster drift sentinel JSON artifacts are written",
     )
-    RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
-        default=300,
-        ge=30,
-        le=7200,
-        description="Total timeout budget in seconds for a single RSS feed collection run",
-    )
-    GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(
-        default=300,
-        ge=30,
-        le=7200,
-        description="Total timeout budget in seconds for a single GDELT query collection run",
-    )
+    RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(default=300, ge=30, le=7200)
+    GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS: int = Field(default=300, ge=30, le=7200)
     COLLECTOR_TASK_MAX_RETRIES: int = Field(
         default=3,
         ge=0,

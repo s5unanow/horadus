@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from src.core.config import settings
 from src.ingestion.content_extractor import ContentExtractor
 from src.ingestion.rate_limiter import DomainRateLimiter
+from src.ingestion.safe_http import build_collector_fetcher
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType, to_decimal
@@ -89,7 +90,7 @@ class RSSCollector:
         requests_per_second: float = 1.0,
     ) -> None:
         self.session = session
-        self.http_client = http_client
+        self.safe_fetcher = build_collector_fetcher(client=http_client)
         self.config_path = Path(config_path)
         self.rate_limiter = DomainRateLimiter(requests_per_second=requests_per_second)
 
@@ -326,13 +327,11 @@ class RSSCollector:
         for attempt in range(max_attempts):
             await self.rate_limiter.wait(url)
             try:
-                response = await self.http_client.get(
+                response = await self.safe_fetcher.get(
                     url,
                     timeout=timeout_seconds,
-                    follow_redirects=True,
                     headers={"User-Agent": self.settings.user_agent},
                 )
-                response.raise_for_status()
                 return response.text
             except httpx.HTTPStatusError as exc:
                 status_code = exc.response.status_code

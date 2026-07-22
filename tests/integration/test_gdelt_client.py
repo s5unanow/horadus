@@ -87,7 +87,7 @@ async def test_gdelt_client_persists_and_deduplicates_items() -> None:
         client = GDELTClient(
             session=session,
             http_client=http_client,
-            api_url="https://gdelt.mock/api/v2/doc/doc",
+            api_url="https://93.184.216.34/api/v2/doc/doc",
             requests_per_second=1000.0,
         )
 

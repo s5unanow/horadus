@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
 from src.ingestion.rate_limiter import DomainRateLimiter
+from src.ingestion.safe_http import build_collector_fetcher
 from src.ingestion.source_identity import gdelt_provider_source_key_from_mapping
 from src.processing.corroboration_provenance import refresh_events_for_source
 from src.processing.deduplication_service import DeduplicationService
@@ -79,7 +80,7 @@ class GDELTClient:
         requests_per_second: float = 1.0,
     ) -> None:
         self.session = session
-        self.http_client = http_client
+        self.safe_fetcher = build_collector_fetcher(client=http_client)
         self.config_path = Path(config_path)
         self.api_url = api_url
         self.rate_limiter = DomainRateLimiter(requests_per_second=requests_per_second)
@@ -295,14 +296,12 @@ class GDELTClient:
         for attempt in range(max_attempts):
             await self.rate_limiter.wait(self.api_url)
             try:
-                response = await self.http_client.get(
+                response = await self.safe_fetcher.get(
                     self.api_url,
                     params=params,
                     timeout=self.settings.request_timeout_seconds,
-                    follow_redirects=True,
                     headers={"User-Agent": self.settings.user_agent},
                 )
-                response.raise_for_status()
                 payload = response.json()
                 if not isinstance(payload, dict):
                     msg = "GDELT response payload is not a JSON object"

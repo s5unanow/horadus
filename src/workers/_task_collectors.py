@@ -5,10 +5,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
+from src.ingestion.safe_http import build_collector_http_client as _http_client
+
 
 async def collect_rss_async(*, deps: Any) -> dict[str, Any]:
     async with (
-        deps.httpx.AsyncClient() as http_client,
+        _http_client() as http_client,
         deps.async_session_maker() as session,
     ):
         collector = deps.RSSCollector(session=session, http_client=http_client)
@@ -32,7 +34,7 @@ async def collect_rss_async(*, deps: Any) -> dict[str, Any]:
 
 async def collect_gdelt_async(*, deps: Any) -> dict[str, Any]:
     async with (
-        deps.httpx.AsyncClient() as http_client,
+        _http_client() as http_client,
         deps.async_session_maker() as session,
     ):
         collector = deps.GDELTClient(session=session, http_client=http_client)
@@ -143,8 +145,7 @@ async def monitor_cluster_drift_async(*, deps: Any) -> dict[str, Any]:
 
     event_samples: list[Any] = []
     for row in rows:
-        activity_state_raw = row[2]
-        item_count_raw = row[3]
+        activity_state_raw, item_count_raw = row[2], row[3]
         item_count = max(0, int(item_count_raw or 0))
         if activity_state_raw == "closed" and item_count == 0:
             continue
@@ -165,8 +166,8 @@ async def monitor_cluster_drift_async(*, deps: Any) -> dict[str, Any]:
             )
         )
 
-    artifact_dir = Path(deps.settings.CLUSTER_DRIFT_ARTIFACT_DIR)
-    baseline_distribution = deps.load_latest_language_distribution(artifact_dir)
+    output_dir = Path(deps.settings.CLUSTER_DRIFT_ARTIFACT_DIR)
+    baseline_distribution = deps.load_latest_language_distribution(output_dir)
     thresholds = deps.ClusterDriftThresholds(
         singleton_rate_warn=deps.settings.CLUSTER_DRIFT_SINGLETON_RATE_WARN_THRESHOLD,
         large_cluster_rate_warn=deps.settings.CLUSTER_DRIFT_LARGE_CLUSTER_RATE_WARN_THRESHOLD,
@@ -181,10 +182,7 @@ async def monitor_cluster_drift_async(*, deps: Any) -> dict[str, Any]:
         window_start=window_start,
         window_end=window_end,
     )
-    artifact_path = deps.write_cluster_drift_artifact(
-        artifact_dir=artifact_dir,
-        summary=summary,
-    )
+    artifact_path = deps.write_cluster_drift_artifact(artifact_dir=output_dir, summary=summary)
     warning_keys = summary.get("warning_keys")
     warnings = list(warning_keys) if isinstance(warning_keys, list) else []
 

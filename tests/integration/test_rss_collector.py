@@ -17,8 +17,8 @@ pytestmark = pytest.mark.integration
 async def test_rss_collector_persists_and_deduplicates_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    feed_url = f"https://integration.local/{uuid4()}/rss.xml"
-    article_url = f"https://integration.local/{uuid4()}/article/1"
+    feed_url = f"https://93.184.216.34/{uuid4()}/rss.xml"
+    article_url = f"https://93.184.216.34/{uuid4()}/article/1"
     source_name = f"Integration Feed {uuid4()}"
 
     feed_xml = f"""<?xml version="1.0" encoding="UTF-8"?>

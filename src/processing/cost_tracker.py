@@ -121,7 +121,7 @@ class CostTracker:
         provider: str | None = None,
         model: str | None = None,
     ) -> None:
-        """Atomically enforce limits and persist usage for one API call."""
+        """Persist one completed API call, then report any resulting overage."""
         normalized_tier = self._normalize_tier(tier)
         today = datetime.now(tz=UTC).date()
         safe_input_tokens = max(0, int(input_tokens))
@@ -142,6 +142,16 @@ class CostTracker:
 
         call_limit = self._call_limit_for_tier(normalized_tier)
         projected_calls = usage.call_count + 1
+        total_cost = sum(Decimal(str(row.estimated_cost_usd)) for row in usage_rows)
+        daily_limit = Decimal(str(settings.DAILY_COST_LIMIT_USD))
+        projected_total_cost = total_cost + estimated_cost
+        usage.call_count = projected_calls
+        usage.input_tokens += safe_input_tokens
+        usage.output_tokens += safe_output_tokens
+        usage.estimated_cost_usd = to_decimal(usage.estimated_cost_usd) + estimated_cost
+        usage.updated_at = datetime.now(tz=UTC)
+        await self.session.flush()
+
         if call_limit > 0 and projected_calls > call_limit:
             reason = f"{normalized_tier} daily call limit ({call_limit}) exceeded"
             self._log_budget_denial(
@@ -151,9 +161,6 @@ class CostTracker:
             )
             raise BudgetExceededError(reason)
 
-        total_cost = sum(Decimal(str(row.estimated_cost_usd)) for row in usage_rows)
-        daily_limit = Decimal(str(settings.DAILY_COST_LIMIT_USD))
-        projected_total_cost = total_cost + estimated_cost
         if daily_limit > 0 and projected_total_cost > daily_limit:
             reason = f"daily cost limit (${settings.DAILY_COST_LIMIT_USD}) exceeded"
             self._log_budget_denial(
@@ -164,13 +171,6 @@ class CostTracker:
                 daily_limit=daily_limit,
             )
             raise BudgetExceededError(reason)
-
-        usage.call_count = projected_calls
-        usage.input_tokens += safe_input_tokens
-        usage.output_tokens += safe_output_tokens
-        usage.estimated_cost_usd = to_decimal(usage.estimated_cost_usd) + estimated_cost
-        usage.updated_at = datetime.now(tz=UTC)
-        await self.session.flush()
 
         await self._maybe_log_alert(today)
 

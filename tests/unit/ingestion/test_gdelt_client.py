@@ -413,7 +413,7 @@ async def test_request_json_retries_transient_timeout_then_succeeds(
 ) -> None:
     client = GDELTClient(session=mock_db_session, http_client=mock_http_client)
     client.max_retries = 2
-    response = SimpleNamespace(content=b'{"articles": []}')
+    response = SimpleNamespace(json=lambda: {"articles": []})
     client.safe_fetcher.get = AsyncMock(side_effect=[httpx.ReadTimeout("timeout"), response])
     monkeypatch.setattr(client.rate_limiter, "wait", AsyncMock(return_value=None))
     monkeypatch.setattr("src.ingestion.gdelt_client.asyncio.sleep", AsyncMock(return_value=None))

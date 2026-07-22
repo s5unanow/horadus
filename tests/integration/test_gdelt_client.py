@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ipaddress
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -9,7 +8,6 @@ import pytest
 from sqlalchemy import select
 
 from src.ingestion.gdelt_client import GDELTClient, GDELTQueryConfig
-from src.ingestion.safe_http import SafeHTTPFetcher
 from src.storage.database import async_session_maker
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
@@ -89,14 +87,8 @@ async def test_gdelt_client_persists_and_deduplicates_items() -> None:
         client = GDELTClient(
             session=session,
             http_client=http_client,
-            api_url="https://gdelt.mock/api/v2/doc/doc",
+            api_url="https://93.184.216.34/api/v2/doc/doc",
             requests_per_second=1000.0,
-        )
-        client.safe_fetcher = SafeHTTPFetcher(
-            client=http_client,
-            max_response_bytes=10_000,
-            max_redirects=2,
-            resolver=lambda _host, _port: _public_address_result(),
         )
 
         first = await client.collect_query(query)
@@ -138,7 +130,3 @@ async def test_gdelt_client_persists_and_deduplicates_items() -> None:
         assert raw_items[0].processing_status == ProcessingStatus.PENDING
         assert source.error_count == 0
         assert source.last_error is None
-
-
-async def _public_address_result() -> tuple[ipaddress.IPv4Address]:
-    return (ipaddress.IPv4Address("93.184.216.34"),)

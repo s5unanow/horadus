@@ -446,7 +446,7 @@ async def test_collect_rss_async_aggregates_results(monkeypatch: pytest.MonkeyPa
                 FakeCollectorResult(2, 1, 0, ["x"], transient_errors=0, terminal_errors=1),
             ]
 
-    monkeypatch.setattr(tasks_module.httpx, "AsyncClient", lambda **_kwargs: FakeAsyncClient())
+    monkeypatch.setattr(tasks_module.collector_helpers, "_http_client", FakeAsyncClient)
     monkeypatch.setattr(tasks_module, "async_session_maker", _session_maker(mock_session))
     monkeypatch.setattr(tasks_module, "RSSCollector", FakeCollector)
 
@@ -484,7 +484,7 @@ async def test_collect_gdelt_async_aggregates_results(monkeypatch: pytest.Monkey
         async def collect_all(self) -> list[FakeCollectorResult]:
             return [FakeCollectorResult(4, 4, 0, [])]
 
-    monkeypatch.setattr(tasks_module.httpx, "AsyncClient", lambda **_kwargs: FakeAsyncClient())
+    monkeypatch.setattr(tasks_module.collector_helpers, "_http_client", FakeAsyncClient)
     monkeypatch.setattr(tasks_module, "async_session_maker", _session_maker(mock_session))
     monkeypatch.setattr(tasks_module, "GDELTClient", FakeCollector)
 

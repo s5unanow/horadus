@@ -59,6 +59,7 @@ redirect count, timeouts, and connection-pool use.
 - 2026-07-22: Send `Connection: close` and disable HTTP/2 for collector clients so a connection pinned for one hostname cannot be pooled for a different hostname that resolves to the same address.
 - 2026-07-22: Local review found that DNS lookup failures lost the collectors' established transient retry path and that source-specific timeouts overrode the new global read cap. Resolution failures now surface as `httpx.ConnectError`, and each request uses the lower of its source timeout and the configured global ceiling.
 - 2026-07-22: Fresh-head review found decompression, multi-address availability, and DNS-timeout gaps. Collector requests now require identity encoding before streaming, try every validated public address in resolver order on network failure, and bound DNS resolution with the configured connect timeout.
+- 2026-07-22: The first canonical full gate exposed committed-diff code-health growth that dirty-worktree checks could not see. HTTP settings and client construction were extracted into single-owner modules, synthetic integration URLs now use public IP literals, and existing config, collector, worker, and integration-test files are flat or smaller against `main`.
 
 ## Risks / Foot-guns
 

@@ -4,19 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 import socket
 from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address
+from typing import Any
 
 import httpx
 
-from src.core.config import settings
+from src.core.collector_http_config import collector_http_settings
 
 IPAddress = IPv4Address | IPv6Address
 AddressResolver = Callable[[str, int], Awaitable[tuple[IPAddress, ...]]]
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _STREAM_CHUNK_BYTES = 64 * 1024
+_COLLECTOR_KEEPALIVE_EXPIRY_SECONDS = 15.0
 
 
 class SafeFetchError(ValueError):
@@ -46,15 +49,42 @@ class SafeFetchResponse:
         """Decode the bounded response body with the server-selected encoding."""
         return self.content.decode(self.encoding, errors="replace")
 
+    def json(self) -> Any:
+        """Decode the bounded response body as JSON."""
+        return json.loads(self.content)
+
 
 def build_collector_fetcher(*, client: httpx.AsyncClient) -> SafeHTTPFetcher:
     """Build the shared collector fetch policy from validated application settings."""
     return SafeHTTPFetcher(
         client=client,
-        max_response_bytes=settings.COLLECTOR_HTTP_MAX_RESPONSE_BYTES,
-        max_redirects=settings.COLLECTOR_HTTP_MAX_REDIRECTS,
-        connect_timeout_seconds=settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS,
-        max_read_timeout_seconds=settings.COLLECTOR_HTTP_READ_TIMEOUT_SECONDS,
+        max_response_bytes=collector_http_settings.COLLECTOR_HTTP_MAX_RESPONSE_BYTES,
+        max_redirects=collector_http_settings.COLLECTOR_HTTP_MAX_REDIRECTS,
+        connect_timeout_seconds=collector_http_settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS,
+        max_read_timeout_seconds=collector_http_settings.COLLECTOR_HTTP_READ_TIMEOUT_SECONDS,
+    )
+
+
+def build_collector_http_client() -> httpx.AsyncClient:
+    """Build a direct collector client with explicit pool and timeout bounds."""
+    connect_timeout = collector_http_settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS
+    return httpx.AsyncClient(
+        timeout=httpx.Timeout(
+            connect=connect_timeout,
+            read=collector_http_settings.COLLECTOR_HTTP_READ_TIMEOUT_SECONDS,
+            write=connect_timeout,
+            pool=connect_timeout,
+        ),
+        limits=httpx.Limits(
+            max_connections=collector_http_settings.COLLECTOR_HTTP_MAX_CONNECTIONS,
+            max_keepalive_connections=(
+                collector_http_settings.COLLECTOR_HTTP_MAX_KEEPALIVE_CONNECTIONS
+            ),
+            keepalive_expiry=_COLLECTOR_KEEPALIVE_EXPIRY_SECONDS,
+        ),
+        follow_redirects=False,
+        http2=False,
+        trust_env=False,
     )
 
 

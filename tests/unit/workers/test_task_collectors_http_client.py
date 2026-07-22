@@ -1,17 +1,19 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
 from typing import cast
 
 import httpx
 import pytest
 
-from src.workers._task_collectors import _collector_http_client
+from src.core.collector_http_config import CollectorHTTPSettings
+from src.ingestion.safe_http import build_collector_http_client
 
 pytestmark = pytest.mark.unit
 
 
-def test_collector_http_client_uses_bounded_direct_connection_settings() -> None:
+def test_collector_http_client_uses_bounded_direct_connection_settings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, object] = {}
     sentinel = object()
 
@@ -19,13 +21,10 @@ def test_collector_http_client_uses_bounded_direct_connection_settings() -> None
         captured.update(kwargs)
         return sentinel
 
-    deps = SimpleNamespace(
-        httpx=SimpleNamespace(
-            AsyncClient=async_client_factory,
-            Limits=httpx.Limits,
-            Timeout=httpx.Timeout,
-        ),
-        settings=SimpleNamespace(
+    monkeypatch.setattr("src.ingestion.safe_http.httpx.AsyncClient", async_client_factory)
+    monkeypatch.setattr(
+        "src.ingestion.safe_http.collector_http_settings",
+        CollectorHTTPSettings(
             COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS=7.0,
             COLLECTOR_HTTP_READ_TIMEOUT_SECONDS=23.0,
             COLLECTOR_HTTP_MAX_CONNECTIONS=8,
@@ -33,7 +32,7 @@ def test_collector_http_client_uses_bounded_direct_connection_settings() -> None
         ),
     )
 
-    assert _collector_http_client(deps=deps) is sentinel
+    assert build_collector_http_client() is sentinel
     assert captured["follow_redirects"] is False
     assert captured["http2"] is False
     assert captured["trust_env"] is False

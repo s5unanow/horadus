@@ -109,7 +109,7 @@ async def test_fetch_articles_and_request_json_cover_error_paths(
         )
 
     client_request = GDELTClient(session=mock_db_session, http_client=mock_http_client)
-    response = SimpleNamespace(content=b"[]")
+    response = SimpleNamespace(json=list)
     client_request.safe_fetcher.get = AsyncMock(return_value=response)
     monkeypatch.setattr(client_request.rate_limiter, "wait", AsyncMock(return_value=None))
     with pytest.raises(ValueError, match="not a JSON object"):
@@ -117,7 +117,7 @@ async def test_fetch_articles_and_request_json_cover_error_paths(
 
     status_response = MagicMock(status_code=429, headers={"Retry-After": "1.5"})
     status_exc = httpx.HTTPStatusError("rate limit", request=MagicMock(), response=status_response)
-    ok_response = SimpleNamespace(content=b'{"articles": []}')
+    ok_response = SimpleNamespace(json=lambda: {"articles": []})
     client_request.safe_fetcher.get = AsyncMock(side_effect=[status_exc, ok_response])
     sleep_mock = AsyncMock(return_value=None)
     monkeypatch.setattr("src.ingestion.gdelt_client.asyncio.sleep", sleep_mock)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import ipaddress
 from uuid import uuid4
 
 import httpx
@@ -8,7 +7,6 @@ import pytest
 from sqlalchemy import select
 
 from src.ingestion.rss_collector import FeedConfig, RSSCollector
-from src.ingestion.safe_http import SafeHTTPFetcher
 from src.storage.database import async_session_maker
 from src.storage.models import ProcessingStatus, RawItem, Source, SourceType
 
@@ -19,8 +17,8 @@ pytestmark = pytest.mark.integration
 async def test_rss_collector_persists_and_deduplicates_items(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    feed_url = f"https://integration.local/{uuid4()}/rss.xml"
-    article_url = f"https://integration.local/{uuid4()}/article/1"
+    feed_url = f"https://93.184.216.34/{uuid4()}/rss.xml"
+    article_url = f"https://93.184.216.34/{uuid4()}/article/1"
     source_name = f"Integration Feed {uuid4()}"
 
     feed_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -48,9 +46,10 @@ async def test_rss_collector_persists_and_deduplicates_items(
 """
 
     async def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == httpx.URL(feed_url).path:
+        url = str(request.url)
+        if url == feed_url:
             return httpx.Response(200, text=feed_xml, request=request)
-        if request.url.path == httpx.URL(article_url).path:
+        if url == article_url:
             return httpx.Response(200, text=article_html, request=request)
         return httpx.Response(404, text="Not found", request=request)
 
@@ -67,12 +66,6 @@ async def test_rss_collector_persists_and_deduplicates_items(
             session=session,
             http_client=http_client,
             requests_per_second=1000.0,
-        )
-        collector.safe_fetcher = SafeHTTPFetcher(
-            client=http_client,
-            max_response_bytes=10_000,
-            max_redirects=2,
-            resolver=lambda _host, _port: _public_address_result(),
         )
         feed = FeedConfig(
             name=source_name,
@@ -123,7 +116,3 @@ async def test_rss_collector_persists_and_deduplicates_items(
         assert raw_items[0].processing_status == ProcessingStatus.PENDING
         assert source.error_count == 0
         assert source.last_error is None
-
-
-async def _public_address_result() -> tuple[ipaddress.IPv4Address]:
-    return (ipaddress.IPv4Address("93.184.216.34"),)

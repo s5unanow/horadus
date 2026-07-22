@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import time
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
@@ -303,7 +302,7 @@ class GDELTClient:
                     timeout=self.settings.request_timeout_seconds,
                     headers={"User-Agent": self.settings.user_agent},
                 )
-                payload = json.loads(response.content)
+                payload = response.json()
                 if not isinstance(payload, dict):
                     msg = "GDELT response payload is not a JSON object"
                     raise ValueError(msg)

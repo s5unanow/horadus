@@ -5,33 +5,12 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
-_COLLECTOR_KEEPALIVE_EXPIRY_SECONDS = 15.0
-
-
-def _collector_http_client(*, deps: Any) -> Any:
-    timeout = deps.httpx.Timeout(
-        connect=deps.settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS,
-        read=deps.settings.COLLECTOR_HTTP_READ_TIMEOUT_SECONDS,
-        write=deps.settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS,
-        pool=deps.settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS,
-    )
-    limits = deps.httpx.Limits(
-        max_connections=deps.settings.COLLECTOR_HTTP_MAX_CONNECTIONS,
-        max_keepalive_connections=deps.settings.COLLECTOR_HTTP_MAX_KEEPALIVE_CONNECTIONS,
-        keepalive_expiry=_COLLECTOR_KEEPALIVE_EXPIRY_SECONDS,
-    )
-    return deps.httpx.AsyncClient(
-        timeout=timeout,
-        limits=limits,
-        follow_redirects=False,
-        http2=False,
-        trust_env=False,
-    )
+from src.ingestion.safe_http import build_collector_http_client as _http_client
 
 
 async def collect_rss_async(*, deps: Any) -> dict[str, Any]:
     async with (
-        _collector_http_client(deps=deps) as http_client,
+        _http_client() as http_client,
         deps.async_session_maker() as session,
     ):
         collector = deps.RSSCollector(session=session, http_client=http_client)
@@ -55,7 +34,7 @@ async def collect_rss_async(*, deps: Any) -> dict[str, Any]:
 
 async def collect_gdelt_async(*, deps: Any) -> dict[str, Any]:
     async with (
-        _collector_http_client(deps=deps) as http_client,
+        _http_client() as http_client,
         deps.async_session_maker() as session,
     ):
         collector = deps.GDELTClient(session=session, http_client=http_client)

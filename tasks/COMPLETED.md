@@ -424,3 +424,4 @@
 - TASK-415: Adopt Context7 docs lookup package set ✅
 - TASK-417: Clear full local-gate blockers surfaced by TASK-416 ✅
 - TASK-416: Update dependency audit CVE blockers ✅
+- TASK-419: Update pyasn1 for dependency audit advisories ✅

@@ -54,6 +54,7 @@ def build_collector_fetcher(*, client: httpx.AsyncClient) -> SafeHTTPFetcher:
         max_response_bytes=settings.COLLECTOR_HTTP_MAX_RESPONSE_BYTES,
         max_redirects=settings.COLLECTOR_HTTP_MAX_REDIRECTS,
         connect_timeout_seconds=settings.COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS,
+        max_read_timeout_seconds=settings.COLLECTOR_HTTP_READ_TIMEOUT_SECONDS,
     )
 
 
@@ -74,7 +75,7 @@ async def resolve_host_addresses(host: str, port: int) -> tuple[IPAddress, ...]:
             proto=socket.IPPROTO_TCP,
         )
     except socket.gaierror as exc:
-        raise UnsafeDestinationError(f"Unable to resolve collector destination: {host}") from exc
+        raise httpx.ConnectError(f"Unable to resolve collector destination: {host}") from exc
 
     addresses = tuple(dict.fromkeys(ipaddress.ip_address(record[4][0]) for record in records))
     if not addresses:
@@ -92,16 +93,20 @@ class SafeHTTPFetcher:
         max_response_bytes: int,
         max_redirects: int,
         connect_timeout_seconds: float = 10.0,
+        max_read_timeout_seconds: float = 30.0,
         resolver: AddressResolver = resolve_host_addresses,
     ) -> None:
         if max_response_bytes <= 0:
             raise ValueError("max_response_bytes must be positive")
         if max_redirects < 0:
             raise ValueError("max_redirects must be non-negative")
+        if max_read_timeout_seconds <= 0:
+            raise ValueError("max_read_timeout_seconds must be positive")
         self._client = client
         self._max_response_bytes = max_response_bytes
         self._max_redirects = max_redirects
         self._connect_timeout_seconds = connect_timeout_seconds
+        self._max_read_timeout_seconds = max_read_timeout_seconds
         self._resolver = resolver
 
     async def get(
@@ -119,7 +124,7 @@ class SafeHTTPFetcher:
         base_headers = httpx.Headers(headers)
         request_timeout = httpx.Timeout(
             connect=self._connect_timeout_seconds,
-            read=timeout,
+            read=min(timeout, self._max_read_timeout_seconds),
             write=self._connect_timeout_seconds,
             pool=self._connect_timeout_seconds,
         )

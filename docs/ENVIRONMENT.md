@@ -240,7 +240,7 @@ Reasoning-effort notes:
 | `RSS_COLLECTOR_TOTAL_TIMEOUT_SECONDS` | `300` | Total timeout budget per RSS feed collection run. |
 | `GDELT_COLLECTOR_TOTAL_TIMEOUT_SECONDS` | `300` | Total timeout budget per GDELT query collection run. |
 | `COLLECTOR_HTTP_CONNECT_TIMEOUT_SECONDS` | `10` | TCP/TLS connect, write, and pool-acquisition timeout for collector clients. |
-| `COLLECTOR_HTTP_READ_TIMEOUT_SECONDS` | `30` | Per-read timeout for RSS and GDELT HTTP responses. |
+| `COLLECTOR_HTTP_READ_TIMEOUT_SECONDS` | `30` | Hard ceiling for each RSS and GDELT HTTP response read; lower source-specific timeouts still apply. |
 | `COLLECTOR_HTTP_MAX_CONNECTIONS` | `20` | Maximum collector HTTP connections. |
 | `COLLECTOR_HTTP_MAX_KEEPALIVE_CONNECTIONS` | `10` | Maximum idle collector keepalive connections. |
 | `COLLECTOR_HTTP_MAX_RESPONSE_BYTES` | `10000000` | Maximum decoded RSS/GDELT response body size. |

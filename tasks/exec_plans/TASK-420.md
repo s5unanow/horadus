@@ -57,6 +57,7 @@ redirect count, timeouts, and connection-pool use.
 - 2026-07-22: Preserve existing retry ownership in each collector; the shared helper performs one bounded request chain and surfaces typed HTTP/status/safety failures.
 - 2026-07-22: Reject multicast explicitly in addition to `is_global` because Python's IP address model reports multicast ranges as global; focused regressions cover every blocked address class named by the task.
 - 2026-07-22: Send `Connection: close` and disable HTTP/2 for collector clients so a connection pinned for one hostname cannot be pooled for a different hostname that resolves to the same address.
+- 2026-07-22: Local review found that DNS lookup failures lost the collectors' established transient retry path and that source-specific timeouts overrode the new global read cap. Resolution failures now surface as `httpx.ConnectError`, and each request uses the lower of its source timeout and the configured global ceiling.
 
 ## Risks / Foot-guns
 
@@ -85,3 +86,4 @@ redirect count, timeouts, and connection-pool use.
 - 2026-07-22 validation: 135 focused unit tests passed; `make agent-check` passed (ruff, mypy, code shape, docstring policy, code health, and full unit suites); `make test-integration-docker` passed 20 tests after its synthetic host fixtures were routed through a deterministic public-address resolver.
 - 2026-07-22 live smoke: a real fetch of `https://example.com/` through `SafeHTTPFetcher` returned HTTP 200 while connecting to the validated numeric address with the original Host/SNI. No automated test performs network I/O.
 - Pre-commit `horadus tasks local-review --format json` reported no branch diff because the review target is `main...HEAD`; rerun after the implementation commit and before push.
+- Post-commit local review completed through the configured Codex fallback after Claude timed out. Both P2 findings were accepted and fixed: DNS lookup failures retain transient network retry semantics, and the environment read timeout is a hard ceiling over source-specific values.

@@ -54,6 +54,7 @@ async def test_safe_fetch_pins_public_ip_and_preserves_host_and_sni() -> None:
             client=client,
             max_response_bytes=100,
             max_redirects=2,
+            max_read_timeout_seconds=3,
             resolver=_public_resolver,
         )
         response = await fetcher.get(
@@ -72,7 +73,7 @@ async def test_safe_fetch_pins_public_ip_and_preserves_host_and_sni() -> None:
     assert seen[0].headers["User-Agent"] == "test"
     assert seen[0].extensions["sni_hostname"] == "example.com"
     assert seen[0].extensions["timeout"]["connect"] == 10.0
-    assert seen[0].extensions["timeout"]["read"] == 5
+    assert seen[0].extensions["timeout"]["read"] == 3
 
 
 @pytest.mark.asyncio
@@ -256,6 +257,13 @@ def test_safe_fetch_validates_constructor_limits() -> None:
         SafeHTTPFetcher(client=client, max_response_bytes=0, max_redirects=1)
     with pytest.raises(ValueError, match="max_redirects"):
         SafeHTTPFetcher(client=client, max_response_bytes=1, max_redirects=-1)
+    with pytest.raises(ValueError, match="max_read_timeout_seconds"):
+        SafeHTTPFetcher(
+            client=client,
+            max_response_bytes=1,
+            max_redirects=1,
+            max_read_timeout_seconds=0,
+        )
 
 
 @pytest.mark.asyncio
@@ -275,7 +283,7 @@ async def test_resolve_host_addresses_handles_literals_dns_dedup_and_failures(
     assert await resolve_host_addresses("example.com", 443) == (_PUBLIC_V4,)
 
     getaddrinfo.side_effect = socket.gaierror("failed")
-    with pytest.raises(UnsafeDestinationError, match="Unable to resolve"):
+    with pytest.raises(httpx.ConnectError, match="Unable to resolve"):
         await resolve_host_addresses("failed.example", 443)
 
     getaddrinfo.side_effect = None

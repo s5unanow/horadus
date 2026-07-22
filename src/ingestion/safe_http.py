@@ -20,6 +20,7 @@ AddressResolver = Callable[[str, int], Awaitable[tuple[IPAddress, ...]]]
 _REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 _STREAM_CHUNK_BYTES = 64 * 1024
 _COLLECTOR_KEEPALIVE_EXPIRY_SECONDS = 15.0
+_NAT64_WELL_KNOWN_PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
 
 
 class SafeFetchError(ValueError):
@@ -111,6 +112,25 @@ async def resolve_host_addresses(host: str, port: int) -> tuple[IPAddress, ...]:
     if not addresses:
         raise UnsafeDestinationError(f"Collector destination resolved no addresses: {host}")
     return addresses
+
+
+def _embedded_ipv4_address(address: IPAddress) -> IPv4Address | None:
+    if not isinstance(address, IPv6Address):
+        return None
+    if address.ipv4_mapped is not None:
+        return address.ipv4_mapped
+    if address in _NAT64_WELL_KNOWN_PREFIX:
+        return IPv4Address(int(address) & 0xFFFFFFFF)
+    return None
+
+
+def _is_public_destination(address: IPAddress) -> bool:
+    embedded_ipv4 = _embedded_ipv4_address(address)
+    return (
+        address.is_global
+        and not address.is_multicast
+        and (embedded_ipv4 is None or (embedded_ipv4.is_global and not embedded_ipv4.is_multicast))
+    )
 
 
 class SafeHTTPFetcher:
@@ -225,9 +245,7 @@ class SafeHTTPFetcher:
             raise httpx.ConnectTimeout(
                 f"Timed out resolving collector destination: {url.host}"
             ) from exc
-        blocked = tuple(
-            address for address in addresses if not address.is_global or address.is_multicast
-        )
+        blocked = tuple(address for address in addresses if not _is_public_destination(address))
         if blocked:
             rendered = ", ".join(str(address) for address in blocked)
             raise UnsafeDestinationError(f"Collector destination is not public: {rendered}")

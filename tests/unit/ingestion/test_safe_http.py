@@ -137,6 +137,28 @@ async def test_safe_fetch_falls_back_across_validated_public_addresses() -> None
 
 
 @pytest.mark.asyncio
+async def test_safe_fetch_allows_nat64_embedding_of_public_ipv4() -> None:
+    public_nat64 = ipaddress.ip_address("64:ff9b::808:808")
+
+    async def resolver(_host: str, _port: int):
+        return (public_nat64,)
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.host == str(public_nat64)
+        return httpx.Response(200, content=b"public NAT64", request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        response = await SafeHTTPFetcher(
+            client=client,
+            max_response_bytes=100,
+            max_redirects=1,
+            resolver=resolver,
+        ).get("https://example.com/source", timeout=5)
+
+    assert response.content == b"public NAT64"
+
+
+@pytest.mark.asyncio
 async def test_safe_fetch_raises_after_all_validated_addresses_fail() -> None:
     seen: list[str] = []
 
@@ -174,6 +196,8 @@ async def test_safe_fetch_raises_after_all_validated_addresses_fail() -> None:
         "fe80::1",
         "ff02::1",
         "2001:db8::1",
+        "::ffff:169.254.169.254",
+        "64:ff9b::a9fe:a9fe",
     ],
 )
 async def test_safe_fetch_rejects_non_public_or_mixed_resolution_before_request(

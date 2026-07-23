@@ -9,6 +9,7 @@ import pytest
 from sqlalchemy import select
 
 from src.core.trend_engine import EvidenceFactors, TrendEngine
+from src.core.trend_state import activate_trend_state
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
 from src.storage.models import Event, EventClaim, Trend, TrendEvidence
@@ -86,6 +87,13 @@ async def test_reclassification_supersedes_active_evidence_when_severity_changes
         )
         session.add_all([trend, event])
         await session.flush()
+        await activate_trend_state(
+            session=session,
+            trend=trend,
+            activation_kind="create",
+            actor="integration-test",
+            context="severity-reclassification",
+        )
         event_claim = EventClaim(
             event_id=event.id,
             claim_key="__event__",
@@ -205,6 +213,13 @@ async def test_reclassification_supersedes_active_evidence_when_event_merge_chan
         )
         session.add_all([trend, event])
         await session.flush()
+        await activate_trend_state(
+            session=session,
+            trend=trend,
+            activation_kind="create",
+            actor="integration-test",
+            context="merge-reclassification",
+        )
         event_claim = EventClaim(
             event_id=event.id,
             claim_key="__event__",

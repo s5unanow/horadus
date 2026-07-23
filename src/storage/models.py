@@ -770,11 +770,13 @@ class TrendEvidence(Base):
         Index("idx_evidence_event_invalidated", "event_id", "is_invalidated"),
         Index(
             "uq_trend_event_claim_signal_active",
+            "trend_id",
             "state_version_id",
             "event_claim_id",
             "signal_type",
             unique=True,
             postgresql_where=text("is_invalidated = false"),
+            postgresql_nulls_not_distinct=True,
         ),
     )
 

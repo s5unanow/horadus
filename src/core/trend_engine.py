@@ -514,12 +514,16 @@ class TrendEngine:
         reasoning: str,
     ) -> TrendUpdate:
         """Apply one evidence delta and persist the claim-aware audit row."""
+        active_state_version_id = trend.active_state_version_id
+        if not isinstance(active_state_version_id, UUID):
+            raise ValueError(f"Trend '{trend.id}' has no active state version")
+
         prior_log_odds = float(trend.current_log_odds)
         previous_prob = logodds_to_prob(prior_log_odds)
 
         existing = await self.session.execute(
             select(TrendEvidence.id).where(
-                TrendEvidence.state_version_id == trend.active_state_version_id,
+                TrendEvidence.state_version_id == active_state_version_id,
                 TrendEvidence.event_claim_id == event_claim_id,
                 TrendEvidence.signal_type == signal_type,
                 TrendEvidence.is_invalidated.is_(False),
@@ -542,11 +546,6 @@ class TrendEngine:
             )
 
         scoring_contract = resolve_active_scoring_contract(trend)
-        active_state_version_id = (
-            trend.active_state_version_id
-            if isinstance(trend.active_state_version_id, UUID)
-            else None
-        )
         evidence = TrendEvidence(
             trend_id=trend.id,
             event_id=event_id,

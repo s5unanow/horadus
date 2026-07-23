@@ -66,6 +66,7 @@ async def test_apply_evidence_persists_decimal_runtime_values(
     mock_session, mock_trend, sample_factors
 ) -> None:
     engine = TrendEngine(mock_session)
+    mock_trend.active_state_version_id = uuid4()
 
     @asynccontextmanager
     async def _begin_nested():
@@ -76,7 +77,7 @@ async def test_apply_evidence_persists_decimal_runtime_values(
     precheck_result.scalar_one_or_none.return_value = None
     execute_result = MagicMock()
     execute_result.scalar_one_or_none.return_value = 1.2
-    mock_session.execute = AsyncMock(side_effect=[precheck_result, execute_result])
+    mock_session.execute = AsyncMock(side_effect=[precheck_result, execute_result, MagicMock()])
 
     await engine.apply_evidence(
         trend=mock_trend,

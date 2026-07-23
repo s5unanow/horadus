@@ -486,6 +486,7 @@ Audit trail of all probability updates.
 | trend_id | UUID | No | | Foreign key to trends |
 | event_id | UUID | No | | Foreign key to events |
 | event_claim_id | UUID | No | | Foreign key to stable `event_claims` identity used for replay/invalidation lineage |
+| state_version_id | UUID | Yes | | FK to the trend state version active when evidence was applied; legacy/deleted-state rows may be null |
 | signal_type | VARCHAR(100) | No | | Type of signal detected |
 | base_weight | DECIMAL(10,6) | Yes | | Indicator weight used at scoring time (nullable for pre-`TASK-157` rows) |
 | direction_multiplier | DECIMAL(3,1) | Yes | | Direction factor used at scoring time (`+1.0` escalatory, `-1.0` de-escalatory; nullable for legacy rows) |
@@ -508,7 +509,8 @@ Audit trail of all probability updates.
 
 **Indexes / uniqueness:**
 - Primary key: `id`
-- Unique active row only: `(trend_id, event_claim_id, signal_type)` where `is_invalidated=false`
+- Unique active row only: `(trend_id, state_version_id, event_claim_id, signal_type)`
+  with `NULLS NOT DISTINCT` where `is_invalidated=false`
 - Index: `(trend_id, created_at DESC)`
 - Index: `event_id`
 - Index: `event_claim_id`

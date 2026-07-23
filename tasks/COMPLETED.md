@@ -428,3 +428,4 @@
 - TASK-418: Fix unrecorded LLM spend when post-call budget check denies ✅
 - TASK-420: Add SSRF guard and resource caps to collector HTTP fetch path ✅
 - TASK-421: Close trend-evidence idempotency hole for NULL state_version_id ✅
+- TASK-422: Guard lineage-repair evidence invalidation against double-reversal ✅

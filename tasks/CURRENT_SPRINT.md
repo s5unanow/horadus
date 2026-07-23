@@ -13,6 +13,9 @@
 
 ## Selection Notes
 
+- `TASK-422` was promoted from `INTAKE-0068` as the next highest-priority
+  belief-state integrity defect because concurrent lineage repairs can reverse
+  one evidence delta more than once.
 - `TASK-421` was promoted from `INTAKE-0063` as the highest-priority pending
   belief-state integrity defect because nullable state-version keys can bypass
   both the pre-check and database uniqueness guard, double-applying evidence.
@@ -52,8 +55,11 @@
 19. `TASK-418` Fix unrecorded LLM spend when post-call budget check denies.
 20. `TASK-420` Add SSRF guard and resource caps to collector HTTP fetch path.
 21. `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id.
+22. `TASK-422` Guard lineage-repair evidence invalidation against double-reversal.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -128,3 +134,4 @@
 - `TASK-418` Fix unrecorded LLM spend when post-call budget check denies ✅
 - `TASK-420` Add SSRF guard and resource caps to collector HTTP fetch path ✅
 - `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id ✅
+- `TASK-422` Guard lineage-repair evidence invalidation against double-reversal ✅

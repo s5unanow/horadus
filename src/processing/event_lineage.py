@@ -8,7 +8,6 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any
 from uuid import UUID
-
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +24,7 @@ from src.processing.event_cluster_health import (
     apply_default_cluster_health,
     apply_repaired_cluster_health,
 )
+from src.processing.event_lineage_invalidation import claim_evidence_invalidations
 from src.processing.event_lifecycle import ARCHIVE_DAYS, FADING_HOURS, EventLifecycleManager
 from src.processing.event_lineage_replay import (
     clear_stale_event_extractions as _clear_stale_event_extractions,
@@ -465,6 +465,8 @@ async def _repair_affected_events(
     evidence_rows = list(
         (await session.scalars(select_from_active_evidence(event_ids=event_ids))).all()
     )
+    recorded_at = datetime.now(tz=UTC)
+    evidence_rows = await claim_evidence_invalidations(session, evidence_rows, recorded_at)
     prior_compensation_by_evidence_id = await _load_prior_compensation_by_evidence_id(
         session=session,
         evidences=evidence_rows,
@@ -474,11 +476,8 @@ async def _repair_affected_events(
         trend_ids={evidence.trend_id for evidence in evidence_rows},
     )
     trend_engine = TrendEngine(session=session)
-    recorded_at = datetime.now(tz=UTC)
     invalidated_evidence_ids: list[UUID] = []
     for evidence in evidence_rows:
-        evidence.is_invalidated = True
-        evidence.invalidated_at = recorded_at
         trend = trend_by_id.get(evidence.trend_id)
         if trend is None:
             continue

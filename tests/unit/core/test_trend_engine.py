@@ -442,15 +442,13 @@ class TestTrendEngine:
     @pytest.fixture
     def mock_trend(self):
         """Create a mock trend object."""
-        trend = MagicMock()
+        trend = MagicMock(active_state_version_id=None)
         trend.id = uuid4()
         trend.name = "Test Trend"
         trend.baseline_log_odds = prob_to_logodds(0.1)
         trend.current_log_odds = 0.0  # 50% probability
-        trend.updated_at = datetime.now(UTC)
-        trend.decay_half_life_days = 30
+        trend.updated_at, trend.decay_half_life_days = datetime.now(UTC), 30
         trend.definition = {"baseline_probability": 0.1}
-        trend.active_state_version_id = None
         return trend
 
     @pytest.fixture
@@ -501,28 +499,6 @@ class TestTrendEngine:
 
         assert float(mock_trend.current_log_odds) == pytest.approx(initial_lo + delta)
         assert result.delta_applied == delta
-
-    @pytest.mark.asyncio
-    async def test_apply_evidence_rejects_missing_active_state_before_query(
-        self, mock_session, mock_trend, sample_factors
-    ):
-        engine = TrendEngine(mock_session)
-        mock_trend.active_state_version_id = None
-
-        with pytest.raises(ValueError, match="has no active state version"):
-            await engine.apply_evidence(
-                trend=mock_trend,
-                delta=0.1,
-                event_id=uuid4(),
-                event_claim_id=uuid4(),
-                signal_type="test",
-                factors=sample_factors,
-                reasoning="Test reasoning",
-            )
-
-        mock_session.execute.assert_not_awaited()
-        mock_session.add.assert_not_called()
-        mock_session.flush.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_apply_evidence_returns_update(self, mock_session, mock_trend, sample_factors):

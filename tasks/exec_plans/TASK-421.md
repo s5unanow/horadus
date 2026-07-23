@@ -67,6 +67,9 @@ version and enforce the same invariant at the PostgreSQL index layer.
 - 2026-07-23: Include `trend_id` in the replacement index so legacy null-state
   rows remain isolated per trend while non-null state versions retain the same
   claim-aware uniqueness semantics.
+- 2026-07-23: Hosted review identified the documented seeder as a caller that
+  created active trends without state versions; seed creation and legacy
+  reseeding now activate a missing initial state before commit.
 
 ## Risks / Foot-guns
 
@@ -87,6 +90,7 @@ version and enforce the same invariant at the PostgreSQL index layer.
 Validation evidence on 2026-07-23:
 
 - Targeted trend-engine/model tests: 73 passed
+- Targeted seeder/trend-engine regression tests after hosted review: 62 passed
 - Full PostgreSQL integration and migration drift suite: 21 passed
 - `make typecheck`: passed
 - `make agent-check`: passed, including 2,753 unit/workflow tests

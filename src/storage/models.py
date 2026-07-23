@@ -663,7 +663,6 @@ class Trend(Base):
         post_update=True,
     )
 
-    # Indexes
     __table_args__ = (Index("idx_trends_active", "is_active"),)
 
 
@@ -755,7 +754,6 @@ class TrendEvidence(Base):
         foreign_keys=[event_claim_id],
     )
 
-    # Constraints
     __table_args__ = (
         ForeignKeyConstraint(
             ["event_id", "event_claim_id"],

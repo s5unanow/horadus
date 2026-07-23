@@ -32,7 +32,7 @@ def mock_trend():
     trend.current_log_odds = prob_to_logodds(0.1)
     trend.baseline_log_odds = prob_to_logodds(0.1)
     trend.updated_at = datetime.now(UTC)
-    trend.active_state_version_id = None
+    trend.active_state_version_id = uuid4()
     trend.active_definition_hash = None
     trend.active_scoring_math_version = None
     trend.active_scoring_parameter_set = None
@@ -66,7 +66,6 @@ async def test_apply_evidence_persists_decimal_runtime_values(
     mock_session, mock_trend, sample_factors
 ) -> None:
     engine = TrendEngine(mock_session)
-    mock_trend.active_state_version_id = uuid4()
 
     @asynccontextmanager
     async def _begin_nested():

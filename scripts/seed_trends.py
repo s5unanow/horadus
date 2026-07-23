@@ -25,6 +25,7 @@ from src.core.trend_engine import (
     DEFAULT_DECAY_HALF_LIFE_DAYS,
     prob_to_logodds,
 )
+from src.core.trend_seed import ensure_seeded_trend_state, persist_seeded_trend
 from src.storage.database import async_session_maker
 from src.storage.models import Trend, to_decimal
 
@@ -108,10 +109,7 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
     files = sorted([p for p in trends_path.glob("*.y*ml") if p.is_file()])
     if not files:
         raise FileNotFoundError(f"No YAML files found in: {trends_path}")
-
-    created = 0
-    updated = 0
-
+    created = updated = 0
     async with async_session_maker() as session:
         for path in files:
             definition = _load_yaml(path)
@@ -142,30 +140,31 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
             if trend is None:
                 created += 1
                 if not dry_run:
-                    session.add(
-                        Trend(
-                            name=name,
-                            description=definition.get("description"),
-                            runtime_trend_id=runtime_trend_id,
-                            definition=normalized_definition,
-                            baseline_log_odds=baseline_log_odds,
-                            current_log_odds=baseline_log_odds,
-                            indicators=indicators,
-                            decay_half_life_days=decay_half_life_days,
-                            is_active=True,
-                        )
+                    trend = Trend(
+                        name=name,
+                        description=definition.get("description"),
+                        runtime_trend_id=runtime_trend_id,
+                        definition=normalized_definition,
+                        baseline_log_odds=baseline_log_odds,
+                        current_log_odds=baseline_log_odds,
+                        indicators=indicators,
+                        decay_half_life_days=decay_half_life_days,
+                        is_active=True,
                     )
+                    await persist_seeded_trend(session, trend, path.name)
             else:
                 updated += 1
                 if not dry_run:
-                    trend.name = name
-                    trend.description = definition.get("description")
-                    trend.runtime_trend_id = runtime_trend_id
-                    trend.definition = normalized_definition
+                    trend.name, trend.description = name, definition.get("description")
+                    trend.runtime_trend_id, trend.definition = (
+                        runtime_trend_id,
+                        normalized_definition,
+                    )
                     trend.indicators = indicators
                     trend.decay_half_life_days = decay_half_life_days
                     trend.baseline_log_odds = to_decimal(baseline_log_odds)
                     # Do not overwrite current probability when reseeding.
+                    await ensure_seeded_trend_state(session, trend, path.name)
 
         if not dry_run:
             await session.commit()

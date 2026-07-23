@@ -598,11 +598,8 @@ class TrendEngine:
             updated_at=applied_at,
             fallback_current_log_odds=prior_log_odds,
         )
-        trend.current_log_odds = Decimal(str(new_lo))
-        trend.updated_at = applied_at
-
-        previous_prob = logodds_to_prob(previous_lo)
-        new_prob = logodds_to_prob(new_lo)
+        trend.current_log_odds, trend.updated_at = Decimal(str(new_lo)), applied_at
+        previous_prob, new_prob = logodds_to_prob(previous_lo), logodds_to_prob(new_lo)
 
         if delta > 0.001:
             direction = "up"

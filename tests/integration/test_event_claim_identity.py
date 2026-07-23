@@ -9,10 +9,10 @@ import pytest
 from sqlalchemy import select
 
 from src.core.trend_engine import TrendEngine
-from src.core.trend_state import activate_trend_state
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.storage.database import async_session_maker
 from src.storage.models import Event, EventClaim, Trend, TrendEvidence
+from tests.integration.trend_state_support import persist_trend_state
 
 pytestmark = pytest.mark.integration
 
@@ -104,15 +104,7 @@ async def test_contradictory_claims_share_event_but_get_distinct_claim_identity(
                 ],
             },
         )
-        session.add_all([trend, event])
-        await session.flush()
-        await activate_trend_state(
-            session=session,
-            trend=trend,
-            activation_kind="create",
-            actor="integration-test",
-            context="event-claim-identity",
-        )
+        await persist_trend_state(session, trend, event)
 
         pipeline = _pipeline(session)
         seen, updates = await pipeline._apply_trend_impacts(event=event, trends=[trend])

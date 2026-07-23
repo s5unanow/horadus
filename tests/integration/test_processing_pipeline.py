@@ -10,7 +10,6 @@ import pytest
 from sqlalchemy import select
 
 from src.core.config import settings
-from src.core.trend_state import activate_trend_state
 from src.processing.embedding_service import EmbeddingService
 from src.processing.pipeline_orchestrator import ProcessingPipeline
 from src.processing.tier1_classifier import Tier1Classifier
@@ -30,6 +29,7 @@ from src.storage.models import (
     Trend,
     TrendEvidence,
 )
+from tests.integration.trend_state_support import persist_trend_state
 
 pytestmark = pytest.mark.integration
 
@@ -230,16 +230,7 @@ async def test_processing_pipeline_runs_end_to_end(monkeypatch: pytest.MonkeyPat
             decay_half_life_days=30,
             is_active=True,
         )
-        session.add(source)
-        session.add(trend)
-        await session.flush()
-        await activate_trend_state(
-            session=session,
-            trend=trend,
-            activation_kind="create",
-            actor="integration-test",
-            context="processing-pipeline",
-        )
+        await persist_trend_state(session, trend, source)
 
         item = RawItem(
             source_id=source.id,
@@ -356,16 +347,7 @@ async def test_processing_pipeline_keeps_item_pending_when_budget_exceeded(monke
             decay_half_life_days=30,
             is_active=True,
         )
-        session.add(source)
-        session.add(trend)
-        await session.flush()
-        await activate_trend_state(
-            session=session,
-            trend=trend,
-            activation_kind="create",
-            actor="integration-test",
-            context="processing-budget",
-        )
+        await persist_trend_state(session, trend, source)
 
         usage_date = datetime.now(tz=UTC).date()
         existing_usage = await session.scalar(
@@ -473,15 +455,7 @@ async def test_processing_pipeline_persists_novelty_candidate_when_no_trend_upda
             decay_half_life_days=30,
             is_active=True,
         )
-        session.add_all([source, trend])
-        await session.flush()
-        await activate_trend_state(
-            session=session,
-            trend=trend,
-            activation_kind="create",
-            actor="integration-test",
-            context="processing-novelty",
-        )
+        await persist_trend_state(session, trend, source)
 
         item_url = f"https://integration.local/{uuid4()}/novelty-item"
         item = RawItem(

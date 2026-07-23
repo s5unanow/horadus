@@ -663,7 +663,6 @@ class Trend(Base):
         post_update=True,
     )
 
-    # Indexes
     __table_args__ = (Index("idx_trends_active", "is_active"),)
 
 
@@ -755,7 +754,6 @@ class TrendEvidence(Base):
         foreign_keys=[event_claim_id],
     )
 
-    # Constraints
     __table_args__ = (
         ForeignKeyConstraint(
             ["event_id", "event_claim_id"],
@@ -770,11 +768,13 @@ class TrendEvidence(Base):
         Index("idx_evidence_event_invalidated", "event_id", "is_invalidated"),
         Index(
             "uq_trend_event_claim_signal_active",
+            "trend_id",
             "state_version_id",
             "event_claim_id",
             "signal_type",
             unique=True,
             postgresql_where=text("is_invalidated = false"),
+            postgresql_nulls_not_distinct=True,
         ),
     )
 

@@ -10,6 +10,7 @@ from sqlalchemy import func, select
 from src.core.trend_engine import EvidenceFactors, TrendEngine
 from src.storage.database import async_session_maker
 from src.storage.models import Event, EventClaim, Trend, TrendEvidence
+from tests.integration.trend_state_support import persist_trend_state
 
 pytestmark = pytest.mark.integration
 
@@ -49,8 +50,7 @@ async def _create_trend_and_events(
         )
         event_one = Event(canonical_summary=f"Concurrency event A {uuid4()}")
         event_two = Event(canonical_summary=f"Concurrency event B {uuid4()}")
-        session.add_all([trend, event_one, event_two])
-        await session.flush()
+        await persist_trend_state(session, trend, event_one, event_two)
         claim_one = EventClaim(
             event_id=event_one.id,
             claim_key="__event__",

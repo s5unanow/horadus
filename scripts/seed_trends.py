@@ -21,14 +21,9 @@ import yaml
 from sqlalchemy import select
 
 from src.core.trend_config import resolve_runtime_trend_id
-from src.core.trend_engine import (
-    DEFAULT_DECAY_HALF_LIFE_DAYS,
-    prob_to_logodds,
-)
+from src.core.trend_seed import create_seeded_trend, sync_seeded_trend
 from src.storage.database import async_session_maker
-from src.storage.models import Trend, to_decimal
-
-DEFAULT_BASELINE_PROBABILITY = 0.10
+from src.storage.models import Trend
 
 
 def _load_yaml(path: Path) -> dict[str, Any]:
@@ -108,21 +103,12 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
     files = sorted([p for p in trends_path.glob("*.y*ml") if p.is_file()])
     if not files:
         raise FileNotFoundError(f"No YAML files found in: {trends_path}")
-
-    created = 0
-    updated = 0
-
+    created = updated = 0
     async with async_session_maker() as session:
         for path in files:
             definition = _load_yaml(path)
             name = _trend_name(definition, path)
 
-            baseline_probability = float(
-                definition.get("baseline_probability", DEFAULT_BASELINE_PROBABILITY)
-            )
-            decay_half_life_days = int(
-                definition.get("decay_half_life_days", DEFAULT_DECAY_HALF_LIFE_DAYS)
-            )
             indicators = definition.get("indicators") or {}
             if not isinstance(indicators, dict):
                 raise ValueError(f"'indicators' must be a mapping in {path}")
@@ -130,8 +116,6 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
             runtime_trend_id = resolve_runtime_trend_id(definition=definition, trend_name=name)
             normalized_definition = dict(definition)
             normalized_definition["id"] = runtime_trend_id
-
-            baseline_log_odds = prob_to_logodds(baseline_probability)
 
             trend = await _get_existing_trend(
                 session,
@@ -142,30 +126,12 @@ async def seed_trends(trends_path: Path, dry_run: bool) -> int:
             if trend is None:
                 created += 1
                 if not dry_run:
-                    session.add(
-                        Trend(
-                            name=name,
-                            description=definition.get("description"),
-                            runtime_trend_id=runtime_trend_id,
-                            definition=normalized_definition,
-                            baseline_log_odds=baseline_log_odds,
-                            current_log_odds=baseline_log_odds,
-                            indicators=indicators,
-                            decay_half_life_days=decay_half_life_days,
-                            is_active=True,
-                        )
-                    )
+                    await create_seeded_trend(session, normalized_definition, path.name)
             else:
                 updated += 1
                 if not dry_run:
-                    trend.name = name
-                    trend.description = definition.get("description")
-                    trend.runtime_trend_id = runtime_trend_id
-                    trend.definition = normalized_definition
-                    trend.indicators = indicators
-                    trend.decay_half_life_days = decay_half_life_days
-                    trend.baseline_log_odds = to_decimal(baseline_log_odds)
                     # Do not overwrite current probability when reseeding.
+                    await sync_seeded_trend(session, trend, normalized_definition, path.name)
 
         if not dry_run:
             await session.commit()

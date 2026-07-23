@@ -1,9 +1,8 @@
-from __future__ import annotations
-
 import importlib.util
 from contextlib import asynccontextmanager
 from pathlib import Path
 from types import ModuleType
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -34,7 +33,7 @@ class _FakeSession:
         self._existing_by_runtime_id = existing_by_runtime_id or {}
         self._existing_by_name = existing_by_name or {}
         self.added: list[Trend] = []
-        self.commit_calls = 0
+        self.commit_calls, self.flush = 0, AsyncMock()
 
     async def execute(self, statement: object) -> _ScalarResult:
         compiled = statement.compile()

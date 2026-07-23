@@ -285,7 +285,10 @@ Tier-2 payload budget strategy:
 Concurrency/serialization rules for trend updates:
 - Evidence and manual override/invalidation deltas use an atomic SQL increment (`current_log_odds = current_log_odds + :delta`) so concurrent workers cannot drop updates.
 - Decay acquires a row lock (`SELECT ... FOR UPDATE`) before computing and writing the decayed value, so decay and evidence/manual deltas serialize safely.
-- Trend evidence idempotency (`trend_id`, `event_id`, `signal_type`) remains enforced by unique constraint, so duplicate evidence never double-applies a delta.
+- Active trend evidence idempotency is enforced by the nulls-not-distinct
+  `(trend_id, state_version_id, event_claim_id, signal_type)` unique index, and
+  evidence application fails closed when a trend has no active state version,
+  so duplicate evidence cannot double-apply a delta.
 
 ### 4. Reporting Flow
 

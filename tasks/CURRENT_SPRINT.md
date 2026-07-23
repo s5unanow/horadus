@@ -13,6 +13,9 @@
 
 ## Selection Notes
 
+- `TASK-421` was promoted from `INTAKE-0063` as the highest-priority pending
+  belief-state integrity defect because nullable state-version keys can bypass
+  both the pre-check and database uniqueness guard, double-applying evidence.
 - Sprint 10 opens immediately after Sprint 9 drained, using a fresh review of the local intake queue instead of carrying forward already-completed work.
 - Promoted intake focused on reproduced issues across ledger integrity, intake concurrency, planning validation, privileged-write type safety, Decimal typing, chat-session guardrails, and operator/docs drift.
 - `INTAKE-0006` remains pending as an umbrella concern because `TASK-390` and `TASK-394` capture the concrete mitigation and design work first.
@@ -48,8 +51,11 @@
 18. `TASK-419` Update pyasn1 for dependency audit advisories.
 19. `TASK-418` Fix unrecorded LLM spend when post-call budget check denies.
 20. `TASK-420` Add SSRF guard and resource caps to collector HTTP fetch path.
+21. `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -121,3 +127,4 @@
 - `TASK-419` Update pyasn1 for dependency audit advisories ✅
 - `TASK-418` Fix unrecorded LLM spend when post-call budget check denies ✅
 - `TASK-420` Add SSRF guard and resource caps to collector HTTP fetch path ✅
+- `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id ✅

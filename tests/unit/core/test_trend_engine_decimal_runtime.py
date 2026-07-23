@@ -32,7 +32,7 @@ def mock_trend():
     trend.current_log_odds = prob_to_logodds(0.1)
     trend.baseline_log_odds = prob_to_logodds(0.1)
     trend.updated_at = datetime.now(UTC)
-    trend.active_state_version_id = None
+    trend.active_state_version_id = uuid4()
     trend.active_definition_hash = None
     trend.active_scoring_math_version = None
     trend.active_scoring_parameter_set = None
@@ -76,7 +76,7 @@ async def test_apply_evidence_persists_decimal_runtime_values(
     precheck_result.scalar_one_or_none.return_value = None
     execute_result = MagicMock()
     execute_result.scalar_one_or_none.return_value = 1.2
-    mock_session.execute = AsyncMock(side_effect=[precheck_result, execute_result])
+    mock_session.execute = AsyncMock(side_effect=[precheck_result, execute_result, MagicMock()])
 
     await engine.apply_evidence(
         trend=mock_trend,

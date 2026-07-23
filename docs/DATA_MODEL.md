@@ -520,6 +520,7 @@ Audit trail of all probability updates.
 - Event invalidation no longer deletes evidence rows.
 - Instead, evidence is marked `is_invalidated=true` and linked to the originating `human_feedback` record while a separate `trend_restatements` row records the signed compensating delta applied later.
 - Tier-2 reclassification can also supersede an active evidence row; the old row is invalidated, a replacement active row is inserted against the stable `event_claim_id`, and a `trend_restatements` row captures the compensating reversal that kept the projection honest.
+- Tier-2 reclassification and event lineage repair claim invalidation with a conditional active-row update; only the transaction that claims the row appends its compensating restatement.
 - Operational analytics/reporting queries use only active (`is_invalidated=false`) evidence by default.
 - Audit/replay paths can include invalidated lineage explicitly when needed, or reconstruct the stored trend value by replaying chronological evidence plus `trend_restatements`.
 

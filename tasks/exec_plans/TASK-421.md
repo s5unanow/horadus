@@ -70,6 +70,9 @@ version and enforce the same invariant at the PostgreSQL index layer.
 - 2026-07-23: Hosted review identified the documented seeder as a caller that
   created active trends without state versions; seed creation and legacy
   reseeding now activate a missing initial state before commit.
+- 2026-07-23: Fresh-head review identified stale lineage on changed reseeds;
+  materially changed YAML now creates a `rebase` state while unchanged reseeds
+  remain idempotent.
 
 ## Risks / Foot-guns
 

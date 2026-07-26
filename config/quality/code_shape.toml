@@ -53,16 +53,12 @@ path = "src/core/trend_engine.py"
 max_lines = 936
 [legacy_files.member_max_lines]
 "TrendEngine.apply_evidence" = 138
-"TrendEngine.apply_decay" = 105
 "calculate_evidence_delta" = 130
 
 [[legacy_files]]
 path = "src/core/trend_restatement.py"
 [legacy_files.member_max_lines]
-"apply_compensating_restatement" = 102
 "build_trend_projection_check" = 120
-[legacy_files.member_max_complexity]
-"apply_compensating_restatement" = 22
 
 [[legacy_files]]
 path = "src/eval/benchmark.py"

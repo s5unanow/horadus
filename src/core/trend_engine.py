@@ -39,6 +39,7 @@ import structlog
 from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 
+from src.core.trend_delta_state import apply_locked_trend_delta, resolve_trend_decay_clock
 from src.core.trend_state import resolve_active_definition_hash, resolve_active_scoring_contract
 from src.storage.models import Trend, TrendEvidence, TrendSnapshot
 from src.storage.trend_state_models import TrendStateVersion
@@ -443,65 +444,19 @@ class TrendEngine:
         trend_name: str | None = None,
         updated_at: datetime | None = None,
         fallback_current_log_odds: float | None = None,
-    ) -> tuple[float, float]:
-        """Apply a log-odds delta atomically and return (previous_lo, new_lo)."""
-        delta_value = Decimal(str(delta))
-        applied_at = _as_utc(updated_at) if updated_at is not None else datetime.now(UTC)
-        stmt = (
-            update(Trend)
-            .where(Trend.id == trend_id)
-            .values(
-                current_log_odds=Trend.current_log_odds + delta_value,
-                updated_at=applied_at,
-            )
-            .returning(Trend.current_log_odds)
-            .execution_options(synchronize_session=False)
-        )
-        result = await self.session.execute(stmt)
-        raw_new_log_odds = result.scalar_one_or_none()
-        if isawaitable(raw_new_log_odds):
-            raw_new_log_odds = await raw_new_log_odds
-
-        parsed_new_log_odds: float | None = None
-        if isinstance(raw_new_log_odds, int | float | Decimal):
-            parsed_new_log_odds = float(raw_new_log_odds)
-
-        if parsed_new_log_odds is None:
-            if fallback_current_log_odds is None:
-                msg = f"Trend '{trend_id}' not found for atomic log-odds update"
-                raise ValueError(msg)
-            previous_lo = float(fallback_current_log_odds)
-            new_lo = previous_lo + float(delta_value)
-            logger.warning(
-                "Atomic trend delta update returned no row; using in-memory fallback",
-                trend_id=str(trend_id),
-                trend_name=trend_name,
-                delta=float(delta_value),
-                reason=reason,
-                update_strategy="fallback_in_memory",
-            )
-            return previous_lo, new_lo
-
-        new_lo = parsed_new_log_odds
-        previous_lo = new_lo - float(delta_value)
-        if isinstance(active_state_version_id, UUID):
-            await self.session.execute(
-                update(TrendStateVersion)
-                .where(TrendStateVersion.id == active_state_version_id)
-                .values(current_log_odds=TrendStateVersion.current_log_odds + delta_value)
-                .execution_options(synchronize_session=False)
-            )
-        logger.debug(
-            "Applied atomic trend log-odds delta",
-            trend_id=str(trend_id),
-            trend_name=trend_name,
-            delta=float(delta_value),
+    ) -> tuple[float, float, datetime]:
+        """Apply accrued decay plus a delta and return both states and apply time."""
+        requested_at = _as_utc(updated_at) if updated_at is not None else datetime.now(UTC)
+        return await apply_locked_trend_delta(
+            session=self.session,
+            trend_id=trend_id,
+            delta=delta,
             reason=reason,
-            update_strategy="atomic_sql_add",
-            previous_log_odds=previous_lo,
-            new_log_odds=new_lo,
+            requested_at=requested_at,
+            active_state_version_id=active_state_version_id,
+            trend_name=trend_name,
+            fallback_current_log_odds=fallback_current_log_odds,
         )
-        return previous_lo, new_lo
 
     async def apply_evidence(
         self,
@@ -521,6 +476,7 @@ class TrendEngine:
         prior_log_odds = float(trend.current_log_odds)
         previous_prob = logodds_to_prob(prior_log_odds)
 
+        await self.session.execute(select(Trend.id).where(Trend.id == trend.id).with_for_update())
         existing = await self.session.execute(
             select(TrendEvidence.id).where(
                 TrendEvidence.state_version_id == active_state_version_id,
@@ -588,17 +544,19 @@ class TrendEngine:
                 direction="unchanged",
             )
 
-        applied_at = datetime.now(UTC)
-        previous_lo, new_lo = await self.apply_log_odds_delta(
+        requested_at = datetime.now(UTC)
+        previous_lo, new_lo, applied_at = await self.apply_log_odds_delta(
             trend_id=trend.id,
             active_state_version_id=active_state_version_id,
             trend_name=trend.name,
             delta=delta,
             reason="evidence",
-            updated_at=applied_at,
+            updated_at=requested_at,
             fallback_current_log_odds=prior_log_odds,
         )
+        evidence.created_at = applied_at
         trend.current_log_odds, trend.updated_at = Decimal(str(new_lo)), applied_at
+        trend.last_decayed_at = applied_at
         previous_prob, new_prob = logodds_to_prob(previous_lo), logodds_to_prob(new_lo)
 
         if delta > 0.001:
@@ -632,22 +590,10 @@ class TrendEngine:
         trend: Trend,
         as_of: datetime | None = None,
     ) -> float:
-        """
-        Apply time-based decay toward baseline probability.
+        """Decay current log-odds toward baseline from its dedicated clock.
 
-        Uses exponential decay with configurable half-life:
-            new_lo = baseline_lo + (current_lo - baseline_lo) * decay_factor
-        Where decay_factor = 0.5^(days_elapsed / half_life)
-
-        This means after one half-life, the deviation from baseline
-        is reduced by 50%. After two half-lives, 75%, etc.
-
-        Args:
-            trend: Trend to decay
-            as_of: Reference time (default: now)
-
-        Returns:
-            New probability after decay
+        After one configured half-life, the deviation from baseline is reduced
+        by 50%; after two half-lives, it is reduced by 75%.
         """
         as_of = _as_utc(as_of) if as_of is not None else datetime.now(UTC)
 
@@ -655,7 +601,7 @@ class TrendEngine:
             select(
                 Trend.current_log_odds.label("current_log_odds"),
                 Trend.baseline_log_odds.label("baseline_log_odds"),
-                Trend.updated_at.label("updated_at"),
+                Trend.last_decayed_at.label("last_decayed_at"),
                 Trend.decay_half_life_days.label("decay_half_life_days"),
             )
             .where(Trend.id == trend.id)
@@ -673,23 +619,23 @@ class TrendEngine:
             typed_mapping is not None
             and typed_mapping.get("current_log_odds") is not None
             and typed_mapping.get("baseline_log_odds") is not None
-            and isinstance(typed_mapping.get("updated_at"), datetime)
+            and isinstance(typed_mapping.get("last_decayed_at"), datetime)
         )
         if has_locked_state and typed_mapping is not None:
             current_lo = float(typed_mapping["current_log_odds"])
             baseline_lo = float(typed_mapping["baseline_log_odds"])
-            last_updated_at = _as_utc(typed_mapping["updated_at"])
+            last_decayed_at = _as_utc(typed_mapping["last_decayed_at"])
             half_life = typed_mapping["decay_half_life_days"] or DEFAULT_DECAY_HALF_LIFE_DAYS
         else:
             current_lo = float(trend.current_log_odds)
             baseline_lo = float(trend.baseline_log_odds)
-            last_updated_at = _as_utc(trend.updated_at)
+            last_decayed_at = resolve_trend_decay_clock(trend)
             half_life = trend.decay_half_life_days or DEFAULT_DECAY_HALF_LIFE_DAYS
 
-        days_elapsed = (as_of - last_updated_at).total_seconds() / 86400.0
+        days_elapsed = (as_of - last_decayed_at).total_seconds() / 86400.0
         if days_elapsed <= 0:
             trend.current_log_odds = Decimal(str(current_lo))
-            trend.updated_at = last_updated_at
+            trend.last_decayed_at = last_decayed_at
             return logodds_to_prob(current_lo)
 
         decay_factor = math.pow(0.5, days_elapsed / half_life)
@@ -700,7 +646,11 @@ class TrendEngine:
             await self.session.execute(
                 update(Trend)
                 .where(Trend.id == trend.id)
-                .values(current_log_odds=Decimal(str(new_lo)), updated_at=as_of)
+                .values(
+                    current_log_odds=Decimal(str(new_lo)),
+                    updated_at=as_of,
+                    last_decayed_at=as_of,
+                )
                 .execution_options(synchronize_session=False)
             )
             if isinstance(trend.active_state_version_id, UUID):
@@ -712,6 +662,7 @@ class TrendEngine:
                 )
         trend.current_log_odds = Decimal(str(new_lo))
         trend.updated_at = as_of
+        trend.last_decayed_at = as_of
 
         new_prob = logodds_to_prob(new_lo)
 

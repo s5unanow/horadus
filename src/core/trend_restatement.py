@@ -144,6 +144,7 @@ async def apply_compensating_restatement(
         recorded_at=applied_at,
     )
     if session is not None:
+        await session.execute(select(Trend.id).where(Trend.id == trend.id).with_for_update())
         session.add(restatement)
         await session.flush()
 
@@ -151,36 +152,20 @@ async def apply_compensating_restatement(
         trend, "active_state_version_id", None
     ):
         prior_log_odds = float(trend.current_log_odds)
-        baseline_log_odds = getattr(trend, "baseline_log_odds", None)
-        prior_updated_at = getattr(trend, "updated_at", None)
-        prior_created_at = getattr(trend, "created_at", None)
-        if baseline_log_odds is None or (prior_updated_at is None and prior_created_at is None):
-            decayed_log_odds = prior_log_odds
-        else:
-            start_at = prior_updated_at if prior_updated_at is not None else prior_created_at
-            assert start_at is not None
-            decayed_log_odds = _decay_log_odds(
-                current_log_odds=prior_log_odds,
-                baseline_log_odds=float(baseline_log_odds),
-                half_life_days=float(
-                    getattr(trend, "decay_half_life_days", None) or DEFAULT_DECAY_HALF_LIFE_DAYS
-                ),
-                from_at=_as_utc(start_at),
-                to_at=applied_at,
-            )
-        total_delta = (decayed_log_odds - prior_log_odds) + compensation_delta_log_odds
-        previous_lo, new_lo = await trend_engine.apply_log_odds_delta(
+        previous_lo, new_lo, applied_at = await trend_engine.apply_log_odds_delta(
             trend_id=trend.id,
             active_state_version_id=state_version_id,
             trend_name=trend.name,
-            delta=total_delta,
+            delta=compensation_delta_log_odds,
             reason=f"restatement:{restatement_kind}",
             updated_at=applied_at,
             fallback_current_log_odds=prior_log_odds,
         )
+        restatement.recorded_at = applied_at
         if previous_lo != new_lo:
             trend.current_log_odds = to_decimal(new_lo)
             trend.updated_at = applied_at
+            trend.last_decayed_at = applied_at
 
     return restatement
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 # ruff: noqa: F401, TC001
 import enum
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -50,17 +50,8 @@ from src.storage.restatement_models import (
     TrendRestatement,
 )
 from src.storage.scoring_contract import TREND_SCORING_MATH_VERSION, TREND_SCORING_PARAMETER_SET
+from src.storage.source_type import SourceType as SourceType
 from src.storage.trend_state_models import TrendDefinitionVersion, TrendStateVersion
-
-
-class SourceType(enum.StrEnum):
-    """Types of data sources."""
-
-    RSS = "rss"
-    TELEGRAM = "telegram"
-    GDELT = "gdelt"
-    API = "api"
-    SCRAPER = "scraper"
 
 
 class SourceTier(enum.StrEnum):
@@ -644,6 +635,12 @@ class Trend(Base):
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
+        nullable=False,
+    )
+    last_decayed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        server_default=func.now(),
         nullable=False,
     )
 

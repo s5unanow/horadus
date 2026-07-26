@@ -398,6 +398,7 @@ Trend definitions and current probability state.
 | is_active | BOOLEAN | No | true | Whether trend is being tracked |
 | created_at | TIMESTAMPTZ | No | NOW() | Record creation time |
 | updated_at | TIMESTAMPTZ | No | NOW() | Last update time |
+| last_decayed_at | TIMESTAMPTZ | No | NOW() | Last boundary through which exponential decay was applied; evidence/restatement writes advance accrued decay before applying their delta |
 
 **Indexes:**
 - Primary key: `id`

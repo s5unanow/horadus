@@ -239,7 +239,7 @@ async def test_reconciliation_helper_storage_paths_cover_async_and_lookup_branch
     session.scalars = AsyncMock(
         return_value=SimpleNamespace(all=AsyncMock(return_value=[evidence]))
     )
-    trend_engine = SimpleNamespace(apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.2)))
+    trend_engine = SimpleNamespace(apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.2, None)))
     monkeypatch.setattr(
         "src.processing.trend_impact_reconciliation.restatement_compensation_totals_by_evidence_id",
         AsyncMock(return_value={}),
@@ -391,7 +391,7 @@ async def test_reconciliation_helper_replaces_and_removes_evidence_rows(
     session = AsyncMock()
     session.flush = AsyncMock()
     trend_engine = SimpleNamespace(
-        apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.2)),
+        apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.2, None)),
         apply_evidence=AsyncMock(return_value=SimpleNamespace(delta_applied=0.02)),
     )
 
@@ -534,7 +534,7 @@ async def test_reconcile_event_trend_impacts_handles_non_list_and_history_append
             SimpleNamespace(all=list),
         ]
     )
-    trend_engine = SimpleNamespace(apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.0)))
+    trend_engine = SimpleNamespace(apply_log_odds_delta=AsyncMock(return_value=(0.1, 0.0, None)))
     callbacks = {
         "load_event_source_credibility": AsyncMock(return_value=0.8),
         "load_corroboration_score": AsyncMock(return_value=1.0),

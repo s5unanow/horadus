@@ -668,92 +668,13 @@ class TestTrendEngine:
         assert unchanged_result.direction == "unchanged"
 
     @pytest.mark.asyncio
-    async def test_apply_log_odds_delta_handles_atomic_and_fallback_paths(
-        self, mock_session, mock_trend
-    ):
-        engine = TrendEngine(mock_session)
-        execute_result = MagicMock()
-        execute_result.scalar_one_or_none.return_value = 1.2
-        mock_session.execute = AsyncMock(return_value=execute_result)
-
-        previous_lo, new_lo = await engine.apply_log_odds_delta(
-            trend_id=mock_trend.id,
-            delta=0.2,
-            reason="test",
-            fallback_current_log_odds=0.8,
-        )
-
-        assert previous_lo == pytest.approx(1.0)
-        assert new_lo == pytest.approx(1.2)
-
-        execute_result.scalar_one_or_none.return_value = None
-        previous_lo, new_lo = await engine.apply_log_odds_delta(
-            trend_id=mock_trend.id,
-            delta=0.2,
-            reason="test",
-            fallback_current_log_odds=0.8,
-        )
-        assert previous_lo == pytest.approx(0.8)
-        assert new_lo == pytest.approx(1.0)
-
-        with pytest.raises(ValueError, match="not found"):
-            await engine.apply_log_odds_delta(
-                trend_id=mock_trend.id,
-                delta=0.2,
-                reason="test",
-            )
-
-    @pytest.mark.asyncio
-    async def test_apply_log_odds_delta_awaits_scalar_result(self, mock_session, mock_trend):
-        engine = TrendEngine(mock_session)
-
-        async def scalar_value() -> float:
-            return 1.2
-
-        execute_result = MagicMock()
-        execute_result.scalar_one_or_none.return_value = scalar_value()
-        mock_session.execute = AsyncMock(return_value=execute_result)
-
-        previous_lo, new_lo = await engine.apply_log_odds_delta(
-            trend_id=mock_trend.id,
-            delta=0.2,
-            reason="test",
-            fallback_current_log_odds=0.8,
-        )
-
-        assert previous_lo == pytest.approx(1.0)
-        assert new_lo == pytest.approx(1.2)
-
-    @pytest.mark.asyncio
-    async def test_apply_log_odds_delta_updates_active_state_version(
-        self, mock_session, mock_trend
-    ):
-        engine = TrendEngine(mock_session)
-        execute_result = MagicMock()
-        execute_result.scalar_one_or_none.return_value = 1.2
-        mock_session.execute = AsyncMock(side_effect=[execute_result, MagicMock()])
-
-        previous_lo, new_lo = await engine.apply_log_odds_delta(
-            trend_id=mock_trend.id,
-            active_state_version_id=uuid4(),
-            delta=0.2,
-            reason="test",
-            fallback_current_log_odds=0.8,
-        )
-
-        assert previous_lo == pytest.approx(1.0)
-        assert new_lo == pytest.approx(1.2)
-        assert mock_session.execute.await_count == 2
-        assert "trend_state_versions" in str(mock_session.execute.await_args_list[1].args[0])
-
-    @pytest.mark.asyncio
     async def test_apply_decay_uses_locked_row_state_when_available(self, mock_session, mock_trend):
         engine = TrendEngine(mock_session)
         row = SimpleNamespace(
             _mapping={
                 "current_log_odds": 0.0,
                 "baseline_log_odds": prob_to_logodds(0.2),
-                "updated_at": datetime.now(UTC) - timedelta(days=30),
+                "last_decayed_at": datetime.now(UTC) - timedelta(days=30),
                 "decay_half_life_days": 30,
             }
         )
@@ -776,7 +697,7 @@ class TestTrendEngine:
             _mapping={
                 "current_log_odds": 0.0,
                 "baseline_log_odds": prob_to_logodds(0.2),
-                "updated_at": datetime.now(UTC) - timedelta(days=30),
+                "last_decayed_at": datetime.now(UTC) - timedelta(days=30),
                 "decay_half_life_days": 30,
             }
         )
@@ -800,7 +721,7 @@ class TestTrendEngine:
                 _mapping={
                     "current_log_odds": 0.25,
                     "baseline_log_odds": prob_to_logodds(0.2),
-                    "updated_at": datetime.now(UTC),
+                    "last_decayed_at": datetime.now(UTC),
                     "decay_half_life_days": None,
                 }
             )
@@ -821,7 +742,7 @@ class TestTrendEngine:
 
         # Start at 50% (log-odds = 0), baseline is 10%
         mock_trend.current_log_odds = 0.0
-        mock_trend.updated_at = datetime.now(UTC) - timedelta(days=30)  # One half-life
+        mock_trend.last_decayed_at = datetime.now(UTC) - timedelta(days=30)
 
         new_prob = await engine.apply_decay(mock_trend)
 
@@ -845,7 +766,7 @@ class TestTrendEngine:
         mock_trend.baseline_log_odds = prob_to_logodds(0.3)
         mock_trend.definition = {"baseline_probability": 0.1}
         mock_trend.current_log_odds = 0.0
-        mock_trend.updated_at = datetime.now(UTC) - timedelta(days=30)
+        mock_trend.last_decayed_at = datetime.now(UTC) - timedelta(days=30)
 
         new_prob = await engine.apply_decay(mock_trend)
 
@@ -865,7 +786,7 @@ class TestTrendEngine:
         mock_trend.baseline_log_odds = prob_to_logodds(0.2)
         mock_trend.definition = {}
         mock_trend.current_log_odds = 0.0
-        mock_trend.updated_at = datetime.now(UTC) - timedelta(days=30)
+        mock_trend.last_decayed_at = datetime.now(UTC) - timedelta(days=30)
 
         new_prob = await engine.apply_decay(mock_trend)
 
@@ -879,7 +800,7 @@ class TestTrendEngine:
         engine = TrendEngine(mock_session)
 
         mock_trend.current_log_odds = 0.5
-        mock_trend.updated_at = datetime.now(UTC)  # Just now
+        mock_trend.last_decayed_at = datetime.now(UTC)
 
         original_lo = mock_trend.current_log_odds
         await engine.apply_decay(mock_trend)

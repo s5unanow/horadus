@@ -155,5 +155,5 @@ async def activate_trend_state(
     trend.active_scoring_parameter_set = contract["parameter_set"]
     trend.active_state_version_id = state_version.id
     trend.current_log_odds = to_decimal(starting_log_odds)
-    trend.updated_at = activated
+    trend.updated_at = trend.last_decayed_at = activated
     return state_version

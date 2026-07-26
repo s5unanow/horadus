@@ -6,7 +6,11 @@ from uuid import uuid4
 
 import pytest
 
-from src.processing.event_cluster_link import ClusterResult, resolve_event_link_failure
+from src.processing.event_cluster_link import (
+    ClusterResult,
+    create_linked_event,
+    resolve_event_link_failure,
+)
 from src.processing.event_clusterer import EventClusterer
 from src.storage.event_state import EventActivityState, EventEpistemicState
 from src.storage.models import Event, RawItem
@@ -122,3 +126,51 @@ async def test_terminal_link_rejection_creates_replacement_event() -> None:
     assert result is replacement
     create_linked_event.assert_awaited_once_with(item)
     find_existing_event_id.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_linked_event_resolves_concurrent_link_winner() -> None:
+    item = RawItem(id=uuid4())
+    losing_event = Event(id=uuid4(), canonical_summary="Losing replacement")
+    winning_event_id = uuid4()
+    session = AsyncMock()
+    refresh_event_provenance = AsyncMock()
+
+    result = await create_linked_event(
+        session=session,
+        item=item,
+        create_event=AsyncMock(return_value=losing_event),
+        add_link=AsyncMock(return_value=False),
+        find_existing_event_id=AsyncMock(return_value=winning_event_id),
+        refresh_event_provenance=refresh_event_provenance,
+    )
+
+    assert result == ClusterResult(
+        item_id=item.id,
+        event_id=winning_event_id,
+        created=False,
+        merged=True,
+    )
+    session.delete.assert_awaited_once_with(losing_event)
+    session.flush.assert_awaited_once()
+    refresh_event_provenance.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_linked_event_fails_when_conflict_has_no_winner() -> None:
+    item = RawItem(id=uuid4())
+    losing_event = Event(id=uuid4(), canonical_summary="Unlinked replacement")
+    session = AsyncMock()
+
+    with pytest.raises(RuntimeError, match=f"Failed to link new event for item {item.id}"):
+        await create_linked_event(
+            session=session,
+            item=item,
+            create_event=AsyncMock(return_value=losing_event),
+            add_link=AsyncMock(return_value=False),
+            find_existing_event_id=AsyncMock(return_value=None),
+            refresh_event_provenance=AsyncMock(),
+        )
+
+    session.delete.assert_awaited_once_with(losing_event)
+    session.flush.assert_awaited_once()

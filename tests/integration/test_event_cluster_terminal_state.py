@@ -4,11 +4,13 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 import pytest
+from sqlalchemy import func, select
 
 from src.processing.event_clusterer import EventClusterer
 from src.storage.database import async_session_maker
 from src.storage.event_state import EventActivityState, EventEpistemicState
-from src.storage.models import Event
+from src.storage.models import Event, EventItem, RawItem, Source
+from src.storage.source_type import SourceType
 
 pytestmark = pytest.mark.integration
 
@@ -96,3 +98,46 @@ async def test_event_link_rechecks_terminal_state_after_stale_match() -> None:
 
     assert linked is None
     assert stale_match[0].activity_state == EventActivityState.CLOSED.value
+
+
+@pytest.mark.asyncio
+async def test_create_linked_event_discards_concurrent_loser() -> None:
+    item_title = f"Concurrent replacement {uuid4()}"
+    async with async_session_maker() as setup_session:
+        source = Source(type=SourceType.RSS, name=f"Source {uuid4()}")
+        setup_session.add(source)
+        await setup_session.flush()
+        item = RawItem(
+            source_id=source.id,
+            external_id=str(uuid4()),
+            title=item_title,
+            raw_content="Concurrent clustering",
+            content_hash=uuid4().hex * 2,
+        )
+        winner = Event(canonical_summary="Winning replacement")
+        setup_session.add_all([item, winner])
+        await setup_session.flush()
+        item_id = item.id
+        winner_id = winner.id
+        setup_session.add(EventItem(event_id=winner_id, item_id=item_id))
+        await setup_session.commit()
+
+    async with async_session_maker() as cluster_session:
+        persisted_item = await cluster_session.get(RawItem, item_id)
+        assert persisted_item is not None
+        result = await EventClusterer(cluster_session)._create_linked_event(persisted_item)
+        await cluster_session.commit()
+
+    async with async_session_maker() as verify_session:
+        linked_event_id = await verify_session.scalar(
+            select(EventItem.event_id).where(EventItem.item_id == item_id)
+        )
+        orphan_count = await verify_session.scalar(
+            select(func.count()).select_from(Event).where(Event.canonical_summary == item_title)
+        )
+
+    assert result.event_id == winner_id
+    assert result.created is False
+    assert result.merged is True
+    assert linked_event_id == winner_id
+    assert orphan_count == 0

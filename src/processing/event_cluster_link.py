@@ -10,6 +10,7 @@ import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.processing.event_cluster_health import apply_default_cluster_health
 from src.storage.event_state import EventActivityState, EventEpistemicState
 from src.storage.models import Event, EventItem, RawItem
 
@@ -57,6 +58,44 @@ async def add_event_link(
         return True
     except IntegrityError:
         return False
+
+
+async def create_linked_event(
+    *,
+    session: AsyncSession,
+    item: RawItem,
+    create_event: Callable[[RawItem], Awaitable[Event]],
+    add_link: Callable[[UUID, UUID], Awaitable[bool | None]],
+    find_existing_event_id: Callable[[UUID], Awaitable[UUID | None]],
+    refresh_event_provenance: Callable[[Event], Awaitable[None]],
+) -> ClusterResult:
+    """Create an event or resolve the winner of a concurrent link race."""
+    event = await create_event(item)
+    link_added = await add_link(event.id, item.id)
+    if link_added is True:
+        await refresh_event_provenance(event)
+        apply_default_cluster_health(event)
+        await session.flush()
+        return ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+
+    existing_event_id = await find_existing_event_id(item.id)
+    await session.delete(event)
+    await session.flush()
+    if existing_event_id is None:
+        msg = f"Failed to link new event for item {item.id}"
+        raise RuntimeError(msg)
+    logger.info(
+        "Discarding unlinked event after concurrent item-link winner",
+        item_id=str(item.id),
+        discarded_event_id=str(event.id),
+        existing_event_id=str(existing_event_id),
+    )
+    return ClusterResult(
+        item_id=item.id,
+        event_id=existing_event_id,
+        created=False,
+        merged=True,
+    )
 
 
 async def resolve_event_link_failure(

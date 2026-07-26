@@ -95,7 +95,7 @@ async def test_cluster_item_handles_launch_languages(
 
     clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
     clusterer._find_matching_event = AsyncMock(return_value=None)
-    clusterer._add_event_link = AsyncMock()
+    clusterer._add_event_link = AsyncMock(return_value=True)
     clusterer._refresh_event_provenance = AsyncMock()
 
     result = await clusterer.cluster_item(item)

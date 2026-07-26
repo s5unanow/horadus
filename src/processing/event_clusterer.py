@@ -18,7 +18,6 @@ from src.core.source_credibility import (
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_cluster_health import (
-    apply_default_cluster_health,
     ensure_cluster_health,
     resolve_cluster_health,
 )
@@ -27,6 +26,7 @@ from src.processing.event_cluster_link import (
 )
 from src.processing.event_cluster_link import (
     add_event_link,
+    create_linked_event,
     resolve_event_link_failure,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
@@ -118,12 +118,14 @@ class EventClusterer:
         )
 
     async def _create_linked_event(self, item: RawItem) -> ClusterResult:
-        event = await self._create_event(item)
-        await self._add_event_link(event.id, item.id)
-        await self._refresh_event_provenance(event)
-        apply_default_cluster_health(event)
-        await self.session.flush()
-        return ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+        return await create_linked_event(
+            session=self.session,
+            item=item,
+            create_event=self._create_event,
+            add_link=self._add_event_link,
+            find_existing_event_id=self._find_existing_event_id_for_item,
+            refresh_event_provenance=self._refresh_event_provenance,
+        )
 
     async def cluster_unlinked_items(self, limit: int = 100) -> list[ClusterResult]:
         """Cluster raw items not yet attached to an event."""

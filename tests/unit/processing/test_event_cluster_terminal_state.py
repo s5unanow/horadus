@@ -13,7 +13,7 @@ from src.processing.event_cluster_link import (
 )
 from src.processing.event_clusterer import EventClusterer
 from src.storage.event_state import EventActivityState, EventEpistemicState
-from src.storage.models import Event, RawItem
+from src.storage.models import Event, EventItem, RawItem
 
 pytestmark = pytest.mark.unit
 
@@ -132,8 +132,17 @@ async def test_terminal_link_rejection_creates_replacement_event() -> None:
 async def test_create_linked_event_resolves_concurrent_link_winner() -> None:
     item = RawItem(id=uuid4())
     losing_event = Event(id=uuid4(), canonical_summary="Losing replacement")
-    winning_event_id = uuid4()
+    winning_event = Event(
+        id=uuid4(),
+        canonical_summary="Winning replacement",
+        epistemic_state=EventEpistemicState.CONFIRMED.value,
+        activity_state=EventActivityState.ACTIVE.value,
+    )
+    winning_link = EventItem(event_id=winning_event.id, item_id=item.id)
     session = AsyncMock()
+    execute_result = MagicMock()
+    execute_result.first.return_value = (winning_link, winning_event)
+    session.execute = AsyncMock(return_value=execute_result)
     refresh_event_provenance = AsyncMock()
 
     result = await create_linked_event(
@@ -141,13 +150,12 @@ async def test_create_linked_event_resolves_concurrent_link_winner() -> None:
         item=item,
         create_event=AsyncMock(return_value=losing_event),
         add_link=AsyncMock(return_value=False),
-        find_existing_event_id=AsyncMock(return_value=winning_event_id),
         refresh_event_provenance=refresh_event_provenance,
     )
 
     assert result == ClusterResult(
         item_id=item.id,
-        event_id=winning_event_id,
+        event_id=winning_event.id,
         created=False,
         merged=True,
     )
@@ -161,16 +169,53 @@ async def test_create_linked_event_fails_when_conflict_has_no_winner() -> None:
     item = RawItem(id=uuid4())
     losing_event = Event(id=uuid4(), canonical_summary="Unlinked replacement")
     session = AsyncMock()
+    execute_result = MagicMock()
+    execute_result.first.return_value = None
+    session.execute = AsyncMock(return_value=execute_result)
 
     with pytest.raises(RuntimeError, match=f"Failed to link new event for item {item.id}"):
         await create_linked_event(
             session=session,
             item=item,
             create_event=AsyncMock(return_value=losing_event),
-            add_link=AsyncMock(return_value=False),
-            find_existing_event_id=AsyncMock(return_value=None),
+            add_link=AsyncMock(side_effect=[False, False]),
             refresh_event_provenance=AsyncMock(),
         )
 
     session.delete.assert_awaited_once_with(losing_event)
     session.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_create_linked_event_replaces_terminal_link_winner() -> None:
+    item = RawItem(id=uuid4())
+    replacement = Event(id=uuid4(), canonical_summary="Eligible replacement")
+    terminal_event = Event(
+        id=uuid4(),
+        canonical_summary="Terminal winner",
+        epistemic_state=EventEpistemicState.CONFIRMED.value,
+        activity_state=EventActivityState.CLOSED.value,
+    )
+    terminal_link = EventItem(event_id=terminal_event.id, item_id=item.id)
+    session = AsyncMock()
+    execute_result = MagicMock()
+    execute_result.first.return_value = (terminal_link, terminal_event)
+    session.execute = AsyncMock(return_value=execute_result)
+    refresh_event_provenance = AsyncMock()
+
+    result = await create_linked_event(
+        session=session,
+        item=item,
+        create_event=AsyncMock(return_value=replacement),
+        add_link=AsyncMock(side_effect=[False, True]),
+        refresh_event_provenance=refresh_event_provenance,
+    )
+
+    assert result == ClusterResult(
+        item_id=item.id,
+        event_id=replacement.id,
+        created=True,
+        merged=False,
+    )
+    session.delete.assert_awaited_once_with(terminal_link)
+    refresh_event_provenance.assert_awaited_once_with(replacement)

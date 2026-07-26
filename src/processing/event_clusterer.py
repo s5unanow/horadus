@@ -123,7 +123,6 @@ class EventClusterer:
             item=item,
             create_event=self._create_event,
             add_link=self._add_event_link,
-            find_existing_event_id=self._find_existing_event_id_for_item,
             refresh_event_provenance=self._refresh_event_provenance,
         )
 

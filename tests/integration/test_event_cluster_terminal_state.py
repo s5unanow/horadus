@@ -141,3 +141,53 @@ async def test_create_linked_event_discards_concurrent_loser() -> None:
     assert result.merged is True
     assert linked_event_id == winner_id
     assert orphan_count == 0
+
+
+@pytest.mark.asyncio
+async def test_create_linked_event_replaces_terminal_link_winner() -> None:
+    item_title = f"Terminal winner replacement {uuid4()}"
+    async with async_session_maker() as setup_session:
+        source = Source(type=SourceType.RSS, name=f"Source {uuid4()}")
+        setup_session.add(source)
+        await setup_session.flush()
+        item = RawItem(
+            source_id=source.id,
+            external_id=str(uuid4()),
+            title=item_title,
+            raw_content="Terminal winner must not receive new evidence",
+            content_hash=uuid4().hex * 2,
+        )
+        terminal_winner = Event(
+            canonical_summary="Terminal linked event",
+            epistemic_state=EventEpistemicState.CONFIRMED.value,
+            activity_state=EventActivityState.CLOSED.value,
+        )
+        setup_session.add_all([item, terminal_winner])
+        await setup_session.flush()
+        item_id = item.id
+        terminal_event_id = terminal_winner.id
+        setup_session.add(EventItem(event_id=terminal_event_id, item_id=item_id))
+        await setup_session.commit()
+
+    async with async_session_maker() as cluster_session:
+        persisted_item = await cluster_session.get(RawItem, item_id)
+        assert persisted_item is not None
+        result = await EventClusterer(cluster_session)._create_linked_event(persisted_item)
+        await cluster_session.commit()
+
+    async with async_session_maker() as verify_session:
+        linked_event = await verify_session.scalar(
+            select(Event)
+            .join(EventItem, EventItem.event_id == Event.id)
+            .where(EventItem.item_id == item_id)
+        )
+        terminal_event = await verify_session.get(Event, terminal_event_id)
+
+    assert result.created is True
+    assert result.merged is False
+    assert linked_event is not None
+    assert linked_event.id == result.event_id
+    assert linked_event.id != terminal_event_id
+    assert linked_event.activity_state == EventActivityState.ACTIVE.value
+    assert terminal_event is not None
+    assert terminal_event.activity_state == EventActivityState.CLOSED.value

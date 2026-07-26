@@ -13,6 +13,9 @@
 
 ## Selection Notes
 
+- `TASK-424` was promoted from `INTAKE-0071` as the next highest-priority
+  belief-state integrity defect because clustering can revive terminal events
+  and route fresh evidence back into invalid probability updates.
 - `TASK-423` was promoted from `INTAKE-0065` as the highest-priority pending
   probability-math defect because evidence writes can erase accrued decay and
   systematically bias actively reported trends away from baseline.
@@ -60,8 +63,11 @@
 21. `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id.
 22. `TASK-422` Guard lineage-repair evidence invalidation against double-reversal.
 23. `TASK-423` Decide and fix decay-clock reset on evidence writes.
+24. `TASK-424` Exclude closed/retracted events from clustering match.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -142,3 +148,4 @@
 - `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id ✅
 - `TASK-422` Guard lineage-repair evidence invalidation against double-reversal ✅
 - `TASK-423` Decide and fix decay-clock reset on evidence writes ✅
+- `TASK-424` Exclude closed/retracted events from clustering match ✅

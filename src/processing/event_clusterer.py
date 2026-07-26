@@ -1,17 +1,13 @@
-"""
-Event clustering service for grouping similar raw items into events.
-"""
+"""Event clustering service for grouping similar raw items into events."""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -22,9 +18,16 @@ from src.core.source_credibility import (
 )
 from src.processing.corroboration_provenance import refresh_event_provenance
 from src.processing.event_cluster_health import (
-    apply_default_cluster_health,
     ensure_cluster_health,
     resolve_cluster_health,
+)
+from src.processing.event_cluster_link import (
+    ClusterResult as ClusterResult,
+)
+from src.processing.event_cluster_link import (
+    add_event_link,
+    create_linked_event,
+    resolve_event_link_failure,
 )
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
@@ -34,17 +37,6 @@ from src.storage.models import Event, EventItem, RawItem, Source
 from src.storage.restatement_models import HumanFeedback
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass(slots=True)
-class ClusterResult:
-    """Result of clustering one raw item."""
-
-    item_id: UUID
-    event_id: UUID
-    created: bool
-    merged: bool
-    similarity: float | None = None
 
 
 class EventClusterer:
@@ -107,33 +99,14 @@ class EventClusterer:
             )
         await ensure_cluster_health(session=self.session, event=event)
         link_added = await self._add_event_link(event.id, item_id)
-        if not link_added:
-            resolved_event_id = await self._find_existing_event_id_for_item(item_id)
-            if resolved_event_id is not None and resolved_event_id != event.id:
-                logger.info(
-                    "Item already linked to a different event; using existing linkage",
-                    item_id=str(item_id),
-                    requested_event_id=str(event.id),
-                    existing_event_id=str(resolved_event_id),
-                )
-                return ClusterResult(
-                    item_id=item_id,
-                    event_id=resolved_event_id,
-                    created=False,
-                    merged=True,
-                    similarity=similarity,
-                )
-            logger.info(
-                "Skipping merge metadata update because item was already linked",
-                event_id=str(event.id),
-                item_id=str(item_id),
-            )
-            return ClusterResult(
-                item_id=item_id,
-                event_id=event.id,
-                created=False,
-                merged=True,
+        if link_added is not True:
+            return await resolve_event_link_failure(
+                event=event,
+                item=item,
                 similarity=similarity,
+                terminal=link_added is None,
+                create_linked_event=self._create_linked_event,
+                find_existing_event_id=self._find_existing_event_id_for_item,
             )
         await self._merge_into_event(event, item)
         return ClusterResult(
@@ -145,12 +118,13 @@ class EventClusterer:
         )
 
     async def _create_linked_event(self, item: RawItem) -> ClusterResult:
-        event = await self._create_event(item)
-        await self._add_event_link(event.id, item.id)
-        await self._refresh_event_provenance(event)
-        apply_default_cluster_health(event)
-        await self.session.flush()
-        return ClusterResult(item_id=item.id, event_id=event.id, created=True, merged=False)
+        return await create_linked_event(
+            session=self.session,
+            item=item,
+            create_event=self._create_event,
+            add_link=self._add_event_link,
+            refresh_event_provenance=self._refresh_event_provenance,
+        )
 
     async def cluster_unlinked_items(self, limit: int = 100) -> list[ClusterResult]:
         """Cluster raw items not yet attached to an event."""
@@ -235,6 +209,8 @@ class EventClusterer:
         query = (
             select(Event, distance_expr.label("distance"))
             .where(Event.last_mention_at >= window_start)
+            .where(Event.epistemic_state != EventEpistemicState.RETRACTED.value)
+            .where(Event.activity_state != EventActivityState.CLOSED.value)
             .where(Event.embedding.is_not(None))
             .where(Event.embedding_model == embedding_model)
             .where(distance_expr <= max_distance)
@@ -272,18 +248,8 @@ class EventClusterer:
             return None
         return normalized_action
 
-    async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool:
-        event = await self.session.get(Event, event_id, with_for_update=True)
-        if event is None:
-            return False
-        link = EventItem(event_id=event_id, item_id=item_id)
-        try:
-            async with self.session.begin_nested():
-                self.session.add(link)
-                await self.session.flush()
-            return True
-        except IntegrityError:
-            return False
+    async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool | None:
+        return await add_event_link(session=self.session, event_id=event_id, item_id=item_id)
 
     async def _count_unique_sources(self, event_id: UUID, fallback_source_id: UUID) -> int:
         count_query = (

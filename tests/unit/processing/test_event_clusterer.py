@@ -95,7 +95,7 @@ async def test_cluster_item_handles_launch_languages(
 
     clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
     clusterer._find_matching_event = AsyncMock(return_value=None)
-    clusterer._add_event_link = AsyncMock()
+    clusterer._add_event_link = AsyncMock(return_value=True)
     clusterer._refresh_event_provenance = AsyncMock()
 
     result = await clusterer.cluster_item(item)
@@ -123,7 +123,7 @@ async def test_cluster_item_merges_into_existing_event(mock_db_session, monkeypa
     async def match_event(_embedding, _embedding_model, _reference_time) -> tuple[Event, float]:
         return (event, 0.95)
 
-    add_link = AsyncMock()
+    add_link = AsyncMock(return_value=True)
     update_primary = AsyncMock(return_value=True)
 
     async def count_unique(_event_id, _fallback_source_id) -> int:

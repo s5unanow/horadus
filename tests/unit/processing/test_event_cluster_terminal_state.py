@@ -57,3 +57,36 @@ async def test_active_split_state_remains_eligible_with_legacy_archived_projecti
     assert result is not None
     assert result[0] is event
     assert result[1] == pytest.approx(0.92)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("epistemic_state", "activity_state"),
+    [
+        (EventEpistemicState.RETRACTED.value, EventActivityState.ACTIVE.value),
+        (EventEpistemicState.CONFIRMED.value, EventActivityState.CLOSED.value),
+    ],
+)
+async def test_add_event_link_rechecks_terminal_state_under_lock(
+    epistemic_state: str,
+    activity_state: str,
+) -> None:
+    event = Event(
+        id=uuid4(),
+        canonical_summary="Transitioned after similarity match",
+        epistemic_state=epistemic_state,
+        activity_state=activity_state,
+    )
+    session = AsyncMock()
+    session.get = AsyncMock(return_value=event)
+
+    linked = await EventClusterer(session)._add_event_link(event.id, uuid4())
+
+    assert linked is False
+    session.get.assert_awaited_once_with(
+        Event,
+        event.id,
+        populate_existing=True,
+        with_for_update=True,
+    )
+    session.add.assert_not_called()

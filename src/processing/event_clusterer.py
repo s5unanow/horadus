@@ -107,7 +107,9 @@ class EventClusterer:
         link_added = await self._add_event_link(event.id, item_id)
         if not link_added:
             resolved_event_id = await self._find_existing_event_id_for_item(item_id)
-            if resolved_event_id is not None and resolved_event_id != event.id:
+            if resolved_event_id is None:
+                return await self._create_linked_event(item)
+            if resolved_event_id != event.id:
                 logger.info(
                     "Item already linked to a different event; using existing linkage",
                     item_id=str(item_id),
@@ -273,8 +275,17 @@ class EventClusterer:
         return normalized_action
 
     async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool:
-        event = await self.session.get(Event, event_id, with_for_update=True)
-        if event is None:
+        event = await self.session.get(
+            Event,
+            event_id,
+            populate_existing=True,
+            with_for_update=True,
+        )
+        if (
+            event is None
+            or event.epistemic_state == EventEpistemicState.RETRACTED.value
+            or event.activity_state == EventActivityState.CLOSED.value
+        ):
             return False
         link = EventItem(event_id=event_id, item_id=item_id)
         try:

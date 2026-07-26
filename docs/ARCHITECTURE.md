@@ -230,7 +230,8 @@ Taxonomy drift safety:
   `epistemic_state` and `activity_state` are authoritative for candidate
   eligibility; the deprecated `lifecycle_status` remains a derived
   compatibility projection and does not independently reopen or suppress a
-  candidate.
+  candidate. Eligibility is rechecked after acquiring the event row lock so a
+  concurrent terminal-state transition cannot receive a stale cluster match.
 - Operator invalidation, partial restatement, and manual trend compensation use the same append-only restatement ledger, and projection verification can deterministically rebuild `current_log_odds` from chronological evidence/restatement history with decay applied between state changes.
 - Live trend state keeps a dedicated `last_decayed_at` clock separate from the
   general `updated_at` audit timestamp. Every evidence/restatement delta first

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from uuid import uuid4
 
 import pytest
 
@@ -57,3 +58,41 @@ async def test_matching_event_excludes_closed_and_retracted_candidates() -> None
     assert terminal_match is None
     assert active_match is not None
     assert active_match[0].id == active_id
+
+
+@pytest.mark.asyncio
+async def test_event_link_rechecks_terminal_state_after_stale_match() -> None:
+    now = datetime.now(UTC)
+    event = Event(
+        canonical_summary="Initially active candidate",
+        embedding=EMBEDDING,
+        embedding_model="stale-terminal-state",
+        epistemic_state=EventEpistemicState.CONFIRMED.value,
+        activity_state=EventActivityState.ACTIVE.value,
+        last_mention_at=now,
+    )
+    async with async_session_maker() as setup_session:
+        setup_session.add(event)
+        await setup_session.flush()
+        event_id = event.id
+        await setup_session.commit()
+
+    async with async_session_maker() as stale_session:
+        clusterer = EventClusterer(stale_session)
+        stale_match = await clusterer._find_matching_event(
+            EMBEDDING,
+            "stale-terminal-state",
+            now,
+        )
+        assert stale_match is not None
+
+        async with async_session_maker() as transition_session:
+            transitioned = await transition_session.get(Event, event_id)
+            assert transitioned is not None
+            transitioned.activity_state = EventActivityState.CLOSED.value
+            await transition_session.commit()
+
+        linked = await clusterer._add_event_link(event_id, uuid4())
+
+    assert linked is False
+    assert stale_match[0].activity_state == EventActivityState.CLOSED.value

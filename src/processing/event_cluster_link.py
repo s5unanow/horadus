@@ -2,13 +2,29 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from uuid import UUID
 
+import structlog
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.storage.event_state import EventActivityState, EventEpistemicState
-from src.storage.models import Event, EventItem
+from src.storage.models import Event, EventItem, RawItem
+
+logger = structlog.get_logger(__name__)
+
+
+@dataclass(slots=True)
+class ClusterResult:
+    """Result of clustering one raw item."""
+
+    item_id: UUID
+    event_id: UUID
+    created: bool
+    merged: bool
+    similarity: float | None = None
 
 
 async def add_event_link(
@@ -41,3 +57,45 @@ async def add_event_link(
         return True
     except IntegrityError:
         return False
+
+
+async def resolve_event_link_failure(
+    *,
+    event: Event,
+    item: RawItem,
+    similarity: float,
+    terminal: bool,
+    create_linked_event: Callable[[RawItem], Awaitable[ClusterResult]],
+    find_existing_event_id: Callable[[UUID], Awaitable[UUID | None]],
+) -> ClusterResult:
+    """Resolve a terminal rejection or an ordinary link conflict."""
+    if terminal:
+        return await create_linked_event(item)
+
+    resolved_event_id = await find_existing_event_id(item.id)
+    if resolved_event_id is not None and resolved_event_id != event.id:
+        logger.info(
+            "Item already linked to a different event; using existing linkage",
+            item_id=str(item.id),
+            requested_event_id=str(event.id),
+            existing_event_id=str(resolved_event_id),
+        )
+        return ClusterResult(
+            item_id=item.id,
+            event_id=resolved_event_id,
+            created=False,
+            merged=True,
+            similarity=similarity,
+        )
+    logger.info(
+        "Skipping merge metadata update because item was already linked",
+        event_id=str(event.id),
+        item_id=str(item.id),
+    )
+    return ClusterResult(
+        item_id=item.id,
+        event_id=event.id,
+        created=False,
+        merged=True,
+        similarity=similarity,
+    )

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import cast
 from uuid import UUID, uuid4
@@ -23,7 +22,13 @@ from src.processing.event_cluster_health import (
     ensure_cluster_health,
     resolve_cluster_health,
 )
-from src.processing.event_cluster_link import add_event_link
+from src.processing.event_cluster_link import (
+    ClusterResult as ClusterResult,
+)
+from src.processing.event_cluster_link import (
+    add_event_link,
+    resolve_event_link_failure,
+)
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.event_state import EventActivityState, EventEpistemicState
@@ -32,17 +37,6 @@ from src.storage.models import Event, EventItem, RawItem, Source
 from src.storage.restatement_models import HumanFeedback
 
 logger = structlog.get_logger(__name__)
-
-
-@dataclass(slots=True)
-class ClusterResult:
-    """Result of clustering one raw item."""
-
-    item_id: UUID
-    event_id: UUID
-    created: bool
-    merged: bool
-    similarity: float | None = None
 
 
 class EventClusterer:
@@ -106,54 +100,17 @@ class EventClusterer:
         await ensure_cluster_health(session=self.session, event=event)
         link_added = await self._add_event_link(event.id, item_id)
         if link_added is not True:
-            return await self._resolve_event_link_failure(
+            return await resolve_event_link_failure(
                 event=event,
                 item=item,
                 similarity=similarity,
                 terminal=link_added is None,
+                create_linked_event=self._create_linked_event,
+                find_existing_event_id=self._find_existing_event_id_for_item,
             )
         await self._merge_into_event(event, item)
         return ClusterResult(
             item_id=item_id,
-            event_id=event.id,
-            created=False,
-            merged=True,
-            similarity=similarity,
-        )
-
-    async def _resolve_event_link_failure(
-        self,
-        *,
-        event: Event,
-        item: RawItem,
-        similarity: float,
-        terminal: bool,
-    ) -> ClusterResult:
-        if terminal:
-            return await self._create_linked_event(item)
-
-        resolved_event_id = await self._find_existing_event_id_for_item(item.id)
-        if resolved_event_id is not None and resolved_event_id != event.id:
-            logger.info(
-                "Item already linked to a different event; using existing linkage",
-                item_id=str(item.id),
-                requested_event_id=str(event.id),
-                existing_event_id=str(resolved_event_id),
-            )
-            return ClusterResult(
-                item_id=item.id,
-                event_id=resolved_event_id,
-                created=False,
-                merged=True,
-                similarity=similarity,
-            )
-        logger.info(
-            "Skipping merge metadata update because item was already linked",
-            event_id=str(event.id),
-            item_id=str(item.id),
-        )
-        return ClusterResult(
-            item_id=item.id,
             event_id=event.id,
             created=False,
             merged=True,

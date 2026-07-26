@@ -144,7 +144,7 @@ async def test_create_linked_event_discards_concurrent_loser() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_linked_event_replaces_terminal_link_winner() -> None:
+async def test_create_linked_event_preserves_terminal_link_winner() -> None:
     item_title = f"Terminal winner replacement {uuid4()}"
     async with async_session_maker() as setup_session:
         source = Source(type=SourceType.RSS, name=f"Source {uuid4()}")
@@ -182,12 +182,15 @@ async def test_create_linked_event_replaces_terminal_link_winner() -> None:
             .where(EventItem.item_id == item_id)
         )
         terminal_event = await verify_session.get(Event, terminal_event_id)
+        replacement_count = await verify_session.scalar(
+            select(func.count()).select_from(Event).where(Event.canonical_summary == item_title)
+        )
 
-    assert result.created is True
-    assert result.merged is False
+    assert result.created is False
+    assert result.merged is True
     assert linked_event is not None
     assert linked_event.id == result.event_id
-    assert linked_event.id != terminal_event_id
-    assert linked_event.activity_state == EventActivityState.ACTIVE.value
+    assert linked_event.id == terminal_event_id
     assert terminal_event is not None
     assert terminal_event.activity_state == EventActivityState.CLOSED.value
+    assert replacement_count == 0

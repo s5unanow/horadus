@@ -25,6 +25,10 @@ from src.processing.pipeline_types import (
     _PreparedItem,
     _StagedTier2Candidate,
 )
+from src.processing.tier2_candidate_suppression import (
+    resolve_processing_event_suppression,
+    suppress_tier2_candidate,
+)
 from src.processing.tier2_voi_scheduler import (
     Tier2TrendSignal,
     Tier2VOICandidate,
@@ -63,32 +67,19 @@ async def stage_tier2_candidate(
             msg = f"Event {cluster_result.event_id} not found after clustering"
             raise ValueError(msg)
 
-        suppression_action = await owner._event_suppression_action(event_id=cluster_result.event_id)
+        suppression_action = await resolve_processing_event_suppression(
+            owner=owner,
+            event=event,
+            cluster_result=cluster_result,
+        )
         if suppression_action is not None:
-            item.processing_status = ProcessingStatus.NOISE
-            item.processing_started_at = None
-            await owner.session.flush()
-            owner.record_processing_event_suppression(
+            return await suppress_tier2_candidate(
+                owner=owner,
+                prepared=prepared,
+                cluster_result=cluster_result,
+                embedded=embedded,
+                usage=usage,
                 action=suppression_action,
-                stage="pipeline_post_cluster",
-            )
-            logger.info(
-                "Skipping event due to human feedback suppression",
-                item_id=str(prepared.item_id),
-                event_id=str(cluster_result.event_id),
-                action=suppression_action,
-            )
-            return (
-                None,
-                _ItemExecution(
-                    result=owner._build_item_result(
-                        item_id=prepared.item_id,
-                        status=item.processing_status,
-                        cluster_result=cluster_result,
-                        embedded=embedded,
-                    ),
-                    usage=usage,
-                ),
             )
         return (
             _StagedTier2Candidate(

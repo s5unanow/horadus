@@ -117,24 +117,23 @@ async def create_linked_event(
 
     locked_link = await _locked_existing_event_link(session=session, item_id=item.id)
     if locked_link is not None:
-        existing_link, existing_event = locked_link
-        if _event_is_cluster_eligible(existing_event):
-            await session.delete(event)
-            await session.flush()
-            logger.info(
-                "Discarding unlinked event after concurrent item-link winner",
-                item_id=str(item.id),
-                discarded_event_id=str(event.id),
-                existing_event_id=str(existing_event.id),
-            )
-            return ClusterResult(
-                item_id=item.id,
-                event_id=existing_event.id,
-                created=False,
-                merged=True,
-            )
-        await session.delete(existing_link)
+        _, existing_event = locked_link
+        winner_eligible = _event_is_cluster_eligible(existing_event)
+        await session.delete(event)
         await session.flush()
+        logger.info(
+            "Discarding unlinked event after concurrent item-link winner",
+            item_id=str(item.id),
+            discarded_event_id=str(event.id),
+            existing_event_id=str(existing_event.id),
+            winner_eligible=winner_eligible,
+        )
+        return ClusterResult(
+            item_id=item.id,
+            event_id=existing_event.id,
+            created=False,
+            merged=True,
+        )
 
     retry_added = await add_link(event.id, item.id)
     if retry_added is True:

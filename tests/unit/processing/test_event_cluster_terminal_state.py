@@ -187,7 +187,7 @@ async def test_create_linked_event_fails_when_conflict_has_no_winner() -> None:
 
 
 @pytest.mark.asyncio
-async def test_create_linked_event_replaces_terminal_link_winner() -> None:
+async def test_create_linked_event_preserves_terminal_link_winner() -> None:
     item = RawItem(id=uuid4())
     replacement = Event(id=uuid4(), canonical_summary="Eligible replacement")
     terminal_event = Event(
@@ -207,15 +207,15 @@ async def test_create_linked_event_replaces_terminal_link_winner() -> None:
         session=session,
         item=item,
         create_event=AsyncMock(return_value=replacement),
-        add_link=AsyncMock(side_effect=[False, True]),
+        add_link=AsyncMock(return_value=False),
         refresh_event_provenance=refresh_event_provenance,
     )
 
     assert result == ClusterResult(
         item_id=item.id,
-        event_id=replacement.id,
-        created=True,
-        merged=False,
+        event_id=terminal_event.id,
+        created=False,
+        merged=True,
     )
-    session.delete.assert_awaited_once_with(terminal_link)
-    refresh_event_provenance.assert_awaited_once_with(replacement)
+    session.delete.assert_awaited_once_with(replacement)
+    refresh_event_provenance.assert_not_called()

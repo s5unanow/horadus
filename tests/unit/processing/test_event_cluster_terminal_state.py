@@ -6,9 +6,10 @@ from uuid import uuid4
 
 import pytest
 
+from src.processing.event_cluster_link import ClusterResult, resolve_event_link_failure
 from src.processing.event_clusterer import EventClusterer
 from src.storage.event_state import EventActivityState, EventEpistemicState
-from src.storage.models import Event
+from src.storage.models import Event, RawItem
 
 pytestmark = pytest.mark.unit
 
@@ -94,3 +95,30 @@ async def test_add_event_link_rechecks_terminal_state_under_lock(
         with_for_update=True,
     )
     session.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_terminal_link_rejection_creates_replacement_event() -> None:
+    event = Event(id=uuid4(), canonical_summary="Closed match")
+    item = RawItem(id=uuid4())
+    replacement = ClusterResult(
+        item_id=item.id,
+        event_id=uuid4(),
+        created=True,
+        merged=False,
+    )
+    create_linked_event = AsyncMock(return_value=replacement)
+    find_existing_event_id = AsyncMock()
+
+    result = await resolve_event_link_failure(
+        event=event,
+        item=item,
+        similarity=0.9,
+        terminal=True,
+        create_linked_event=create_linked_event,
+        find_existing_event_id=find_existing_event_id,
+    )
+
+    assert result is replacement
+    create_linked_event.assert_awaited_once_with(item)
+    find_existing_event_id.assert_not_called()

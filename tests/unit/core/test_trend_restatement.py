@@ -208,8 +208,8 @@ async def test_apply_compensating_restatement_leaves_in_memory_trend_when_delta_
     class _Engine:
         session = None
 
-        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
-            return (0.4, 0.4)
+        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float, datetime]:
+            return (0.4, 0.4, datetime.now(UTC))
 
     await apply_compensating_restatement(
         trend_engine=_Engine(),
@@ -238,19 +238,19 @@ async def test_apply_compensating_restatement_decays_before_applying_delta() -> 
         is_active=True,
         created_at=prior_updated_at - timedelta(days=1),
         updated_at=prior_updated_at,
+        last_decayed_at=prior_updated_at,
     )
     call: dict[str, float] = {}
 
     class _Engine:
         session = None
 
-        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
+        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float, datetime]:
             call.update(
                 delta=float(kwargs["delta"]),
                 fallback_current_log_odds=float(kwargs["fallback_current_log_odds"]),
             )
-            previous_lo = float(kwargs["fallback_current_log_odds"])
-            return previous_lo, previous_lo + float(kwargs["delta"])
+            return 0.2, 0.3, kwargs["updated_at"]
 
     await apply_compensating_restatement(
         trend_engine=_Engine(),
@@ -262,14 +262,14 @@ async def test_apply_compensating_restatement_decays_before_applying_delta() -> 
     )
 
     assert call["fallback_current_log_odds"] == pytest.approx(0.4)
-    assert call["delta"] == pytest.approx(-0.1)
+    assert call["delta"] == pytest.approx(0.1)
     assert float(trend.current_log_odds) == pytest.approx(0.3)
-    assert trend.updated_at == applied_at
+    assert (trend.updated_at, trend.last_decayed_at) == (applied_at, applied_at)
 
 
 @pytest.mark.asyncio
 async def test_apply_compensating_restatement_records_scoring_contract() -> None:
-    session = SimpleNamespace(add=MagicMock(), flush=AsyncMock())
+    session = SimpleNamespace(add=MagicMock(), execute=AsyncMock(), flush=AsyncMock())
     trend = Trend(
         id=uuid4(),
         name="Versioned Trend",
@@ -286,9 +286,9 @@ async def test_apply_compensating_restatement_records_scoring_contract() -> None
         def __init__(self) -> None:
             self.session = session
 
-        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float]:
+        async def apply_log_odds_delta(self, **kwargs) -> tuple[float, float, datetime]:
             previous_lo = float(kwargs["fallback_current_log_odds"])
-            return previous_lo, previous_lo + float(kwargs["delta"])
+            return previous_lo, previous_lo + float(kwargs["delta"]), kwargs["updated_at"]
 
     await apply_compensating_restatement(
         trend_engine=_Engine(),
@@ -305,7 +305,7 @@ async def test_apply_compensating_restatement_records_scoring_contract() -> None
 
 @pytest.mark.asyncio
 async def test_apply_compensating_restatement_uses_historical_evidence_contract() -> None:
-    session = SimpleNamespace(add=MagicMock(), flush=AsyncMock())
+    session = SimpleNamespace(add=MagicMock(), execute=AsyncMock(), flush=AsyncMock())
     active_state_version_id = uuid4()
     historical_state_version_id = uuid4()
     trend = Trend(

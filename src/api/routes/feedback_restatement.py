@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 from fastapi import HTTPException, status
@@ -96,13 +96,13 @@ async def apply_compensation_without_trend(
     """Apply a compensation directly when the referenced trend row is missing."""
 
     try:
-        result = await trend_engine.apply_log_odds_delta(
+        previous_lo, new_lo, _applied_at = await trend_engine.apply_log_odds_delta(
             trend_id=evidence.trend_id,
             trend_name=None,
             delta=compensation_delta,
             reason="event_invalidation" if invalidate_evidence else "event_partial_restatement",
             fallback_current_log_odds=None,
         )
-        return cast("tuple[float, float]", result)
+        return previous_lo, new_lo
     except ValueError:
         return None

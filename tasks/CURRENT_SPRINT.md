@@ -13,6 +13,9 @@
 
 ## Selection Notes
 
+- `TASK-423` was promoted from `INTAKE-0065` as the highest-priority pending
+  probability-math defect because evidence writes can erase accrued decay and
+  systematically bias actively reported trends away from baseline.
 - `TASK-422` was promoted from `INTAKE-0068` as the next highest-priority
   belief-state integrity defect because concurrent lineage repairs can reverse
   one evidence delta more than once.
@@ -56,8 +59,11 @@
 20. `TASK-420` Add SSRF guard and resource caps to collector HTTP fetch path.
 21. `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id.
 22. `TASK-422` Guard lineage-repair evidence invalidation against double-reversal.
+23. `TASK-423` Decide and fix decay-clock reset on evidence writes.
 
 ## Human Blocker Metadata
+
+
 
 
 
@@ -135,3 +141,4 @@
 - `TASK-420` Add SSRF guard and resource caps to collector HTTP fetch path ✅
 - `TASK-421` Close trend-evidence idempotency hole for NULL state_version_id ✅
 - `TASK-422` Guard lineage-repair evidence invalidation against double-reversal ✅
+- `TASK-423` Decide and fix decay-clock reset on evidence writes ✅

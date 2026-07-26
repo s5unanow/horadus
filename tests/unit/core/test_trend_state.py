@@ -193,7 +193,7 @@ async def test_activate_trend_state_rebase_uses_current_log_odds(mock_db_session
     assert trend.active_definition_version_id == definition_version.id
     assert trend.active_state_version_id == state_version.id
     assert float(trend.current_log_odds) == pytest.approx(prob_to_logodds(0.35))
-    assert trend.updated_at == activated_at
+    assert (trend.updated_at, trend.last_decayed_at) == (activated_at, activated_at)
 
 
 @pytest.mark.asyncio

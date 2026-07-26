@@ -284,13 +284,13 @@ async def test_create_event_feedback_invalidate_handles_missing_trend_rows(
             delta,
             reason,
             fallback_current_log_odds,
-        ) -> tuple[float, float]:
+        ) -> tuple[float, float, datetime]:
             assert trend_id == evidence.trend_id
             assert trend_name is None
             assert delta == pytest.approx(-0.4)
             assert reason == "event_invalidation"
             assert fallback_current_log_odds is None
-            return (0.2, -0.2)
+            return (0.2, -0.2, datetime.now(UTC))
 
     monkeypatch.setattr(feedback_mutations_module, "TrendEngine", FakeTrendEngine)
     mock_db_session.get.return_value = event

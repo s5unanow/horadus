@@ -82,11 +82,15 @@ async def test_add_event_link_rechecks_terminal_state_under_lock(
 
     linked = await EventClusterer(session)._add_event_link(event.id, uuid4())
 
-    assert linked is False
+    assert linked is None
     session.get.assert_awaited_once_with(
         Event,
         event.id,
-        populate_existing=True,
+        with_for_update=True,
+    )
+    session.refresh.assert_awaited_once_with(
+        event,
+        attribute_names=["epistemic_state", "activity_state"],
         with_for_update=True,
     )
     session.add.assert_not_called()

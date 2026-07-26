@@ -9,7 +9,6 @@ from uuid import UUID, uuid4
 
 import structlog
 from sqlalchemy import func, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.config import settings
@@ -24,6 +23,7 @@ from src.processing.event_cluster_health import (
     ensure_cluster_health,
     resolve_cluster_health,
 )
+from src.processing.event_cluster_link import add_event_link
 from src.processing.event_lifecycle import EventLifecycleManager
 from src.processing.vector_similarity import max_distance_for_similarity
 from src.storage.event_state import EventActivityState, EventEpistemicState
@@ -105,11 +105,11 @@ class EventClusterer:
             )
         await ensure_cluster_health(session=self.session, event=event)
         link_added = await self._add_event_link(event.id, item_id)
+        if link_added is None:
+            return await self._create_linked_event(item)
         if not link_added:
             resolved_event_id = await self._find_existing_event_id_for_item(item_id)
-            if resolved_event_id is None:
-                return await self._create_linked_event(item)
-            if resolved_event_id != event.id:
+            if resolved_event_id is not None and resolved_event_id != event.id:
                 logger.info(
                     "Item already linked to a different event; using existing linkage",
                     item_id=str(item_id),
@@ -274,27 +274,8 @@ class EventClusterer:
             return None
         return normalized_action
 
-    async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool:
-        event = await self.session.get(
-            Event,
-            event_id,
-            populate_existing=True,
-            with_for_update=True,
-        )
-        if (
-            event is None
-            or event.epistemic_state == EventEpistemicState.RETRACTED.value
-            or event.activity_state == EventActivityState.CLOSED.value
-        ):
-            return False
-        link = EventItem(event_id=event_id, item_id=item_id)
-        try:
-            async with self.session.begin_nested():
-                self.session.add(link)
-                await self.session.flush()
-            return True
-        except IntegrityError:
-            return False
+    async def _add_event_link(self, event_id: UUID, item_id: UUID) -> bool | None:
+        return await add_event_link(session=self.session, event_id=event_id, item_id=item_id)
 
     async def _count_unique_sources(self, event_id: UUID, fallback_source_id: UUID) -> int:
         count_query = (

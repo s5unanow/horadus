@@ -94,5 +94,5 @@ async def test_event_link_rechecks_terminal_state_after_stale_match() -> None:
 
         linked = await clusterer._add_event_link(event_id, uuid4())
 
-    assert linked is False
+    assert linked is None
     assert stale_match[0].activity_state == EventActivityState.CLOSED.value

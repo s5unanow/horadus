@@ -249,24 +249,15 @@ async def test_cluster_item_skips_merge_when_link_already_exists(mock_db_session
     item = _build_item(embedding=[0.1, 0.2, 0.3], title="Duplicate merge")
     item.embedding_model = "text-embedding-3-small"
     event = Event(
-        id=uuid4(),
         canonical_summary="Existing event",
         source_count=2,
         unique_source_count=2,
         lifecycle_status=EventLifecycle.EMERGING.value,
         primary_item_id=uuid4(),
-        provenance_summary={
-            "cluster_health": {
-                "cluster_cohesion_score": 1.0,
-                "split_risk_score": 0.0,
-            }
-        },
     )
     merge_into_event = AsyncMock()
 
-    clusterer._find_existing_event_id_for_item = AsyncMock(
-        side_effect=[None, event.id],
-    )
+    clusterer._find_existing_event_id_for_item = AsyncMock(return_value=None)
     clusterer._find_matching_event = AsyncMock(return_value=(event, 0.93))
     clusterer._add_event_link = AsyncMock(return_value=False)
     clusterer._merge_into_event = merge_into_event
@@ -794,7 +785,6 @@ async def test_add_event_link_returns_true_on_insert_and_false_on_conflict(mock_
     mock_db_session.get.assert_awaited_with(
         Event,
         event_id,
-        populate_existing=True,
         with_for_update=True,
     )
 
@@ -811,7 +801,6 @@ async def test_add_event_link_returns_false_when_event_missing(mock_db_session) 
     mock_db_session.get.assert_awaited_once_with(
         Event,
         event_id,
-        populate_existing=True,
         with_for_update=True,
     )
 

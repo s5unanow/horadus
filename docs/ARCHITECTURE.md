@@ -226,6 +226,11 @@ Taxonomy drift safety:
 - Active runtime trend routing is pinned to the normalized, unique `trends.runtime_trend_id` value (mirrored in `definition.id`) so duplicate config/API writes fail closed instead of shadowing one trend behind another.
 - Repeated Tier-2 classification for the same event reconciles active `trend_evidence` instead of blindly appending: stale evidence is invalidated, its prior delta is reversed through append-only `trend_restatements`, replacement evidence is applied under the current event context, and the event stores supersession lineage metadata plus current extraction runtime provenance for audit/replay.
 - Event split/merge repairs use a separate append-only `event_lineage` ledger: raw-item links move to their corrected current cluster, stale active evidence on affected events is atomically claimed before it is reversed through `trend_restatements`, and the repaired events are queued for Tier-2 replay so concurrent repairs cannot reverse one evidence delta twice while claims/reporting are rebuilt.
+- Similarity clustering considers only non-retracted, non-closed events.
+  `epistemic_state` and `activity_state` are authoritative for candidate
+  eligibility; the deprecated `lifecycle_status` remains a derived
+  compatibility projection and does not independently reopen or suppress a
+  candidate.
 - Operator invalidation, partial restatement, and manual trend compensation use the same append-only restatement ledger, and projection verification can deterministically rebuild `current_log_odds` from chronological evidence/restatement history with decay applied between state changes.
 - Live trend state keeps a dedicated `last_decayed_at` clock separate from the
   general `updated_at` audit timestamp. Every evidence/restatement delta first

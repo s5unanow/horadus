@@ -430,3 +430,4 @@
 - TASK-421: Close trend-evidence idempotency hole for NULL state_version_id ✅
 - TASK-422: Guard lineage-repair evidence invalidation against double-reversal ✅
 - TASK-423: Decide and fix decay-clock reset on evidence writes ✅
+- TASK-424: Exclude closed/retracted events from clustering match ✅

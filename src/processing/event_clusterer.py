@@ -1,6 +1,4 @@
-"""
-Event clustering service for grouping similar raw items into events.
-"""
+"""Event clustering service for grouping similar raw items into events."""
 
 from __future__ import annotations
 
@@ -235,6 +233,8 @@ class EventClusterer:
         query = (
             select(Event, distance_expr.label("distance"))
             .where(Event.last_mention_at >= window_start)
+            .where(Event.epistemic_state != EventEpistemicState.RETRACTED.value)
+            .where(Event.activity_state != EventActivityState.CLOSED.value)
             .where(Event.embedding.is_not(None))
             .where(Event.embedding_model == embedding_model)
             .where(distance_expr <= max_distance)
